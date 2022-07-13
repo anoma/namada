@@ -1,6 +1,7 @@
-## Inflation system
+## Inflation system
 
-In general, inflation refers to the process of a currency losing its purchasing power over time. While this is a classical economic phenomenon, the way cryptocurrencies are produced permits great control over money supply, and doing so cleverly can have positive effects such as increasing incentives. Here we use "infation" as a synonym for "token printing". The protocol controls the Namada token NAM (the native staking token), which is programmatically minted to pay for algorithmically measurable public goods - proof-of-stake security and shielded pool usage - and out-of-band public goods.
+In general, inflation refers to the process of a currency losing its 
+purchasing power over time. While this is a classical economic phenomenon, the way cryptocurrencies are produced permits great control over money supply, and doing so cleverly can have positive effects such as increasing incentives. Here we use "inflation" as a synonym for "token printing". The protocol controls the Namada token NAM (the native staking token), which is programmatically minted to pay for algorithmically measurable public goods - proof-of-stake security and shielded pool usage - and out-of-band public goods.
 
 1. Proof-of-stake rewards, which are paid into the reward distribution mechanism in order to distribute them to validators and delegators.
 2. Shielded pool rewards, which are locked in a way such that they can be eventually paid to users who kept tokens in the shielded pool.
@@ -8,7 +9,12 @@ In general, inflation refers to the process of a currency losing its purchasing 
 
 ### Proof-of-stake rewards
 
-When validators are selected they need to be backed by funds. These funds are locked for the duration of an epoch and 21 days after the epoch has ended. Locked tokens help secure the system while liquidity supports its activity and liveness. We need to choose the ratio between locked and liquid tokens carefully. Liquid tokens make sure the price of the token is not increasing out of scarcity and users have access to tokens to pay transaction fees, while locked tokens are the guarantee that attacking the system is expensive for an adversary. 
+When validators are selected they need to be backed by funds. These funds are locked for the duration of an epoch and 21 days after the epoch has ended. Locked tokens help secure the system while liquidity supports its activity and liveness. We need to choose the ratio between locked and liquid tokens carefully. Liquid tokens make sure the price of the token is not increasing out of scarcity and users have access to tokens to pay transaction fees, while locked tokens are the guarantee that attacking the system is expensive for an adversary.
+
+```
+Jacob: Staked funds are variably locked. I think you mean the the bonding period
+is one epoch and unbounding is something like 21 days.
+```
 
 Here are some numbers from other projects
 
@@ -20,18 +26,12 @@ Here are some numbers from other projects
 | Solana                                           | 77   |
 
 
-Our desired percentage for Namada is 33%-66%: Locked for validating and the rest %33-%66 is liquid. When the price of the token is low we can aim for a higher % of locked tokens and reduce this as the price and demand for liquid tokens increases. For example, we can set a range, in the beginning have 50 % and later aim for 1/3. I don't think we should go lower than that. The staking reward should be ideally set. 
+Our desired percentage for Namada is 33%-66%: Locked for validating and the rest %33-%66 is liquid. When the price of the token is low we can aim for a higher % of locked tokens and reduce this as the price and demand for liquid tokens increases. For example, we can set a range, in the beginning have 50 % and later aim for 1/3. I don't think we should go lower than that. The staking reward should be ideally set.
+```
+Jacob: Strange switch to first person here.
+```
 
 In Polkadot and Cosmos the total inflation rate that is paid as rewards to validators depends on the staking ratio. This is to incentivize validators and delegators to invest in the staking pool. We will follow the same idea and have inflation vary depending on our target staking ratio. Here is how we achieve that.
-
-
-### Shielded pool rewards
-
-The privacy that MASP is providing depends on the asset in the shielded pool. A transaction can only be private if it can hide among other transactions, hence more funds and activity in the shielded pool increase privacy for transactions. 
-
-### Public goods funding
-
-10% per annum. See [public goods funding](./public-goods-funding.md).
 
 ###  Net inflation model
 
@@ -43,7 +43,12 @@ The total inflation consists of several components as follows.
 
 $$I=I_{PoS}+I_L+I_T-D_T$$
 
-where $I_T$ is our inflation that goes to treasury, $I_{PoS}$ is inflation that is paid as PoS rewards, and $I_L$ is the inflation for locking that is paid to accounts in shielded pool. We can extend the $I_L$ be extended to be for many other types of $I_L1,...,I_Ln$. For simplicity we only assume to have one $I_L$. $D_T$ is the constant deflation of the treasury. This is applied to incentivize governance voters to spend treasury funds. 
+where $I_T$ is our inflation that goes to treasury, $I_{PoS}$ is inflation 
+that is paid as PoS rewards, and $I_L$ is the inflation for locking that is 
+paid to accounts in shielded pool. We can extend the formula to many 
+types, $I_{L_1},\dots,I_{L_n}$. For simplicity, we assume we have only one 
+type, $I_L$. $D_T$ is the constant deflation of the treasury. This is applied to
+incentivize governance voters to spend treasury funds. 
 
 These components are each varying depending on independent factors as follows. The $I_{PoS}$ depends on the staking ratio $R(t)$. The locking inflation $I_L$ depends on the locking ratio $L(t)$. Ideally we want the total token supply to consist of tokens locked for staking and shielded pool and the rest are liquid tokens $Y$. 
 
@@ -59,7 +64,7 @@ $$A(t)=K_1(R(t)-R_{target})+K_2(\frac{dR}{dt})$$
 
 If $I_{PoS}^{min}< I_{PoS}< I_{PoS}^{max}$ then $\frac{dI_{PoS}}{dt}=A(t)$.
 
-If $I_{PoS}{min}< I_{PoS}$ then $\frac{dI_{PoS}}{dt}=max(A(t),0$.
+If $I_{PoS}^{min}< I_{PoS}$ then $\frac{dI_{PoS}}{dt}=max(A(t),0)$.
 
 If $I_{PoS}< I_{PoS}^{max}$ then $\frac{dI_{PoS}}{dt}=min(A(t),0)$.
 
@@ -78,7 +83,7 @@ $$A(t)=K_1(L(t)-L_{target})+K_2(\frac{dL}{dt})$$
 
 If $I_{L}^{min}< I_{L}< I_{L}^{max}$ then $\frac{dI_{L}}{dt}=A(t)$.
 
-If $I_{L}^{min}< I_{L}$ then $\frac{dI_{L}}{dt}=max(A(t),0$.
+If $I_{L}^{min}< I_{L}$ then $\frac{dI_{L}}{dt}=max(A(t),0)$.
 
 If $I_{L}< I_{L}^{max}$ then $\frac{dI_{L}}{dt}=min(A(t),0)$.
 
@@ -101,4 +106,17 @@ $$I_{PoS}^{max}+I_{L}^{max}+I_T=< I^{max}$$
 
 The sum of $I_L$ and other $I_L1, ..., I_Ln$ will also be limited. If their sum would exceed the limit, then we need to scale them down to stay within the limit. 
 
-These bounds on $I_{PoS}$ and $I_L$ give us a min and max bound on the total inflation, where the total inflation depends on $L_{target}$ and $R_{target}$ independently. 
+These bounds on $I_{PoS}$ and $I_L$ give us a min and max bound on the total inflation, where the total inflation depends on $L_{target}$ and $R_{target}$ independently.
+
+### Shielded pool rewards
+
+The privacy that MASP is providing depends on the asset in the shielded pool. A transaction can only be private if it can hide among other transactions, hence more funds and activity in the shielded pool increase privacy for transactions.
+
+```
+Jacob: Presumably there were supposed to be some words here saying we thus 
+incentivize people to the shielded pool to enhance overall privacy?
+```
+
+### Public goods funding
+
+10% per annum. See [public goods funding](./public-goods-funding.md).

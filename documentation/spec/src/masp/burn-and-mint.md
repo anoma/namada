@@ -24,7 +24,7 @@ Each allowed conversion is committed to a Jubjub point using a binding Bowe-Hopw
 
 In order for an unbalanced transaction containing burns and mints to get a net value balance of zero, one or more value commitments burning and minting assets must be added to the value balance. Similar to how Spend and Output circuits check the validity of their respective value commitments, the Convert circuit checks the validity and integrity of:
 
-1.     There exists an allowed conversion commitment in the Merkle tree, and
+1.    There exists an allowed conversion commitment in the Merkle tree, and
 1.    The imbalance in the value commitment is a multiple of an allowed conversion's asset generator
 
 In particular, the Convert circuit takes public input:
@@ -57,6 +57,9 @@ Directionality of allowed conversions must be enforced as well. That is, $v$ mus
 ### Cycles 
 
 It is also critical not to allow cycles. For example, if $\{(A_1, -1), (A_2, 2)\}$ and $\{(A_1, 1), (A_2, -1)\}$ are allowed conversions, then an unlimited amount of $A_2$ may be minted from a nonzero amount of $A_1$. Since 
+```
+Jacob: the anticipation is killing me
+```
 
 ## Alternative approaches
 

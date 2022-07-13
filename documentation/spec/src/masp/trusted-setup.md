@@ -4,6 +4,10 @@ This spec assumes that you have some previous knowledge about Trusted Setup Cere
 The Namada Trusted Setup (TS) consists of running the phase 2 of the MPC which is a circuit-specific step to construct the multi-asset shielded pool circuit. Our phase 2 takes as input the Powers of Tau (phase 1) ran by Zcash that can be found [here](https://download.z.cash/downloads/powersoftau/).
 
 ## Overview of the contribution flow
+```
+Jacob: This whole flow would much easier to process as a flow chart.
+The existing graphics still don't quite capture the big picture.
+```
 NOTE: add CLI flag `--offline` for the contributors that run on an offline machine. The flag will skip all the steps where there is communication with the coordinator and go straight to the generation of parameters in step 14.
 1. Contributor downloads the Namada CLI source from GitHub, compiles it, runs it.
 2. CLI asks the Contributor a couple of questions:
