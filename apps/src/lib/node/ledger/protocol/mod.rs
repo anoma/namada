@@ -139,18 +139,42 @@ where
             // TODO: don't hardcode path to wasm
             let tx_code = std::fs::read("wasm_for_tests/tx_log.wasm").unwrap();
             tracing::debug!(bytes = tx_code.len(), "Read tx_code");
+            // TODO: mints should be applied within transaction
 
-            let _tx = Tx::new(tx_code, Some(tx_data));
+            let tx = Tx::new(tx_code, Some(tx_data));
 
-            // TODO: apply transaction to storage - mints etc should be
-            // calculated in the transaction wasm itself
-            // TODO: return appropriate TxResult
+            let verifiers = execute_tx(
+                &tx,
+                storage,
+                block_gas_meter,
+                write_log,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            )?;
+            // TODO: here we would remove the sentinel VP - e.g.
+            // `verifiers.remove(&ETHEREUM_SENTINEL);`
+            let vps_result = check_vps(
+                &tx,
+                storage,
+                block_gas_meter,
+                write_log,
+                &verifiers,
+                vp_wasm_cache,
+            )?;
+
             let gas_used = block_gas_meter
                 .finalize_transaction()
                 .map_err(Error::GasError)?;
+            let initialized_accounts = write_log.get_initialized_accounts();
+            let changed_keys = write_log.get_keys();
+            let ibc_event = write_log.take_ibc_event();
+
             Ok(TxResult {
                 gas_used,
-                ..Default::default()
+                changed_keys,
+                vps_result,
+                initialized_accounts,
+                ibc_event,
             })
         }
         _ => {
