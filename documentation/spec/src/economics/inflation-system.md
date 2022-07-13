@@ -1,22 +1,12 @@
-# Inflation system
+## Inflation system
 
-## Token flow
-
-The protocol controls Namada token NAM (the native staking token) sourced from two locations:
-
-- Fees paid for transactions per the description in [fee system](./fee-system.md), 50 % goes to block production and 50 % goes to treasury.  
-- Inflation (described below), as in tokens directly printed by the protocol (which we can do arbitrarily), where these tokens then flow to many different sinks:
+In general, inflation refers to the process of a currency losing its purchasing power over time. While this is a classical economic phenomenon, the way cryptocurrencies are produced permits great control over money supply, and doing so cleverly can have positive effects such as increasing incentives. Here we use "infation" as a synonym for "token printing". The protocol controls the Namada token NAM (the native staking token), which is programmatically minted to pay for algorithmically measurable public goods - proof-of-stake security and shielded pool usage - and out-of-band public goods.
 
 1. Proof-of-stake rewards, which are paid into the reward distribution mechanism in order to distribute them to validators and delegators.
 2. Shielded pool rewards, which are locked in a way such that they can be eventually paid to users who kept tokens in the shielded pool.
-3. A governance pool - aka treasury.
-    - These tokens are slowly burned at a fixed fraction per epoch.
-4. A set of configurable custom sinks, which can be addresses on Namada, addresses on Ethereum (over the Ethereum bridge), or addresses on other chains connected over IBC.
-    - These can be paid fixed amounts per epoch.
-    - Initial recipients will be configured at genesis, and recipients can be added, removed, or altered by Namada governance.
+3. Public goods funding, split into proactive and retroactive versions, which is paid partially continuously and partially on a regular cadence.
 
-## Token Inflation
-In general, inflation refers to the process of a currency losing its purchasing power over time. While this is a classical economic phenomenon, the way cryptocurrencies are produced permits great control over money supply, and doing so cleverly can have positive effects such as increasing incentives. The Namada inflation model depends on several factors, such as ratio between locked and liquid tokens (described below), the multi-asset shielded pool, and funds for treasury. 
+### Proof-of-stake rewards
 
 When validators are selected they need to be backed by funds. These funds are locked for the duration of an epoch and 21 days after the epoch has ended. Locked tokens help secure the system while liquidity supports its activity and liveness. We need to choose the ratio between locked and liquid tokens carefully. Liquid tokens make sure the price of the token is not increasing out of scarcity and users have access to tokens to pay transaction fees, while locked tokens are the guarantee that attacking the system is expensive for an adversary. 
 
@@ -32,28 +22,18 @@ Here are some numbers from other projects
 
 Our desired percentage for Namada is 33%-66%: Locked for validating and the rest %33-%66 is liquid. When the price of the token is low we can aim for a higher % of locked tokens and reduce this as the price and demand for liquid tokens increases. For example, we can set a range, in the beginning have 50 % and later aim for 1/3. I don't think we should go lower than that. The staking reward should be ideally set. 
 
+In Polkadot and Cosmos the total inflation rate that is paid as rewards to validators depends on the staking ratio. This is to incentivize validators and delegators to invest in the staking pool. We will follow the same idea and have inflation vary depending on our target staking ratio. Here is how we achieve that.
 
-<!--## Inflation rates for popular platforms
-_insert table here_
-Solana has the following model where the inflation that is produced for rewards is independent of the staking ratio:
-1. Define a starting inflation rate for year 1.
-2. The inflation rate decreases thereon at a fixed pace until it reaches a desired rate.
-3. Once this desired rate is attained, the inflation rate remains constant.
 
-In Polkadot and Cosmos the total inflation rate that is paid as rewards to validators depends on the staking ratio. This is to incentivize validators and delegators to invest in the staking pool. We will follow the same idea and have inflation vary depending on our target staking ratio. Here is how we achieve that. -->
+### Shielded pool rewards
 
 The privacy that MASP is providing depends on the asset in the shielded pool. A transaction can only be private if it can hide among other transactions, hence more funds and activity in the shielded pool increase privacy for transactions. 
 
-The Treasury is a pool of native tokens that can be appropriated for funding public-good products for Namada. The decision on spending these funds will be assigned to governance. 
+### Public goods funding
 
-### Related work
-Ethereum 2.0, Solana, and Near protocols inflation rate are independent of how much tokens are staked. Near protocol and Ethereum 2.0 have fixed inflation rates, while Solana start with a high inflation rate that decreases over time, as less transaction fees are burned. 
+10% per annum. See [public goods funding](./public-goods-funding.md).
 
-In Polkadot and Cosmos the total inflation rate that is paid as rewards to validators depends on the staking ratio. This is to incentivize validators and delegators to invest in the staking pool. We will follow the same idea and have inflation vary depending on our target staking ratio. Here is how we achieve that. 
-
-For funds going to treasury Near protocol where 5 % goes to treasury and Polkadot sends the difference between inflation for PoS and the total constant inflation to treasury.
-
-###  Model
+###  Net inflation model
 
 Let us assume $T$ is the total token supply and $I$ is the total inflation of Namada. 
 
@@ -122,5 +102,3 @@ $$I_{PoS}^{max}+I_{L}^{max}+I_T=< I^{max}$$
 The sum of $I_L$ and other $I_L1, ..., I_Ln$ will also be limited. If their sum would exceed the limit, then we need to scale them down to stay within the limit. 
 
 These bounds on $I_{PoS}$ and $I_L$ give us a min and max bound on the total inflation, where the total inflation depends on $L_{target}$ and $R_{target}$ independently. 
-
-
