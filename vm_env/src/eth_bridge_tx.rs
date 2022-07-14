@@ -2,7 +2,7 @@
 use std::error::Error;
 
 use anoma::ledger::eth_bridge::storage;
-use anoma::proto::Tx;
+use anoma::types::ethereum_events::EthMsgDiff;
 use borsh::BorshDeserialize;
 
 use crate::imports::tx::log_string;
@@ -23,7 +23,9 @@ pub fn apply(tx_data: Vec<u8>) {
 pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
     log(&format!("got data - {} bytes", tx_data.len()));
     log(&format!("/eth_msgs key - {}", storage::eth_msgs_key()));
-    Tx::try_from_slice(&tx_data)?;
+
+    let diffs: Vec<EthMsgDiff> = BorshDeserialize::try_from_slice(&tx_data)?;
+    log(&format!("deserialized diffs - length = {}", diffs.len()));
     Ok(())
 
     // TODO: extract Vec<EthMsgDiffs>
@@ -80,11 +82,10 @@ mod tests {
             },
             seen_by: vec![sole_validator],
         };
-        let data = vec![diff].try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(data)).try_to_vec().unwrap();
+        let tx_data = vec![diff].try_to_vec().unwrap();
         tx_host_env::init();
 
-        let result = apply_aux(tx);
+        let result = apply_aux(tx_data);
 
         if let Err(err) = result {
             panic!("apply_aux error: {:?}", err);
