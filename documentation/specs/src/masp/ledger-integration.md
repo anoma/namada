@@ -234,6 +234,8 @@ pub struct Transfer {
     pub token: Address,
     /// The amount of tokens
     pub amount: Amount,
+    /// The unused storage location at which to place TxId
+    pub key: Option<String>,
     /// Shielded transaction part
     pub shielded: Option<Transaction>,
 }
@@ -246,6 +248,8 @@ Below, the conditions necessary for a valid shielded or unshielded transfer are 
   * the `Transfer` must satisfy the usual conditions for Anoma ledger transfers (i.e. sufficient funds, ...) as enforced by token and account validity predicates
   * the `Transaction` must satisfy the conditions specified in the [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/anoma/masp/main/docs/multi-asset-shielded-pool.pdf)
   * the `Transaction` and `Transfer` together must additionaly satisfy the below boundary conditions intended to ensure consistency between the MASP validity predicate ledger and Anoma ledger
+* A key equal to `None` indicates an unpinned shielded transaction; one that can only be found by scanning and trial-decrypting the entire shielded pool
+* Otherwise the key must have the form `Some(x)` where `x` is a `String` such that there exists no prior accepted transaction with the same key
 
 ### Boundary Conditions
 Below, the conditions necessary to maintain consistency between the MASP validity predicate ledger and Anoma ledger are outlined:
@@ -274,6 +278,9 @@ Below are miscellaneous remarks on the capabilities and limitations of the curre
   * As a consequence, an amount exceeding the gas fees must be available in a transparent account in order to execute an unshielding transaction - this prevents denial of service attacks
 * Using the MASP sentinel transaction key for transaction signing indicates that gas be drawn from the transaction's transparent value pool
   * In this case, the gas will be taken from the MASP transparent address if the shielded transaction is proven to be valid
+* With knowledge of its key, a pinned shielded transaction can be directly downloaded or proven non-existent without scanning the entire blockchain
+  * It is recommended that pinned transaction's key be derived from the hash of its payment address, something that both transaction parties would share
+  * This key must not be reused, this is in order to avoid revealing that multiple transactions are going to the same entity
 
 ## Multi-Asset Shielded Pool Specification Differences from Zcash Protocol Specification
 The [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/anoma/masp/main/docs/multi-asset-shielded-pool.pdf) referenced above is in turn an extension to the [Zcash Protocol Specification](https://zips.z.cash/protocol/protocol.pdf). Below, the changes from the Zcash Protocol Specification assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
@@ -334,3 +341,27 @@ Below, the changes from [ZIP 32: Shielded Hierarchical Deterministic Wallets](ht
   * For extended spending keys on the Testnet, the Human-Readable Part is "xsktest"
 * [Sapling extended full viewing keys](https://zips.z.cash/zip-0032#sapling-extended-full-viewing-keys)
   * For extended full viewing keys on the Testnet, the Human-Readable Part is "xfvktest"
+
+# Storage Interface Specification
+Anoma nodes provide interfaces that allow Anoma clients to query for specific pinned transactions, transactions accepted into the shielded pool, and allowed conversions between various asset types. Below we describe the ABCI paths and the encodings of the responses to each type of query.
+
+## Shielded Transfer Query
+In order to determine shielded balances belonging to particular keys or spend one's balance, it is necessary to download the transactions that transferred the assets to you. To this end, the nth transaction in the shielded pool can be obtained by getting the value at the storage path `<MASP address>/tx-<n>`. Note that indexing is 0-based. This will return a quadruple of the type below:
+
+```
+(
+    /// the epoch of the transaction's block
+    Epoch,
+    /// the height of the transaction's block
+    BlockHeight,
+    /// the index of the transaction within the block
+    TxIndex,
+    /// the actual bytes of the transfer
+    Transfer
+)
+```
+`Transfer` is defined as above and `(Epoch, BlockHeight, TxIndex) = (u64, u64, u32)`.
+## Transaction Count Query
+When scanning the shielded pool, it is sometimes useful know when to stop scanning. This can be done by querying the storage path `head-tx`, which will return a `u64` indicating the total number of transactions in the shielded pool.
+## Pinned Transfer Query
+A transaction pinned to the key `x` in the shielded pool can be obtained indirectly by getting the value at the storage path `<MASP address>/pin-<x>`. This will return the index of the desired transaction within the shielded pool encoded as a `u64`. At this point, the above shielded transaction query can then be used to obtain the actual transaction bytes.
