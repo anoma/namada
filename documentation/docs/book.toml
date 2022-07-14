@@ -1,10 +1,10 @@
 [book]
-authors = ["Heliax R&D Team"]
+authors = ["Heliax AG"]
 language = "en"
 multilingual = false
 site-url = "https://docs.namada.net/"
 src = "src"
-title = "Namada Docs"
+title = "Namada Documentation"
 
 [output.html]
 edit-url-template = "https://github.com/anoma/namada/documentation/docs/edit/main/{path}"
