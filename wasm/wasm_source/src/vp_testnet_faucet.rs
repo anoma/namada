@@ -5,7 +5,7 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use anoma_vp_prelude::{SignedTxData, *};
+use namada_vp_prelude::{SignedTxData, *};
 use once_cell::unsync::Lazy;
 
 /// Allows anyone to withdraw up to 1_000 tokens in a single tx
@@ -92,7 +92,7 @@ mod tests {
     use anoma_tests::tx::{tx_host_env, TestTxEnv};
     use anoma_tests::vp::vp_host_env::storage::Key;
     use anoma_tests::vp::*;
-    use anoma_vp_prelude::key::RefTo;
+    use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 

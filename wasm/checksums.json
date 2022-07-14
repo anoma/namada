@@ -1,19 +1,19 @@
 {
     "tx_bond.wasm": "tx_bond.824c6425d47541b0c6ea19d987ff0e11d654e160ae4b86f92ef64bd2090822ff.wasm",
     "tx_from_intent.wasm": "tx_from_intent.8b9d953445e96a305e4b2702a02d29a879d4ce5aa928233732265c693de6033c.wasm",
-    "tx_ibc.wasm": "tx_ibc.8a14856e4290d3c8e91f57a81a27424c4e7c0ae59c372f7472e1eba57ac5bf40.wasm",
+    "tx_ibc.wasm": "tx_ibc.6d3d45fd1ad3554a4db946b9dc783bf7a237b73db935fc4014467cf1f75f1547.wasm",
     "tx_init_account.wasm": "tx_init_account.f0e428331363f56dadc958aa743a8f3cb0096c99aaa26a4123f6cbadf2bc1c59.wasm",
     "tx_init_nft.wasm": "tx_init_nft.632cc71b0774d5a89b900080b7fed3fcf3dab41b38ce44f34fecc71d114b72a2.wasm",
     "tx_init_proposal.wasm": "tx_init_proposal.2081caea833d4a88933ba3c8d7486e6e253a734a7c3d1c8ca5d0ee71394b5956.wasm",
-    "tx_init_validator.wasm": "tx_init_validator.85cb7203423c08f4f8f35e43d2ab67027c337873f185304ee97ac682120215c8.wasm",
-    "tx_mint_nft.wasm": "tx_mint_nft.58aeeba7a79efa262dcd98cb058b1fb3d6eb6692f0108e01f6f468487bf4491f.wasm",
+    "tx_init_validator.wasm": "tx_init_validator.5cd0765fca1d73634718a633f18b66cb59f5ba088955a9674f8f114e10cdf91b.wasm",
+    "tx_mint_nft.wasm": "tx_mint_nft.04ab8c61d5ad92ba81ec77602ffc92fd3a73fbfe425cd0b6ea146e8a170ff172.wasm",
     "tx_transfer.wasm": "tx_transfer.9fc18513f41856e80be1c084e57a4a4abf0062e866c539a17b7b614c63c8e8af.wasm",
     "tx_unbond.wasm": "tx_unbond.67139fdbc55d43769bd094b4539c1d526d54583518bbf6a8c7ab8748984412aa.wasm",
-    "tx_update_vp.wasm": "tx_update_vp.7a1705ad1061b16625c1fb5616e5554218b75bcd73b4d9e62dec4cf08f8c33ed.wasm",
+    "tx_update_vp.wasm": "tx_update_vp.9c0f8d07a54f98c83cafca7b345235ba9c0cd3cc4aeefd026cbc6a5d72f68bd5.wasm",
     "tx_vote_proposal.wasm": "tx_vote_proposal.18393e415cd944b22912e4408ab18d690b47da04bb4a714f8c5a7ac29dd5f6d2.wasm",
     "tx_withdraw.wasm": "tx_withdraw.f75105ed2b4bc430d3a29eccbe5cbb24b5ff05cff3d6326f9d32cfefaf35bc27.wasm",
-    "vp_nft.wasm": "vp_nft.6a267651ecd9c21e0ba5e60d1e9df513fc1d00ffe4d7a3ad9c1a0bb65e01679f.wasm",
-    "vp_testnet_faucet.wasm": "vp_testnet_faucet.c8853637e00232d987ab8a2ed61a9217161544e467a0a19a94ad6b86a4ebb5a8.wasm",
-    "vp_token.wasm": "vp_token.ffda754fe01239333287875d073eca4db0cc79db85c5817524b93f4ecb28c1d7.wasm",
-    "vp_user.wasm": "vp_user.a6f283cdd9bbcbe0fc4f94081f6d16998e6e4aced0481244223bee5ee3a5fd9d.wasm"
+    "vp_nft.wasm": "vp_nft.b6d0b456e0d26c4dc97300a242f2132923765eddeda3dea040dbac91384f9d4e.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.21ddc31c1e990502e83bb5af1f6de35084927d49bd413fe783cb89ce87ba24dc.wasm",
+    "vp_token.wasm": "vp_token.e0b56e1a2816371c7d428d74636e13e106026f21b8ef5ce2c343e2ab88ea9ae1.wasm",
+    "vp_user.wasm": "vp_user.dc3f4087b5b756fd0bca11964a673b2f92727851dfb69c98572dc2d0ce714510.wasm"
 }

@@ -65,31 +65,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma_tx_prelude"
-version = "0.6.1"
-dependencies = [
- "namada_vm_env",
- "sha2 0.10.2",
-]
-
-[[package]]
-name = "anoma_vp_prelude"
-version = "0.6.1"
-dependencies = [
- "namada_vm_env",
- "sha2 0.10.2",
-]
-
-[[package]]
 name = "anoma_wasm"
 version = "0.6.1"
 dependencies = [
  "anoma_tests",
- "anoma_tx_prelude",
- "anoma_vp_prelude",
  "borsh",
  "getrandom",
  "namada",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
  "once_cell",
  "proptest",
  "rust_decimal",
@@ -1468,6 +1452,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_tx_prelude"
+version = "0.7.0"
+dependencies = [
+ "namada_vm_env",
+ "sha2 0.10.2",
+]
+
+[[package]]
 name = "namada_vm_env"
 version = "0.7.0"
 dependencies = [
@@ -1475,6 +1467,14 @@ dependencies = [
  "hex",
  "namada",
  "namada_macros",
+]
+
+[[package]]
+name = "namada_vp_prelude"
+version = "0.7.0"
+dependencies = [
+ "namada_vm_env",
+ "sha2 0.10.2",
 ]
 
 [[package]]
