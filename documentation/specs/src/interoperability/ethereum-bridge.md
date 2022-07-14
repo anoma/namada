@@ -60,14 +60,17 @@ vote more than once for a given event.
 
 ### Minimum confirmations
 There will be a protocol-specified minimum number of confirmations that events
-must reach on the Ethereum chain, before validators should vote to include them
-on Namada. Validators should not vote to include events that have not met this 
-required number of confirmations. This constant will be changeable via 
-governance. Voting on unconfirmed events is considered a slashable offence.
+must reach on the Ethereum chain, before validators can vote to include them
+on Namada. This minimum number of confirmations will be changeable via 
+governance.
 
-In a future version of the Ethereum bridge, we may allow an additional per-event
-minimum number of confirmations that an event should have to reach before being
-included in Namada.
+`TransferToNamada` events may include a custom minimum number of 
+confirmations, that must be at least the protocol-specified minimum number of 
+confirmations.
+
+Validators must not vote to include events that have not met the required 
+number of confirmations. Voting on unconfirmed events is considered a 
+slashable offence.
 
 ### Storage
 To make including new events easy, we take the approach of always overwriting 
