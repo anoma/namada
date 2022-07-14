@@ -42,58 +42,18 @@ pub(crate) fn construct_tx_data(diffs: Vec<EthMsgDiff>) -> Result<Vec<u8>> {
 mod test {
     use anoma::proto::MultiSigned;
     use anoma::types::address;
+    use anoma::types::ethereum_events::testing::{
+        arbitrary_amount, arbitrary_block_height, arbitrary_eth_address,
+        arbitrary_fractional_voting_power, arbitrary_nonce,
+        arbitrary_secret_key,
+    };
     use anoma::types::ethereum_events::vote_extensions::{
         FractionalVotingPower, MultiSignedEthEvent,
     };
-    use anoma::types::ethereum_events::{
-        EthAddress, EthereumEvent, TransferToNamada, Uint,
-    };
-    use anoma::types::key::{common, ed25519, SigScheme};
+    use anoma::types::ethereum_events::{EthereumEvent, TransferToNamada};
     use anoma::types::storage::BlockHeight;
-    use anoma::types::token::Amount;
-    use rand::prelude::ThreadRng;
 
     use super::*;
-
-    const DAI_ERC20_ETH_ADDRESS: &str =
-        "0x6B175474E89094C44Da98b954EedeAC495271d0F";
-
-    fn arbitrary_eth_address() -> EthAddress {
-        let bytes: [u8; 20] =
-            hex::decode(DAI_ERC20_ETH_ADDRESS[2..].as_bytes())
-                .unwrap()
-                .try_into()
-                .unwrap();
-
-        EthAddress(bytes)
-    }
-
-    fn arbitrary_fractional_voting_power() -> FractionalVotingPower {
-        FractionalVotingPower::new(1, 3).unwrap()
-    }
-
-    fn arbitrary_nonce() -> Uint {
-        123.into()
-    }
-
-    fn arbitrary_amount() -> Amount {
-        Amount::from(1_000)
-    }
-
-    fn arbitrary_block_height() -> BlockHeight {
-        BlockHeight(100)
-    }
-
-    /// This will actually generate a new random secret key each time it's
-    /// called
-    fn arbitrary_secret_key() -> common::SecretKey {
-        let mut rng: ThreadRng = rand::thread_rng();
-        let sk: common::SecretKey = {
-            use anoma::types::key::SecretKey;
-            ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
-        };
-        sk
-    }
 
     #[test]
     fn calculate_eth_msg_diffs_empty() {

@@ -36,36 +36,16 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use anoma::types::address;
-    use anoma::types::ethereum_events::{
-        EthAddress, EthMsgDiff, EthereumEvent, TransferToNamada, Uint,
+    use anoma::types::ethereum_events::testing::{
+        arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
     };
-    use anoma::types::token::Amount;
+    use anoma::types::ethereum_events::{
+        EthMsgDiff, EthereumEvent, TransferToNamada,
+    };
     use anoma_tests::tx::tx_host_env;
     use borsh::BorshSerialize;
 
     use super::*;
-
-    fn arbitrary_nonce() -> Uint {
-        123.into()
-    }
-
-    fn arbitrary_amount() -> Amount {
-        Amount::from(1_000)
-    }
-
-    const DAI_ERC20_ETH_ADDRESS: &str =
-        "0x6B175474E89094C44Da98b954EedeAC495271d0F";
-
-    fn arbitrary_eth_address() -> EthAddress {
-        let bytes: [u8; 20] =
-            hex::decode(DAI_ERC20_ETH_ADDRESS[2..].as_bytes())
-                .unwrap()
-                .try_into()
-                .unwrap();
-
-        EthAddress(bytes)
-    }
-
     #[test]
     fn test_happy_path() {
         let sole_validator = address::testing::gen_established_address();
