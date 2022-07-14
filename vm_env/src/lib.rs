@@ -6,6 +6,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
+pub mod eth_bridge_tx;
 pub mod governance;
 pub mod ibc;
 pub mod imports;
@@ -16,7 +17,6 @@ pub mod proof_of_stake;
 pub mod token;
 
 pub mod tx_prelude {
-    pub use anoma::ledger::eth_bridge::storage as eth_bridge_storage;
     pub use anoma::ledger::governance::storage;
     pub use anoma::ledger::parameters::storage as parameters_storage;
     pub use anoma::ledger::storage::types::encode;
@@ -27,6 +27,7 @@ pub mod tx_prelude {
     pub use anoma::types::*;
     pub use anoma_macros::transaction;
 
+    pub use crate::eth_bridge_tx;
     pub use crate::governance::tx as governance;
     pub use crate::ibc::{Ibc, IbcActions};
     pub use crate::imports::tx::*;
