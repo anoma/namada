@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use anoma::types::key::*;
+use namada::types::key::*;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
 #[cfg(not(feature = "ABCI"))]

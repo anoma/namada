@@ -4,7 +4,7 @@ mod identity;
 use std::path::Path;
 use std::time::Duration;
 
-use anoma::proto::Intent;
+use namada::proto::Intent;
 use behaviour::Behaviour;
 use libp2p::core::connection::ConnectionLimits;
 use libp2p::core::muxing::StreamMuxerBox;

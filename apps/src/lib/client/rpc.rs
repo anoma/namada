@@ -7,24 +7,24 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
 
-use anoma::ledger::governance::storage as gov_storage;
-use anoma::ledger::governance::utils::Votes;
-use anoma::ledger::parameters::{storage as param_storage, EpochDuration};
-use anoma::ledger::pos::types::{
+use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::governance::utils::Votes;
+use namada::ledger::parameters::{storage as param_storage, EpochDuration};
+use namada::ledger::pos::types::{
     Epoch as PosEpoch, VotingPower, WeightedValidator,
 };
-use anoma::ledger::pos::{
+use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
-use anoma::ledger::treasury::storage as treasury_storage;
-use anoma::types::address::Address;
-use anoma::types::governance::{
+use namada::ledger::treasury::storage as treasury_storage;
+use namada::types::address::Address;
+use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalVote, TallyResult,
 };
-use anoma::types::key::*;
-use anoma::types::storage::{Epoch, PrefixValue};
-use anoma::types::token::{balance_key, Amount};
-use anoma::types::{address, storage, token};
+use namada::types::key::*;
+use namada::types::storage::{Epoch, PrefixValue};
+use namada::types::token::{balance_key, Amount};
+use namada::types::{address, storage, token};
 use async_std::fs::{self};
 use async_std::path::PathBuf;
 use async_std::prelude::*;
@@ -1674,7 +1674,7 @@ pub async fn get_proposal_offline_votes(
                     let bond = epoched_amount
                         .get(proposal.tally_epoch)
                         .expect("Delegation bond should be definied.");
-                    let epoch = anoma::ledger::pos::types::Epoch::from(
+                    let epoch = namada::ledger::pos::types::Epoch::from(
                         proposal.tally_epoch.0,
                     );
                     let amount = *bond

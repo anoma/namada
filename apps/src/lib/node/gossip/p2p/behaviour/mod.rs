@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
-use anoma::proto::{self, Intent, IntentGossipMessage};
+use namada::proto::{self, Intent, IntentGossipMessage};
 use libp2p::gossipsub::subscription_filter::regex::RegexSubscriptionFilter;
 use libp2p::gossipsub::subscription_filter::{
     TopicSubscriptionFilter, WhitelistSubscriptionFilter,

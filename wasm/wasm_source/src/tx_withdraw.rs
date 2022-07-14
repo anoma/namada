@@ -1,8 +1,8 @@
 //! A tx for a PoS unbond that removes staked tokens from a self-bond or a
 //! delegation to be withdrawn in or after unbonding epoch.
 
-use anoma_tx_prelude::proof_of_stake::withdraw_tokens;
-use anoma_tx_prelude::*;
+use namada_tx_prelude::proof_of_stake::withdraw_tokens;
+use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(tx_data: Vec<u8>) {

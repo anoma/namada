@@ -1,13 +1,13 @@
 use std::collections::BTreeSet;
 
-use anoma::types::address::{Address, InternalAddress};
-use anoma::types::storage::Key;
-use anoma::types::token;
+use namada::types::address::{Address, InternalAddress};
+use namada::types::storage::Key;
+use namada::types::token;
 
 /// Vp imports and functions.
 pub mod vp {
-    use anoma::types::storage::KeySeg;
-    pub use anoma::types::token::*;
+    use namada::types::storage::KeySeg;
+    pub use namada::types::token::*;
 
     use super::*;
     use crate::imports::vp;
@@ -63,7 +63,7 @@ pub mod vp {
 
 /// Tx imports and functions.
 pub mod tx {
-    pub use anoma::types::token::*;
+    pub use namada::types::token::*;
 
     use super::*;
     use crate::imports::tx;

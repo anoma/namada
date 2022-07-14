@@ -1,8 +1,8 @@
 //! A tx to initialize a new validator account and staking reward account with a
 //! given public keys and a validity predicates.
 
-use anoma_tx_prelude::transaction::InitValidator;
-use anoma_tx_prelude::*;
+use namada_tx_prelude::transaction::InitValidator;
+use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(tx_data: Vec<u8>) {

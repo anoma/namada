@@ -7,14 +7,14 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug 'anoman run-ledger'",
+            "name": "Debug 'namadan run-ledger'",
             "cargo": {
                 "args": [
                     "run",
-                    "--bin=anoman",
+                    "--bin=namadan",
                 ],
                 "filter": {
-                    "name": "anoman",
+                    "name": "namadan",
                     "kind": "bin"
                 }
             },
@@ -26,14 +26,14 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug 'anoman run-gossip'",
+            "name": "Debug 'namadan run-gossip'",
             "cargo": {
                 "args": [
                     "run",
-                    "--bin=anoman",
+                    "--bin=namadan",
                 ],
                 "filter": {
-                    "name": "anoman",
+                    "name": "namadan",
                     "kind": "bin"
                 }
             },
@@ -49,10 +49,10 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--lib=anoma_tests",
+                    "--lib=namada_tests",
                 ],
                 "filter": {
-                    "name": "anoma_tests",
+                    "name": "namada_tests",
                     "kind": "lib"
                 }
             },
@@ -64,16 +64,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'anoma'",
+            "name": "Debug unit tests in library 'namada'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=anoma"
+                    "--package=namada"
                 ],
                 "filter": {
-                    "name": "anoma",
+                    "name": "namada",
                     "kind": "lib"
                 }
             },
@@ -83,15 +83,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'anoma'",
+            "name": "Debug executable 'namada'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=anoma",
-                    "--package=anoma"
+                    "--bin=namada",
+                    "--package=namada"
                 ],
                 "filter": {
-                    "name": "anoma",
+                    "name": "namada",
                     "kind": "bin"
                 }
             },
@@ -101,16 +101,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'anoma'",
+            "name": "Debug unit tests in executable 'namada'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=anoma",
-                    "--package=anoma"
+                    "--bin=namada",
+                    "--package=namada"
                 ],
                 "filter": {
-                    "name": "anoma",
+                    "name": "namada",
                     "kind": "bin"
                 }
             },
@@ -120,15 +120,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'anoman'",
+            "name": "Debug executable 'namadan'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=anoman",
-                    "--package=anoma"
+                    "--bin=namadan",
+                    "--package=namada"
                 ],
                 "filter": {
-                    "name": "anoman",
+                    "name": "namadan",
                     "kind": "bin"
                 }
             },
@@ -138,16 +138,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'anoman'",
+            "name": "Debug unit tests in executable 'namadan'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=anoman",
-                    "--package=anoma"
+                    "--bin=namadan",
+                    "--package=namada"
                 ],
                 "filter": {
-                    "name": "anoman",
+                    "name": "namadan",
                     "kind": "bin"
                 }
             },
@@ -157,15 +157,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'anomac'",
+            "name": "Debug executable 'namadac'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=anomac",
-                    "--package=anoma"
+                    "--bin=namadac",
+                    "--package=namada"
                 ],
                 "filter": {
-                    "name": "anomac",
+                    "name": "namadac",
                     "kind": "bin"
                 }
             },
@@ -175,16 +175,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'anomac'",
+            "name": "Debug unit tests in executable 'namadac'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=anomac",
-                    "--package=anoma"
+                    "--bin=namadac",
+                    "--package=namada"
                 ],
                 "filter": {
-                    "name": "anomac",
+                    "name": "namadac",
                     "kind": "bin"
                 }
             },
@@ -194,16 +194,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'anoma'",
+            "name": "Debug unit tests in library 'namada'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=anoma"
+                    "--package=namada"
                 ],
                 "filter": {
-                    "name": "anoma",
+                    "name": "namada",
                     "kind": "lib"
                 }
             },
@@ -213,16 +213,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'anoma_vm_env'",
+            "name": "Debug unit tests in library 'namada_vm_env'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=anoma_vm_env"
+                    "--package=namada_vm_env"
                 ],
                 "filter": {
-                    "name": "anoma_vm_env",
+                    "name": "namada_vm_env",
                     "kind": "lib"
                 }
             },

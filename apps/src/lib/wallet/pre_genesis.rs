@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use anoma::types::key::common;
+use namada::types::key::common;
 use ark_serialize::{Read, Write};
 use file_lock::{FileLock, FileOptions};
 use serde::{Deserialize, Serialize};

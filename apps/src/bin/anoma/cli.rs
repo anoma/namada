@@ -8,7 +8,7 @@
 use std::env;
 use std::process::Command;
 
-use anoma_apps::cli;
+use namada_apps::cli;
 use eyre::Result;
 
 pub fn main() -> Result<()> {

@@ -1,0 +1,17 @@
+# Summary
+
+- [Introduction](./README.md)
+- [Quick Start](./quick-start.md)
+- [User Guide](./user-guide/README.md)
+  - [Install Namada](./user-guide/install.md)
+  - [Getting started](./user-guide/getting-started.md)
+  - [Manage a Wallet](./user-guide/wallet.md)
+  - [The Ledger](./user-guide/ledger.md)
+    - [Interact with PoS](./user-guide/ledger/pos.md)
+    - [Governance](./user-guide/ledger/governance.md)
+    - [Private Transfers](./user-guide/ledger/masp.md)
+  - [Genesis validator setup](./user-guide/genesis-validator-setup.md)
+  - [Applying to be a genesis validator](./user-guide/genesis-validator-apply.md)
+- [Testnets](./testnets/README.md)
+  - [Namada Close Quarters Testnet 1](./testnets/namada-close-quarters-testnet-1.md)
+- [Namada Trusted Setup](./namada-trusted-setup.md)

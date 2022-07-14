@@ -6,9 +6,9 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anoma::types::address;
-use anoma::types::chain::ChainId;
-use anoma::types::key::*;
+use namada::types::address;
+use namada::types::chain::ChainId;
+use namada::types::key::*;
 use borsh::BorshSerialize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;

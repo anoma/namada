@@ -6,10 +6,10 @@ use std::str::FromStr;
 use std::sync::Once;
 use std::{env, fs, mem, thread, time};
 
-use anoma::types::chain::ChainId;
-use anoma_apps::client::utils;
-use anoma_apps::config::genesis::genesis_config::{self, GenesisConfig};
-use anoma_apps::{config, wallet};
+use namada::types::chain::ChainId;
+use namada_apps::client::utils;
+use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
+use namada_apps::{config, wallet};
 use assert_cmd::assert::OutputAssertExt;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
@@ -23,7 +23,7 @@ use tempfile::{tempdir, TempDir};
 /// process
 pub static INIT: Once = Once::new();
 
-const APPS_PACKAGE: &str = "anoma_apps";
+const APPS_PACKAGE: &str = "namada_apps";
 
 /// Env. var for running E2E tests in debug mode
 pub const ENV_VAR_DEBUG: &str = "ANOMA_E2E_DEBUG";

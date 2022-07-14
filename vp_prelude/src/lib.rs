@@ -1,5 +1,5 @@
 //! This crate contains library code for validity predicate WASM. Most of the
-//! code is re-exported from the `anoma_vm_env` crate.
+//! code is re-exported from the `namada_vm_env` crate.
 
 #![doc(html_favicon_url = "https://dev.anoma.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.anoma.net/master/rustdoc-logo.png")]
@@ -8,8 +8,8 @@
 
 use core::convert::AsRef;
 
-use anoma_vm_env::vp_prelude::hash::Hash;
-pub use anoma_vm_env::vp_prelude::*;
+use namada_vm_env::vp_prelude::hash::Hash;
+pub use namada_vm_env::vp_prelude::*;
 pub use sha2::{Digest, Sha256, Sha384, Sha512};
 
 pub fn sha256(bytes: &[u8]) -> Hash {

@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use std::net::SocketAddr;
 
-use anoma::proto::{Intent, IntentGossipMessage};
+use namada::proto::{Intent, IntentGossipMessage};
 use libp2p::gossipsub::IdentTopic;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::oneshot;

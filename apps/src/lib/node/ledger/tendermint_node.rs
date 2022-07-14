@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anoma::types::address::Address;
-use anoma::types::chain::ChainId;
-use anoma::types::key::*;
-use anoma::types::time::DateTimeUtc;
+use namada::types::address::Address;
+use namada::types::chain::ChainId;
+use namada::types::key::*;
+use namada::types::time::DateTimeUtc;
 use borsh::BorshSerialize;
 use serde_json::json;
 #[cfg(not(feature = "ABCI"))]

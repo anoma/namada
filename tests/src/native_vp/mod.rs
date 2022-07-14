@@ -1,11 +1,11 @@
 mod pos;
 
-use anoma::ledger::native_vp::{Ctx, NativeVp};
-use anoma::ledger::storage::mockdb::MockDB;
-use anoma::ledger::storage::Sha256Hasher;
-use anoma::vm::wasm::compilation_cache;
-use anoma::vm::wasm::compilation_cache::common::Cache;
-use anoma::vm::{wasm, WasmCacheRwAccess};
+use namada::ledger::native_vp::{Ctx, NativeVp};
+use namada::ledger::storage::mockdb::MockDB;
+use namada::ledger::storage::Sha256Hasher;
+use namada::vm::wasm::compilation_cache;
+use namada::vm::wasm::compilation_cache::common::Cache;
+use namada::vm::{wasm, WasmCacheRwAccess};
 use tempfile::TempDir;
 
 use crate::tx::TestTxEnv;

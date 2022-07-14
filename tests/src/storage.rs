@@ -2,7 +2,7 @@
 
 use std::rc::Rc;
 
-use anoma::types::storage;
+use namada::types::storage;
 use derivative::Derivative;
 
 /// A list of changes, which must be applied in the same order to get to the

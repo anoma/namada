@@ -1,5 +1,5 @@
-use anoma::proto::Tx;
-use anoma::types::address::Address;
+use namada::proto::Tx;
+use namada::types::address::Address;
 use jsonpath_lib as jsonpath;
 use serde::Serialize;
 use thiserror::Error;

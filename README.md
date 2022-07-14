@@ -1,19 +1,28 @@
-# Anoma
+# Namada
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
-[![Drone CI build status](https://ci.heliax.dev/api/badges/anoma/anoma/status.svg)](https://ci.heliax.dev/anoma/anoma)
 
 ## Overview
 
-[Anoma](https://anoma.network/) is a sovereign, proof-of-stake blockchain protocol that enables private, asset-agnostic cash and private bartering among any number of parties. To learn more about Anoma's vision, take a look at the [Anoma Vision Paper](https://anoma.net/vision-paper.pdf) or [Anoma's Whitepaper](https://anoma.net/whitepaper.pdf).
+[Namada](http://namada.net) is a sovereign proof-of-stake blockchain, using Tendermint BFT
+consensus, that enables multi-asset private transfers for any native
+or non-native asset using a multi-asset shielded pool derived from
+the Sapling circuit. Namada features full IBC protocol support,
+a natively integrated Ethereum bridge, a modern proof-of-stake
+system with automatic reward compounding and cubic slashing, and a
+stake-weighted governance signalling mechanism. Users of shielded
+transfers are rewarded for their contributions to the privacy set in
+the form of native protocol tokens. A multi-asset shielded transfer
+wallet is provided in order to facilitate safe and private user
+interaction with the protocol.
 
-This is an implementation of the Anoma protocol in Rust.
+* Blogpost: [Introducing Namada: Shielded transfers with any assets](https://medium.com/anomanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
 
 ## 📓 Docs
 
-- [user docs](https://docs.anoma.net/): built from [anoma/docs mdBook](https://github.com/anoma/docs)
-- [dev docs](https://dev.anoma.net/master/): built from [docs mdBook](./docs/) in this repo
-- [rustdoc](https://dev.anoma.net/master/rustdoc/anoma/): built from the source
+- user docs: built from [docs mdBook](./documentation/docs/)
+- dev docs: built from [dev mdBook](./documentation/dev/)
+- specifications: built from [spec mdBook](./documentation/spec/)
 
 ## Warning
 

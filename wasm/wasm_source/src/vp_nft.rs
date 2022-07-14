@@ -1,6 +1,6 @@
 //! A VP for a nft.
 
-use anoma_vp_prelude::*;
+use namada_vp_prelude::*;
 
 #[validity_predicate]
 fn validate_tx(
@@ -35,11 +35,11 @@ fn validate_tx(
 
 #[cfg(test)]
 mod tests {
-    use anoma::types::nft::{self, NftToken};
-    use anoma::types::transaction::nft::{CreateNft, MintNft};
-    use anoma_tests::log::test;
-    use anoma_tests::tx::{tx_host_env, TestTxEnv};
-    use anoma_tests::vp::*;
+    use namada::types::nft::{self, NftToken};
+    use namada::types::transaction::nft::{CreateNft, MintNft};
+    use namada_tests::log::test;
+    use namada_tests::tx::{tx_host_env, TestTxEnv};
+    use namada_tests::vp::*;
 
     use super::*;
 
