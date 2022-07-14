@@ -1,7 +1,7 @@
 //! code that should be executed within a transaction
 use anoma::ledger::eth_bridge::storage;
 
-use crate::imports::vp::log_string;
+use crate::imports::tx::log_string;
 
 const TX_NAME: &str = "tx_eth_bridge";
 
