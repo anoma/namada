@@ -330,9 +330,33 @@ The [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/an
     * a length `nValueBalanceSapling` sequence of 40 byte values where:
       * the first 32 bytes encode the asset type
       * the last 8 bytes are an `int64` encoding asset value
+  * In between `vSpendsSapling` and `nOutputsSapling` are two additional rows:
+    * First row:
+      * Bytes: Varies
+      * Name: nConvertsMASP
+      * Data Type: compactSize
+      * Description: The number of Convert descriptions in vConvertsMASP
+    * Second row:
+      * Bytes: 64*nConvertsMASP
+      * Name: vConvertsMASP
+      * Data Type: ConvertDescription[nConvertsMASP]
+      * Description: A sequence of Convert descriptions, encoded as described in the following section.
 * [7.4 Output Description Encoding and Consensus](https://zips.z.cash/protocol/protocol.pdf#outputencodingandconsensus)
   * The `encCiphertext` field must be 612 bytes in order to make 32 bytes room to encode the asset type
 
+### Additional Sections
+In addition to the above components of shielded transactions inherited from Zcash, we have the following:
+#### Convert Descriptions
+Each transaction includes a sequence of zero or more Convert descriptions.
+
+Let `ValueCommit.Output` be as defined in [4.1.8](https://zips.z.cash/protocol/protocol.pdf#abstractcommit) Commitment.
+Let `B[Sapling Merkle]` be as defined in [5.3](https://zips.z.cash/protocol/protocol.pdf#constants) Constants.
+Let `ZKSpend` be as defined in [4.1.13](https://zips.z.cash/protocol/protocol.pdf#abstractzk) Zero-Knowledge Proving System.
+
+A convert description comprises `(cv, rt, pi)` where
+* `cv: ValueCommit.Output` is value commitment to the value of the conversion note
+* `rt: B[Sapling Merkle]` is an anchor for the current conversion tree or an archived conversion tree
+* `pi: ZKConvert.Proof` is a zk-SNARK proof with primary input `(rt, cv)` for the Convert statement defined at [Burn and Mint conversion transactions in MASP](./burn-and-mint.md).
 ## Required Changes to ZIP 32: Shielded Hierarchical Deterministic Wallets
 Below, the changes from [ZIP 32: Shielded Hierarchical Deterministic Wallets](https://zips.z.cash/zip-0032) assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
 * [Specification: Key Encodings](https://zips.z.cash/zip-0032#specification-key-encodings)
