@@ -21,10 +21,10 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use namada::ledger::gas::BlockGasMeter;
-use namada::ledger::pos::anoma_proof_of_stake::types::{
+use namada::ledger::pos::namada_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
-use namada::ledger::pos::anoma_proof_of_stake::PosBase;
+use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, DB,

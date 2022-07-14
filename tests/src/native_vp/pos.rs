@@ -102,7 +102,7 @@
 #[cfg(test)]
 mod tests {
 
-    use namada::ledger::pos::anoma_proof_of_stake::PosBase;
+    use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosParams;
     use namada::types::storage::Epoch;
     use namada::types::token;
@@ -531,7 +531,7 @@ mod tests {
 pub mod testing {
     use std::collections::HashMap;
 
-    use namada::ledger::pos::anoma_proof_of_stake::btree_set::BTreeSetShims;
+    use namada::ledger::pos::namada_proof_of_stake::btree_set::BTreeSetShims;
     use namada::types::key::common::PublicKey;
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;
@@ -928,7 +928,7 @@ pub mod testing {
                     // for each epoch that we iterate, less the deltas of the
                     // predecessor epochs
                     let mut total_vp_delta = 0_i128;
-                    for epoch in namada::ledger::pos::anoma_proof_of_stake::types::Epoch::iter_range(
+                    for epoch in namada::ledger::pos::namada_proof_of_stake::types::Epoch::iter_range(
                         (current_epoch.0 + DynEpochOffset::PipelineLen.value(params) + 1).into(),
                         num_of_epochs,
                     ) {

@@ -3,14 +3,14 @@
 use std::collections::BTreeSet;
 use std::panic::{RefUnwindSafe, UnwindSafe};
 
-pub use anoma_proof_of_stake;
-pub use anoma_proof_of_stake::parameters::PosParams;
-pub use anoma_proof_of_stake::types::{
+pub use namada_proof_of_stake;
+pub use namada_proof_of_stake::parameters::PosParams;
+pub use namada_proof_of_stake::types::{
     self, Slash, Slashes, TotalVotingPowers, ValidatorStates,
     ValidatorVotingPowers,
 };
-use anoma_proof_of_stake::validation::validate;
-use anoma_proof_of_stake::{validation, PosReadOnly};
+use namada_proof_of_stake::validation::validate;
+use namada_proof_of_stake::{validation, PosReadOnly};
 use borsh::BorshDeserialize;
 use itertools::Itertools;
 use thiserror::Error;

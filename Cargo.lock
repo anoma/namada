@@ -174,15 +174,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma_proof_of_stake"
-version = "0.6.1"
-dependencies = [
- "borsh",
- "proptest",
- "thiserror",
-]
-
-[[package]]
 name = "anoma_tests"
 version = "0.6.1"
 dependencies = [
@@ -4022,7 +4013,6 @@ dependencies = [
 name = "namada"
 version = "0.7.0"
 dependencies = [
- "anoma_proof_of_stake",
  "ark-bls12-381",
  "ark-ec",
  "ark-serialize",
@@ -4045,6 +4035,7 @@ dependencies = [
  "ics23",
  "itertools 0.10.3",
  "loupe",
+ "namada_proof_of_stake",
  "parity-wasm",
  "pretty_assertions",
  "proptest",
@@ -4083,6 +4074,15 @@ version = "0.7.0"
 dependencies = [
  "quote",
  "syn",
+]
+
+[[package]]
+name = "namada_proof_of_stake"
+version = "0.7.0"
+dependencies = [
+ "borsh",
+ "proptest",
+ "thiserror",
 ]
 
 [[package]]
