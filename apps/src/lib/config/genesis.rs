@@ -4,17 +4,17 @@ use std::collections::HashMap;
 #[cfg(not(feature = "dev"))]
 use std::path::Path;
 
-use anoma::ledger::governance::parameters::GovParams;
-use anoma::ledger::parameters::Parameters;
-use anoma::ledger::pos::{GenesisValidator, PosParams};
-use anoma::ledger::treasury::parameters::TreasuryParams;
-use anoma::types::address::Address;
+use namada::ledger::governance::parameters::GovParams;
+use namada::ledger::parameters::Parameters;
+use namada::ledger::pos::{GenesisValidator, PosParams};
+use namada::ledger::treasury::parameters::TreasuryParams;
+use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
-use anoma::types::chain::ChainId;
-use anoma::types::key::dkg_session_keys::DkgPublicKey;
-use anoma::types::key::*;
-use anoma::types::time::DateTimeUtc;
-use anoma::types::{storage, token};
+use namada::types::chain::ChainId;
+use namada::types::key::dkg_session_keys::DkgPublicKey;
+use namada::types::key::*;
+use namada::types::time::DateTimeUtc;
+use namada::types::{storage, token};
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 
@@ -26,16 +26,16 @@ pub mod genesis_config {
     use std::path::Path;
     use std::str::FromStr;
 
-    use anoma::ledger::governance::parameters::GovParams;
-    use anoma::ledger::parameters::{EpochDuration, Parameters};
-    use anoma::ledger::pos::types::BasisPoints;
-    use anoma::ledger::pos::{GenesisValidator, PosParams};
-    use anoma::ledger::treasury::parameters::TreasuryParams;
-    use anoma::types::address::Address;
-    use anoma::types::key::dkg_session_keys::DkgPublicKey;
-    use anoma::types::key::*;
-    use anoma::types::time::Rfc3339String;
-    use anoma::types::{storage, token};
+    use namada::ledger::governance::parameters::GovParams;
+    use namada::ledger::parameters::{EpochDuration, Parameters};
+    use namada::ledger::pos::types::BasisPoints;
+    use namada::ledger::pos::{GenesisValidator, PosParams};
+    use namada::ledger::treasury::parameters::TreasuryParams;
+    use namada::types::address::Address;
+    use namada::types::key::dkg_session_keys::DkgPublicKey;
+    use namada::types::key::*;
+    use namada::types::time::Rfc3339String;
+    use namada::types::{storage, token};
     use hex;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
@@ -532,12 +532,12 @@ pub mod genesis_config {
         let parameters = Parameters {
             epoch_duration: EpochDuration {
                 min_num_of_blocks: config.parameters.min_num_of_blocks,
-                min_duration: anoma::types::time::Duration::seconds(
+                min_duration: namada::types::time::Duration::seconds(
                     config.parameters.min_duration,
                 )
                 .into(),
             },
-            max_expected_time_per_block: anoma::types::time::Duration::seconds(
+            max_expected_time_per_block: namada::types::time::Duration::seconds(
                 config.parameters.max_expected_time_per_block,
             )
             .into(),
@@ -731,8 +731,8 @@ pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
 }
 #[cfg(feature = "dev")]
 pub fn genesis() -> Genesis {
-    use anoma::ledger::parameters::EpochDuration;
-    use anoma::types::address;
+    use namada::ledger::parameters::EpochDuration;
+    use namada::types::address;
 
     use crate::wallet;
 
@@ -775,9 +775,9 @@ pub fn genesis() -> Genesis {
     let parameters = Parameters {
         epoch_duration: EpochDuration {
             min_num_of_blocks: 10,
-            min_duration: anoma::types::time::Duration::seconds(60).into(),
+            min_duration: namada::types::time::Duration::seconds(60).into(),
         },
-        max_expected_time_per_block: anoma::types::time::DurationSecs(30),
+        max_expected_time_per_block: namada::types::time::DurationSecs(30),
         vp_whitelist: vec![],
         tx_whitelist: vec![],
     };
@@ -864,8 +864,8 @@ pub fn genesis() -> Genesis {
 
 #[cfg(test)]
 pub mod tests {
-    use anoma::types::address::testing::gen_established_address;
-    use anoma::types::key::*;
+    use namada::types::address::testing::gen_established_address;
+    use namada::types::key::*;
     use borsh::BorshSerialize;
     use rand::prelude::ThreadRng;
     use rand::thread_rng;

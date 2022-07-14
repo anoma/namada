@@ -1,7 +1,7 @@
 use std::mem::ManuallyDrop;
 
-use anoma::types::internal::HostEnvResult;
-use anoma::vm::types::KeyVal;
+use namada::types::internal::HostEnvResult;
+use namada::vm::types::KeyVal;
 use borsh::BorshDeserialize;
 
 /// This function is a helper to handle the second step of reading var-len
@@ -54,15 +54,15 @@ pub mod tx {
     use std::convert::TryFrom;
     use std::marker::PhantomData;
 
-    use anoma::types::address;
-    use anoma::types::address::Address;
-    use anoma::types::chain::CHAIN_ID_LENGTH;
-    use anoma::types::ibc::IbcEvent;
-    use anoma::types::internal::HostEnvResult;
-    use anoma::types::storage::{
+    use namada::types::address;
+    use namada::types::address::Address;
+    use namada::types::chain::CHAIN_ID_LENGTH;
+    use namada::types::ibc::IbcEvent;
+    use namada::types::internal::HostEnvResult;
+    use namada::types::storage::{
         BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
     };
-    use anoma::types::time::Rfc3339String;
+    use namada::types::time::Rfc3339String;
     pub use borsh::{BorshDeserialize, BorshSerialize};
 
     #[derive(Debug)]
@@ -361,11 +361,11 @@ pub mod vp {
     use std::convert::TryFrom;
     use std::marker::PhantomData;
 
-    use anoma::types::chain::CHAIN_ID_LENGTH;
-    use anoma::types::hash::{Hash, HASH_LENGTH};
-    use anoma::types::internal::HostEnvResult;
-    use anoma::types::key::*;
-    use anoma::types::storage::{
+    use namada::types::chain::CHAIN_ID_LENGTH;
+    use namada::types::hash::{Hash, HASH_LENGTH};
+    use namada::types::internal::HostEnvResult;
+    use namada::types::key::*;
+    use namada::types::storage::{
         BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
     };
     pub use borsh::{BorshDeserialize, BorshSerialize};
@@ -534,8 +534,8 @@ pub mod vp {
     }
 
     /// Verify a transaction signature. The signature is expected to have been
-    /// produced on the encoded transaction [`anoma::proto::Tx`]
-    /// using [`anoma::proto::Tx::sign`].
+    /// produced on the encoded transaction [`namada::proto::Tx`]
+    /// using [`namada::proto::Tx::sign`].
     pub fn verify_tx_signature(
         pk: &common::PublicKey,
         sig: &common::Signature,

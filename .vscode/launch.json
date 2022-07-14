@@ -64,16 +64,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'anoma'",
+            "name": "Debug unit tests in library 'namada'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=anoma"
+                    "--package=namada"
                 ],
                 "filter": {
-                    "name": "anoma",
+                    "name": "namada",
                     "kind": "lib"
                 }
             },

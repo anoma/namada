@@ -2,9 +2,9 @@
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2021"
 license = "GPL-3.0"
-name = "anoma"
+name = "namada"
 resolver = "2"
-version = "0.6.1"
+version = "0.7.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

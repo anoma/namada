@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::sync::Once;
 use std::{env, fs, mem, thread, time};
 
-use anoma::types::chain::ChainId;
+use namada::types::chain::ChainId;
 use anoma_apps::client::utils;
 use anoma_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use anoma_apps::{config, wallet};

@@ -5,11 +5,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 #[cfg(feature = "ABCI")]
-use anoma::types::hash::Hash;
+use namada::types::hash::Hash;
 #[cfg(feature = "ABCI")]
-use anoma::types::storage::BlockHash;
+use namada::types::storage::BlockHash;
 #[cfg(feature = "ABCI")]
-use anoma::types::transaction::hash_tx;
+use namada::types::transaction::hash_tx;
 use futures::future::FutureExt;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::RequestBeginBlock;

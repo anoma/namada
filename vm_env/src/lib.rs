@@ -16,14 +16,14 @@ pub mod proof_of_stake;
 pub mod token;
 
 pub mod tx_prelude {
-    pub use anoma::ledger::governance::storage;
-    pub use anoma::ledger::parameters::storage as parameters_storage;
-    pub use anoma::ledger::storage::types::encode;
-    pub use anoma::ledger::treasury::storage as treasury_storage;
-    pub use anoma::proto::{Signed, SignedTxData};
-    pub use anoma::types::address::Address;
-    pub use anoma::types::storage::Key;
-    pub use anoma::types::*;
+    pub use namada::ledger::governance::storage;
+    pub use namada::ledger::parameters::storage as parameters_storage;
+    pub use namada::ledger::storage::types::encode;
+    pub use namada::ledger::treasury::storage as treasury_storage;
+    pub use namada::proto::{Signed, SignedTxData};
+    pub use namada::types::address::Address;
+    pub use namada::types::storage::Key;
+    pub use namada::types::*;
     pub use anoma_macros::transaction;
 
     pub use crate::governance::tx as governance;
@@ -39,12 +39,12 @@ pub mod vp_prelude {
     // used in the VP input
     pub use std::collections::{BTreeSet, HashSet};
 
-    pub use anoma::ledger::governance::storage as gov_storage;
-    pub use anoma::ledger::{parameters, pos as proof_of_stake};
-    pub use anoma::proto::{Signed, SignedTxData};
-    pub use anoma::types::address::Address;
-    pub use anoma::types::storage::Key;
-    pub use anoma::types::*;
+    pub use namada::ledger::governance::storage as gov_storage;
+    pub use namada::ledger::{parameters, pos as proof_of_stake};
+    pub use namada::proto::{Signed, SignedTxData};
+    pub use namada::types::address::Address;
+    pub use namada::types::storage::Key;
+    pub use namada::types::*;
     pub use anoma_macros::validity_predicate;
 
     pub use crate::imports::vp::*;

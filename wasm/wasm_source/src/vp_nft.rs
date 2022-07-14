@@ -35,8 +35,8 @@ fn validate_tx(
 
 #[cfg(test)]
 mod tests {
-    use anoma::types::nft::{self, NftToken};
-    use anoma::types::transaction::nft::{CreateNft, MintNft};
+    use namada::types::nft::{self, NftToken};
+    use namada::types::transaction::nft::{CreateNft, MintNft};
     use anoma_tests::log::test;
     use anoma_tests::tx::{tx_host_env, TestTxEnv};
     use anoma_tests::vp::*;

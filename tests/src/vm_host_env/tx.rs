@@ -1,19 +1,19 @@
 use std::borrow::Borrow;
 use std::collections::BTreeSet;
 
-use anoma::ledger::gas::BlockGasMeter;
-use anoma::ledger::parameters::{self, EpochDuration};
-use anoma::ledger::storage::mockdb::MockDB;
-use anoma::ledger::storage::testing::TestStorage;
-use anoma::ledger::storage::write_log::WriteLog;
-use anoma::proto::Tx;
-use anoma::types::address::Address;
-use anoma::types::storage::Key;
-use anoma::types::time::DurationSecs;
-use anoma::types::{key, token};
-use anoma::vm::prefix_iter::PrefixIterators;
-use anoma::vm::wasm::{self, TxCache, VpCache};
-use anoma::vm::{self, WasmCacheRwAccess};
+use namada::ledger::gas::BlockGasMeter;
+use namada::ledger::parameters::{self, EpochDuration};
+use namada::ledger::storage::mockdb::MockDB;
+use namada::ledger::storage::testing::TestStorage;
+use namada::ledger::storage::write_log::WriteLog;
+use namada::proto::Tx;
+use namada::types::address::Address;
+use namada::types::storage::Key;
+use namada::types::time::DurationSecs;
+use namada::types::{key, token};
+use namada::vm::prefix_iter::PrefixIterators;
+use namada::vm::wasm::{self, TxCache, VpCache};
+use namada::vm::{self, WasmCacheRwAccess};
 use anoma_vm_env::tx_prelude::BorshSerialize;
 use derivative::Derivative;
 use tempfile::TempDir;
@@ -162,7 +162,7 @@ mod native_tx_host_env {
     use std::cell::RefCell;
     use std::pin::Pin;
 
-    use anoma::vm::host_env::*;
+    use namada::vm::host_env::*;
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
 

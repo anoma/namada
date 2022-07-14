@@ -102,10 +102,10 @@
 #[cfg(test)]
 mod tests {
 
-    use anoma::ledger::pos::anoma_proof_of_stake::PosBase;
-    use anoma::ledger::pos::PosParams;
-    use anoma::types::storage::Epoch;
-    use anoma::types::token;
+    use namada::ledger::pos::anoma_proof_of_stake::PosBase;
+    use namada::ledger::pos::PosParams;
+    use namada::types::storage::Epoch;
+    use namada::types::token;
     use anoma_vm_env::proof_of_stake::parameters::testing::arb_pos_params;
     use anoma_vm_env::proof_of_stake::{staking_token_address, PosVP};
     use anoma_vm_env::tx_prelude::Address;
@@ -531,11 +531,11 @@ mod tests {
 pub mod testing {
     use std::collections::HashMap;
 
-    use anoma::ledger::pos::anoma_proof_of_stake::btree_set::BTreeSetShims;
-    use anoma::types::key::common::PublicKey;
-    use anoma::types::key::RefTo;
-    use anoma::types::storage::Epoch;
-    use anoma::types::{address, key, token};
+    use namada::ledger::pos::anoma_proof_of_stake::btree_set::BTreeSetShims;
+    use namada::types::key::common::PublicKey;
+    use namada::types::key::RefTo;
+    use namada::types::storage::Epoch;
+    use namada::types::{address, key, token};
     use anoma_vm_env::proof_of_stake::epoched::{
         DynEpochOffset, Epoched, EpochedDelta,
     };
@@ -928,7 +928,7 @@ pub mod testing {
                     // for each epoch that we iterate, less the deltas of the
                     // predecessor epochs
                     let mut total_vp_delta = 0_i128;
-                    for epoch in anoma::ledger::pos::anoma_proof_of_stake::types::Epoch::iter_range(
+                    for epoch in namada::ledger::pos::anoma_proof_of_stake::types::Epoch::iter_range(
                         (current_epoch.0 + DynEpochOffset::PipelineLen.value(params) + 1).into(),
                         num_of_epochs,
                     ) {

@@ -3,11 +3,11 @@
 
 use std::rc::Rc;
 
-use anoma::proto::Tx;
-use anoma::types::address::{Address, ImplicitAddress};
-use anoma::types::key::*;
-use anoma::types::storage::Epoch;
-use anoma::types::transaction::{hash_tx, Fee, WrapperTx};
+use namada::proto::Tx;
+use namada::types::address::{Address, ImplicitAddress};
+use namada::types::key::*;
+use namada::types::storage::Epoch;
+use namada::types::transaction::{hash_tx, Fee, WrapperTx};
 use borsh::BorshSerialize;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;

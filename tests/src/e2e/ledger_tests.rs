@@ -15,7 +15,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anoma::types::token;
+use namada::types::token;
 use anoma_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
@@ -321,7 +321,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--source",
             BERTHA,
             "--public-key",
-            // Value obtained from `anoma::types::key::ed25519::tests::gen_keypair`
+            // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
             "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
             "--code-path",
             &vp_user,
@@ -1560,7 +1560,7 @@ fn test_genesis_validators() -> Result<()> {
     use std::net::SocketAddr;
     use std::str::FromStr;
 
-    use anoma::types::chain::ChainId;
+    use namada::types::chain::ChainId;
     use anoma_apps::config::genesis::genesis_config::{
         self, ValidatorPreGenesisConfig,
     };

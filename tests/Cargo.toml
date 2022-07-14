@@ -9,22 +9,22 @@ version = "0.6.1"
 
 [features]
 default = ["wasm-runtime", "ABCI"]
-wasm-runtime = ["anoma/wasm-runtime"]
+wasm-runtime = ["namada/wasm-runtime"]
 
 ABCI = [
-  "anoma/ABCI",
-  "anoma/ibc-mocks-abci",
+  "namada/ABCI",
+  "namada/ibc-mocks-abci",
   "anoma_vm_env/ABCI",
 ]
 
 ABCI-plus-plus = [
-  "anoma/ABCI-plus-plus",
-  "anoma/ibc-mocks",
+  "namada/ABCI-plus-plus",
+  "namada/ibc-mocks",
   "anoma_vm_env/ABCI-plus-plus",
 ]
 
 [dependencies]
-anoma = {path = "../shared", default-features = false, features = ["testing"]}
+namada = {path = "../shared", default-features = false, features = ["testing"]}
 anoma_vm_env = {path = "../vm_env", default-features = false}
 chrono = "0.4.19"
 concat-idents = "1.1.2"

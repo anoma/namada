@@ -18,13 +18,13 @@
 use std::collections::HashSet;
 use std::io::Write;
 
-use anoma::ledger::parameters::Parameters;
-use anoma::proto::SignedTxData;
-use anoma::types::address::Address;
-use anoma::types::key::ed25519::{PublicKey, Signature};
-use anoma::types::storage::{self, Epoch};
-use anoma::types::transaction::pos;
-use anoma::types::{token, transaction};
+use namada::ledger::parameters::Parameters;
+use namada::proto::SignedTxData;
+use namada::types::address::Address;
+use namada::types::key::ed25519::{PublicKey, Signature};
+use namada::types::storage::{self, Epoch};
+use namada::types::transaction::pos;
+use namada::types::{token, transaction};
 use borsh::{schema, BorshSchema};
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // PoS
     // TODO add after <https://github.com/anoma/anoma/issues/439>
-    // TODO imported from `use anoma::ledger::pos::Bonds;`
+    // TODO imported from `use namada::ledger::pos::Bonds;`
     // let pos_bonds_schema = Bonds::schema_container();
 
     // Merge type definitions

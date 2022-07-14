@@ -20,28 +20,28 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::str::FromStr;
 
-use anoma::ledger::gas::BlockGasMeter;
-use anoma::ledger::pos::anoma_proof_of_stake::types::{
+use namada::ledger::gas::BlockGasMeter;
+use namada::ledger::pos::anoma_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
-use anoma::ledger::pos::anoma_proof_of_stake::PosBase;
-use anoma::ledger::storage::write_log::WriteLog;
-use anoma::ledger::storage::{
+use namada::ledger::pos::anoma_proof_of_stake::PosBase;
+use namada::ledger::storage::write_log::WriteLog;
+use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, DB,
 };
-use anoma::ledger::{ibc, parameters, pos};
-use anoma::proto::{self, Tx};
-use anoma::types::chain::ChainId;
-use anoma::types::key::*;
-use anoma::types::storage::{BlockHeight, Key};
-use anoma::types::time::{DateTimeUtc, TimeZone, Utc};
-use anoma::types::transaction::{
+use namada::ledger::{ibc, parameters, pos};
+use namada::proto::{self, Tx};
+use namada::types::chain::ChainId;
+use namada::types::key::*;
+use namada::types::storage::{BlockHeight, Key};
+use namada::types::time::{DateTimeUtc, TimeZone, Utc};
+use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
-use anoma::types::{address, token};
-use anoma::vm::wasm::{TxCache, VpCache};
-use anoma::vm::WasmCacheRwAccess;
+use namada::types::{address, token};
+use namada::vm::wasm::{TxCache, VpCache};
+use namada::vm::WasmCacheRwAccess;
 use borsh::{BorshDeserialize, BorshSerialize};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -663,14 +663,14 @@ mod test_utils {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
-    use anoma::ledger::storage::mockdb::MockDB;
-    use anoma::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
-    use anoma::types::address::{xan, EstablishedAddressGen};
-    use anoma::types::chain::ChainId;
-    use anoma::types::hash::Hash;
-    use anoma::types::key::*;
-    use anoma::types::storage::{BlockHash, Epoch, Header};
-    use anoma::types::transaction::Fee;
+    use namada::ledger::storage::mockdb::MockDB;
+    use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
+    use namada::types::address::{xan, EstablishedAddressGen};
+    use namada::types::chain::ChainId;
+    use namada::types::hash::Hash;
+    use namada::types::key::*;
+    use namada::types::storage::{BlockHash, Epoch, Header};
+    use namada::types::transaction::Fee;
     use tempfile::tempdir;
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::{RequestInitChain, RequestProcessProposal};

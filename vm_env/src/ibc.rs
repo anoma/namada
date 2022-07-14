@@ -1,11 +1,11 @@
 //! IBC functions for transactions.
 
-pub use anoma::ledger::ibc::handler::IbcActions;
-use anoma::types::address::Address;
-use anoma::types::ibc::IbcEvent;
-use anoma::types::storage::{BlockHeight, Key};
-use anoma::types::time::Rfc3339String;
-use anoma::types::token::Amount;
+pub use namada::ledger::ibc::handler::IbcActions;
+use namada::types::address::Address;
+use namada::types::ibc::IbcEvent;
+use namada::types::storage::{BlockHeight, Key};
+use namada::types::time::Rfc3339String;
+use namada::types::token::Amount;
 
 use crate::imports::tx;
 use crate::token::tx::transfer;

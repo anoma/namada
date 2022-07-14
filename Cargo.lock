@@ -73,69 +73,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma"
-version = "0.6.1"
-dependencies = [
- "anoma_proof_of_stake",
- "ark-bls12-381",
- "ark-ec",
- "ark-serialize",
- "assert_matches",
- "bech32",
- "borsh",
- "byte-unit",
- "chrono",
- "clru",
- "derivative",
- "ed25519-consensus",
- "ferveo",
- "ferveo-common",
- "group-threshold-cryptography",
- "hex",
- "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_tm_v0.23.5)",
- "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?rev=30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc)",
- "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_tm_v0.23.5)",
- "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?rev=30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc)",
- "ics23",
- "itertools 0.10.3",
- "loupe",
- "parity-wasm",
- "pretty_assertions",
- "proptest",
- "prost 0.9.0",
- "prost-types 0.9.0",
- "pwasm-utils",
- "rand 0.8.5",
- "rand_core 0.6.3",
- "rust_decimal",
- "serde 1.0.137",
- "serde_json",
- "sha2 0.9.9",
- "sparse-merkle-tree",
- "tempfile",
- "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
- "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "test-log",
- "thiserror",
- "tonic-build",
- "tracing 0.1.35",
- "tracing-subscriber 0.3.11",
- "wasmer",
- "wasmer-cache",
- "wasmer-compiler-singlepass",
- "wasmer-engine-dylib",
- "wasmer-engine-universal",
- "wasmer-vm",
- "wasmparser 0.83.0",
-]
-
-[[package]]
 name = "anoma_apps"
 version = "0.6.1"
 dependencies = [
- "anoma",
  "ark-serialize",
  "ark-std",
  "async-std",
@@ -169,6 +109,7 @@ dependencies = [
  "libloading",
  "libp2p",
  "message-io",
+ "namada",
  "num-derive",
  "num-traits 0.2.15",
  "num_cpus",
@@ -225,11 +166,11 @@ dependencies = [
 name = "anoma_encoding_spec"
 version = "0.6.1"
 dependencies = [
- "anoma",
  "borsh",
  "itertools 0.10.3",
  "lazy_static 1.4.0",
  "madato",
+ "namada",
 ]
 
 [[package]]
@@ -253,7 +194,6 @@ dependencies = [
 name = "anoma_tests"
 version = "0.6.1"
 dependencies = [
- "anoma",
  "anoma_apps",
  "anoma_vm_env",
  "assert_cmd",
@@ -270,6 +210,7 @@ dependencies = [
  "hex",
  "itertools 0.10.3",
  "libp2p",
+ "namada",
  "pretty_assertions",
  "proptest",
  "prost 0.9.0",
@@ -298,10 +239,10 @@ dependencies = [
 name = "anoma_vm_env"
 version = "0.6.1"
 dependencies = [
- "anoma",
  "anoma_macros",
  "borsh",
  "hex",
+ "namada",
 ]
 
 [[package]]
@@ -4109,6 +4050,65 @@ dependencies = [
  "pin-project 1.0.10",
  "smallvec 1.8.0",
  "unsigned-varint 0.7.1",
+]
+
+[[package]]
+name = "namada"
+version = "0.7.0"
+dependencies = [
+ "anoma_proof_of_stake",
+ "ark-bls12-381",
+ "ark-ec",
+ "ark-serialize",
+ "assert_matches",
+ "bech32",
+ "borsh",
+ "byte-unit",
+ "chrono",
+ "clru",
+ "derivative",
+ "ed25519-consensus",
+ "ferveo",
+ "ferveo-common",
+ "group-threshold-cryptography",
+ "hex",
+ "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_tm_v0.23.5)",
+ "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?rev=30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc)",
+ "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?branch=yuji/v0.12.0_tm_v0.23.5)",
+ "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?rev=30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc)",
+ "ics23",
+ "itertools 0.10.3",
+ "loupe",
+ "parity-wasm",
+ "pretty_assertions",
+ "proptest",
+ "prost 0.9.0",
+ "prost-types 0.9.0",
+ "pwasm-utils",
+ "rand 0.8.5",
+ "rand_core 0.6.3",
+ "rust_decimal",
+ "serde 1.0.137",
+ "serde_json",
+ "sha2 0.9.9",
+ "sparse-merkle-tree",
+ "tempfile",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=yuji/rebase_v0.23.5)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
+ "test-log",
+ "thiserror",
+ "tonic-build",
+ "tracing 0.1.35",
+ "tracing-subscriber 0.3.11",
+ "wasmer",
+ "wasmer-cache",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-dylib",
+ "wasmer-engine-universal",
+ "wasmer-vm",
+ "wasmparser 0.83.0",
 ]
 
 [[package]]

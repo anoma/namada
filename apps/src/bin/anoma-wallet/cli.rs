@@ -3,7 +3,7 @@
 use std::fs::File;
 use std::io::{self, Write};
 
-use anoma::types::key::*;
+use namada::types::key::*;
 use anoma_apps::cli;
 use anoma_apps::cli::{args, cmds, Context};
 use anoma_apps::wallet::DecryptionError;
