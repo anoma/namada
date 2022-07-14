@@ -40,7 +40,7 @@ borsh-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev 
 borsh-schema-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 
 [dev-dependencies]
-anoma_tests = {path = "../../tests"}
+namada_tests = {path = "../../tests"}
 
 [profile.release]
 # smaller and faster wasm https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto

@@ -7,7 +7,7 @@ fn apply_tx(tx_data: Vec<u8>) {
 
 #[cfg(test)]
 mod tests {
-    use anoma_tests::tx::*;
+    use namada_tests::tx::*;
 
     use super::*;
 

@@ -38,31 +38,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma_tests"
-version = "0.6.1"
-dependencies = [
- "chrono",
- "concat-idents",
- "derivative",
- "namada",
- "namada_vm_env",
- "prost",
- "serde_json",
- "sha2 0.9.9",
- "tempfile",
- "test-log",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "anoma_wasm"
 version = "0.6.1"
 dependencies = [
- "anoma_tests",
  "borsh",
  "getrandom",
  "namada",
+ "namada_tests",
  "namada_tx_prelude",
  "namada_vp_prelude",
  "once_cell",
@@ -1449,6 +1431,24 @@ dependencies = [
  "borsh",
  "proptest",
  "thiserror",
+]
+
+[[package]]
+name = "namada_tests"
+version = "0.7.0"
+dependencies = [
+ "chrono",
+ "concat-idents",
+ "derivative",
+ "namada",
+ "namada_vm_env",
+ "prost",
+ "serde_json",
+ "sha2 0.9.9",
+ "tempfile",
+ "test-log",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

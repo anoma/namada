@@ -49,10 +49,10 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--lib=anoma_tests",
+                    "--lib=namada_tests",
                 ],
                 "filter": {
-                    "name": "anoma_tests",
+                    "name": "namada_tests",
                     "kind": "lib"
                 }
             },
