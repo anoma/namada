@@ -1,6 +1,6 @@
 mod cli;
 
-use anoma_apps::logging;
+use namada_apps::logging;
 use color_eyre::eyre::Result;
 use tracing_subscriber::filter::LevelFilter;
 

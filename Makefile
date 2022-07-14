@@ -29,10 +29,10 @@ build-test-abci-plus-plus:
 	$(cargo) build --tests --no-default-features --features "ABCI-plus-plus"
 
 build-release:
-	ANOMA_DEV=false $(cargo) build --release --package anoma_apps
+	ANOMA_DEV=false $(cargo) build --release --package namada_apps
 
 check-release:
-	ANOMA_DEV=false $(cargo) check --release --package anoma_apps
+	ANOMA_DEV=false $(cargo) check --release --package namada_apps
 
 package: build-release
 	scripts/make-package.sh
@@ -81,7 +81,7 @@ clippy-abci-plus-plus:
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
-		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" && \
+		--features "wasm-runtime ABCI-plus-plus namada_apps/ABCI-plus-plus" && \
 	$(cargo) +$(nightly) clippy \
 		--all-targets \
 		--manifest-path ./vm_env/Cargo.toml \
@@ -131,7 +131,7 @@ test-e2e-abci-plus-plus:
 	RUST_BACKTRACE=1 $(cargo) test e2e \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
-		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" \
+		--features "wasm-runtime ABCI-plus-plus namada_apps/ABCI-plus-plus" \
 		-- --test-threads=1
 
 test-unit-abci-plus-plus:
@@ -148,7 +148,7 @@ test-unit-abci-plus-plus:
 	$(cargo) test \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
-		--features "wasm-runtime ABCI-plus-plus anoma_apps/ABCI-plus-plus" \
+		--features "wasm-runtime ABCI-plus-plus namada_apps/ABCI-plus-plus" \
 		-- --skip e2e && \
 	$(cargo) test \
 		--manifest-path ./vm_env/Cargo.toml \

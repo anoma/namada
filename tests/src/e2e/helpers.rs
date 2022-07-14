@@ -5,7 +5,7 @@ use std::str::FromStr;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
-use anoma_apps::config::{Config, TendermintMode};
+use namada_apps::config::{Config, TendermintMode};
 use color_eyre::eyre::Result;
 use eyre::eyre;
 

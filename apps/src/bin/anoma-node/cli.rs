@@ -1,7 +1,7 @@
 //! Anoma node CLI.
 
-use anoma_apps::cli::{self, args, cmds};
-use anoma_apps::node::{gossip, ledger, matchmaker};
+use namada_apps::cli::{self, args, cmds};
+use namada_apps::node::{gossip, ledger, matchmaker};
 use eyre::{Context, Result};
 
 pub fn main() -> Result<()> {

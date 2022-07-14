@@ -1,41 +1,41 @@
 [package]
 authors = ["Heliax AG <hello@heliax.dev>"]
-description = "Anoma apps"
+description = "Namada apps"
 edition = "2021"
 license = "GPL-3.0"
-name = "anoma_apps"
+name = "namada_apps"
 readme = "../README.md"
 resolver = "2"
-version = "0.6.1"
+version = "0.7.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "anoma_apps"
+name = "namada_apps"
 path = "src/lib/mod.rs"
 
-# Anoma CLI that aggregates some common commands for the node and the client
+# Namada CLI that aggregates some common commands for the node and the client
 [[bin]]
 doc = false
-name = "anoma"
+name = "namada"
 path = "src/bin/anoma/main.rs"
 
-# Anoma node
+# Namada node
 [[bin]]
 doc = false
-name = "anoman"
+name = "namadan"
 path = "src/bin/anoma-node/main.rs"
 
-# Anoma client
+# Namada client
 [[bin]]
 doc = false
-name = "anomac"
+name = "namadac"
 path = "src/bin/anoma-client/main.rs"
 
-# Anoma wallet
+# Namada wallet
 [[bin]]
 doc = false
-name = "anomaw"
+name = "namadaw"
 path = "src/bin/anoma-wallet/main.rs"
 
 [features]
