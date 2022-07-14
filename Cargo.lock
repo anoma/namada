@@ -163,17 +163,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma_encoding_spec"
-version = "0.6.1"
-dependencies = [
- "borsh",
- "itertools 0.10.3",
- "lazy_static 1.4.0",
- "madato",
- "namada",
-]
-
-[[package]]
 name = "anoma_tests"
 version = "0.6.1"
 dependencies = [
@@ -4066,6 +4055,17 @@ dependencies = [
  "wasmer-engine-universal",
  "wasmer-vm",
  "wasmparser 0.83.0",
+]
+
+[[package]]
+name = "namada_encoding_spec"
+version = "0.7.0"
+dependencies = [
+ "borsh",
+ "itertools 0.10.3",
+ "lazy_static 1.4.0",
+ "madato",
+ "namada",
 ]
 
 [[package]]

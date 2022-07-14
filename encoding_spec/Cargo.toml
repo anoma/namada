@@ -1,12 +1,12 @@
 [package]
 authors = ["Heliax AG <hello@heliax.dev>"]
-description = "Anoma encoding spec generator"
+description = "Namada encoding spec generator"
 edition = "2021"
 license = "GPL-3.0"
-name = "anoma_encoding_spec"
+name = "namada_encoding_spec"
 readme = "../README.md"
 resolver = "2"
-version = "0.6.1"
+version = "0.7.0"
 
 [features]
 default = ["ABCI"]
