@@ -349,3 +349,12 @@ pub mod vote_extensions {
         }
     }
 }
+
+/// Represents an Ethereum event being seen by some validators
+#[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct EthMsgDiff {
+    /// the event being seen
+    pub body: EthereumEvent,
+    /// addresses of the validators who have just seen this event
+    pub seen_by: Vec<Address>,
+}

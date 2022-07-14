@@ -1,14 +1,7 @@
-use anoma::types::address::Address;
 use anoma::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
-use anoma::types::ethereum_events::EthereumEvent;
-use borsh::{BorshDeserialize, BorshSerialize};
+use anoma::types::ethereum_events::EthMsgDiff;
+use borsh::BorshSerialize;
 use eyre::{eyre, Context, Result};
-
-#[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-pub(crate) struct EthMsgDiff {
-    body: EthereumEvent,
-    seen_by: Vec<Address>,
-}
 
 pub(crate) fn calculate_eth_msg_diffs(
     multisigneds: Vec<MultiSignedEthEvent>,
@@ -65,6 +58,16 @@ mod test {
     const DAI_ERC20_ETH_ADDRESS: &str =
         "0x6B175474E89094C44Da98b954EedeAC495271d0F";
 
+    fn arbitrary_eth_address() -> EthAddress {
+        let bytes: [u8; 20] =
+            hex::decode(DAI_ERC20_ETH_ADDRESS[2..].as_bytes())
+                .unwrap()
+                .try_into()
+                .unwrap();
+
+        EthAddress(bytes)
+    }
+
     fn arbitrary_fractional_voting_power() -> FractionalVotingPower {
         FractionalVotingPower::new(1, 3).unwrap()
     }
@@ -90,16 +93,6 @@ mod test {
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
         };
         sk
-    }
-
-    fn arbitrary_eth_address() -> EthAddress {
-        let bytes: [u8; 20] =
-            hex::decode(DAI_ERC20_ETH_ADDRESS[2..].as_bytes())
-                .unwrap()
-                .try_into()
-                .unwrap();
-
-        EthAddress(bytes)
     }
 
     #[test]
