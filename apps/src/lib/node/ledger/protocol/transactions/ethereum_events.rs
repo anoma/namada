@@ -1,7 +1,5 @@
 use anoma::types::address::Address;
-use anoma::types::ethereum_events::vote_extensions::{
-    FractionalVotingPower, MultiSignedEthEvent,
-};
+use anoma::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
 use anoma::types::ethereum_events::EthereumEvent;
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, Context, Result};
@@ -10,7 +8,6 @@ use eyre::{eyre, Context, Result};
 pub(crate) struct EthMsgDiff {
     body: EthereumEvent,
     seen_by: Vec<Address>,
-    voting_power: FractionalVotingPower,
 }
 
 pub(crate) fn calculate_eth_msg_diffs(
@@ -31,19 +28,14 @@ pub(crate) fn calculate_eth_msg_diff(
         return Err(eyre!("invalid event: {:#?}", body));
     }
 
-    let mut total_voting_power = FractionalVotingPower::zero();
     let mut seen_by = vec![];
-    for (signer, voting_power) in multisigned.signers {
+    for (signer, _) in multisigned.signers {
+        // we disregard voting power, as we will look it up directly from
+        // storage
         seen_by.push(signer);
-        total_voting_power =
-            (*voting_power + *total_voting_power).try_into().unwrap();
     }
 
-    Ok(EthMsgDiff {
-        body,
-        seen_by,
-        voting_power: total_voting_power,
-    })
+    Ok(EthMsgDiff { body, seen_by })
 }
 
 pub(crate) fn construct_tx_data(diffs: Vec<EthMsgDiff>) -> Result<Vec<u8>> {
@@ -167,7 +159,6 @@ mod test {
         let expected = EthMsgDiff {
             body: single_transfer.clone(),
             seen_by: vec![sole_validator],
-            voting_power: FractionalVotingPower::full(),
         };
 
         let eth_msg = calculate_eth_msg_diff(with_signers);
