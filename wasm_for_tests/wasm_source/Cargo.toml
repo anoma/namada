@@ -2,9 +2,9 @@
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2021"
 license = "GPL-3.0"
-name = "anoma_wasm_for_tests"
+name = "namada_wasm_for_tests"
 resolver = "2"
-version = "0.6.1"
+version = "0.7.0"
 
 [lib]
 crate-type = ["cdylib"]
