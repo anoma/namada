@@ -301,6 +301,7 @@ The [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/an
   * `NoteCommit` and hence `cm` must be parameterized by asset type
   * `ValueCommit` and hence `cv` must be parameterized by asset type
 * [4.13 Balance and Binding Signature (Sapling)](https://zips.z.cash/protocol/protocol.pdf#saplingbalance)
+  * The Sapling balance value is now defined as the net value of Spend and [Convert](#convert-descriptions) transfers minus Output transfers.
   * The Sapling balance value is no longer a scalar but a vector of pairs comprising values and asset types
   * Addition, subtraction, and equality checks of Sapling balance values is now done component-wise
   * A Sapling balance value is defined to be non-negative iff each of its components is non-negative
@@ -357,6 +358,25 @@ A convert description comprises `(cv, rt, pi)` where
 * `cv: ValueCommit.Output` is value commitment to the value of the conversion note
 * `rt: B[Sapling Merkle]` is an anchor for the current conversion tree or an archived conversion tree
 * `pi: ZKConvert.Proof` is a zk-SNARK proof with primary input `(rt, cv)` for the Convert statement defined at [Burn and Mint conversion transactions in MASP](./burn-and-mint.md).
+#### Convert Description Encoding
+Let `pi_{ZKConvert}` be the zk-SNARK proof of the corresponding Convert statement. `pi_{ZKConvert}` is encoded in the `zkproof` field of the Convert description.
+
+An abstract Convert description, as described above, is encoded in a transaction as an instance of a `ConvertDescription` type:
+* First Entry
+  * Bytes: 32
+  * Name: `cv`
+  * Data Type: `byte[32]`
+  * Description: A value commitment to the value of the conversion note, `LEBS2OSP_256(repr_J(cv))`.
+* Second Entry
+  * Bytes: 32
+  * Name: `anchor`
+  * Data Type: `byte[32]`
+  * Description: A root of the current conversion tree or an archived conversion tree, `LEBS2OSP_256(rt^Sapling)`.
+* Third Entry
+  * Bytes: 192
+  * Name: `zkproof`
+  * Data Type: `byte[192]`
+  * Description: An encoding of the zk-SNARK proof `pi_{ZKConvert}` (see [5.4.10.2](https://zips.z.cash/protocol/protocol.pdf#groth) `Groth16`).
 ## Required Changes to ZIP 32: Shielded Hierarchical Deterministic Wallets
 Below, the changes from [ZIP 32: Shielded Hierarchical Deterministic Wallets](https://zips.z.cash/zip-0032) assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
 * [Specification: Key Encodings](https://zips.z.cash/zip-0032#specification-key-encodings)
