@@ -10,13 +10,13 @@ version = "0.6.1"
 default = ["ABCI"]
 
 ABCI = [
-  "anoma_vm_env/ABCI",
+  "namada_vm_env/ABCI",
 ]
 
 ABCI-plus-plus = [
-  "anoma_vm_env/ABCI-plus-plus",
+  "namada_vm_env/ABCI-plus-plus",
 ]
 
 [dependencies]
-anoma_vm_env = {path = "../vm_env", default-features = false}
+namada_vm_env = {path = "../vm_env", default-features = false}
 sha2 = "0.10.1"

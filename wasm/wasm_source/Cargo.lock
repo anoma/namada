@@ -58,11 +58,11 @@ dependencies = [
 name = "anoma_tests"
 version = "0.6.1"
 dependencies = [
- "anoma_vm_env",
  "chrono",
  "concat-idents",
  "derivative",
  "namada",
+ "namada_vm_env",
  "prost",
  "serde_json",
  "sha2 0.9.9",
@@ -76,25 +76,15 @@ dependencies = [
 name = "anoma_tx_prelude"
 version = "0.6.1"
 dependencies = [
- "anoma_vm_env",
+ "namada_vm_env",
  "sha2 0.10.2",
-]
-
-[[package]]
-name = "anoma_vm_env"
-version = "0.6.1"
-dependencies = [
- "anoma_macros",
- "borsh",
- "hex",
- "namada",
 ]
 
 [[package]]
 name = "anoma_vp_prelude"
 version = "0.6.1"
 dependencies = [
- "anoma_vm_env",
+ "namada_vm_env",
  "sha2 0.10.2",
 ]
 
@@ -1475,6 +1465,16 @@ dependencies = [
  "wasmer-engine-universal",
  "wasmer-vm",
  "wasmparser 0.83.0",
+]
+
+[[package]]
+name = "namada_vm_env"
+version = "0.7.0"
+dependencies = [
+ "anoma_macros",
+ "borsh",
+ "hex",
+ "namada",
 ]
 
 [[package]]

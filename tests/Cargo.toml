@@ -14,18 +14,18 @@ wasm-runtime = ["namada/wasm-runtime"]
 ABCI = [
   "namada/ABCI",
   "namada/ibc-mocks-abci",
-  "anoma_vm_env/ABCI",
+  "namada_vm_env/ABCI",
 ]
 
 ABCI-plus-plus = [
   "namada/ABCI-plus-plus",
   "namada/ibc-mocks",
-  "anoma_vm_env/ABCI-plus-plus",
+  "namada_vm_env/ABCI-plus-plus",
 ]
 
 [dependencies]
 namada = {path = "../shared", default-features = false, features = ["testing"]}
-anoma_vm_env = {path = "../vm_env", default-features = false}
+namada_vm_env = {path = "../vm_env", default-features = false}
 chrono = "0.4.19"
 concat-idents = "1.1.2"
 prost = "0.9.0"

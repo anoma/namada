@@ -19,7 +19,7 @@ use crate::tx::{tx_host_env, TestTxEnv};
 /// that will call to the native functions, instead of interfacing via a
 /// wasm runtime. It can be used for host environment integration tests.
 pub mod vp_host_env {
-    pub use anoma_vm_env::vp_prelude::*;
+    pub use namada_vm_env::vp_prelude::*;
 
     pub use super::native_vp_host_env::*;
 }
@@ -309,7 +309,7 @@ mod native_vp_host_env {
         }
 
     // Implement all the exported functions from
-    // [`anoma_vm_env::imports::vp`] `extern "C"` section.
+    // [`namada_vm_env::imports::vp`] `extern "C"` section.
     native_host_fn!(vp_read_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_read_post(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_result_buffer(result_ptr: u64));

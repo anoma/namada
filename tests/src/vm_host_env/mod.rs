@@ -32,10 +32,10 @@ mod tests {
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
     use namada::types::{address, key};
-    use anoma_vm_env::tx_prelude::{
+    use namada_vm_env::tx_prelude::{
         BorshDeserialize, BorshSerialize, KeyValIterator,
     };
-    use anoma_vm_env::vp_prelude::{PostKeyValIterator, PreKeyValIterator};
+    use namada_vm_env::vp_prelude::{PostKeyValIterator, PreKeyValIterator};
     use itertools::Itertools;
     use prost::Message;
     use test_log::test;

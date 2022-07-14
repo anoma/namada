@@ -213,16 +213,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'anoma_vm_env'",
+            "name": "Debug unit tests in library 'namada_vm_env'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=anoma_vm_env"
+                    "--package=namada_vm_env"
                 ],
                 "filter": {
-                    "name": "anoma_vm_env",
+                    "name": "namada_vm_env",
                     "kind": "lib"
                 }
             },

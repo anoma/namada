@@ -14,7 +14,7 @@ use namada::types::{key, token};
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
-use anoma_vm_env::tx_prelude::BorshSerialize;
+use namada_vm_env::tx_prelude::BorshSerialize;
 use derivative::Derivative;
 use tempfile::TempDir;
 
@@ -23,7 +23,7 @@ use tempfile::TempDir;
 /// that will call to the native functions, instead of interfacing via a
 /// wasm runtime. It can be used for host environment integration tests.
 pub mod tx_host_env {
-    pub use anoma_vm_env::tx_prelude::*;
+    pub use namada_vm_env::tx_prelude::*;
 
     pub use super::native_tx_host_env::*;
 }
@@ -308,7 +308,7 @@ mod native_tx_host_env {
         }
 
     // Implement all the exported functions from
-    // [`anoma_vm_env::imports::tx`] `extern "C"` section.
+    // [`namada_vm_env::imports::tx`] `extern "C"` section.
     native_host_fn!(tx_read(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(tx_result_buffer(result_ptr: u64));
     native_host_fn!(tx_has_key(key_ptr: u64, key_len: u64) -> i64);
