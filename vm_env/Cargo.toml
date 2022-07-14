@@ -21,6 +21,6 @@ ABCI-plus-plus = [
 
 [dependencies]
 namada = {path = "../shared", default-features = false}
-anoma_macros = {path = "../macros"}
+namada_macros = {path = "../macros"}
 borsh = "0.9.0"
 hex = "0.4.3"

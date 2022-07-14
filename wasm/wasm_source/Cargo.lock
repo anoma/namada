@@ -38,14 +38,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma_macros"
-version = "0.6.1"
-dependencies = [
- "quote",
- "syn",
-]
-
-[[package]]
 name = "anoma_proof_of_stake"
 version = "0.6.1"
 dependencies = [
@@ -1468,13 +1460,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_macros"
+version = "0.7.0"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "namada_vm_env"
 version = "0.7.0"
 dependencies = [
- "anoma_macros",
  "borsh",
  "hex",
  "namada",
+ "namada_macros",
 ]
 
 [[package]]

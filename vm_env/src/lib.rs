@@ -24,7 +24,7 @@ pub mod tx_prelude {
     pub use namada::types::address::Address;
     pub use namada::types::storage::Key;
     pub use namada::types::*;
-    pub use anoma_macros::transaction;
+    pub use namada_macros::transaction;
 
     pub use crate::governance::tx as governance;
     pub use crate::ibc::{Ibc, IbcActions};
@@ -45,7 +45,7 @@ pub mod vp_prelude {
     pub use namada::types::address::Address;
     pub use namada::types::storage::Key;
     pub use namada::types::*;
-    pub use anoma_macros::validity_predicate;
+    pub use namada_macros::validity_predicate;
 
     pub use crate::imports::vp::*;
     pub use crate::intent::vp as intent;

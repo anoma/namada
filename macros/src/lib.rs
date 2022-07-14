@@ -135,7 +135,7 @@ pub fn validity_predicate(
 ///
 /// ```compiler_fail
 /// use namada::types::matchmaker::AddIntent;
-/// use anoma_macros::Matchmaker;
+/// use namada_macros::Matchmaker;
 ///
 /// #[derive(Default, Matchmaker)]
 /// struct Matchmaker;
