@@ -21,7 +21,7 @@ pub struct VoteExtension {
     pub block_height: BlockHeight,
     /// The new ethereum events seen. These should be
     /// deterministically ordered.
-    pub ethereum_events: Vec<EthereumEvent>
+    pub ethereum_events: Vec<EthereumEvent>,
 }
 
 impl VoteExtension {
@@ -74,8 +74,7 @@ impl BorshSerialize for FractionalVotingPower {
 
 impl BorshDeserialize for FractionalVotingPower {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        let (numer, denom): (u64, u64) =
-            BorshDeserialize::deserialize(buf)?;
+        let (numer, denom): (u64, u64) = BorshDeserialize::deserialize(buf)?;
         Ok(FractionalVotingPower(Ratio::<u64>::new(numer, denom)))
     }
 }
@@ -103,7 +102,7 @@ impl BorshSchema for FractionalVotingPower {
 
 /// Aggregates an Ethereum event with the corresponding
 // validators who saw this event.
-#[derive(Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct MultiSignedEthEvent {
     /// The Ethereum event that was signed.
     pub event: EthereumEvent,
@@ -113,19 +112,22 @@ pub struct MultiSignedEthEvent {
 
 /// Compresses a set of signed `VoteExtension` instances, to save
 /// space on a block.
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct VoteExtensionDigest {
     /// The signatures and signing address of each VoteExtension
     pub signatures: Vec<(Signature, Address)>,
     /// The events that were reported
     pub events: Vec<MultiSignedEthEvent>,
     /// The validators who saw no events
-    pub nulls: HashSet<Address>
+    pub nulls: HashSet<Address>,
 }
 
 impl VoteExtensionDigest {
     /// Decompresses a set of signed `VoteExtension` instances.
-    pub fn decompress<D, H>(self, last_height: BlockHeight) -> Vec<Signed<VoteExtension>> {
+    pub fn decompress<D, H>(
+        self,
+        last_height: BlockHeight,
+    ) -> Vec<Signed<VoteExtension>> {
         let VoteExtensionDigest {
             signatures,
             events,
@@ -138,20 +140,17 @@ impl VoteExtensionDigest {
             let mut ext = VoteExtension::empty(last_height);
 
             if !nulls.contains(&addr) {
-                for event in events {
+                for event in events.iter() {
                     if event.signers.contains(&addr) {
-                        ext.ethereum_events.push(event.clone());
+                        ext.ethereum_events.push(event.event.clone());
                     }
                 }
                 // TODO: we need to implement `Ord` for `EthereumEvent`
-                //ext.ethereum_events.sort();
+                // ext.ethereum_events.sort();
             }
 
-            let signed = Signed {
-                data: ext,
-                sig,
-            };
-            extensions.push(sig);
+            let signed = Signed { data: ext, sig };
+            extensions.push(signed);
         }
         extensions
     }
@@ -176,9 +175,9 @@ mod tests {
         assert_eq!(
             hash,
             Hash([
-                94, 131, 116, 129, 41, 204, 178, 144, 24, 8, 185, 16, 103,
-                236, 209, 191, 20, 89, 145, 17, 41, 233, 31, 98, 185, 6,
-                217, 204, 80, 38, 224, 23
+                94, 131, 116, 129, 41, 204, 178, 144, 24, 8, 185, 16, 103, 236,
+                209, 191, 20, 89, 145, 17, 41, 233, 31, 98, 185, 6, 217, 204,
+                80, 38, 224, 23
             ])
         );
     }
