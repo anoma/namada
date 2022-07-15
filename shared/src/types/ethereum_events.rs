@@ -11,7 +11,15 @@ use crate::types::token::Amount;
 
 /// Anoma native type to replace the ethabi::Uint type
 #[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
 )]
 pub struct Uint(pub [u64; 4]);
 
@@ -35,18 +43,44 @@ impl From<u64> for Uint {
 
 /// Representation of address on Ethereum
 #[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
 )]
 pub struct EthAddress(pub [u8; 20]);
 
 /// A Keccak hash
 #[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
 )]
 pub struct KeccakHash(pub [u8; 32]);
 
 /// An Ethereum event to be processed by the Anoma ledger
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
 pub enum EthereumEvent {
     /// Event transferring batches of ether or Ethereum based ERC20 tokens
     /// from Ethereum to wrapped assets on Anoma
@@ -123,7 +157,15 @@ impl EthereumEvent {
 
 /// An event transferring some kind of value from Ethereum to Anoma
 #[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
 )]
 pub struct TransferToNamada {
     /// Quantity of the ERC20 token in the transfer
@@ -136,7 +178,15 @@ pub struct TransferToNamada {
 
 /// An event transferring some kind of value from Anoma to Ethereum
 #[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
 )]
 pub struct TransferToEthereum {
     /// Quantity of wrapped Asset in the transfer
@@ -152,7 +202,15 @@ pub struct TransferToEthereum {
 /// a cap on the max amount of this token allowed to be
 /// held by the bridge.
 #[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
 )]
 #[allow(dead_code)]
 pub struct TokenWhitelist {

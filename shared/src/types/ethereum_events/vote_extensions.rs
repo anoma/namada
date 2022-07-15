@@ -145,8 +145,11 @@ impl VoteExtensionDigest {
                         ext.ethereum_events.push(event.event.clone());
                     }
                 }
-                // TODO: we need to implement `Ord` for `EthereumEvent`
-                // ext.ethereum_events.sort();
+                // TODO: we probably need a manual `Ord` impl for
+                // `EthereumEvent`, such that this `sort()` is
+                // always deterministic, regardless
+                // of crate versions changing and such
+                ext.ethereum_events.sort();
             }
 
             let signed = Signed { data: ext, sig };
