@@ -2,15 +2,27 @@
 use std::error::Error;
 
 use anoma::ledger::eth_bridge::storage;
-use anoma::types::ethereum_events::EthMsgDiff;
-use borsh::BorshDeserialize;
+use anoma::types::address::Address;
+use anoma::types::ethereum_events::{EthMsgDiff, EthereumEvent};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 
 use crate::imports::tx::log_string;
+use crate::tx_prelude::{has_key, read};
 
 const TX_NAME: &str = "tx_eth_bridge";
 
 fn log(msg: &str) {
     log_string(format!("[{}] {}", TX_NAME, msg))
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
+pub struct EthMsg {
+    pub body: EthereumEvent,
+    pub voting_power: (u64, u64),
+    pub seen_by: Vec<Address>,
+    pub seen: bool,
 }
 
 pub fn apply(tx_data: Vec<u8>) {
@@ -26,11 +38,27 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
 
     let diffs: Vec<EthMsgDiff> = BorshDeserialize::try_from_slice(&tx_data)?;
     log(&format!("deserialized diffs - length = {}", diffs.len()));
-    Ok(())
 
-    // TODO: extract Vec<EthMsgDiffs>
-    // TODO: look at /eth_msgs storage, calculate new state
-    // TODO: write new state
+    for diff in diffs {
+        let hash = diff.body.hash()?;
+        let eth_msg_keys = storage::EthMsgKeys::new(hash);
+
+        if !has_key(&eth_msg_keys.prefix.to_string()) {
+            log(&format!("key not present - {}", &eth_msg_keys.prefix));
+            // TODO: write fresh
+        } else {
+            log(&format!("key present - {}", &eth_msg_keys.prefix));
+            // TODO: calculate with applied diff
+            let _body: Option<EthereumEvent> =
+                read(&eth_msg_keys.body().to_string());
+            let _seen: Option<bool> = read(&eth_msg_keys.seen().to_string());
+            let _seen_by: Option<Vec<Address>> =
+                read(&eth_msg_keys.seen_by().to_string());
+            let _voting_power: Option<(u64, u64)> =
+                read(&eth_msg_keys.voting_power().to_string());
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
