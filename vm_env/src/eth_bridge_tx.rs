@@ -71,10 +71,7 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
         Some(total_voting_power) => total_voting_power,
         None => return Err("couldn't get total voting power")?,
     };
-    log(&format!(
-        "total_voting_power - {:?}",
-        &total_voting_power_deltas
-    ));
+    log(&format!("total_voting_power - {:?}", &total_voting_power));
 
     for diff in diffs {
         let hash = diff.body.hash()?;
