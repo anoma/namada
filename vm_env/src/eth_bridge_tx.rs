@@ -33,10 +33,7 @@ pub struct EthMsg {
     pub seen: bool,
 }
 
-fn write(
-    eth_msg_keys: &EthMsgKeys,
-    eth_msg: &EthMsg,
-) -> Result<(), Box<dyn Error>> {
+fn write_eth_msg(eth_msg_keys: &EthMsgKeys, eth_msg: &EthMsg) {
     tx::write(&eth_msg_keys.body().to_string(), &eth_msg.body);
     tx::write(&eth_msg_keys.seen().to_string(), &eth_msg.seen);
     tx::write(&eth_msg_keys.seen_by().to_string(), &eth_msg.seen_by);
@@ -44,7 +41,6 @@ fn write(
         &eth_msg_keys.voting_power().to_string(),
         &eth_msg.voting_power,
     );
-    Ok(())
 }
 
 pub fn apply(tx_data: Vec<u8>) {
@@ -61,40 +57,50 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
     let diffs: Vec<EthMsgDiff> = BorshDeserialize::try_from_slice(&tx_data)?;
     log(&format!("deserialized diffs - length = {}", diffs.len()));
 
+    // TODO: this should be previous block's epoch, not current epoch!
+    let epoch = get_block_epoch();
+    log(&format!("epoch - {}", &epoch));
+
+    let total_voting_power_deltas = PoS.read_total_voting_power();
+    log(&format!(
+        "total_voting_power_deltas - {:?}",
+        &total_voting_power_deltas
+    ));
+
+    let total_voting_power = match total_voting_power_deltas.get(epoch) {
+        Some(total_voting_power) => total_voting_power,
+        None => return Err("couldn't get total voting power")?,
+    };
+    log(&format!(
+        "total_voting_power - {:?}",
+        &total_voting_power_deltas
+    ));
+
     for diff in diffs {
         let hash = diff.body.hash()?;
         let eth_msg_keys = storage::EthMsgKeys::new(hash);
 
         let eth_msg = if !has_key(&eth_msg_keys.prefix.to_string()) {
             log(&format!("key not present - {}", &eth_msg_keys.prefix));
-            // TODO: this should be previous block's epoch, not current epoch!
-            let epoch = get_block_epoch();
-            // look up voting powers from storage
-            let total_voting_power_deltas = PoS.read_total_voting_power();
-            let total_voting_power = match total_voting_power_deltas.get(epoch)
-            {
-                Some(total_voting_power) => total_voting_power,
-                None => todo!("handle being unable to read total voting power"),
-            };
 
             let mut numerator = VotingPowerDelta::default();
             for validator in diff.seen_by.iter() {
                 let voting_power_deltas =
-                    match PoS.read_validator_voting_power(&validator) {
+                    match PoS.read_validator_voting_power(validator) {
                         Some(voting_power) => voting_power,
-                        None => todo!(
-                            "handle not being able to read a validator's \
-                             voting power"
-                        ),
+                        None => {
+                            return Err(
+                                "couldn't get validator's voting power deltas"
+                            )?;
+                        }
                     };
                 // TODO: use voting_power_deltas.last_update() to ensure voting
                 // power is up to date?
                 let voting_power = match voting_power_deltas.get(epoch) {
                     Some(voting_power) => voting_power,
-                    None => todo!(
-                        "handle being unable to get voting power for the \
-                         correct epoch"
-                    ),
+                    None => {
+                        return Err("couldn't get validator's voting power")?;
+                    }
                 };
                 numerator = numerator.add(voting_power);
             }
@@ -114,12 +120,23 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
             log(&format!("key present - {}", &eth_msg_keys.prefix));
             let body: Option<EthereumEvent> =
                 read(&eth_msg_keys.body().to_string());
+            if body.is_none() {
+                return Err("couldn't read body")?;
+            }
             let seen: Option<bool> = read(&eth_msg_keys.seen().to_string());
+            if seen.is_none() {
+                return Err("couldn't read seen")?;
+            }
             let seen_by: Option<Vec<Address>> =
                 read(&eth_msg_keys.seen_by().to_string());
+            if seen_by.is_none() {
+                return Err("couldn't read seen_by")?;
+            }
             let voting_power: Option<(u64, u64)> =
                 read(&eth_msg_keys.voting_power().to_string());
-            // TODO: don't unwrap
+            if voting_power.is_none() {
+                return Err("couldn't read voting_power")?;
+            }
             EthMsg {
                 body: body.unwrap(),
                 voting_power: voting_power.unwrap(),
@@ -128,7 +145,7 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
             }
             // TODO: apply the diff before writing back
         };
-        write(&eth_msg_keys, &eth_msg)?;
+        write_eth_msg(&eth_msg_keys, &eth_msg);
     }
     Ok(())
 }
