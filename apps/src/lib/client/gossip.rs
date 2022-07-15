@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 use std::io::Write;
 
+use borsh::BorshSerialize;
 use namada::proto::Signed;
 use namada::types::intent::{Exchange, FungibleTokenIntent};
-use borsh::BorshSerialize;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]

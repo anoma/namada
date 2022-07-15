@@ -531,6 +531,8 @@ mod tests {
 pub mod testing {
     use std::collections::HashMap;
 
+    use derivative::Derivative;
+    use itertools::Either;
     use namada::ledger::pos::namada_proof_of_stake::btree_set::BTreeSetShims;
     use namada::types::key::common::PublicKey;
     use namada::types::key::RefTo;
@@ -547,8 +549,6 @@ pub mod testing {
         staking_token_address, BondId, Bonds, PosParams, Unbonds,
     };
     use namada_vm_env::tx_prelude::{Address, PoS};
-    use derivative::Derivative;
-    use itertools::Either;
     use proptest::prelude::*;
 
     use crate::tx::tx_host_env;

@@ -12,11 +12,11 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use namada::types::chain::ChainId;
-use namada::types::time::Rfc3339String;
 use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::multihash::Multihash;
 use libp2p::PeerId;
+use namada::types::chain::ChainId;
+use namada::types::time::Rfc3339String;
 use regex::Regex;
 use serde::{de, Deserialize, Serialize};
 #[cfg(not(feature = "ABCI"))]

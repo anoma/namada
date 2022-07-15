@@ -3,6 +3,8 @@
 use std::collections::BTreeSet;
 use std::panic::{RefUnwindSafe, UnwindSafe};
 
+use borsh::BorshDeserialize;
+use itertools::Itertools;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::types::{
@@ -11,8 +13,6 @@ pub use namada_proof_of_stake::types::{
 };
 use namada_proof_of_stake::validation::validate;
 use namada_proof_of_stake::{validation, PosReadOnly};
-use borsh::BorshDeserialize;
-use itertools::Itertools;
 use thiserror::Error;
 
 use super::{

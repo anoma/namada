@@ -18,6 +18,10 @@
 use std::collections::HashSet;
 use std::io::Write;
 
+use borsh::{schema, BorshSchema};
+use itertools::Itertools;
+use lazy_static::lazy_static;
+use madato::types::TableRow;
 use namada::ledger::parameters::Parameters;
 use namada::proto::SignedTxData;
 use namada::types::address::Address;
@@ -25,10 +29,6 @@ use namada::types::key::ed25519::{PublicKey, Signature};
 use namada::types::storage::{self, Epoch};
 use namada::types::transaction::pos;
 use namada::types::{token, transaction};
-use borsh::{schema, BorshSchema};
-use itertools::Itertools;
-use lazy_static::lazy_static;
-use madato::types::TableRow;
 
 /// This generator will write output into this `docs` file.
 const OUTPUT_PATH: &str =

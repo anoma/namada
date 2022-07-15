@@ -86,11 +86,11 @@ mod native_vp_host_env {
     use std::cell::RefCell;
     use std::pin::Pin;
 
+    // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
+    use concat_idents::concat_idents;
     use namada::ledger::storage::Sha256Hasher;
     use namada::vm::host_env::*;
     use namada::vm::WasmCacheRwAccess;
-    // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
-    use concat_idents::concat_idents;
 
     use super::*;
 

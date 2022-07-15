@@ -2,6 +2,9 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fs::File;
 
+use async_std::io::{self, WriteExt};
+use borsh::BorshSerialize;
+use itertools::Either::*;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
 use namada::proto::Tx;
@@ -20,9 +23,6 @@ use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, token};
 use namada::{ledger, vm};
-use async_std::io::{self, WriteExt};
-use borsh::BorshSerialize;
-use itertools::Either::*;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]

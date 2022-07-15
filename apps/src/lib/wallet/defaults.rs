@@ -1,8 +1,5 @@
 //! Default addresses and keys.
 
-use namada::ledger::{eth_bridge, governance, pos};
-use namada::types::address::Address;
-use namada::types::key::*;
 #[cfg(feature = "dev")]
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
@@ -10,6 +7,9 @@ pub use dev::{
     matchmaker_address, matchmaker_keypair, validator_address,
     validator_keypair, validator_keys,
 };
+use namada::ledger::{eth_bridge, governance, pos};
+use namada::types::address::Address;
+use namada::types::key::*;
 
 use crate::config::genesis::genesis_config::GenesisConfig;
 use crate::wallet::alias::Alias;
@@ -73,11 +73,11 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
 
 #[cfg(feature = "dev")]
 mod dev {
+    use borsh::BorshDeserialize;
     use namada::ledger::{governance, pos};
     use namada::types::address::{self, Address};
     use namada::types::key::dkg_session_keys::DkgKeypair;
     use namada::types::key::*;
-    use borsh::BorshDeserialize;
 
     use crate::wallet::alias::Alias;
 

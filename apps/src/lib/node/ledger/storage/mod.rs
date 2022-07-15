@@ -5,8 +5,8 @@ mod rocksdb;
 
 use std::fmt;
 
-use namada::ledger::storage::{Storage, StorageHasher};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
+use namada::ledger::storage::{Storage, StorageHasher};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::H256;
