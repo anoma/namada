@@ -8,17 +8,14 @@ use eyre::{eyre, Result};
 use num_rational::Ratio;
 
 use super::EthereumEvent;
-use crate::proto::MultiSigned;
+use crate::proto::Signed;
 use crate::types::address::Address;
 use crate::types::key::common::Signature;
 use crate::types::storage::BlockHeight;
-use crate::proto::types::Signed;
-use crate::ledger::storage::{
-    DB, DBIter, Storage, StorageHasher,
-};
 
 /// This struct will be created and signed over by each
 /// validator as their vote extension.
+#[derive(BorshSerialize, BorshDeserialize)]
 pub struct VoteExtension {
     /// The current height of Anoma.
     pub block_height: BlockHeight,
@@ -28,14 +25,12 @@ pub struct VoteExtension {
 }
 
 impl VoteExtension {
-    /// Order `ethereum_events` deterministically and wrap them
-    /// up in this `VoteExtension` instance, along with the block height
-    /// they were observed at.
-    pub fn from_ethereum_events(
-        _ethereum_events: Vec<EthereumEvent>,
-        _block_height: BlockHeight
-    ) -> Self {
-        todo!()
+    /// Creates a [`VoteExtension`] without any Ethereum events.
+    pub fn empty(block_height: BlockHeight) -> Self {
+        Self {
+            block_height,
+            ethereum_events: Vec::new(),
+        }
     }
 }
 
@@ -108,7 +103,7 @@ impl BorshSchema for FractionalVotingPower {
 
 /// Aggregates an Ethereum event with the corresponding
 // validators who saw this event.
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct MultiSignedEthEvent {
     /// The Ethereum event that was signed.
     pub event: EthereumEvent,
@@ -130,35 +125,27 @@ pub struct VoteExtensionDigest {
 
 impl VoteExtensionDigest {
     /// Decompresses a set of signed `VoteExtension` instances.
-    pub fn decompress<D, H>(self, storage: &Storage<D, H>) -> Vec<Signed<VoteExtension>>
-    where
-        D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-        H: StorageHasher + Sync + 'static,
-    {
+    pub fn decompress<D, H>(self, last_height: BlockHeight) -> Vec<Signed<VoteExtension>> {
         let VoteExtensionDigest {
             signatures,
             events,
             nulls,
-        } = digest;
+        } = self;
 
         let mut extensions = vec![];
 
         for (sig, addr) in signatures.into_iter() {
-            let mut ext = VoteExtension {
-                block_height: self.storage.last_height,
-                events: vec![],
-            };
+            let mut ext = VoteExtension::empty(last_height);
 
-            let ext = if nulls.contains(&addr) {
-                ext
-            } else {
+            if !nulls.contains(&addr) {
                 for event in events {
                     if event.signers.contains(&addr) {
-                        ext.events.push(event.clone());
+                        ext.ethereum_events.push(event.clone());
                     }
                 }
-                ext.events.sort();
-            };
+                // TODO: we need to implement `Ord` for `EthereumEvent`
+                //ext.ethereum_events.sort();
+            }
 
             let signed = Signed {
                 data: ext,
