@@ -412,6 +412,7 @@ dependencies = [
  "anoma_tests",
  "borsh",
  "hex",
+ "num-rational 0.4.1",
 ]
 
 [[package]]

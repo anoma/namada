@@ -1,18 +1,26 @@
 //! code that should be executed within a transaction
 use std::error::Error;
+use std::ops::Add;
 
-use anoma::ledger::eth_bridge::storage;
+use anoma::ledger::eth_bridge::storage::{self, EthMsgKeys};
+use anoma::ledger::pos::types::VotingPowerDelta;
 use anoma::types::address::Address;
 use anoma::types::ethereum_events::{EthMsgDiff, EthereumEvent};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use num_rational::Ratio;
 
-use crate::imports::tx::log_string;
-use crate::tx_prelude::{has_key, read};
+use crate::imports::tx::{self, log_string};
+use crate::proof_of_stake::PosRead;
+use crate::tx_prelude::{get_block_epoch, has_key, read, PoS};
 
 const TX_NAME: &str = "tx_eth_bridge";
 
 fn log(msg: &str) {
     log_string(format!("[{}] {}", TX_NAME, msg))
+}
+
+fn threshold() -> Ratio<u64> {
+    Ratio::new(2, 3)
 }
 
 #[derive(
@@ -23,6 +31,20 @@ pub struct EthMsg {
     pub voting_power: (u64, u64),
     pub seen_by: Vec<Address>,
     pub seen: bool,
+}
+
+fn write(
+    eth_msg_keys: &EthMsgKeys,
+    eth_msg: &EthMsg,
+) -> Result<(), Box<dyn Error>> {
+    tx::write(&eth_msg_keys.body().to_string(), &eth_msg.body);
+    tx::write(&eth_msg_keys.seen().to_string(), &eth_msg.seen);
+    tx::write(&eth_msg_keys.seen_by().to_string(), &eth_msg.seen_by);
+    tx::write(
+        &eth_msg_keys.voting_power().to_string(),
+        &eth_msg.voting_power,
+    );
+    Ok(())
 }
 
 pub fn apply(tx_data: Vec<u8>) {
@@ -43,20 +65,70 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
         let hash = diff.body.hash()?;
         let eth_msg_keys = storage::EthMsgKeys::new(hash);
 
-        if !has_key(&eth_msg_keys.prefix.to_string()) {
+        let eth_msg = if !has_key(&eth_msg_keys.prefix.to_string()) {
             log(&format!("key not present - {}", &eth_msg_keys.prefix));
-            // TODO: write fresh
+            // TODO: this should be previous block's epoch, not current epoch!
+            let epoch = get_block_epoch();
+            // look up voting powers from storage
+            let total_voting_power_deltas = PoS.read_total_voting_power();
+            let total_voting_power = match total_voting_power_deltas.get(epoch)
+            {
+                Some(total_voting_power) => total_voting_power,
+                None => todo!("handle being unable to read total voting power"),
+            };
+
+            let mut numerator = VotingPowerDelta::default();
+            for validator in diff.seen_by.iter() {
+                let voting_power_deltas =
+                    match PoS.read_validator_voting_power(&validator) {
+                        Some(voting_power) => voting_power,
+                        None => todo!(
+                            "handle not being able to read a validator's \
+                             voting power"
+                        ),
+                    };
+                // TODO: use voting_power_deltas.last_update() to ensure voting
+                // power is up to date?
+                let voting_power = match voting_power_deltas.get(epoch) {
+                    Some(voting_power) => voting_power,
+                    None => todo!(
+                        "handle being unable to get voting power for the \
+                         correct epoch"
+                    ),
+                };
+                numerator = numerator.add(voting_power);
+            }
+
+            // TODO: be careful for overflows
+            let numerator: u64 = Into::<i64>::into(numerator) as u64;
+            let total_voting_power: u64 =
+                Into::<i64>::into(total_voting_power) as u64;
+            let fvp: Ratio<u64> = Ratio::new(numerator, total_voting_power);
+            EthMsg {
+                body: diff.body,
+                voting_power: fvp.into(),
+                seen_by: diff.seen_by,
+                seen: fvp > threshold(),
+            }
         } else {
             log(&format!("key present - {}", &eth_msg_keys.prefix));
-            // TODO: calculate with applied diff
-            let _body: Option<EthereumEvent> =
+            let body: Option<EthereumEvent> =
                 read(&eth_msg_keys.body().to_string());
-            let _seen: Option<bool> = read(&eth_msg_keys.seen().to_string());
-            let _seen_by: Option<Vec<Address>> =
+            let seen: Option<bool> = read(&eth_msg_keys.seen().to_string());
+            let seen_by: Option<Vec<Address>> =
                 read(&eth_msg_keys.seen_by().to_string());
-            let _voting_power: Option<(u64, u64)> =
+            let voting_power: Option<(u64, u64)> =
                 read(&eth_msg_keys.voting_power().to_string());
-        }
+            // TODO: don't unwrap
+            EthMsg {
+                body: body.unwrap(),
+                voting_power: voting_power.unwrap(),
+                seen_by: seen_by.unwrap(),
+                seen: seen.unwrap(),
+            }
+            // TODO: apply the diff before writing back
+        };
+        write(&eth_msg_keys, &eth_msg)?;
     }
     Ok(())
 }
