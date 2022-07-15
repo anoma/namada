@@ -20,6 +20,18 @@ pub struct VoteExtension {
     pub ethereum_events: Vec<EthereumEvent>
 }
 
+impl VoteExtension {
+    /// Order `ethereum_events` deterministically and wrap them
+    /// up in this `VoteExtension` instance, along with the block height
+    /// they were observed at.
+    pub fn from_ethereum_events(
+        _ethereum_events: Vec<EthereumEvent>,
+        _block_height: BlockHeight
+    ) -> Self {
+        todo!()
+    }
+}
+
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Debug)]
