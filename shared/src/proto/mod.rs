@@ -4,7 +4,7 @@ pub mod generated;
 mod types;
 
 pub use types::{
-    Dkg, Error, Intent, IntentGossipMessage, IntentId, MultiSigned, Signed,
+    Dkg, Error, Intent, IntentGossipMessage, IntentId, Signed,
     SignedTxData, Tx,
 };
 
