@@ -10,6 +10,16 @@ use crate::proto::MultiSigned;
 use crate::types::address::Address;
 use crate::types::storage::BlockHeight;
 
+/// This struct will be created and signed over by each
+/// validator as their vote extension.
+pub struct VoteExtension {
+    /// The current height of Anoma.
+    pub block_height: BlockHeight,
+    /// The new ethereum events seen. These should be
+    /// deterministically ordered.
+    pub ethereum_events: Vec<EthereumEvent>
+}
+
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Debug)]
