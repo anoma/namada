@@ -1,6 +1,8 @@
 //! Contains types necessary for processing Ethereum events
 //! in vote extensions.
 
+use std::collections::HashSet;
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
 use num_rational::Ratio;
@@ -8,7 +10,12 @@ use num_rational::Ratio;
 use super::EthereumEvent;
 use crate::proto::MultiSigned;
 use crate::types::address::Address;
+use crate::types::key::common::Signature;
 use crate::types::storage::BlockHeight;
+use crate::proto::types::Signed;
+use crate::ledger::storage::{
+    DB, DBIter, Storage, StorageHasher,
+};
 
 /// This struct will be created and signed over by each
 /// validator as their vote extension.
@@ -99,14 +106,68 @@ impl BorshSchema for FractionalVotingPower {
     }
 }
 
-/// This is created by the block proposer based on the Ethereum events
-/// included in the vote extensions of the previous Tendermint round
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+/// Aggregates an Ethereum event with the corresponding
+// validators who saw this event.
+#[derive(BorshSerialize, BorshDeserialize)]
 pub struct MultiSignedEthEvent {
-    /// Address and voting power of the signing validators
-    pub signers: Vec<(Address, FractionalVotingPower)>,
-    /// Events as signed by validators
-    pub event: MultiSigned<(EthereumEvent, BlockHeight)>,
+    /// The Ethereum event that was signed.
+    pub event: EthereumEvent,
+    /// List of addresses of validators who signed this event
+    pub signers: HashSet<Address>,
+}
+
+/// Compresses a set of signed `VoteExtension` instances, to save
+/// space on a block.
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct VoteExtensionDigest {
+    /// The signatures and signing address of each VoteExtension
+    pub signatures: Vec<(Signature, Address)>,
+    /// The events that were reported
+    pub events: Vec<MultiSignedEthEvent>,
+    /// The validators who saw no events
+    pub nulls: HashSet<Address>
+}
+
+impl VoteExtensionDigest {
+    /// Decompresses a set of signed `VoteExtension` instances.
+    pub fn decompress<D, H>(self, storage: &Storage<D, H>) -> Vec<Signed<VoteExtension>>
+    where
+        D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+        H: StorageHasher + Sync + 'static,
+    {
+        let VoteExtensionDigest {
+            signatures,
+            events,
+            nulls,
+        } = digest;
+
+        let mut extensions = vec![];
+
+        for (sig, addr) in signatures.into_iter() {
+            let mut ext = VoteExtension {
+                block_height: self.storage.last_height,
+                events: vec![],
+            };
+
+            let ext = if nulls.contains(&addr) {
+                ext
+            } else {
+                for event in events {
+                    if event.signers.contains(&addr) {
+                        ext.events.push(event.clone());
+                    }
+                }
+                ext.events.sort();
+            };
+
+            let signed = Signed {
+                data: ext,
+                sig,
+            };
+            extensions.push(sig);
+        }
+        extensions
+    }
 }
 
 #[cfg(test)]
