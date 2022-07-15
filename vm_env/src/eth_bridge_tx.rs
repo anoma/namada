@@ -77,7 +77,12 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
         let hash = diff.body.hash()?;
         let eth_msg_keys = storage::EthMsgKeys::new(hash);
 
-        let eth_msg = if !has_key(&eth_msg_keys.prefix.to_string()) {
+        // TODO: we arbitrarily look at whether the seen key is present to
+        // determine if the /eth_msg already exists in storage, but maybe there
+        // is a less arbitrary way to do this
+        let exists_in_storage = has_key(&eth_msg_keys.seen().to_string());
+
+        let eth_msg = if !exists_in_storage {
             log(&format!("key not present - {}", &eth_msg_keys.prefix));
 
             let mut numerator = VotingPowerDelta::default();
@@ -134,13 +139,15 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
             if voting_power.is_none() {
                 return Err("couldn't read voting_power")?;
             }
-            EthMsg {
+            let eth_msg = EthMsg {
                 body: body.unwrap(),
                 voting_power: voting_power.unwrap(),
                 seen_by: seen_by.unwrap(),
                 seen: seen.unwrap(),
-            }
-            // TODO: apply the diff before writing back
+            };
+            log(&format!("read EthMsg - {:#?}", &eth_msg));
+            // TODO: apply the diff to eth_msg before writing back
+            eth_msg
         };
         write_eth_msg(&eth_msg_keys, &eth_msg);
     }
