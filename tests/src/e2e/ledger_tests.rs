@@ -244,12 +244,6 @@ fn ledger_txs_and_queries() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
-
     let _bg_ledger = ledger.background();
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
@@ -423,11 +417,6 @@ fn invalid_transactions() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
@@ -583,11 +572,6 @@ fn pos_bonds() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -781,11 +765,6 @@ fn pos_init_validator() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -948,11 +927,6 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
@@ -1043,11 +1017,6 @@ fn proposal_submission() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1395,11 +1364,6 @@ fn proposal_offline() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
