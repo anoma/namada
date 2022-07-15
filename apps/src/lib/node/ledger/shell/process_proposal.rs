@@ -269,6 +269,7 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
+    use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
     use namada::types::address::xan;
     use namada::types::hash::Hash;
@@ -277,7 +278,6 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
-    use borsh::BorshDeserialize;
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::RequestInitChain;
     #[cfg(not(feature = "ABCI"))]

@@ -8,8 +8,8 @@
 use std::env;
 use std::process::Command;
 
-use namada_apps::cli;
 use eyre::Result;
+use namada_apps::cli;
 
 pub fn main() -> Result<()> {
     let (cmd, raw_sub_cmd) = cli::anoma_cli();

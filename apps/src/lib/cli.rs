@@ -1362,6 +1362,7 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
+    use libp2p::Multiaddr;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::governance::ProposalVote;
@@ -1370,7 +1371,6 @@ pub mod args {
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
     use namada::types::transaction::GasLimit;
-    use libp2p::Multiaddr;
     use serde::Deserialize;
     #[cfg(not(feature = "ABCI"))]
     use tendermint::Timeout;

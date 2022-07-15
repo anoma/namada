@@ -6,7 +6,7 @@ use namada::ledger::pos::namada_proof_of_stake::{
 use namada::ledger::pos::types::Slash;
 pub use namada::ledger::pos::*;
 use namada::ledger::pos::{
-    namada_proof_of_stake, bond_key, params_key, total_voting_power_key,
+    bond_key, namada_proof_of_stake, params_key, total_voting_power_key,
     unbond_key, validator_address_raw_hash_key, validator_consensus_key_key,
     validator_set_key, validator_slashes_key,
     validator_staking_reward_address_key, validator_state_key,

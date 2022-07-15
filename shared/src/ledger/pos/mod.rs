@@ -47,7 +47,9 @@ pub fn init_genesis_storage<'a, DB, H>(
 
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type ValidatorConsensusKeys =
-    namada_proof_of_stake::types::ValidatorConsensusKeys<key::common::PublicKey>;
+    namada_proof_of_stake::types::ValidatorConsensusKeys<
+        key::common::PublicKey,
+    >;
 
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type ValidatorTotalDeltas =

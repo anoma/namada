@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::BTreeSet;
 
+use derivative::Derivative;
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::parameters::{self, EpochDuration};
 use namada::ledger::storage::mockdb::MockDB;
@@ -15,7 +16,6 @@ use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
 use namada_vm_env::tx_prelude::BorshSerialize;
-use derivative::Derivative;
 use tempfile::TempDir;
 
 /// This module combines the native host function implementations from
@@ -162,9 +162,9 @@ mod native_tx_host_env {
     use std::cell::RefCell;
     use std::pin::Pin;
 
-    use namada::vm::host_env::*;
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
+    use namada::vm::host_env::*;
 
     use super::*;
 

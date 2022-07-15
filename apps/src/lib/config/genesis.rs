@@ -4,6 +4,8 @@ use std::collections::HashMap;
 #[cfg(not(feature = "dev"))]
 use std::path::Path;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+use derivative::Derivative;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::{GenesisValidator, PosParams};
@@ -15,8 +17,6 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::DateTimeUtc;
 use namada::types::{storage, token};
-use borsh::{BorshDeserialize, BorshSerialize};
-use derivative::Derivative;
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -26,6 +26,7 @@ pub mod genesis_config {
     use std::path::Path;
     use std::str::FromStr;
 
+    use hex;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::pos::types::BasisPoints;
@@ -36,7 +37,6 @@ pub mod genesis_config {
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
     use namada::types::{storage, token};
-    use hex;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
@@ -537,10 +537,11 @@ pub mod genesis_config {
                 )
                 .into(),
             },
-            max_expected_time_per_block: namada::types::time::Duration::seconds(
-                config.parameters.max_expected_time_per_block,
-            )
-            .into(),
+            max_expected_time_per_block:
+                namada::types::time::Duration::seconds(
+                    config.parameters.max_expected_time_per_block,
+                )
+                .into(),
             vp_whitelist: config.parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: config.parameters.tx_whitelist.unwrap_or_default(),
         };
@@ -864,9 +865,9 @@ pub fn genesis() -> Genesis {
 
 #[cfg(test)]
 pub mod tests {
+    use borsh::BorshSerialize;
     use namada::types::address::testing::gen_established_address;
     use namada::types::key::*;
-    use borsh::BorshSerialize;
     use rand::prelude::ThreadRng;
     use rand::thread_rng;
 
