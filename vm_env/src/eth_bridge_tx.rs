@@ -52,7 +52,6 @@ pub fn apply(tx_data: Vec<u8>) {
 
 pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
     log(&format!("got data - {} bytes", tx_data.len()));
-    log(&format!("/eth_msgs key - {}", storage::eth_msgs_key()));
 
     let diffs: Vec<EthMsgDiff> = BorshDeserialize::try_from_slice(&tx_data)?;
     log(&format!("deserialized diffs - length = {}", diffs.len()));
@@ -91,19 +90,35 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
                     match PoS.read_validator_voting_power(validator) {
                         Some(voting_power) => voting_power,
                         None => {
-                            return Err(
-                                "couldn't get validator's voting power deltas"
-                            )?;
+                            return Err(format!(
+                                "couldn't get validator's voting power deltas \
+                                 - address = {}",
+                                validator
+                            ))?;
                         }
                     };
+                log(&format!(
+                    "voting_power_deltas for {} - {:?}",
+                    validator, &voting_power_deltas
+                ));
+
                 // TODO: use voting_power_deltas.last_update() to ensure voting
                 // power is up to date?
                 let voting_power = match voting_power_deltas.get(epoch) {
                     Some(voting_power) => voting_power,
                     None => {
-                        return Err("couldn't get validator's voting power")?;
+                        return Err(format!(
+                            "couldn't get validator's voting power - address \
+                             = {}",
+                            validator
+                        ))?;
                     }
                 };
+                log(&format!(
+                    "voting power for {} - {:?}",
+                    validator, &voting_power
+                ));
+
                 numerator = numerator.add(voting_power);
             }
 
