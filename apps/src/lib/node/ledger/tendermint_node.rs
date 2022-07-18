@@ -15,6 +15,7 @@ use tendermint_config::net::Address as TendermintAddress;
 use tendermint_config::Error as TendermintError;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::TendermintConfig;
+use tendermint_config::TxIndexer;
 #[cfg(feature = "ABCI")]
 use tendermint_config_abci::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
@@ -382,6 +383,7 @@ async fn update_tendermint_config(
         .to_string();
     config.instrumentation.namespace =
         tendermint_config.instrumentation_namespace;
+    config.tx_index.indexer = [TxIndexer::Kv];
 
     // setup the events log
     #[cfg(not(feature = "ABCI"))]
