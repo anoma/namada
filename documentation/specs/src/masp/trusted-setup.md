@@ -3,16 +3,28 @@ This spec assumes that you have some previous knowledge about Trusted Setup Cere
 
 The Namada Trusted Setup (TS) consists of running the phase 2 of the MPC which is a circuit-specific step to construct the multi-asset shielded pool circuit. Our phase 2 takes as input the Powers of Tau (phase 1) ran by Zcash that can be found [here](https://download.z.cash/downloads/powersoftau/).
 
-## Overview of the contribution flow
-NOTE: add CLI flag `--offline` for the contributors that run on an offline machine. The flag will skip all the steps where there is communication with the coordinator and go straight to the generation of parameters in step 14.
+
+## Contribution flow
+
+### Overview
+
+1. Contributor compiles or downloads the CLI binary and runs it.
+2. CLI generates a 24-words `BIP39` mnemonic. 
+3. CLI can choose to participate in the incentivized program or not.
+4. CLI joins the queue and waits for its turn.
+5. CLI downloads the challenge from the nearest AWS S3 bucket.
+6. Contributor can choose to contribute on the same machine or another.
+7. Contributor can choose to give its own seed of randomness or not.
+8. CLI contributes.
+9. CLI uploads the response to the challenge and notifies the coordinator with its personal info.
+
+### Detailed Flow
+**NOTE:** add CLI flag `--offline` for the contributors that run on an offline machine. The flag will skip all the steps where there is communication with the coordinator and go straight to the generation of parameters in step 14.
 1. Contributor downloads the Namada CLI source from GitHub, compiles it, runs it.
 2. CLI asks the Contributor a couple of questions:
 		a) Do you want to participate in the incentivized trusted setup?
 			- Yes. Asks for personal information: full name and email. 
 			- No. Contribution will be identified as Anonymous.
-		b) Do you want to take part in the contest?
-			- Yes. This assumes that the Contributor will generate the parameters with another method than the default implementation and that in any case the contribution file will be uploaded through the CLI.
-			- No. Pursue with the normal flow.
 3. CLI generates a `ed25519` key pair that will serve to communicate and sign requests with the HTTP REST API endpoints and receive any potential rewards.
     The private key is generated through [BIP39](https://docs.rs/tiny-bip39/latest/bip39/#) where we use it as a seed for the `ed25519` key pair and a 24 word seed-phrase is presented to the user to back-up. 
 5. CLI sends request to the HTTP REST API endpoint `contributor/join_queue`. Contributor is added to the queue of the ceremony.
@@ -41,7 +53,7 @@ NOTE: CLI will display a countdown of 10 min with an extension capability of 5 m
 
 ## Subcomponents
 
-![](https://hackmd.io/_uploads/BJ-OIAhD5.png)
+![](./trusted-setup-assets/namada-ts-arch.png)
 
 Our implementation of the TS consists of the following subcomponents: 
 1. A fork of the [Aleo Trusted Setup](https://github.com/AleoHQ/aleo-setup/) where we re-used the Coordinator Library (CL) contained in the `phase1-coordinator` folder.
@@ -64,17 +76,24 @@ To be able to re-use the CL without heavy refactoring, we decided to keep most o
 
 ## 2. HTTP REST API
 ### Description
-The HTTP REST API is a rocket web server that interfaces with the CL. All requests need to be signed to be accepted by the endpoints. It's the core of the ceremony where the Coordinator is started together with utility functions like `verify_contributions`  and `update_coordinator`.
+The [HTTP REST API](https://github.com/anoma/namada-trusted-setup/blob/main/phase1-coordinator/src/rest.rs) is a rocket web server that interfaces with the CL. All requests need to be signed to be accepted by the endpoints. It's the core of the ceremony where the Coordinator is started together with utility functions like `verify_contributions`  and `update_coordinator`.
 
 ### Endpoints
-- `contributor/join_queue` 
-- `contributor/lock_chunk`
-- `download/chunk`
-- `contributor/challenge`
-- `upload/chunk`
-- `contributor/contribute_chunk`
-- `contributor/heartbeat` 
-- `contributor/get_tasks_left`
+- `/contributor/join_queue` Add the incoming contributor to the queue of contributors. 
+- `/contributor/lock_chunk` Lock a Chunk in the ceremony. This should be the first function called when attempting to contribute to a chunk. Once the chunk is locked, it is ready to be downloaded.
+- `/contributor/challenge` Get the challenge key on Amazon S3 from the Coordinator.
+- `/upload/chunk` Request the urls where to upload a Chunk contribution and the ContributionFileSignature.
+- `/contributor/contribute_chunk` Notify the Coordinator of a finished and uploaded Contribution. This will unlock the given Chunk.
+- `/contributor/heartbeat` Let the Coordinator know that the participant is still alive and participating (or waiting to participate) in the ceremony.
+- `/update` Update the Coordinator state. This endpoint is accessible only by the coordinator itself.
+- `/stop` Stop the Coordinator and shuts the server down. This endpoint is accessible only by the coordinator itself.
+- `/verify` Verify all the pending contributions. This endpoint is accessible only by the coordinator itself.
+- `/contributor/queue_status` Get the queue status of the contributor.
+- `/contributor/contribution_info` Write ContributionInfo to disk.
+- `/contribution_info` Retrieve the contributions' info. This endpoint is accessible by anyone and does not require a signed request.
+- `/healthcheck` Retrieve healthcheck info. This endpoint is accessible by anyone and does not require a signed request.
+
+![](./trusted-setup-assets/namda-ts-swimlane.png)
 
 ### Saved files
 - `contributors/namada_contributor_info_round_{i}.json` contributor info received from the participant. Same file as described below. 
@@ -126,8 +145,6 @@ The CLI communicates with the HTTP REST API accordingly to the [overview of the 
    "public_key":"very random public key",
    // User participates in incentivized program or not
    "is_incentivized":true,
-   // User expresses his intent to participate or not in the contest for creative contributions
-   "is_contest_participant":true,
    // User can choose to contribute on another machine
    "is_another_machine":true,
    // User can choose the default method to generate randomness or his own.
