@@ -71,13 +71,13 @@ the state with the new state rather than applying state diffs. The storage
 keys involved are:
 ```
 # all values are Borsh-serialized
-/eth_msgs/$msg_hash/body : EthereumEvent
-/eth_msgs/$msg_hash/seen_by : Vec<Address>
-/eth_msgs/$msg_hash/voting_power: (u64, u64)  # reduced fraction < 1 e.g. (2, 3)
-/eth_msgs/$msg_hash/seen: bool
+/eth_msgs/\$msg_hash/body : EthereumEvent
+/eth_msgs/\$msg_hash/seen_by : Vec<Address>
+/eth_msgs/\$msg_hash/voting_power: (u64, u64)  # reduced fraction < 1 e.g. (2, 3)
+/eth_msgs/\$msg_hash/seen: bool
 ```
 
-`$msg_hash` is the SHA256 digest of the Borsh serialization of the relevant 
+`\$msg_hash` is the SHA256 digest of the Borsh serialization of the relevant 
 `EthereumEvent`.
 
 Changes to this `/eth_msgs` storage subspace are only ever made by internal transactions crafted 
@@ -95,7 +95,7 @@ allowed to update `/eth_msgs`.
 ### Including events into storage
 For every Namada block proposal, the vote extension of a validator should include
 the events of the Ethereum blocks they have seen via their full node such that:
-1. The storage value `/eth_msgs/$msg_hash/seen_by` does not include their
+1. The storage value `/eth_msgs/\$msg_hash/seen_by` does not include their
    address.
 2. It's correctly formatted.
 3. It's reached the required number of confirmations on the Ethereum chain
@@ -164,7 +164,7 @@ by the block proposer.
 In `FinalizeBlock`, we derive a second transaction (the "state update" 
 transaction) from the vote extensions transaction that:
 - calculates the required changes to `/eth_msgs` storage and applies it
-- acts on any `/eth_msgs/$msg_hash` where `seen` is going from `false` to `true`
+- acts on any `/eth_msgs/\$msg_hash` where `seen` is going from `false` to `true`
   (e.g. appropriately minting wrapped Ethereum assets)
 
 This state update transaction will not be recorded on chain but will be 
@@ -173,7 +173,7 @@ recorded on chain. All ledger nodes will derive and apply this transaction to
 their own local blockchain state, whenever they receive a block with a vote 
 extensions transaction. No signature is required.
 
-The value of `/eth_msgs/$msg_hash/seen` will also indicate if the event 
+The value of `/eth_msgs/\$msg_hash/seen` will also indicate if the event 
 has been acted on on the Namada side. The appropriate transfers of tokens to the
 given user will be included on chain free of charge and requires no
 additional actions from the end user.

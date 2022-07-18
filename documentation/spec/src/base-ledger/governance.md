@@ -16,13 +16,13 @@ The second address holds the funds of rejected proposals.
 Each proposal will be stored in a sub-key under the internal proposal address. The storage keys involved are:
 
 ```
-/$GovernanceAddress/proposal/$id/content : Vec<u8>
-/$GovernanceAddress/proposal/$id/author : Address
-/$GovernanceAddress/proposal/$id/start_epoch: Epoch
-/$GovernanceAddress/proposal/$id/end_epoch: Epoch
-/$GovernanceAddress/proposal/$id/grace_epoch: Epoch
-/$GovernanceAddress/proposal/$id/proposal_code: Option<Vec<u8>>
-/$GovernanceAddress/proposal/$id/funds: u64
+/\$GovernanceAddress/proposal/\$id/content : Vec<u8>
+/\$GovernanceAddress/proposal/\$id/author : Address
+/\$GovernanceAddress/proposal/\$id/start_epoch: Epoch
+/\$GovernanceAddress/proposal/\$id/end_epoch: Epoch
+/\$GovernanceAddress/proposal/\$id/grace_epoch: Epoch
+/\$GovernanceAddress/proposal/\$id/proposal_code: Option<Vec<u8>>
+/\$GovernanceAddress/proposal/\$id/funds: u64
 ```
 
 `Author` address field will be used to credit the locked funds if the proposal is approved.
@@ -46,14 +46,14 @@ The `content` value should follow a standard format. We leverage something simil
 `GovernanceAddress` parameters and global storage keys are:
 
 ```
-/$GovernanceAddress/?: Vec<u8> 
-/$GovernanceAddress/counter: u64
-/$GovernanceAddress/min_proposal_fund: u64
-/$GovernanceAddress/max_proposal_code_size: u64
-/$GovernanceAddress/min_proposal_period: u64
-/$GovernanceAddress/max_proposal_content_size: u64
-/$GovernanceAddress/min_proposal_grace_epochs: u64
-/$GovernanceAddress/pending/$proposal_id: u64
+/\$GovernanceAddress/?: Vec<u8> 
+/\$GovernanceAddress/counter: u64
+/\$GovernanceAddress/min_proposal_fund: u64
+/\$GovernanceAddress/max_proposal_code_size: u64
+/\$GovernanceAddress/min_proposal_period: u64
+/\$GovernanceAddress/max_proposal_content_size: u64
+/\$GovernanceAddress/min_proposal_grace_epochs: u64
+/\$GovernanceAddress/pending/\$proposal_id: u64
 
 ```
 
@@ -63,16 +63,16 @@ The `content` value should follow a standard format. We leverage something simil
 `min_proposal_period` sets the minimum voting time window (in `Epoch`).\
 `max_proposal_content_size` tells the maximum number of characters allowed in the proposal content.\
 `min_proposal_grace_epochs` is the minimum required time window (in `Epoch`) between `end_epoch` and the epoch in which the proposal has to be executed.
-`/$GovernanceAddress/pending/$proposal_id` this storage key is written only before the execution of the the code defined in `/$GovernanceAddress/proposal/$id/proposal_code` and deleted afterwards. Since this storage key can be written only by the protocol itself (and by no other means), VPs can check for the presence of this storage key to be sure that a a proposal_code has been executed by the protocol and not by a transaction.
+`/\$GovernanceAddress/pending/\$proposal_id` this storage key is written only before the execution of the the code defined in `/\$GovernanceAddress/proposal/\$id/proposal_code` and deleted afterwards. Since this storage key can be written only by the protocol itself (and by no other means), VPs can check for the presence of this storage key to be sure that a a proposal_code has been executed by the protocol and not by a transaction.
 
 The governance machinery also relies on a subkey stored under the `NAM` token address:
 
 ```
-/$NAMAddress/balance/$GovernanceAddress: u64
+/\$NAMAddress/balance/\$GovernanceAddress: u64
 ```
 
 This is to leverage the `NAM` VP to check that the funds were correctly locked.
-The governance subkey, `/$GovernanceAddress/proposal/$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to Treasury.
+The governance subkey, `/\$GovernanceAddress/proposal/\$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to Treasury.
 
 ### GovernanceAddress VP
 Just like Pos, also governance has his own storage space. The `GovernanceAddress` validity predicate task is to check the integrity and correctness of new proposals. A proposal, to be correct, must satisfy the followings:
@@ -138,7 +138,7 @@ struct OnChainVote {
 Vote transaction creates or modify the following storage key:
 
 ```
-/$GovernanceAddress/proposal/$id/vote/$delegation_address/$voter_address: Enum(yay|nay)
+/\$GovernanceAddress/proposal/\$id/vote/\$delegation_address/\$voter_address: Enum(yay|nay)
 ```
 
 The storage key will only be created if the transaction is signed either by a validator or a delagator. 
@@ -181,18 +181,18 @@ Funds locked in `TreasuryAddress` address should be spendable only by proposals.
 
 ### TreasuryAddress storage
 ```
-/$TreasuryAddress/max_transferable_fund: u64
-/$TreasuryAddress/?: Vec<u8>
+/\$TreasuryAddress/max_transferable_fund: u64
+/\$TreasuryAddress/?: Vec<u8>
 ```
 
 The funds will be stored under:
 ```
-/$NAMAddress/balance/$TreasuryAddress: u64
+/\$NAMAddress/balance/\$TreasuryAddress: u64
 ```
 
 ### TreasuryAddress VP
 The treasury validity predicate will approve a trasfer only if:
-- the transfer has been made by the protocol (by checking the existence of `/$GovernanceAddress/pending/$proposal_id` storage key)
+- the transfer has been made by the protocol (by checking the existence of `/\$GovernanceAddress/pending/\$proposal_id` storage key)
 - the transfered amount is <= `MAX_SPENDABLE_SUM`
 
 `MAX_SPENDABLE_SUM` is a parameter of the treasury native vp.
@@ -201,12 +201,12 @@ It is possible to check the actual implementation [here](https://github.com/anom
 
 
 ## ParameterAddress
-Protocol parameter are described under the `$ParameterAddress` internal address. 
+Protocol parameter are described under the `\$ParameterAddress` internal address. 
 
 ### ParameterAddress storage
 ```
-/$ParamaterAddress/<param>: String
-/$ParamaterAddress/?: Vec<u8>
+/\$ParamaterAddress/<param>: String
+/\$ParamaterAddress/?: Vec<u8>
 ```
 
 At the moment there are 5 parameters:
@@ -217,7 +217,7 @@ At the moment there are 5 parameters:
 
 ### ParameterAddress VP
 The parameter validity predicate will approve changes to the protocol parameter only if:
-- the changes have been made by the protocol (by checking the existence of `/$GovernanceAddress/pending/$proposal_id` storage key)
+- the changes have been made by the protocol (by checking the existence of `/\$GovernanceAddress/pending/\$proposal_id` storage key)
 
 It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/parameters/mod.rs#L53).
 
