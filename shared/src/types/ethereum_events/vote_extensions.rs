@@ -112,7 +112,7 @@ pub struct MultiSignedEthEvent {
 
 /// Compresses a set of signed `VoteExtension` instances, to save
 /// space on a block.
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct VoteExtensionDigest {
     /// The signatures and signing address of each VoteExtension
     pub signatures: Vec<(Signature, Address)>,
