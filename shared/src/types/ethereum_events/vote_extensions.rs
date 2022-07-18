@@ -15,7 +15,7 @@ use crate::types::storage::BlockHeight;
 
 /// This struct will be created and signed over by each
 /// validator as their vote extension.
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct VoteExtension {
     /// The current height of Anoma.
     pub block_height: BlockHeight,
@@ -124,7 +124,7 @@ pub struct VoteExtensionDigest {
 
 impl VoteExtensionDigest {
     /// Decompresses a set of signed `VoteExtension` instances.
-    pub fn decompress<D, H>(
+    pub fn decompress(
         self,
         last_height: BlockHeight,
     ) -> Vec<Signed<VoteExtension>> {
@@ -161,9 +161,17 @@ impl VoteExtensionDigest {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use super::super::EthereumEvent;
     use super::*;
+    use crate::proto::Signed;
+    use crate::types::address::Address;
     use crate::types::ethereum_events::Uint;
     use crate::types::hash::Hash;
+    use crate::types::key;
+    use crate::types::key::RefTo;
+    use crate::types::storage::BlockHeight;
 
     /// Test the hashing of an Ethereum event
     #[test]
@@ -214,5 +222,76 @@ mod tests {
         assert!(FractionalVotingPower::new(1, 1).is_ok());
         assert!(FractionalVotingPower::new(1, 2).is_ok());
         assert!(FractionalVotingPower::new(3, 2).is_err());
+    }
+
+    /// Test decompression of a set of Ethereum events
+    #[test]
+    fn test_decompress_ethereum_events() {
+        // we need to construct a `Vec<Signed<VoteExtension>>`
+        let sk_1 = key::testing::keypair_1();
+        let sk_2 = key::testing::keypair_2();
+
+        let last_block_height = BlockHeight(123);
+
+        let ev_1 = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let ev_2 = EthereumEvent::TransfersToEthereum {
+            nonce: 2u64.into(),
+            transfers: vec![],
+        };
+
+        let ext = {
+            let mut ext = VoteExtension::empty(last_block_height);
+
+            ext.ethereum_events.push(ev_1.clone());
+            ext.ethereum_events.push(ev_2.clone());
+            ext.ethereum_events.sort();
+
+            ext
+        };
+
+        // assume both v1 and v2 saw the same events,
+        // so each of them signs `ext` with their respective sk
+        let ext_1 = Signed::new(&sk_1, ext.clone());
+        let ext_2 = Signed::new(&sk_2, ext);
+
+        let ext = vec![ext_1, ext_2];
+
+        // we have the `Signed<VoteExtension>` instances we need,
+        // let us now compress them into a single `VoteExtensionDigest`
+        let signatures: Vec<(_, Address)> = vec![
+            (ext[0].sig.clone(), (&sk_1.ref_to()).into()),
+            (ext[1].sig.clone(), (&sk_2.ref_to()).into()),
+        ];
+        let signers = {
+            let mut s = HashSet::new();
+            s.insert(signatures[0].1.clone());
+            s.insert(signatures[1].1.clone());
+            s
+        };
+        let events = vec![
+            MultiSignedEthEvent {
+                event: ev_1.clone(),
+                signers: signers.clone(),
+            },
+            MultiSignedEthEvent {
+                event: ev_2.clone(),
+                signers,
+            },
+        ];
+
+        let digest = VoteExtensionDigest {
+            events,
+            signatures,
+            nulls: HashSet::new(),
+        };
+
+        // finally, decompress the `VoteExtensionDigest` back into a
+        // `Vec<Signed<VoteExtension>>`
+        let decompressed = digest.decompress(last_block_height);
+
+        assert_eq!(ext, decompressed);
     }
 }
