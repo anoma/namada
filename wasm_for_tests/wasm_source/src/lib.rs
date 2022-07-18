@@ -57,6 +57,26 @@ pub mod main {
     }
 }
 
+/// A tx that logs to stdout
+#[cfg(feature = "tx_log")]
+pub mod main {
+    use namada_vm_env::tx_prelude::*;
+
+    const TX_NAME: &str = "tx_log";
+
+    fn log(msg: &str) {
+        log_string(format!("[{}] {}", TX_NAME, msg))
+    }
+
+    #[transaction]
+    fn apply_tx(tx_data: Vec<u8>) {
+        log(&format!(
+            "inside transaction (data has {} bytes)",
+            tx_data.len()
+        ))
+    }
+}
+
 /// A tx that attempts to write arbitrary data to the given key
 #[cfg(feature = "tx_write_storage_key")]
 pub mod main {
