@@ -139,6 +139,8 @@ impl VoteExtensionDigest {
         for (sig, addr) in signatures.into_iter() {
             let mut ext = VoteExtension::empty(last_height);
 
+            // TODO: perhaps remove the `nulls` field,
+            // as this code will behave much the same without it
             if !nulls.contains(&addr) {
                 for event in events.iter() {
                     if event.signers.contains(&addr) {
