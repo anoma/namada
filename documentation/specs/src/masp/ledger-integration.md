@@ -259,7 +259,9 @@ Below, the conditions necessary to maintain consistency between the MASP validit
     * its public key must be the hash of the target address bytes - this prevents replay attacks altering transfer destinations
       * the hash is specifically a RIPEMD-160 of a SHA-256 of the input bytes
     * its value must equal that of the containing transfer - this prevents replay attacks altering transfer amounts
-    * its asset type must be derived from the token address raw bytes - this prevents replay attacks altering transfer asset types
+    * its asset type must be derived from the token address raw bytes and the current epoch once Borsh serialized from the type `(Address, Epoch)`:
+      * the dependency on the address prevents replay attacks altering transfer asset types
+      * the current epoch requirement prevents attackers from claiming extra rewards by forging the time when they began to receive rewards
       * the derivation must be done as specified in `0.3 Derivation of Asset Generator from Asset Identifer`
 * If the source address is the MASP validity predicate, then:
   * no transparent inputs are permitted in the shielded transaction
@@ -269,7 +271,9 @@ Below, the conditions necessary to maintain consistency between the MASP validit
 * If the source address is not the MASP validity predicate, then:
   * there must be exactly one transparent input in the shielded transaction and:
     * its value must equal that of amount in the containing transfer - this prevents stealing/losing funds from/to the pool
-    * its asset type must be derived from the token address raw bytes - this prevents stealing/losing funds from/to the pool
+    * its asset type must be derived from the token address raw bytes and the current epoch once Borsh serialized from the type `(Address, Epoch)`:
+      * the address dependency prevents stealing/losing funds from/to the pool
+      * the current epoch requirement ensures that withdrawers receive their full reward when leaving the shielded pool
       * the derivation must be done as specified in `0.3 Derivation of Asset Generator from Asset Identifer`
 
 ## Remarks
@@ -283,7 +287,7 @@ Below are miscellaneous remarks on the capabilities and limitations of the curre
   * This key must not be reused, this is in order to avoid revealing that multiple transactions are going to the same entity
 
 ## Multi-Asset Shielded Pool Specification Differences from Zcash Protocol Specification
-The [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/anoma/masp/main/docs/multi-asset-shielded-pool.pdf) referenced above is in turn an extension to the [Zcash Protocol Specification](https://zips.z.cash/protocol/protocol.pdf). Below, the changes from the Zcash Protocol Specification assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
+The [Multi-Asset Shielded Pool Specication](https://media.githubusercontent.com/media/anoma/masp/main/docs/multi-asset-shielded-pool.pdf) referenced above is in turn an extension to the [Zcash Protocol Specification](https://zips.z.cash/protocol/protocol.pdf). Below, the changes from the Zcash Protocol Specification assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
 * [3.2 Notes](https://zips.z.cash/protocol/protocol.pdf#notes)
   * Sapling note tuple must include asset type
   * Note commitment must be parameterized by asset type
@@ -390,7 +394,7 @@ Below, the changes from [ZIP 32: Shielded Hierarchical Deterministic Wallets](ht
 Anoma nodes provide interfaces that allow Anoma clients to query for specific pinned transactions, transactions accepted into the shielded pool, and allowed conversions between various asset types. Below we describe the ABCI paths and the encodings of the responses to each type of query.
 
 ## Shielded Transfer Query
-In order to determine shielded balances belonging to particular keys or spend one's balance, it is necessary to download the transactions that transferred the assets to you. To this end, the nth transaction in the shielded pool can be obtained by getting the value at the storage path `<MASP address>/tx-<n>`. Note that indexing is 0-based. This will return a quadruple of the type below:
+In order to determine shielded balances belonging to particular keys or spend one's balance, it is necessary to download the transactions that transferred the assets to you. To this end, the nth transaction in the shielded pool can be obtained by getting the value at the storage path `<MASP-address>/tx-<n>`. Note that indexing is 0-based. This will return a quadruple of the type below:
 
 ```
 (
@@ -409,3 +413,18 @@ In order to determine shielded balances belonging to particular keys or spend on
 When scanning the shielded pool, it is sometimes useful know when to stop scanning. This can be done by querying the storage path `head-tx`, which will return a `u64` indicating the total number of transactions in the shielded pool.
 ## Pinned Transfer Query
 A transaction pinned to the key `x` in the shielded pool can be obtained indirectly by getting the value at the storage path `<MASP address>/pin-<x>`. This will return the index of the desired transaction within the shielded pool encoded as a `u64`. At this point, the above shielded transaction query can then be used to obtain the actual transaction bytes.
+## Conversion Query
+In order for MASP clients to convert older asset types to their latest variants, they need to query nodes for currently valid conversions. This can be done by querying the ABCI path `conv/<asset-type>` where `asset-type` is a hexadecimal encoding of the asset identifier as defined in [Multi-Asset Shielded Pool Specication](https://media.githubusercontent.com/media/anoma/masp/main/docs/multi-asset-shielded-pool.pdf).  This will return a quadruple of the type below:
+```
+(
+    /// the token address of this asset type
+    Address,
+    /// the epoch of this asset type
+    Epoch,
+    /// the amount to be treated as equivalent to zero
+    Amount,
+    /// the Merkle path to this conversion
+    MerklePath<Node>
+)
+```
+If no conversions are available the amount will be exactly zero, otherwise the amount must contain negative units of the queried asset type.
