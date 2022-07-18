@@ -1,6 +1,0 @@
-*
-!target/x86_64-unknown-linux-gnu/small/anoma
-!target/x86_64-unknown-linux-gnu/small/anomac
-!target/x86_64-unknown-linux-gnu/small/anoman
-!target/x86_64-unknown-linux-gnu/small/anomaw
-!wasm/tx_eth_bridge.wasm
