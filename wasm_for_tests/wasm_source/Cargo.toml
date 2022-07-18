@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 # The features should be used individually to build the selected wasm.
 # Newly added wasms should also be added into the Makefile `$(wasms)` list.
 [features]
+tx_log = []
 tx_memory_limit = []
 tx_mint_tokens = []
 tx_no_op = []
