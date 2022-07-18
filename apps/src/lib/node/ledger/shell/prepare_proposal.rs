@@ -5,7 +5,9 @@ mod prepare_block {
     use tendermint_proto::abci::TxRecord;
 
     use super::super::*;
+    use crate::proto::Signed;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+    use crate::types::ethereum_events::vote_extensions::VoteExtension;
 
     impl<D, H> Shell<D, H>
     where
@@ -33,10 +35,39 @@ mod prepare_block {
                 // TODO: This should not be hardcoded
                 let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
+                // add ethereum events as protocol txs
+                let mut txs: Vec<TxRecord> = {
+                    let protocol_key = self.mode
+                        .get_protocol_key()
+                        .expect("Validators should always have a protocol key");
+
+                    let ethereum_events: Vec<_> = req
+                        .local_last_commit
+                        .map(|local_last_commit| {
+                            local_last_commit
+                                .votes
+                                .into_iter()
+                                .filter_map(|vote| {
+                                    let vote_extension = Signed<VoteExtension>::try_from_slice(
+                                        &vote.vote_extension[..]
+                                    ).ok()?;
+                                    vote_extension
+                                })
+                                .flat_map(|vote_extension| {
+                                    vote_extension
+                                        .ethereum_events
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    todo!()
+                };
+
                 // filter in half of the new txs from Tendermint, only keeping
                 // wrappers
                 let number_of_new_txs = 1 + req.txs.len() / 2;
-                let mut txs: Vec<TxRecord> = req
+                let mut mempool_txs: Vec<TxRecord> = req
                     .txs
                     .into_iter()
                     .take(number_of_new_txs)
@@ -50,6 +81,8 @@ mod prepare_block {
                         }
                     })
                     .collect();
+
+                txs.append(&mut mempool_txs);
 
                 // decrypt the wrapper txs included in the previous block
                 let mut decrypted_txs = self
