@@ -1,6 +1,6 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
-use anoma::types::transaction::protocol::ProtocolTxType;
+use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
 #[cfg(not(feature = "ABCI"))]

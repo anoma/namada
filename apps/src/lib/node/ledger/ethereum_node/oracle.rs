@@ -2,8 +2,8 @@
 pub mod oracle_process {
     use std::ops::Deref;
 
-    use anoma::types::ethereum_events::{EthAddress, EthereumEvent};
     use clarity::Address;
+    use namada::types::ethereum_events::{EthAddress, EthereumEvent};
     use num256::Uint256;
     use tokio::sync::mpsc::UnboundedSender;
     use tokio::sync::oneshot::Sender;
@@ -211,7 +211,7 @@ pub mod oracle_process {
 
     #[cfg(test)]
     mod test_oracle {
-        use anoma::types::ethereum_events::TransferToEthereum;
+        use namada::types::ethereum_events::TransferToEthereum;
         use tokio::sync::oneshot::{channel, Receiver};
 
         use super::*;

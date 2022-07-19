@@ -44,17 +44,17 @@ pub mod eth_events {
     use std::fmt::Debug;
     use std::str::FromStr;
 
-    use anoma::types::address::Address;
-    use anoma::types::ethereum_events::{
-        EthAddress, EthereumEvent, KeccakHash, TokenWhitelist,
-        TransferToEthereum, TransferToNamada, Uint,
-    };
-    use anoma::types::token::Amount;
     use ethabi::decode;
     #[cfg(test)]
     use ethabi::encode;
     use ethabi::param_type::ParamType;
     use ethabi::token::Token;
+    use namada::types::address::Address;
+    use namada::types::ethereum_events::{
+        EthAddress, EthereumEvent, KeccakHash, TokenWhitelist,
+        TransferToEthereum, TransferToNamada, Uint,
+    };
+    use namada::types::token::Amount;
     use num256::Uint256;
     use thiserror::Error;
 

@@ -27,7 +27,7 @@ pub mod mock_eth_fullnode {
 #[cfg(not(feature = "eth-fullnode"))]
 pub mod mock_oracle {
 
-    use anoma::types::ethereum_events::EthereumEvent;
+    use namada::types::ethereum_events::EthereumEvent;
     use tokio::sync::mpsc::UnboundedSender;
     use tokio::sync::oneshot::Sender;
 

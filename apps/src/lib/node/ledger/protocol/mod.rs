@@ -75,7 +75,7 @@ where
 }
 
 impl<'a, D, H> From<&'a mut Shell<D, H>>
-    for ShellParams<'a, D, H, anoma::vm::WasmCacheRwAccess>
+    for ShellParams<'a, D, H, namada::vm::WasmCacheRwAccess>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,

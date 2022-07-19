@@ -33,8 +33,8 @@ use namada::ledger::storage::{
 use namada::ledger::{ibc, parameters, pos};
 use namada::proto::{self, Tx};
 use namada::types::chain::ChainId;
-use namada::types::key::*;
 use namada::types::ethereum_events::EthereumEvent;
+use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::transaction::{
