@@ -118,8 +118,6 @@ pub struct VoteExtensionDigest {
     pub signatures: Vec<(Signature, Address)>,
     /// The events that were reported
     pub events: Vec<MultiSignedEthEvent>,
-    /// The validators who saw no events
-    pub nulls: HashSet<Address>,
 }
 
 impl VoteExtensionDigest {
@@ -131,7 +129,6 @@ impl VoteExtensionDigest {
         let VoteExtensionDigest {
             signatures,
             events,
-            nulls,
         } = self;
 
         let mut extensions = vec![];
@@ -139,20 +136,17 @@ impl VoteExtensionDigest {
         for (sig, addr) in signatures.into_iter() {
             let mut ext = VoteExtension::empty(last_height);
 
-            // TODO: perhaps remove the `nulls` field,
-            // as this code will behave much the same without it
-            if !nulls.contains(&addr) {
-                for event in events.iter() {
-                    if event.signers.contains(&addr) {
-                        ext.ethereum_events.push(event.event.clone());
-                    }
+            for event in events.iter() {
+                if event.signers.contains(&addr) {
+                    ext.ethereum_events.push(event.event.clone());
                 }
-                // TODO: we probably need a manual `Ord` impl for
-                // `EthereumEvent`, such that this `sort()` is
-                // always deterministic, regardless
-                // of crate versions changing and such
-                ext.ethereum_events.sort();
             }
+
+            // TODO: we probably need a manual `Ord` impl for
+            // `EthereumEvent`, such that this `sort()` is
+            // always deterministic, regardless
+            // of crate versions changing and such
+            ext.ethereum_events.sort();
 
             let signed = Signed { data: ext, sig };
             extensions.push(signed);
@@ -287,7 +281,6 @@ mod tests {
         let digest = VoteExtensionDigest {
             events,
             signatures,
-            nulls: HashSet::new(),
         };
 
         // finally, decompress the `VoteExtensionDigest` back into a
