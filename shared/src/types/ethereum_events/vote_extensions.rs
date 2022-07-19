@@ -17,7 +17,7 @@ use crate::types::storage::BlockHeight;
 /// validator as their vote extension.
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct VoteExtension {
-    /// The current height of Anoma.
+    /// The block height for which this [`VoteExtension`] was made.
     pub block_height: BlockHeight,
     /// The new ethereum events seen. These should be
     /// deterministically ordered.
