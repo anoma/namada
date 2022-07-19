@@ -6,8 +6,8 @@ mod prepare_block {
 
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
-    use crate::proto::Signed;
-    use crate::types::ethereum_events::vote_extensions::VoteExtension;
+    use anoma::proto::Signed;
+    use anoma::types::ethereum_events::vote_extensions::VoteExtension;
 
     impl<D, H> Shell<D, H>
     where
@@ -55,10 +55,10 @@ mod prepare_block {
                                             &vote.vote_extension[..],
                                         )
                                         .ok()?;
-                                    vote_extension
+                                    Some(vote_extension)
                                 })
                                 .flat_map(|vote_extension| {
-                                    vote_extension.ethereum_events
+                                    vote_extension.data.ethereum_events
                                 })
                                 .collect()
                         })
