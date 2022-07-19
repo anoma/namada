@@ -542,16 +542,6 @@ where
         }
     }
 
-    /// Converts a raw Tendermint address to an [`address::Address`].
-    // TODO: use this above in `slash()`
-    pub fn raw_hash_to_address(
-        &self,
-        raw_hash: impl AsRef<[u8]>,
-    ) -> Option<address::Address> {
-        let raw_hash = core::str::from_utf8(raw_hash.as_ref()).ok()?;
-        self.storage.read_validator_address_raw_hash(raw_hash)
-    }
-
     #[cfg(not(feature = "ABCI"))]
     /// INVARIANT: This method must be stateless.
     pub fn extend_vote(

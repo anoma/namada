@@ -57,9 +57,10 @@ mod prepare_block {
                                         .ok()?;
                                     let validator = vote.validator?;
                                     let validator_addr = self
-                                        .raw_hash_to_address(
-                                            validator.address,
-                                        )?;
+                                        .get_validator_from_tm_address(
+                                            &validator.address[..],
+                                        )
+                                        .ok()?;
                                     Some((validator_addr, vote_extension))
                                 })
                                 .collect()
