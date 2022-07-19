@@ -6,10 +6,6 @@ use std::str::FromStr;
 use std::sync::Once;
 use std::{env, fs, mem, thread, time};
 
-use namada::types::chain::ChainId;
-use namada_apps::client::utils;
-use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
-use namada_apps::{config, wallet};
 use assert_cmd::assert::OutputAssertExt;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
@@ -17,6 +13,10 @@ use escargot::CargoBuild;
 use expectrl::session::Session;
 use expectrl::{Eof, WaitStatus};
 use eyre::eyre;
+use namada::types::chain::ChainId;
+use namada_apps::client::utils;
+use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
+use namada_apps::{config, wallet};
 use tempfile::{tempdir, TempDir};
 
 /// For `color_eyre::install`, which fails if called more than once in the same

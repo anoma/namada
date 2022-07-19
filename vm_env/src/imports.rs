@@ -1,8 +1,8 @@
 use std::mem::ManuallyDrop;
 
+use borsh::BorshDeserialize;
 use namada::types::internal::HostEnvResult;
 use namada::vm::types::KeyVal;
-use borsh::BorshDeserialize;
 
 /// This function is a helper to handle the second step of reading var-len
 /// values from the host.
@@ -54,6 +54,7 @@ pub mod tx {
     use std::convert::TryFrom;
     use std::marker::PhantomData;
 
+    pub use borsh::{BorshDeserialize, BorshSerialize};
     use namada::types::address;
     use namada::types::address::Address;
     use namada::types::chain::CHAIN_ID_LENGTH;
@@ -63,7 +64,6 @@ pub mod tx {
         BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
     };
     use namada::types::time::Rfc3339String;
-    pub use borsh::{BorshDeserialize, BorshSerialize};
 
     #[derive(Debug)]
     pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
@@ -361,6 +361,7 @@ pub mod vp {
     use std::convert::TryFrom;
     use std::marker::PhantomData;
 
+    pub use borsh::{BorshDeserialize, BorshSerialize};
     use namada::types::chain::CHAIN_ID_LENGTH;
     use namada::types::hash::{Hash, HASH_LENGTH};
     use namada::types::internal::HostEnvResult;
@@ -368,7 +369,6 @@ pub mod vp {
     use namada::types::storage::{
         BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
     };
-    pub use borsh::{BorshDeserialize, BorshSerialize};
 
     pub struct PreKeyValIterator<T>(pub u64, pub PhantomData<T>);
 

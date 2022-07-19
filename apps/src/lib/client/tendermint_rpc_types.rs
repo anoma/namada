@@ -1,6 +1,6 @@
+use jsonpath_lib as jsonpath;
 use namada::proto::Tx;
 use namada::types::address::Address;
-use jsonpath_lib as jsonpath;
 use serde::Serialize;
 use thiserror::Error;
 

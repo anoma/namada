@@ -1,6 +1,8 @@
 //! Shell methods for querying state
 use std::cmp::max;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+use ferveo_common::TendermintValidator;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::PosParams;
 use namada::types::address::Address;
@@ -8,8 +10,6 @@ use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Key, PrefixValue};
 use namada::types::token::{self, Amount};
-use borsh::{BorshDeserialize, BorshSerialize};
-use ferveo_common::TendermintValidator;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 #[cfg(not(feature = "ABCI"))]

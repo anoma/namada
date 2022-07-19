@@ -3,12 +3,12 @@
 
 use std::rc::Rc;
 
+use borsh::BorshSerialize;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
-use borsh::BorshSerialize;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]

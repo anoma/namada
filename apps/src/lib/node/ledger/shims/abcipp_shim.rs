@@ -4,13 +4,13 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use futures::future::FutureExt;
 #[cfg(feature = "ABCI")]
 use namada::types::hash::Hash;
 #[cfg(feature = "ABCI")]
 use namada::types::storage::BlockHash;
 #[cfg(feature = "ABCI")]
 use namada::types::transaction::hash_tx;
-use futures::future::FutureExt;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::RequestBeginBlock;
 use tokio::sync::mpsc::UnboundedSender;

@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+use libc::c_void;
+use libloading::Library;
 use namada::proto::Tx;
 use namada::types::address::{self, Address};
 use namada::types::dylib;
@@ -11,9 +14,6 @@ use namada::types::intent::{IntentTransfers, MatchedExchanges};
 use namada::types::key::*;
 use namada::types::matchmaker::AddIntentResult;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
-use borsh::{BorshDeserialize, BorshSerialize};
-use libc::c_void;
-use libloading::Library;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net;
 #[cfg(not(feature = "ABCI"))]

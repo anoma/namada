@@ -15,12 +15,12 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use borsh::BorshSerialize;
+use color_eyre::eyre::Result;
 use namada::types::token;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
-use borsh::BorshSerialize;
-use color_eyre::eyre::Result;
 use serde_json::json;
 use setup::constants::*;
 

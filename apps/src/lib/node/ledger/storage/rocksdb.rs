@@ -31,6 +31,7 @@ use std::cmp::Ordering;
 use std::path::Path;
 use std::str::FromStr;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada::ledger::storage::types::PrefixIterator;
 use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
@@ -40,7 +41,6 @@ use namada::types::storage::{
     BlockHeight, Header, Key, KeySeg, TxQueue, KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
-use borsh::{BorshDeserialize, BorshSerialize};
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,

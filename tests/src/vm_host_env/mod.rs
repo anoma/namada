@@ -20,6 +20,7 @@ mod tests {
 
     use std::panic;
 
+    use itertools::Itertools;
     use namada::ibc::tx_msg::Msg;
     use namada::ledger::ibc::handler::IbcActions;
     use namada::ledger::ibc::vp::{
@@ -36,7 +37,6 @@ mod tests {
         BorshDeserialize, BorshSerialize, KeyValIterator,
     };
     use namada_vm_env::vp_prelude::{PostKeyValIterator, PreKeyValIterator};
-    use itertools::Itertools;
     use prost::Message;
     use test_log::test;
 
