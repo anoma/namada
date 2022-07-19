@@ -288,5 +288,7 @@ mod tests {
         let decompressed = digest.decompress(last_block_height);
 
         assert_eq!(ext, decompressed);
+        assert!(decompressed[0].verify(&sk_1.ref_to()).is_ok());
+        assert!(decompressed[1].verify(&sk_2.ref_to()).is_ok());
     }
 }
