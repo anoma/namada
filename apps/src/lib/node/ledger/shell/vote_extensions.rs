@@ -83,6 +83,17 @@ mod extend_votes {
                 ethereum_events: self.new_ethereum_events(),
                 validator_addr,
             };
+            if !ext.ethereum_events.is_empty() {
+                tracing::info!(
+                    new_ethereum_events.len = ext.ethereum_events.len(),
+                    ?ext.block_height,
+                    "Voting for new Ethereum events"
+                );
+                tracing::debug!(
+                    "New Ethereum events - {:#?}",
+                    ext.ethereum_events
+                );
+            }
 
             let protocol_key = match &self.mode {
                 ShellMode::Validator { data, .. } => {

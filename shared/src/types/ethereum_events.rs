@@ -16,6 +16,7 @@ use crate::types::token::Amount;
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -85,6 +86,7 @@ impl FromStr for EthAddress {
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -98,6 +100,7 @@ pub struct KeccakHash(pub [u8; 32]);
     PartialEq,
     Eq,
     PartialOrd,
+    Hash,
     Ord,
     Clone,
     Debug,
@@ -172,8 +175,7 @@ pub enum EthereumEvent {
 
 impl EthereumEvent {
     /// SHA256 of the Borsh serialization of the [`EthereumEvent`].
-    #[allow(dead_code)]
-    pub(crate) fn hash(&self) -> Result<Hash, std::io::Error> {
+    pub fn hash(&self) -> Result<Hash, std::io::Error> {
         let bytes = self.try_to_vec()?;
         Ok(Hash::sha256(&bytes))
     }
@@ -186,6 +188,7 @@ impl EthereumEvent {
     PartialEq,
     Eq,
     PartialOrd,
+    Hash,
     Ord,
     BorshSerialize,
     BorshDeserialize,
@@ -206,6 +209,7 @@ pub struct TransferToNamada {
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -230,6 +234,7 @@ pub struct TransferToEthereum {
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -280,9 +285,15 @@ pub mod tests {
 }
 
 #[allow(missing_docs)]
+/// Test helpers
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use namada_proof_of_stake::types::VotingPower;
+
     use super::*;
+    use crate::types::storage::Epoch;
+    use crate::types::token::Amount;
+    use crate::types::voting_power::FractionalVotingPower;
 
     pub const DAI_ERC20_ETH_ADDRESS_CHECKSUMMED: &str =
         "0x6B175474E89094C44Da98b954EedeAC495271d0F";
@@ -290,4 +301,44 @@ pub mod testing {
         107, 23, 84, 116, 232, 144, 148, 196, 77, 169, 139, 149, 78, 237, 234,
         196, 149, 39, 29, 15,
     ]);
+
+    pub fn arbitrary_eth_address() -> EthAddress {
+        DAI_ERC20_ETH_ADDRESS
+    }
+
+    pub fn arbitrary_fractional_voting_power() -> FractionalVotingPower {
+        FractionalVotingPower::new(1, 3).unwrap()
+    }
+
+    pub fn arbitrary_nonce() -> Uint {
+        123.into()
+    }
+
+    pub fn arbitrary_amount() -> Amount {
+        Amount::from(1_000)
+    }
+
+    pub fn arbitrary_voting_power() -> VotingPower {
+        VotingPower::from(1_000)
+    }
+
+    pub fn arbitrary_epoch() -> Epoch {
+        Epoch(100)
+    }
+
+    /// A [`EthereumEvent::TransfersToNamada`] containing a single transfer of
+    /// some arbitrary ERC20
+    pub fn arbitrary_single_transfer(
+        nonce: Uint,
+        receiver: Address,
+    ) -> EthereumEvent {
+        EthereumEvent::TransfersToNamada {
+            nonce,
+            transfers: vec![TransferToNamada {
+                amount: arbitrary_amount(),
+                asset: arbitrary_eth_address(),
+                receiver,
+            }],
+        }
+    }
 }
