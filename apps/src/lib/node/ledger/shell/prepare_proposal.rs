@@ -2,12 +2,12 @@
 
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
+    use anoma::proto::Signed;
+    use anoma::types::ethereum_events::vote_extensions::VoteExtension;
     use tendermint_proto::abci::TxRecord;
 
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
-    use anoma::proto::Signed;
-    use anoma::types::ethereum_events::vote_extensions::VoteExtension;
 
     impl<D, H> Shell<D, H>
     where

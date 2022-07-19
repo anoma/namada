@@ -126,10 +126,7 @@ impl VoteExtensionDigest {
         self,
         last_height: BlockHeight,
     ) -> Vec<Signed<VoteExtension>> {
-        let VoteExtensionDigest {
-            signatures,
-            events,
-        } = self;
+        let VoteExtensionDigest { signatures, events } = self;
 
         let mut extensions = vec![];
 
@@ -278,10 +275,7 @@ mod tests {
             },
         ];
 
-        let digest = VoteExtensionDigest {
-            events,
-            signatures,
-        };
+        let digest = VoteExtensionDigest { events, signatures };
 
         // finally, decompress the `VoteExtensionDigest` back into a
         // `Vec<Signed<VoteExtension>>`

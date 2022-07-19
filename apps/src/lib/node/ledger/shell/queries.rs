@@ -353,12 +353,14 @@ where
         tm_address: &[u8],
     ) -> std::result::Result<Address, ()> {
         let epoch = self.storage.get_current_epoch().0;
-        let validator_raw_hash = core::str::from_utf8(tm_address)
-            .map_err(|_| ())?;
-        let address = self.storage
+        let validator_raw_hash =
+            core::str::from_utf8(tm_address).map_err(|_| ())?;
+        let address = self
+            .storage
             .read_validator_address_raw_hash(&validator_raw_hash)
             .ok_or(())?;
-        if self.storage
+        if self
+            .storage
             .read_validator_set()
             .get(epoch)
             .expect("Validators for an epoch should be known")
