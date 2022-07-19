@@ -4296,6 +4296,7 @@ dependencies = [
  "message-io",
  "namada",
  "num-derive",
+ "num-rational 0.4.1",
  "num-traits 0.2.15",
  "num256",
  "num_cpus",
@@ -4428,6 +4429,8 @@ dependencies = [
  "hex",
  "namada",
  "namada_macros",
+ "namada_tests",
+ "num-rational 0.4.1",
 ]
 
 [[package]]

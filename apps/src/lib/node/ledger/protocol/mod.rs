@@ -22,6 +22,8 @@ use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
+mod transactions;
+
 use crate::node::ledger::shell::Shell;
 
 #[derive(Error, Debug)]
@@ -157,16 +159,70 @@ where
             })
         }
         TxType::Protocol(ProtocolTx {
-            tx: ProtocolTxType::EthereumEvents(_),
+            tx: ProtocolTxType::EthereumEvents(digest),
             ..
         }) => {
-            tracing::debug!("Ethereum events received");
+            tracing::debug!(
+                n = digest.events.len(),
+                "Ethereum events received"
+            );
+            // TODO: don't use unwraps, handle errors gracefully
+            // TODO: improve logging
+            let diffs = transactions::ethereum_events::calculate_eth_msg_diffs(
+                digest.events,
+            )
+            .unwrap();
+            tracing::debug!("Calculated diffs for /eth_msgs");
+            let tx_data =
+                transactions::ethereum_events::construct_tx_data(diffs)
+                    .unwrap();
+            tracing::debug!(bytes = tx_data.len(), "Serialized tx_data");
+            let tx_code = {
+                // TODO: once tx_eth_bridge can be added to checksums.wasm
+                // start loading it using wasm_loader::read_wasm
+                // crate::wasm_loader::read_wasm(
+                //     &wasm_dir,
+                //     Path::new("tx_eth_bridge"),
+                // )
+                std::fs::read("wasm/tx_eth_bridge.wasm").unwrap()
+            };
+            tracing::debug!(bytes = tx_code.len(), "Read tx_code");
+            // TODO: mints should be applied within transaction
+
+            let tx = Tx::new(tx_code, Some(tx_data));
+
+            let verifiers = execute_tx(
+                &tx,
+                storage,
+                block_gas_meter,
+                write_log,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            )?;
+            // TODO: here we would remove the sentinel VP - e.g.
+            // `verifiers.remove(&ETHEREUM_SENTINEL);`
+            let vps_result = check_vps(
+                &tx,
+                storage,
+                block_gas_meter,
+                write_log,
+                &verifiers,
+                vp_wasm_cache,
+            )?;
+
             let gas_used = block_gas_meter
                 .finalize_transaction()
                 .map_err(Error::GasError)?;
+            let initialized_accounts = write_log.get_initialized_accounts();
+            let changed_keys = write_log.get_keys();
+            let ibc_event = write_log.take_ibc_event();
+
             Ok(TxResult {
                 gas_used,
-                ..Default::default()
+                changed_keys,
+                vps_result,
+                initialized_accounts,
+                ibc_event,
             })
         }
         _ => {

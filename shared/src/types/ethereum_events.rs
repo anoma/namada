@@ -148,10 +148,20 @@ pub enum EthereumEvent {
 
 impl EthereumEvent {
     /// SHA256 of the Borsh serialization of the [`EthereumEvent`].
-    #[allow(dead_code)]
-    fn hash(&self) -> Result<Hash, std::io::Error> {
+    pub fn hash(&self) -> Result<Hash, std::io::Error> {
         let bytes = self.try_to_vec()?;
         Ok(Hash::sha256(&bytes))
+    }
+
+    /// Whether the event is valid or not. Validators should be slashed if they
+    /// included a signed invalid event in their vote extension.
+    pub fn is_valid(&self) -> bool {
+        match self {
+            EthereumEvent::TransfersToNamada { transfers, .. } => {
+                !transfers.is_empty()
+            }
+            _ => true,
+        }
     }
 }
 
@@ -218,4 +228,66 @@ pub struct TokenWhitelist {
     pub token: EthAddress,
     /// Maximum amount of token allowed on the bridge
     pub cap: Amount,
+}
+
+/// Represents an Ethereum event being seen by some validators
+#[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct EthMsgDiff {
+    /// the event being seen
+    pub body: EthereumEvent,
+    /// addresses of the validators who have just seen this event
+    pub seen_by: Vec<Address>,
+}
+
+#[allow(missing_docs)]
+/// Test helpers
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use rand::prelude::ThreadRng;
+
+    use super::vote_extensions::*;
+    use super::*;
+    use crate::types::key::{common, ed25519, SigScheme};
+    use crate::types::storage::BlockHeight;
+    use crate::types::token::Amount;
+
+    const DAI_ERC20_ETH_ADDRESS: &str =
+        "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+
+    pub fn arbitrary_eth_address() -> EthAddress {
+        let bytes: [u8; 20] =
+            hex::decode(DAI_ERC20_ETH_ADDRESS[2..].as_bytes())
+                .unwrap()
+                .try_into()
+                .unwrap();
+
+        EthAddress(bytes)
+    }
+
+    pub fn arbitrary_fractional_voting_power() -> FractionalVotingPower {
+        FractionalVotingPower::new(1, 3).unwrap()
+    }
+
+    pub fn arbitrary_nonce() -> Uint {
+        123.into()
+    }
+
+    pub fn arbitrary_amount() -> Amount {
+        Amount::from(1_000)
+    }
+
+    pub fn arbitrary_block_height() -> BlockHeight {
+        BlockHeight(100)
+    }
+
+    /// This will actually generate a new random secret key each time it's
+    /// called
+    pub fn arbitrary_secret_key() -> common::SecretKey {
+        let mut rng: ThreadRng = rand::thread_rng();
+        let sk: common::SecretKey = {
+            use crate::types::key::SecretKey;
+            ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
+        };
+        sk
+    }
 }
