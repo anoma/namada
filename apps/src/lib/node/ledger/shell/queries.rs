@@ -13,11 +13,15 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Epoch, Key, PrefixValue};
 use namada::types::token::{self, Amount};
 #[cfg(not(feature = "ABCI"))]
+use tendermint_proto::abci::Validator;
+#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::google::protobuf;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::types::EvidenceParams;
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::abci::Validator;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::crypto::{ProofOp, ProofOps};
 #[cfg(feature = "ABCI")]
@@ -27,6 +31,31 @@ use tendermint_proto_abci::types::EvidenceParams;
 
 use super::*;
 use crate::node::ledger::response;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(
+        "The address '{:?}' is not among the active validator set for epoch \
+         {1}"
+    )]
+    NotValidatorAddress(Address, Epoch),
+    #[error(
+        "The public key '{0}' is not among the active validator set for epoch \
+         {1}"
+    )]
+    NotValidatorKey(String, Epoch),
+    #[error(
+    "The public key hash '{0}' is not among the active validator set for epoch \
+         {1}"
+    )]
+    NotValidatorKeyHash(String, Epoch),
+    #[error("There are currently no staked validators")]
+    NoStakingValidators,
+    #[error("This node is not a validator")]
+    NotValidator,
+    #[error("Invalid validator tendermint address")]
+    InvalidTMAddress,
+}
 
 impl<D, H> Shell<D, H>
 where
@@ -302,7 +331,7 @@ where
         &self,
         pk: &key::common::PublicKey,
         epoch: Option<Epoch>,
-    ) -> Option<TendermintValidator<EllipticCurve>> {
+    ) -> std::result::Result<TendermintValidator<EllipticCurve>, Error> {
         let pk_bytes = pk
             .try_to_vec()
             .expect("Serializing public key should not fail");
@@ -311,7 +340,7 @@ where
         self.storage
             .read_validator_set()
             .get(epoch)
-            .expect("Validators for the next epoch should be known")
+            .expect("Validators for an epoch should be known")
             .active
             .iter()
             .find(|validator| {
@@ -343,6 +372,7 @@ where
                     public_key: dkg_publickey.into(),
                 }
             })
+            .ok_or_else(|| Error::NotValidatorKey(pk.to_string(), epoch))
     }
 
     /// Lookup data about a validator from their address
@@ -351,13 +381,13 @@ where
         &self,
         address: &Address,
         epoch: Option<Epoch>,
-    ) -> Option<(VotingPower, common::PublicKey)> {
+    ) -> std::result::Result<(VotingPower, common::PublicKey), Error> {
         let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
         // get the active validator set
         self.storage
             .read_validator_set()
             .get(epoch)
-            .expect("Validators for the next epoch should be known")
+            .expect("Validators for an epoch should be known")
             .active
             .iter()
             .find(|validator| address == &validator.address)
@@ -376,6 +406,7 @@ where
                     );
                 (validator.voting_power, protocol_pk)
             })
+            .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))
     }
 
     /// Lookup the total voting power for an epoch
@@ -401,23 +432,53 @@ where
     /// Get the voting power of this node (as a fraction of this epochs total
     /// voting power) if it is a validator. Else return None
     #[cfg(not(feature = "ABCI"))]
-    pub fn get_validator_voting_power(&self) -> Option<FractionalVotingPower> {
+    pub fn get_validator_voting_power(
+        &self,
+    ) -> std::result::Result<FractionalVotingPower, Error> {
         let power = if let Some(secret_key) = self.mode.get_protocol_key() {
-            match self
-                .get_validator_from_protocol_pk(&secret_key.ref_to(), None)
-            {
-                Some(validator) => Some(validator.power),
-                _ => None,
-            }
+            self.get_validator_from_protocol_pk(&secret_key.ref_to(), None)
+                .map(|validator| validator.power)?
         } else {
-            None
+            return Err(Error::NotValidator);
         };
         let total = u64::from(self.get_total_voting_power(None));
-        match power {
-            Some(power) if total > 0 => {
-                FractionalVotingPower::new(power, total).ok()
-            }
-            _ => None,
+        if total > 0 {
+            Ok(FractionalVotingPower::new(power, total).unwrap())
+        } else {
+            Err(Error::NoStakingValidators)
+        }
+    }
+
+    /// Given a tendermint validator, the address is the hash
+    /// of the validators public key. We look up the native
+    /// address from storage using this hash. Returns an error
+    /// if no matching validator is found in the active validator
+    /// set.
+    pub fn get_validator_from_tm_address(
+        &self,
+        tm_address: &[u8],
+    ) -> std::result::Result<Address, Error> {
+        let epoch = self.storage.get_current_epoch().0;
+        let validator_raw_hash = core::str::from_utf8(tm_address)
+            .map_err(|_| Error::InvalidTMAddress)?;
+        let address = self.storage
+            .read_validator_address_raw_hash(&validator_raw_hash)
+            .ok_or_else(|| Error::NotValidatorKeyHash(
+                validator_raw_hash.to_string(),
+                epoch
+            ))?;
+        if self.storage
+            .read_validator_set()
+            .get(epoch)
+            .expect("Validators for an epoch should be known")
+            .active
+            .iter()
+            .find(|validator| address == &validator.address)
+            .is_some()
+        {
+            Ok(address)
+        } else {
+            Err(Error::NotValidatorAddress(address, epoch))
         }
     }
 }
