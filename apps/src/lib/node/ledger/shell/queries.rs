@@ -342,4 +342,34 @@ where
                 }
             })
     }
+
+    /// Given a tendermint validator, the address is the hash
+    /// of the validators public key. We look up the native
+    /// address from storage using this hash. Returns an error
+    /// if no matching validator is found in the active validator
+    /// set.
+    pub fn get_validator_from_tm_address(
+        &self,
+        tm_address: &[u8],
+    ) -> std::result::Result<Address, ()> {
+        let epoch = self.storage.get_current_epoch().0;
+        let validator_raw_hash = core::str::from_utf8(tm_address)
+            .map_err(|_| ())?;
+        let address = self.storage
+            .read_validator_address_raw_hash(&validator_raw_hash)
+            .ok_or(())?;
+        if self.storage
+            .read_validator_set()
+            .get(epoch)
+            .expect("Validators for an epoch should be known")
+            .active
+            .iter()
+            .find(|validator| &address == &validator.address)
+            .is_some()
+        {
+            Ok(address)
+        } else {
+            Err(())
+        }
+    }
 }
