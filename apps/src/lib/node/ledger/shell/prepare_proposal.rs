@@ -5,8 +5,8 @@ mod prepare_block {
     use tendermint_proto::abci::TxRecord;
 
     use super::super::*;
-    use crate::proto::Signed;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+    use crate::proto::Signed;
     use crate::types::ethereum_events::vote_extensions::VoteExtension;
 
     impl<D, H> Shell<D, H>
@@ -37,7 +37,8 @@ mod prepare_block {
 
                 // add ethereum events as protocol txs
                 let mut txs: Vec<TxRecord> = {
-                    let protocol_key = self.mode
+                    let protocol_key = self
+                        .mode
                         .get_protocol_key()
                         .expect("Validators should always have a protocol key");
 
@@ -48,14 +49,16 @@ mod prepare_block {
                                 .votes
                                 .into_iter()
                                 .filter_map(|vote| {
-                                    let vote_extension = Signed<VoteExtension>::try_from_slice(
-                                        &vote.vote_extension[..]
-                                    ).ok()?;
+                                    let vote_extension = Signed::<
+                                            VoteExtension,
+                                        >::try_from_slice(
+                                            &vote.vote_extension[..],
+                                        )
+                                        .ok()?;
                                     vote_extension
                                 })
                                 .flat_map(|vote_extension| {
-                                    vote_extension
-                                        .ethereum_events
+                                    vote_extension.ethereum_events
                                 })
                                 .collect()
                         })
