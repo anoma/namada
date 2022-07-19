@@ -114,6 +114,7 @@ mod prepare_block {
                 let validator = vote.validator?;
                 let validator_addr = self
                     .get_validator_from_tm_address(&validator.address[..])
+                    // TODO: catch errors here and log them
                     .ok()?;
                 Some((validator_addr, vote_extension))
             });
