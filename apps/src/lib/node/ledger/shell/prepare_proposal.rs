@@ -3,8 +3,10 @@
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
     use anoma::proto::Signed;
-    use anoma::types::ethereum_events::vote_extensions::VoteExtension;
-    use tendermint_proto::abci::TxRecord;
+    use anoma::types::ethereum_events::vote_extensions::{
+        VoteExtension, VoteExtensionDigest,
+    };
+    use tendermint_proto::abci::{ExtendedVoteInfo, TxRecord};
 
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -42,30 +44,13 @@ mod prepare_block {
                         .get_protocol_key()
                         .expect("Validators should always have a protocol key");
 
-                    let ethereum_events: Vec<_> = req
+                    let vote_extension_digest = req
                         .local_last_commit
                         .map(|local_last_commit| {
-                            local_last_commit
-                                .votes
-                                .into_iter()
-                                .filter_map(|vote| {
-                                    let vote_extension = Signed::<
-                                            VoteExtension,
-                                        >::try_from_slice(
-                                            &vote.vote_extension[..],
-                                        )
-                                        .ok()?;
-                                    let validator = vote.validator?;
-                                    let validator_addr = self
-                                        .get_validator_from_tm_address(
-                                            &validator.address[..],
-                                        )
-                                        .ok()?;
-                                    Some((validator_addr, vote_extension))
-                                })
-                                .collect()
+                            let votes = local_last_commit.votes;
+                            self.compress_vote_extensions(votes)
                         })
-                        .unwrap_or_default();
+                        .unwrap_or_else(VoteExtensionDigest::empty);
 
                     todo!()
                 };
@@ -115,6 +100,24 @@ mod prepare_block {
                 tx_records: txs,
                 ..Default::default()
             }
+        }
+
+        fn compress_vote_extensions(
+            &self,
+            vote_extensions: Vec<ExtendedVoteInfo>,
+        ) -> VoteExtensionDigest {
+            let _ = vote_extensions.into_iter().filter_map(|vote| {
+                let vote_extension = Signed::<VoteExtension>::try_from_slice(
+                    &vote.vote_extension[..],
+                )
+                .ok()?;
+                let validator = vote.validator?;
+                let validator_addr = self
+                    .get_validator_from_tm_address(&validator.address[..])
+                    .ok()?;
+                Some((validator_addr, vote_extension))
+            });
+            todo!()
         }
     }
 

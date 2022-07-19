@@ -121,6 +121,14 @@ pub struct VoteExtensionDigest {
 }
 
 impl VoteExtensionDigest {
+    /// Creates a [`VoteExtensionDigest`] without any Ethereum events.
+    pub const fn empty() -> Self {
+        Self {
+            signatures: Vec::new(),
+            events: Vec::new(),
+        }
+    }
+
     /// Decompresses a set of signed `VoteExtension` instances.
     pub fn decompress(
         self,
