@@ -4429,6 +4429,7 @@ dependencies = [
  "hex",
  "namada",
  "namada_macros",
+ "namada_tests",
 ]
 
 [[package]]
