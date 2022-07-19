@@ -8,7 +8,7 @@ mod finalize_block;
 mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
-mod queries;
+pub(super) mod queries;
 mod vote_extensions;
 
 use std::collections::{BTreeSet, HashSet};
