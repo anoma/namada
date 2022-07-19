@@ -1,16 +1,16 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use anoma::ledger::governance::storage as gov_storage;
-use anoma::ledger::governance::utils::{
+use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::governance::utils::{
     compute_tally, get_proposal_votes, ProposalEvent,
 };
-use anoma::ledger::governance::vp::ADDRESS as gov_address;
-use anoma::ledger::storage::types::encode;
-use anoma::ledger::treasury::ADDRESS as treasury_address;
-use anoma::types::address::{xan as m1t, Address};
-use anoma::types::governance::TallyResult;
-use anoma::types::storage::{BlockHash, Epoch, Header};
-use anoma::types::transaction::protocol::ProtocolTxType;
+use namada::ledger::governance::vp::ADDRESS as gov_address;
+use namada::ledger::storage::types::encode;
+use namada::ledger::treasury::ADDRESS as treasury_address;
+use namada::types::address::{xan as m1t, Address};
+use namada::types::governance::TallyResult;
+use namada::types::storage::{BlockHash, Epoch, Header};
+use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::Misbehavior as Evidence;
 #[cfg(not(feature = "ABCI"))]
@@ -509,9 +509,9 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use anoma::types::address::xan;
-    use anoma::types::storage::Epoch;
-    use anoma::types::transaction::{EncryptionKey, Fee};
+    use namada::types::address::xan;
+    use namada::types::storage::Epoch;
+    use namada::types::transaction::{EncryptionKey, Fee};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;
@@ -748,7 +748,7 @@ mod test_finalize_block {
         // not valid tx bytes
         let tx = "garbage data".as_bytes().to_owned();
         let inner_tx =
-            anoma::types::transaction::encrypted::EncryptedTx::encrypt(
+            namada::types::transaction::encrypted::EncryptedTx::encrypt(
                 &tx, pubkey,
             );
         let wrapper = WrapperTx {
@@ -805,7 +805,7 @@ mod test_finalize_block {
         // not valid tx bytes
         let tx = "garbage data".as_bytes().to_owned();
         let inner_tx =
-            anoma::types::transaction::encrypted::EncryptedTx::encrypt(
+            namada::types::transaction::encrypted::EncryptedTx::encrypt(
                 &tx, pubkey,
             );
         let wrapper = WrapperTx {

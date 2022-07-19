@@ -12,11 +12,11 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use anoma_vp_prelude::intent::{
+use namada_vp_prelude::intent::{
     Exchange, FungibleTokenIntent, IntentTransfers,
 };
-use anoma_vp_prelude::storage::KeySeg;
-use anoma_vp_prelude::*;
+use namada_vp_prelude::storage::KeySeg;
+use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 use rust_decimal::prelude::*;
 
@@ -236,8 +236,8 @@ fn try_decode_intent(
     signed_tx_data: &SignedTxData,
 ) -> Option<(
     Vec<u8>,
-    anoma_vp_prelude::Signed<Exchange>,
-    anoma_vp_prelude::Signed<FungibleTokenIntent>,
+    namada_vp_prelude::Signed<Exchange>,
+    namada_vp_prelude::Signed<FungibleTokenIntent>,
 )> {
     let raw_intent_transfers = signed_tx_data.data.as_ref().cloned()?;
     let mut tx_data =
@@ -260,8 +260,8 @@ fn try_decode_intent(
 
 fn check_intent(
     addr: &Address,
-    exchange: anoma_vp_prelude::Signed<Exchange>,
-    intent: anoma_vp_prelude::Signed<FungibleTokenIntent>,
+    exchange: namada_vp_prelude::Signed<Exchange>,
+    intent: namada_vp_prelude::Signed<FungibleTokenIntent>,
     raw_intent_transfers: Vec<u8>,
 ) -> bool {
     // verify signature
@@ -364,11 +364,11 @@ fn check_intent(
 mod tests {
     use address::testing::arb_non_internal_address;
     // Use this as `#[test]` annotation to enable logging
-    use anoma_tests::log::test;
-    use anoma_tests::tx::{tx_host_env, TestTxEnv};
-    use anoma_tests::vp::vp_host_env::storage::Key;
-    use anoma_tests::vp::*;
-    use anoma_vp_prelude::key::RefTo;
+    use namada_tests::log::test;
+    use namada_tests::tx::{tx_host_env, TestTxEnv};
+    use namada_tests::vp::vp_host_env::storage::Key;
+    use namada_tests::vp::*;
+    use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 

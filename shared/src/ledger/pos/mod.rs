@@ -3,13 +3,13 @@
 mod storage;
 pub mod vp;
 
-pub use anoma_proof_of_stake;
-pub use anoma_proof_of_stake::parameters::PosParams;
-pub use anoma_proof_of_stake::types::{
+pub use namada_proof_of_stake;
+pub use namada_proof_of_stake::parameters::PosParams;
+pub use namada_proof_of_stake::types::{
     self, Slash, Slashes, TotalVotingPowers, ValidatorStates,
     ValidatorVotingPowers,
 };
-use anoma_proof_of_stake::PosBase;
+use namada_proof_of_stake::PosBase;
 pub use storage::*;
 pub use vp::PosVP;
 
@@ -47,40 +47,42 @@ pub fn init_genesis_storage<'a, DB, H>(
 
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type ValidatorConsensusKeys =
-    anoma_proof_of_stake::types::ValidatorConsensusKeys<key::common::PublicKey>;
+    namada_proof_of_stake::types::ValidatorConsensusKeys<
+        key::common::PublicKey,
+    >;
 
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type ValidatorTotalDeltas =
-    anoma_proof_of_stake::types::ValidatorTotalDeltas<token::Change>;
+    namada_proof_of_stake::types::ValidatorTotalDeltas<token::Change>;
 
 /// Alias for a PoS type with the same name with concrete type parameters
-pub type Bonds = anoma_proof_of_stake::types::Bonds<token::Amount>;
+pub type Bonds = namada_proof_of_stake::types::Bonds<token::Amount>;
 
 /// Alias for a PoS type with the same name with concrete type parameters
-pub type Unbonds = anoma_proof_of_stake::types::Unbonds<token::Amount>;
+pub type Unbonds = namada_proof_of_stake::types::Unbonds<token::Amount>;
 
 /// Alias for a PoS type with the same name with concrete type parameters
-pub type ValidatorSets = anoma_proof_of_stake::types::ValidatorSets<Address>;
+pub type ValidatorSets = namada_proof_of_stake::types::ValidatorSets<Address>;
 
 /// Alias for a PoS type with the same name with concrete type parameters
-pub type BondId = anoma_proof_of_stake::types::BondId<Address>;
+pub type BondId = namada_proof_of_stake::types::BondId<Address>;
 
 /// Alias for a PoS type with the same name with concrete type parameters
-pub type GenesisValidator = anoma_proof_of_stake::types::GenesisValidator<
+pub type GenesisValidator = namada_proof_of_stake::types::GenesisValidator<
     Address,
     token::Amount,
     key::common::PublicKey,
 >;
 
-impl From<Epoch> for anoma_proof_of_stake::types::Epoch {
+impl From<Epoch> for namada_proof_of_stake::types::Epoch {
     fn from(epoch: Epoch) -> Self {
         let epoch: u64 = epoch.into();
-        anoma_proof_of_stake::types::Epoch::from(epoch)
+        namada_proof_of_stake::types::Epoch::from(epoch)
     }
 }
 
-impl From<anoma_proof_of_stake::types::Epoch> for Epoch {
-    fn from(epoch: anoma_proof_of_stake::types::Epoch) -> Self {
+impl From<namada_proof_of_stake::types::Epoch> for Epoch {
+    fn from(epoch: namada_proof_of_stake::types::Epoch) -> Self {
         let epoch: u64 = epoch.into();
         Epoch(epoch)
     }

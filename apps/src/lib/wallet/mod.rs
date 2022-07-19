@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::{env, fs};
 
-use anoma::types::address::Address;
-use anoma::types::key::*;
+use namada::types::address::Address;
+use namada::types::key::*;
 pub use store::wallet_file;
 use thiserror::Error;
 

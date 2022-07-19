@@ -23,7 +23,7 @@
 //! ## Pos Parameters
 //!
 //! Arbitrary valid PoS parameters are provided from its module via
-//! [`anoma_vm_env::proof_of_stake::parameters::testing::arb_pos_params`].
+//! [`namada_vm_env::proof_of_stake::parameters::testing::arb_pos_params`].
 //!
 //! ## Valid transitions
 //!
@@ -102,13 +102,13 @@
 #[cfg(test)]
 mod tests {
 
-    use anoma::ledger::pos::anoma_proof_of_stake::PosBase;
-    use anoma::ledger::pos::PosParams;
-    use anoma::types::storage::Epoch;
-    use anoma::types::token;
-    use anoma_vm_env::proof_of_stake::parameters::testing::arb_pos_params;
-    use anoma_vm_env::proof_of_stake::{staking_token_address, PosVP};
-    use anoma_vm_env::tx_prelude::Address;
+    use namada::ledger::pos::namada_proof_of_stake::PosBase;
+    use namada::ledger::pos::PosParams;
+    use namada::types::storage::Epoch;
+    use namada::types::token;
+    use namada_vm_env::proof_of_stake::parameters::testing::arb_pos_params;
+    use namada_vm_env::proof_of_stake::{staking_token_address, PosVP};
+    use namada_vm_env::tx_prelude::Address;
     use proptest::prelude::*;
     use proptest::prop_state_machine;
     use proptest::state_machine::{AbstractStateMachine, StateMachineTest};
@@ -531,24 +531,24 @@ mod tests {
 pub mod testing {
     use std::collections::HashMap;
 
-    use anoma::ledger::pos::anoma_proof_of_stake::btree_set::BTreeSetShims;
-    use anoma::types::key::common::PublicKey;
-    use anoma::types::key::RefTo;
-    use anoma::types::storage::Epoch;
-    use anoma::types::{address, key, token};
-    use anoma_vm_env::proof_of_stake::epoched::{
+    use derivative::Derivative;
+    use itertools::Either;
+    use namada::ledger::pos::namada_proof_of_stake::btree_set::BTreeSetShims;
+    use namada::types::key::common::PublicKey;
+    use namada::types::key::RefTo;
+    use namada::types::storage::Epoch;
+    use namada::types::{address, key, token};
+    use namada_vm_env::proof_of_stake::epoched::{
         DynEpochOffset, Epoched, EpochedDelta,
     };
-    use anoma_vm_env::proof_of_stake::types::{
+    use namada_vm_env::proof_of_stake::types::{
         Bond, Unbond, ValidatorState, VotingPower, VotingPowerDelta,
         WeightedValidator,
     };
-    use anoma_vm_env::proof_of_stake::{
+    use namada_vm_env::proof_of_stake::{
         staking_token_address, BondId, Bonds, PosParams, Unbonds,
     };
-    use anoma_vm_env::tx_prelude::{Address, PoS};
-    use derivative::Derivative;
-    use itertools::Either;
+    use namada_vm_env::tx_prelude::{Address, PoS};
     use proptest::prelude::*;
 
     use crate::tx::tx_host_env;
@@ -783,7 +783,7 @@ pub mod testing {
         /// the VP.
         pub fn apply(self, is_current_tx_valid: bool) {
             // Read the PoS parameters
-            use anoma_vm_env::tx_prelude::PosRead;
+            use namada_vm_env::tx_prelude::PosRead;
             let params = PoS.read_pos_params();
 
             let current_epoch = tx_host_env::with(|env| {
@@ -811,7 +811,7 @@ pub mod testing {
             params: &PosParams,
             current_epoch: Epoch,
         ) -> PosStorageChanges {
-            use anoma_vm_env::tx_prelude::PosRead;
+            use namada_vm_env::tx_prelude::PosRead;
 
             match self {
                 ValidPosAction::InitValidator(addr) => {
@@ -928,7 +928,7 @@ pub mod testing {
                     // for each epoch that we iterate, less the deltas of the
                     // predecessor epochs
                     let mut total_vp_delta = 0_i128;
-                    for epoch in anoma::ledger::pos::anoma_proof_of_stake::types::Epoch::iter_range(
+                    for epoch in namada::ledger::pos::namada_proof_of_stake::types::Epoch::iter_range(
                         (current_epoch.0 + DynEpochOffset::PipelineLen.value(params) + 1).into(),
                         num_of_epochs,
                     ) {
@@ -1108,7 +1108,7 @@ pub mod testing {
         // invalid changes
         is_current_tx_valid: bool,
     ) {
-        use anoma_vm_env::tx_prelude::{PosRead, PosWrite};
+        use namada_vm_env::tx_prelude::{PosRead, PosWrite};
 
         match change {
             PosStorageChange::SpawnAccount { address } => {
@@ -1433,7 +1433,7 @@ pub mod testing {
         current_epoch: Epoch,
         params: &PosParams,
     ) {
-        use anoma_vm_env::tx_prelude::{PosRead, PosWrite};
+        use namada_vm_env::tx_prelude::{PosRead, PosWrite};
 
         let validator_total_deltas =
             PoS.read_validator_total_deltas(&validator);
@@ -1625,7 +1625,7 @@ pub mod testing {
         /// Apply an invalid PoS storage action.
         pub fn apply(self) {
             // Read the PoS parameters
-            use anoma_vm_env::tx_prelude::PosRead;
+            use namada_vm_env::tx_prelude::PosRead;
             let params = PoS.read_pos_params();
 
             for (epoch, changes) in self.changes {
@@ -1641,7 +1641,7 @@ pub mod testing {
         params: &PosParams,
         current_epoch: Epoch,
     ) -> bool {
-        use anoma_vm_env::tx_prelude::PosRead;
+        use namada_vm_env::tx_prelude::PosRead;
 
         let validator_sets = PoS.read_validator_set();
         let validator_set = validator_sets

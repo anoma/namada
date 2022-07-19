@@ -3,13 +3,13 @@
 use std::fs::File;
 use std::io::{self, Write};
 
-use anoma::types::key::*;
-use anoma_apps::cli;
-use anoma_apps::cli::{args, cmds, Context};
-use anoma_apps::wallet::DecryptionError;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use itertools::sorted;
+use namada::types::key::*;
+use namada_apps::cli;
+use namada_apps::cli::{args, cmds, Context};
+use namada_apps::wallet::DecryptionError;
 
 pub fn main() -> Result<()> {
     let (cmd, ctx) = cli::anoma_wallet_cli();

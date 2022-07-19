@@ -205,9 +205,9 @@ pub mod shim {
     pub mod request {
         use std::convert::TryFrom;
 
-        use anoma::types::hash::Hash;
-        use anoma::types::storage::{BlockHash, Header};
-        use anoma::types::time::DateTimeUtc;
+        use namada::types::hash::Hash;
+        use namada::types::storage::{BlockHash, Header};
+        use namada::types::time::DateTimeUtc;
         #[cfg(not(feature = "ABCI"))]
         use tendermint_proto::abci::{
             Misbehavior as Evidence, RequestFinalizeBlock,

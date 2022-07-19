@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use anoma_proof_of_stake::types::{Slash, Slashes};
 use borsh::BorshDeserialize;
 use itertools::Itertools;
+use namada_proof_of_stake::types::{Slash, Slashes};
 use thiserror::Error;
 
 use crate::ledger::governance::storage as gov_storage;

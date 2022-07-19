@@ -5,8 +5,8 @@ mod rocksdb;
 
 use std::fmt;
 
-use anoma::ledger::storage::{Storage, StorageHasher};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
+use namada::ledger::storage::{Storage, StorageHasher};
 use sparse_merkle_tree::blake2b::Blake2bHasher;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::H256;
@@ -50,9 +50,9 @@ fn new_blake2b() -> Blake2b {
 
 #[cfg(test)]
 mod tests {
-    use anoma::ledger::storage::types;
-    use anoma::types::chain::ChainId;
-    use anoma::types::storage::{BlockHash, BlockHeight, Key};
+    use namada::ledger::storage::types;
+    use namada::types::chain::ChainId;
+    use namada::types::storage::{BlockHash, BlockHeight, Key};
     use tempfile::TempDir;
 
     use super::*;

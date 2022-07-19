@@ -1,15 +1,15 @@
 use std::collections::BTreeSet;
 
-use anoma::ledger::gas::VpGasMeter;
-use anoma::ledger::storage::mockdb::MockDB;
-use anoma::ledger::storage::testing::TestStorage;
-use anoma::ledger::storage::write_log::WriteLog;
-use anoma::proto::Tx;
-use anoma::types::address::{self, Address};
-use anoma::types::storage::{self, Key};
-use anoma::vm::prefix_iter::PrefixIterators;
-use anoma::vm::wasm::{self, VpCache};
-use anoma::vm::{self, WasmCacheRwAccess};
+use namada::ledger::gas::VpGasMeter;
+use namada::ledger::storage::mockdb::MockDB;
+use namada::ledger::storage::testing::TestStorage;
+use namada::ledger::storage::write_log::WriteLog;
+use namada::proto::Tx;
+use namada::types::address::{self, Address};
+use namada::types::storage::{self, Key};
+use namada::vm::prefix_iter::PrefixIterators;
+use namada::vm::wasm::{self, VpCache};
+use namada::vm::{self, WasmCacheRwAccess};
 use tempfile::TempDir;
 
 use crate::tx::{tx_host_env, TestTxEnv};
@@ -19,7 +19,7 @@ use crate::tx::{tx_host_env, TestTxEnv};
 /// that will call to the native functions, instead of interfacing via a
 /// wasm runtime. It can be used for host environment integration tests.
 pub mod vp_host_env {
-    pub use anoma_vm_env::vp_prelude::*;
+    pub use namada_vm_env::vp_prelude::*;
 
     pub use super::native_vp_host_env::*;
 }
@@ -43,7 +43,7 @@ pub struct TestVpEnv {
 impl Default for TestVpEnv {
     fn default() -> Self {
         #[cfg(feature = "wasm-runtime")]
-        let eval_runner = anoma::vm::wasm::run::VpEvalWasm::default();
+        let eval_runner = namada::vm::wasm::run::VpEvalWasm::default();
         #[cfg(not(feature = "wasm-runtime"))]
         let eval_runner = native_vp_host_env::VpEval;
 
@@ -86,16 +86,16 @@ mod native_vp_host_env {
     use std::cell::RefCell;
     use std::pin::Pin;
 
-    use anoma::ledger::storage::Sha256Hasher;
-    use anoma::vm::host_env::*;
-    use anoma::vm::WasmCacheRwAccess;
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
+    use namada::ledger::storage::Sha256Hasher;
+    use namada::vm::host_env::*;
+    use namada::vm::WasmCacheRwAccess;
 
     use super::*;
 
     #[cfg(feature = "wasm-runtime")]
-    pub type VpEval = anoma::vm::wasm::run::VpEvalWasm<
+    pub type VpEval = namada::vm::wasm::run::VpEvalWasm<
         MockDB,
         Sha256Hasher,
         WasmCacheRwAccess,
@@ -211,7 +211,7 @@ mod native_vp_host_env {
             _ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
             _vp_code: Vec<u8>,
             _input_data: Vec<u8>,
-        ) -> anoma::types::internal::HostEnvResult {
+        ) -> namada::types::internal::HostEnvResult {
             unimplemented!(
                 "The \"wasm-runtime\" feature must be enabled to test with \
                  the `eval` function."
@@ -309,7 +309,7 @@ mod native_vp_host_env {
         }
 
     // Implement all the exported functions from
-    // [`anoma_vm_env::imports::vp`] `extern "C"` section.
+    // [`namada_vm_env::imports::vp`] `extern "C"` section.
     native_host_fn!(vp_read_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_read_post(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_result_buffer(result_ptr: u64));

@@ -2,23 +2,23 @@
 use std::collections::BTreeSet;
 use std::panic;
 
-use anoma::ledger::eth_bridge::vp::EthBridge;
-use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter};
-use anoma::ledger::governance::GovernanceVp;
-use anoma::ledger::ibc::vp::{Ibc, IbcToken};
-use anoma::ledger::native_vp::{self, NativeVp};
-use anoma::ledger::parameters::{self, ParametersVp};
-use anoma::ledger::pos::{self, PosVP};
-use anoma::ledger::storage::write_log::WriteLog;
-use anoma::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use anoma::ledger::treasury::TreasuryVp;
-use anoma::proto::{self, Tx};
-use anoma::types::address::{Address, InternalAddress};
-use anoma::types::storage;
-use anoma::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
-use anoma::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
-use anoma::vm::wasm::{TxCache, VpCache};
-use anoma::vm::{self, wasm, WasmCacheAccess};
+use namada::ledger::eth_bridge::vp::EthBridge;
+use namada::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use namada::ledger::governance::GovernanceVp;
+use namada::ledger::ibc::vp::{Ibc, IbcToken};
+use namada::ledger::native_vp::{self, NativeVp};
+use namada::ledger::parameters::{self, ParametersVp};
+use namada::ledger::pos::{self, PosVP};
+use namada::ledger::storage::write_log::WriteLog;
+use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada::ledger::treasury::TreasuryVp;
+use namada::proto::{self, Tx};
+use namada::types::address::{Address, InternalAddress};
+use namada::types::storage;
+use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+use namada::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
+use namada::vm::wasm::{TxCache, VpCache};
+use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
@@ -27,7 +27,7 @@ use crate::node::ledger::shell::Shell;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
-    StorageError(anoma::ledger::storage::Error),
+    StorageError(namada::ledger::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
@@ -41,7 +41,7 @@ pub enum Error {
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
     #[error("IBC native VP: {0}")]
-    IbcNativeVpError(anoma::ledger::ibc::vp::Error),
+    IbcNativeVpError(namada::ledger::ibc::vp::Error),
     #[error("PoS native VP: {0}")]
     PosNativeVpError(pos::vp::Error),
     #[error("PoS native VP panicked")]
@@ -49,13 +49,13 @@ pub enum Error {
     #[error("Parameters native VP: {0}")]
     ParametersNativeVpError(parameters::Error),
     #[error("IBC Token native VP: {0}")]
-    IbcTokenNativeVpError(anoma::ledger::ibc::vp::IbcTokenError),
+    IbcTokenNativeVpError(namada::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(anoma::ledger::governance::vp::Error),
+    GovernanceNativeVpError(namada::ledger::governance::vp::Error),
     #[error("Treasury native VP error: {0}")]
-    TreasuryNativeVpError(anoma::ledger::treasury::Error),
+    TreasuryNativeVpError(namada::ledger::treasury::Error),
     #[error("Ethereum bridge native VP error: {0}")]
-    EthBridgeNativeVpError(anoma::ledger::eth_bridge::vp::Error),
+    EthBridgeNativeVpError(namada::ledger::eth_bridge::vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }

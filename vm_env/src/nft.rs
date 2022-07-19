@@ -1,10 +1,10 @@
-use anoma::types::nft;
+use namada::types::nft;
 
 /// Tx imports and functions.
 pub mod tx {
-    use anoma::types::address::Address;
-    use anoma::types::nft::NftToken;
-    use anoma::types::transaction::nft::{CreateNft, MintNft};
+    use namada::types::address::Address;
+    use namada::types::nft::NftToken;
+    use namada::types::transaction::nft::{CreateNft, MintNft};
 
     use super::*;
     use crate::imports::tx;
@@ -93,9 +93,9 @@ pub mod tx {
 pub mod vp {
     use std::collections::BTreeSet;
 
-    use anoma::types::address::Address;
-    pub use anoma::types::nft::*;
-    use anoma::types::storage::Key;
+    use namada::types::address::Address;
+    pub use namada::types::nft::*;
+    use namada::types::storage::Key;
 
     use crate::imports::vp;
 

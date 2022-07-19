@@ -6,13 +6,13 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::str::FromStr;
 
-use anoma::types::address::{Address, ImplicitAddress};
-use anoma::types::key::dkg_session_keys::DkgKeypair;
-use anoma::types::key::*;
-use anoma::types::transaction::EllipticCurve;
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
 use file_lock::{FileLock, FileOptions};
+use namada::types::address::{Address, ImplicitAddress};
+use namada::types::key::dkg_session_keys::DkgKeypair;
+use namada::types::key::*;
+use namada::types::transaction::EllipticCurve;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

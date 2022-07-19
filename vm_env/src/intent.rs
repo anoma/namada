@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 
-use anoma::proto::Signed;
-use anoma::types::intent;
-use anoma::types::key::*;
+use namada::proto::Signed;
+use namada::types::intent;
+use namada::types::key::*;
 
 /// Tx imports and functions.
 pub mod tx {
-    pub use anoma::types::intent::*;
+    pub use namada::types::intent::*;
 
     use super::*;
     pub fn invalidate_exchange(intent: &Signed<Exchange>) {
@@ -21,7 +21,7 @@ pub mod tx {
 
 /// Vp imports and functions.
 pub mod vp {
-    pub use anoma::types::intent::*;
+    pub use namada::types::intent::*;
 
     use super::*;
 

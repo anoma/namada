@@ -481,7 +481,7 @@ fn get_id(req_json: &str) -> Result<String, Error> {
 mod test_tendermint_websocket_client {
     use std::time::Duration;
 
-    use anoma::types::transaction::hash_tx as hash_tx_bytes;
+    use namada::types::transaction::hash_tx as hash_tx_bytes;
     use serde::{Deserialize, Serialize};
     #[cfg(feature = "ABCI")]
     use tendermint_rpc_abci::endpoint::abci_info::AbciInfo;

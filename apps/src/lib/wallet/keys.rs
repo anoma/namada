@@ -4,8 +4,8 @@ use std::fmt::Display;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use anoma::types::key::*;
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::types::key::*;
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

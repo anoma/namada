@@ -275,15 +275,15 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use anoma::proto::SignedTxData;
-    use anoma::types::address::xan;
-    use anoma::types::hash::Hash;
-    use anoma::types::key::*;
-    use anoma::types::storage::Epoch;
-    use anoma::types::token::Amount;
-    use anoma::types::transaction::encrypted::EncryptedTx;
-    use anoma::types::transaction::{EncryptionKey, Fee};
     use borsh::BorshDeserialize;
+    use namada::proto::SignedTxData;
+    use namada::types::address::xan;
+    use namada::types::hash::Hash;
+    use namada::types::key::*;
+    use namada::types::storage::Epoch;
+    use namada::types::token::Amount;
+    use namada::types::transaction::encrypted::EncryptedTx;
+    use namada::types::transaction::{EncryptionKey, Fee};
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::RequestInitChain;
     #[cfg(not(feature = "ABCI"))]
