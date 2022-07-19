@@ -55,10 +55,12 @@ mod prepare_block {
                                             &vote.vote_extension[..],
                                         )
                                         .ok()?;
-                                    Some(vote_extension)
-                                })
-                                .flat_map(|vote_extension| {
-                                    vote_extension.data.ethereum_events
+                                    let validator = vote.validator?;
+                                    let validator_addr = self
+                                        .raw_hash_to_address(
+                                            validator.address,
+                                        )?;
+                                    Some((validator_addr, vote_extension))
                                 })
                                 .collect()
                         })
