@@ -140,6 +140,13 @@ mod prepare_block {
                         Signed::<VoteExtension>::try_from_slice(
                             &vote.vote_extension[..],
                         )
+                        .map_err(|err| {
+                            tracing::error!(
+                                "Failed to deserialize signed vote extension: \
+                                 {}",
+                                err
+                            );
+                        })
                         .ok()?;
                     let validator = vote.validator?;
                     let validator_addr = self
