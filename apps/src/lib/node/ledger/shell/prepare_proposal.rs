@@ -6,8 +6,10 @@ mod prepare_block {
 
     use anoma::proto::Signed;
     use anoma::types::ethereum_events::vote_extensions::{
-        MultiSignedEthEvent, VoteExtension, VoteExtensionDigest,
+        FractionalVotingPower, MultiSignedEthEvent, VoteExtension,
+        VoteExtensionDigest,
     };
+    use anoma::types::storage::BlockHeight;
     use anoma::types::transaction::protocol::ProtocolTxType;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
@@ -42,8 +44,11 @@ mod prepare_block {
                 // TODO: add some info logging
 
                 // add ethereum events as protocol txs
-                let mut txs =
-                    self.build_vote_extensions_txs(req.local_last_commit);
+                let last_height = BlockHeight((req.height - 1) as u64);
+                let mut txs = self.build_vote_extensions_txs(
+                    last_height,
+                    req.local_last_commit,
+                );
 
                 // add mempool txs
                 let mut mempool_txs = self.build_mempool_txs(req.txs);
@@ -68,6 +73,7 @@ mod prepare_block {
         /// events
         fn build_vote_extensions_txs(
             &mut self,
+            last_height: BlockHeight,
             local_last_commit: Option<ExtendedCommitInfo>,
         ) -> Vec<TxRecord> {
             let protocol_key = self
@@ -76,9 +82,9 @@ mod prepare_block {
                 .expect("Validators should always have a protocol key");
 
             let vote_extension_digest =
-                local_last_commit.map(|local_last_commit| {
+                local_last_commit.and_then(|local_last_commit| {
                     let votes = local_last_commit.votes;
-                    self.compress_vote_extensions(votes)
+                    self.compress_vote_extensions(last_height, votes)
                 });
             let vote_extension_digest = match vote_extension_digest {
                 Some(d) => d,
@@ -139,11 +145,11 @@ mod prepare_block {
         /// `Signed<VoteExtension>` instances in the process
         fn compress_vote_extensions(
             &self,
+            last_height: BlockHeight,
             vote_extensions: Vec<ExtendedVoteInfo>,
-        ) -> VoteExtensionDigest {
-            let all_vote_extensions = vote_extensions
-                .into_iter()
-                .filter_map(|vote| {
+        ) -> Option<VoteExtensionDigest> {
+            let all_vote_extensions =
+                vote_extensions.into_iter().filter_map(|vote| {
                     let vote_extension =
                         Signed::<VoteExtension>::try_from_slice(
                             &vote.vote_extension[..],
@@ -171,34 +177,61 @@ mod prepare_block {
                             );
                         })
                         .ok()?;
-                    Some((validator_addr, vote_extension))
-                })
-                .filter(|(validator_addr, vote_extension)| {
-                    // TODO:
-                    // - verify 2/3 stake of vote_extension
-                    // - verify block height of vote_extension
 
                     // verify signature of the vote extension
                     let result =
                         self.get_validator_from_address(&validator_addr, None);
                     let validator_public_key = match result {
                         Ok((_, validator_public_key)) => validator_public_key,
+                        // TODO: improve this code
                         Err(_) => {
                             tracing::error!(
                                 "Could not get public key from Storage for \
                                  validator {}",
                                 validator_addr
                             );
-                            return false;
+                            return None;
                         }
                     };
-                    vote_extension.verify(&validator_public_key).is_ok()
+
+                    // TODO: log invalid signature
+                    vote_extension.verify(&validator_public_key).ok()?;
+
+                    Some((validator_addr, vote_extension))
                 });
+
+            // TODO:
+            // [x] verify 2/3 stake of vote_extension
+            // [ ] verify block height of vote_extension
 
             let mut event_observers = BTreeMap::new();
             let mut signatures = Vec::new();
 
+            let events_epoch = self
+                .storage
+                .block
+                .pred_epochs
+                .get_epoch(last_height)
+                // TODO: is this `unwrap()` fine?
+                .unwrap();
+            let total_voting_power =
+                self.get_total_voting_power(Some(events_epoch)).into();
+            let mut voting_power = 0u64;
+
             for (validator_addr, vote_extension) in all_vote_extensions {
+                let (validator_voting_power, _) = self
+                    .get_validator_from_address(
+                        &validator_addr,
+                        Some(events_epoch),
+                    )
+                    .expect(
+                        "We already checked that we have a valid Tendermint \
+                         address",
+                    );
+
+                // update voting power
+                voting_power += u64::from(validator_voting_power);
+
                 // register all ethereum events seen by `validator_addr`
                 for ev in vote_extension.data.ethereum_events {
                     let signers =
@@ -214,12 +247,24 @@ mod prepare_block {
                 signatures.push((sig, addr));
             }
 
+            let voting_power =
+                FractionalVotingPower::new(voting_power, total_voting_power)
+                    .unwrap();
+
+            if voting_power <= FractionalVotingPower::TWO_THIRDS {
+                tracing::error!(
+                    "Tendermint has decided on a block including vote \
+                     extensions reflecting less than 2/3 of the total stake"
+                );
+                return None;
+            }
+
             let events = event_observers
                 .into_iter()
                 .map(|(event, signers)| MultiSignedEthEvent { event, signers })
                 .collect();
 
-            VoteExtensionDigest { events, signatures }
+            Some(VoteExtensionDigest { events, signatures })
         }
     }
 
