@@ -39,7 +39,7 @@ mod prepare_block {
             self.gas_meter.reset();
             let txs = if let ShellMode::Validator { .. } = self.mode {
                 // add ethereum events as protocol txs
-                let mut txs: Vec<TxRecord> =
+                let mut txs =
                     self.build_vote_extensions_txs(req.local_last_commit);
 
                 // add mempool txs
