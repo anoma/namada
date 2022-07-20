@@ -2,11 +2,14 @@
 use std::cmp::max;
 
 use anoma::ledger::parameters::EpochDuration;
+#[cfg(not(feature = "ABCI"))]
+use anoma::ledger::pos::anoma_proof_of_stake::types::VotingPower;
 use anoma::ledger::pos::PosParams;
 use anoma::types::address::Address;
+use anoma::types::ethereum_events::vote_extensions::FractionalVotingPower;
 use anoma::types::key;
 use anoma::types::key::dkg_session_keys::DkgPublicKey;
-use anoma::types::storage::{Key, PrefixValue};
+use anoma::types::storage::{Epoch, Key, PrefixValue};
 use anoma::types::token::{self, Amount};
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
@@ -25,6 +28,32 @@ use tendermint_proto_abci::types::EvidenceParams;
 
 use super::*;
 use crate::node::ledger::response;
+
+#[derive(Error, Debug)]
+#[allow(dead_code)]
+pub enum Error {
+    #[error(
+        "The address '{:?}' is not among the active validator set for epoch \
+         {1}"
+    )]
+    NotValidatorAddress(Address, Epoch),
+    #[error(
+        "The public key '{0}' is not among the active validator set for epoch \
+         {1}"
+    )]
+    NotValidatorKey(String, Epoch),
+    #[error(
+        "The public key hash '{0}' is not among the active validator set for \
+         epoch {1}"
+    )]
+    NotValidatorKeyHash(String, Epoch),
+    #[error("There are currently no staked validators")]
+    NoStakingValidators,
+    #[error("This node is not a validator")]
+    NotValidator,
+    #[error("Invalid validator tendermint address")]
+    InvalidTMAddress,
+}
 
 impl<D, H> Shell<D, H>
 where
@@ -299,17 +328,17 @@ where
     pub fn get_validator_from_protocol_pk(
         &self,
         pk: &key::common::PublicKey,
-    ) -> Option<TendermintValidator<EllipticCurve>> {
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<TendermintValidator<EllipticCurve>, Error> {
         let pk_bytes = pk
             .try_to_vec()
             .expect("Serializing public key should not fail");
-        // get the current epoch
-        let (current_epoch, _) = self.storage.get_current_epoch();
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
         // get the active validator set
         self.storage
             .read_validator_set()
-            .get(current_epoch)
-            .expect("Validators for the next epoch should be known")
+            .get(epoch)
+            .expect("Validators for an epoch should be known")
             .active
             .iter()
             .find(|validator| {
@@ -341,6 +370,81 @@ where
                     public_key: dkg_publickey.into(),
                 }
             })
+            .ok_or_else(|| Error::NotValidatorKey(pk.to_string(), epoch))
+    }
+
+    /// Lookup data about a validator from their address
+    #[cfg(not(feature = "ABCI"))]
+    pub fn get_validator_from_address(
+        &self,
+        address: &Address,
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<(VotingPower, common::PublicKey), Error> {
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        // get the active validator set
+        self.storage
+            .read_validator_set()
+            .get(epoch)
+            .expect("Validators for an epoch should be known")
+            .active
+            .iter()
+            .find(|validator| address == &validator.address)
+            .map(|validator| {
+                let protocol_pk_key = key::protocol_pk_key(&validator.address);
+                let bytes = self
+                    .storage
+                    .read(&protocol_pk_key)
+                    .expect("Validator should have public protocol key")
+                    .0
+                    .expect("Validator should have public protocol key");
+                let protocol_pk: common::PublicKey =
+                    BorshDeserialize::deserialize(&mut bytes.as_ref()).expect(
+                        "Protocol public key in storage should be \
+                         deserializable",
+                    );
+                (validator.voting_power, protocol_pk)
+            })
+            .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))
+    }
+
+    /// Lookup the total voting power for an epoch
+    #[cfg(not(feature = "ABCI"))]
+    pub fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
+        // get the current epoch
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        // get the active validator set
+        self.storage
+            .read_validator_set()
+            .get(epoch)
+            .map(|validators| {
+                validators
+                    .active
+                    .iter()
+                    .map(|validator| u64::from(validator.voting_power))
+                    .sum::<u64>()
+                    .into()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get the voting power of this node (as a fraction of this epochs total
+    /// voting power) if it is a validator. Else return None
+    #[cfg(not(feature = "ABCI"))]
+    pub fn get_validator_voting_power(
+        &self,
+    ) -> std::result::Result<FractionalVotingPower, Error> {
+        let power = if let Some(secret_key) = self.mode.get_protocol_key() {
+            self.get_validator_from_protocol_pk(&secret_key.ref_to(), None)
+                .map(|validator| validator.power)?
+        } else {
+            return Err(Error::NotValidator);
+        };
+        let total = u64::from(self.get_total_voting_power(None));
+        if total > 0 {
+            Ok(FractionalVotingPower::new(power, total).unwrap())
+        } else {
+            Err(Error::NoStakingValidators)
+        }
     }
 
     /// Given a tendermint validator, the address is the hash
@@ -351,14 +455,19 @@ where
     pub fn get_validator_from_tm_address(
         &self,
         tm_address: &[u8],
-    ) -> std::result::Result<Address, ()> {
+    ) -> std::result::Result<Address, Error> {
         let epoch = self.storage.get_current_epoch().0;
-        let validator_raw_hash =
-            core::str::from_utf8(tm_address).map_err(|_| ())?;
+        let validator_raw_hash = core::str::from_utf8(tm_address)
+            .map_err(|_| Error::InvalidTMAddress)?;
         let address = self
             .storage
             .read_validator_address_raw_hash(&validator_raw_hash)
-            .ok_or(())?;
+            .ok_or_else(|| {
+                Error::NotValidatorKeyHash(
+                    validator_raw_hash.to_string(),
+                    epoch,
+                )
+            })?;
         if self
             .storage
             .read_validator_set()
@@ -371,7 +480,7 @@ where
         {
             Ok(address)
         } else {
-            Err(())
+            Err(Error::NotValidatorAddress(address, epoch))
         }
     }
 }
