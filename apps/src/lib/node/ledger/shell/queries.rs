@@ -13,15 +13,11 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Epoch, Key, PrefixValue};
 use namada::types::token::{self, Amount};
 #[cfg(not(feature = "ABCI"))]
-use tendermint_proto::abci::Validator;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::google::protobuf;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::types::EvidenceParams;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::Validator;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::crypto::{ProofOp, ProofOps};
 #[cfg(feature = "ABCI")]
@@ -43,16 +39,13 @@ pub enum Error {
         "The public key '{0}' is not among the active validator set for epoch \
          {1}"
     )]
+    #[allow(dead_code)]
     NotValidatorKey(String, Epoch),
     #[error(
-    "The public key hash '{0}' is not among the active validator set for epoch \
+        "The public key hash '{0}' is not among the active validator set for epoch \
          {1}"
     )]
     NotValidatorKeyHash(String, Epoch),
-    #[error("There are currently no staked validators")]
-    NoStakingValidators,
-    #[error("This node is not a validator")]
-    NotValidator,
     #[error("Invalid validator tendermint address")]
     InvalidTMAddress,
 }
@@ -411,6 +404,7 @@ where
 
     /// Lookup the total voting power for an epoch
     #[cfg(not(feature = "ABCI"))]
+    #[allow(dead_code)]
     pub fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
         // get the current epoch
         let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
@@ -429,56 +423,25 @@ where
             .unwrap_or_default()
     }
 
-    /// Get the voting power of this node (as a fraction of this epochs total
-    /// voting power) if it is a validator. Else return None
-    #[cfg(not(feature = "ABCI"))]
-    pub fn get_validator_voting_power(
-        &self,
-    ) -> std::result::Result<FractionalVotingPower, Error> {
-        let power = if let Some(secret_key) = self.mode.get_protocol_key() {
-            self.get_validator_from_protocol_pk(&secret_key.ref_to(), None)
-                .map(|validator| validator.power)?
-        } else {
-            return Err(Error::NotValidator);
-        };
-        let total = u64::from(self.get_total_voting_power(None));
-        if total > 0 {
-            Ok(FractionalVotingPower::new(power, total).unwrap())
-        } else {
-            Err(Error::NoStakingValidators)
-        }
-    }
-
     /// Given a tendermint validator, the address is the hash
     /// of the validators public key. We look up the native
-    /// address from storage using this hash. Returns an error
-    /// if no matching validator is found in the active validator
-    /// set.
+    /// address from storage using this hash.
     pub fn get_validator_from_tm_address(
         &self,
         tm_address: &[u8],
+        epoch: Option<Epoch>,
     ) -> std::result::Result<Address, Error> {
-        let epoch = self.storage.get_current_epoch().0;
+        // get the current epoch
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
         let validator_raw_hash = core::str::from_utf8(tm_address)
             .map_err(|_| Error::InvalidTMAddress)?;
-        let address = self.storage
+        self.storage
             .read_validator_address_raw_hash(&validator_raw_hash)
-            .ok_or_else(|| Error::NotValidatorKeyHash(
-                validator_raw_hash.to_string(),
-                epoch
-            ))?;
-        if self.storage
-            .read_validator_set()
-            .get(epoch)
-            .expect("Validators for an epoch should be known")
-            .active
-            .iter()
-            .find(|validator| address == &validator.address)
-            .is_some()
-        {
-            Ok(address)
-        } else {
-            Err(Error::NotValidatorAddress(address, epoch))
-        }
+            .ok_or_else(|| {
+                Error::NotValidatorKeyHash(
+                    validator_raw_hash.to_string(),
+                    epoch,
+                )
+            })
     }
 }

@@ -34,8 +34,6 @@ use namada::ledger::storage::{
 use namada::ledger::{ibc, parameters, pos};
 use namada::proto::{self, Tx};
 use namada::types::chain::ChainId;
-#[cfg(not(feature="ABCI"))]
-use namada::types::ethereum_events::vote_extensions::FractionalVotingPower;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key};
