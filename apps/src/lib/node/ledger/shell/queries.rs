@@ -430,6 +430,7 @@ where
     /// Get the voting power of this node (as a fraction of this epochs total
     /// voting power) if it is a validator. Else return None
     #[cfg(not(feature = "ABCI"))]
+    #[allow(dead_code)]
     pub fn get_validator_voting_power(
         &self,
     ) -> std::result::Result<FractionalVotingPower, Error> {
