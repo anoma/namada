@@ -303,6 +303,7 @@ mod prepare_block {
     }
 
     #[cfg(test)]
+    // TODO: write tests for ethereum events on prepare proposal
     mod test_prepare_proposal {
         use anoma::types::address::xan;
         use anoma::types::storage::Epoch;
