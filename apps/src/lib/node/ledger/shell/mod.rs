@@ -33,8 +33,6 @@ use anoma::ledger::storage::{
 use anoma::ledger::{ibc, parameters, pos};
 use anoma::proto::{self, Tx};
 use anoma::types::chain::ChainId;
-#[cfg(not(feature = "ABCI"))]
-use anoma::types::ethereum_events::vote_extensions::FractionalVotingPower;
 use anoma::types::ethereum_events::EthereumEvent;
 use anoma::types::key::*;
 use anoma::types::storage::{BlockHeight, Key};

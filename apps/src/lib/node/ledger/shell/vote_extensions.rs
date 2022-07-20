@@ -1,17 +1,12 @@
 #[cfg(not(feature = "ABCI"))]
 mod extend_votes {
-    use anoma::types::ethereum_events::vote_extensions::{
-        EpochPower, SignedEthEvent, SignedEvent,
-    };
+    use anoma::proto::Signed;
+    use anoma::types::ethereum_events::vote_extensions::VoteExtension;
+    use borsh::BorshDeserialize;
 
     use super::super::*;
 
-    /// The data we include in a vote extension
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-    pub struct VoteExtension {
-        /// Ethereum events seen since last round
-        ethereum_events: Vec<SignedEthEvent>,
-    }
+    type SignedExt = Signed<VoteExtension>;
 
     impl<D, H> Shell<D, H>
     where
@@ -23,119 +18,94 @@ mod extend_votes {
             &mut self,
             _req: request::ExtendVote,
         ) -> response::ExtendVote {
-            response::ExtendVote {
-                vote_extension: VoteExtension {
-                    ethereum_events: self.new_ethereum_events(),
-                }
-                .try_to_vec()
-                .unwrap(),
-            }
+            let ext = VoteExtension {
+                block_height: self.storage.last_height + 1,
+                ethereum_events: self.new_ethereum_events(),
+            };
+            self.mode
+                .get_protocol_key()
+                .map(|signing_key| response::ExtendVote {
+                    vote_extension: ext.sign(signing_key).try_to_vec().unwrap(),
+                })
+                .unwrap_or_default()
         }
 
-        /// At present this checks the signature on all Ethereum headers
+        /// This checks that the vote extension:
+        /// * Correctly deserializes
+        /// * Was correctly signed by an active validator.
+        /// * The block height signed over is correct (replay protection)
         ///
         /// INVARIANT: This method must be stateless.
         pub fn verify_vote_extension(
             &self,
             req: request::VerifyVoteExtension,
         ) -> response::VerifyVoteExtension {
-            if let Ok(VoteExtension { ethereum_events }) =
-                VoteExtension::try_from_slice(&req.vote_extension[..])
+            let validator_addr = req.validator_address.as_slice();
+            if let Ok(signed) =
+                SignedExt::try_from_slice(&req.vote_extension[..])
             {
-                return if ethereum_events.iter().all(|event| {
-                    self.validate_ethereum_event(
+                response::VerifyVoteExtension {
+                    status: if self.validate_vote_extension(
+                        signed,
+                        validator_addr,
                         self.storage.last_height + 1,
-                        event,
-                    )
-                }) {
-                    response::VerifyVoteExtension {
-                        status: VerifyStatus::Accept.into(),
-                    }
-                } else {
-                    response::VerifyVoteExtension {
-                        status: VerifyStatus::Reject.into(),
-                    }
-                };
+                    ) {
+                        VerifyStatus::Accept.into()
+                    } else {
+                        VerifyStatus::Reject.into()
+                    },
+                }
+            } else {
+                response::VerifyVoteExtension {
+                    status: VerifyStatus::Reject.into(),
+                }
             }
-            Default::default()
+        }
+
+        /// Validates a vote extension issued at the provided block height
+        /// Checks that at epoch of the provided height
+        ///  * The tendermint address corresponds to an active validator
+        ///  * The validator correctly signed the extension
+        ///  * The validator signed over the correct height inside of the
+        ///    extension
+        pub fn validate_vote_extension(
+            &self,
+            ext: SignedExt,
+            tm_address: &[u8],
+            height: BlockHeight,
+        ) -> bool {
+            let epoch = self.storage.block.pred_epochs.get_epoch(height);
+            // get the validator that issued this vote extension
+            // this should not fail
+            let validator =
+                match self.get_validator_from_tm_address(tm_address, epoch) {
+                    Ok(address) => address,
+                    _ => return false,
+                };
+            // get the public key associated with this validator
+            let pk = match self.get_validator_from_address(&validator, epoch) {
+                Ok((_, pk)) => pk,
+                _ => return false,
+            };
+            ext.verify(&pk).is_ok()
+                && ext.data.block_height == height
         }
 
         /// Checks the channel from the Ethereum oracle monitoring
-        /// the fullnode and retrieves all messages sent. These are
-        /// signed and prepared for inclusion in a vote extension.
-        pub fn new_ethereum_events(&mut self) -> Vec<SignedEthEvent> {
+        /// the fullnode and retrieves all VoteExtensionmessages sent.
+        pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
             let mut events = vec![];
-            let voting_power = self.get_validator_voting_power();
-            let address = self.mode.get_validator_address().cloned();
             if let ShellMode::Validator {
                 ref mut ethereum_recv,
-                data:
-                    ValidatorData {
-                        keys:
-                            ValidatorKeys {
-                                protocol_keypair, ..
-                            },
-                        ..
-                    },
                 ..
             } = &mut self.mode
             {
-                let (voting_power, address) =
-                    voting_power.zip(address).unwrap();
                 while let Ok(eth_event) = ethereum_recv.try_recv() {
-                    events.push(SignedEthEvent::new(
-                        eth_event,
-                        address.clone(),
-                        voting_power.clone(),
-                        self.storage.last_height + 1,
-                        protocol_keypair,
-                    ));
+                    events.push(eth_event);
                 }
             }
+
             events
-        }
-
-        /// Verify that each ethereum header in a vote extension was signed by
-        /// a validator in the correct epoch, the stated voting power is
-        /// correct, and the signature is correct.
-        pub fn validate_ethereum_event(
-            &self,
-            height: BlockHeight,
-            event: &impl SignedEvent,
-        ) -> bool {
-            let epoch = self.storage.block.pred_epochs.get_epoch(height);
-            let total_voting_power = self.get_total_voting_power(epoch);
-            if u64::from(total_voting_power) == 0 {
-                return false;
-            }
-
-            // Get the public keys of each validator. Filter out those that
-            // inaccurately stated their voting power at a given block height
-            let mut public_keys = vec![];
-            for EpochPower {
-                validator,
-                voting_power,
-                block_height,
-            } in event.get_voting_powers().into_iter()
-            {
-                if block_height != height {
-                    continue;
-                }
-                if let Some((power, pk)) =
-                    self.get_validator_from_address(&validator, epoch)
-                {
-                    let power =
-                        FractionalVotingPower::new(power, total_voting_power)
-                            .unwrap();
-                    if power == voting_power {
-                        public_keys.push(pk);
-                    }
-                }
-            }
-            // check that we found all the public keys and
-            // check that the signatures are valid
-            public_keys.len() == event.number_of_signers()
-                && event.verify_signatures(&public_keys).is_ok()
         }
     }
 
@@ -145,9 +115,7 @@ mod extend_votes {
 
         use anoma::ledger::pos;
         use anoma::ledger::pos::anoma_proof_of_stake::PosBase;
-        use anoma::types::ethereum_events::vote_extensions::{
-            FractionalVotingPower, MultiSignedEthEvent, SignedEthEvent,
-        };
+        use anoma::types::ethereum_events::vote_extensions::VoteExtension;
         use anoma::types::ethereum_events::{
             EthAddress, EthereumEvent, TransferToEthereum,
         };
@@ -157,8 +125,8 @@ mod extend_votes {
         use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
         use tower_abci::request;
 
+        use super::SignedExt;
         use crate::node::ledger::shell::test_utils::*;
-        use crate::node::ledger::shell::vote_extensions::VoteExtension;
         use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
         /// Test that we successfully receive ethereum events
@@ -183,13 +151,8 @@ mod extend_votes {
             };
             oracle.send(event_1.clone()).expect("Test failed");
             oracle.send(event_2.clone()).expect("Test failed");
-            let [event_first, event_second]: [EthereumEvent; 2] = shell
-                .new_ethereum_events()
-                .into_iter()
-                .map(|signed| signed.event.data.0)
-                .collect::<Vec<EthereumEvent>>()
-                .try_into()
-                .expect("Test failed");
+            let [event_first, event_second]: [EthereumEvent; 2] =
+                shell.new_ethereum_events().try_into().expect("Test failed");
 
             assert_eq!(event_first, event_1);
             assert_eq!(event_second, event_2);
@@ -200,6 +163,11 @@ mod extend_votes {
         #[test]
         fn test_eth_events_vote_extension() {
             let (mut shell, _, oracle) = setup();
+            let address = shell
+                .mode
+                .get_validator_address()
+                .expect("Test failed")
+                .clone();
             let event_1 = EthereumEvent::NewContract {
                 name: "Test".to_string(),
                 address: EthAddress([0; 20]),
@@ -214,19 +182,17 @@ mod extend_votes {
             };
             oracle.send(event_1.clone()).expect("Test failed");
             oracle.send(event_2.clone()).expect("Test failed");
-            let vote_extension: VoteExtension =
-                BorshDeserialize::try_from_slice(
+            let vote_extension =
+                <SignedExt as BorshDeserialize>::try_from_slice(
                     &shell.extend_vote(Default::default()).vote_extension[..],
                 )
                 .expect("Test failed");
 
             let [event_first, event_second]: [EthereumEvent; 2] =
                 vote_extension
+                    .data
                     .ethereum_events
                     .clone()
-                    .into_iter()
-                    .map(|signed| signed.event.data.0)
-                    .collect::<Vec<EthereumEvent>>()
                     .try_into()
                     .expect("Test failed");
 
@@ -234,7 +200,11 @@ mod extend_votes {
             assert_eq!(event_second, event_2);
             let req = request::VerifyVoteExtension {
                 hash: vec![],
-                validator_address: vec![],
+                validator_address: address
+                    .raw_hash()
+                    .expect("Test failed")
+                    .as_bytes()
+                    .to_vec(),
                 height: 0,
                 vote_extension: vote_extension
                     .try_to_vec()
@@ -254,30 +224,34 @@ mod extend_votes {
                 .get_validator_address()
                 .expect("Test failed")
                 .clone();
-            let voting_power =
-                shell.get_validator_voting_power().expect("Test failed");
-            let signed_event = SignedEthEvent::new(
-                EthereumEvent::TransfersToEthereum {
+            let vote_ext = VoteExtension {
+                ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                     nonce: 1.into(),
                     transfers: vec![TransferToEthereum {
                         amount: 100.into(),
                         asset: EthAddress([1; 20]),
                         receiver: EthAddress([2; 20]),
                     }],
-                },
-                address,
-                voting_power,
-                shell.storage.last_height + 1,
-                &signing_key,
+                }],
+                block_height: shell.storage.last_height + 1,
+            }
+            .sign(&signing_key)
+            .try_to_vec()
+            .expect("Test failed");
+            let req = request::VerifyVoteExtension {
+                hash: vec![],
+                validator_address: address
+                    .raw_hash()
+                    .expect("Test failed")
+                    .as_bytes()
+                    .to_vec(),
+                height: 0,
+                vote_extension: vote_ext,
+            };
+            assert_eq!(
+                shell.verify_vote_extension(req).status,
+                i32::from(VerifyStatus::Reject)
             );
-            assert!(!shell.validate_ethereum_event(
-                shell.storage.last_height + 1,
-                &signed_event
-            ));
-            assert!(!shell.validate_ethereum_event(
-                shell.storage.last_height + 1,
-                &MultiSignedEthEvent::from(signed_event)
-            ));
         }
 
         /// Test that validation of vote extensions cast during the
@@ -294,24 +268,20 @@ mod extend_votes {
                 .get_validator_address()
                 .expect("Test failed")
                 .clone();
-            let voting_power =
-                shell.get_validator_voting_power().expect("Test failed");
-            let height = shell.storage.last_height + 1;
-
-            let signed_event = SignedEthEvent::new(
-                EthereumEvent::TransfersToEthereum {
+            let signed_height = shell.storage.last_height + 1;
+            let vote_ext = VoteExtension {
+                ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                     nonce: 1.into(),
                     transfers: vec![TransferToEthereum {
                         amount: 100.into(),
                         asset: EthAddress([1; 20]),
                         receiver: EthAddress([2; 20]),
                     }],
-                },
-                address,
-                voting_power,
-                shell.storage.last_height + 1,
-                &signing_key,
-            );
+                }],
+                block_height: signed_height,
+            }
+            .sign(shell.mode.get_protocol_key().expect("Test failed"));
+
             assert_eq!(shell.storage.get_current_epoch().0.0, 0);
             // We make a change so that there are no
             // validators in the next epoch
@@ -334,7 +304,7 @@ mod extend_votes {
             assert!(
                 shell
                     .get_validator_from_protocol_pk(&signing_key.ref_to(), None)
-                    .is_none()
+                    .is_err()
             );
             let prev_epoch = Epoch(shell.storage.get_current_epoch().0.0 - 1);
             assert!(
@@ -344,49 +314,15 @@ mod extend_votes {
                         &signing_key.ref_to(),
                         Some(prev_epoch)
                     )
-                    .is_some()
+                    .is_ok()
             );
-            assert!(shell.validate_ethereum_event(height, &signed_event));
-            assert!(shell.validate_ethereum_event(
-                height,
-                &MultiSignedEthEvent::from(signed_event)
-            ));
-        }
 
-        /// Test that if the declared voting power is not correct,
-        /// the signed event is rejected
-        #[test]
-        fn reject_incorrect_voting_power() {
-            let (shell, _, _) = setup();
-            let signing_key =
-                shell.mode.get_protocol_key().expect("Test failed");
-            let address = shell.mode.get_validator_address().unwrap().clone();
-            let voting_power = 99u64;
-            let total_voting_power =
-                u64::from(shell.get_total_voting_power(None));
-            let signed_event = SignedEthEvent::new(
-                EthereumEvent::TransfersToEthereum {
-                    nonce: 1.into(),
-                    transfers: vec![TransferToEthereum {
-                        amount: 100.into(),
-                        asset: EthAddress([1; 20]),
-                        receiver: EthAddress([2; 20]),
-                    }],
-                },
-                address,
-                FractionalVotingPower::new(voting_power, total_voting_power)
-                    .expect("Test failed"),
-                shell.storage.last_height + 1,
-                signing_key,
-            );
-            assert!(!shell.validate_ethereum_event(
-                shell.storage.last_height + 1,
-                &signed_event
-            ));
-            assert!(!shell.validate_ethereum_event(
-                shell.storage.last_height + 1,
-                &MultiSignedEthEvent::from(signed_event)
-            ));
+            let tm_address = address
+                .raw_hash()
+                .expect("Test failed")
+                .as_bytes()
+                .to_vec();
+            assert!(shell.validate_vote_extension(vote_ext, &tm_address, signed_height));
         }
 
         /// Test that that an event that incorrectly labels what block it was
@@ -394,64 +330,32 @@ mod extend_votes {
         #[test]
         fn reject_incorrect_block_number() {
             let (shell, _, _) = setup();
-            let signing_key =
-                shell.mode.get_protocol_key().expect("Test failed");
             let address = shell.mode.get_validator_address().unwrap().clone();
-            let voting_power = shell.get_validator_voting_power().unwrap();
-            let signed_event = SignedEthEvent::new(
-                EthereumEvent::TransfersToEthereum {
+            let vote_ext = VoteExtension {
+                ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                     nonce: 1.into(),
                     transfers: vec![TransferToEthereum {
                         amount: 100.into(),
                         asset: EthAddress([1; 20]),
                         receiver: EthAddress([2; 20]),
                     }],
-                },
-                address,
-                voting_power,
-                shell.storage.last_height,
-                signing_key,
-            );
-            assert!(!shell.validate_ethereum_event(
-                shell.storage.last_height + 1,
-                &signed_event
-            ));
-            assert!(!shell.validate_ethereum_event(
-                shell.storage.last_height + 1,
-                &MultiSignedEthEvent::from(signed_event)
-            ));
-        }
+                }],
+                block_height: shell.storage.last_height,
+            }
+            .sign(shell.mode.get_protocol_key().expect("Test failed"))
+            .try_to_vec()
+            .expect("Test failed");
 
-        /// Test that that an event with an incorrect address
-        /// included in a vote extension is rejected
-        #[test]
-        fn reject_incorrect_address() {
-            let (shell, _, _) = setup();
-            let signing_key =
-                shell.mode.get_protocol_key().expect("Test failed");
-            let voting_power = shell.get_validator_voting_power().unwrap();
-            let signed_event = SignedEthEvent::new(
-                EthereumEvent::TransfersToEthereum {
-                    nonce: 1.into(),
-                    transfers: vec![TransferToEthereum {
-                        amount: 100.into(),
-                        asset: EthAddress([1; 20]),
-                        receiver: EthAddress([2; 20]),
-                    }],
-                },
-                crate::wallet::defaults::bertha_address(),
-                voting_power,
-                shell.storage.last_height,
-                signing_key,
+            let req = request::VerifyVoteExtension {
+                hash: vec![],
+                validator_address: address.try_to_vec().expect("Test failed"),
+                height: 0,
+                vote_extension: vote_ext,
+            };
+            assert_eq!(
+                shell.verify_vote_extension(req).status,
+                i32::from(VerifyStatus::Reject)
             );
-            assert!(!shell.validate_ethereum_event(
-                shell.storage.last_height + 1,
-                &signed_event
-            ));
-            assert!(!shell.validate_ethereum_event(
-                shell.storage.last_height + 1,
-                &MultiSignedEthEvent::from(signed_event)
-            ));
         }
     }
 }
