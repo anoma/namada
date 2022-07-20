@@ -8,6 +8,7 @@ mod prepare_block {
     use anoma::types::ethereum_events::vote_extensions::{
         MultiSignedEthEvent, VoteExtension, VoteExtensionDigest,
     };
+    use anoma::types::transaction::protocol::ProtocolTxType;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
@@ -87,7 +88,12 @@ mod prepare_block {
                 _ => return vec![],
             };
 
-            todo!()
+            let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+                .sign(&protocol_key)
+                .to_bytes();
+            let tx_record = record::add(tx);
+
+            vec![tx_record]
         }
 
         /// Builds a batch of mempool transactions
