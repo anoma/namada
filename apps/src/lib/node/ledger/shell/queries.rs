@@ -42,8 +42,8 @@ pub enum Error {
     #[allow(dead_code)]
     NotValidatorKey(String, Epoch),
     #[error(
-        "The public key hash '{0}' is not among the active validator set for epoch \
-         {1}"
+        "The public key hash '{0}' is not among the active validator set for \
+         epoch {1}"
     )]
     NotValidatorKeyHash(String, Epoch),
     #[error("Invalid validator tendermint address")]
