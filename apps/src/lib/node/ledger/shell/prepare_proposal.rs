@@ -46,6 +46,10 @@ mod prepare_block {
                 // add ethereum events as protocol txs
                 let last_height = BlockHeight((req.height - 1) as u64);
                 let mut txs = self.build_vote_extensions_txs(
+                    // TODO: maybe get last block height
+                    // from `self.storage.last_height`,
+                    // in which case we don't even need
+                    // to pass a parameter here
                     last_height,
                     req.local_last_commit,
                 );
@@ -87,6 +91,12 @@ mod prepare_block {
                     self.compress_vote_extensions(last_height, votes)
                 });
             let vote_extension_digest = match vote_extension_digest {
+                Some(_) if last_height.0 == 0 => {
+                    tracing::error!(
+                        "The genesis block should not contain vote extensions"
+                    );
+                    return vec![];
+                }
                 Some(d) => d,
                 // if no vote extensions were found, we return an empty
                 // `Vec` of protocol
