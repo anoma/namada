@@ -6,7 +6,9 @@ mod prepare_block {
     use anoma::types::ethereum_events::vote_extensions::{
         VoteExtension, VoteExtensionDigest,
     };
-    use tendermint_proto::abci::{ExtendedVoteInfo, TxRecord};
+    use tendermint_proto::abci::{
+        ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
+    };
 
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -34,63 +36,18 @@ mod prepare_block {
             // proposal is accepted
             self.gas_meter.reset();
             let txs = if let ShellMode::Validator { .. } = self.mode {
-                // TODO: This should not be hardcoded
-                let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-
                 // add ethereum events as protocol txs
-                let mut txs: Vec<TxRecord> = {
-                    let protocol_key = self
-                        .mode
-                        .get_protocol_key()
-                        .expect("Validators should always have a protocol key");
+                let mut txs: Vec<TxRecord> =
+                    self.build_vote_extensions_txs(req.local_last_commit);
 
-                    let vote_extension_digest = req
-                        .local_last_commit
-                        .map(|local_last_commit| {
-                            let votes = local_last_commit.votes;
-                            self.compress_vote_extensions(votes)
-                        })
-                        .unwrap_or_else(VoteExtensionDigest::empty);
-
-                    todo!()
-                };
-
-                // filter in half of the new txs from Tendermint, only keeping
-                // wrappers
-                let number_of_new_txs = 1 + req.txs.len() / 2;
-                let mut mempool_txs: Vec<TxRecord> = req
-                    .txs
-                    .into_iter()
-                    .take(number_of_new_txs)
-                    .map(|tx_bytes| {
-                        if let Ok(Ok(TxType::Wrapper(_))) =
-                            Tx::try_from(tx_bytes.as_slice()).map(process_tx)
-                        {
-                            record::keep(tx_bytes)
-                        } else {
-                            record::remove(tx_bytes)
-                        }
-                    })
-                    .collect();
-
+                // add mempool txs
+                let mut mempool_txs = self.build_mempool_txs(req.txs);
                 txs.append(&mut mempool_txs);
 
                 // decrypt the wrapper txs included in the previous block
-                let mut decrypted_txs = self
-                    .storage
-                    .tx_queue
-                    .iter()
-                    .map(|tx| {
-                        Tx::from(match tx.decrypt(privkey) {
-                            Ok(tx) => DecryptedTx::Decrypted(tx),
-                            _ => DecryptedTx::Undecryptable(tx.clone()),
-                        })
-                        .to_bytes()
-                    })
-                    .map(record::add)
-                    .collect();
-
+                let mut decrypted_txs = self.build_decrypted_txs();
                 txs.append(&mut decrypted_txs);
+
                 txs
             } else {
                 vec![]
@@ -102,6 +59,74 @@ mod prepare_block {
             }
         }
 
+        /// Builds a batch of vote extension transactions, comprised of Ethereum
+        /// events
+        fn build_vote_extensions_txs(
+            &mut self,
+            local_last_commit: Option<ExtendedCommitInfo>,
+        ) -> Vec<TxRecord> {
+            let protocol_key = self
+                .mode
+                .get_protocol_key()
+                .expect("Validators should always have a protocol key");
+
+            let vote_extension_digest =
+                local_last_commit.map(|local_last_commit| {
+                    let votes = local_last_commit.votes;
+                    self.compress_vote_extensions(votes)
+                });
+            let vote_extension_digest = match vote_extension_digest {
+                Some(d) => d,
+                // if no vote extensions were found, we return an empty
+                // `Vec` of protocol
+                // transactions
+                _ => return vec![],
+            };
+
+            todo!()
+        }
+
+        /// Builds a batch of mempool transactions
+        fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxRecord> {
+            // filter in half of the new txs from Tendermint, only keeping
+            // wrappers
+            let number_of_new_txs = 1 + txs.len() / 2;
+            txs.into_iter()
+                .take(number_of_new_txs)
+                .map(|tx_bytes| {
+                    if let Ok(Ok(TxType::Wrapper(_))) =
+                        Tx::try_from(tx_bytes.as_slice()).map(process_tx)
+                    {
+                        record::keep(tx_bytes)
+                    } else {
+                        record::remove(tx_bytes)
+                    }
+                })
+                .collect()
+        }
+
+        /// Builds a batch of DKG decrypted transactions
+        fn build_decrypted_txs(&mut self) -> Vec<TxRecord> {
+            // TODO: This should not be hardcoded
+            let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+
+            self.storage
+                .tx_queue
+                .iter()
+                .map(|tx| {
+                    Tx::from(match tx.decrypt(privkey) {
+                        Ok(tx) => DecryptedTx::Decrypted(tx),
+                        _ => DecryptedTx::Undecryptable(tx.clone()),
+                    })
+                    .to_bytes()
+                })
+                .map(record::add)
+                .collect()
+        }
+
+        /// Compresses a set of vote extensions into a single
+        /// [`VoteExtensionDigest`], whilst filtering invalid
+        /// `Signed<VoteExtension>` instances in the process
         fn compress_vote_extensions(
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
