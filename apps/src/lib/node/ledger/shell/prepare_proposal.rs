@@ -144,7 +144,14 @@ mod prepare_block {
                     let validator = vote.validator?;
                     let validator_addr = self
                         .get_validator_from_tm_address(&validator.address[..])
-                        // TODO: catch errors here and log them
+                        .map_err(|err| {
+                            tracing::error!(
+                                "Failed to get an address from Tendermint \
+                                 {:?}: {}",
+                                validator,
+                                err
+                            );
+                        })
                         .ok()?;
                     Some((validator_addr, vote_extension))
                 })
@@ -158,7 +165,14 @@ mod prepare_block {
                         self.get_validator_from_address(&validator_addr, None);
                     let validator_public_key = match result {
                         Ok((_, validator_public_key)) => validator_public_key,
-                        Err(_) => return false,
+                        Err(_) => {
+                            tracing::error!(
+                                "Could not get public key from Storage for \
+                                 validator {}",
+                                validator_addr
+                            );
+                            return false;
+                        }
                     };
                     vote_extension.verify(&validator_public_key).is_ok()
                 });
@@ -169,9 +183,8 @@ mod prepare_block {
             for (validator_addr, vote_extension) in all_vote_extensions {
                 // register all ethereum events seen by `validator_addr`
                 for ev in vote_extension.data.ethereum_events {
-                    let signers = event_observers
-                        .entry(ev)
-                        .or_insert_with(HashSet::new);
+                    let signers =
+                        event_observers.entry(ev).or_insert_with(HashSet::new);
 
                     signers.insert(validator_addr.clone());
                 }
@@ -188,10 +201,7 @@ mod prepare_block {
                 .map(|(event, signers)| MultiSignedEthEvent { event, signers })
                 .collect();
 
-            VoteExtensionDigest {
-                events,
-                signatures,
-            }
+            VoteExtensionDigest { events, signatures }
         }
     }
 
