@@ -106,18 +106,34 @@ mod prepare_block {
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
         ) -> VoteExtensionDigest {
-            let _ = vote_extensions.into_iter().filter_map(|vote| {
-                let vote_extension = Signed::<VoteExtension>::try_from_slice(
-                    &vote.vote_extension[..],
-                )
-                .ok()?;
-                let validator = vote.validator?;
-                let validator_addr = self
-                    .get_validator_from_tm_address(&validator.address[..])
-                    // TODO: catch errors here and log them
-                    .ok()?;
-                Some((validator_addr, vote_extension))
-            });
+            let _ = vote_extensions
+                .into_iter()
+                .filter_map(|vote| {
+                    let vote_extension =
+                        Signed::<VoteExtension>::try_from_slice(
+                            &vote.vote_extension[..],
+                        )
+                        .ok()?;
+                    let validator = vote.validator?;
+                    let validator_addr = self
+                        .get_validator_from_tm_address(&validator.address[..])
+                        // TODO: catch errors here and log them
+                        .ok()?;
+                    Some((validator_addr, vote_extension))
+                })
+                .filter(|(validator_addr, vote_extension)| {
+                    // TODO:
+                    // - verify 2/3 stake of vote_extension
+
+                    let result =
+                        self.get_validator_from_address(&validator_addr, None);
+                    let validator_public_key = match result {
+                        Ok((_, validator_public_key)) => validator_public_key,
+                        Err(_) => return false,
+                    };
+                    vote_extension.verify(&validator_public_key).is_ok()
+                });
+
             todo!()
         }
     }
