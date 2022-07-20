@@ -2,11 +2,11 @@
 mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::proto::Signed;
+    use namada::types::address::Address;
     use namada::types::ethereum_events::vote_extensions::VoteExtension;
 
     use super::super::*;
-
-    type SignedExt = Signed<VoteExtension>;
+    pub type SignedExt = Signed<VoteExtension>;
 
     impl<D, H> Shell<D, H>
     where
@@ -40,14 +40,17 @@ mod extend_votes {
             &self,
             req: request::VerifyVoteExtension,
         ) -> response::VerifyVoteExtension {
-            let validator_addr = req.validator_address.as_slice();
-            if let Ok(signed) =
-                SignedExt::try_from_slice(&req.vote_extension[..])
+            let addr = self.get_validator_from_tm_address(
+                req.validator_address.as_slice(),
+                None,
+            );
+            if let (Ok(signed), Ok(validator)) =
+                (SignedExt::try_from_slice(&req.vote_extension[..]), addr)
             {
                 response::VerifyVoteExtension {
                     status: if self.validate_vote_extension(
                         signed,
-                        validator_addr,
+                        validator,
                         self.storage.last_height + 1,
                     ) {
                         VerifyStatus::Accept.into()
@@ -83,17 +86,10 @@ mod extend_votes {
         pub fn validate_vote_extension(
             &self,
             ext: SignedExt,
-            tm_address: &[u8],
+            validator: Address,
             height: BlockHeight,
         ) -> bool {
             let epoch = self.storage.block.pred_epochs.get_epoch(height);
-            // get the validator that issued this vote extension
-            // this should not fail
-            let validator =
-                match self.get_validator_from_tm_address(tm_address, epoch) {
-                    Ok(address) => address,
-                    _ => return false,
-                };
             // get the public key associated with this validator
             let pk = match self.get_validator_from_address(&validator, epoch) {
                 Ok((_, pk)) => pk,
@@ -345,11 +341,9 @@ mod extend_votes {
                     .is_ok()
             );
 
-            let tm_address =
-                address.raw_hash().expect("Test failed").as_bytes().to_vec();
             assert!(shell.validate_vote_extension(
                 vote_ext,
-                &tm_address,
+                address,
                 signed_height
             ));
         }
