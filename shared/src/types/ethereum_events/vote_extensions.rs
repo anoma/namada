@@ -2,6 +2,7 @@
 //! in vote extensions.
 
 use std::collections::HashSet;
+use std::ops::{Add, AddAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
@@ -61,9 +62,29 @@ impl FractionalVotingPower {
     }
 }
 
+impl Default for FractionalVotingPower {
+    fn default() -> Self {
+        Self::new(0, 1).unwrap()
+    }
+}
+
 impl From<&FractionalVotingPower> for (u64, u64) {
     fn from(ratio: &FractionalVotingPower) -> Self {
         (ratio.0.numer().to_owned(), ratio.0.denom().to_owned())
+    }
+}
+
+impl Add<FractionalVotingPower> for FractionalVotingPower {
+    type Output = Self;
+
+    fn add(self, rhs: FractionalVotingPower) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl AddAssign<FractionalVotingPower> for FractionalVotingPower {
+    fn add_assign(&mut self, rhs: FractionalVotingPower) {
+        *self = Self(self.0 + rhs.0)
     }
 }
 
@@ -130,7 +151,7 @@ impl VoteExtensionDigest {
     pub fn decompress(
         self,
         last_height: BlockHeight,
-    ) -> Vec<Signed<VoteExtension>> {
+    ) -> Vec<(Signed<VoteExtension>, Address)> {
         let VoteExtensionDigest { signatures, events } = self;
 
         let mut extensions = vec![];
@@ -151,7 +172,7 @@ impl VoteExtensionDigest {
             ext.ethereum_events.sort();
 
             let signed = Signed { data: ext, sig };
-            extensions.push(signed);
+            extensions.push((signed, addr));
         }
         extensions
     }
@@ -284,7 +305,11 @@ mod tests {
 
         // finally, decompress the `VoteExtensionDigest` back into a
         // `Vec<Signed<VoteExtension>>`
-        let decompressed = digest.decompress(last_block_height);
+        let decompressed = digest
+            .decompress(last_block_height)
+            .into_iter()
+            .map(|event| event.0)
+            .collect::<Vec<Signed<VoteExtension>>>();
 
         assert_eq!(ext, decompressed);
         assert!(decompressed[0].verify(&sk_1.ref_to()).is_ok());

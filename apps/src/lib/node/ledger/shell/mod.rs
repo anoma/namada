@@ -134,6 +134,7 @@ pub enum ErrorCodes {
     InvalidOrder = 4,
     ExtraTxs = 5,
     Undecryptable = 6,
+    InvalidVoteExntension = 7,
 }
 
 impl From<ErrorCodes> for u32 {
