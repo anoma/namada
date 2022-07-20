@@ -5,7 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::types::address::Address;
 use crate::types::ibc::IbcEvent;
-use crate::types::storage::{self, BlockHash, BlockHeight, Epoch};
+use crate::types::storage::{self, BlockHash, BlockHeight, Epoch, TxIndex};
 use crate::types::time::Rfc3339String;
 
 /// Transaction host functions
@@ -49,6 +49,9 @@ pub trait TxEnv {
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch, Self::Error>;
+
+    /// Get index of the current transaction
+    fn get_tx_index(&self) -> Result<TxIndex, Self::Error>;
 
     /// Get time of the current block header as rfc 3339 string
     fn get_block_time(&self) -> Result<Rfc3339String, Self::Error>;

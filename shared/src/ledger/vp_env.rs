@@ -94,6 +94,9 @@ pub trait VpEnv {
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch, Self::Error>;
 
+    /// Get index of the current transaction
+    fn get_tx_index(&self) -> Result<TxIndex, Self::Error>;
+
     /// Storage prefix iterator. It will try to get an iterator from the
     /// storage.
     fn iter_prefix(
