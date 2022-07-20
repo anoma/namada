@@ -2,9 +2,11 @@
 
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
+    use std::collections::{BTreeMap, HashSet};
+
     use anoma::proto::Signed;
     use anoma::types::ethereum_events::vote_extensions::{
-        VoteExtension, VoteExtensionDigest,
+        MultiSignedEthEvent, VoteExtension, VoteExtensionDigest,
     };
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
@@ -131,7 +133,7 @@ mod prepare_block {
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
         ) -> VoteExtensionDigest {
-            let _ = vote_extensions
+            let all_vote_extensions = vote_extensions
                 .into_iter()
                 .filter_map(|vote| {
                     let vote_extension =
@@ -149,7 +151,9 @@ mod prepare_block {
                 .filter(|(validator_addr, vote_extension)| {
                     // TODO:
                     // - verify 2/3 stake of vote_extension
+                    // - verify block height of vote_extension
 
+                    // verify signature of the vote extension
                     let result =
                         self.get_validator_from_address(&validator_addr, None);
                     let validator_public_key = match result {
@@ -159,7 +163,35 @@ mod prepare_block {
                     vote_extension.verify(&validator_public_key).is_ok()
                 });
 
-            todo!()
+            let mut event_observers = BTreeMap::new();
+            let mut signatures = Vec::new();
+
+            for (validator_addr, vote_extension) in all_vote_extensions {
+                // register all ethereum events seen by `validator_addr`
+                for ev in vote_extension.data.ethereum_events {
+                    let signers = event_observers
+                        .entry(ev)
+                        .or_insert_with(HashSet::new);
+
+                    signers.insert(validator_addr.clone());
+                }
+
+                // register the signature of `validator_addr`
+                let addr = validator_addr;
+                let sig = vote_extension.sig;
+
+                signatures.push((sig, addr));
+            }
+
+            let events = event_observers
+                .into_iter()
+                .map(|(event, signers)| MultiSignedEthEvent { event, signers })
+                .collect();
+
+            VoteExtensionDigest {
+                events,
+                signatures,
+            }
         }
     }
 
