@@ -38,6 +38,8 @@ mod prepare_block {
             // proposal is accepted
             self.gas_meter.reset();
             let txs = if let ShellMode::Validator { .. } = self.mode {
+                // TODO: add some info logging
+
                 // add ethereum events as protocol txs
                 let mut txs =
                     self.build_vote_extensions_txs(req.local_last_commit);
@@ -148,7 +150,10 @@ mod prepare_block {
                             );
                         })
                         .ok()?;
-                    let validator = vote.validator?;
+                    let validator = vote.validator.or_else(|| {
+                        tracing::error!("Vote extension has no validator data");
+                        None
+                    })?;
                     let validator_addr = self
                         .get_validator_from_tm_address(&validator.address[..])
                         .map_err(|err| {
