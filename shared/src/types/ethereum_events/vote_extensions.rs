@@ -40,6 +40,10 @@ impl VoteExtension {
 pub struct FractionalVotingPower(Ratio<u64>);
 
 impl FractionalVotingPower {
+    /// Two thirds of the voting power.
+    pub const TWO_THIRDS: FractionalVotingPower =
+        FractionalVotingPower(Ratio::new_raw(2, 3));
+
     /// Create a new FractionalVotingPower. It must be between zero and one
     /// inclusive.
     pub fn new(numer: u64, denom: u64) -> Result<Self> {
