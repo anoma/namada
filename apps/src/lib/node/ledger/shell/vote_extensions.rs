@@ -87,25 +87,22 @@ mod extend_votes {
                 Ok((_, pk)) => pk,
                 _ => return false,
             };
-            ext.verify(&pk).is_ok()
-                && ext.data.block_height == height
+            ext.verify(&pk).is_ok() && ext.data.block_height == height
         }
 
         /// Checks the channel from the Ethereum oracle monitoring
         /// the fullnode and retrieves all VoteExtensionmessages sent.
         pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
-            let mut events = vec![];
-            if let ShellMode::Validator {
-                ref mut ethereum_recv,
-                ..
-            } = &mut self.mode
-            {
-                while let Ok(eth_event) = ethereum_recv.try_recv() {
-                    events.push(eth_event);
+            match &mut self.mode {
+                ShellMode::Validator {
+                    ref mut ethereum_recv,
+                    ..
+                } => {
+                    ethereum_recv.fill_queue();
+                    ethereum_recv.get_events()
                 }
+                _ => vec![],
             }
-
-            events
         }
     }
 
@@ -133,15 +130,12 @@ mod extend_votes {
         /// from the channel to fullnode process
         ///
         /// We further check that ledger side buffering is done if multiple
-        /// events are in the channel
+        /// events are in the channel and that queueing and de-duplicating is
+        /// done
         #[test]
         fn test_get_eth_events() {
             let (mut shell, _, oracle) = setup();
-            let event_1 = EthereumEvent::NewContract {
-                name: "Test".to_string(),
-                address: EthAddress([0; 20]),
-            };
-            let event_2 = EthereumEvent::TransfersToEthereum {
+            let event_1 = EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
@@ -149,13 +143,35 @@ mod extend_votes {
                     receiver: EthAddress([2; 20]),
                 }],
             };
+            let event_2 = EthereumEvent::TransfersToEthereum {
+                nonce: 2.into(),
+                transfers: vec![TransferToEthereum {
+                    amount: 100.into(),
+                    asset: EthAddress([1; 20]),
+                    receiver: EthAddress([2; 20]),
+                }],
+            };
+            let event_3 = EthereumEvent::NewContract {
+                name: "Test".to_string(),
+                address: EthAddress([0; 20]),
+            };
+
             oracle.send(event_1.clone()).expect("Test failed");
-            oracle.send(event_2.clone()).expect("Test failed");
+            oracle.send(event_3.clone()).expect("Test failed");
             let [event_first, event_second]: [EthereumEvent; 2] =
                 shell.new_ethereum_events().try_into().expect("Test failed");
 
             assert_eq!(event_first, event_1);
+            assert_eq!(event_second, event_3);
+            // check that we queue and de-duplicate events
+            oracle.send(event_2.clone()).expect("Test failed");
+            oracle.send(event_3.clone()).expect("Test failed");
+            let [event_first, event_second, event_third]: [EthereumEvent; 3] =
+                shell.new_ethereum_events().try_into().expect("Test failed");
+
+            assert_eq!(event_first, event_1);
             assert_eq!(event_second, event_2);
+            assert_eq!(event_third, event_3);
         }
 
         /// Test that ethereum events are added to vote extensions.
@@ -168,17 +184,17 @@ mod extend_votes {
                 .get_validator_address()
                 .expect("Test failed")
                 .clone();
-            let event_1 = EthereumEvent::NewContract {
-                name: "Test".to_string(),
-                address: EthAddress([0; 20]),
-            };
-            let event_2 = EthereumEvent::TransfersToEthereum {
+            let event_1 = EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
                 }],
+            };
+            let event_2 = EthereumEvent::NewContract {
+                name: "Test".to_string(),
+                address: EthAddress([0; 20]),
             };
             oracle.send(event_1.clone()).expect("Test failed");
             oracle.send(event_2.clone()).expect("Test failed");
@@ -317,12 +333,13 @@ mod extend_votes {
                     .is_ok()
             );
 
-            let tm_address = address
-                .raw_hash()
-                .expect("Test failed")
-                .as_bytes()
-                .to_vec();
-            assert!(shell.validate_vote_extension(vote_ext, &tm_address, signed_height));
+            let tm_address =
+                address.raw_hash().expect("Test failed").as_bytes().to_vec();
+            assert!(shell.validate_vote_extension(
+                vote_ext,
+                &tm_address,
+                signed_height
+            ));
         }
 
         /// Test that that an event that incorrectly labels what block it was
