@@ -114,7 +114,7 @@ impl<'a> TestIbcTokenVp<'a> {
 pub fn validate_ibc_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     tx: &'a Tx,
-) -> std::result::Result<bool, anoma::ledger::ibc::vp::Error> {
+) -> std::result::Result<bool, namada::ledger::ibc::vp::Error> {
     let (verifiers, keys_changed) = tx_env
         .write_log
         .verifiers_and_changed_keys(&tx_env.verifiers);
@@ -149,7 +149,7 @@ pub fn validate_token_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     tx: &'a Tx,
     addr: &Address,
-) -> std::result::Result<bool, anoma::ledger::ibc::vp::IbcTokenError> {
+) -> std::result::Result<bool, namada::ledger::ibc::vp::IbcTokenError> {
     let (verifiers, keys_changed) = tx_env
         .write_log
         .verifiers_and_changed_keys(&tx_env.verifiers);

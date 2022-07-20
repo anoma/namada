@@ -1833,7 +1833,8 @@ dependencies = [
  "concat-idents",
  "derivative",
  "namada",
- "namada_vm_env",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
  "prost",
  "serde_json",
  "sha2 0.9.9",
@@ -1847,8 +1848,12 @@ dependencies = [
 name = "namada_tx_prelude"
 version = "0.7.0"
 dependencies = [
+ "borsh",
+ "namada",
+ "namada_macros",
  "namada_vm_env",
  "sha2 0.10.2",
+ "thiserror",
 ]
 
 [[package]]
@@ -1860,15 +1865,18 @@ dependencies = [
  "masp_primitives",
  "masp_proofs",
  "namada",
- "namada_macros",
 ]
 
 [[package]]
 name = "namada_vp_prelude"
 version = "0.7.0"
 dependencies = [
+ "borsh",
+ "namada",
+ "namada_macros",
  "namada_vm_env",
  "sha2 0.10.2",
+ "thiserror",
 ]
 
 [[package]]
