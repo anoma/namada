@@ -19,6 +19,10 @@ use crate::types::storage::BlockHeight;
 pub struct VoteExtension {
     /// The block height for which this [`VoteExtension`] was made.
     pub block_height: BlockHeight,
+    /// The validator's address is temporarily being included
+    /// until we're able to map a Tendermint address to a validator
+    /// address (see https://github.com/anoma/namada/issues/200)
+    pub validator_addr: Address,
     /// The new ethereum events seen. These should be
     /// deterministically ordered.
     pub ethereum_events: Vec<EthereumEvent>,
@@ -26,10 +30,11 @@ pub struct VoteExtension {
 
 impl VoteExtension {
     /// Creates a [`VoteExtension`] without any Ethereum events.
-    pub fn empty(block_height: BlockHeight) -> Self {
+    pub fn empty(block_height: BlockHeight, validator_addr: Address) -> Self {
         Self {
             block_height,
             ethereum_events: Vec::new(),
+            validator_addr,
         }
     }
 
@@ -136,7 +141,7 @@ impl VoteExtensionDigest {
         let mut extensions = vec![];
 
         for (sig, addr) in signatures.into_iter() {
-            let mut ext = VoteExtension::empty(last_height);
+            let mut ext = VoteExtension::empty(last_height, addr.clone());
 
             for event in events.iter() {
                 if event.signers.contains(&addr) {
@@ -164,7 +169,7 @@ mod tests {
     use super::super::EthereumEvent;
     use super::*;
     use crate::proto::Signed;
-    use crate::types::address::Address;
+    use crate::types::address::{self, Address};
     use crate::types::ethereum_events::Uint;
     use crate::types::hash::Hash;
     use crate::types::key;
@@ -240,8 +245,11 @@ mod tests {
             transfers: vec![],
         };
 
-        let ext = {
-            let mut ext = VoteExtension::empty(last_block_height);
+        let validator_1 = address::testing::established_address_2();
+        let validator_2 = address::testing::established_address_2();
+
+        let ext = |validator: Address| -> VoteExtension {
+            let mut ext = VoteExtension::empty(last_block_height, validator);
 
             ext.ethereum_events.push(ev_1.clone());
             ext.ethereum_events.push(ev_2.clone());
@@ -252,16 +260,16 @@ mod tests {
 
         // assume both v1 and v2 saw the same events,
         // so each of them signs `ext` with their respective sk
-        let ext_1 = Signed::new(&sk_1, ext.clone());
-        let ext_2 = Signed::new(&sk_2, ext);
+        let ext_1 = Signed::new(&sk_1, ext(validator_1.clone()));
+        let ext_2 = Signed::new(&sk_2, ext(validator_2.clone()));
 
         let ext = vec![ext_1, ext_2];
 
         // we have the `Signed<VoteExtension>` instances we need,
         // let us now compress them into a single `VoteExtensionDigest`
         let signatures: Vec<(_, Address)> = vec![
-            (ext[0].sig.clone(), (&sk_1.ref_to()).into()),
-            (ext[1].sig.clone(), (&sk_2.ref_to()).into()),
+            (ext[0].sig.clone(), validator_1),
+            (ext[1].sig.clone(), validator_2),
         ];
         let signers = {
             let mut s = HashSet::new();
