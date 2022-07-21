@@ -428,6 +428,7 @@ where
     /// address from storage using this hash.
     /// TODO: We may change how this lookup is done, see
     /// https://github.com/anoma/namada/issues/200
+    #[allow(dead_code)]
     pub fn get_validator_from_tm_address(
         &self,
         tm_address: &[u8],
