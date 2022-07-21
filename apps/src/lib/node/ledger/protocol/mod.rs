@@ -8,6 +8,8 @@ use namada::ledger::governance::GovernanceVp;
 use namada::ledger::ibc::vp::{Ibc, IbcToken};
 use namada::ledger::native_vp::{self, NativeVp};
 use namada::ledger::parameters::{self, ParametersVp};
+use namada::ledger::pos::namada_proof_of_stake::PosBase;
+use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::{self, PosVP};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
@@ -16,6 +18,7 @@ use namada::proto::{self, Tx};
 use namada::types::address::{Address, InternalAddress};
 use namada::types::ethereum_events::vote_extensions::VoteExtensionDigest;
 use namada::types::storage;
+use namada::types::storage::Epoch;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use namada::vm::wasm::{TxCache, VpCache};
@@ -23,9 +26,11 @@ use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 use transactions::ethereum_events;
+use transactions::ethereum_events::{eth_msg_update, voting_powers};
+
+mod transactions;
 
 use crate::node::ledger::shell::Shell;
-mod transactions;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -37,6 +42,11 @@ pub enum Error {
     TxRunnerError(vm::wasm::run::Error),
     #[error("Couldn't read wasm: {wasm_name}")]
     ReadWasmError { wasm_name: String },
+    #[error("Couldn't execute protocol transaction: {source:?}")]
+    ProtocolTxError {
+        #[from]
+        source: eyre::Error,
+    },
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
     #[error("Gas error: {0}")]
@@ -173,7 +183,36 @@ where
                 "applying state update transaction derived from vote \
                  extension digest"
             );
-            let tx = ethereum_events::construct_tx(wasm_dir)?;
+            let (last_epoch, _) = storage.get_last_epoch();
+            tracing::debug!(?last_epoch, "got epoch of last block");
+            let validators = eth_msg_update::get_all_voters(events.iter());
+            tracing::debug!(?validators, "got relevant validators");
+            let active_validators = get_active_validators(&storage, last_epoch);
+            tracing::debug!(
+                n = active_validators.len(),
+                "got active validators - {:#?}",
+                active_validators,
+            );
+            let voting_powers = voting_powers::get_voting_powers_for_selected(
+                &active_validators,
+                validators,
+            )?;
+            tracing::debug!(
+                ?voting_powers,
+                "got voting powers for relevant validators"
+            );
+            let total_voting_power =
+                voting_powers::sum_voting_powers(&active_validators);
+            tracing::debug!(
+                ?total_voting_power,
+                "got total voting power for epoch"
+            );
+            let tx = ethereum_events::construct_tx(
+                events,
+                total_voting_power,
+                voting_powers,
+                wasm_dir,
+            )?;
             let verifiers = execute_tx(
                 &tx,
                 storage,
@@ -214,6 +253,24 @@ where
             })
         }
     }
+}
+
+/// This is a helper function for getting the set of active validators for a
+/// given epoch.
+pub fn get_active_validators<D, H>(
+    storage: &Storage<D, H>,
+    epoch: Epoch,
+) -> BTreeSet<WeightedValidator<Address>>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    let validator_set = storage.read_validator_set();
+    validator_set
+        .get(epoch)
+        .expect("Validators for an epoch should be known")
+        .active
+        .clone()
 }
 
 /// Execute a transaction code. Returns verifiers requested by the transaction.

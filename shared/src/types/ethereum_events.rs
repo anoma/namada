@@ -2,11 +2,13 @@
 
 pub mod vote_extensions;
 
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::Uint as ethUint;
 use eyre::{eyre, Context};
+use namada_proof_of_stake::types::VotingPower;
 
 use crate::types::address::Address;
 use crate::types::hash::Hash;
@@ -245,6 +247,84 @@ pub struct TokenWhitelist {
     pub cap: Amount,
 }
 
+/// Represents an Ethereum event being seen by some validators
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct EthMsgUpdate {
+    /// the event being seen
+    pub body: EthereumEvent,
+    /// addresses of the validators who have just seen this event
+    pub seen_by: Vec<Address>,
+}
+
+/// The data that is passed to tx_eth_bridge.wasm
+#[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct TxEthBridgeData {
+    /// Updates to be applied to /eth_msgs storage
+    pub updates: Vec<EthMsgUpdate>,
+    /// Total voting power for the epoch in which the Ethereum events were
+    /// voted for
+    pub total_voting_power: VotingPower,
+    /// Voting powers for each validator seeing an event
+    pub voting_powers: HashMap<Address, VotingPower>,
+}
+
+#[allow(missing_docs)]
+/// Test helpers
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use super::vote_extensions::*;
+    use super::*;
+    use crate::types::storage::Epoch;
+    use crate::types::token::Amount;
+
+    pub const DAI_ERC20_ETH_ADDRESS_CHECKSUMMED: &str =
+        "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+    pub const DAI_ERC20_ETH_ADDRESS: EthAddress = EthAddress([
+        107, 23, 84, 116, 232, 144, 148, 196, 77, 169, 139, 149, 78, 237, 234,
+        196, 149, 39, 29, 15,
+    ]);
+
+    pub fn arbitrary_eth_address() -> EthAddress {
+        DAI_ERC20_ETH_ADDRESS
+    }
+
+    pub fn arbitrary_fractional_voting_power() -> FractionalVotingPower {
+        FractionalVotingPower::new(1, 3).unwrap()
+    }
+
+    pub fn arbitrary_nonce() -> Uint {
+        123.into()
+    }
+
+    pub fn arbitrary_amount() -> Amount {
+        Amount::from(1_000)
+    }
+
+    pub fn arbitrary_voting_power() -> VotingPower {
+        VotingPower::from(1_000)
+    }
+
+    pub fn arbitrary_epoch() -> Epoch {
+        Epoch(100)
+    }
+
+    /// A [`EthereumEvent::TransfersToNamada`] containing a single transfer of
+    /// some arbitrary ERC20
+    pub fn arbitrary_single_transfer(
+        nonce: Uint,
+        receiver: Address,
+    ) -> EthereumEvent {
+        EthereumEvent::TransfersToNamada {
+            nonce,
+            transfers: vec![TransferToNamada {
+                amount: arbitrary_amount(),
+                asset: arbitrary_eth_address(),
+                receiver,
+            }],
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use std::str::FromStr;
@@ -278,17 +358,4 @@ pub mod tests {
 
         assert!(result.is_err());
     }
-}
-
-#[allow(missing_docs)]
-#[cfg(any(test, feature = "testing"))]
-pub mod testing {
-    use super::*;
-
-    pub const DAI_ERC20_ETH_ADDRESS_CHECKSUMMED: &str =
-        "0x6B175474E89094C44Da98b954EedeAC495271d0F";
-    pub const DAI_ERC20_ETH_ADDRESS: EthAddress = EthAddress([
-        107, 23, 84, 116, 232, 144, 148, 196, 77, 169, 139, 149, 78, 237, 234,
-        196, 149, 39, 29, 15,
-    ]);
 }
