@@ -183,23 +183,23 @@ jobs:
           path: ./target/release/
       - name: Change permissions
         run: |
-          chmod +x target/release/anoma
-          chmod +x target/release/anomaw
-          chmod +x target/release/anoman
-          chmod +x target/release/anomac
+          chmod +x target/release/namada
+          chmod +x target/release/namadaw
+          chmod +x target/release/namadan
+          chmod +x target/release/namadac
           chmod +x /usr/local/bin/tendermint
       - name: Sets env vars for abci++ job
         if: matrix.make.suffix == '-abci-plus-plus'
-        run: |
-          echo "TENDERMINT=/usr/local/bin/tendermint" >> $GITHUB_ENV
+        run: echo "TENDERMINT=/usr/local/bin/tendermint" >> $GITHUB_ENV
       - name: Run e2e test
         run: make test-e2e${{ matrix.make.suffix }}
         env:
           ANOMA_E2E_USE_PREBUILT_BINARIES: "true"
           ANOMA_E2E_KEEP_TEMP: "true"
+          ENV_VAR_TM_STDOUT: "false"
           ANOMA_LOG_COLOR: "false"
-          ANOMA_LOG: "info"
           TM_LOG_LEVEL: "info"
+          ANOMA_LOG: "info"
       - name: Upload e2e logs
         if: success() || failure()
         uses: actions/upload-artifact@v3
@@ -284,10 +284,10 @@ jobs:
         with:
           name: binaries${{ matrix.make.suffix }}-${{ github.sha }}
           path: |
-            target/release/anoma
-            target/release/anomac
-            target/release/anomaw
-            target/release/anoman
+            target/release/namada
+            target/release/namadac
+            target/release/namadaw
+            target/release/namadan
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats

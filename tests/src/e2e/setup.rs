@@ -609,9 +609,9 @@ where
     // Root cargo workspace manifest path
     let manifest_path = working_dir.as_ref().join("Cargo.toml");
     let bin_name = match bin {
-        Bin::Node => "anoman",
-        Bin::Client => "anomac",
-        Bin::Wallet => "anomaw",
+        Bin::Node => "namadan",
+        Bin::Client => "namadac",
+        Bin::Wallet => "namadaw",
     };
     // Allow to run in debug
     let run_debug = match env::var(ENV_VAR_DEBUG) {
@@ -710,6 +710,7 @@ where
             }
         }
     }
+
     Ok(cmd_process)
 }
 
