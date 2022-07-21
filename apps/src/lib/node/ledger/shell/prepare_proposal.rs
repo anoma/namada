@@ -299,10 +299,15 @@ mod prepare_block {
     // TODO: write tests for ethereum events on prepare proposal
     mod test_prepare_proposal {
         use namada::types::address::xan;
-        use namada::types::storage::Epoch;
+        use namada::types::ethereum_events::vote_extensions::VoteExtension;
+        // use namada::types::ethereum_events::EthereumEvent;
+        use namada::types::key::{self, common, ed25519::Signature};
+        use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::Fee;
         use tendermint_proto::abci::tx_record::TxAction;
+        use tendermint_proto::abci::{ExtendedCommitInfo, ExtendedVoteInfo};
 
+        use super::super::super::vote_extensions::SignedExt;
         use super::*;
         use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
 
@@ -326,6 +331,57 @@ mod prepare_block {
                 vec![record::remove(tx.to_bytes())]
             );
         }
+
+        /// Test if we are filtering out vote extensinos with bad
+        /// signatures in a prepare proposal.
+        #[test]
+        fn test_prepare_proposal_filter_out_bad_signatures() {
+            const LAST_HEIGHT: BlockHeight = BlockHeight(2);
+
+            let (mut shell, _, _) = TestShell::new();
+
+            // artificially change the block height
+            shell.storage.last_height = LAST_HEIGHT;
+
+            let signed_vote_extensions = vec![
+                {
+                    let sk = key::testing::keypair_1();
+                    VoteExtension {
+                        block_height: LAST_HEIGHT,
+                        ethereum_events: vec![],
+                    }
+                    .sign(&sk)
+                },
+                {
+                    // create a fake signature
+                    let sig =
+                        common::Signature::Ed25519(Signature([0u8; 64].into()));
+
+                    let data = VoteExtension {
+                        block_height: LAST_HEIGHT,
+                        ethereum_events: vec![],
+                    };
+
+                    SignedExt { sig, data }
+                },
+            ];
+            let votes = signed_vote_extensions
+                .into_iter()
+                .map(|ext| ExtendedVoteInfo {
+                    vote_extension: ext.try_to_vec().unwrap(),
+                    validator: Some(todo!()),
+                    ..Default::default()
+                })
+                .collect();
+
+            let req = RequestPrepareProposal {
+                local_last_commit: Some(ExtendedCommitInfo { round: 0, votes }),
+                ..Default::default()
+            };
+        }
+
+        // TODO: test if we filter out valid signatures,
+        // but for invalid block heights
 
         /// Test that if an error is encountered while
         /// trying to process a tx from the mempool,
