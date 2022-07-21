@@ -9,7 +9,6 @@ mod prepare_block {
         FractionalVotingPower, MultiSignedEthEvent, VoteExtension,
         VoteExtensionDigest,
     };
-    use anoma::types::storage::BlockHeight;
     use anoma::types::transaction::protocol::ProtocolTxType;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
@@ -44,15 +43,8 @@ mod prepare_block {
                 // TODO: add some info logging
 
                 // add ethereum events as protocol txs
-                let last_height = BlockHeight((req.height - 1) as u64);
-                let mut txs = self.build_vote_extensions_txs(
-                    // TODO: maybe get last block height
-                    // from `self.storage.last_height`,
-                    // in which case we don't even need
-                    // to pass a parameter here
-                    last_height,
-                    req.local_last_commit,
-                );
+                let mut txs =
+                    self.build_vote_extensions_txs(req.local_last_commit);
 
                 // add mempool txs
                 let mut mempool_txs = self.build_mempool_txs(req.txs);
@@ -77,7 +69,6 @@ mod prepare_block {
         /// events
         fn build_vote_extensions_txs(
             &mut self,
-            last_height: BlockHeight,
             local_last_commit: Option<ExtendedCommitInfo>,
         ) -> Vec<TxRecord> {
             let protocol_key = self
@@ -88,10 +79,10 @@ mod prepare_block {
             let vote_extension_digest =
                 local_last_commit.and_then(|local_last_commit| {
                     let votes = local_last_commit.votes;
-                    self.compress_vote_extensions(last_height, votes)
+                    self.compress_vote_extensions(votes)
                 });
             let vote_extension_digest = match vote_extension_digest {
-                Some(_) if last_height.0 == 0 => {
+                Some(_) if self.storage.last_height.0 == 0 => {
                     tracing::error!(
                         "The genesis block should not contain vote extensions"
                     );
@@ -155,7 +146,6 @@ mod prepare_block {
         /// `Signed<VoteExtension>` instances in the process
         fn compress_vote_extensions(
             &self,
-            last_height: BlockHeight,
             vote_extensions: Vec<ExtendedVoteInfo>,
         ) -> Option<VoteExtensionDigest> {
             let all_vote_extensions =
@@ -221,7 +211,7 @@ mod prepare_block {
                 .storage
                 .block
                 .pred_epochs
-                .get_epoch(last_height)
+                .get_epoch(self.storage.last_height)
                 // TODO: is this `unwrap()` fine?
                 .unwrap();
             let total_voting_power =
