@@ -1,0 +1,296 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  GIT_LFS_SKIP_SMUDGE: 1
+
+
+jobs:
+  build-wasm:
+    runs-on: ${{ matrix.os }}
+    container:
+      image: ghcr.io/fraccaman/namada:wasm-0.6.1
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        wasm_cache_version: ["v1"]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Show rust toolchain info
+        run: rustup show
+      - name: Build WASM
+        run: cp wasm/checksums.json wasm/original-checksums.json && make build-wasm-scripts
+      - name: Upload wasm artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: wasm-${{ github.sha }}
+          path: |
+            wasm/tx_*.wasm
+            wasm/vp_*.wasm
+            wasm/checksums.json
+      - name: Test Wasm
+        run: make test-wasm
+      - name: Check wasm up-to-date
+        run: cmp -- wasm/checksums.json wasm/original-checksums.json
+  
+  update-wasm:
+    runs-on: ${{ matrix.os }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.build-wasm.result == 'success' }}
+    needs: [build-wasm]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          aws-region: eu-west-1
+      - name: Download wasm artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: wasm-${{ github.sha }}
+          path: ./wasm
+      - name: Update WASM
+        run: aws s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
+        env:
+          BUCKET_NAME: namada-wasm-master
+          AWS_REGION: eu-west-1
+
+  anoma:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        nightly_version: [nightly-2022-05-20]
+        make: 
+          - name: ABCI
+            suffix: ''
+            cache_key: anoma
+            cache_version: v1
+            wait_for: anoma-release (ubuntu-latest, ABCI Release build, anoma-e2e-release, v1)
+            tendermint_artifact: tendermint-2f231ceb952a2426cf3c0abaf0b455aadd11e5b2
+          - name: ABCI++
+            suffix: -abci-plus-plus
+            cache_key: anoma-abci-plus-plus
+            cache_version: v1
+            wait_for: anoma-release (ubuntu-latest, ABCI++ Release build, -abci-plus-plus, anoma-e2e-release-abci-plus-...
+            tendermint_artifact: tendermint++-29e5fbcc648510e4763bd0af0b461aed92c21f30
+
+    env:
+      CARGO_INCREMENTAL: 0
+      RUST_BACKTRACE: full
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: 100G
+      SCCACHE_BUCKET: namada-sccache-master
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          aws-region: eu-west-1
+      - name: Install sccache (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          LINK: https://github.com/mozilla/sccache/releases/download
+          SCCACHE_VERSION: v0.3.0
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH          
+      - name: Install sccache (macos-latest)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install sccache
+      - name: Setup rust toolchain
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          profile: default
+          override: true
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: default
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git          
+          key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Build
+        run: make build${{ matrix.make.suffix }}
+      - name: Build test
+        run: make build-test${{ matrix.make.suffix }}
+      - name: Download wasm artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: wasm-${{ github.sha }}
+          path: ./wasm
+      - name: Run unit test
+        run: make test-unit${{ matrix.make.suffix }}
+      - name: Wait for release binaries
+        uses: lewagon/wait-on-check-action@master
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          check-name: ${{ matrix.make.wait_for }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 30
+          allowed-conclusions: success
+      - name: Download tendermint binaries
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          github_token: ${{secrets.GITHUB_TOKEN}}
+          workflow: build-tendermint.yml
+          workflow_conclusion: success
+          name: ${{ matrix.make.tendermint_artifact }}
+          path: /usr/local/bin
+      - name: Download anoma binaries
+        uses: actions/download-artifact@v3
+        with:
+          name: binaries${{ matrix.make.suffix }}-${{ github.sha }}
+          path: ./target/release/
+      - name: Change permissions
+        run: |
+          chmod +x target/release/anoma
+          chmod +x target/release/anomaw
+          chmod +x target/release/anoman
+          chmod +x target/release/anomac
+          chmod +x /usr/local/bin/tendermint
+      - name: Sets env vars for abci++ job
+        if: matrix.make.suffix == '-abci-plus-plus'
+        run: |
+          echo "TENDERMINT=/usr/local/bin/tendermint" >> $GITHUB_ENV
+      - name: Run e2e test
+        run: make test-e2e${{ matrix.make.suffix }}
+        env:
+          ANOMA_E2E_USE_PREBUILT_BINARIES: "true"
+          ANOMA_E2E_KEEP_TEMP: "true"
+          ANOMA_LOG_COLOR: "false"
+          ANOMA_LOG: "info"
+          TM_LOG_LEVEL: "info"
+      - name: Upload e2e logs
+        if: success() || failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: logs-e2e${{ matrix.make.suffix }}-${{ github.sha }}
+          path: /tmp/.*/logs/
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true
+
+  anoma-release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        make: 
+          - name: ABCI Release build
+            suffix: ''
+            cache_key: anoma-e2e-release
+            cache_version: "v1"
+          - name: ABCI++ Release build
+            suffix: -abci-plus-plus
+            cache_key: anoma-e2e-release-abci-plus-plus
+            cache_version: "v1"
+
+    env:
+      CARGO_INCREMENTAL: 0
+      RUST_BACKTRACE: full
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: 100G
+      SCCACHE_BUCKET: namada-sccache-master
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          aws-region: eu-west-1
+      - name: Install sccache (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          LINK: https://github.com/mozilla/sccache/releases/download
+          SCCACHE_VERSION: v0.3.0
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH          
+      - name: Install sccache (macos-latest)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install sccache
+      - name: Setup rust toolchain
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          profile: default
+          override: true
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git          
+          key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Build
+        run: make build-release${{ matrix.make.suffix }}
+      - name: Upload target binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries${{ matrix.make.suffix }}-${{ github.sha }}
+          path: |
+            target/release/anoma
+            target/release/anomac
+            target/release/anomaw
+            target/release/anoman
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true

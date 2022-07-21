@@ -29,7 +29,10 @@ build-test-abci-plus-plus:
 	$(cargo) build --tests --no-default-features --features "ABCI-plus-plus"
 
 build-release:
-	ANOMA_DEV=false $(cargo) build --release --package namada_apps
+	ANOMA_DEV=false $(cargo) build --release --package anoma_apps --manifest-path Cargo.toml --features "ABCI"
+
+build-release-abci-plus-plus:
+	ANOMA_DEV=false $(cargo) build --release --package anoma_apps --no-default-features --features "ABCI-plus-plus"
 
 check-release:
 	ANOMA_DEV=false $(cargo) check --release --package namada_apps
@@ -97,7 +100,7 @@ install: tendermint
 	ANOMA_DEV=false $(cargo) install --path ./apps --locked
 
 tendermint:
-	./scripts/install/get_tendermint.sh
+	./scripts/get_tendermint.sh
 
 run-ledger:
 	# runs the node
