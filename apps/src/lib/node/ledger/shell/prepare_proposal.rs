@@ -347,6 +347,8 @@ mod prepare_block {
 
             let signed_vote_extensions = vec![
                 {
+                    // TODO: might need to change this to the sk
+                    // of the validator in `genesis::genesis()`
                     let sk = key::testing::keypair_1();
                     VoteExtension {
                         block_height: LAST_HEIGHT,
