@@ -4430,6 +4430,7 @@ dependencies = [
  "namada",
  "namada_macros",
  "namada_tests",
+ "num-rational 0.4.1",
 ]
 
 [[package]]
