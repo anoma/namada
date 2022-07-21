@@ -5,6 +5,7 @@ mod prepare_block {
     use std::collections::{BTreeMap, HashSet};
 
     use namada::proto::Signed;
+    use namada::types::address::Address;
     use namada::types::ethereum_events::vote_extensions::{
         FractionalVotingPower, MultiSignedEthEvent, VoteExtension,
         VoteExtensionDigest,
@@ -14,6 +15,7 @@ mod prepare_block {
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
 
+    use super::super::vote_extensions::SignedExt;
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -143,38 +145,11 @@ mod prepare_block {
 
         /// Compresses a set of vote extensions into a single
         /// [`VoteExtensionDigest`], whilst filtering invalid
-        /// `Signed<VoteExtension>` instances in the process
+        /// [`SignedExt`] instances in the process
         fn compress_vote_extensions(
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
         ) -> Option<VoteExtensionDigest> {
-            let all_vote_extensions =
-                vote_extensions.into_iter().filter_map(|vote| {
-                    let vote_extension =
-                        Signed::<VoteExtension>::try_from_slice(
-                            &vote.vote_extension[..],
-                        )
-                        .map_err(|err| {
-                            tracing::error!(
-                                "Failed to deserialize signed vote extension: \
-                                 {}",
-                                err
-                            );
-                        })
-                        .ok()?;
-
-                    let validator = vote.validator.or_else(|| {
-                        tracing::error!("Vote extension has no validator data");
-                        None
-                    })?;
-
-                    self.validate_vote_ext_and_get_nam_addr(
-                        vote_extension,
-                        &validator.address[..],
-                        self.storage.last_height,
-                    )
-                });
-
             let events_epoch = self
                 .storage
                 .block
@@ -191,7 +166,9 @@ mod prepare_block {
                 self.get_total_voting_power(Some(events_epoch)).into();
             let mut voting_power = 0u64;
 
-            for (validator_addr, vote_extension) in all_vote_extensions {
+            for (validator_addr, vote_extension) in
+                self.filter_invalid_vote_extensions(vote_extensions)
+            {
                 let (validator_voting_power, _) = self
                     .get_validator_from_address(
                         &validator_addr,
@@ -238,6 +215,37 @@ mod prepare_block {
                 .collect();
 
             Some(VoteExtensionDigest { events, signatures })
+        }
+
+        /// Takes a list of signed vote extensions,
+        /// and filters out invalid instances.
+        fn filter_invalid_vote_extensions(
+            &self,
+            vote_extensions: Vec<ExtendedVoteInfo>,
+        ) -> impl Iterator<Item = (Address, SignedExt)> + '_ {
+            vote_extensions.into_iter().filter_map(|vote| {
+                let vote_extension = Signed::<VoteExtension>::try_from_slice(
+                    &vote.vote_extension[..],
+                )
+                .map_err(|err| {
+                    tracing::error!(
+                        "Failed to deserialize signed vote extension: {}",
+                        err
+                    );
+                })
+                .ok()?;
+
+                let validator = vote.validator.or_else(|| {
+                    tracing::error!("Vote extension has no validator data");
+                    None
+                })?;
+
+                self.validate_vote_ext_and_get_nam_addr(
+                    vote_extension,
+                    &validator.address[..],
+                    self.storage.last_height,
+                )
+            })
         }
     }
 
