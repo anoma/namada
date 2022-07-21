@@ -281,8 +281,8 @@ pub enum ValidatorState {
     // TODO consider adding `Jailed`
 }
 
-/// A bond is either a validator's self-bond or a delegation from a regular account to a
-/// validator.
+/// A bond is either a validator's self-bond or a delegation from a regular
+/// account to a validator.
 #[derive(
     Debug, Clone, Default, BorshDeserialize, BorshSerialize, BorshSchema,
 )]
