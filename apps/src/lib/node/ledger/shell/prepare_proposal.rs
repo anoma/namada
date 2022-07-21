@@ -83,19 +83,29 @@ mod prepare_block {
                     let votes = local_last_commit.votes;
                     self.compress_vote_extensions(votes)
                 });
-            let vote_extension_digest = match vote_extension_digest {
-                Some(_) if self.storage.last_height.0 == 0 => {
-                    tracing::error!(
-                        "The genesis block should not contain vote extensions"
-                    );
-                    return vec![];
-                }
-                Some(d) => d,
-                // if no vote extensions were found, we return an empty
-                // `Vec` of protocol
-                // transactions
-                _ => return vec![],
-            };
+            let vote_extension_digest =
+                match (vote_extension_digest, self.storage.last_height) {
+                    // handle genesis block
+                    (None, BlockHeight(0)) => return vec![],
+                    (Some(_), BlockHeight(0)) => {
+                        tracing::error!(
+                            "The genesis block should not contain vote \
+                             extensions"
+                        );
+                        return vec![];
+                    }
+                    // handle block heights > 0
+                    (Some(digest), _) => digest,
+                    _ => unreachable!(
+                        "Honest Namada validators will always sign a \
+                         VoteExtension, even if no Ethereum events were \
+                         observed at a given block height. In fact, signing \
+                         an empty VoteExtension commits the fact no events \
+                         were observed by a majority of validators. This \
+                         scenario is virtually impossible, unless every \
+                         validator is Byzantine."
+                    ),
+                };
 
             let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
                 .sign(&protocol_key)
