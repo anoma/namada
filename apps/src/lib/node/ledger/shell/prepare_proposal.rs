@@ -148,6 +148,14 @@ mod prepare_block {
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
         ) -> Option<VoteExtensionDigest> {
+            let events_epoch = self
+                .storage
+                .block
+                .pred_epochs
+                .get_epoch(self.storage.last_height)
+                // TODO: is this `unwrap()` fine?
+                .unwrap();
+
             let all_vote_extensions =
                 vote_extensions.into_iter().filter_map(|vote| {
                     let vote_extension =
@@ -183,7 +191,10 @@ mod prepare_block {
                         None
                     })?;
                     let validator_addr = self
-                        .get_validator_from_tm_address(&validator.address[..])
+                        .get_validator_from_tm_address(
+                            &validator.address[..],
+                            Some(events_epoch),
+                        )
                         .map_err(|err| {
                             tracing::error!(
                                 "Failed to get an address from Tendermint \
@@ -195,8 +206,10 @@ mod prepare_block {
                         .ok()?;
 
                     // verify signature of the vote extension
-                    let result =
-                        self.get_validator_from_address(&validator_addr, None);
+                    let result = self.get_validator_from_address(
+                        &validator_addr,
+                        Some(events_epoch),
+                    );
                     let validator_public_key = match result {
                         Ok((_, validator_public_key)) => validator_public_key,
                         // TODO: improve this code
@@ -219,13 +232,6 @@ mod prepare_block {
             let mut event_observers = BTreeMap::new();
             let mut signatures = Vec::new();
 
-            let events_epoch = self
-                .storage
-                .block
-                .pred_epochs
-                .get_epoch(self.storage.last_height)
-                // TODO: is this `unwrap()` fine?
-                .unwrap();
             let total_voting_power =
                 self.get_total_voting_power(Some(events_epoch)).into();
             let mut voting_power = 0u64;
