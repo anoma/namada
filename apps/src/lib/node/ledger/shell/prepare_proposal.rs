@@ -153,8 +153,9 @@ mod prepare_block {
                 .block
                 .pred_epochs
                 .get_epoch(self.storage.last_height)
-                // TODO: is this `unwrap()` fine?
-                .unwrap();
+                .expect(
+                    "The epoch of the last block height should always be known",
+                );
 
             let all_vote_extensions =
                 vote_extensions.into_iter().filter_map(|vote| {
