@@ -1,8 +1,8 @@
 #[cfg(not(feature = "ABCI"))]
 mod extend_votes {
-    use anoma::proto::Signed;
-    use anoma::types::ethereum_events::vote_extensions::VoteExtension;
     use borsh::BorshDeserialize;
+    use namada::proto::Signed;
+    use namada::types::ethereum_events::vote_extensions::VoteExtension;
 
     use super::super::*;
 
@@ -70,7 +70,7 @@ mod extend_votes {
                 );
                 response::VerifyVoteExtension {
                     status: VerifyStatus::Reject.into(),
-                }           
+                }
             }
         }
 
@@ -122,15 +122,15 @@ mod extend_votes {
     mod test_vote_extensions {
         use std::convert::TryInto;
 
-        use anoma::ledger::pos;
-        use anoma::ledger::pos::anoma_proof_of_stake::PosBase;
-        use anoma::types::ethereum_events::vote_extensions::VoteExtension;
-        use anoma::types::ethereum_events::{
+        use borsh::{BorshDeserialize, BorshSerialize};
+        use namada::ledger::pos;
+        use namada::ledger::pos::namada_proof_of_stake::PosBase;
+        use namada::types::ethereum_events::vote_extensions::VoteExtension;
+        use namada::types::ethereum_events::{
             EthAddress, EthereumEvent, TransferToEthereum,
         };
-        use anoma::types::key::*;
-        use anoma::types::storage::{BlockHeight, Epoch};
-        use borsh::{BorshDeserialize, BorshSerialize};
+        use namada::types::key::*;
+        use namada::types::storage::{BlockHeight, Epoch};
         use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
         use tower_abci::request;
 
@@ -324,7 +324,7 @@ mod extend_votes {
             shell.storage.write_validator_set(&current_validators);
             // we advance forward to the next epoch
             let mut req = FinalizeBlock::default();
-            req.header.time = anoma::types::time::DateTimeUtc::now();
+            req.header.time = namada::types::time::DateTimeUtc::now();
             shell.storage.last_height = BlockHeight(11);
             shell.finalize_block(req).expect("Test failed");
             shell.commit();

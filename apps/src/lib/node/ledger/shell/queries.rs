@@ -5,7 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
 use namada::ledger::parameters::EpochDuration;
 #[cfg(not(feature = "ABCI"))]
-use anoma::ledger::pos::anoma_proof_of_stake::types::VotingPower;
+use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::PosParams;
 use namada::types::address::Address;
 use namada::types::key;
