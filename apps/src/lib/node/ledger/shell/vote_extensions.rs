@@ -2,6 +2,7 @@
 mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::proto::Signed;
+    use namada::types::address::Address;
     use namada::types::ethereum_events::vote_extensions::VoteExtension;
 
     use super::super::*;
@@ -80,26 +81,70 @@ mod extend_votes {
         ///  * The validator correctly signed the extension
         ///  * The validator signed over the correct height inside of the
         ///    extension
+        #[inline]
         pub fn validate_vote_extension(
             &self,
             ext: SignedExt,
             tm_address: &[u8],
             height: BlockHeight,
         ) -> bool {
+            self.validate_vote_ext_and_get_nam_addr(ext, tm_address, height)
+                .is_some()
+        }
+
+        /// This method behaves exactly like [`Self::validate_vote_extension`],
+        /// with the added bonus of returning the Namada [`Address`]
+        /// corresponding to `tm_address`, and the respective
+        /// [`SignedExt`] to be validated.
+        pub fn validate_vote_ext_and_get_nam_addr(
+            &self,
+            ext: SignedExt,
+            tm_address: &[u8],
+            height: BlockHeight,
+        ) -> Option<(Address, SignedExt)> {
+            if ext.data.block_height != height {
+                let ext_height = ext.data.block_height;
+                tracing::error!(
+                    "Vote extension issued for a block height {ext_height} \
+                     different from the expected height {height}"
+                );
+                return None;
+            }
             let epoch = self.storage.block.pred_epochs.get_epoch(height);
             // get the validator that issued this vote extension
             // this should not fail
-            let validator =
-                match self.get_validator_from_tm_address(tm_address, epoch) {
-                    Ok(address) => address,
-                    _ => return false,
-                };
+            let validator = self
+                .get_validator_from_tm_address(tm_address, epoch)
+                .map_err(|err| {
+                    tracing::error!(
+                        "Failed to get an address from Tendermint validator \
+                         {:?}: {}",
+                        tm_address,
+                        err
+                    );
+                })
+                .ok()?;
             // get the public key associated with this validator
-            let pk = match self.get_validator_from_address(&validator, epoch) {
-                Ok((_, pk)) => pk,
-                _ => return false,
-            };
-            ext.verify(&pk).is_ok() && ext.data.block_height == height
+            let pk = self
+                .get_validator_from_address(&validator, epoch)
+                .map(|(_, pk)| pk)
+                .map_err(|_| {
+                    tracing::error!(
+                        "Could not get public key from Storage for validator \
+                         {validator}"
+                    );
+                })
+                .ok()?;
+            // verify the signature of the vote extension
+            ext.verify(&pk)
+                .map_err(|_| {
+                    tracing::error!(
+                        "Failed to verify the signature of a vote extension \
+                         issued by {validator}"
+                    );
+                })
+                .ok()
+                .map(|_| (validator, ext))
         }
 
         /// Checks the channel from the Ethereum oracle monitoring

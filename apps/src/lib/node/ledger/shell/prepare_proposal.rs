@@ -148,15 +148,6 @@ mod prepare_block {
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
         ) -> Option<VoteExtensionDigest> {
-            let events_epoch = self
-                .storage
-                .block
-                .pred_epochs
-                .get_epoch(self.storage.last_height)
-                .expect(
-                    "The epoch of the last block height should always be known",
-                );
-
             let all_vote_extensions =
                 vote_extensions.into_iter().filter_map(|vote| {
                     let vote_extension =
@@ -170,69 +161,28 @@ mod prepare_block {
                                 err
                             );
                         })
-                        .ok()
-                        .and_then(|ext| {
-                            let ext_height = ext.data.block_height;
-                            let last_height = self.storage.last_height;
-
-                            if ext_height == last_height {
-                                Some(ext)
-                            } else {
-                                tracing::error!(
-                                    "Vote extension issued for a block height \
-                                     {ext_height} different from the last \
-                                     height {last_height}"
-                                );
-                                None
-                            }
-                        })?;
+                        .ok()?;
 
                     let validator = vote.validator.or_else(|| {
                         tracing::error!("Vote extension has no validator data");
                         None
                     })?;
-                    let validator_addr = self
-                        .get_validator_from_tm_address(
-                            &validator.address[..],
-                            Some(events_epoch),
-                        )
-                        .map_err(|err| {
-                            tracing::error!(
-                                "Failed to get an address from Tendermint \
-                                 {:?}: {}",
-                                validator,
-                                err
-                            );
-                        })
-                        .ok()?;
 
-                    // verify signature of the vote extension
-                    let validator_public_key = self
-                        .get_validator_from_address(
-                            &validator_addr,
-                            Some(events_epoch),
-                        )
-                        .map(|(_, validator_public_key)| validator_public_key)
-                        .map_err(|_| {
-                            tracing::error!(
-                                "Could not get public key from Storage for \
-                                 validator {validator_addr}"
-                            );
-                        })
-                        .ok()?;
-
-                    vote_extension
-                        .verify(&validator_public_key)
-                        .map_err(|_| {
-                            tracing::error!(
-                                "Failed to verify the signature of a vote \
-                                 extension issued by {validator_addr}"
-                            );
-                        })
-                        .ok()?;
-
-                    Some((validator_addr, vote_extension))
+                    self.validate_vote_ext_and_get_nam_addr(
+                        vote_extension,
+                        &validator.address[..],
+                        self.storage.last_height,
+                    )
                 });
+
+            let events_epoch = self
+                .storage
+                .block
+                .pred_epochs
+                .get_epoch(self.storage.last_height)
+                .expect(
+                    "The epoch of the last block height should always be known",
+                );
 
             let mut event_observers = BTreeMap::new();
             let mut signatures = Vec::new();
