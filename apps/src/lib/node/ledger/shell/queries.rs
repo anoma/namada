@@ -404,7 +404,6 @@ where
 
     /// Lookup the total voting power for an epoch
     #[cfg(not(feature = "ABCI"))]
-    #[allow(dead_code)]
     pub fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
         // get the current epoch
         let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
