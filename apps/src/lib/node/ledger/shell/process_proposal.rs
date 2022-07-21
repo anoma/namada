@@ -2,7 +2,6 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 use namada::types::ethereum_events::vote_extensions::FractionalVotingPower;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
-
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
 #[cfg(not(feature = "ABCI"))]
@@ -104,6 +103,8 @@ where
     ///   3: Wasm runtime error
     ///   4: Invalid order of decrypted txs
     ///   5. More decrypted txs than expected
+    ///   6. A transaciton could not be decrypted
+    ///   7. An error in the vote extensions included in the proposal
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
@@ -125,12 +126,11 @@ where
                     let extensions =
                         digest.decompress(self.storage.last_height);
                     let mut voting_power = FractionalVotingPower::default();
-                    // the subtraction underflow check is handled at a higher
-                    // scope
-                    let epoch =
-                        self.storage.block.pred_epochs.get_epoch(BlockHeight(
-                            self.storage.last_height.0 - 1,
-                        ));
+                    let epoch = self
+                        .storage
+                        .block
+                        .pred_epochs
+                        .get_epoch(BlockHeight(self.storage.last_height.0));
                     let total_power =
                         u64::from(self.get_total_voting_power(epoch));
                     if extensions.into_iter().all(|(ext, validator)| match self
