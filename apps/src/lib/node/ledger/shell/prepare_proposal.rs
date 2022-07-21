@@ -206,22 +206,19 @@ mod prepare_block {
                         .ok()?;
 
                     // verify signature of the vote extension
-                    let result = self.get_validator_from_address(
-                        &validator_addr,
-                        Some(events_epoch),
-                    );
-                    let validator_public_key = match result {
-                        Ok((_, validator_public_key)) => validator_public_key,
-                        // TODO: improve this code
-                        Err(_) => {
+                    let validator_public_key = self
+                        .get_validator_from_address(
+                            &validator_addr,
+                            Some(events_epoch),
+                        )
+                        .map(|(_, validator_public_key)| validator_public_key)
+                        .map_err(|_| {
                             tracing::error!(
                                 "Could not get public key from Storage for \
-                                 validator {}",
-                                validator_addr
+                                 validator {validator_addr}"
                             );
-                            return None;
-                        }
-                    };
+                        })
+                        .ok()?;
 
                     vote_extension
                         .verify(&validator_public_key)
