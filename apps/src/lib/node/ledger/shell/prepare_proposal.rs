@@ -4,12 +4,12 @@
 mod prepare_block {
     use std::collections::{BTreeMap, HashSet};
 
-    use anoma::proto::Signed;
-    use anoma::types::ethereum_events::vote_extensions::{
+    use namada::proto::Signed;
+    use namada::types::ethereum_events::vote_extensions::{
         FractionalVotingPower, MultiSignedEthEvent, VoteExtension,
         VoteExtensionDigest,
     };
-    use anoma::types::transaction::protocol::ProtocolTxType;
+    use namada::types::transaction::protocol::ProtocolTxType;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
