@@ -1,6 +1,6 @@
 //! A tx to mint new NFT token(s).
 
-use anoma_tx_prelude::*;
+use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(tx_data: Vec<u8>) {

@@ -115,9 +115,9 @@ mod prepare_block {
 
     #[cfg(test)]
     mod test_prepare_proposal {
-        use anoma::types::address::xan;
-        use anoma::types::storage::Epoch;
-        use anoma::types::transaction::Fee;
+        use namada::types::address::xan;
+        use namada::types::storage::Epoch;
+        use namada::types::transaction::Fee;
         use tendermint_proto::abci::tx_record::TxAction;
 
         use super::*;

@@ -2,8 +2,8 @@
 
 use std::rc::Rc;
 
-use anoma::types::storage;
 use derivative::Derivative;
+use namada::types::storage;
 
 /// A list of changes, which must be applied in the same order to get to the
 /// current state.

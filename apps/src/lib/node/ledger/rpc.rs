@@ -3,8 +3,8 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use anoma::types::address::Address;
-use anoma::types::storage;
+use namada::types::address::Address;
+use namada::types::storage;
 #[cfg(not(feature = "ABCI"))]
 use tendermint::abci::Path as AbciPath;
 #[cfg(feature = "ABCI")]

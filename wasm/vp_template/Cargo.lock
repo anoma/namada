@@ -38,109 +38,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anoma"
-version = "0.6.1"
-dependencies = [
- "anoma_proof_of_stake",
- "ark-bls12-381",
- "ark-serialize",
- "bech32",
- "borsh",
- "chrono",
- "clru",
- "derivative",
- "ed25519-consensus",
- "ethabi",
- "eyre",
- "ferveo-common",
- "hex",
- "ibc",
- "ibc-proto",
- "ics23",
- "itertools",
- "loupe",
- "num-rational",
- "parity-wasm",
- "proptest",
- "prost",
- "prost-types",
- "pwasm-utils",
- "rand",
- "rand_core 0.6.3",
- "rust_decimal",
- "serde",
- "serde_json",
- "sha2 0.9.9",
- "sparse-merkle-tree",
- "tempfile",
- "tendermint",
- "tendermint-proto",
- "thiserror",
- "tonic-build",
- "tracing",
- "wasmer",
- "wasmer-cache",
- "wasmer-compiler-singlepass",
- "wasmer-engine-dylib",
- "wasmer-engine-universal",
- "wasmer-vm",
- "wasmparser 0.83.0",
-]
-
-[[package]]
-name = "anoma_macros"
-version = "0.6.1"
-dependencies = [
- "quote",
- "syn",
-]
-
-[[package]]
-name = "anoma_proof_of_stake"
-version = "0.6.1"
-dependencies = [
- "borsh",
- "proptest",
- "thiserror",
-]
-
-[[package]]
-name = "anoma_tests"
-version = "0.6.1"
-dependencies = [
- "anoma",
- "anoma_vm_env",
- "chrono",
- "concat-idents",
- "derivative",
- "prost",
- "serde_json",
- "sha2 0.9.9",
- "tempfile",
- "test-log",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "anoma_vm_env"
-version = "0.6.1"
-dependencies = [
- "anoma",
- "anoma_macros",
- "borsh",
- "hex",
-]
-
-[[package]]
-name = "anoma_vp_prelude"
-version = "0.6.1"
-dependencies = [
- "anoma_vm_env",
- "sha2 0.10.2",
-]
-
-[[package]]
 name = "anyhow"
 version = "1.0.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1575,6 +1472,109 @@ name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
+
+[[package]]
+name = "namada"
+version = "0.7.0"
+dependencies = [
+ "ark-bls12-381",
+ "ark-serialize",
+ "bech32",
+ "borsh",
+ "chrono",
+ "clru",
+ "derivative",
+ "ed25519-consensus",
+ "ethabi",
+ "eyre",
+ "ferveo-common",
+ "hex",
+ "ibc",
+ "ibc-proto",
+ "ics23",
+ "itertools",
+ "loupe",
+ "namada_proof_of_stake",
+ "num-rational",
+ "parity-wasm",
+ "proptest",
+ "prost",
+ "prost-types",
+ "pwasm-utils",
+ "rand",
+ "rand_core 0.6.3",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2 0.9.9",
+ "sparse-merkle-tree",
+ "tempfile",
+ "tendermint",
+ "tendermint-proto",
+ "thiserror",
+ "tonic-build",
+ "tracing",
+ "wasmer",
+ "wasmer-cache",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-dylib",
+ "wasmer-engine-universal",
+ "wasmer-vm",
+ "wasmparser 0.83.0",
+]
+
+[[package]]
+name = "namada_macros"
+version = "0.7.0"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "namada_proof_of_stake"
+version = "0.7.0"
+dependencies = [
+ "borsh",
+ "proptest",
+ "thiserror",
+]
+
+[[package]]
+name = "namada_tests"
+version = "0.7.0"
+dependencies = [
+ "chrono",
+ "concat-idents",
+ "derivative",
+ "namada",
+ "namada_vm_env",
+ "prost",
+ "serde_json",
+ "sha2 0.9.9",
+ "tempfile",
+ "test-log",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "namada_vm_env"
+version = "0.7.0"
+dependencies = [
+ "borsh",
+ "hex",
+ "namada",
+ "namada_macros",
+]
+
+[[package]]
+name = "namada_vp_prelude"
+version = "0.7.0"
+dependencies = [
+ "namada_vm_env",
+ "sha2 0.10.2",
+]
 
 [[package]]
 name = "ntapi"
@@ -3116,10 +3116,10 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "vp_template"
 version = "0.6.1"
 dependencies = [
- "anoma_tests",
- "anoma_vp_prelude",
  "borsh",
  "getrandom",
+ "namada_tests",
+ "namada_vp_prelude",
  "wee_alloc",
 ]
 

@@ -4,14 +4,14 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use anoma::types::ethereum_events::EthereumEvent;
-#[cfg(feature = "ABCI")]
-use anoma::types::hash::Hash;
-#[cfg(feature = "ABCI")]
-use anoma::types::storage::BlockHash;
-#[cfg(feature = "ABCI")]
-use anoma::types::transaction::hash_tx;
 use futures::future::FutureExt;
+use namada::types::ethereum_events::EthereumEvent;
+#[cfg(feature = "ABCI")]
+use namada::types::hash::Hash;
+#[cfg(feature = "ABCI")]
+use namada::types::storage::BlockHash;
+#[cfg(feature = "ABCI")]
+use namada::types::transaction::hash_tx;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::RequestBeginBlock;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};

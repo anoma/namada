@@ -4,7 +4,6 @@ mod identity;
 use std::path::Path;
 use std::time::Duration;
 
-use anoma::proto::Intent;
 use behaviour::Behaviour;
 use libp2p::core::connection::ConnectionLimits;
 use libp2p::core::muxing::StreamMuxerBox;
@@ -15,6 +14,7 @@ use libp2p::swarm::SwarmBuilder;
 use libp2p::tcp::TcpConfig;
 use libp2p::websocket::WsConfig;
 use libp2p::{core, mplex, noise, PeerId, Transport, TransportError};
+use namada::proto::Intent;
 use thiserror::Error;
 use tokio::sync::mpsc::Sender;
 

@@ -2,12 +2,12 @@
 
 use std::str::FromStr;
 
-use anoma::types::address::Address;
-use anoma::types::key::*;
-use anoma::types::storage::Epoch;
-use anoma_apps::config::{Config, TendermintMode};
 use color_eyre::eyre::Result;
 use eyre::eyre;
+use namada::types::address::Address;
+use namada::types::key::*;
+use namada::types::storage::Epoch;
+use namada_apps::config::{Config, TendermintMode};
 
 use super::setup::Test;
 use crate::e2e::setup::{Bin, Who};

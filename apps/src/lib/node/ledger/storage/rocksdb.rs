@@ -31,16 +31,16 @@ use std::cmp::Ordering;
 use std::path::Path;
 use std::str::FromStr;
 
-use anoma::ledger::storage::types::PrefixIterator;
-use anoma::ledger::storage::{
+use borsh::{BorshDeserialize, BorshSerialize};
+use namada::ledger::storage::types::PrefixIterator;
+use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
     MerkleTreeStoresRead, Result, StoreType, DB,
 };
-use anoma::types::storage::{
+use namada::types::storage::{
     BlockHeight, Header, Key, KeySeg, TxQueue, KEY_SEGMENT_SEPARATOR,
 };
-use anoma::types::time::DateTimeUtc;
-use borsh::{BorshDeserialize, BorshSerialize};
+use namada::types::time::DateTimeUtc;
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
@@ -934,9 +934,9 @@ mod imp {
 
 #[cfg(test)]
 mod test {
-    use anoma::ledger::storage::{MerkleTree, Sha256Hasher};
-    use anoma::types::address::EstablishedAddressGen;
-    use anoma::types::storage::{BlockHash, Epoch, Epochs};
+    use namada::ledger::storage::{MerkleTree, Sha256Hasher};
+    use namada::types::address::EstablishedAddressGen;
+    use namada::types::storage::{BlockHash, Epoch, Epochs};
     use tempfile::tempdir;
 
     use super::*;
