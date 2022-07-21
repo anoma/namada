@@ -38,13 +38,13 @@ package: build-release
 	scripts/make-package.sh
 
 build-release-image-docker:
-	docker build -t anoma-build - < docker/anoma-build/Dockerfile
+	docker build -t namada-build - < docker/namada-build/Dockerfile
 
 build-release-docker: build-release-image-docker
-	docker run --rm -v ${PWD}:/var/build anoma-build make build-release
+	docker run --rm -v ${PWD}:/var/build namada-build make build-release
 
 package-docker: build-release-image-docker
-	docker run --rm -v ${PWD}:/var/build anoma-build make package
+	docker run --rm -v ${PWD}:/var/build namada-build make package
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
@@ -198,10 +198,10 @@ doc:
 	$(cargo) doc --open
 
 build-wasm-image-docker:
-	docker build -t anoma-wasm - < docker/anoma-wasm/Dockerfile
+	docker build -t namada-wasm - < docker/namada-wasm/Dockerfile
 
 build-wasm-scripts-docker: build-wasm-image-docker
-	docker run --rm -v ${PWD}:/usr/local/rust/wasm anoma-wasm make build-wasm-scripts
+	docker run --rm -v ${PWD}:/usr/local/rust/wasm namada-wasm make build-wasm-scripts
 
 # Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
 build-wasm-scripts:
