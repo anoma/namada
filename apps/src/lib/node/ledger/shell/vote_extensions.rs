@@ -7,7 +7,8 @@ mod extend_votes {
 
     use super::super::*;
 
-    type SignedExt = Signed<VoteExtension>;
+    /// A [`VoteExtension`] signed by a Namada validator.
+    pub type SignedExt = Signed<VoteExtension>;
 
     impl<D, H> Shell<D, H>
     where
