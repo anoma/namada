@@ -3,7 +3,7 @@ name: Run checks
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
 
 concurrency:
