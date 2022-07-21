@@ -92,6 +92,8 @@ mod prepare_block {
                             "The genesis block should not contain vote \
                              extensions"
                         );
+                        // TODO: maybe slash validators who claim to have
+                        // seen vote extensions at H=0
                         return vec![];
                     }
                     // handle block heights > 0
