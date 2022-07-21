@@ -223,8 +223,15 @@ mod prepare_block {
                         }
                     };
 
-                    // TODO: log invalid signature
-                    vote_extension.verify(&validator_public_key).ok()?;
+                    vote_extension
+                        .verify(&validator_public_key)
+                        .map_err(|_| {
+                            tracing::error!(
+                                "Failed to verify the signature of a vote \
+                                 extension issued by {validator_addr}"
+                            );
+                        })
+                        .ok()?;
 
                     Some((validator_addr, vote_extension))
                 });
