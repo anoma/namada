@@ -72,6 +72,8 @@ fn main() {
         }
     }
 
+    let mut use_rustfmt = false;
+
     // The version should match the one we use in the `Makefile`
     if let Ok(rustfmt_toolchain) = read_to_string(RUSTFMT_TOOLCHAIN_SRC) {
         // Try to find the path to rustfmt.
@@ -91,6 +93,7 @@ fn main() {
                 if !rustfmt.is_empty() {
                     println!("using rustfmt from path \"{}\"", rustfmt);
                     env::set_var("RUSTFMT", rustfmt);
+                    use_rustfmt = true
                 }
             }
         }
@@ -98,8 +101,8 @@ fn main() {
 
     tonic_build::configure()
         .out_dir("src/lib/proto/generated")
-        .format(true)
-        .extern_path(".types", "::namada::proto::generated::types")
+        .format(use_rustfmt)
+        .extern_path(".types", "::anoma::proto::generated::types")
         // This warning appears in tonic generated code
         .server_mod_attribute(".", "#[allow(clippy::unit_arg)]")
         // TODO try to add json encoding to simplify use for user

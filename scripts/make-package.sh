@@ -4,7 +4,7 @@
 
 set -e
 
-VERSION="$(git describe --dirty --broken)"
+VERSION="$(git describe --tags)"
 PLATFORM="$(uname -s)-$(uname -m)"
 PACKAGE_NAME="anoma-${VERSION}-${PLATFORM}"
 BIN="anoma anomac anoman anomaw"
