@@ -11,8 +11,9 @@ mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
+mod vote_extensions;
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -168,10 +169,55 @@ pub(super) enum ShellMode {
     Validator {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        ethereum_recv: UnboundedReceiver<EthereumEvent>,
+        ethereum_recv: EthereumReceiver,
     },
     Full,
     Seed,
+}
+
+/// A channel for pulling events from the Ethereum oracle
+/// and queueing them up for inclusion in vote extensions
+#[derive(Debug)]
+pub(super) struct EthereumReceiver {
+    channel: UnboundedReceiver<EthereumEvent>,
+    queue: BTreeSet<EthereumEvent>,
+}
+
+impl EthereumReceiver {
+    /// Create a new [`EthereumReceiver`] from a channel connected
+    /// to an Ethereum oracle
+    pub fn new(channel: UnboundedReceiver<EthereumEvent>) -> Self {
+        Self {
+            channel,
+            queue: BTreeSet::new(),
+        }
+    }
+
+    /// Pull messages from the channel and add to queue
+    /// Since vote extensions require ordering of ethereum
+    /// events, we do that here. We also de-duplicate events
+    pub fn fill_queue(&mut self) {
+        let mut new_events = 0;
+        while let Ok(eth_event) = self.channel.try_recv() {
+            if self.queue.insert(eth_event) {
+                new_events += 1;
+            };
+        }
+        tracing::debug!(n = new_events, "received Ethereum events");
+    }
+
+    /// Get a copy of the queue
+    pub fn get_events(&self) -> Vec<EthereumEvent> {
+        self.queue.iter().cloned().collect()
+    }
+
+    /// Given a list of events, remove them from the queue if present
+    /// Note that this method preserves the sorting and de-duplication
+    /// of events in the queue.
+    #[allow(dead_code)]
+    pub fn remove(&mut self, events: &[EthereumEvent]) {
+        self.queue.retain(|event| !events.contains(event));
+    }
 }
 
 #[allow(dead_code)]
@@ -307,7 +353,9 @@ where
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,
-                            ethereum_recv: eth_receiver.unwrap(),
+                            ethereum_recv: EthereumReceiver::new(
+                                eth_receiver.unwrap(),
+                            ),
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -326,7 +374,9 @@ where
                             },
                         },
                         broadcast_sender,
-                        ethereum_recv: eth_receiver.unwrap(),
+                        ethereum_recv: EthereumReceiver::new(
+                            eth_receiver.unwrap(),
+                        ),
                     }
                 }
             }
@@ -539,26 +589,6 @@ where
                     tracing::error!("Error in slashing: {}", err);
                 }
             }
-        }
-    }
-
-    #[cfg(not(feature = "ABCI"))]
-    /// INVARIANT: This method must be stateless.
-    pub fn extend_vote(
-        &self,
-        _req: request::ExtendVote,
-    ) -> response::ExtendVote {
-        Default::default()
-    }
-
-    #[cfg(not(feature = "ABCI"))]
-    /// INVARIANT: This method must be stateless.
-    pub fn verify_vote_extension(
-        &self,
-        _req: request::VerifyVoteExtension,
-    ) -> response::VerifyVoteExtension {
-        response::VerifyVoteExtension {
-            status: VerifyStatus::Accept as i32,
         }
     }
 
