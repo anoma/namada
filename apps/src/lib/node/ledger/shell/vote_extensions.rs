@@ -62,9 +62,15 @@ mod extend_votes {
                     },
                 }
             } else {
+                tracing::warn!(
+                    ?req.validator_address,
+                    ?req.hash,
+                    req.height,
+                    "received undeserializable vote extension"
+                );
                 response::VerifyVoteExtension {
                     status: VerifyStatus::Reject.into(),
-                }
+                }           
             }
         }
 
