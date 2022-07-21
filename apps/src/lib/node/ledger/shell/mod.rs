@@ -351,7 +351,7 @@ where
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,
-                            ethereum_recv: EthereumReciever::new(
+                            ethereum_recv: EthereumReceiver::new(
                                 eth_receiver.unwrap(),
                             ),
                         })
