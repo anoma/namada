@@ -18,3 +18,16 @@ pub mod wasm_loader;
 // Taken from <https://github.com/rust-lang/rfcs/issues/2324#issuecomment-502437904>.
 #[doc(inline)]
 pub use std;
+
+#[cfg(not(feature = "ABCI"))]
+pub extern crate tendermint;
+#[cfg(not(feature = "ABCI"))]
+pub extern crate tendermint_config;
+#[cfg(feature = "ABCI")]
+pub extern crate tendermint_config_abci;
+#[cfg(not(feature = "ABCI"))]
+pub extern crate tendermint_rpc;
+#[cfg(feature = "ABCI")]
+pub extern crate tendermint_rpc_abci;
+#[cfg(feature = "ABCI")]
+pub extern crate tendermint_stable;
