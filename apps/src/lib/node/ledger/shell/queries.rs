@@ -3,8 +3,6 @@ use std::cmp::max;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
-#[cfg(not(feature = "ABCI"))]
-use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::parameters::EpochDuration;
 #[cfg(not(feature = "ABCI"))]
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
