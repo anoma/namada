@@ -369,6 +369,10 @@ mod prepare_block {
                 .into_iter()
                 .map(|ext| ExtendedVoteInfo {
                     vote_extension: ext.try_to_vec().unwrap(),
+                    // TODO: make sure the Tendermint validator we insert here
+                    // has an equivalent Namada validator addr in the `shell`
+                    //
+                    // https://github.com/anoma/namada/blob/tiago/vote-extensions-types/apps/src/lib/config/genesis.rs#L733=
                     validator: Some(todo!()),
                     ..Default::default()
                 })
