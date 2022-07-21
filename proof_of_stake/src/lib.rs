@@ -733,12 +733,12 @@ pub trait PosBase {
         let prev_validators =
             previous_epoch.and_then(|epoch| validators.get(epoch));
 
-        // If the validator never been active before and it doesn't have more
-        // than 0 voting power, we should not tell Tendermint to update it until
-        // it does. Tendermint uses 0 voting power as a way to signal
-        // that a validator has been removed from the validator set, but
-        // fails if we attempt to give it a new validator with 0 voting
-        // power.
+        // If the validator has never been active before and it doesn't have
+        // more than 0 voting power, we should not tell Tendermint to
+        // update it until it does. Tendermint uses 0 voting power as a
+        // way to signal that a validator has been removed from the
+        // validator set, but fails if we attempt to give it a new
+        // validator with 0 voting power.
         // For active validators, this would only ever happen until all the
         // validator slots are filled with non-0 voting power validators, but we
         // still need to guard against it.
