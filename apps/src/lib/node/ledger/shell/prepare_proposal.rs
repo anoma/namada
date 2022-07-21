@@ -2,7 +2,17 @@
 
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
-    use tendermint_proto::abci::TxRecord;
+    use std::collections::{BTreeMap, HashSet};
+
+    use anoma::proto::Signed;
+    use anoma::types::ethereum_events::vote_extensions::{
+        FractionalVotingPower, MultiSignedEthEvent, VoteExtension,
+        VoteExtensionDigest,
+    };
+    use anoma::types::transaction::protocol::ProtocolTxType;
+    use tendermint_proto::abci::{
+        ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
+    };
 
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -30,43 +40,20 @@ mod prepare_block {
             // proposal is accepted
             self.gas_meter.reset();
             let txs = if let ShellMode::Validator { .. } = self.mode {
-                // TODO: This should not be hardcoded
-                let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+                // TODO: add some info logging
 
-                // filter in half of the new txs from Tendermint, only keeping
-                // wrappers
-                let number_of_new_txs = 1 + req.txs.len() / 2;
-                let mut txs: Vec<TxRecord> = req
-                    .txs
-                    .into_iter()
-                    .take(number_of_new_txs)
-                    .map(|tx_bytes| {
-                        if let Ok(Ok(TxType::Wrapper(_))) =
-                            Tx::try_from(tx_bytes.as_slice()).map(process_tx)
-                        {
-                            record::keep(tx_bytes)
-                        } else {
-                            record::remove(tx_bytes)
-                        }
-                    })
-                    .collect();
+                // add ethereum events as protocol txs
+                let mut txs =
+                    self.build_vote_extensions_txs(req.local_last_commit);
+
+                // add mempool txs
+                let mut mempool_txs = self.build_mempool_txs(req.txs);
+                txs.append(&mut mempool_txs);
 
                 // decrypt the wrapper txs included in the previous block
-                let mut decrypted_txs = self
-                    .storage
-                    .tx_queue
-                    .iter()
-                    .map(|tx| {
-                        Tx::from(match tx.decrypt(privkey) {
-                            Ok(tx) => DecryptedTx::Decrypted(tx),
-                            _ => DecryptedTx::Undecryptable(tx.clone()),
-                        })
-                        .to_bytes()
-                    })
-                    .map(record::add)
-                    .collect();
-
+                let mut decrypted_txs = self.build_decrypted_txs();
                 txs.append(&mut decrypted_txs);
+
                 txs
             } else {
                 vec![]
@@ -76,6 +63,230 @@ mod prepare_block {
                 tx_records: txs,
                 ..Default::default()
             }
+        }
+
+        /// Builds a batch of vote extension transactions, comprised of Ethereum
+        /// events
+        fn build_vote_extensions_txs(
+            &mut self,
+            local_last_commit: Option<ExtendedCommitInfo>,
+        ) -> Vec<TxRecord> {
+            let protocol_key = self
+                .mode
+                .get_protocol_key()
+                .expect("Validators should always have a protocol key");
+
+            let vote_extension_digest =
+                local_last_commit.and_then(|local_last_commit| {
+                    let votes = local_last_commit.votes;
+                    self.compress_vote_extensions(votes)
+                });
+            let vote_extension_digest = match vote_extension_digest {
+                Some(_) if self.storage.last_height.0 == 0 => {
+                    tracing::error!(
+                        "The genesis block should not contain vote extensions"
+                    );
+                    return vec![];
+                }
+                Some(d) => d,
+                // if no vote extensions were found, we return an empty
+                // `Vec` of protocol
+                // transactions
+                _ => return vec![],
+            };
+
+            let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+                .sign(&protocol_key)
+                .to_bytes();
+            let tx_record = record::add(tx);
+
+            vec![tx_record]
+        }
+
+        /// Builds a batch of mempool transactions
+        fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxRecord> {
+            // filter in half of the new txs from Tendermint, only keeping
+            // wrappers
+            let number_of_new_txs = 1 + txs.len() / 2;
+            txs.into_iter()
+                .take(number_of_new_txs)
+                .map(|tx_bytes| {
+                    if let Ok(Ok(TxType::Wrapper(_))) =
+                        Tx::try_from(tx_bytes.as_slice()).map(process_tx)
+                    {
+                        record::keep(tx_bytes)
+                    } else {
+                        record::remove(tx_bytes)
+                    }
+                })
+                .collect()
+        }
+
+        /// Builds a batch of DKG decrypted transactions
+        fn build_decrypted_txs(&mut self) -> Vec<TxRecord> {
+            // TODO: This should not be hardcoded
+            let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+
+            self.storage
+                .tx_queue
+                .iter()
+                .map(|tx| {
+                    Tx::from(match tx.decrypt(privkey) {
+                        Ok(tx) => DecryptedTx::Decrypted(tx),
+                        _ => DecryptedTx::Undecryptable(tx.clone()),
+                    })
+                    .to_bytes()
+                })
+                .map(record::add)
+                .collect()
+        }
+
+        /// Compresses a set of vote extensions into a single
+        /// [`VoteExtensionDigest`], whilst filtering invalid
+        /// `Signed<VoteExtension>` instances in the process
+        fn compress_vote_extensions(
+            &self,
+            vote_extensions: Vec<ExtendedVoteInfo>,
+        ) -> Option<VoteExtensionDigest> {
+            let events_epoch = self
+                .storage
+                .block
+                .pred_epochs
+                .get_epoch(self.storage.last_height)
+                // TODO: is this `unwrap()` fine?
+                .unwrap();
+
+            let all_vote_extensions =
+                vote_extensions.into_iter().filter_map(|vote| {
+                    let vote_extension =
+                        Signed::<VoteExtension>::try_from_slice(
+                            &vote.vote_extension[..],
+                        )
+                        .map_err(|err| {
+                            tracing::error!(
+                                "Failed to deserialize signed vote extension: \
+                                 {}",
+                                err
+                            );
+                        })
+                        .ok()
+                        .and_then(|ext| {
+                            let ext_height = ext.data.block_height;
+                            let last_height = self.storage.last_height;
+
+                            if ext_height == last_height {
+                                Some(ext)
+                            } else {
+                                tracing::error!(
+                                    "Vote extension issued for a block height \
+                                     {ext_height} different from the last \
+                                     height {last_height}"
+                                );
+                                None
+                            }
+                        })?;
+
+                    let validator = vote.validator.or_else(|| {
+                        tracing::error!("Vote extension has no validator data");
+                        None
+                    })?;
+                    let validator_addr = self
+                        .get_validator_from_tm_address(
+                            &validator.address[..],
+                            Some(events_epoch),
+                        )
+                        .map_err(|err| {
+                            tracing::error!(
+                                "Failed to get an address from Tendermint \
+                                 {:?}: {}",
+                                validator,
+                                err
+                            );
+                        })
+                        .ok()?;
+
+                    // verify signature of the vote extension
+                    let validator_public_key = self
+                        .get_validator_from_address(
+                            &validator_addr,
+                            Some(events_epoch),
+                        )
+                        .map(|(_, validator_public_key)| validator_public_key)
+                        .map_err(|_| {
+                            tracing::error!(
+                                "Could not get public key from Storage for \
+                                 validator {validator_addr}"
+                            );
+                        })
+                        .ok()?;
+
+                    vote_extension
+                        .verify(&validator_public_key)
+                        .map_err(|_| {
+                            tracing::error!(
+                                "Failed to verify the signature of a vote \
+                                 extension issued by {validator_addr}"
+                            );
+                        })
+                        .ok()?;
+
+                    Some((validator_addr, vote_extension))
+                });
+
+            let mut event_observers = BTreeMap::new();
+            let mut signatures = Vec::new();
+
+            let total_voting_power =
+                self.get_total_voting_power(Some(events_epoch)).into();
+            let mut voting_power = 0u64;
+
+            for (validator_addr, vote_extension) in all_vote_extensions {
+                let (validator_voting_power, _) = self
+                    .get_validator_from_address(
+                        &validator_addr,
+                        Some(events_epoch),
+                    )
+                    .expect(
+                        "We already checked that we have a valid Tendermint \
+                         address",
+                    );
+
+                // update voting power
+                voting_power += u64::from(validator_voting_power);
+
+                // register all ethereum events seen by `validator_addr`
+                for ev in vote_extension.data.ethereum_events {
+                    let signers =
+                        event_observers.entry(ev).or_insert_with(HashSet::new);
+
+                    signers.insert(validator_addr.clone());
+                }
+
+                // register the signature of `validator_addr`
+                let addr = validator_addr;
+                let sig = vote_extension.sig;
+
+                signatures.push((sig, addr));
+            }
+
+            let voting_power =
+                FractionalVotingPower::new(voting_power, total_voting_power)
+                    .unwrap();
+
+            if voting_power <= FractionalVotingPower::TWO_THIRDS {
+                tracing::error!(
+                    "Tendermint has decided on a block including vote \
+                     extensions reflecting less than 2/3 of the total stake"
+                );
+                return None;
+            }
+
+            let events = event_observers
+                .into_iter()
+                .map(|(event, signers)| MultiSignedEthEvent { event, signers })
+                .collect();
+
+            Some(VoteExtensionDigest { events, signatures })
         }
     }
 
@@ -114,6 +325,7 @@ mod prepare_block {
     }
 
     #[cfg(test)]
+    // TODO: write tests for ethereum events on prepare proposal
     mod test_prepare_proposal {
         use namada::types::address::xan;
         use namada::types::storage::Epoch;

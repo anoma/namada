@@ -3,12 +3,14 @@ use std::cmp::max;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
+#[cfg(not(feature = "ABCI"))]
+use namada::ledger::pos::namada_proof_of_stake::types::VotingPower
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::PosParams;
 use namada::types::address::Address;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::storage::{Key, PrefixValue};
+use namada::types::storage::{Epoch, Key, PrefixValue};
 use namada::types::token::{self, Amount};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::{ProofOp, ProofOps};
@@ -25,6 +27,28 @@ use tendermint_proto_abci::types::EvidenceParams;
 
 use super::*;
 use crate::node::ledger::response;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(
+        "The address '{:?}' is not among the active validator set for epoch \
+         {1}"
+    )]
+    NotValidatorAddress(Address, Epoch),
+    #[error(
+        "The public key '{0}' is not among the active validator set for epoch \
+         {1}"
+    )]
+    #[allow(dead_code)]
+    NotValidatorKey(String, Epoch),
+    #[error(
+        "The public key hash '{0}' is not among the active validator set for \
+         epoch {1}"
+    )]
+    NotValidatorKeyHash(String, Epoch),
+    #[error("Invalid validator tendermint address")]
+    InvalidTMAddress,
+}
 
 impl<D, H> Shell<D, H>
 where
@@ -299,17 +323,17 @@ where
     pub fn get_validator_from_protocol_pk(
         &self,
         pk: &key::common::PublicKey,
-    ) -> Option<TendermintValidator<EllipticCurve>> {
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<TendermintValidator<EllipticCurve>, Error> {
         let pk_bytes = pk
             .try_to_vec()
             .expect("Serializing public key should not fail");
-        // get the current epoch
-        let (current_epoch, _) = self.storage.get_current_epoch();
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
         // get the active validator set
         self.storage
             .read_validator_set()
-            .get(current_epoch)
-            .expect("Validators for the next epoch should be known")
+            .get(epoch)
+            .expect("Validators for an epoch should be known")
             .active
             .iter()
             .find(|validator| {
@@ -340,6 +364,84 @@ where
                     address: validator.address.to_string(),
                     public_key: dkg_publickey.into(),
                 }
+            })
+            .ok_or_else(|| Error::NotValidatorKey(pk.to_string(), epoch))
+    }
+
+    /// Lookup data about a validator from their address
+    #[cfg(not(feature = "ABCI"))]
+    pub fn get_validator_from_address(
+        &self,
+        address: &Address,
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<(VotingPower, common::PublicKey), Error> {
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        // get the active validator set
+        self.storage
+            .read_validator_set()
+            .get(epoch)
+            .expect("Validators for an epoch should be known")
+            .active
+            .iter()
+            .find(|validator| address == &validator.address)
+            .map(|validator| {
+                let protocol_pk_key = key::protocol_pk_key(&validator.address);
+                let bytes = self
+                    .storage
+                    .read(&protocol_pk_key)
+                    .expect("Validator should have public protocol key")
+                    .0
+                    .expect("Validator should have public protocol key");
+                let protocol_pk: common::PublicKey =
+                    BorshDeserialize::deserialize(&mut bytes.as_ref()).expect(
+                        "Protocol public key in storage should be \
+                         deserializable",
+                    );
+                (validator.voting_power, protocol_pk)
+            })
+            .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))
+    }
+
+    /// Lookup the total voting power for an epoch
+    #[cfg(not(feature = "ABCI"))]
+    #[allow(dead_code)]
+    pub fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
+        // get the current epoch
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        // get the active validator set
+        self.storage
+            .read_validator_set()
+            .get(epoch)
+            .map(|validators| {
+                validators
+                    .active
+                    .iter()
+                    .map(|validator| u64::from(validator.voting_power))
+                    .sum::<u64>()
+                    .into()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Given a tendermint validator, the address is the hash
+    /// of the validators public key. We look up the native
+    /// address from storage using this hash.
+    pub fn get_validator_from_tm_address(
+        &self,
+        tm_address: &[u8],
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<Address, Error> {
+        // get the current epoch
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        let validator_raw_hash = core::str::from_utf8(tm_address)
+            .map_err(|_| Error::InvalidTMAddress)?;
+        self.storage
+            .read_validator_address_raw_hash(&validator_raw_hash)
+            .ok_or_else(|| {
+                Error::NotValidatorKeyHash(
+                    validator_raw_hash.to_string(),
+                    epoch,
+                )
             })
     }
 }
