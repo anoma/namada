@@ -52,6 +52,12 @@ mod extend_votes {
                     ) {
                         VerifyStatus::Accept.into()
                     } else {
+                        tracing::warn!(
+                            ?req.validator_address,
+                            ?req.hash,
+                            req.height,
+                            "received vote extension that didn't validate"
+                        );
                         VerifyStatus::Reject.into()
                     },
                 }
