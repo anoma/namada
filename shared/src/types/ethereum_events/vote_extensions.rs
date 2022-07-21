@@ -10,7 +10,7 @@ use num_rational::Ratio;
 use super::EthereumEvent;
 use crate::proto::Signed;
 use crate::types::address::Address;
-use crate::types::key::common::Signature;
+use crate::types::key::common::{self, Signature};
 use crate::types::storage::BlockHeight;
 
 /// This struct will be created and signed over by each
@@ -31,6 +31,11 @@ impl VoteExtension {
             block_height,
             ethereum_events: Vec::new(),
         }
+    }
+
+    /// Sign a vote extension and return the data with signature
+    pub fn sign(self, signing_key: &common::SecretKey) -> Signed<Self> {
+        Signed::new(signing_key, self)
     }
 }
 
@@ -270,11 +275,11 @@ mod tests {
         };
         let events = vec![
             MultiSignedEthEvent {
-                event: ev_1.clone(),
+                event: ev_1,
                 signers: signers.clone(),
             },
             MultiSignedEthEvent {
-                event: ev_2.clone(),
+                event: ev_2,
                 signers,
             },
         ];
