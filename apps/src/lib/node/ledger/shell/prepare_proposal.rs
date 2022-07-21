@@ -103,9 +103,11 @@ mod prepare_block {
                          VoteExtension, even if no Ethereum events were \
                          observed at a given block height. In fact, signing \
                          an empty VoteExtension commits the fact no events \
-                         were observed by a majority of validators. This \
-                         scenario is virtually impossible, unless every \
-                         validator is Byzantine."
+                         were observed by a majority of validators. Likewise, \
+                         a Tendermint quorum should never decide on a block \
+                         including vote extensions reflecting less than 2/3 \
+                         of the total stake. These scenarios are virtually \
+                         impossible, so we will panic here."
                     ),
                 };
 
