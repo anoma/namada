@@ -13,7 +13,7 @@ mod process_proposal;
 mod queries;
 mod vote_extensions;
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -180,7 +180,7 @@ pub(super) enum ShellMode {
 #[derive(Debug)]
 pub(super) struct EthereumReceiver {
     channel: UnboundedReceiver<EthereumEvent>,
-    queue: Vec<EthereumEvent>,
+    queue: BTreeSet<EthereumEvent>,
 }
 
 impl EthereumReceiver {
@@ -189,7 +189,7 @@ impl EthereumReceiver {
     pub fn new(channel: UnboundedReceiver<EthereumEvent>) -> Self {
         Self {
             channel,
-            queue: vec![],
+            queue: BTreeSet::new(),
         }
     }
 
@@ -197,16 +197,18 @@ impl EthereumReceiver {
     /// Since vote extensions require ordering of ethereum
     /// events, we do that here. We also de-duplicate events
     pub fn fill_queue(&mut self) {
+        let mut new_events = 0;
         while let Ok(eth_event) = self.channel.try_recv() {
-            self.queue.push(eth_event);
+            if self.queue.insert(eth_event) {
+                new_events += 1;
+            };
         }
-        self.queue.sort();
-        self.queue.dedup();
+        tracing::debug!(n = new_events, "received Ethereum events");
     }
 
     /// Get a copy of the queue
     pub fn get_events(&self) -> Vec<EthereumEvent> {
-        self.queue.clone()
+        self.queue.iter().cloned().collect()
     }
 
     /// Given a list of events, remove them from the queue if present
