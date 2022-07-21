@@ -1,4 +1,4 @@
-package = anoma
+package = namada
 
 cargo := $(env) cargo
 rustup := $(env) rustup
@@ -97,27 +97,27 @@ install: tendermint
 	ANOMA_DEV=false $(cargo) install --path ./apps --locked
 
 tendermint:
-	./scripts/install/get_tendermint.sh
+	./scripts/get_tendermint.sh
 
 run-ledger:
 	# runs the node
-	$(cargo) run --bin anoman -- ledger run
+	$(cargo) run --bin namadan -- ledger run
 
 run-ledger-abci-plus-plus:
 	# runs the node
-	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger run
+	$(cargo) run --bin namadan --no-default-features --features "ABCI-plus-plus" -- ledger run
 
 run-gossip:
 	# runs the node gossip node
-	$(cargo) run --bin anoman -- gossip run
+	$(cargo) run --bin namadan -- gossip run
 
 reset-ledger:
 	# runs the node
-	$(cargo) run --bin anoman -- ledger reset
+	$(cargo) run --bin namadan -- ledger reset
 
 reset-ledger-abci-plus-plus:
 	# runs the node
-	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger reset
+	$(cargo) run --bin namadan --no-default-features --features "ABCI-plus-plus" -- ledger reset
 
 audit:
 	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
