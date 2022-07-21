@@ -734,7 +734,7 @@ fn masp_pinned_txs() -> Result<()> {
     )?;
     client.send_line(AB_VIEWING_KEY)?;
     client.exp_string("Supplied viewing key cannot decode transactions to")?;
-    drop(client);
+    client.assert_success();
 
     // Assert PPA(C) has no transaction pinned to it
     let mut client = run!(
@@ -753,7 +753,7 @@ fn masp_pinned_txs() -> Result<()> {
     )?;
     client.send_line(AC_VIEWING_KEY)?;
     client.exp_string("has not yet been consumed")?;
-    drop(client);
+    client.assert_success();
 
     // Send 20 BTC from Albert to PPA(C)
     let mut client = run!(
@@ -775,7 +775,7 @@ fn masp_pinned_txs() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("Transaction is valid")?;
-    drop(client);
+    client.assert_success();
 
     // Assert PPA(C) has the 20 BTC transaction pinned to it
     let mut client = run!(
@@ -794,7 +794,7 @@ fn masp_pinned_txs() -> Result<()> {
     )?;
     client.send_line(AC_VIEWING_KEY)?;
     client.exp_string("Received 20 BTC")?;
-    drop(client);
+    client.assert_success();
 
     // Assert PPA(C) has no XAN pinned to it
     let mut client = run!(
@@ -813,7 +813,7 @@ fn masp_pinned_txs() -> Result<()> {
     )?;
     client.send_line(AC_VIEWING_KEY)?;
     client.exp_string("Received no shielded XAN")?;
-    drop(client);
+    client.assert_success();
 
     // Wait till epoch boundary
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
@@ -835,7 +835,7 @@ fn masp_pinned_txs() -> Result<()> {
     )?;
     client.send_line(AC_VIEWING_KEY)?;
     client.exp_string("Received no shielded XAN")?;
-    drop(client);
+    client.assert_success();
 
     Ok(())
 }
@@ -902,7 +902,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("Transaction is valid")?;
-    drop(client);
+    client.assert_success();
 
     // Assert BTC balance at VK(A) is 20
     let mut client = run!(
@@ -920,7 +920,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("BTC: 20")?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at VK(A) is 0
     let mut client = run!(
@@ -938,7 +938,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("No shielded XAN balance found")?;
-    drop(client);
+    client.assert_success();
 
     let masp_rewards = masp_rewards();
 
@@ -961,7 +961,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("BTC: 20")?;
-    drop(client);
+    client.assert_success();
 
     let amt20 = token::Amount::from_str("20").unwrap();
     let amt30 = token::Amount::from_str("30").unwrap();
@@ -985,7 +985,7 @@ fn masp_incentives() -> Result<()> {
         "XAN: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at MASP pool is 20*BTC_reward*(epoch_1-epoch_0)
     let mut client = run!(
@@ -1006,7 +1006,7 @@ fn masp_incentives() -> Result<()> {
         "XAN: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Wait till epoch boundary
     let ep2 = epoch_sleep(&test, &validator_one_rpc, 720)?;
@@ -1027,7 +1027,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("BTC: 20")?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at VK(A) is 20*BTC_reward*(epoch_2-epoch_0)
     let mut client = run!(
@@ -1048,7 +1048,7 @@ fn masp_incentives() -> Result<()> {
         "XAN: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
     let mut client = run!(
@@ -1069,7 +1069,7 @@ fn masp_incentives() -> Result<()> {
         "XAN: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Wait till epoch boundary
     let ep3 = epoch_sleep(&test, &validator_one_rpc, 720)?;
@@ -1094,7 +1094,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("Transaction is valid")?;
-    drop(client);
+    client.assert_success();
 
     // Assert ETH balance at VK(B) is 30
     let mut client = run!(
@@ -1112,7 +1112,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("ETH: 30")?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at VK(B) is 0
     let mut client = run!(
@@ -1130,7 +1130,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("No shielded XAN balance found")?;
-    drop(client);
+    client.assert_success();
 
     // Wait till epoch boundary
     let ep4 = epoch_sleep(&test, &validator_one_rpc, 720)?;
@@ -1151,7 +1151,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("ETH: 30")?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at VK(B) is 30*ETH_reward*(epoch_4-epoch_3)
     let mut client = run!(
@@ -1172,7 +1172,7 @@ fn masp_incentives() -> Result<()> {
         "XAN: {}",
         (amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0)
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at MASP pool is
     // 20*BTC_reward*(epoch_4-epoch_0)+30*ETH_reward*(epoch_4-epoch_3)
@@ -1195,7 +1195,7 @@ fn masp_incentives() -> Result<()> {
         ((amt20 * masp_rewards[&btc()]).0 * (ep4.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0))
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Wait till epoch boundary
     let ep5 = epoch_sleep(&test, &validator_one_rpc, 720)?;
@@ -1220,7 +1220,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("Transaction is valid")?;
-    drop(client);
+    client.assert_success();
 
     // Assert ETH balance at VK(B) is 0
     let mut client = run!(
@@ -1238,7 +1238,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("No shielded ETH balance found")?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at VK(B) is 30*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
@@ -1259,7 +1259,7 @@ fn masp_incentives() -> Result<()> {
         "XAN: {}",
         (amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at MASP pool is
     // 20*BTC_reward*(epoch_5-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
@@ -1282,7 +1282,7 @@ fn masp_incentives() -> Result<()> {
         ((amt20 * masp_rewards[&btc()]).0 * (ep5.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Wait till epoch boundary
     let ep6 = epoch_sleep(&test, &validator_one_rpc, 720)?;
@@ -1307,7 +1307,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("Transaction is valid")?;
-    drop(client);
+    client.assert_success();
 
     // Assert BTC balance at VK(A) is 0
     let mut client = run!(
@@ -1325,7 +1325,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("No shielded BTC balance found")?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
     let mut client = run!(
@@ -1346,7 +1346,7 @@ fn masp_incentives() -> Result<()> {
         "XAN: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at MASP pool is
     // 20*BTC_reward*(epoch_6-epoch_0)+20*ETH_reward*(epoch_5-epoch_3)
@@ -1369,7 +1369,7 @@ fn masp_incentives() -> Result<()> {
         ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Wait till epoch boundary
     let _ep7 = epoch_sleep(&test, &validator_one_rpc, 720)?;
@@ -1393,7 +1393,7 @@ fn masp_incentives() -> Result<()> {
         "XAN: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at VK(B) is 30*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
@@ -1414,7 +1414,7 @@ fn masp_incentives() -> Result<()> {
         "XAN: {}",
         (amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at MASP pool is
     // 20*BTC_reward*(epoch_6-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
@@ -1437,7 +1437,7 @@ fn masp_incentives() -> Result<()> {
         ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
     ))?;
-    drop(client);
+    client.assert_success();
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
@@ -1463,7 +1463,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("Transaction is valid")?;
-    drop(client);
+    client.assert_success();
 
     // Wait till epoch boundary
     let _ep9 = epoch_sleep(&test, &validator_one_rpc, 720)?;
@@ -1488,7 +1488,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("Transaction is valid")?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at VK(A) is 0
     let mut client = run!(
@@ -1506,7 +1506,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("No shielded XAN balance found")?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at VK(B) is 0
     let mut client = run!(
@@ -1524,7 +1524,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("No shielded XAN balance found")?;
-    drop(client);
+    client.assert_success();
 
     // Assert XAN balance at MASP pool is 0
     let mut client = run!(
@@ -1542,7 +1542,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string("XAN: 0")?;
-    drop(client);
+    client.assert_success();
 
     Ok(())
 }
