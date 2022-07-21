@@ -8,6 +8,11 @@ mod extend_votes {
 
     type SignedExt = Signed<VoteExtension>;
 
+    pub enum ValidateVoteExtensionResult {
+        Success,
+        Failure { reason: String },
+    }
+
     impl<D, H> Shell<D, H>
     where
         D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -45,20 +50,24 @@ mod extend_votes {
                 SignedExt::try_from_slice(&req.vote_extension[..])
             {
                 response::VerifyVoteExtension {
-                    status: if self.validate_vote_extension(
+                    status: match self.validate_vote_extension(
                         signed,
                         validator_addr,
                         self.storage.last_height + 1,
                     ) {
-                        VerifyStatus::Accept.into()
-                    } else {
-                        tracing::warn!(
-                            ?req.validator_address,
-                            ?req.hash,
-                            req.height,
-                            "received vote extension that didn't validate"
-                        );
-                        VerifyStatus::Reject.into()
+                        ValidateVoteExtensionResult::Success => {
+                            VerifyStatus::Accept.into()
+                        }
+                        ValidateVoteExtensionResult::Failure { reason } => {
+                            tracing::warn!(
+                                ?req.validator_address,
+                                ?req.hash,
+                                ?reason,
+                                req.height,
+                                "received vote extension that didn't validate"
+                            );
+                            VerifyStatus::Reject.into()
+                        }
                     },
                 }
             } else {
@@ -85,21 +94,53 @@ mod extend_votes {
             ext: SignedExt,
             tm_address: &[u8],
             height: BlockHeight,
-        ) -> bool {
+        ) -> ValidateVoteExtensionResult {
             let epoch = self.storage.block.pred_epochs.get_epoch(height);
             // get the validator that issued this vote extension
-            // this should not fail
             let validator =
                 match self.get_validator_from_tm_address(tm_address, epoch) {
                     Ok(address) => address,
-                    _ => return false,
+                    Err(err) => {
+                        return ValidateVoteExtensionResult::Failure {
+                            reason: format!(
+                                "couldn't get validator address: {:?}",
+                                err
+                            ),
+                        };
+                    }
                 };
             // get the public key associated with this validator
             let pk = match self.get_validator_from_address(&validator, epoch) {
                 Ok((_, pk)) => pk,
-                _ => return false,
+                Err(err) => {
+                    return ValidateVoteExtensionResult::Failure {
+                        reason: format!(
+                            "couldn't get public key for validator: {:?}",
+                            err
+                        ),
+                    };
+                }
             };
-            ext.verify(&pk).is_ok() && ext.data.block_height == height
+            if let Err(err) = ext.verify(&pk) {
+                return ValidateVoteExtensionResult::Failure {
+                    reason: format!(
+                        "signature failed verification against public key: \
+                         {:?}",
+                        err
+                    ),
+                };
+            }
+            if ext.data.block_height != height {
+                return ValidateVoteExtensionResult::Failure {
+                    reason: format!(
+                        "vote extension block height {} didn't match \
+                         specified height {}",
+                        ext.data.block_height, height
+                    ),
+                };
+            }
+
+            ValidateVoteExtensionResult::Success
         }
 
         /// Checks the channel from the Ethereum oracle monitoring
@@ -136,6 +177,7 @@ mod extend_votes {
 
         use super::SignedExt;
         use crate::node::ledger::shell::test_utils::*;
+        use crate::node::ledger::shell::vote_extensions::ValidateVoteExtensionResult;
         use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
         /// Test that we successfully receive ethereum events
@@ -347,10 +389,13 @@ mod extend_votes {
 
             let tm_address =
                 address.raw_hash().expect("Test failed").as_bytes().to_vec();
-            assert!(shell.validate_vote_extension(
-                vote_ext,
-                &tm_address,
-                signed_height
+            assert!(matches!(
+                shell.validate_vote_extension(
+                    vote_ext,
+                    &tm_address,
+                    signed_height
+                ),
+                ValidateVoteExtensionResult::Success
             ));
         }
 

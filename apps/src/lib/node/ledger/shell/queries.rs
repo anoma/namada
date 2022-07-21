@@ -1,5 +1,6 @@
 //! Shell methods for querying state
 use std::cmp::max;
+use std::str::Utf8Error;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
@@ -47,7 +48,7 @@ pub enum Error {
     )]
     NotValidatorKeyHash(String, Epoch),
     #[error("Invalid validator tendermint address")]
-    InvalidTMAddress,
+    InvalidTMAddress(#[from] Utf8Error),
 }
 
 impl<D, H> Shell<D, H>
@@ -436,7 +437,7 @@ where
         // get the current epoch
         let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
         let validator_raw_hash = core::str::from_utf8(tm_address)
-            .map_err(|_| Error::InvalidTMAddress)?;
+            .map_err(|err| Error::InvalidTMAddress(err))?;
         self.storage
             .read_validator_address_raw_hash(&validator_raw_hash)
             .ok_or_else(|| {
