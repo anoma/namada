@@ -122,110 +122,6 @@ of the pool. The client needs the capability to create notes,
 transactions, and proofs of transactions, but it has the advantage of
 simply being able to link against the MASP crates, unlike the VP.
 
-### Shielded Address/Key Generation
-#### Spending Key Generation
-The client should be able to generate a spending key and automatically
-derive a viewing key for it. The spending key should be usable as the
-source of a transfer. The viewing key should be usable to determine the
-total unspent notes that the spending key is authorized to spend. It
-should not be possible to directly or indirectly use the viewing key to
-spend funds. Below is an example of how spending keys should be
-generated:
-```
-anomaw --masp gen-key --alias my-sk
-```
-#### Payment Address Generation
-The client should be able to generate a payment address from a
-spending key or viewing key. This payment address should be usable
-to send notes to the originating spending key. It should not be
-directly or indirectly usable to either spend notes or view shielded
-balances. Below are examples of how payment addresses should be
-generated:
-```
-anomaw masp gen-addr --alias my-pa1 --key my-sk
-anomaw masp gen-addr --alias my-pa2 --key my-vk
-```
-#### Manual Key/Address Addition
-The client should be able to directly add raw spending keys, viewing
-keys, and payment addresses. Below are examples of how these objects
-should be added:
-```
-anomaw masp add --alias my-sk --value xsktest1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu69au6gn3su5ewneas486hdccyayx32hxvt64p3d0hfuprpgcgv2q9gdx3jvxrn02f0nnp3jtdd6f5vwscfuyum083cvfv4jun75ak5sdgrm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcvedhsv
-anomaw masp add --alias my-vk --value xfvktest1qqqqqqqqqqqqqqpagte43rsza46v55dlz8cffahv0fnr6eqacvnrkyuf9lmndgal7erg38awgq60r259csg3lxeeyy5355f5nj3ywpeqgd2guqd73uxz46645d0ayt9em88wflka0vsrq29u47x55psw93ly80lvftzdr5ccrzuuedtf6fala4r4nnazm9y9hq5yu6pq24arjskmpv4mdgfn3spffxxv8ugvym36kmnj45jcvvmm227vqjm5fq8882yhjsq97p7xrwqt7n63v
-anomaw masp add --alias my-pa --value patest10qy6fuwef9leccl6dfm7wwlyd336x4y32hz62cnrvlrl6r5yk0jnw80kus33x34a5peg2xc4csn
-```
-### Making Shielded Transactions
-#### Shielding Transactions
-The client should be able to make shielding transactions by providing a
-transparent source address and a shielded payment address. The
-main transparent effect of such a transaction should be a deduction of
-the specified amount from the source address, and a corresponding
-increase in the balance of the MASP validity predicate's address. The
-gas fee is charged to the source address. Once the transaction is
-completed, the spending key that was used to generate the payment address
-will have the authority to spend the amount that was send. Below is an
-example of how a shielding transacion should be made:
-```
-anomac transfer --source Bertha --amount 50 --token BTC --target my-pa
-```
-#### Unshielding Transactions
-The client should be able to make unshielding transactions by providing
-a shielded spending key and a transparent target address. The main
-transparent effect of such a transaction should be a deduction of the
-specified amount from the MASP validity predicate's address and a
-corresponding increase in the transparent target address. The gas fee
-is charged to the signer's address (which should default to the target
-address). Once the transaction is complete, the spending key will no
-longer be able to spend the transferred amount. Below is an example of
-how an unshielding transaction should be made:
-```
-anomac transfer --target Bertha --amount 45 --token BTC --source my-sk
-```
-#### Shielded Transactions
-The client should be able to make shielded transactions by providing a
-shielded spending key and a shielded payment address. There should be
-no change in the transparent balance of the MASP validity predicate's
-address. The gas fee is charged to the signer's address. Once the
-transaction is complete, the spending key will no longer be able to
-spend the transferred amount, but the spending key that was used to
-(directly or indirectly) generate the payment address will. Below is
-an example of how a shielded transaction should be made:
-```
-anomac transfer --source my-sk --amount 5 --token BTC --target your-pa
-```
-### Viewing Shielded Balances
-The client should be able to view shielded balances. The most
-general output should be a list of pairs, each denoting a token
-type and the unspent amount of that token present at each shielded
-address whose viewing key is represented in the wallet. Note that
-it should be possible to restrict the balance query to check only
-a specific viewing key or for a specific token type. Below are
-examples of how balance queries should be made:
-```
-anomac balance
-anomac balance --owner my-key
-anomac balance --owner my-key --token BTC
-anomac balance --token BTC
-```
-### Listing Shielded Keys/Addresses
-The wallet should be able to list all the spending keys, viewing keys,
-and payment addresses that it stores. Below are examples of how the
-wallet's storage should be queried:
-```
-anomaw masp list-keys
-anomaw masp list-keys --unsafe-show-secret
-anomaw masp list-keys --unsafe-show-secret --decrypt
-anomaw masp list-addrs
-```
-### Finding Shielded Keys/Addresses
-The wallet should be able to find any spending key, viewing key or
-payment address when given its alias. Below are examples of how the
-wallet's storage should be queried:
-```
-anomaw masp find --alias my-alias
-anomaw masp find --alias my-alias --unsafe-show-secret
-```
-
 ## Protocol
 
 ### Note Format
@@ -338,6 +234,8 @@ pub struct Transfer {
     pub token: Address,
     /// The amount of tokens
     pub amount: Amount,
+    /// The unused storage location at which to place TxId
+    pub key: Option<String>,
     /// Shielded transaction part
     pub shielded: Option<Transaction>,
 }
@@ -350,6 +248,8 @@ Below, the conditions necessary for a valid shielded or unshielded transfer are 
   * the `Transfer` must satisfy the usual conditions for Anoma ledger transfers (i.e. sufficient funds, ...) as enforced by token and account validity predicates
   * the `Transaction` must satisfy the conditions specified in the [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/anoma/masp/main/docs/multi-asset-shielded-pool.pdf)
   * the `Transaction` and `Transfer` together must additionaly satisfy the below boundary conditions intended to ensure consistency between the MASP validity predicate ledger and Anoma ledger
+* A key equal to `None` indicates an unpinned shielded transaction; one that can only be found by scanning and trial-decrypting the entire shielded pool
+* Otherwise the key must have the form `Some(x)` where `x` is a `String` such that there exists no prior accepted transaction with the same key
 
 ### Boundary Conditions
 Below, the conditions necessary to maintain consistency between the MASP validity predicate ledger and Anoma ledger are outlined:
@@ -359,7 +259,9 @@ Below, the conditions necessary to maintain consistency between the MASP validit
     * its public key must be the hash of the target address bytes - this prevents replay attacks altering transfer destinations
       * the hash is specifically a RIPEMD-160 of a SHA-256 of the input bytes
     * its value must equal that of the containing transfer - this prevents replay attacks altering transfer amounts
-    * its asset type must be derived from the token address raw bytes - this prevents replay attacks altering transfer asset types
+    * its asset type must be derived from the token address raw bytes and the current epoch once Borsh serialized from the type `(Address, Epoch)`:
+      * the dependency on the address prevents replay attacks altering transfer asset types
+      * the current epoch requirement prevents attackers from claiming extra rewards by forging the time when they began to receive rewards
       * the derivation must be done as specified in `0.3 Derivation of Asset Generator from Asset Identifer`
 * If the source address is the MASP validity predicate, then:
   * no transparent inputs are permitted in the shielded transaction
@@ -369,7 +271,9 @@ Below, the conditions necessary to maintain consistency between the MASP validit
 * If the source address is not the MASP validity predicate, then:
   * there must be exactly one transparent input in the shielded transaction and:
     * its value must equal that of amount in the containing transfer - this prevents stealing/losing funds from/to the pool
-    * its asset type must be derived from the token address raw bytes - this prevents stealing/losing funds from/to the pool
+    * its asset type must be derived from the token address raw bytes and the current epoch once Borsh serialized from the type `(Address, Epoch)`:
+      * the address dependency prevents stealing/losing funds from/to the pool
+      * the current epoch requirement ensures that withdrawers receive their full reward when leaving the shielded pool
       * the derivation must be done as specified in `0.3 Derivation of Asset Generator from Asset Identifer`
 
 ## Remarks
@@ -378,9 +282,12 @@ Below are miscellaneous remarks on the capabilities and limitations of the curre
   * As a consequence, an amount exceeding the gas fees must be available in a transparent account in order to execute an unshielding transaction - this prevents denial of service attacks
 * Using the MASP sentinel transaction key for transaction signing indicates that gas be drawn from the transaction's transparent value pool
   * In this case, the gas will be taken from the MASP transparent address if the shielded transaction is proven to be valid
+* With knowledge of its key, a pinned shielded transaction can be directly downloaded or proven non-existent without scanning the entire blockchain
+  * It is recommended that pinned transaction's key be derived from the hash of its payment address, something that both transaction parties would share
+  * This key must not be reused, this is in order to avoid revealing that multiple transactions are going to the same entity
 
 ## Multi-Asset Shielded Pool Specification Differences from Zcash Protocol Specification
-The [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/anoma/masp/main/docs/multi-asset-shielded-pool.pdf) referenced above is in turn an extension to the [Zcash Protocol Specification](https://zips.z.cash/protocol/protocol.pdf). Below, the changes from the Zcash Protocol Specification assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
+The [Multi-Asset Shielded Pool Specication](https://media.githubusercontent.com/media/anoma/masp/main/docs/multi-asset-shielded-pool.pdf) referenced above is in turn an extension to the [Zcash Protocol Specification](https://zips.z.cash/protocol/protocol.pdf). Below, the changes from the Zcash Protocol Specification assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
 * [3.2 Notes](https://zips.z.cash/protocol/protocol.pdf#notes)
   * Sapling note tuple must include asset type
   * Note commitment must be parameterized by asset type
@@ -398,6 +305,7 @@ The [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/an
   * `NoteCommit` and hence `cm` must be parameterized by asset type
   * `ValueCommit` and hence `cv` must be parameterized by asset type
 * [4.13 Balance and Binding Signature (Sapling)](https://zips.z.cash/protocol/protocol.pdf#saplingbalance)
+  * The Sapling balance value is now defined as the net value of Spend and [Convert](#convert-descriptions) transfers minus Output transfers.
   * The Sapling balance value is no longer a scalar but a vector of pairs comprising values and asset types
   * Addition, subtraction, and equality checks of Sapling balance values is now done component-wise
   * A Sapling balance value is defined to be non-negative iff each of its components is non-negative
@@ -427,9 +335,52 @@ The [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/an
     * a length `nValueBalanceSapling` sequence of 40 byte values where:
       * the first 32 bytes encode the asset type
       * the last 8 bytes are an `int64` encoding asset value
+  * In between `vSpendsSapling` and `nOutputsSapling` are two additional rows:
+    * First row:
+      * Bytes: Varies
+      * Name: nConvertsMASP
+      * Data Type: compactSize
+      * Description: The number of Convert descriptions in vConvertsMASP
+    * Second row:
+      * Bytes: 64*nConvertsMASP
+      * Name: vConvertsMASP
+      * Data Type: ConvertDescription[nConvertsMASP]
+      * Description: A sequence of Convert descriptions, encoded as described in the following section.
 * [7.4 Output Description Encoding and Consensus](https://zips.z.cash/protocol/protocol.pdf#outputencodingandconsensus)
   * The `encCiphertext` field must be 612 bytes in order to make 32 bytes room to encode the asset type
 
+### Additional Sections
+In addition to the above components of shielded transactions inherited from Zcash, we have the following:
+#### Convert Descriptions
+Each transaction includes a sequence of zero or more Convert descriptions.
+
+Let `ValueCommit.Output` be as defined in [4.1.8](https://zips.z.cash/protocol/protocol.pdf#abstractcommit) Commitment.
+Let `B[Sapling Merkle]` be as defined in [5.3](https://zips.z.cash/protocol/protocol.pdf#constants) Constants.
+Let `ZKSpend` be as defined in [4.1.13](https://zips.z.cash/protocol/protocol.pdf#abstractzk) Zero-Knowledge Proving System.
+
+A convert description comprises `(cv, rt, pi)` where
+* `cv: ValueCommit.Output` is value commitment to the value of the conversion note
+* `rt: B[Sapling Merkle]` is an anchor for the current conversion tree or an archived conversion tree
+* `pi: ZKConvert.Proof` is a zk-SNARK proof with primary input `(rt, cv)` for the Convert statement defined at [Burn and Mint conversion transactions in MASP](./burn-and-mint.md).
+#### Convert Description Encoding
+Let `pi_{ZKConvert}` be the zk-SNARK proof of the corresponding Convert statement. `pi_{ZKConvert}` is encoded in the `zkproof` field of the Convert description.
+
+An abstract Convert description, as described above, is encoded in a transaction as an instance of a `ConvertDescription` type:
+* First Entry
+  * Bytes: 32
+  * Name: `cv`
+  * Data Type: `byte[32]`
+  * Description: A value commitment to the value of the conversion note, `LEBS2OSP_256(repr_J(cv))`.
+* Second Entry
+  * Bytes: 32
+  * Name: `anchor`
+  * Data Type: `byte[32]`
+  * Description: A root of the current conversion tree or an archived conversion tree, `LEBS2OSP_256(rt^Sapling)`.
+* Third Entry
+  * Bytes: 192
+  * Name: `zkproof`
+  * Data Type: `byte[192]`
+  * Description: An encoding of the zk-SNARK proof `pi_{ZKConvert}` (see [5.4.10.2](https://zips.z.cash/protocol/protocol.pdf#groth) `Groth16`).
 ## Required Changes to ZIP 32: Shielded Hierarchical Deterministic Wallets
 Below, the changes from [ZIP 32: Shielded Hierarchical Deterministic Wallets](https://zips.z.cash/zip-0032) assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
 * [Specification: Key Encodings](https://zips.z.cash/zip-0032#specification-key-encodings)
@@ -438,3 +389,42 @@ Below, the changes from [ZIP 32: Shielded Hierarchical Deterministic Wallets](ht
   * For extended spending keys on the Testnet, the Human-Readable Part is "xsktest"
 * [Sapling extended full viewing keys](https://zips.z.cash/zip-0032#sapling-extended-full-viewing-keys)
   * For extended full viewing keys on the Testnet, the Human-Readable Part is "xfvktest"
+
+# Storage Interface Specification
+Anoma nodes provide interfaces that allow Anoma clients to query for specific pinned transactions, transactions accepted into the shielded pool, and allowed conversions between various asset types. Below we describe the ABCI paths and the encodings of the responses to each type of query.
+
+## Shielded Transfer Query
+In order to determine shielded balances belonging to particular keys or spend one's balance, it is necessary to download the transactions that transferred the assets to you. To this end, the nth transaction in the shielded pool can be obtained by getting the value at the storage path `<MASP-address>/tx-<n>`. Note that indexing is 0-based. This will return a quadruple of the type below:
+
+```
+(
+    /// the epoch of the transaction's block
+    Epoch,
+    /// the height of the transaction's block
+    BlockHeight,
+    /// the index of the transaction within the block
+    TxIndex,
+    /// the actual bytes of the transfer
+    Transfer
+)
+```
+`Transfer` is defined as above and `(Epoch, BlockHeight, TxIndex) = (u64, u64, u32)`.
+## Transaction Count Query
+When scanning the shielded pool, it is sometimes useful know when to stop scanning. This can be done by querying the storage path `head-tx`, which will return a `u64` indicating the total number of transactions in the shielded pool.
+## Pinned Transfer Query
+A transaction pinned to the key `x` in the shielded pool can be obtained indirectly by getting the value at the storage path `<MASP address>/pin-<x>`. This will return the index of the desired transaction within the shielded pool encoded as a `u64`. At this point, the above shielded transaction query can then be used to obtain the actual transaction bytes.
+## Conversion Query
+In order for MASP clients to convert older asset types to their latest variants, they need to query nodes for currently valid conversions. This can be done by querying the ABCI path `conv/<asset-type>` where `asset-type` is a hexadecimal encoding of the asset identifier as defined in [Multi-Asset Shielded Pool Specication](https://media.githubusercontent.com/media/anoma/masp/main/docs/multi-asset-shielded-pool.pdf).  This will return a quadruple of the type below:
+```
+(
+    /// the token address of this asset type
+    Address,
+    /// the epoch of this asset type
+    Epoch,
+    /// the amount to be treated as equivalent to zero
+    Amount,
+    /// the Merkle path to this conversion
+    MerklePath<Node>
+)
+```
+If no conversions are available the amount will be exactly zero, otherwise the amount must contain negative units of the queried asset type.
