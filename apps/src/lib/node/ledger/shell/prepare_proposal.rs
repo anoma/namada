@@ -161,7 +161,23 @@ mod prepare_block {
                                 err
                             );
                         })
-                        .ok()?;
+                        .ok()
+                        .and_then(|ext| {
+                            let ext_height = ext.data.block_height;
+                            let last_height = self.storage.last_height;
+
+                            if ext_height == last_height {
+                                Some(ext)
+                            } else {
+                                tracing::error!(
+                                    "Vote extension issued for a block height \
+                                     {ext_height} different from the last \
+                                     height {last_height}"
+                                );
+                                None
+                            }
+                        })?;
+
                     let validator = vote.validator.or_else(|| {
                         tracing::error!("Vote extension has no validator data");
                         None
@@ -199,10 +215,6 @@ mod prepare_block {
 
                     Some((validator_addr, vote_extension))
                 });
-
-            // TODO:
-            // [x] verify 2/3 stake of vote_extension
-            // [ ] verify block height of vote_extension
 
             let mut event_observers = BTreeMap::new();
             let mut signatures = Vec::new();
