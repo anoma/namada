@@ -343,6 +343,35 @@ mod prepare_block {
             );
         }
 
+        /// Returns a tuple with the Tendermint validator address and the
+        /// Namada protocol key.
+        fn get_validator_keys() -> (Vec<u8>, common::SecretKey) {
+            let validator_tm_addr = {
+                let consensus_key = wallet::defaults::validator_keypair();
+                let common::PublicKey::Ed25519(ed25519::PublicKey(public_key)) =
+                    consensus_key.ref_to();
+                let Hash(raw_hash) = Hash::sha256(public_key.as_bytes());
+                (&raw_hash[..20]).to_vec()
+            };
+            let (protocol_key, _) = wallet::defaults::validator_keys();
+            (validator_tm_addr, protocol_key)
+        }
+
+        /// Serialize a [`SignedExt`] to an [`ExtendedVoteInfo`]
+        fn vote_extension_serialize(
+            tm_addr: Vec<u8>,
+            vext: SignedExt,
+        ) -> ExtendedVoteInfo {
+            ExtendedVoteInfo {
+                vote_extension: vext.try_to_vec().unwrap(),
+                validator: Some(Validator {
+                    address: tm_addr,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        }
+
         /// Test if we are filtering out vote extensinos with bad
         /// signatures in a prepare proposal.
         #[test]
@@ -354,14 +383,7 @@ mod prepare_block {
             // artificially change the block height
             shell.storage.last_height = LAST_HEIGHT;
 
-            // tendermint address
-            let validator_tm_addr = {
-                let consensus_key = wallet::defaults::validator_keypair();
-                let common::PublicKey::Ed25519(ed25519::PublicKey(public_key)) =
-                    consensus_key.ref_to();
-                let Hash(raw_hash) = Hash::sha256(public_key.as_bytes());
-                (&raw_hash[..20]).to_vec()
-            };
+            let (validator_tm_addr, _) = get_validator_keys();
 
             let signed_vote_extension = {
                 // create a fake signature
@@ -376,16 +398,10 @@ mod prepare_block {
 
                 SignedExt { sig, data }
             };
-            let vote = ExtendedVoteInfo {
-                vote_extension: signed_vote_extension.try_to_vec().unwrap(),
-                validator: Some(Validator {
-                    address: validator_tm_addr,
-                    ..Default::default()
-                }),
-                ..Default::default()
-            };
-
-            let votes = vec![vote];
+            let votes = vec![vote_extension_serialize(
+                validator_tm_addr,
+                signed_vote_extension,
+            )];
             let filtered_votes: Vec<_> =
                 shell.filter_invalid_vote_extensions(votes).collect();
 
@@ -397,40 +413,27 @@ mod prepare_block {
         #[test]
         fn test_prepare_proposal_filter_out_bad_vext_bheights() {
             const LAST_HEIGHT: BlockHeight = BlockHeight(3);
-            const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
+            const PRED_LAST_HEIGHT: BlockHeight =
+                BlockHeight(LAST_HEIGHT.0 - 1);
 
             let (mut shell, _, _) = test_utils::setup();
 
             // artificially change the block height
             shell.storage.last_height = LAST_HEIGHT;
 
-            // tendermint address
-            let validator_tm_addr = {
-                let consensus_key = wallet::defaults::validator_keypair();
-                let common::PublicKey::Ed25519(ed25519::PublicKey(public_key)) =
-                    consensus_key.ref_to();
-                let Hash(raw_hash) = Hash::sha256(public_key.as_bytes());
-                (&raw_hash[..20]).to_vec()
-            };
+            let (validator_tm_addr, protocol_key) = get_validator_keys();
 
             let signed_vote_extension = {
-                let (protocol_key, _) = wallet::defaults::validator_keys();
                 VoteExtension {
                     block_height: PRED_LAST_HEIGHT,
                     ethereum_events: vec![],
                 }
                 .sign(&protocol_key)
             };
-            let vote = ExtendedVoteInfo {
-                vote_extension: signed_vote_extension.try_to_vec().unwrap(),
-                validator: Some(Validator {
-                    address: validator_tm_addr,
-                    ..Default::default()
-                }),
-                ..Default::default()
-            };
-
-            let votes = vec![vote];
+            let votes = vec![vote_extension_serialize(
+                validator_tm_addr,
+                signed_vote_extension,
+            )];
             let filtered_votes: Vec<_> =
                 shell.filter_invalid_vote_extensions(votes).collect();
 
@@ -442,13 +445,13 @@ mod prepare_block {
         // TODO: finish this
         #[test]
         fn test_prepare_proposal_vext_normal_op() {
-            //let shell: TestShell = todo!();
-            //let votes = todo!();
-            //let req = RequestPrepareProposal {
-            //    local_last_commit: Some(ExtendedCommitInfo { round: 0, votes }),
-            //    ..Default::default()
+            // let shell: TestShell = todo!();
+            // let votes = todo!();
+            // let req = RequestPrepareProposal {
+            //    local_last_commit: Some(ExtendedCommitInfo { round: 0, votes
+            // }),    ..Default::default()
             //};
-            //let rsp = shell.prepare_proposal(req);
+            // let rsp = shell.prepare_proposal(req);
         }
 
         /// Test that if an error is encountered while
