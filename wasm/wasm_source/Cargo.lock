@@ -1574,6 +1574,7 @@ dependencies = [
  "hex",
  "namada",
  "namada_macros",
+ "num-rational",
 ]
 
 [[package]]
