@@ -231,8 +231,6 @@ impl From<Amount> for Change {
 
 /// Key segment for a balance key
 pub const BALANCE_STORAGE_KEY: &str = "balance";
-/// Key segment for a multitoken
-pub const MULTITOKEN_STORAGE_KEY: &str = "multitoken";
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
@@ -303,21 +301,8 @@ pub fn is_multitoken_balance_key<'a>(
     key: &'a Key,
 ) -> Option<(Key, &'a Address)> {
     match key.segments.first() {
-        Some(DbKeySeg::AddressSeg(addr)) if addr == token_addr => {}
-        _ => return None,
-    }
-    let len = key.segments.len();
-    match key.get_at(len - 2) {
-        Some(DbKeySeg::StringSeg(balance))
-            if balance == BALANCE_STORAGE_KEY => {}
-        _ => return None,
-    }
-    match key.segments.last() {
-        Some(DbKeySeg::AddressSeg(owner)) => {
-            let sub_prefix = Key {
-                segments: key.segments[1..(len - 2)].to_vec(),
-            };
-            Some((sub_prefix, owner))
+        Some(DbKeySeg::AddressSeg(addr)) if addr == token_addr => {
+            multitoken_balance_owner(key)
         }
         _ => None,
     }
@@ -327,13 +312,13 @@ pub fn is_multitoken_balance_key<'a>(
 /// token. If it is, returns the sub prefix and the owner.
 pub fn is_any_multitoken_balance_key(key: &Key) -> Option<(Key, &Address)> {
     match key.segments.first() {
-        Some(DbKeySeg::AddressSeg(_)) => {}
-        _ => return None,
+        Some(DbKeySeg::AddressSeg(_)) => multitoken_balance_owner(key),
+        _ => None,
     }
+}
+
+fn multitoken_balance_owner(key: &Key) -> Option<(Key, &Address)> {
     let len = key.segments.len();
-    if len <= 3 {
-        return None;
-    }
     match key.get_at(len - 2) {
         Some(DbKeySeg::StringSeg(balance))
             if balance == BALANCE_STORAGE_KEY =>
@@ -374,9 +359,7 @@ pub struct Transfer {
     /// Token's address
     pub token: Address,
     /// Source token's sub prefix
-    pub source_sub_prefix: Option<Key>,
-    /// Target token's sub prefix
-    pub target_sub_prefix: Option<Key>,
+    pub sub_prefix: Option<Key>,
     /// The amount of tokens
     pub amount: Amount,
 }

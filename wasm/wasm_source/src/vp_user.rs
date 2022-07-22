@@ -413,7 +413,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
             tx_host_env::token::transfer(
-                &source, address, &token, None, None, amount,
+                &source, address, &token, None, amount,
             );
         });
 
@@ -448,7 +448,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
             tx_host_env::token::transfer(
-                address, &target, &token, None, None, amount,
+                address, &target, &token, None, amount,
             );
         });
 
@@ -487,7 +487,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
             tx_host_env::token::transfer(
-                address, &target, &token, None, None, amount,
+                address, &target, &token, None, amount,
             );
         });
 
@@ -527,7 +527,7 @@ mod tests {
             tx_host_env::insert_verifier(address);
             // Apply transfer in a transaction
             tx_host_env::token::transfer(
-                &source, &target, &token, None, None, amount,
+                &source, &target, &token, None, amount,
             );
         });
 

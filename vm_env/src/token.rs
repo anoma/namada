@@ -78,22 +78,21 @@ pub mod tx {
         src: &Address,
         dest: &Address,
         token: &Address,
-        src_sub_prefix: Option<Key>,
-        dest_sub_prefix: Option<Key>,
+        sub_prefix: Option<Key>,
         amount: Amount,
     ) {
-        let src_key = match src_sub_prefix {
-            Some(sub_preifx) => {
+        let src_key = match &sub_prefix {
+            Some(sub_prefix) => {
                 let prefix =
-                    token::multitoken_balance_prefix(token, &sub_preifx);
+                    token::multitoken_balance_prefix(token, sub_prefix);
                 token::multitoken_balance_key(&prefix, src)
             }
             None => token::balance_key(token, src),
         };
-        let dest_key = match dest_sub_prefix {
-            Some(sub_preifx) => {
+        let dest_key = match &sub_prefix {
+            Some(sub_prefix) => {
                 let prefix =
-                    token::multitoken_balance_prefix(token, &sub_preifx);
+                    token::multitoken_balance_prefix(token, sub_prefix);
                 token::multitoken_balance_key(&prefix, dest)
             }
             None => token::balance_key(token, dest),
