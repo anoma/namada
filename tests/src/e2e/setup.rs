@@ -197,7 +197,7 @@ pub fn network(
 
     Ok(Test {
         working_dir,
-        base_dir,
+        test_dir: base_dir,
         net,
         genesis,
     })
@@ -214,7 +214,7 @@ pub enum Bin {
 #[derive(Debug)]
 pub struct Test {
     pub working_dir: PathBuf,
-    pub base_dir: TempDir,
+    pub test_dir: TempDir,
     pub net: Network,
     pub genesis: GenesisConfig,
 }
@@ -227,7 +227,7 @@ impl Drop for Test {
         };
         if keep_temp {
             if cfg!(any(unix, target_os = "redox", target_os = "wasi")) {
-                let path = mem::replace(&mut self.base_dir, tempdir().unwrap());
+                let path = mem::replace(&mut self.test_dir, tempdir().unwrap());
                 println!(
                     "{}: \"{}\"",
                     "Keeping temporary directory at".underline().yellow(),
@@ -369,9 +369,9 @@ impl Test {
 
     pub fn get_base_dir(&self, who: &Who) -> PathBuf {
         match who {
-            Who::NonValidator => self.base_dir.path().to_owned(),
+            Who::NonValidator => self.test_dir.path().to_owned(),
             Who::Validator(index) => self
-                .base_dir
+                .test_dir
                 .path()
                 .join(self.net.chain_id.as_str())
                 .join(utils::NET_ACCOUNTS_DIR)
