@@ -118,10 +118,9 @@ mod extend_votes {
                 .get_validator_from_tm_address(tm_address, epoch)
                 .map_err(|err| {
                     tracing::error!(
-                        "Failed to get an address from Tendermint validator \
-                         {:?}: {}",
-                        tm_address,
-                        err
+                        ?err,
+                        ?tm_address,
+                        "Failed to get an address from Tendermint validator",
                     );
                 })
                 .ok()?;
