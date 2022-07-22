@@ -18,16 +18,11 @@ mod extend_votes {
             &mut self,
             _req: request::ExtendVote,
         ) -> response::ExtendVote {
-            let validator_addr = match self.mode.get_validator_address() {
-                Some(validator_addr) => validator_addr.to_owned(),
-                None => {
-                    tracing::warn!(
-                        "couldn't get validator address, returning empty vote \
-                         extension"
-                    );
-                    return response::ExtendVote::default();
-                }
-            };
+            let validator_addr = self
+                .mode
+                .get_validator_address()
+                .expect("only validators should receive this method call")
+                .to_owned();
             let ext = VoteExtension {
                 block_height: self.storage.last_height + 1,
                 ethereum_events: self.new_ethereum_events(),
