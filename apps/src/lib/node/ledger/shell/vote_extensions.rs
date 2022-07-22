@@ -144,6 +144,7 @@ mod extend_votes {
                         %validator,
                         "Failed to verify the signature of a vote extension issued by validator"
                     );
+                })
                 .ok()
                 .map(|_| (validator, ext))
         }
