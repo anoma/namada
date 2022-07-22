@@ -377,6 +377,19 @@ mod prepare_block {
             }
         }
 
+        /// Check if we are filtering out an invalid vote extension `vext`
+        fn check_vote_extension_filtering(
+            shell: &mut TestShell,
+            tm_addr: Vec<u8>,
+            vext: SignedExt,
+        ) {
+            let votes = vec![vote_extension_serialize(tm_addr, vext)];
+            let filtered_votes: Vec<_> =
+                shell.filter_invalid_vote_extensions(votes).collect();
+
+            assert_eq!(filtered_votes, vec![]);
+        }
+
         /// Test if we are filtering out vote extensinos with bad
         /// signatures in a prepare proposal.
         #[test]
@@ -403,14 +416,12 @@ mod prepare_block {
 
                 SignedExt { sig, data }
             };
-            let votes = vec![vote_extension_serialize(
+
+            check_vote_extension_filtering(
+                &mut shell,
                 validator_tm_addr,
                 signed_vote_extension,
-            )];
-            let filtered_votes: Vec<_> =
-                shell.filter_invalid_vote_extensions(votes).collect();
-
-            assert_eq!(filtered_votes, vec![]);
+            );
         }
 
         /// Test if we are filtering out vote extensinos for
@@ -435,14 +446,12 @@ mod prepare_block {
                 }
                 .sign(&protocol_key)
             };
-            let votes = vec![vote_extension_serialize(
+
+            check_vote_extension_filtering(
+                &mut shell,
                 validator_tm_addr,
                 signed_vote_extension,
-            )];
-            let filtered_votes: Vec<_> =
-                shell.filter_invalid_vote_extensions(votes).collect();
-
-            assert_eq!(filtered_votes, vec![]);
+            );
         }
 
         /// Test if we are filtering out vote extensinos for
@@ -469,14 +478,12 @@ mod prepare_block {
                 }
                 .sign(&protocol_key)
             };
-            let votes = vec![vote_extension_serialize(
+
+            check_vote_extension_filtering(
+                &mut shell,
                 validator_tm_addr,
                 signed_vote_extension,
-            )];
-            let filtered_votes: Vec<_> =
-                shell.filter_invalid_vote_extensions(votes).collect();
-
-            assert_eq!(filtered_votes, vec![]);
+            );
         }
 
         /// Test if vote extension validation and inclusion in a block
