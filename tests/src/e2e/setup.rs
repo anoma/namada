@@ -26,17 +26,24 @@ use itertools::Itertools;
 use rand::Rng;
 use tempfile::{tempdir, TempDir};
 
+use crate::e2e::helpers::generate_bin_command;
+
 /// For `color_eyre::install`, which fails if called more than once in the same
 /// process
 pub static INIT: Once = Once::new();
 
-const APPS_PACKAGE: &str = "namada_apps";
+pub const APPS_PACKAGE: &str = "namada_apps";
 
 /// Env. var for running E2E tests in debug mode
 pub const ENV_VAR_DEBUG: &str = "ANOMA_E2E_DEBUG";
 
 /// Env. var for keeping temporary files created by the E2E tests
 const ENV_VAR_KEEP_TEMP: &str = "ANOMA_E2E_KEEP_TEMP";
+
+/// Env. var to use a set of prebuilt binaries. This variable holds the path to
+/// a folder.
+pub const ENV_VAR_USE_PREBUILT_BINARIES: &str =
+    "ANOMA_E2E_USE_PREBUILT_BINARIES";
 
 /// The E2E tests genesis config source.
 /// This file must contain a single validator with alias "validator-0".
@@ -641,54 +648,15 @@ where
         Bin::Client => "anomac",
         Bin::Wallet => "anomaw",
     };
-    // Allow to run in debug
-    let run_debug = match env::var(ENV_VAR_DEBUG) {
-        Ok(val) => val.to_ascii_lowercase() != "false",
-        _ => false,
-    };
-    let build_cmd = if !cfg!(feature = "ABCI") {
-        CargoBuild::new()
-            .package(APPS_PACKAGE)
-            .manifest_path(manifest_path)
-            .no_default_features()
-            .features("ABCI-plus-plus")
-            // Explicitly disable dev, in case it's enabled when a test is
-            // invoked
-            .env("ANOMA_DEV", "false")
-            .bin(bin_name)
-    } else {
-        CargoBuild::new()
-            .package(APPS_PACKAGE)
-            .manifest_path(manifest_path)
-            .features("ABCI")
-            // Explicitly disable dev, in case it's enabled when a test is
-            // invoked
-            .env("ANOMA_DEV", "false")
-            .bin(bin_name)
-    };
-    let build_cmd = if run_debug {
-        build_cmd
-    } else {
-        // Use the same build settings as `make build-release`
-        build_cmd.release()
-    };
-    let now = time::Instant::now();
-    // ideally we would print the compile command here, but escargot doesn't
-    // implement Display or Debug for CargoBuild
-    println!(
-        "\n{}: {}",
-        "`cargo build` starting".underline().bright_blue(),
-        bin_name
-    );
-    let mut run_cmd = build_cmd.run().unwrap().command();
-    println!(
-        "\n{}: {}ms",
-        "`cargo build` finished after".underline().bright_blue(),
-        now.elapsed().as_millis()
+    
+    let mut run_cmd = generate_bin_command(
+        bin_name,
+        &working_dir.as_ref().join("Cargo.toml"),
     );
 
     run_cmd
-        .env("ANOMA_LOG", "anoma=info")
+        .env("ANOMA_LOG", "info")
+        .env("TM_LOG_LEVEL", "info")
         .env("ANOMA_LOG_COLOR", "false")
         .current_dir(working_dir)
         .args(&[
