@@ -267,7 +267,7 @@ mod tests {
 
         // we have the `Signed<VoteExtension>` instances we need,
         // let us now compress them into a single `VoteExtensionDigest`
-        let signatures: Vec<(_, Address)> = vec![
+        let signatures = vec![
             (ext[0].sig.clone(), validator_1),
             (ext[1].sig.clone(), validator_2),
         ];
