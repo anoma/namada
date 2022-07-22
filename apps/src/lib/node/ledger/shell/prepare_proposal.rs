@@ -343,15 +343,20 @@ mod prepare_block {
             );
         }
 
+        /// Given a secret key `sk`, return a Tendermint compliant address.
+        fn get_tm_address(sk: &common::SecretKey) -> Vec<u8> {
+            let common::PublicKey::Ed25519(ed25519::PublicKey(pk)) =
+                sk.ref_to();
+            let Hash(raw_hash) = Hash::sha256(pk.as_bytes());
+            (&raw_hash[..20]).to_vec()
+        }
+
         /// Returns a tuple with the Tendermint validator address and the
         /// Namada protocol key.
         fn get_validator_keys() -> (Vec<u8>, common::SecretKey) {
             let validator_tm_addr = {
                 let consensus_key = wallet::defaults::validator_keypair();
-                let common::PublicKey::Ed25519(ed25519::PublicKey(public_key)) =
-                    consensus_key.ref_to();
-                let Hash(raw_hash) = Hash::sha256(public_key.as_bytes());
-                (&raw_hash[..20]).to_vec()
+                get_tm_address(&consensus_key)
             };
             let (protocol_key, _) = wallet::defaults::validator_keys();
             (validator_tm_addr, protocol_key)
@@ -426,6 +431,40 @@ mod prepare_block {
             let signed_vote_extension = {
                 VoteExtension {
                     block_height: PRED_LAST_HEIGHT,
+                    ethereum_events: vec![],
+                }
+                .sign(&protocol_key)
+            };
+            let votes = vec![vote_extension_serialize(
+                validator_tm_addr,
+                signed_vote_extension,
+            )];
+            let filtered_votes: Vec<_> =
+                shell.filter_invalid_vote_extensions(votes).collect();
+
+            assert_eq!(filtered_votes, vec![]);
+        }
+
+        /// Test if we are filtering out vote extensinos for
+        /// non-validator nodes.
+        #[test]
+        fn test_prepare_proposal_filter_out_bad_vext_validators() {
+            const LAST_HEIGHT: BlockHeight = BlockHeight(2);
+
+            let (mut shell, _, _) = test_utils::setup();
+
+            // artificially change the block height
+            shell.storage.last_height = LAST_HEIGHT;
+
+            let (validator_tm_addr, protocol_key) = {
+                let bertha = wallet::defaults::bertha_keypair();
+                let bertha_tm_addr = get_tm_address(&bertha);
+                (bertha_tm_addr, bertha)
+            };
+
+            let signed_vote_extension = {
+                VoteExtension {
+                    block_height: LAST_HEIGHT,
                     ethereum_events: vec![],
                 }
                 .sign(&protocol_key)
