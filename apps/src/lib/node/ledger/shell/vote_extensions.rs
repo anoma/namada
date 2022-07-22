@@ -138,12 +138,12 @@ mod extend_votes {
                 .ok()?;
             // verify the signature of the vote extension
             ext.verify(&pk)
-                .map_err(|_| {
+                .map_err(|err| {
                     tracing::error!(
-                        "Failed to verify the signature of a vote extension \
-                         issued by {validator}"
+                        ?err,
+                        %validator,
+                        "Failed to verify the signature of a vote extension issued by validator"
                     );
-                })
                 .ok()
                 .map(|_| (validator, ext))
         }
