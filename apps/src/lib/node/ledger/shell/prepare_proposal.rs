@@ -392,8 +392,50 @@ mod prepare_block {
             assert_eq!(filtered_votes, vec![]);
         }
 
-        // TODO: test if we filter out valid signatures,
-        // but for invalid block heights
+        /// Test if we are filtering out vote extensinos for
+        /// block heights different than the last height.
+        #[test]
+        fn test_prepare_proposal_filter_out_bad_vext_bheights() {
+            const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+            const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
+
+            let (mut shell, _, _) = test_utils::setup();
+
+            // artificially change the block height
+            shell.storage.last_height = LAST_HEIGHT;
+
+            // tendermint address
+            let validator_tm_addr = {
+                let consensus_key = wallet::defaults::validator_keypair();
+                let common::PublicKey::Ed25519(ed25519::PublicKey(public_key)) =
+                    consensus_key.ref_to();
+                let Hash(raw_hash) = Hash::sha256(public_key.as_bytes());
+                (&raw_hash[..20]).to_vec()
+            };
+
+            let signed_vote_extension = {
+                let (protocol_key, _) = wallet::defaults::validator_keys();
+                VoteExtension {
+                    block_height: PRED_LAST_HEIGHT,
+                    ethereum_events: vec![],
+                }
+                .sign(&protocol_key)
+            };
+            let vote = ExtendedVoteInfo {
+                vote_extension: signed_vote_extension.try_to_vec().unwrap(),
+                validator: Some(Validator {
+                    address: validator_tm_addr,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+
+            let votes = vec![vote];
+            let filtered_votes: Vec<_> =
+                shell.filter_invalid_vote_extensions(votes).collect();
+
+            assert_eq!(filtered_votes, vec![]);
+        }
 
         /// Test if vote extension validation and inclusion in a block
         /// behaves as expected, considering honest validators.
