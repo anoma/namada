@@ -487,7 +487,12 @@ mod prepare_block {
             let decompressed = digest.decompress(LAST_HEIGHT);
 
             assert_eq!(decompressed.len(), 1);
-            assert!(decompressed[0].verify(&protocol_key.ref_to()).is_ok());
+
+            // NOTE: this negation is on purpose. we just want to check if the events
+            // were de-duped, obv the signature will be different, since we signed
+            // a `Vec` with duped events
+            assert!(!decompressed[0].verify(&protocol_key.ref_to()).is_ok());
+
             assert_eq!(
                 decompressed[0].data.ethereum_events,
                 vec![ethereum_event]
