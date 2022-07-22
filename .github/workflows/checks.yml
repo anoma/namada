@@ -28,23 +28,33 @@ jobs:
         make:
           - name: Clippy
             command: clippy
+            check_command: check
             cache_subkey: clippy
             cache_version: v1
           - name: Clippy ABCI++
+            check_command: check-abci-plus-plus
             command: clippy-abci-plus-plus
             cache_subkey: clippy-abci
             cache_version: v1
           - name: Format
-            command: check && make fmt-check
+            check_command: check
+            command: fmt-check
             cache_subkey: fmt
             cache_version: v1
 
     env:
       CARGO_INCREMENTAL: 0
+      SCCACHE_CACHE_SIZE: 100G
+      SCCACHE_BUCKET: namada-sccache-master
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          aws-region: eu-west-1
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
@@ -59,23 +69,49 @@ jobs:
           profile: default
       - name: Show rust toolchain info
         run: rustup show
+      - name: Install sccache (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          LINK: https://github.com/mozilla/sccache/releases/download
+          SCCACHE_VERSION: v0.3.0
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH          
+      - name: Install sccache (macos-latest)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install sccache
+      - name: Show rust toolchain info
+        run: rustup show
+      - name: Start sccache server
+        run: sccache --start-server
       - name: Cache cargo
         uses: actions/cache@v3
         with:
           path: |
-            ~/.cargo/bin
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-            ./target
-            ./wasm/tx_template/target
-            ./wasm/vp_template/target
-            ./wasm_for_tests/wasm_source/target
           key: ${{ runner.os }}-${{ matrix.make.cache_subkey }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.make.cache_subkey }}-${{ matrix.make.cache_version }}-cargo-
+      - name: Run check
+        run: make ${{ matrix.make.check_command }}
+        env:
+          RUSTC_WRAPPER: "sccache"
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
       - name: Clean cache folder
-        run: cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache && cargo-cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache || true
+          cargo-cache
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true
