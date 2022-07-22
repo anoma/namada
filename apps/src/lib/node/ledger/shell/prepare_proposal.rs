@@ -11,6 +11,7 @@ mod prepare_block {
         VoteExtensionDigest,
     };
     use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
@@ -180,21 +181,10 @@ mod prepare_block {
                 self.get_total_voting_power(Some(events_epoch)).into();
             let mut voting_power = 0u64;
 
-            for (validator_addr, vote_extension) in
+            for (validator_voting_power, vote_extension) in
                 self.filter_invalid_vote_extensions(vote_extensions)
             {
-                // TODO: we can return the voting power from
-                // `filter_invalid_vote_extensions`, therefore
-                // optimizing this loop a bit
-                let (validator_voting_power, _) = self
-                    .get_validator_from_address(
-                        &validator_addr,
-                        Some(events_epoch),
-                    )
-                    .expect(
-                        "We already checked that we have a valid Tendermint \
-                         address",
-                    );
+                let validator_addr = vote_extension.data.validator_addr;
 
                 // update voting power
                 voting_power += u64::from(validator_voting_power);
@@ -239,27 +229,21 @@ mod prepare_block {
         fn filter_invalid_vote_extensions(
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
-        ) -> impl Iterator<Item = (Address, SignedExt)> + '_ {
+        ) -> impl Iterator<Item = (VotingPower, SignedExt)> + '_ {
             vote_extensions.into_iter().filter_map(|vote| {
                 let vote_extension = Signed::<VoteExtension>::try_from_slice(
                     &vote.vote_extension[..],
                 )
                 .map_err(|err| {
                     tracing::error!(
-                        "Failed to deserialize signed vote extension: {}",
-                        err
+                        ?err,
+                        "Failed to deserialize signed vote extension",
                     );
                 })
                 .ok()?;
 
-                let validator = vote.validator.or_else(|| {
-                    tracing::error!("Vote extension has no validator data");
-                    None
-                })?;
-
-                self.validate_vote_ext_and_get_nam_addr(
+                self.validate_vote_ext_and_get_it_back(
                     vote_extension,
-                    &validator.address[..],
                     self.storage.last_height,
                 )
             })

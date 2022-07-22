@@ -4,6 +4,7 @@ mod extend_votes {
     use namada::proto::Signed;
     use namada::types::address::Address;
     use namada::types::ethereum_events::vote_extensions::VoteExtension;
+    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 
     use super::super::*;
 
@@ -92,19 +93,18 @@ mod extend_votes {
             ext: SignedExt,
             height: BlockHeight,
         ) -> bool {
-            self.validate_vote_ext_and_get_nam_addr(ext, height)
+            self.validate_vote_ext_and_get_it_back(ext, height)
                 .is_some()
         }
 
         /// This method behaves exactly like [`Self::validate_vote_extension`],
-        /// with the added bonus of returning the Namada [`Address`]
-        /// corresponding to `tm_address`, and the respective
-        /// [`SignedExt`] to be validated.
-        pub fn validate_vote_ext_and_get_nam_addr(
+        /// with the added bonus of returning the vote extension back, if it
+        /// is valid.
+        pub fn validate_vote_ext_and_get_it_back(
             &self,
             ext: SignedExt,
             height: BlockHeight,
-        ) -> Option<(Address, SignedExt)> {
+        ) -> Option<(VotingPower, SignedExt)> {
             if ext.data.block_height != height {
                 let ext_height = ext.data.block_height;
                 tracing::error!(
@@ -115,9 +115,9 @@ mod extend_votes {
             }
             let epoch = self.storage.block.pred_epochs.get_epoch(height);
             // get the public key associated with this validator
-            let pk = self
-                .get_validator_from_address(&ext.data.validator_addr, epoch)
-                .map(|(_, pk)| pk)
+            let validator = &ext.data.validator_addr;
+            let (voting_power, pk) = self
+                .get_validator_from_address(validator, epoch)
                 .map_err(|err| {
                     tracing::error!(
                         ?err,
@@ -136,7 +136,7 @@ mod extend_votes {
                     );
                 })
                 .ok()
-                .map(|_| (validator, ext))
+                .map(|_| (voting_power, ext))
         }
 
         /// Checks the channel from the Ethereum oracle monitoring
