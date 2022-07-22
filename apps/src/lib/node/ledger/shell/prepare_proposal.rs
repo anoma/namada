@@ -183,6 +183,9 @@ mod prepare_block {
             for (validator_addr, vote_extension) in
                 self.filter_invalid_vote_extensions(vote_extensions)
             {
+                // TODO: we can return the voting power from
+                // `filter_invalid_vote_extensions`, therefore
+                // optimizing this loop a bit
                 let (validator_voting_power, _) = self
                     .get_validator_from_address(
                         &validator_addr,
@@ -218,7 +221,7 @@ mod prepare_block {
             if voting_power <= FractionalVotingPower::TWO_THIRDS {
                 tracing::error!(
                     "Tendermint has decided on a block including vote \
-                     extensions reflecting less than 2/3 of the total stake"
+                     extensions reflecting <= 2/3 of the total stake"
                 );
                 return None;
             }
@@ -302,16 +305,22 @@ mod prepare_block {
     mod test_prepare_proposal {
         use namada::types::address::xan;
         use namada::types::ethereum_events::vote_extensions::VoteExtension;
+        use namada::types::hash::Hash;
         // use namada::types::ethereum_events::EthereumEvent;
-        use namada::types::key::{self, common, ed25519::Signature};
+        use namada::types::key::{common, ed25519};
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::Fee;
         use tendermint_proto::abci::tx_record::TxAction;
-        use tendermint_proto::abci::{ExtendedCommitInfo, ExtendedVoteInfo};
+        use tendermint_proto::abci::{
+            ExtendedCommitInfo, ExtendedVoteInfo, Validator,
+        };
 
         use super::super::super::vote_extensions::SignedExt;
         use super::*;
-        use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
+        use crate::node::ledger::shell::test_utils::{
+            self, gen_keypair, TestShell,
+        };
+        use crate::wallet;
 
         /// Test that if a tx from the mempool is not a
         /// WrapperTx type, it is not included in the
@@ -337,59 +346,68 @@ mod prepare_block {
         /// Test if we are filtering out vote extensinos with bad
         /// signatures in a prepare proposal.
         #[test]
-        fn test_prepare_proposal_filter_out_bad_signatures() {
+        fn test_prepare_proposal_filter_out_bad_vext_signatures() {
             const LAST_HEIGHT: BlockHeight = BlockHeight(2);
 
-            let (mut shell, _, _) = TestShell::new();
+            let (mut shell, _, _) = test_utils::setup();
 
             // artificially change the block height
             shell.storage.last_height = LAST_HEIGHT;
 
-            let signed_vote_extensions = vec![
-                {
-                    // TODO: might need to change this to the sk
-                    // of the validator in `genesis::genesis()`
-                    let sk = key::testing::keypair_1();
-                    VoteExtension {
-                        block_height: LAST_HEIGHT,
-                        ethereum_events: vec![],
-                    }
-                    .sign(&sk)
-                },
-                {
-                    // create a fake signature
-                    let sig =
-                        common::Signature::Ed25519(Signature([0u8; 64].into()));
+            // tendermint address
+            let validator_tm_addr = {
+                let consensus_key = wallet::defaults::validator_keypair();
+                let common::PublicKey::Ed25519(ed25519::PublicKey(public_key)) =
+                    consensus_key.ref_to();
+                let Hash(raw_hash) = Hash::sha256(public_key.as_bytes());
+                (&raw_hash[..20]).to_vec()
+            };
 
-                    let data = VoteExtension {
-                        block_height: LAST_HEIGHT,
-                        ethereum_events: vec![],
-                    };
+            let signed_vote_extension = {
+                // create a fake signature
+                let sig = common::Signature::Ed25519(ed25519::Signature(
+                    [0u8; 64].into(),
+                ));
 
-                    SignedExt { sig, data }
-                },
-            ];
-            let votes = signed_vote_extensions
-                .into_iter()
-                .map(|ext| ExtendedVoteInfo {
-                    vote_extension: ext.try_to_vec().unwrap(),
-                    // TODO: make sure the Tendermint validator we insert here
-                    // has an equivalent Namada validator addr in the `shell`
-                    //
-                    // https://github.com/anoma/namada/blob/tiago/vote-extensions-types/apps/src/lib/config/genesis.rs#L733=
-                    validator: Some(todo!()),
+                let data = VoteExtension {
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![],
+                };
+
+                SignedExt { sig, data }
+            };
+            let vote = ExtendedVoteInfo {
+                vote_extension: signed_vote_extension.try_to_vec().unwrap(),
+                validator: Some(Validator {
+                    address: validator_tm_addr,
                     ..Default::default()
-                })
-                .collect();
-
-            let req = RequestPrepareProposal {
-                local_last_commit: Some(ExtendedCommitInfo { round: 0, votes }),
+                }),
                 ..Default::default()
             };
+
+            let votes = vec![vote];
+            let filtered_votes: Vec<_> =
+                shell.filter_invalid_vote_extensions(votes).collect();
+
+            assert_eq!(filtered_votes, vec![]);
         }
 
         // TODO: test if we filter out valid signatures,
         // but for invalid block heights
+
+        /// Test if vote extension validation and inclusion in a block
+        /// behaves as expected, considering honest validators.
+        // TODO: finish this
+        #[test]
+        fn test_prepare_proposal_vext_normal_op() {
+            //let shell: TestShell = todo!();
+            //let votes = todo!();
+            //let req = RequestPrepareProposal {
+            //    local_last_commit: Some(ExtendedCommitInfo { round: 0, votes }),
+            //    ..Default::default()
+            //};
+            //let rsp = shell.prepare_proposal(req);
+        }
 
         /// Test that if an error is encountered while
         /// trying to process a tx from the mempool,
