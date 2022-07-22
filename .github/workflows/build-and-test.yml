@@ -48,6 +48,9 @@ jobs:
         run: make test-wasm
       - name: Check wasm up-to-date
         run: cmp -- wasm/checksums.json wasm/original-checksums.json
+      - name: Print diff
+        if: failure()
+        run: diff -y -W 120 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
   
   update-wasm:
     runs-on: ${{ matrix.os }}
@@ -188,7 +191,7 @@ jobs:
           chmod +x target/release/anoman
           chmod +x target/release/anomac
           chmod +x /usr/local/bin/tendermint
-      - name: Sets env vars for abci++ job
+      - name: Set tendermint ENV for abci++ tests
         if: matrix.make.suffix == '-abci-plus-plus'
         run: |
           echo "TENDERMINT=/usr/local/bin/tendermint" >> $GITHUB_ENV
@@ -206,6 +209,7 @@ jobs:
         with:
           name: logs-e2e${{ matrix.make.suffix }}-${{ github.sha }}
           path: /tmp/.*/logs/
+          retention-days: 5
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats
@@ -288,6 +292,7 @@ jobs:
             target/release/anomac
             target/release/anomaw
             target/release/anoman
+          retention-days: 2
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats

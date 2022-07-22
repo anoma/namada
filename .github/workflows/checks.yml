@@ -28,20 +28,22 @@ jobs:
         make:
           - name: Clippy
             command: clippy
+            check_command: check
             cache_subkey: clippy
             cache_version: v1
           - name: Clippy ABCI++
+            check_command: check-abci-plus-plus
             command: clippy-abci-plus-plus
             cache_subkey: clippy-abci
             cache_version: v1
           - name: Format
-            command: check && make fmt-check
+            check_command: check
+            command: fmt-check
             cache_subkey: fmt
             cache_version: v1
 
     env:
       CARGO_INCREMENTAL: 0
-      RUSTC_WORKSPACE_WRAPPER: "sccache"
       SCCACHE_CACHE_SIZE: 100G
       SCCACHE_BUCKET: namada-sccache-master
 
@@ -97,6 +99,10 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-${{ matrix.make.cache_subkey }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.make.cache_subkey }}-${{ matrix.make.cache_version }}-cargo-
+      - name: Run check
+        run: make ${{ matrix.make.check_command }}
+        env:
+          RUSTC_WRAPPER: "sccache"
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
       - name: Clean cache folder
