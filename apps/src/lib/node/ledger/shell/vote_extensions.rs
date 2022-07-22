@@ -128,10 +128,11 @@ mod extend_votes {
             let pk = self
                 .get_validator_from_address(&validator, epoch)
                 .map(|(_, pk)| pk)
-                .map_err(|_| {
+                .map_err(|err| {
                     tracing::error!(
-                        "Could not get public key from Storage for validator \
-                         {validator}"
+                        ?err,
+                        %validator,
+                        "Could not get public key from Storage for validator"
                     );
                 })
                 .ok()?;
