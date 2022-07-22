@@ -12,7 +12,6 @@ use std::{env, fs, mem, thread, time};
 use assert_cmd::assert::OutputAssertExt;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use escargot::CargoBuild;
 use expectrl::process::unix::{PtyStream, UnixProcess};
 use expectrl::session::Session;
 use expectrl::stream::log::LoggedStream;
@@ -635,7 +634,6 @@ where
     S: AsRef<OsStr>,
 {
     // Root cargo workspace manifest path
-    let manifest_path = working_dir.as_ref().join("Cargo.toml");
     let bin_name = match bin {
         Bin::Node => "anoman",
         Bin::Client => "anomac",
