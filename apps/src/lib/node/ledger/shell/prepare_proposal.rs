@@ -440,11 +440,13 @@ mod prepare_block {
             let (validator_tm_addr, protocol_key) = get_validator_keys();
 
             let signed_vote_extension = {
-                VoteExtension {
+                let ext = VoteExtension {
                     block_height: PRED_LAST_HEIGHT,
                     ethereum_events: vec![],
                 }
-                .sign(&protocol_key)
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
             };
 
             check_vote_extension_filtering(
@@ -472,11 +474,13 @@ mod prepare_block {
             };
 
             let signed_vote_extension = {
-                VoteExtension {
+                let ext = VoteExtension {
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![],
                 }
-                .sign(&protocol_key)
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
             };
 
             check_vote_extension_filtering(
