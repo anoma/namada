@@ -15,6 +15,7 @@ use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada::ledger::treasury::TreasuryVp;
 use namada::proto::{self, Tx};
 use namada::types::address::{Address, InternalAddress};
+use namada::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
 use namada::types::storage;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
@@ -22,6 +23,8 @@ use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
+
+mod transactions;
 
 use crate::node::ledger::shell::Shell;
 
@@ -169,7 +172,7 @@ where
                 "applying state update transaction derived from vote \
                  extension digest"
             );
-            let tx = construct_tx_eth_bridge(wasm_dir)?;
+            let tx = construct_tx_eth_bridge(digest.events, wasm_dir)?;
             let verifiers = execute_tx(
                 &tx,
                 storage,
@@ -214,8 +217,17 @@ where
 
 const TX_ETH_BRIDGE_WASM_NAME: &str = "tx_eth_bridge";
 
-fn construct_tx_eth_bridge(wasm_dir: &Path) -> Result<Tx> {
-    let tx_data = vec![];
+fn construct_tx_eth_bridge(
+    events: Vec<MultiSignedEthEvent>,
+    wasm_dir: &Path,
+) -> Result<Tx> {
+    // TODO: don't use unwraps, handle errors gracefully
+    // TODO: improve logging
+    let diffs =
+        transactions::ethereum_events::calculate_eth_msg_diffs(events).unwrap();
+    tracing::debug!("Calculated diffs for /eth_msgs");
+    let tx_data =
+        transactions::ethereum_events::construct_tx_data(diffs).unwrap();
     tracing::debug!(
         bytes = tx_data.len(),
         "serialized tx_data for state update transaction"
@@ -566,12 +578,14 @@ mod test {
         tmp_dir.into_path()
     }
 
+    // TODO: fix these tests
     #[test]
     fn test_construct_tx_eth_bridge() {
         let wasm_contents = b"arbitrary wasm contents";
         let wasm_dir = fake_wasm_dir(TX_ETH_BRIDGE_WASM_NAME, wasm_contents);
+        let events = vec![];
 
-        let result = construct_tx_eth_bridge(&wasm_dir);
+        let result = construct_tx_eth_bridge(events, &wasm_dir);
 
         let tx = match result {
             Ok(tx) => tx,
@@ -587,8 +601,9 @@ mod test {
         let wasm_name = "tx_something_else";
         assert_ne!(wasm_name, TX_ETH_BRIDGE_WASM_NAME);
         let wasm_dir = fake_wasm_dir(wasm_name, wasm_contents);
+        let events = vec![];
 
-        let result = construct_tx_eth_bridge(&wasm_dir);
+        let result = construct_tx_eth_bridge(events, &wasm_dir);
 
         assert!(result.is_err());
     }
