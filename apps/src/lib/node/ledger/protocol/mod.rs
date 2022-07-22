@@ -551,10 +551,10 @@ mod test {
     ) -> PathBuf {
         let tmp_dir = tempfile::tempdir().unwrap();
         let wasm_filename_without_hash = format!("{}.wasm", wasm_name.as_ref());
-        let wasm_filename = format!(
-            "{}.\
-             7d7fa4553ccf115cd82ce59d4e1dc8321c41d357d02ccae29a59865aac2bb77d.\
-             wasm", wasm_name.as_ref());
+        let arbitrary_hash =
+            "7d7fa4553ccf115cd82ce59d4e1dc8321c41d357d02ccae29a59865aac2bb77d";
+        let wasm_filename =
+            format!("{}.{}.wasm", arbitrary_hash, wasm_name.as_ref());
         let wasm_path = tmp_dir.path().join(&wasm_filename);
         fs::write(&wasm_path, wasm_contents).unwrap();
         let checksums_path = tmp_dir.path().join("checksums.json");
