@@ -4,13 +4,13 @@
 mod prepare_block {
     use std::collections::{BTreeMap, HashSet};
 
+    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
     use namada::types::ethereum_events::vote_extensions::{
         FractionalVotingPower, MultiSignedEthEvent, VoteExtension,
         VoteExtensionDigest,
     };
     use namada::types::transaction::protocol::ProtocolTxType;
-    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
@@ -293,9 +293,7 @@ mod prepare_block {
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::Fee;
         use tendermint_proto::abci::tx_record::TxAction;
-        use tendermint_proto::abci::{
-            ExtendedCommitInfo, ExtendedVoteInfo,
-        };
+        use tendermint_proto::abci::{ExtendedCommitInfo, ExtendedVoteInfo};
 
         use super::super::super::vote_extensions::SignedExt;
         use super::*;
@@ -326,9 +324,7 @@ mod prepare_block {
         }
 
         /// Serialize a [`SignedExt`] to an [`ExtendedVoteInfo`]
-        fn vote_extension_serialize(
-            vext: SignedExt,
-        ) -> ExtendedVoteInfo {
+        fn vote_extension_serialize(vext: SignedExt) -> ExtendedVoteInfo {
             ExtendedVoteInfo {
                 vote_extension: vext.try_to_vec().unwrap(),
                 ..Default::default()
@@ -375,10 +371,7 @@ mod prepare_block {
                 SignedExt { sig, data }
             };
 
-            check_vote_extension_filtering(
-                &mut shell,
-                signed_vote_extension,
-            );
+            check_vote_extension_filtering(&mut shell, signed_vote_extension);
         }
 
         /// Test if we are filtering out vote extensinos for
@@ -408,10 +401,7 @@ mod prepare_block {
                 ext
             };
 
-            check_vote_extension_filtering(
-                &mut shell,
-                signed_vote_extension,
-            );
+            check_vote_extension_filtering(&mut shell, signed_vote_extension);
         }
 
         /// Test if we are filtering out vote extensinos for
@@ -442,10 +432,7 @@ mod prepare_block {
                 ext
             };
 
-            check_vote_extension_filtering(
-                &mut shell,
-                signed_vote_extension,
-            );
+            check_vote_extension_filtering(&mut shell, signed_vote_extension);
         }
 
         /// Test if we are de-duplicating Ethereum events in
@@ -479,18 +466,17 @@ mod prepare_block {
             };
 
             let digest = {
-                let votes = vec![vote_extension_serialize(
-                    signed_vote_extension,
-                )];
+                let votes =
+                    vec![vote_extension_serialize(signed_vote_extension)];
                 shell.compress_vote_extensions(votes).unwrap()
             };
             let decompressed = digest.decompress(LAST_HEIGHT);
 
             assert_eq!(decompressed.len(), 1);
 
-            // NOTE: this negation is on purpose. we just want to check if the events
-            // were de-duped, obv the signature will be different, since we signed
-            // a `Vec` with duped events
+            // NOTE: this negation is on purpose. we just want to check if the
+            // events were de-duped, obv the signature will be
+            // different, since we signed a `Vec` with duped events
             assert!(!decompressed[0].verify(&protocol_key.ref_to()).is_ok());
 
             assert_eq!(
