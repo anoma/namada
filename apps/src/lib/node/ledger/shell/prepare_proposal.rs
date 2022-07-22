@@ -305,8 +305,8 @@ mod prepare_block {
     mod test_prepare_proposal {
         use namada::types::address::xan;
         use namada::types::ethereum_events::vote_extensions::VoteExtension;
+        use namada::types::ethereum_events::EthereumEvent;
         use namada::types::hash::Hash;
-        // use namada::types::ethereum_events::EthereumEvent;
         use namada::types::key::{common, ed25519};
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::Fee;
@@ -490,6 +490,51 @@ mod prepare_block {
             );
         }
 
+        /// Test if we are de-duplicating Ethereum events in
+        /// prepare proposals.
+        #[test]
+        fn test_prepare_proposal_deduplicate_ethereum_events() {
+            const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+            let (mut shell, _, _) = test_utils::setup();
+
+            // artificially change the block height
+            shell.storage.last_height = LAST_HEIGHT;
+
+            let (validator_tm_addr, protocol_key) = get_validator_keys();
+
+            let ethereum_event = EthereumEvent::TransfersToNamada {
+                nonce: 1u64.into(),
+                transfers: vec![],
+            };
+            let signed_vote_extension = {
+                let ev = ethereum_event.clone();
+                let ext = VoteExtension {
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![ev.clone(), ev.clone(), ev],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+
+            let digest = {
+                let votes = vec![vote_extension_serialize(
+                    validator_tm_addr,
+                    signed_vote_extension,
+                )];
+                shell.compress_vote_extensions(votes).unwrap()
+            };
+            let decompressed = digest.decompress(LAST_HEIGHT);
+
+            assert_eq!(decompressed.len(), 1);
+            assert!(decompressed[0].verify(&protocol_key.ref_to()).is_ok());
+            assert_eq!(
+                decompressed[0].data.ethereum_events,
+                vec![ethereum_event]
+            );
+        }
+
         /// Test if vote extension validation and inclusion in a block
         /// behaves as expected, considering honest validators.
         // TODO: finish this
@@ -498,9 +543,9 @@ mod prepare_block {
             // let shell: TestShell = todo!();
             // let votes = todo!();
             // let req = RequestPrepareProposal {
-            //    local_last_commit: Some(ExtendedCommitInfo { round: 0, votes
-            // }),    ..Default::default()
-            //};
+            // local_last_commit: Some(ExtendedCommitInfo { round: 0, votes }),
+            // ..Default::default()
+            // };
             // let rsp = shell.prepare_proposal(req);
         }
 
