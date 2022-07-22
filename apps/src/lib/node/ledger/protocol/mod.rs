@@ -34,8 +34,8 @@ pub enum Error {
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
-    #[error("Couldn't read wasm: {name}")]
-    ReadWasmError { name: String },
+    #[error("Couldn't read wasm: {wasm_name}")]
+    ReadWasmError { wasm_name: String },
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
     #[error("Gas error: {0}")]
@@ -234,7 +234,7 @@ fn construct_tx_eth_bridge(wasm_dir: &Path) -> Result<Tx> {
             .0
             .get(&format!("{}.wasm", TX_ETH_BRIDGE_WASM_NAME))
             .ok_or_else(|| Error::ReadWasmError {
-                name: TX_ETH_BRIDGE_WASM_NAME.to_owned(),
+                wasm_name: TX_ETH_BRIDGE_WASM_NAME.to_owned(),
             })?;
         tracing::debug!(
             file_path = file_path.as_str(),
