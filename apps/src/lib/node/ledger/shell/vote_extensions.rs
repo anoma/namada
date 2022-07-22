@@ -20,9 +20,15 @@ mod extend_votes {
             &mut self,
             _req: request::ExtendVote,
         ) -> response::ExtendVote {
+            let validator_addr = self
+                .mode
+                .get_validator_address()
+                .expect("only validators should receive this method call")
+                .to_owned();
             let ext = VoteExtension {
                 block_height: self.storage.last_height + 1,
                 ethereum_events: self.new_ethereum_events(),
+                validator_addr,
             };
             self.mode
                 .get_protocol_key()
@@ -42,14 +48,12 @@ mod extend_votes {
             &self,
             req: request::VerifyVoteExtension,
         ) -> response::VerifyVoteExtension {
-            let validator_addr = req.validator_address.as_slice();
             if let Ok(signed) =
                 SignedExt::try_from_slice(&req.vote_extension[..])
             {
                 response::VerifyVoteExtension {
                     status: if self.validate_vote_extension(
                         signed,
-                        validator_addr,
                         self.storage.last_height + 1,
                     ) {
                         VerifyStatus::Accept.into()
@@ -86,10 +90,9 @@ mod extend_votes {
         pub fn validate_vote_extension(
             &self,
             ext: SignedExt,
-            tm_address: &[u8],
             height: BlockHeight,
         ) -> bool {
-            self.validate_vote_ext_and_get_nam_addr(ext, tm_address, height)
+            self.validate_vote_ext_and_get_nam_addr(ext, height)
                 .is_some()
         }
 
@@ -100,7 +103,6 @@ mod extend_votes {
         pub fn validate_vote_ext_and_get_nam_addr(
             &self,
             ext: SignedExt,
-            tm_address: &[u8],
             height: BlockHeight,
         ) -> Option<(Address, SignedExt)> {
             if ext.data.block_height != height {
@@ -112,21 +114,9 @@ mod extend_votes {
                 return None;
             }
             let epoch = self.storage.block.pred_epochs.get_epoch(height);
-            // get the validator that issued this vote extension
-            // this should not fail
-            let validator = self
-                .get_validator_from_tm_address(tm_address, epoch)
-                .map_err(|err| {
-                    tracing::error!(
-                        ?err,
-                        ?tm_address,
-                        "Failed to get an address from Tendermint validator",
-                    );
-                })
-                .ok()?;
             // get the public key associated with this validator
             let pk = self
-                .get_validator_from_address(&validator, epoch)
+                .get_validator_from_address(&ext.data.validator_addr, epoch)
                 .map(|(_, pk)| pk)
                 .map_err(|err| {
                     tracing::error!(
@@ -309,6 +299,7 @@ mod extend_votes {
                     }],
                 }],
                 block_height: shell.storage.last_height + 1,
+                validator_addr: address.clone(),
             }
             .sign(&signing_key)
             .try_to_vec()
@@ -354,6 +345,7 @@ mod extend_votes {
                     }],
                 }],
                 block_height: signed_height,
+                validator_addr: address.clone(),
             }
             .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
@@ -392,13 +384,7 @@ mod extend_votes {
                     .is_ok()
             );
 
-            let tm_address =
-                address.raw_hash().expect("Test failed").as_bytes().to_vec();
-            assert!(shell.validate_vote_extension(
-                vote_ext,
-                &tm_address,
-                signed_height
-            ));
+            assert!(shell.validate_vote_extension(vote_ext, signed_height));
         }
 
         /// Test that that an event that incorrectly labels what block it was
@@ -417,6 +403,7 @@ mod extend_votes {
                     }],
                 }],
                 block_height: shell.storage.last_height,
+                validator_addr: address.clone(),
             }
             .sign(shell.mode.get_protocol_key().expect("Test failed"))
             .try_to_vec()
