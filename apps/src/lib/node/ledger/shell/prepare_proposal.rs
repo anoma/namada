@@ -286,6 +286,8 @@ mod prepare_block {
     #[cfg(test)]
     // TODO: write tests for ethereum events on prepare proposal
     mod test_prepare_proposal {
+        use std::collections::HashSet;
+
         use namada::types::address::xan;
         use namada::types::ethereum_events::vote_extensions::VoteExtension;
         use namada::types::ethereum_events::EthereumEvent;
@@ -293,7 +295,9 @@ mod prepare_block {
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::Fee;
         use tendermint_proto::abci::tx_record::TxAction;
-        use tendermint_proto::abci::{ExtendedCommitInfo, ExtendedVoteInfo};
+        use tendermint_proto::abci::{
+            ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
+        };
 
         use super::super::super::vote_extensions::SignedExt;
         use super::*;
@@ -485,18 +489,89 @@ mod prepare_block {
             );
         }
 
+        /// Creates a vote extension digest manually, and encodes it as a
+        /// [`TxRecord`].
+        fn manually_assemble_digest(
+            protocol_key: &common::SecretKey,
+            ext: SignedExt,
+            last_height: BlockHeight,
+        ) -> TxRecord {
+            let events = vec![MultiSignedEthEvent {
+                event: ext.data.ethereum_events[0].clone(),
+                signers: {
+                    let mut s = HashSet::new();
+                    s.insert(ext.data.validator_addr.clone());
+                    s
+                },
+            }];
+            let signatures =
+                vec![(ext.sig.clone(), ext.data.validator_addr.clone())];
+
+            let vote_extension_digest =
+                VoteExtensionDigest { events, signatures };
+
+            assert_eq!(
+                vec![ext],
+                vote_extension_digest.clone().decompress(last_height)
+            );
+
+            let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+                .sign(&protocol_key)
+                .to_bytes();
+
+            super::record::add(tx)
+        }
+
         /// Test if vote extension validation and inclusion in a block
         /// behaves as expected, considering honest validators.
-        // TODO: finish this
         #[test]
         fn test_prepare_proposal_vext_normal_op() {
-            // let shell: TestShell = todo!();
-            // let votes = todo!();
-            // let req = RequestPrepareProposal {
-            // local_last_commit: Some(ExtendedCommitInfo { round: 0, votes }),
-            // ..Default::default()
-            // };
-            // let rsp = shell.prepare_proposal(req);
+            const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+            let (mut shell, _, _) = test_utils::setup();
+
+            // artificially change the block height
+            shell.storage.last_height = LAST_HEIGHT;
+
+            let (protocol_key, _) = wallet::defaults::validator_keys();
+            let validator_addr = wallet::defaults::validator_address();
+
+            let ethereum_event = EthereumEvent::TransfersToNamada {
+                nonce: 1u64.into(),
+                transfers: vec![],
+            };
+            let signed_vote_extension = {
+                let ext = VoteExtension {
+                    validator_addr,
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![ethereum_event],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+            let vote = ExtendedVoteInfo {
+                vote_extension: signed_vote_extension
+                    .clone()
+                    .try_to_vec()
+                    .unwrap(),
+                ..Default::default()
+            };
+
+            let rsp = shell.prepare_proposal(RequestPrepareProposal {
+                local_last_commit: Some(ExtendedCommitInfo {
+                    votes: vec![vote],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            });
+
+            let digest = manually_assemble_digest(
+                &protocol_key,
+                signed_vote_extension,
+                LAST_HEIGHT,
+            );
+            assert_eq!(rsp.tx_records, vec![digest]);
         }
 
         /// Test that if an error is encountered while
