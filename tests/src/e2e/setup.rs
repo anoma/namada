@@ -17,12 +17,11 @@ use expectrl::session::Session;
 use expectrl::stream::log::LoggedStream;
 use expectrl::{Eof, WaitStatus};
 use eyre::eyre;
-use itertools::Either;
+use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
-use itertools::Itertools;
 use rand::Rng;
 use tempfile::{tempdir, TempDir};
 
@@ -676,9 +675,9 @@ where
     let bin_name = match bin {
         Bin::Node => "namadan",
         Bin::Client => "namadac",
-        Bin::Wallet => "namadaw"
+        Bin::Wallet => "namadaw",
     };
-    
+
     let mut run_cmd = generate_bin_command(
         bin_name,
         &working_dir.as_ref().join("Cargo.toml"),
@@ -696,7 +695,7 @@ where
             mode,
         ])
         .args(args);
-    
+
     let args: String =
         run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
     let cmd_str =

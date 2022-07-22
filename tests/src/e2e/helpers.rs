@@ -6,9 +6,9 @@ use std::str::FromStr;
 use std::{env, time};
 
 use color_eyre::eyre::Result;
-use eyre::eyre;
 use color_eyre::owo_colors::OwoColorize;
 use escargot::CargoBuild;
+use eyre::eyre;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
@@ -27,7 +27,11 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
         Some(10)
     )?;
     let (unread, matched) = find.exp_regex("Found address .*")?;
-    let address_str = strip_trailing_newline(&matched).trim().rsplit_once(' ').unwrap().1;
+    let address_str = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
     let address = Address::from_str(address_str).map_err(|e| {
         eyre!(format!(
             "Address: {} parsed from {}, Error: {}\n\nOutput: {}",
@@ -81,9 +85,17 @@ pub fn find_keypair(
         Some(10)
     )?;
     let (_unread, matched) = find.exp_regex("Public key: .*")?;
-    let pk = strip_trailing_newline(&matched).trim().rsplit_once(' ').unwrap().1;
+    let pk = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
     let (unread, matched) = find.exp_regex("Secret key: .*")?;
-    let sk = strip_trailing_newline(&matched).trim().rsplit_once(' ').unwrap().1;
+    let sk = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
     let key = format!("{}{}", sk, pk);
     common::SecretKey::from_str(&key).map_err(|e| {
         eyre!(format!(
@@ -112,7 +124,11 @@ pub fn find_voting_power(
         Some(10)
     )?;
     let (unread, matched) = find.exp_regex("voting power: .*")?;
-    let voting_power_str = strip_trailing_newline(&matched).trim().rsplit_once(' ').unwrap().1;
+    let voting_power_str = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
     u64::from_str(voting_power_str).map_err(|e| {
         eyre!(format!(
             "Voting power: {} parsed from {}, Error: {}\n\nOutput: {}",
@@ -130,7 +146,11 @@ pub fn get_epoch(test: &Test, ledger_address: &str) -> Result<Epoch> {
         Some(10)
     )?;
     let (unread, matched) = find.exp_regex("Last committed epoch: .*")?;
-    let epoch_str = strip_trailing_newline(&matched).trim().rsplit_once(' ').unwrap().1;
+    let epoch_str = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
     let epoch = u64::from_str(epoch_str).map_err(|e| {
         eyre!(format!(
             "Epoch: {} parsed from {}, Error: {}\n\nOutput: {}",
