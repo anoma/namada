@@ -133,41 +133,38 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
                     prefix,
                 )
                 .await;
-                match balances {
-                    Some(balances) => {
-                        let stdout = io::stdout();
-                        let mut w = stdout.lock();
-                        for (key, balance) in balances {
-                            match token::is_any_multitoken_balance_key(&key) {
-                                Some((sub_prefix, o)) if *o == owner => {
-                                    writeln!(
-                                        w,
-                                        "{} with {}: {}",
-                                        currency_code, sub_prefix, balance
-                                    )
-                                    .unwrap();
-                                    found_any = true;
-                                }
-                                Some(_) => {}
-                                None => {
-                                    if let Some(o) =
-                                        token::is_any_token_balance_key(&key)
-                                    {
-                                        if *o == owner {
-                                            writeln!(
-                                                w,
-                                                "{}: {}",
-                                                currency_code, balance
-                                            )
-                                            .unwrap();
-                                            found_any = true;
-                                        }
+                if let Some(balances) = balances {
+                    let stdout = io::stdout();
+                    let mut w = stdout.lock();
+                    for (key, balance) in balances {
+                        match token::is_any_multitoken_balance_key(&key) {
+                            Some((sub_prefix, o)) if *o == owner => {
+                                writeln!(
+                                    w,
+                                    "{} with {}: {}",
+                                    currency_code, sub_prefix, balance
+                                )
+                                .unwrap();
+                                found_any = true;
+                            }
+                            Some(_) => {}
+                            None => {
+                                if let Some(o) =
+                                    token::is_any_token_balance_key(&key)
+                                {
+                                    if *o == owner {
+                                        writeln!(
+                                            w,
+                                            "{}: {}",
+                                            currency_code, balance
+                                        )
+                                        .unwrap();
+                                        found_any = true;
                                     }
                                 }
                             }
                         }
                     }
-                    None => {}
                 }
             }
             if !found_any {

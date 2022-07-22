@@ -19,13 +19,14 @@ use crate::ibc::core::ics24_host::path::{
 use crate::ibc::core::ics24_host::Path;
 use crate::types::address::{Address, InternalAddress, HASH_LEN};
 use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
-use crate::types::token::MULTITOKEN_STORAGE_KEY;
 
 const CLIENTS_COUNTER: &str = "clients/counter";
 const CONNECTIONS_COUNTER: &str = "connections/counter";
 const CHANNELS_COUNTER: &str = "channelEnds/counter";
 const CAPABILITIES_INDEX: &str = "capabilities/index";
 const CAPABILITIES: &str = "capabilities";
+/// Key segment for a multitoken
+const MULTITOKEN_STORAGE_KEY: &str = "multitoken";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]

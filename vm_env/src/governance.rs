@@ -64,7 +64,6 @@ pub mod tx {
             &governance_address,
             &m1t(),
             None,
-            None,
             min_proposal_funds,
         );
     }

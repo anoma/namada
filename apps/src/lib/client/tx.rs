@@ -415,7 +415,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         }
     }
     // Check source balance
-    let (source_sub_prefix, balance_key) = match args.source_sub_prefix {
+    let (sub_prefix, balance_key) = match args.sub_prefix {
         Some(sub_prefix) => {
             let sub_prefix = Key::parse(sub_prefix).unwrap();
             let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
@@ -452,15 +452,12 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
             }
         }
     }
-    let target_sub_prefix =
-        args.target_sub_prefix.map(|p| Key::parse(p).unwrap());
     let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
     let transfer = token::Transfer {
         source,
         target,
         token,
-        source_sub_prefix,
-        target_sub_prefix,
+        sub_prefix,
         amount: args.amount,
     };
     tracing::debug!("Transfer data {:?}", transfer);

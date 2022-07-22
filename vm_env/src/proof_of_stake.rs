@@ -256,6 +256,6 @@ impl namada_proof_of_stake::PosActions for PoS {
         src: &Self::Address,
         dest: &Self::Address,
     ) {
-        crate::token::tx::transfer(src, dest, token, None, None, amount)
+        crate::token::tx::transfer(src, dest, token, None, amount)
     }
 }
