@@ -5,7 +5,6 @@ mod prepare_block {
     use std::collections::{BTreeMap, HashSet};
 
     use namada::proto::Signed;
-    use namada::types::address::Address;
     use namada::types::ethereum_events::vote_extensions::{
         FractionalVotingPower, MultiSignedEthEvent, VoteExtension,
         VoteExtensionDigest,
@@ -290,13 +289,12 @@ mod prepare_block {
         use namada::types::address::xan;
         use namada::types::ethereum_events::vote_extensions::VoteExtension;
         use namada::types::ethereum_events::EthereumEvent;
-        use namada::types::hash::Hash;
         use namada::types::key::{common, ed25519};
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::Fee;
         use tendermint_proto::abci::tx_record::TxAction;
         use tendermint_proto::abci::{
-            ExtendedCommitInfo, ExtendedVoteInfo, Validator,
+            ExtendedCommitInfo, ExtendedVoteInfo,
         };
 
         use super::super::super::vote_extensions::SignedExt;
@@ -327,36 +325,12 @@ mod prepare_block {
             );
         }
 
-        /// Given a secret key `sk`, return a Tendermint compliant address.
-        fn get_tm_address(sk: &common::SecretKey) -> Vec<u8> {
-            let common::PublicKey::Ed25519(ed25519::PublicKey(pk)) =
-                sk.ref_to();
-            let Hash(raw_hash) = Hash::sha256(pk.as_bytes());
-            (&raw_hash[..20]).to_vec()
-        }
-
-        /// Returns a tuple with the Tendermint validator address and the
-        /// Namada protocol key.
-        fn get_validator_keys() -> (Vec<u8>, common::SecretKey) {
-            let validator_tm_addr = {
-                let consensus_key = wallet::defaults::validator_keypair();
-                get_tm_address(&consensus_key)
-            };
-            let (protocol_key, _) = wallet::defaults::validator_keys();
-            (validator_tm_addr, protocol_key)
-        }
-
         /// Serialize a [`SignedExt`] to an [`ExtendedVoteInfo`]
         fn vote_extension_serialize(
-            tm_addr: Vec<u8>,
             vext: SignedExt,
         ) -> ExtendedVoteInfo {
             ExtendedVoteInfo {
                 vote_extension: vext.try_to_vec().unwrap(),
-                validator: Some(Validator {
-                    address: tm_addr,
-                    ..Default::default()
-                }),
                 ..Default::default()
             }
         }
@@ -364,10 +338,9 @@ mod prepare_block {
         /// Check if we are filtering out an invalid vote extension `vext`
         fn check_vote_extension_filtering(
             shell: &mut TestShell,
-            tm_addr: Vec<u8>,
             vext: SignedExt,
         ) {
-            let votes = vec![vote_extension_serialize(tm_addr, vext)];
+            let votes = vec![vote_extension_serialize(vext)];
             let filtered_votes: Vec<_> =
                 shell.filter_invalid_vote_extensions(votes).collect();
 
@@ -385,7 +358,7 @@ mod prepare_block {
             // artificially change the block height
             shell.storage.last_height = LAST_HEIGHT;
 
-            let (validator_tm_addr, _) = get_validator_keys();
+            let validator_addr = wallet::defaults::validator_address();
 
             let signed_vote_extension = {
                 // create a fake signature
@@ -394,6 +367,7 @@ mod prepare_block {
                 ));
 
                 let data = VoteExtension {
+                    validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![],
                 };
@@ -403,7 +377,6 @@ mod prepare_block {
 
             check_vote_extension_filtering(
                 &mut shell,
-                validator_tm_addr,
                 signed_vote_extension,
             );
         }
@@ -421,10 +394,12 @@ mod prepare_block {
             // artificially change the block height
             shell.storage.last_height = LAST_HEIGHT;
 
-            let (validator_tm_addr, protocol_key) = get_validator_keys();
+            let (protocol_key, _) = wallet::defaults::validator_keys();
+            let validator_addr = wallet::defaults::validator_address();
 
             let signed_vote_extension = {
                 let ext = VoteExtension {
+                    validator_addr,
                     block_height: PRED_LAST_HEIGHT,
                     ethereum_events: vec![],
                 }
@@ -435,7 +410,6 @@ mod prepare_block {
 
             check_vote_extension_filtering(
                 &mut shell,
-                validator_tm_addr,
                 signed_vote_extension,
             );
         }
@@ -451,14 +425,15 @@ mod prepare_block {
             // artificially change the block height
             shell.storage.last_height = LAST_HEIGHT;
 
-            let (validator_tm_addr, protocol_key) = {
-                let bertha = wallet::defaults::bertha_keypair();
-                let bertha_tm_addr = get_tm_address(&bertha);
-                (bertha_tm_addr, bertha)
+            let (validator_addr, protocol_key) = {
+                let bertha_key = wallet::defaults::bertha_keypair();
+                let bertha_addr = wallet::defaults::bertha_address();
+                (bertha_addr, bertha_key)
             };
 
             let signed_vote_extension = {
                 let ext = VoteExtension {
+                    validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![],
                 }
@@ -469,7 +444,6 @@ mod prepare_block {
 
             check_vote_extension_filtering(
                 &mut shell,
-                validator_tm_addr,
                 signed_vote_extension,
             );
         }
@@ -485,7 +459,8 @@ mod prepare_block {
             // artificially change the block height
             shell.storage.last_height = LAST_HEIGHT;
 
-            let (validator_tm_addr, protocol_key) = get_validator_keys();
+            let (protocol_key, _) = wallet::defaults::validator_keys();
+            let validator_addr = wallet::defaults::validator_address();
 
             let ethereum_event = EthereumEvent::TransfersToNamada {
                 nonce: 1u64.into(),
@@ -494,6 +469,7 @@ mod prepare_block {
             let signed_vote_extension = {
                 let ev = ethereum_event.clone();
                 let ext = VoteExtension {
+                    validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![ev.clone(), ev.clone(), ev],
                 }
@@ -504,7 +480,6 @@ mod prepare_block {
 
             let digest = {
                 let votes = vec![vote_extension_serialize(
-                    validator_tm_addr,
                     signed_vote_extension,
                 )];
                 shell.compress_vote_extensions(votes).unwrap()

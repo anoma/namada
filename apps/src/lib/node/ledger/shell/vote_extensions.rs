@@ -2,7 +2,6 @@
 mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::proto::Signed;
-    use namada::types::address::Address;
     use namada::types::ethereum_events::vote_extensions::VoteExtension;
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 
