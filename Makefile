@@ -59,34 +59,35 @@ check:
 check-abci-plus-plus:
 	$(cargo) check --no-default-features --features "ABCI-plus-plus"
 
-clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
+clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --message-format=json -- -D warnings
 
-clippy-wasm-abci-plus-plus = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --no-default-features --features "ABCI-plus-plus" -- -D warnings
+clippy-wasm-abci-plus-plus = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets --no-default-features --features "ABCI-plus-plus" --message-format=json -- -D warnings
 
 clippy:
-	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
-	make -C $(wasms) clippy && \
-	make -C $(wasms_for_tests) clippy && \
+	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets --message-format=json -- -D warnings && \
+	make -C $(wasms) clippy --message-format=json && \
+	make -C $(wasms_for_tests) clippy --message-format=json && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
 clippy-abci-plus-plus:
-	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
+	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets --message-format=json \
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
 		--features "std testing ABCI-plus-plus" && \
-	$(cargo) +$(nightly) clippy --all-targets \
+	$(cargo) +$(nightly) clippy --all-targets --message-format=json \
 		--manifest-path ./proof_of_stake/Cargo.toml \
 		--features "testing" && \
-	$(cargo) +$(nightly) clippy --all-targets \
+	$(cargo) +$(nightly) clippy --all-targets --message-format=json \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
 		--features "testing wasm-runtime ABCI-plus-plus ibc-mocks" && \
-	$(cargo) +$(nightly) clippy --all-targets \
+	$(cargo) +$(nightly) clippy --all-targets --message-format=json \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
 		--features "wasm-runtime ABCI-plus-plus namada_apps/ABCI-plus-plus" && \
 	$(cargo) +$(nightly) clippy \
 		--all-targets \
+		--message-format=json \
 		--manifest-path ./vm_env/Cargo.toml \
 		--no-default-features \
 		--features "ABCI-plus-plus" && \

@@ -25,6 +25,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         nightly_version: [nightly-2022-05-20]
+        clippy_sarif: [psastras/sarif-rs@0.3.1]
         make:
           - name: Clippy
             command: clippy
@@ -74,7 +75,19 @@ jobs:
             ./wasm_for_tests/wasm_source/target
           key: ${{ runner.os }}-${{ matrix.make.cache_subkey }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.make.cache_subkey }}-${{ matrix.make.cache_version }}-cargo-
+      - name: Install sarif
+        if: matrix.make.name != "Format"
+        run: curl https://i.jpillora.com/${{ matrix.clippy_sarif }}! | bash
       - name: ${{ matrix.make.name }}
+        if: matrix.make.name != "Format"
+        run: make ${{ matrix.make.command }} | clippy-sarif | tee results.sarif
+      - name: Upload SARIF file
+        if: matrix.make.name != "Format"
+        uses: github/codeql-action/upload-sarif@v1
+        with:
+          sarif_file: results.sarif
+      - name: ${{ matrix.make.name }}
+        if: matrix.make.name == "Format"
         run: make ${{ matrix.make.command }}
       - name: Clean cache folder
         run: |

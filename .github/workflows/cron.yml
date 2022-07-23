@@ -66,6 +66,6 @@ jobs:
           pip3 install -Iv cryptography==37.0.4
           python3 ${{ matrix.make.command }}.py
         env:
-          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GT_APP_PRIVATE_KEY }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - name: Clean cache folder
         run: cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache && cargo-cache
