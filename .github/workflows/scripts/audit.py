@@ -10,9 +10,9 @@ REPOSITORY_NAME = os.environ['GITHUB_REPOSITORY_OWNER']
 
 GH_TOKEN = os.environ['GITHUB_TOKEN']
 
-GET_ISSUES_URL = 'https://api.github.com/repos/{}/{}/issues'.format(REPOSITORY_NAME, 'anoma')
-CREATE_ISSUE_URL = 'https://api.github.com/repos/{}/{}/issues'.format(REPOSITORY_NAME, 'anoma')
-MODIFY_ISSUE = 'https://api.github.com/repos/{}/{}/issues/{}'.format(REPOSITORY_NAME, 'anoma', '{}')
+GET_ISSUES_URL = 'https://api.github.com/repos/{}/{}/issues'.format(REPOSITORY_NAME, 'namada')
+CREATE_ISSUE_URL = 'https://api.github.com/repos/{}/{}/issues'.format(REPOSITORY_NAME, 'namada')
+MODIFY_ISSUE = 'https://api.github.com/repos/{}/{}/issues/{}'.format(REPOSITORY_NAME, 'namada', '{}')
 HEADERS = {
     'Content-Type': 'application/json',
     'Accept': 'application/vnd.github.v3+json',
