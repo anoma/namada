@@ -112,8 +112,10 @@ mod extend_votes {
                 );
                 return None;
             }
-            let epoch = self.storage.block.pred_epochs.get_epoch(height);
+            // TODO: verify if we have any duplicate ethereum events
+            let _ = todo!();
             // get the public key associated with this validator
+            let epoch = self.storage.block.pred_epochs.get_epoch(height);
             let validator = &ext.data.validator_addr;
             let (voting_power, pk) = self
                 .get_validator_from_address(validator, epoch)
