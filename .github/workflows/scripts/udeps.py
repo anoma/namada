@@ -6,21 +6,9 @@ import github3
 import urllib.request
 from urllib.request import urlopen
 
-GITHUB_APP_ID = 160343
 REPOSITORY_NAME = os.environ['GITHUB_REPOSITORY_OWNER']
 
-def generate_gh_token():
-    gh = github3.github.GitHub()
-    
-    app_pk = os.environ['GITHUB_APP_PRIVATE_KEY']
-    gh.login_as_app(app_pk.encode(), GITHUB_APP_ID)
-    
-    installation = list(filter(lambda installation: installation.account['login'] == REPOSITORY_NAME, gh.app_installations())).pop()
-    gh.login_as_app_installation(app_pk.encode(), GITHUB_APP_ID, installation.id)
-
-    return gh.session.auth.token
-
-GH_TOKEN = generate_gh_token() if 'CI' in os.environ and os.environ['CI'] else ""
+GH_TOKEN = os.environ['GITHUB_TOKEN']
 
 GET_ISSUES_URL = 'https://api.github.com/repos/{}/{}/issues'.format(REPOSITORY_NAME, 'anoma')
 CREATE_ISSUE_URL = 'https://api.github.com/repos/{}/{}/issues'.format(REPOSITORY_NAME, 'anoma')
