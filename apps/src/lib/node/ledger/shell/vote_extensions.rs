@@ -113,7 +113,7 @@ mod extend_votes {
                 return None;
             }
             // verify if we have any duplicate Ethereum events,
-            // and if these are sorted
+            // and if these are sorted in ascending order
             let have_dupes = {
                 let some_ethereum_events =
                     ext.data.ethereum_events.iter().map(Some);
