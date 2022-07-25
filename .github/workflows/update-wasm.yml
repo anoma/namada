@@ -25,7 +25,7 @@ jobs:
         id: update-wasm
         with:
           trigger: 'pls update wasm'
-          reaction: eyes
+          reaction: ''
         env:
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
       - name: Dump GitHub context
