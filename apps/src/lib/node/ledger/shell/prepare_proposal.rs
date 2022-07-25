@@ -628,7 +628,8 @@ mod prepare_block {
             let (mut shell, _, _) = test_utils::setup();
 
             // artificially change the voting power of the default validator to
-            // zero and change the block height, to move to a new epoch
+            // zero, change the block height, and commit a dummy block,
+            // to move to a new epoch
             let events_epoch = shell
                 .storage
                 .block
