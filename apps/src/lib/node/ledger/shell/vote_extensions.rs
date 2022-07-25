@@ -112,11 +112,28 @@ mod extend_votes {
                 );
                 return None;
             }
-            // TODO: verify if we have any duplicate ethereum events
-            let _ = todo!();
+            // verify if we have any duplicate Ethereum events,
+            // and if these are sorted
+            let have_dupes = {
+                let some_ethereum_events =
+                    ext.data.ethereum_events.iter().map(Some);
+                let first_elems =
+                    std::iter::once(None).chain(some_ethereum_events);
+                let second_elems = ext.data.ethereum_events.iter().map(Some);
+                first_elems
+                    .zip(second_elems)
+                    .all(|(ev_1, ev_2)| ev_1 < ev_2)
+            };
+            let validator = &ext.data.validator_addr;
+            if have_dupes {
+                tracing::error!(
+                    %validator,
+                    "Found duplicate or non-sorted Ethereum events in a vote extension from validator"
+                );
+                return None;
+            }
             // get the public key associated with this validator
             let epoch = self.storage.block.pred_epochs.get_epoch(height);
-            let validator = &ext.data.validator_addr;
             let (voting_power, pk) = self
                 .get_validator_from_address(validator, epoch)
                 .map_err(|err| {
