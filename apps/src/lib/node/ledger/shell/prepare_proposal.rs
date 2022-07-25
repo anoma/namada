@@ -140,6 +140,13 @@ mod prepare_block {
         }
 
         /// Builds a batch of DKG decrypted transactions
+        // TODO: we won't have frontrunning protection until V2 of the Anoma
+        // protocol; Namada runs V1, therefore this method is
+        // essentially a NOOP, and ought to be removed
+        //
+        // sources:
+        // - https://specs.anoma.net/main/releases/v2.html
+        // - https://github.com/anoma/ferveo
         fn build_decrypted_txs(&mut self) -> Vec<TxRecord> {
             // TODO: This should not be hardcoded
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
