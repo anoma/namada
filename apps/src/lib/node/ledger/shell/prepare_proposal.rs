@@ -284,7 +284,8 @@ mod prepare_block {
     }
 
     #[cfg(test)]
-    // TODO: write tests for ethereum events on prepare proposal
+    // TODO: write a test to check for unreachable code paths in
+    // prepare proposals, when processing ethereum events
     mod test_prepare_proposal {
         use std::collections::HashSet;
 
