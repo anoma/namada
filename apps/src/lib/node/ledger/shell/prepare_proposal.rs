@@ -101,13 +101,14 @@ mod prepare_block {
                     _ => unreachable!(
                         "Honest Namada validators will always sign a \
                          VoteExtension, even if no Ethereum events were \
-                         observed at a given block height. In fact, signing \
-                         an empty VoteExtension commits the fact no events \
-                         were observed by a majority of validators. Likewise, \
-                         a Tendermint quorum should never decide on a block \
-                         including vote extensions reflecting less than or \
-                         equal to 2/3 of the total stake. These scenarios are \
-                         virtually impossible, so we will panic here."
+                         observed at a given block height. In fact, a quorum \
+                         of signed empty VoteExtension commits the fact no \
+                         events were observed by a majority of validators. \
+                         Likewise, a Tendermint quorum should never decide on \
+                         a block including vote extensions reflecting less \
+                         than or equal to 2/3 of the total stake. These \
+                         scenarios are virtually impossible, so we will panic \
+                         here."
                     ),
                 };
 
