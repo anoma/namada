@@ -62,10 +62,10 @@ jobs:
       - name: ${{ matrix.make.name }}
         working-directory: ./.github/workflows/scripts
         run: |
-          pip3 install github3.py 
-          pip3 install -Iv cryptography==37.0.4
+          pip3 install github3.py >/dev/null 2>&1
+          pip3 install -Iv cryptography==37.0.4 >/dev/null 2>&1
           python3 ${{ matrix.make.command }}.py
         env:
-          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GT_APP_PRIVATE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Clean cache folder
         run: cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache && cargo-cache
