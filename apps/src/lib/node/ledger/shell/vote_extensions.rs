@@ -1,11 +1,14 @@
 #[cfg(not(feature = "ABCI"))]
 mod extend_votes {
     use borsh::BorshDeserialize;
+    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
     use namada::types::address::Address;
     use namada::types::ethereum_events::vote_extensions::VoteExtension;
 
     use super::super::*;
+
+    /// A [`VoteExtension`] signed by a Namada validator.
     pub type SignedExt = Signed<VoteExtension>;
 
     impl<D, H> Shell<D, H>
@@ -18,9 +21,15 @@ mod extend_votes {
             &mut self,
             _req: request::ExtendVote,
         ) -> response::ExtendVote {
+            let validator_addr = self
+                .mode
+                .get_validator_address()
+                .expect("only validators should receive this method call")
+                .to_owned();
             let ext = VoteExtension {
                 block_height: self.storage.last_height + 1,
                 ethereum_events: self.new_ethereum_events(),
+                validator_addr,
             };
             self.mode
                 .get_protocol_key()
@@ -40,17 +49,12 @@ mod extend_votes {
             &self,
             req: request::VerifyVoteExtension,
         ) -> response::VerifyVoteExtension {
-            let addr = self.get_validator_from_tm_address(
-                req.validator_address.as_slice(),
-                None,
-            );
-            if let (Ok(signed), Ok(validator)) =
-                (SignedExt::try_from_slice(&req.vote_extension[..]), addr)
+            if let Ok(signed) =
+                SignedExt::try_from_slice(&req.vote_extension[..])
             {
                 response::VerifyVoteExtension {
                     status: if self.validate_vote_extension(
                         signed,
-                        validator,
                         self.storage.last_height + 1,
                     ) {
                         VerifyStatus::Accept.into()
@@ -83,19 +87,56 @@ mod extend_votes {
         ///  * The validator correctly signed the extension
         ///  * The validator signed over the correct height inside of the
         ///    extension
+        #[inline]
         pub fn validate_vote_extension(
             &self,
             ext: SignedExt,
-            validator: Address,
             height: BlockHeight,
         ) -> bool {
+            self.validate_vote_ext_and_get_it_back(ext, height)
+                .is_some()
+        }
+
+        /// This method behaves exactly like [`Self::validate_vote_extension`],
+        /// with the added bonus of returning the vote extension back, if it
+        /// is valid.
+        pub fn validate_vote_ext_and_get_it_back(
+            &self,
+            ext: SignedExt,
+            height: BlockHeight,
+        ) -> Option<(VotingPower, SignedExt)> {
+            if ext.data.block_height != height {
+                let ext_height = ext.data.block_height;
+                tracing::error!(
+                    "Vote extension issued for a block height {ext_height} \
+                     different from the expected height {height}"
+                );
+                return None;
+            }
             let epoch = self.storage.block.pred_epochs.get_epoch(height);
             // get the public key associated with this validator
-            let pk = match self.get_validator_from_address(&validator, epoch) {
-                Ok((_, pk)) => pk,
-                _ => return false,
-            };
-            ext.verify(&pk).is_ok() && ext.data.block_height == height
+            let validator = &ext.data.validator_addr;
+            let (voting_power, pk) = self
+                .get_validator_from_address(validator, epoch)
+                .map_err(|err| {
+                    tracing::error!(
+                        ?err,
+                        %validator,
+                        "Could not get public key from Storage for validator"
+                    );
+                })
+                .ok()?;
+            // verify the signature of the vote extension
+            ext.verify(&pk)
+                .map_err(|err| {
+                    tracing::error!(
+                        ?err,
+                        %validator,
+                        "Failed to verify the signature of a vote extension issued by validator"
+                    );
+                })
+                .ok()
+                .map(|_| (voting_power, ext))
         }
 
         /// Checks the channel from the Ethereum oracle monitoring
@@ -258,6 +299,7 @@ mod extend_votes {
                     }],
                 }],
                 block_height: shell.storage.last_height + 1,
+                validator_addr: address.clone(),
             }
             .sign(&signing_key)
             .try_to_vec()
@@ -303,6 +345,7 @@ mod extend_votes {
                     }],
                 }],
                 block_height: signed_height,
+                validator_addr: address,
             }
             .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
@@ -341,11 +384,7 @@ mod extend_votes {
                     .is_ok()
             );
 
-            assert!(shell.validate_vote_extension(
-                vote_ext,
-                address,
-                signed_height
-            ));
+            assert!(shell.validate_vote_extension(vote_ext, signed_height));
         }
 
         /// Test that that an event that incorrectly labels what block it was
@@ -364,6 +403,7 @@ mod extend_votes {
                     }],
                 }],
                 block_height: shell.storage.last_height,
+                validator_addr: address.clone(),
             }
             .sign(shell.mode.get_protocol_key().expect("Test failed"))
             .try_to_vec()

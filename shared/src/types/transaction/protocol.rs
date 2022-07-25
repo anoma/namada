@@ -83,20 +83,14 @@ mod protocol_txs {
 
     impl ProtocolTxType {
         /// Sign a ProtocolTxType and wrap it up in a normal Tx
-        pub fn sign(
-            self,
-            pk: &common::PublicKey,
-            signing_key: &common::SecretKey,
-        ) -> Tx {
+        pub fn sign(self, signing_key: &common::SecretKey) -> Tx {
+            let pk = signing_key.ref_to();
             Tx::new(
                 vec![],
                 Some(
-                    TxType::Protocol(ProtocolTx {
-                        pk: pk.clone(),
-                        tx: self,
-                    })
-                    .try_to_vec()
-                    .expect("Could not serialize ProtocolTx"),
+                    TxType::Protocol(ProtocolTx { pk, tx: self })
+                        .try_to_vec()
+                        .expect("Could not serialize ProtocolTx"),
                 ),
             )
             .sign(signing_key)

@@ -404,7 +404,6 @@ where
 
     /// Lookup the total voting power for an epoch
     #[cfg(not(feature = "ABCI"))]
-    #[allow(dead_code)]
     pub fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
         // get the current epoch
         let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
@@ -426,8 +425,9 @@ where
     /// Given a tendermint validator, the address is the hash
     /// of the validators public key. We look up the native
     /// address from storage using this hash.
-    /// TODO: We may change how this lookup is done, see
-    /// https://github.com/anoma/namada/issues/200
+    // TODO: We may change how this lookup is done, see
+    // https://github.com/anoma/namada/issues/200
+    #[allow(dead_code)]
     pub fn get_validator_from_tm_address(
         &self,
         tm_address: &[u8],
