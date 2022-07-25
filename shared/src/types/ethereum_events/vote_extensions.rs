@@ -164,7 +164,7 @@ impl VoteExtensionDigest {
     pub fn decompress(
         self,
         last_height: BlockHeight,
-    ) -> Vec<(Signed<VoteExtension>, Address)> {
+    ) -> Vec<Signed<VoteExtension>> {
         let VoteExtensionDigest { signatures, events } = self;
 
         let mut extensions = vec![];
@@ -185,7 +185,7 @@ impl VoteExtensionDigest {
             ext.ethereum_events.sort();
 
             let signed = Signed { data: ext, sig };
-            extensions.push((signed, addr));
+            extensions.push(signed);
         }
         extensions
     }
@@ -324,7 +324,6 @@ mod tests {
         let decompressed = digest
             .decompress(last_block_height)
             .into_iter()
-            .map(|event| event.0)
             .collect::<Vec<Signed<VoteExtension>>>();
 
         assert_eq!(ext, decompressed);

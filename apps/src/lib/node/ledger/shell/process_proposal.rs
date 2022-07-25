@@ -133,22 +133,24 @@ where
                         .get_epoch(BlockHeight(self.storage.last_height.0));
                     let total_power =
                         u64::from(self.get_total_voting_power(epoch));
-                    if extensions.into_iter().all(|(ext, validator)| match self
-                        .get_validator_from_address(&validator, epoch)
-                    {
-                        Ok((power, _)) => {
-                            voting_power += FractionalVotingPower::new(
-                                u64::from(power),
-                                total_power,
-                            )
-                            .unwrap_or_default();
-                            self.validate_vote_extension(
-                                ext,
-                                validator,
-                                self.storage.last_height,
-                            )
+                    if extensions.into_iter().all(|ext| {
+                        match self.get_validator_from_address(
+                            &ext.data.validator_addr,
+                            epoch,
+                        ) {
+                            Ok((power, _)) => {
+                                voting_power += FractionalVotingPower::new(
+                                    u64::from(power),
+                                    total_power,
+                                )
+                                .unwrap_or_default();
+                                self.validate_vote_extension(
+                                    ext,
+                                    self.storage.last_height,
+                                )
+                            }
+                            _ => false,
                         }
-                        _ => false,
                     }) {
                         if voting_power
                             > FractionalVotingPower::new(2, 3).unwrap()
