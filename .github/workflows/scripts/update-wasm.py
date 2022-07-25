@@ -23,13 +23,15 @@ def commit_and_push():
 
 
 TOKEN = environ["GITHUB_TOKEN"]
+READ_ORG_TOKEN = environ['GITHUB_READ_ORG_TOKEN']
 TMP_DIRECTORY = gettempdir()
 PR_COMMENT = 'pls update wasm'
 ARTIFACT_PER_PAGE = 75
 
+read_org_api = GhApi(token=READ_ORG_TOKEN)
 api = GhApi(owner="Fraccaman", repo="namada", token=TOKEN)
 
-user_membership = api.teams.get_membership_for_user_in_org('heliaxdev', 'company', 'fraccaman')
+user_membership = read_org_api.teams.get_membership_for_user_in_org('heliaxdev', 'company', 'fraccaman')
 if user_membership['state'] != 'active':
     exit(0)
 

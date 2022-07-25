@@ -103,8 +103,8 @@ jobs:
       - name: ${{ matrix.make.name }}
         run: ${{ matrix.make.command }}
       - name: Publish docs
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-        run: aws s3 sync ${{ matrix.make.folder }}/book/html/* s3://${{ matrix.make.bucket }} --delete
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: aws s3 sync ${{ matrix.make.folder }}/book/html/* s3://${{ matrix.make.bucket }} --delete --dry-run
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats

@@ -51,11 +51,11 @@ jobs:
         run: cmp -- wasm/checksums.json wasm/original-checksums.json
       - name: Print diff
         if: failure()
-        run: diff -y -W 120 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
+        run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
   
   update-wasm:
     runs-on: ${{ matrix.os }}
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.build-wasm.result == 'success' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-wasm.result == 'success' }}
     needs: [build-wasm]
     strategy:
       fail-fast: false
@@ -74,7 +74,7 @@ jobs:
           name: wasm-${{ github.sha }}
           path: ./wasm
       - name: Update WASM
-        run: aws s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
+        run: aws s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION --dry-run
         env:
           BUCKET_NAME: namada-wasm-master
           AWS_REGION: eu-west-1
@@ -92,7 +92,7 @@ jobs:
             cache_key: anoma
             cache_version: v1
             wait_for: anoma-release (ubuntu-latest, ABCI Release build, anoma-e2e-release, v1)
-            tendermint_artifact: tendermint-0.34.11-c2908ef785bb5ca6e015910368e4b7a32821b9ff
+            tendermint_artifact: tendermint-0.34.19-2f231ceb952a2426cf3c0abaf0b455aadd11e5b2
           - name: ABCI++
             suffix: -abci-plus-plus
             cache_key: anoma-abci-plus-plus

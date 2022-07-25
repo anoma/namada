@@ -37,4 +37,5 @@ jobs:
         env:
           GITHUB_CONTEXT: ${{ toJson(github) }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_READ_ORG_TOKEN: ${{ secrets.GT_READ_ORG }}
         run: pip3 install ghapi && python3 .github/workflows/scripts/${{ matrix.command }}
