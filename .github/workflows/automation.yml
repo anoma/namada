@@ -1,0 +1,33 @@
+name: Automation Tasks
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  GIT_LFS_SKIP_SMUDGE: 1
+
+jobs:
+  update-wasm:
+    if: ${{ github.event.issue.pull_request }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        command: ['publish-wasm.py', 'update-wasm.py']
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          aws-region: eu-west-1
+      - name: Run task
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: pip3 install ghapi && python3 run .github/workflows/scripts/${{ matrix.command }}
