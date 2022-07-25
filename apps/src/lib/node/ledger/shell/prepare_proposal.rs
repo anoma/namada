@@ -289,6 +289,9 @@ mod prepare_block {
     mod test_prepare_proposal {
         use std::collections::HashSet;
 
+        use namada::ledger::pos::namada_proof_of_stake::types::{
+            VotingPower, WeightedValidator,
+        };
         use namada::proto::SignedTxData;
         use namada::types::address::xan;
         use namada::types::ethereum_events::vote_extensions::VoteExtension;
@@ -604,6 +607,87 @@ mod prepare_block {
 
             // NOTE: this comparison will not work because of timestamps
             // assert_eq!(rsp.tx_records, vec![digest]);
+        }
+
+        /// Test if vote extension validation and inclusion in a block
+        /// behaves as expected, considering <= 2/3 voting power.
+        #[test]
+        // TODO: make sure this test panics
+        //#[should_panic(expected = "entered unreachable code")]
+        fn test_prepare_proposal_vext_insufficient_voting_power() {
+            const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+            // starting the shell like this will contain insufficient voting
+            // power
+            let (mut shell, _, _) = test_utils::setup();
+
+            // artificially change the block height
+            shell.storage.last_height = LAST_HEIGHT;
+
+            // artificially change the voting power of the default validator to
+            // 0
+            //
+            // TODO: this is not working
+            let events_epoch = shell
+                .storage
+                .block
+                .pred_epochs
+                .get_epoch(LAST_HEIGHT)
+                .expect("Test failed");
+            let validator_set = {
+                let params = shell.storage.read_pos_params();
+                let mut epochs = shell.storage.read_validator_set();
+                let mut data =
+                    epochs.get(events_epoch).cloned().expect("Test failed");
+
+                data.active = data
+                    .active
+                    .iter()
+                    .cloned()
+                    .map(|v| WeightedValidator {
+                        voting_power: VotingPower::from(0u64),
+                        ..v
+                    })
+                    .collect();
+
+                epochs.set(data, events_epoch, &params);
+                epochs
+            };
+            shell.storage.write_validator_set(&validator_set);
+
+            let (protocol_key, _) = wallet::defaults::validator_keys();
+            let validator_addr = wallet::defaults::validator_address();
+
+            let ethereum_event = EthereumEvent::TransfersToNamada {
+                nonce: 1u64.into(),
+                transfers: vec![],
+            };
+            let signed_vote_extension = {
+                let ext = VoteExtension {
+                    validator_addr,
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![ethereum_event],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+            let vote = ExtendedVoteInfo {
+                vote_extension: signed_vote_extension
+                    .clone()
+                    .try_to_vec()
+                    .unwrap(),
+                ..Default::default()
+            };
+
+            // this should panic
+            shell.prepare_proposal(RequestPrepareProposal {
+                local_last_commit: Some(ExtendedCommitInfo {
+                    votes: vec![vote],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            });
         }
 
         /// Test that if an error is encountered while
