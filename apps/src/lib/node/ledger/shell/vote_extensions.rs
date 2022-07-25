@@ -344,7 +344,7 @@ mod extend_votes {
                     }],
                 }],
                 block_height: signed_height,
-                validator_addr: address.clone(),
+                validator_addr: address,
             }
             .sign(shell.mode.get_protocol_key().expect("Test failed"));
 

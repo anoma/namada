@@ -113,7 +113,7 @@ mod prepare_block {
                 };
 
             let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-                .sign(&protocol_key)
+                .sign(protocol_key)
                 .to_bytes();
             let tx_record = record::add(tx);
 
@@ -566,10 +566,7 @@ mod prepare_block {
                 ext
             };
             let vote = ExtendedVoteInfo {
-                vote_extension: signed_vote_extension
-                    .clone()
-                    .try_to_vec()
-                    .unwrap(),
+                vote_extension: signed_vote_extension.try_to_vec().unwrap(),
                 ..Default::default()
             };
 
@@ -681,10 +678,7 @@ mod prepare_block {
                 ext
             };
             let vote = ExtendedVoteInfo {
-                vote_extension: signed_vote_extension
-                    .clone()
-                    .try_to_vec()
-                    .unwrap(),
+                vote_extension: signed_vote_extension.try_to_vec().unwrap(),
                 ..Default::default()
             };
 
