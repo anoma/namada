@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        command: ['publish-wasm.py', 'update-wasm.py']
+        command: [publish-wasm.py, update-wasm.py]
 
     steps:
       - name: Configure AWS Credentials
@@ -27,8 +27,12 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
           aws-region: eu-west-1
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - uses: xt0rted/pull-request-comment-branch@v1
+        id: comment-branch
+      - uses: actions/checkout@v2
+        if: success()
+        with:
+          ref: ${{ steps.comment-branch.outputs.head_ref }}
       - name: Run task
         env:
           GITHUB_CONTEXT: ${{ toJson(github) }}
