@@ -480,10 +480,10 @@ mod prepare_block {
 
             assert_eq!(decompressed.len(), 1);
 
-            // NOTE: this negation is on purpose. we just want to check if the
+            // NOTE: this check is on purpose. we just want to check if the
             // events were de-duped, obv the signature will be
             // different, since we signed a `Vec` with duped events
-            assert!(!decompressed[0].verify(&protocol_key.ref_to()).is_ok());
+            assert!(decompressed[0].verify(&protocol_key.ref_to()).is_err());
 
             assert_eq!(
                 decompressed[0].data.ethereum_events,
