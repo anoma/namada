@@ -116,7 +116,9 @@ impl BorshSchema for FractionalVotingPower {
 
 /// Aggregates an Ethereum event with the corresponding
 // validators who saw this event.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct MultiSignedEthEvent {
     /// The Ethereum event that was signed.
     pub event: EthereumEvent,
@@ -126,7 +128,9 @@ pub struct MultiSignedEthEvent {
 
 /// Compresses a set of signed `VoteExtension` instances, to save
 /// space on a block.
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct VoteExtensionDigest {
     /// The signatures and signing address of each VoteExtension
     pub signatures: Vec<(Signature, Address)>,

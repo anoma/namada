@@ -288,12 +288,14 @@ mod prepare_block {
     mod test_prepare_proposal {
         use std::collections::HashSet;
 
+        use namada::proto::SignedTxData;
         use namada::types::address::xan;
         use namada::types::ethereum_events::vote_extensions::VoteExtension;
         use namada::types::ethereum_events::EthereumEvent;
         use namada::types::key::{common, ed25519};
         use namada::types::storage::{BlockHeight, Epoch};
-        use namada::types::transaction::Fee;
+        use namada::types::transaction::protocol::ProtocolTxType;
+        use namada::types::transaction::{Fee, TxType};
         use tendermint_proto::abci::tx_record::TxAction;
         use tendermint_proto::abci::{
             ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
@@ -492,10 +494,10 @@ mod prepare_block {
         /// Creates a vote extension digest manually, and encodes it as a
         /// [`TxRecord`].
         fn manually_assemble_digest(
-            protocol_key: &common::SecretKey,
+            _protocol_key: &common::SecretKey,
             ext: SignedExt,
             last_height: BlockHeight,
-        ) -> TxRecord {
+        ) -> VoteExtensionDigest {
             let events = vec![MultiSignedEthEvent {
                 event: ext.data.ethereum_events[0].clone(),
                 signers: {
@@ -515,11 +517,12 @@ mod prepare_block {
                 vote_extension_digest.clone().decompress(last_height)
             );
 
-            let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-                .sign(&protocol_key)
-                .to_bytes();
+            vote_extension_digest
 
-            super::record::add(tx)
+            // let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+            //    .sign(&protocol_key)
+            //    .to_bytes();
+            // super::record::add(tx)
         }
 
         /// Test if vote extension validation and inclusion in a block
@@ -558,20 +561,48 @@ mod prepare_block {
                 ..Default::default()
             };
 
-            let rsp = shell.prepare_proposal(RequestPrepareProposal {
+            let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
                 local_last_commit: Some(ExtendedCommitInfo {
                     votes: vec![vote],
                     ..Default::default()
                 }),
                 ..Default::default()
             });
+            let rsp_digest = {
+                assert_eq!(rsp.tx_records.len(), 1);
+                let tx_record = rsp.tx_records.pop().unwrap();
+
+                assert_eq!(tx_record.action(), TxAction::Added);
+
+                let got = Tx::try_from(&tx_record.tx[..]).unwrap();
+                let got_signed_tx =
+                    SignedTxData::try_from_slice(&got.data.unwrap()[..])
+                        .unwrap();
+                let protocol_tx =
+                    TxType::try_from_slice(&got_signed_tx.data.unwrap()[..])
+                        .unwrap();
+
+                let protocol_tx = match protocol_tx {
+                    TxType::Protocol(protocol_tx) => protocol_tx.tx,
+                    _ => panic!("Test failed"),
+                };
+
+                match protocol_tx {
+                    ProtocolTxType::EthereumEvents(digest) => digest,
+                    _ => panic!("Test failed"),
+                }
+            };
 
             let digest = manually_assemble_digest(
                 &protocol_key,
                 signed_vote_extension,
                 LAST_HEIGHT,
             );
-            assert_eq!(rsp.tx_records, vec![digest]);
+
+            assert_eq!(rsp_digest, digest);
+
+            // NOTE: this comparison will not work because of timestamps
+            // assert_eq!(rsp.tx_records, vec![digest]);
         }
 
         /// Test that if an error is encountered while
