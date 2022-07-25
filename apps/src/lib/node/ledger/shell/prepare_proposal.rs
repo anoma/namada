@@ -318,6 +318,7 @@ mod prepare_block {
         use crate::node::ledger::shell::test_utils::{
             self, gen_keypair, TestShell,
         };
+        use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
         use crate::wallet;
 
         /// Test that if a tx from the mempool is not a
@@ -617,27 +618,22 @@ mod prepare_block {
         /// Test if vote extension validation and inclusion in a block
         /// behaves as expected, considering <= 2/3 voting power.
         #[test]
-        // TODO: make sure this test panics
-        //#[should_panic(expected = "entered unreachable code")]
+        #[should_panic(expected = "entered unreachable code")]
         fn test_prepare_proposal_vext_insufficient_voting_power() {
-            const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+            const FIRST_HEIGHT: BlockHeight = BlockHeight(0);
+            const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
 
             // starting the shell like this will contain insufficient voting
             // power
             let (mut shell, _, _) = test_utils::setup();
 
-            // artificially change the block height
-            shell.storage.last_height = LAST_HEIGHT;
-
             // artificially change the voting power of the default validator to
-            // 0
-            //
-            // TODO: this is not working
+            // zero and change the block height, to move to a new epoch
             let events_epoch = shell
                 .storage
                 .block
                 .pred_epochs
-                .get_epoch(LAST_HEIGHT)
+                .get_epoch(FIRST_HEIGHT)
                 .expect("Test failed");
             let validator_set = {
                 let params = shell.storage.read_pos_params();
@@ -660,6 +656,13 @@ mod prepare_block {
             };
             shell.storage.write_validator_set(&validator_set);
 
+            let mut req = FinalizeBlock::default();
+            req.header.time = namada::types::time::DateTimeUtc::now();
+            shell.storage.last_height = LAST_HEIGHT;
+            shell.finalize_block(req).expect("Test failed");
+            shell.commit();
+
+            // test prepare proposal
             let (protocol_key, _) = wallet::defaults::validator_keys();
             let validator_addr = wallet::defaults::validator_address();
 
