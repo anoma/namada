@@ -29,7 +29,7 @@ def get_nightly_from_file() -> str:
 
 # 0 - not exist,2 already exist, else issue number
 def check_issue_status(body: str) -> int:
-    params = {'creator': 'heliaxbot[bot]', 'state':'open'}
+    params = {'creator': 'github-action[bot]', 'state':'open'}
     params_encoded = urllib.parse.urlencode(params)
     req = urllib.request.Request("{}?{}".format(CREATE_ISSUE_URL, params_encoded), headers=HEADERS)
 
