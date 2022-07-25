@@ -29,7 +29,7 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, DB,
 };
-use namada::ledger::{ibc, parameters, pos};
+use namada::ledger::{ibc, pos};
 use namada::proto::{self, Tx};
 use namada::types::chain::ChainId;
 use namada::types::key::*;
@@ -50,7 +50,6 @@ use tendermint_proto::abci::{
     RequestPrepareProposal, ValidatorUpdate,
 };
 use tendermint_proto::crypto::public_key;
-use tendermint_proto::types::ConsensusParams;
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
 use tower_abci::{request, response};
