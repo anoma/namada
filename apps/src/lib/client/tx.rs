@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 use std::convert::TryFrom;
+use std::env;
 use std::fs::File;
+use std::time::Duration;
 
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
@@ -70,6 +72,9 @@ const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const VP_NFT: &str = "vp_nft.wasm";
+
+const ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: &str =
+    "ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT";
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
@@ -1116,9 +1121,21 @@ pub async fn broadcast_tx(
         } => (tx, wrapper_hash, decrypted_hash),
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
+
+    let websocket_timeout =
+        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
+            if let Ok(timeout) = val.parse::<u64>() {
+                Duration::new(timeout, 0)
+            } else {
+                Duration::new(300, 0)
+            }
+        } else {
+            Duration::new(300, 0)
+        };
+
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
         WebSocketAddress::try_from(address.clone())?,
-        None,
+        Some(websocket_timeout),
     )?;
 
     let response = wrapper_tx_subscription
@@ -1236,9 +1253,21 @@ pub async fn submit_tx(
         } => (tx, wrapper_hash, decrypted_hash),
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
+
+    let websocket_timeout =
+        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
+            if let Ok(timeout) = val.parse::<u64>() {
+                Duration::new(timeout, 0)
+            } else {
+                Duration::new(300, 0)
+            }
+        } else {
+            Duration::new(300, 0)
+        };
+
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
         WebSocketAddress::try_from(address.clone())?,
-        None,
+        Some(websocket_timeout),
     )?;
 
     // It is better to subscribe to the transaction before it is broadcast

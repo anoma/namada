@@ -5,6 +5,7 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -63,7 +64,6 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            ~/.cargo/bin
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git
@@ -78,4 +78,6 @@ jobs:
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
       - name: Clean cache folder
-        run: cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache && cargo-cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache || true
+          cargo-cache

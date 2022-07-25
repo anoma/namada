@@ -3,8 +3,9 @@ name: Build and Test
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -48,6 +49,9 @@ jobs:
         run: make test-wasm
       - name: Check wasm up-to-date
         run: cmp -- wasm/checksums.json wasm/original-checksums.json
+      - name: Print diff
+        if: failure()
+        run: diff -y -W 120 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
   
   update-wasm:
     runs-on: ${{ matrix.os }}
@@ -88,13 +92,13 @@ jobs:
             cache_key: anoma
             cache_version: v1
             wait_for: anoma-release (ubuntu-latest, ABCI Release build, anoma-e2e-release, v1)
-            tendermint_artifact: tendermint-2f231ceb952a2426cf3c0abaf0b455aadd11e5b2
+            tendermint_artifact: tendermint-0.34.11-c2908ef785bb5ca6e015910368e4b7a32821b9ff
           - name: ABCI++
             suffix: -abci-plus-plus
             cache_key: anoma-abci-plus-plus
             cache_version: v1
             wait_for: anoma-release (ubuntu-latest, ABCI++ Release build, -abci-plus-plus, anoma-e2e-release-abci-plus-...
-            tendermint_artifact: tendermint++-29e5fbcc648510e4763bd0af0b461aed92c21f30
+            tendermint_artifact: tendermint-unreleased-29e5fbcc648510e4763bd0af0b461aed92c21f30
 
     env:
       CARGO_INCREMENTAL: 0
@@ -183,29 +187,31 @@ jobs:
           path: ./target/release/
       - name: Change permissions
         run: |
-          chmod +x target/release/anoma
-          chmod +x target/release/anomaw
-          chmod +x target/release/anoman
-          chmod +x target/release/anomac
+          chmod +x target/release/namada
+          chmod +x target/release/namadaw
+          chmod +x target/release/namadan
+          chmod +x target/release/namadac
           chmod +x /usr/local/bin/tendermint
-      - name: Sets env vars for abci++ job
+      - name: Set tendermint ENV for abci++ tests
         if: matrix.make.suffix == '-abci-plus-plus'
-        run: |
-          echo "TENDERMINT=/usr/local/bin/tendermint" >> $GITHUB_ENV
+        run: echo "TENDERMINT=/usr/local/bin/tendermint" >> $GITHUB_ENV
       - name: Run e2e test
         run: make test-e2e${{ matrix.make.suffix }}
         env:
+          ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: 20
           ANOMA_E2E_USE_PREBUILT_BINARIES: "true"
           ANOMA_E2E_KEEP_TEMP: "true"
+          ENV_VAR_TM_STDOUT: "false"
           ANOMA_LOG_COLOR: "false"
-          ANOMA_LOG: "info"
           TM_LOG_LEVEL: "info"
+          ANOMA_LOG: "info"
       - name: Upload e2e logs
         if: success() || failure()
         uses: actions/upload-artifact@v3
         with:
           name: logs-e2e${{ matrix.make.suffix }}-${{ github.sha }}
           path: /tmp/.*/logs/
+          retention-days: 5
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats
@@ -284,10 +290,10 @@ jobs:
         with:
           name: binaries${{ matrix.make.suffix }}-${{ github.sha }}
           path: |
-            target/release/anoma
-            target/release/anomac
-            target/release/anomaw
-            target/release/anoman
+            target/release/namada
+            target/release/namadac
+            target/release/namadaw
+            target/release/namadan
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats
