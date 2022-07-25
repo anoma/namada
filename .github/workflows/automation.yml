@@ -12,7 +12,7 @@ env:
   GIT_LFS_SKIP_SMUDGE: 1
 
 jobs:
-  update-wasm:
+  tasks:
     if: ${{ github.event.issue.pull_request }}
     runs-on: ${{ matrix.os }}
     strategy:
