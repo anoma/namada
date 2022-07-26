@@ -115,14 +115,10 @@ mod extend_votes {
             // verify if we have any duplicate Ethereum events,
             // and if these are sorted in ascending order
             let have_dupes = {
-                let some_ethereum_events =
-                    ext.data.ethereum_events.iter().map(Some);
-                let first_elems =
-                    std::iter::once(None).chain(some_ethereum_events);
-                let second_elems = ext.data.ethereum_events.iter().map(Some);
-                first_elems
-                    .zip(second_elems)
-                    .all(|(ev_1, ev_2)| ev_1 < ev_2)
+                ext.data
+                    .ethereum_events
+                    .windows(2)
+                    .all(|evs| evs.len() < 2 || (evs[0] < evs[1]))
             };
             let validator = &ext.data.validator_addr;
             if have_dupes {
