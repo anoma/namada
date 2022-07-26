@@ -185,16 +185,23 @@ mod prepare_block {
             let mut signatures = HashMap::new();
 
             let total_voting_power =
-                self.get_total_voting_power(Some(events_epoch)).into();
-            let mut voting_power = 0u64;
+                u64::from(self.get_total_voting_power(Some(events_epoch)));
+            let mut voting_power = FractionalVotingPower::default();
+
+            let deserialized = deserialize_vote_extensions(vote_extensions);
 
             for (validator_voting_power, vote_extension) in
-                self.filter_invalid_vote_extensions(vote_extensions)
+                self.filter_invalid_vote_extensions(deserialized)
             {
                 let validator_addr = vote_extension.data.validator_addr;
 
                 // update voting power
-                voting_power += u64::from(validator_voting_power);
+                let validator_voting_power = u64::from(validator_voting_power);
+                voting_power += FractionalVotingPower::new(
+                    validator_voting_power,
+                    total_voting_power,
+                )
+                .unwrap_or_default();
 
                 // register all ethereum events seen by `validator_addr`
                 for ev in vote_extension.data.ethereum_events {
@@ -218,10 +225,6 @@ mod prepare_block {
                 }
             }
 
-            let voting_power =
-                FractionalVotingPower::new(voting_power, total_voting_power)
-                    .unwrap();
-
             if voting_power <= FractionalVotingPower::TWO_THIRDS {
                 tracing::error!(
                     "Tendermint has decided on a block including vote \
@@ -239,29 +242,50 @@ mod prepare_block {
         }
 
         /// Takes a list of signed vote extensions,
-        /// and filters out invalid instances.
-        fn filter_invalid_vote_extensions(
+        /// and filters out invalid instances, returning
+        /// all residual values (including invalid vote
+        /// extensions).
+        #[inline]
+        pub fn filter_invalid_vote_extensions_residuals(
             &self,
-            vote_extensions: Vec<ExtendedVoteInfo>,
-        ) -> impl Iterator<Item = (VotingPower, SignedExt)> + '_ {
-            vote_extensions.into_iter().filter_map(|vote| {
-                let vote_extension = Signed::<VoteExtension>::try_from_slice(
-                    &vote.vote_extension[..],
-                )
-                .map_err(|err| {
-                    tracing::error!(
-                        ?err,
-                        "Failed to deserialize signed vote extension",
-                    );
-                })
-                .ok()?;
-
+            vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
+        ) -> impl Iterator<Item = Option<(VotingPower, SignedExt)>> + '_
+        {
+            vote_extensions.into_iter().map(|vote_extension| {
                 self.validate_vote_ext_and_get_it_back(
                     vote_extension,
                     self.storage.last_height,
                 )
             })
         }
+
+        /// Takes a list of signed vote extensions,
+        /// and filters out invalid instances.
+        #[inline]
+        pub fn filter_invalid_vote_extensions(
+            &self,
+            vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
+        ) -> impl Iterator<Item = (VotingPower, SignedExt)> + '_ {
+            self.filter_invalid_vote_extensions_residuals(vote_extensions)
+                .filter_map(|ext| ext)
+        }
+    }
+
+    /// Given a `Vec` of [`ExtendedVoteInfo`], return an iterator over the
+    /// deserialized [`SignedExt`] instances.
+    fn deserialize_vote_extensions(
+        vote_extensions: Vec<ExtendedVoteInfo>,
+    ) -> impl Iterator<Item = SignedExt> + 'static {
+        vote_extensions.into_iter().filter_map(|vote| {
+            Signed::<VoteExtension>::try_from_slice(&vote.vote_extension[..])
+                .map_err(|err| {
+                    tracing::error!(
+                        ?err,
+                        "Failed to deserialize signed vote extension",
+                    );
+                })
+                .ok()
+        })
     }
 
     /// Functions for creating the appropriate TxRecord given the
@@ -362,7 +386,10 @@ mod prepare_block {
             shell: &mut TestShell,
             vext: SignedExt,
         ) {
-            let votes = vec![vote_extension_serialize(vext)];
+            let votes =
+                deserialize_vote_extensions(vec![vote_extension_serialize(
+                    vext,
+                )]);
             let filtered_votes: Vec<_> =
                 shell.filter_invalid_vote_extensions(votes).collect();
 

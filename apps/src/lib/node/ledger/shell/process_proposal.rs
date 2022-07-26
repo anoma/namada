@@ -125,6 +125,8 @@ where
                 ProtocolTxType::EthereumEvents(digest) => {
                     let extensions =
                         digest.decompress(self.storage.last_height);
+                    let filtered_extensions = self
+                        .filter_invalid_vote_extensions_residuals(extensions);
                     let mut voting_power = FractionalVotingPower::default();
                     let epoch = self
                         .storage
@@ -133,24 +135,16 @@ where
                         .get_epoch(BlockHeight(self.storage.last_height.0));
                     let total_power =
                         u64::from(self.get_total_voting_power(epoch));
-                    if extensions.into_iter().all(|ext| {
-                        match self.get_validator_from_address(
-                            &ext.data.validator_addr,
-                            epoch,
-                        ) {
-                            Ok((power, _)) => {
+                    if filtered_extensions.into_iter().all(|maybe_ext| {
+                        maybe_ext
+                            .map(|(power, _)| {
                                 voting_power += FractionalVotingPower::new(
                                     u64::from(power),
                                     total_power,
                                 )
                                 .unwrap_or_default();
-                                self.validate_vote_extension(
-                                    ext,
-                                    self.storage.last_height,
-                                )
-                            }
-                            _ => false,
-                        }
+                            })
+                            .is_some()
                     }) {
                         if voting_power > FractionalVotingPower::TWO_THIRDS {
                             TxResult {
