@@ -1,6 +1,7 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
-use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::ethereum_events::vote_extensions::FractionalVotingPower;
+use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
 #[cfg(not(feature = "ABCI"))]
@@ -34,16 +35,51 @@ where
         &mut self,
         req: RequestProcessProposal,
     ) -> ResponseProcessProposal {
+        // the number of vote extension digests included in the block proposal
+        let mut vote_ext_digest_num = 0;
         let tx_results: Vec<ExecTxResult> = req
             .txs
             .iter()
             .map(|tx_bytes| {
-                ExecTxResult::from(self.process_single_tx(tx_bytes))
+                ExecTxResult::from(match Tx::try_from(tx_bytes.as_slice()) {
+                    Ok(tx) => match process_tx(tx) {
+                        // This occurs if the wrapper / protocol tx signature is invalid
+                        Err(err) => TxResult {
+                            code: ErrorCodes::InvalidSig.into(),
+                            info: err.to_string(),
+                        },
+                        Ok(tx) => {
+                            if let TxType::Protocol(ProtocolTx{tx: ProtocolTxType::EthereumEvents(_), ..}) = &tx {
+                                vote_ext_digest_num += 1;
+                                // genesis block should not have vote extensions
+                                if self.storage.last_height.0 == 0 {
+                                     TxResult {
+                                        code: ErrorCodes::InvalidVoteExntension.into(),
+                                        info: "No vote extensions should be included in block height 0".into()
+                                    }
+                                } else {
+                                    self.process_single_tx(tx)
+                                }
+                            } else {
+                                self.process_single_tx(tx)
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        TxResult {
+                            code: ErrorCodes::InvalidTx.into(),
+                            info: "The submitted transaction was not deserializable"
+                                .into(),
+                        }
+                    }
+                })
             })
             .collect();
 
         ResponseProcessProposal {
-            status: if tx_results.iter().any(|res| res.code > 3) {
+            status: if vote_ext_digest_num <= 1
+                && tx_results.iter().any(|res| res.code > 3)
+            {
                 ProposalStatus::Reject as i32
             } else {
                 ProposalStatus::Accept as i32
@@ -67,99 +103,58 @@ where
     ///   3: Wasm runtime error
     ///   4: Invalid order of decrypted txs
     ///   5. More decrypted txs than expected
+    ///   6. A transaciton could not be decrypted
+    ///   7. An error in the vote extensions included in the proposal
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    pub(crate) fn process_single_tx(&mut self, tx_bytes: &[u8]) -> TxResult {
-        let tx = match Tx::try_from(tx_bytes) {
-            Ok(tx) => tx,
-            Err(_) => {
-                return TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
-                    info: "The submitted transaction was not deserializable"
-                        .into(),
-                };
-            }
-        };
+    pub(crate) fn process_single_tx(&mut self, tx: TxType) -> TxResult {
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-
-        match process_tx(tx) {
-            // This occurs if the wrapper / protocol tx signature is invalid
-            Err(err) => TxResult {
-                code: ErrorCodes::InvalidSig.into(),
-                info: err.to_string(),
+        let hash = hash_tx(&Tx::from(tx.clone()).to_bytes());
+        match tx {
+            // If it is a raw transaction, we do no further validation
+            TxType::Raw(_) => TxResult {
+                code: ErrorCodes::InvalidTx.into(),
+                info: "Transaction rejected: Non-encrypted transactions are \
+                       not supported"
+                    .into(),
             },
-            Ok(result) => match result {
-                // If it is a raw transaction, we do no further validation
-                TxType::Raw(_) => TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
-                    info: "Transaction rejected: Non-encrypted transactions \
-                           are not supported"
-                        .into(),
-                },
-                TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::EthereumEvents(_) => TxResult {
-                        code: ErrorCodes::Ok.into(),
-                        info: "Process Proposal accepted this transaction"
-                            .into(),
-                    },
-                    _ => TxResult {
-                        code: ErrorCodes::InvalidTx.into(),
-                        info: "Unsupported protocol transaction type".into(),
-                    },
-                },
-                TxType::Decrypted(tx) => match self.next_wrapper() {
-                    Some(wrapper) => {
-                        if wrapper.tx_hash != tx.hash_commitment() {
-                            TxResult {
-                                code: ErrorCodes::InvalidOrder.into(),
-                                info: "Process proposal rejected a decrypted \
-                                       transaction that violated the tx order \
-                                       determined in the previous block"
-                                    .into(),
+            TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                ProtocolTxType::EthereumEvents(digest) => {
+                    let extensions =
+                        digest.decompress(self.storage.last_height);
+                    let mut voting_power = FractionalVotingPower::default();
+                    let epoch = self
+                        .storage
+                        .block
+                        .pred_epochs
+                        .get_epoch(BlockHeight(self.storage.last_height.0));
+                    let total_power =
+                        u64::from(self.get_total_voting_power(epoch));
+                    if extensions.into_iter().all(|ext| {
+                        match self.get_validator_from_address(
+                            &ext.data.validator_addr,
+                            epoch,
+                        ) {
+                            Ok((power, _)) => {
+                                voting_power += FractionalVotingPower::new(
+                                    u64::from(power),
+                                    total_power,
+                                )
+                                .unwrap_or_default();
+                                self.validate_vote_extension(
+                                    ext,
+                                    self.storage.last_height,
+                                )
                             }
-                        } else if verify_decrypted_correctly(&tx, privkey) {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process Proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            }
-                        } else {
-                            TxResult {
-                                code: ErrorCodes::InvalidTx.into(),
-                                info: "The encrypted payload of tx was \
-                                       incorrectly marked as un-decryptable"
-                                    .into(),
-                            }
+                            _ => false,
                         }
-                    }
-                    None => TxResult {
-                        code: ErrorCodes::ExtraTxs.into(),
-                        info: "Received more decrypted txs than expected"
-                            .into(),
-                    },
-                },
-                TxType::Wrapper(tx) => {
-                    // validate the ciphertext via Ferveo
-                    if !tx.validate_ciphertext() {
-                        TxResult {
-                            code: ErrorCodes::InvalidTx.into(),
-                            info: format!(
-                                "The ciphertext of the wrapped tx {} is \
-                                 invalid",
-                                hash_tx(tx_bytes)
-                            ),
-                        }
-                    } else {
-                        // check that the fee payer has sufficient balance
-                        let balance = self
-                            .get_balance(&tx.fee.token, &tx.fee_payer())
-                            .unwrap_or_default();
-
-                        if tx.fee.amount <= balance {
+                    }) {
+                        if voting_power
+                            > FractionalVotingPower::new(2, 3).unwrap()
+                        {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process proposal accepted this \
@@ -168,15 +163,91 @@ where
                             }
                         } else {
                             TxResult {
-                                code: ErrorCodes::InvalidTx.into(),
-                                info: "The address given does not have \
-                                       sufficient balance to pay fee"
+                                code: ErrorCodes::InvalidVoteExntension.into(),
+                                info: "Process proposal rejected this \
+                                       proposal because the backing stake of \
+                                       the vote extensions published in the \
+                                       proposal was insufficient"
                                     .into(),
                             }
                         }
+                    } else {
+                        TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process proposal rejected this proposal \
+                                   because the at least on of the vote \
+                                   extensions included was invalid."
+                                .into(),
+                        }
                     }
                 }
+                _ => TxResult {
+                    code: ErrorCodes::InvalidTx.into(),
+                    info: "Unsupported protocol transaction type".into(),
+                },
             },
+            TxType::Decrypted(tx) => match self.next_wrapper() {
+                Some(wrapper) => {
+                    if wrapper.tx_hash != tx.hash_commitment() {
+                        TxResult {
+                            code: ErrorCodes::InvalidOrder.into(),
+                            info: "Process proposal rejected a decrypted \
+                                   transaction that violated the tx order \
+                                   determined in the previous block"
+                                .into(),
+                        }
+                    } else if verify_decrypted_correctly(&tx, privkey) {
+                        TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process Proposal accepted this transaction"
+                                .into(),
+                        }
+                    } else {
+                        TxResult {
+                            code: ErrorCodes::InvalidTx.into(),
+                            info: "The encrypted payload of tx was \
+                                   incorrectly marked as un-decryptable"
+                                .into(),
+                        }
+                    }
+                }
+                None => TxResult {
+                    code: ErrorCodes::ExtraTxs.into(),
+                    info: "Received more decrypted txs than expected".into(),
+                },
+            },
+            TxType::Wrapper(wrapper) => {
+                // validate the ciphertext via Ferveo
+                if !wrapper.validate_ciphertext() {
+                    TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info: format!(
+                            "The ciphertext of the wrapped tx {} is invalid",
+                            hash
+                        ),
+                    }
+                } else {
+                    // check that the fee payer has sufficient balance
+                    let balance = self
+                        .get_balance(&wrapper.fee.token, &wrapper.fee_payer())
+                        .unwrap_or_default();
+
+                    if wrapper.fee.amount <= balance {
+                        TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process proposal accepted this transaction"
+                                .into(),
+                        }
+                    } else {
+                        TxResult {
+                            code: ErrorCodes::InvalidTx.into(),
+                            info: "The address given does not have sufficient \
+                                   balance to pay fee"
+                                .into(),
+                        }
+                    }
+                }
+            }
         }
     }
 

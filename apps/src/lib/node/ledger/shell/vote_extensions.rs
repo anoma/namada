@@ -112,9 +112,25 @@ mod extend_votes {
                 );
                 return None;
             }
-            let epoch = self.storage.block.pred_epochs.get_epoch(height);
-            // get the public key associated with this validator
+            // verify if we have any duplicate Ethereum events,
+            // and if these are sorted in ascending order
+            let have_dupes_or_non_sorted = {
+                !ext.data
+                    .ethereum_events
+                    // TODO: move to `array_windows` when it reaches Rust stable
+                    .windows(2)
+                    .all(|evs| evs[0] < evs[1])
+            };
             let validator = &ext.data.validator_addr;
+            if have_dupes_or_non_sorted {
+                tracing::error!(
+                    %validator,
+                    "Found duplicate or non-sorted Ethereum events in a vote extension from validator"
+                );
+                return None;
+            }
+            // get the public key associated with this validator
+            let epoch = self.storage.block.pred_epochs.get_epoch(height);
             let (voting_power, pk) = self
                 .get_validator_from_address(validator, epoch)
                 .map_err(|err| {
