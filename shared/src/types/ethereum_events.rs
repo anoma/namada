@@ -360,12 +360,10 @@ pub mod tests {
     use std::collections::{BTreeSet, HashSet};
     use std::str::FromStr;
 
+    use super::testing::{arbitrary_nonce, arbitrary_single_transfer};
     use super::vote_extensions::MultiSignedEthEvent;
     use super::*;
     use crate::types::address;
-    use crate::types::ethereum_events::testing::{
-        arbitrary_nonce, arbitrary_single_transfer,
-    };
 
     #[test]
     fn test_from_multi_signed_eth_event_for_eth_msg_update() {

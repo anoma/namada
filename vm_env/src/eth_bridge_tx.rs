@@ -6,7 +6,9 @@ use namada::ledger::eth_bridge::storage::eth_msgs::EthMsgKeys;
 use namada::ledger::eth_bridge::storage::{self};
 use namada::ledger::pos::types::VotingPower;
 use namada::types::address::Address;
-use namada::types::ethereum_events::{EthereumEvent, TxEthBridgeData};
+use namada::types::ethereum_events::{
+    EthereumEvent, TransferToNamada, TxEthBridgeData,
+};
 use num_rational::Ratio;
 
 use crate::imports::tx::{self, log_string};
@@ -20,6 +22,79 @@ fn log(msg: impl AsRef<str>) {
 
 fn threshold() -> Ratio<u64> {
     Ratio::new(2, 3)
+}
+
+pub mod read {
+    //! Helpers for reading from storage
+    use std::error::Error;
+
+    use crate::tx_prelude::token::Amount;
+    use crate::tx_prelude::{read_bytes, BorshDeserialize};
+
+    /// Returns the stored Amount, or 0 if not stored
+    pub fn amount(key: &str) -> Result<Amount, Box<dyn Error>> {
+        let bytes = match read_bytes(key) {
+            Some(bytes) => bytes,
+            None => return Ok(Amount::from(0)),
+        };
+        Amount::try_from_slice(&bytes[..]).map_err(|err| err.into())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use namada_tests::tx::*;
+
+        use super::super::read;
+        use crate::tx_prelude::token::Amount;
+
+        #[test]
+        fn test_amount_returns_zero_for_uninitialized_storage() {
+            tx_host_env::init();
+
+            let a = read::amount("some arbitrary key with no stored value")
+                .unwrap();
+            assert_eq!(a, Amount::from(0));
+        }
+
+        #[test]
+        fn test_amount_returns_stored_amount() {
+            tx_host_env::init();
+            let key = "some arbitrary key";
+            let amount = Amount::from(1_000_000);
+            tx_host_env::write(key, amount);
+
+            let a = read::amount(key).unwrap();
+            assert_eq!(a, amount);
+        }
+
+        #[test]
+        fn test_amount_errors_if_not_amount() {
+            tx_host_env::init();
+            let key = "some arbitrary key";
+            let amount = "not an Amount type";
+            tx_host_env::write(key, amount);
+
+            assert!(matches!(read::amount(key), Err(_)))
+        }
+    }
+}
+pub mod update {
+    use std::error::Error;
+
+    use crate::tx_prelude::token::Amount;
+    use crate::tx_prelude::{write, Key};
+
+    /// Reads the `Amount` from key, applies update then writes it back
+    pub fn amount(
+        key: &Key,
+        update: impl Fn(&mut Amount),
+    ) -> Result<Amount, Box<dyn Error>> {
+        let key = key.to_string();
+        let mut amount = super::read::amount(&key)?;
+        update(&mut amount);
+        write(&key, amount);
+        Ok(amount)
+    }
 }
 
 #[derive(
@@ -76,11 +151,18 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
             log(format!("New Ethereum event - {}", &eth_msg_keys.prefix));
 
             // TODO: be careful for overflows
-            let seen_by_voting_power: VotingPower = update
-                .seen_by
-                .iter()
-                .map(|validator| data.voting_powers.get(validator).unwrap())
-                .fold(VotingPower::from(0), |acc, elem| acc + *elem);
+            let mut seen_by_voting_power: VotingPower = VotingPower::from(0);
+            for validator in &update.seen_by {
+                match data.voting_powers.get(validator) {
+                    Some(voting_power) => seen_by_voting_power += *voting_power,
+                    None => {
+                        return Err(format!(
+                            "voting power was not provided for validator {}",
+                            validator
+                        ))?;
+                    }
+                };
+            }
 
             let seen_by_voting_power: u64 = seen_by_voting_power.into();
             let total_voting_power: u64 = data.total_voting_power.into();
@@ -140,7 +222,47 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
             "events were newly confirmed - n = {}",
             confirmed.len()
         ));
-        // TODO: act on confirmed events
+        for event in &confirmed {
+            act_on(event)?;
+        }
+    }
+    Ok(())
+}
+
+fn act_on(event: &EthereumEvent) -> Result<(), Box<dyn Error>> {
+    match &event {
+        EthereumEvent::TransfersToNamada { transfers, .. } => {
+            act_on_transfers_to_namada(transfers)?
+        }
+        _ => log(format!("no actions taken for {:?}", event)),
+    }
+    Ok(())
+}
+
+fn act_on_transfers_to_namada(
+    transfers: &[TransferToNamada],
+) -> Result<(), Box<dyn Error>> {
+    for TransferToNamada {
+        amount,
+        asset,
+        receiver,
+    } in transfers
+    {
+        // TODO: increase balance key for `asset`/balance/`receiver` by `amount`
+        // TODO: increase supply key by `amount`
+        let balance_key = storage::wrapped_erc20_balance(asset, receiver);
+        update::amount(&balance_key, |balance| {
+            log(format!("existing value for {} is {}", balance_key, balance));
+            balance.receive(amount);
+            log(format!("new value for {} will be {}", balance_key, balance));
+        })?;
+
+        let supply_key = storage::wrapped_erc20_supply(asset);
+        update::amount(&supply_key, |supply| {
+            log(format!("existing value for {} is {}", supply_key, supply));
+            supply.receive(amount);
+            log(format!("new value for {} will be {}", supply_key, supply));
+        })?;
     }
     Ok(())
 }
