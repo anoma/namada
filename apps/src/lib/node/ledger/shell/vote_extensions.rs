@@ -117,8 +117,9 @@ mod extend_votes {
             let have_dupes_or_non_sorted = {
                 !ext.data
                     .ethereum_events
+                    // TODO: move to `array_windows` when it reaches Rust stable
                     .windows(2)
-                    .all(|evs| evs.len() < 2 || (evs[0] < evs[1]))
+                    .all(|evs| evs[0] < evs[1])
             };
             let validator = &ext.data.validator_addr;
             if have_dupes_or_non_sorted {
