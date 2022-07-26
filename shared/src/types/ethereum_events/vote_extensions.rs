@@ -1,7 +1,7 @@
 //! Contains types necessary for processing Ethereum events
 //! in vote extensions.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
@@ -50,6 +50,10 @@ impl VoteExtension {
 pub struct FractionalVotingPower(Ratio<u64>);
 
 impl FractionalVotingPower {
+    /// Two thirds of the voting power.
+    pub const TWO_THIRDS: FractionalVotingPower =
+        FractionalVotingPower(Ratio::new_raw(2, 3));
+
     /// Create a new FractionalVotingPower. It must be between zero and one
     /// inclusive.
     pub fn new(numer: u64, denom: u64) -> Result<Self> {
@@ -112,7 +116,9 @@ impl BorshSchema for FractionalVotingPower {
 
 /// Aggregates an Ethereum event with the corresponding
 // validators who saw this event.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct MultiSignedEthEvent {
     /// The Ethereum event that was signed.
     pub event: EthereumEvent,
@@ -122,10 +128,12 @@ pub struct MultiSignedEthEvent {
 
 /// Compresses a set of signed `VoteExtension` instances, to save
 /// space on a block.
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct VoteExtensionDigest {
     /// The signatures and signing address of each VoteExtension
-    pub signatures: Vec<(Signature, Address)>,
+    pub signatures: HashMap<Address, Signature>,
     /// The events that were reported
     pub events: Vec<MultiSignedEthEvent>,
 }
@@ -140,7 +148,7 @@ impl VoteExtensionDigest {
 
         let mut extensions = vec![];
 
-        for (sig, addr) in signatures.into_iter() {
+        for (addr, sig) in signatures.into_iter() {
             let mut ext = VoteExtension::empty(last_height, addr.clone());
 
             for event in events.iter() {
@@ -245,7 +253,7 @@ mod tests {
             transfers: vec![],
         };
 
-        let validator_1 = address::testing::established_address_2();
+        let validator_1 = address::testing::established_address_1();
         let validator_2 = address::testing::established_address_2();
 
         let ext = |validator: Address| -> VoteExtension {
@@ -267,14 +275,16 @@ mod tests {
 
         // we have the `Signed<VoteExtension>` instances we need,
         // let us now compress them into a single `VoteExtensionDigest`
-        let signatures = vec![
-            (ext[0].sig.clone(), validator_1),
-            (ext[1].sig.clone(), validator_2),
-        ];
+        let signatures: HashMap<_, _> = [
+            (validator_1.clone(), ext[0].sig.clone()),
+            (validator_2.clone(), ext[1].sig.clone()),
+        ]
+        .into_iter()
+        .collect();
         let signers = {
             let mut s = HashSet::new();
-            s.insert(signatures[0].1.clone());
-            s.insert(signatures[1].1.clone());
+            s.insert(validator_1);
+            s.insert(validator_2);
             s
         };
         let events = vec![

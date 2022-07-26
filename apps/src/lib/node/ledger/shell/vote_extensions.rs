@@ -1,12 +1,14 @@
 #[cfg(not(feature = "ABCI"))]
 mod extend_votes {
     use borsh::BorshDeserialize;
+    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
     use namada::types::ethereum_events::vote_extensions::VoteExtension;
 
     use super::super::*;
 
-    type SignedExt = Signed<VoteExtension>;
+    /// A [`VoteExtension`] signed by a Namada validator.
+    pub type SignedExt = Signed<VoteExtension>;
 
     impl<D, H> Shell<D, H>
     where
@@ -84,20 +86,56 @@ mod extend_votes {
         ///  * The validator correctly signed the extension
         ///  * The validator signed over the correct height inside of the
         ///    extension
+        #[inline]
         pub fn validate_vote_extension(
             &self,
             ext: SignedExt,
             height: BlockHeight,
         ) -> bool {
+            self.validate_vote_ext_and_get_it_back(ext, height)
+                .is_some()
+        }
+
+        /// This method behaves exactly like [`Self::validate_vote_extension`],
+        /// with the added bonus of returning the vote extension back, if it
+        /// is valid.
+        pub fn validate_vote_ext_and_get_it_back(
+            &self,
+            ext: SignedExt,
+            height: BlockHeight,
+        ) -> Option<(VotingPower, SignedExt)> {
+            if ext.data.block_height != height {
+                let ext_height = ext.data.block_height;
+                tracing::error!(
+                    "Vote extension issued for a block height {ext_height} \
+                     different from the expected height {height}"
+                );
+                return None;
+            }
             let epoch = self.storage.block.pred_epochs.get_epoch(height);
             // get the public key associated with this validator
-            let pk = match self
-                .get_validator_from_address(&ext.data.validator_addr, epoch)
-            {
-                Ok((_, pk)) => pk,
-                _ => return false,
-            };
-            ext.verify(&pk).is_ok() && ext.data.block_height == height
+            let validator = &ext.data.validator_addr;
+            let (voting_power, pk) = self
+                .get_validator_from_address(validator, epoch)
+                .map_err(|err| {
+                    tracing::error!(
+                        ?err,
+                        %validator,
+                        "Could not get public key from Storage for validator"
+                    );
+                })
+                .ok()?;
+            // verify the signature of the vote extension
+            ext.verify(&pk)
+                .map_err(|err| {
+                    tracing::error!(
+                        ?err,
+                        %validator,
+                        "Failed to verify the signature of a vote extension issued by validator"
+                    );
+                })
+                .ok()
+                .map(|_| (voting_power, ext))
         }
 
         /// Checks the channel from the Ethereum oracle monitoring
@@ -306,7 +344,7 @@ mod extend_votes {
                     }],
                 }],
                 block_height: signed_height,
-                validator_addr: address.clone(),
+                validator_addr: address,
             }
             .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
