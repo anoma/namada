@@ -2,27 +2,27 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fs::File;
 
-use anoma::ledger::governance::storage as gov_storage;
-use anoma::ledger::pos::{BondId, Bonds, Unbonds};
-use anoma::proto::Tx;
-use anoma::types::address::{xan as m1t, Address};
-use anoma::types::governance::{
-    OfflineProposal, OfflineVote, Proposal, ProposalVote,
-};
-use anoma::types::key::*;
-use anoma::types::nft::{self, Nft, NftToken};
-use anoma::types::storage::Epoch;
-use anoma::types::token::Amount;
-use anoma::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
-};
-use anoma::types::transaction::nft::{CreateNft, MintNft};
-use anoma::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use anoma::types::{address, token};
-use anoma::{ledger, vm};
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
 use itertools::Either::*;
+use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::pos::{BondId, Bonds, Unbonds};
+use namada::proto::Tx;
+use namada::types::address::{xan as m1t, Address};
+use namada::types::governance::{
+    OfflineProposal, OfflineVote, Proposal, ProposalVote,
+};
+use namada::types::key::*;
+use namada::types::nft::{self, Nft, NftToken};
+use namada::types::storage::Epoch;
+use namada::types::token::Amount;
+use namada::types::transaction::governance::{
+    InitProposalData, VoteProposalData,
+};
+use namada::types::transaction::nft::{CreateNft, MintNft};
+use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
+use namada::types::{address, token};
+use namada::{ledger, vm};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
@@ -735,7 +735,7 @@ async fn is_safe_voting_window(
 
     match proposal_end_epoch {
         Some(proposal_end_epoch) => {
-            !anoma::ledger::governance::vp::is_valid_validator_voting_period(
+            !namada::ledger::governance::vp::is_valid_validator_voting_period(
                 current_epoch,
                 proposal_start_epoch,
                 proposal_end_epoch,

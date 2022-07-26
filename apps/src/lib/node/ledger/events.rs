@@ -3,10 +3,10 @@ use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
-use anoma::ledger::governance::utils::ProposalEvent;
-use anoma::types::ibc::IbcEvent;
-use anoma::types::transaction::{hash_tx, TxType};
 use borsh::BorshSerialize;
+use namada::ledger::governance::utils::ProposalEvent;
+use namada::types::ibc::IbcEvent;
+use namada::types::transaction::{hash_tx, TxType};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::EventAttribute;
 #[cfg(feature = "ABCI")]

@@ -15,12 +15,12 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anoma::types::token;
-use anoma_apps::config::genesis::genesis_config::{
-    GenesisConfig, ParametersConfig, PosParamsConfig,
-};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
+use namada::types::token;
+use namada_apps::config::genesis::genesis_config::{
+    GenesisConfig, ParametersConfig, PosParamsConfig,
+};
 use serde_json::json;
 use setup::constants::*;
 
@@ -321,7 +321,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--source",
             BERTHA,
             "--public-key",
-            // Value obtained from `anoma::types::key::ed25519::tests::gen_keypair`
+            // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
             "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
             "--code-path",
             &vp_user,
@@ -1560,11 +1560,11 @@ fn test_genesis_validators() -> Result<()> {
     use std::net::SocketAddr;
     use std::str::FromStr;
 
-    use anoma::types::chain::ChainId;
-    use anoma_apps::config::genesis::genesis_config::{
+    use namada::types::chain::ChainId;
+    use namada_apps::config::genesis::genesis_config::{
         self, ValidatorPreGenesisConfig,
     };
-    use anoma_apps::config::Config;
+    use namada_apps::config::Config;
     use tempfile::tempdir;
 
     // This test is not using the `setup::network`, because we're setting up
@@ -1622,12 +1622,12 @@ fn test_genesis_validators() -> Result<()> {
     )?;
     init_genesis_validator_0.assert_success();
     let validator_0_pre_genesis_dir =
-        anoma_apps::client::utils::validator_pre_genesis_dir(
+        namada_apps::client::utils::validator_pre_genesis_dir(
             base_dir.path(),
             validator_0_alias,
         );
     let config = std::fs::read_to_string(
-        anoma_apps::client::utils::validator_pre_genesis_file(
+        namada_apps::client::utils::validator_pre_genesis_file(
             &validator_0_pre_genesis_dir,
         ),
     )
@@ -1658,12 +1658,12 @@ fn test_genesis_validators() -> Result<()> {
     )?;
     init_genesis_validator_1.assert_success();
     let validator_1_pre_genesis_dir =
-        anoma_apps::client::utils::validator_pre_genesis_dir(
+        namada_apps::client::utils::validator_pre_genesis_dir(
             base_dir.path(),
             validator_1_alias,
         );
     let config = std::fs::read_to_string(
-        &anoma_apps::client::utils::validator_pre_genesis_file(
+        &namada_apps::client::utils::validator_pre_genesis_file(
             &validator_1_pre_genesis_dir,
         ),
     )
@@ -1770,7 +1770,7 @@ fn test_genesis_validators() -> Result<()> {
     std::fs::remove_dir_all(&validator_1_base_dir).unwrap();
 
     std::env::set_var(
-        anoma_apps::client::utils::ENV_VAR_NETWORK_CONFIGS_SERVER,
+        namada_apps::client::utils::ENV_VAR_NETWORK_CONFIGS_SERVER,
         format!("http://{network_archive_addr}/{}", archive_dir),
     );
     let pre_genesis_path = validator_0_pre_genesis_dir.to_string_lossy();

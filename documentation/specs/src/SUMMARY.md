@@ -26,4 +26,4 @@
         - [Reward distribution](./economics/proof-of-stake/reward-distribution.md)
     - [Shielded pool incentives](./economics/shielded-pool-incentives.md)
     - [Public goods funding](./economics/public-goods-funding.md)
-- [Further readhing](./further-reading.md)
+- [Further reading](./further-reading.md)

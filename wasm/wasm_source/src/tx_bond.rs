@@ -1,7 +1,7 @@
 //! A tx for a PoS bond that stakes tokens via a self-bond or delegation.
 
-use anoma_tx_prelude::proof_of_stake::bond_tokens;
-use anoma_tx_prelude::*;
+use namada_tx_prelude::proof_of_stake::bond_tokens;
+use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(tx_data: Vec<u8>) {

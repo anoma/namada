@@ -1362,15 +1362,15 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use anoma::types::address::Address;
-    use anoma::types::chain::{ChainId, ChainIdPrefix};
-    use anoma::types::governance::ProposalVote;
-    use anoma::types::intent::{DecimalWrapper, Exchange};
-    use anoma::types::key::*;
-    use anoma::types::storage::{self, Epoch};
-    use anoma::types::token;
-    use anoma::types::transaction::GasLimit;
     use libp2p::Multiaddr;
+    use namada::types::address::Address;
+    use namada::types::chain::{ChainId, ChainIdPrefix};
+    use namada::types::governance::ProposalVote;
+    use namada::types::intent::{DecimalWrapper, Exchange};
+    use namada::types::key::*;
+    use namada::types::storage::{self, Epoch};
+    use namada::types::token;
+    use namada::types::transaction::GasLimit;
     use serde::Deserialize;
     #[cfg(not(feature = "ABCI"))]
     use tendermint::Timeout;

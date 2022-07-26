@@ -1,15 +1,15 @@
 //! Shell methods for querying state
 use std::cmp::max;
 
-use anoma::ledger::parameters::EpochDuration;
-use anoma::ledger::pos::PosParams;
-use anoma::types::address::Address;
-use anoma::types::key;
-use anoma::types::key::dkg_session_keys::DkgPublicKey;
-use anoma::types::storage::{Key, PrefixValue};
-use anoma::types::token::{self, Amount};
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
+use namada::ledger::parameters::EpochDuration;
+use namada::ledger::pos::PosParams;
+use namada::types::address::Address;
+use namada::types::key;
+use namada::types::key::dkg_session_keys::DkgPublicKey;
+use namada::types::storage::{Key, PrefixValue};
+use namada::types::token::{self, Amount};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 #[cfg(not(feature = "ABCI"))]
@@ -56,7 +56,7 @@ where
                 Path::DryRunTx => self.dry_run_tx(&query.data),
                 Path::Epoch => {
                     let (epoch, _gas) = self.storage.get_last_epoch();
-                    let value = anoma::ledger::storage::types::encode(&epoch);
+                    let value = namada::ledger::storage::types::encode(&epoch);
                     response::Query {
                         value,
                         ..Default::default()
@@ -199,7 +199,7 @@ where
         } else {
             let values: std::result::Result<
                 Vec<PrefixValue>,
-                anoma::types::storage::Error,
+                namada::types::storage::Error,
             > = iter
                 .map(|(key, value, _gas)| {
                     let key = Key::parse(key)?;

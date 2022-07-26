@@ -12,10 +12,10 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anoma::ledger::governance::storage as gov_storage;
-use anoma::types::storage::Key;
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
+use namada::ledger::governance::storage as gov_storage;
+use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
 #[cfg(not(feature = "ABCI"))]

@@ -1,7 +1,7 @@
 use std::net::ToSocketAddrs;
 use std::sync::{Arc, RwLock};
 
-use anoma::proto::{Intent, IntentId};
+use namada::proto::{Intent, IntentId};
 
 use super::mempool::IntentMempool;
 use super::rpc::matchmakers::{
