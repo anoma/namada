@@ -2,7 +2,7 @@
 
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
-    use std::collections::{BTreeMap, HashSet};
+    use std::collections::{BTreeMap, HashMap, HashSet};
 
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
@@ -182,7 +182,7 @@ mod prepare_block {
                 );
 
             let mut event_observers = BTreeMap::new();
-            let mut signatures = Vec::new();
+            let mut signatures = HashMap::new();
 
             let total_voting_power =
                 self.get_total_voting_power(Some(events_epoch)).into();
@@ -205,10 +205,17 @@ mod prepare_block {
                 }
 
                 // register the signature of `validator_addr`
-                let addr = validator_addr;
+                let addr = validator_addr.clone();
                 let sig = vote_extension.sig;
 
-                signatures.push((sig, addr));
+                if let Some(sig) = signatures.insert(addr, sig) {
+                    tracing::warn!(
+                        ?sig,
+                        ?validator_addr,
+                        "Overwrote old signature from validator while \
+                         constructing VoteExtensionDigest"
+                    );
+                }
             }
 
             let voting_power =
@@ -519,8 +526,11 @@ mod prepare_block {
                     s
                 },
             }];
-            let signatures =
-                vec![(ext.sig.clone(), ext.data.validator_addr.clone())];
+            let signatures = {
+                let mut s = HashMap::new();
+                s.insert(ext.data.validator_addr.clone(), ext.sig.clone());
+                s
+            };
 
             let vote_extension_digest =
                 VoteExtensionDigest { events, signatures };
