@@ -454,10 +454,10 @@ mod prepare_block {
             check_vote_extension_filtering(&mut shell, signed_vote_extension);
         }
 
-        /// Test if we are de-duplicating Ethereum events in
+        /// Test if we are filtering out duped Ethereum events in
         /// prepare proposals.
         #[test]
-        fn test_prepare_proposal_deduplicate_ethereum_events() {
+        fn test_prepare_proposal_filter_duped_ethereum_events() {
             const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
             let (mut shell, _, _) = test_utils::setup();
@@ -473,7 +473,7 @@ mod prepare_block {
                 transfers: vec![],
             };
             let signed_vote_extension = {
-                let ev = ethereum_event.clone();
+                let ev = ethereum_event;
                 let ext = VoteExtension {
                     validator_addr,
                     block_height: LAST_HEIGHT,
@@ -484,24 +484,17 @@ mod prepare_block {
                 ext
             };
 
-            let digest = {
+            let maybe_digest = {
                 let votes =
                     vec![vote_extension_serialize(signed_vote_extension)];
-                shell.compress_vote_extensions(votes).unwrap()
+                shell.compress_vote_extensions(votes)
             };
-            let decompressed = digest.decompress(LAST_HEIGHT);
 
-            assert_eq!(decompressed.len(), 1);
-
-            // NOTE: this check is on purpose. we just want to check if the
-            // events were de-duped, obv the signature will be
-            // different, since we signed a `Vec` with duped events
-            assert!(decompressed[0].verify(&protocol_key.ref_to()).is_err());
-
-            assert_eq!(
-                decompressed[0].data.ethereum_events,
-                vec![ethereum_event]
-            );
+            // we should be filtering out the vote extension with
+            // duped ethereum events; therefore, no valid vote
+            // extensions will remain, and we will get no
+            // digest from compressing nil vote extensions
+            assert!(maybe_digest.is_none());
         }
 
         /// Creates a vote extension digest manually, and encodes it as a
