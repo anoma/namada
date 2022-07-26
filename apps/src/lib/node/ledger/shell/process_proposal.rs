@@ -152,9 +152,7 @@ where
                             _ => false,
                         }
                     }) {
-                        if voting_power
-                            > FractionalVotingPower::new(2, 3).unwrap()
-                        {
+                        if voting_power > FractionalVotingPower::TWO_THIRDS {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process proposal accepted this \

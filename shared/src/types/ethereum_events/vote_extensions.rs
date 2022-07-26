@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn test_fractional_voting_power_ord_eq() {
         assert!(
-            FractionalVotingPower::new(2, 3).unwrap()
+            FractionalVotingPower::TWO_THIRDS
                 > FractionalVotingPower::new(1, 4).unwrap()
         );
         assert!(
