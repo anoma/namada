@@ -22,11 +22,11 @@ transparent account with some token balance.
 
 Generate an implicit account:
 ```shell
-anomaw address gen --alias [your-implicit-account-alias]
+namadaw address gen --alias [your-implicit-account-alias]
 ```
 Then, create an established account on chain using the implicit account you've just generated:
 ```shell
-anomac init-account \
+namadac init-account \
     --source [your-implicit-account-alias] \
     --public-key [your-implicit-account-alias] \
     --alias [your-established-account-alias]
@@ -40,7 +40,7 @@ will transfer these in increments of 1000 maximum at a time.
 ```
 
 ```shell
-anomac transfer \
+namadac transfer \
     --token btc \
     --amount 1000 \
     --source faucet \
@@ -54,7 +54,7 @@ Now that you have a transparent account with some tokens, you can generate a Spe
 
 You can randomly generate a new Spending Key with:
 ```shell 
-anomaw masp gen-key --alias [your-spending-key-alias]
+namadaw masp gen-key --alias [your-spending-key-alias]
 ```
 
 ```admonish info
@@ -67,7 +67,7 @@ the same alias.
 To create a payment address from your Spending key, use:
 
 ```shell
-anomaw masp gen-addr \
+namadaw masp gen-addr \
     --key [your-spending-key-alias] \
     --alias [your-payment-address-alias]
 ```
@@ -84,7 +84,7 @@ Once you have a payment address, transfer a balance from your
 transparent account to your shielded account with something like:
 
 ```shell
-anomac transfer \
+namadac transfer \
     --source [your-established-account-alias] \
     --target [your-payment-address-alias] \
     --token btc \
@@ -97,7 +97,7 @@ Once this transfer goes through, you can view your Spending Key's
 balance:
 
 ```shell
-anomac balance --owner [your-spending-key-alias]
+namadac balance --owner [your-spending-key-alias]
 ```
 
 ### Shielded transfers
@@ -106,7 +106,7 @@ Now that you have a shielded balance, it can be transferred to a
 another shielded address:
 
 ```shell
-anomac transfer \
+namadac transfer \
     --source [your-spending-key-alias] \
     --target [some-payment-address] \
     --token btc \
@@ -119,7 +119,7 @@ anomac transfer \
 You can also transfer back your balance to some transparent account:
 
 ```shell
-anomac transfer \
+namadac transfer \
     --source [your-spending-key-alias] \
     --target [some-transparent-address] \
     --token btc \
@@ -137,7 +137,7 @@ should not be possible to directly or indirectly use the viewing key to
 spend funds. Below is an example of how spending keys should be
 generated:
 ```
-anomaw --masp gen-key --alias my-sk
+namadaw --masp gen-key --alias my-sk
 ```
 #### Payment Address Generation
 The client should be able to generate a payment address from a
@@ -147,17 +147,17 @@ directly or indirectly usable to either spend notes or view shielded
 balances. Below are examples of how payment addresses should be
 generated:
 ```
-anomaw masp gen-addr --alias my-pa1 --key my-sk
-anomaw masp gen-addr --alias my-pa2 --key my-vk
+namadaw masp gen-addr --alias my-pa1 --key my-sk
+namadaw masp gen-addr --alias my-pa2 --key my-vk
 ```
 #### Manual Key/Address Addition
 The client should be able to directly add raw spending keys, viewing
 keys, and payment addresses. Below are examples of how these objects
 should be added:
 ```
-anomaw masp add --alias my-sk --value xsktest1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu69au6gn3su5ewneas486hdccyayx32hxvt64p3d0hfuprpgcgv2q9gdx3jvxrn02f0nnp3jtdd6f5vwscfuyum083cvfv4jun75ak5sdgrm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcvedhsv
-anomaw masp add --alias my-vk --value xfvktest1qqqqqqqqqqqqqqpagte43rsza46v55dlz8cffahv0fnr6eqacvnrkyuf9lmndgal7erg38awgq60r259csg3lxeeyy5355f5nj3ywpeqgd2guqd73uxz46645d0ayt9em88wflka0vsrq29u47x55psw93ly80lvftzdr5ccrzuuedtf6fala4r4nnazm9y9hq5yu6pq24arjskmpv4mdgfn3spffxxv8ugvym36kmnj45jcvvmm227vqjm5fq8882yhjsq97p7xrwqt7n63v
-anomaw masp add --alias my-pa --value patest10qy6fuwef9leccl6dfm7wwlyd336x4y32hz62cnrvlrl6r5yk0jnw80kus33x34a5peg2xc4csn
+namadaw masp add --alias my-sk --value xsktest1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu69au6gn3su5ewneas486hdccyayx32hxvt64p3d0hfuprpgcgv2q9gdx3jvxrn02f0nnp3jtdd6f5vwscfuyum083cvfv4jun75ak5sdgrm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcvedhsv
+namadaw masp add --alias my-vk --value xfvktest1qqqqqqqqqqqqqqpagte43rsza46v55dlz8cffahv0fnr6eqacvnrkyuf9lmndgal7erg38awgq60r259csg3lxeeyy5355f5nj3ywpeqgd2guqd73uxz46645d0ayt9em88wflka0vsrq29u47x55psw93ly80lvftzdr5ccrzuuedtf6fala4r4nnazm9y9hq5yu6pq24arjskmpv4mdgfn3spffxxv8ugvym36kmnj45jcvvmm227vqjm5fq8882yhjsq97p7xrwqt7n63v
+namadaw masp add --alias my-pa --value patest10qy6fuwef9leccl6dfm7wwlyd336x4y32hz62cnrvlrl6r5yk0jnw80kus33x34a5peg2xc4csn
 ```
 ### Making Shielded Transactions
 #### Shielding Transactions
@@ -171,7 +171,7 @@ completed, the spending key that was used to generate the payment address
 will have the authority to spend the amount that was send. Below is an
 example of how a shielding transacion should be made:
 ```
-anomac transfer --source Bertha --amount 50 --token BTC --target my-pa
+namadac transfer --source Bertha --amount 50 --token BTC --target my-pa
 ```
 #### Unshielding Transactions
 The client should be able to make unshielding transactions by providing
@@ -184,7 +184,7 @@ address). Once the transaction is complete, the spending key will no
 longer be able to spend the transferred amount. Below is an example of
 how an unshielding transaction should be made:
 ```
-anomac transfer --target Bertha --amount 45 --token BTC --source my-sk
+namadac transfer --target Bertha --amount 45 --token BTC --source my-sk
 ```
 #### Shielded Transactions
 The client should be able to make shielded transactions by providing a
@@ -196,7 +196,7 @@ spend the transferred amount, but the spending key that was used to
 (directly or indirectly) generate the payment address will. Below is
 an example of how a shielded transaction should be made:
 ```
-anomac transfer --source my-sk --amount 5 --token BTC --target your-pa
+namadac transfer --source my-sk --amount 5 --token BTC --target your-pa
 ```
 ### Viewing Shielded Balances
 The client should be able to view shielded balances. The most
@@ -207,26 +207,26 @@ it should be possible to restrict the balance query to check only
 a specific viewing key or for a specific token type. Below are
 examples of how balance queries should be made:
 ```
-anomac balance
-anomac balance --owner my-key
-anomac balance --owner my-key --token BTC
-anomac balance --token BTC
+namadac balance
+namadac balance --owner my-key
+namadac balance --owner my-key --token BTC
+namadac balance --token BTC
 ```
 ### Listing Shielded Keys/Addresses
 The wallet should be able to list all the spending keys, viewing keys,
 and payment addresses that it stores. Below are examples of how the
 wallet's storage should be queried:
 ```
-anomaw masp list-keys
-anomaw masp list-keys --unsafe-show-secret
-anomaw masp list-keys --unsafe-show-secret --decrypt
-anomaw masp list-addrs
+namadaw masp list-keys
+namadaw masp list-keys --unsafe-show-secret
+namadaw masp list-keys --unsafe-show-secret --decrypt
+namadaw masp list-addrs
 ```
 ### Finding Shielded Keys/Addresses
 The wallet should be able to find any spending key, viewing key or
 payment address when given its alias. Below are examples of how the
 wallet's storage should be queried:
 ```
-anomaw masp find --alias my-alias
-anomaw masp find --alias my-alias --unsafe-show-secret
+namadaw masp find --alias my-alias
+namadaw masp find --alias my-alias --unsafe-show-secret
 ```
