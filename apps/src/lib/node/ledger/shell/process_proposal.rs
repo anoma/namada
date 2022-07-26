@@ -128,13 +128,13 @@ where
                     let filtered_extensions = self
                         .filter_invalid_vote_extensions_residuals(extensions);
                     let mut voting_power = FractionalVotingPower::default();
-                    let epoch = self
-                        .storage
-                        .block
-                        .pred_epochs
-                        .get_epoch(BlockHeight(self.storage.last_height.0));
-                    let total_power =
-                        u64::from(self.get_total_voting_power(epoch));
+                    let total_power = {
+                        let epoch =
+                            self.storage.block.pred_epochs.get_epoch(
+                                BlockHeight(self.storage.last_height.0),
+                            );
+                        u64::from(self.get_total_voting_power(epoch))
+                    };
                     if filtered_extensions.into_iter().all(|maybe_ext| {
                         maybe_ext
                             .map(|(power, _)| {
