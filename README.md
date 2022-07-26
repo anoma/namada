@@ -22,7 +22,7 @@ interaction with the protocol.
 
 - user docs: built from [docs mdBook](./documentation/docs/)
 - dev docs: built from [dev mdBook](./documentation/dev/)
-- specifications: built from [spec mdBook](./documentation/spec/)
+- specifications: built from [specs mdBook](./documentation/specs/)
 
 ## Warning
 
