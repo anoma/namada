@@ -1,7 +1,7 @@
 //! Contains types necessary for processing Ethereum events
 //! in vote extensions.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::{Add, AddAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -154,7 +154,7 @@ pub struct MultiSignedEthEvent {
 )]
 pub struct VoteExtensionDigest {
     /// The signatures and signing address of each VoteExtension
-    pub signatures: Vec<(Signature, Address)>,
+    pub signatures: HashMap<Address, Signature>,
     /// The events that were reported
     pub events: Vec<MultiSignedEthEvent>,
 }
@@ -169,7 +169,7 @@ impl VoteExtensionDigest {
 
         let mut extensions = vec![];
 
-        for (sig, addr) in signatures.into_iter() {
+        for (addr, sig) in signatures.into_iter() {
             let mut ext = VoteExtension::empty(last_height, addr.clone());
 
             for event in events.iter() {
@@ -274,7 +274,7 @@ mod tests {
             transfers: vec![],
         };
 
-        let validator_1 = address::testing::established_address_2();
+        let validator_1 = address::testing::established_address_1();
         let validator_2 = address::testing::established_address_2();
 
         let ext = |validator: Address| -> VoteExtension {
@@ -296,14 +296,16 @@ mod tests {
 
         // we have the `Signed<VoteExtension>` instances we need,
         // let us now compress them into a single `VoteExtensionDigest`
-        let signatures = vec![
-            (ext[0].sig.clone(), validator_1),
-            (ext[1].sig.clone(), validator_2),
-        ];
+        let signatures: HashMap<_, _> = [
+            (validator_1.clone(), ext[0].sig.clone()),
+            (validator_2.clone(), ext[1].sig.clone()),
+        ]
+        .into_iter()
+        .collect();
         let signers = {
             let mut s = HashSet::new();
-            s.insert(signatures[0].1.clone());
-            s.insert(signatures[1].1.clone());
+            s.insert(validator_1);
+            s.insert(validator_2);
             s
         };
         let events = vec![
