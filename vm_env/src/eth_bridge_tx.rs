@@ -5,19 +5,19 @@ use crate::imports::tx::log_string;
 
 const TX_NAME: &str = "tx_eth_bridge";
 
-fn log(msg: &str) {
-    log_string(format!("[{}] {}", TX_NAME, msg))
+fn log(msg: impl AsRef<str>) {
+    log_string(format!("[{}] {}", TX_NAME, msg.as_ref()))
 }
 
 pub fn apply(tx_data: Vec<u8>) {
     if let Err(err) = apply_aux(tx_data) {
-        log(&format!("ERROR: {:?}", err));
+        log(format!("ERROR: {:?}", err));
         panic!("{:?}", err)
     }
 }
 
 pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
-    log(&format!("got data - {} bytes", tx_data.len()));
+    log(format!("got data - {} bytes", tx_data.len()));
     Ok(())
 }
 
