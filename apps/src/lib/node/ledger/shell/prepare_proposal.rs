@@ -88,13 +88,10 @@ mod prepare_block {
                     // handle genesis block
                     (None, BlockHeight(0)) => return vec![],
                     (Some(_), BlockHeight(0)) => {
-                        tracing::error!(
-                            "The genesis block should not contain vote \
-                             extensions"
-                        );
-                        // TODO: maybe slash validators who claim to have
-                        // seen vote extensions at H=0
-                        return vec![];
+                        unreachable!(
+                            "We already handle this scenario in \
+                             validate_vote_extension."
+                        )
                     }
                     // handle block heights > 0
                     (Some(digest), _) => digest,
@@ -652,7 +649,7 @@ mod prepare_block {
         /// Test if vote extension validation and inclusion in a block
         /// behaves as expected, considering <= 2/3 voting power.
         #[test]
-        #[should_panic(expected = "entered unreachable code")]
+        #[should_panic(expected = "Honest Namada validators")]
         fn test_prepare_proposal_vext_insufficient_voting_power() {
             const FIRST_HEIGHT: BlockHeight = BlockHeight(0);
             const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);

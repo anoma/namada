@@ -13,6 +13,8 @@ mod extend_votes {
     /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
     #[derive(Error, Debug)]
     pub enum VoteExtensionError {
+        #[error("The vote extension was issued at block height 0.")]
+        IssuedAtGenesis,
         #[error("The vote extension has an unexpected block height.")]
         UnexpectedBlockHeight,
         #[error(
@@ -130,6 +132,10 @@ mod extend_votes {
                      different from the expected height {height}"
                 );
                 return Err(VoteExtensionError::UnexpectedBlockHeight);
+            }
+            if height.0 == 0 {
+                tracing::error!("Dropping vote extension issued at genesis");
+                return Err(VoteExtensionError::IssuedAtGenesis);
             }
             // verify if we have any duplicate Ethereum events,
             // and if these are sorted in ascending order

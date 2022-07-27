@@ -133,15 +133,6 @@ where
                 ProtocolTxType::EthereumEvents(digest) => {
                     *vote_ext_digest_num += 1;
 
-                    if self.storage.last_height.0 == 0 {
-                        return TxResult {
-                            code: ErrorCodes::InvalidVoteExntension.into(),
-                            info: "No vote extensions should be included in \
-                                   block height 0"
-                                .into(),
-                        };
-                    }
-
                     let extensions =
                         digest.decompress(self.storage.last_height);
                     let filtered_extensions = self
