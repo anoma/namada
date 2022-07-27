@@ -446,6 +446,10 @@ mod test_process_proposal {
         let (protocol_key, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
             let addr = wallet::defaults::validator_address();
+            let event = EthereumEvent::TransfersToNamada {
+                nonce: 1u64.into(),
+                transfers: vec![],
+            };
             let ext = {
                 // create a fake signature
                 let sig = common::Signature::Ed25519(ed25519::Signature(
@@ -455,14 +459,10 @@ mod test_process_proposal {
                 let data = VoteExtension {
                     validator_addr: addr.clone(),
                     block_height: LAST_HEIGHT,
-                    ethereum_events: vec![],
+                    ethereum_events: vec![event.clone()],
                 };
 
                 SignedExt { sig, data }
-            };
-            let event = EthereumEvent::TransfersToNamada {
-                nonce: 1u64.into(),
-                transfers: vec![],
             };
             VoteExtensionDigest {
                 signatures: {
