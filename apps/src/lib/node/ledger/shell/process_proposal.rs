@@ -436,6 +436,32 @@ mod test_process_proposal {
         );
     }
 
+    fn check_rejected_digest(
+        shell: &mut TestShell,
+        vote_extension_digest: VoteExtensionDigest,
+        protocol_key: common::SecretKey,
+    ) {
+        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+            .sign(&protocol_key)
+            .to_bytes();
+        let request = ProcessProposal { txs: vec![tx] };
+        let response = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
+        assert_eq!(
+            response.result.code,
+            u32::from(ErrorCodes::InvalidVoteExntension)
+        );
+    }
+
     /// Test that if a proposal contains vote extensions with
     /// invalid validator signatures, we reject it.
     #[test]
@@ -480,25 +506,7 @@ mod test_process_proposal {
                 }],
             }
         };
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-            .sign(&protocol_key)
-            .to_bytes();
-        let request = ProcessProposal { txs: vec![tx] };
-        let response = if let Err(TestError::RejectProposal(resp)) =
-            shell.process_proposal(request)
-        {
-            if let [resp] = resp.as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            }
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(
-            response.result.code,
-            u32::from(ErrorCodes::InvalidVoteExntension)
-        );
+        check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
     }
 
     /// Test that if a proposal contains vote extensions with
@@ -542,25 +550,7 @@ mod test_process_proposal {
                 }],
             }
         };
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-            .sign(&protocol_key)
-            .to_bytes();
-        let request = ProcessProposal { txs: vec![tx] };
-        let response = if let Err(TestError::RejectProposal(resp)) =
-            shell.process_proposal(request)
-        {
-            if let [resp] = resp.as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            }
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(
-            response.result.code,
-            u32::from(ErrorCodes::InvalidVoteExntension)
-        );
+        check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
     }
 
     /// Test that if a proposal contains vote extensions with
@@ -606,25 +596,7 @@ mod test_process_proposal {
                 }],
             }
         };
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-            .sign(&protocol_key)
-            .to_bytes();
-        let request = ProcessProposal { txs: vec![tx] };
-        let response = if let Err(TestError::RejectProposal(resp)) =
-            shell.process_proposal(request)
-        {
-            if let [resp] = resp.as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            }
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(
-            response.result.code,
-            u32::from(ErrorCodes::InvalidVoteExntension)
-        );
+        check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
     }
 
     /// Test that if a wrapper tx is not signed, it is rejected
