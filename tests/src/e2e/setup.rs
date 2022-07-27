@@ -55,10 +55,6 @@ pub struct Network {
     pub chain_id: ChainId,
 }
 
-/// Offset the ports used in the network configuration by 1000 for ABCI++ to
-/// avoid shared resources
-pub const ABCI_PLUS_PLUS_PORT_OFFSET: u16 = 1000;
-
 /// Add `num` validators to the genesis config. Note that called from inside
 /// the [`network`]'s first argument's closure, there is 1 validator already
 /// present to begin with, so e.g. `add_validators(1, _)` will configure a
@@ -86,15 +82,7 @@ pub fn add_validators(num: u8, mut genesis: GenesisConfig) -> GenesisConfig {
         validator.intent_gossip_seed = None;
         let mut net_address = net_address_0;
         // 6 ports for each validator
-        let first_port = net_address_port_0
-            + 6 * (ix as u16 + 1)
-            + if cfg!(feature = "ABCI") {
-                0
-            } else {
-                // The ABCI++ ports at `26670 + ABCI_PLUS_PLUS_PORT_OFFSET`,
-                // see `network`
-                ABCI_PLUS_PLUS_PORT_OFFSET
-            };
+        let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
         net_address.set_port(first_port);
         validator.net_address = Some(net_address.to_string());
         let name = format!("validator-{}", ix + 1);
@@ -122,22 +110,9 @@ pub fn network(
     let test_dir = TestDir::new();
 
     // Open the source genesis file
-    let mut genesis = genesis_config::open_genesis_config(
+    let genesis = genesis_config::open_genesis_config(
         working_dir.join(SINGLE_NODE_NET_GENESIS),
     );
-
-    if !cfg!(feature = "ABCI") {
-        // The ABCI ports start at `26670`, ABCI++ at `26670 +
-        // ABCI_PLUS_PLUS_PORT_OFFSET`to avoid using shared resources with ABCI
-        // feature if running at the same time.
-        let validator_0 = genesis.validator.get_mut("validator-0").unwrap();
-        let mut net_address_0 =
-            SocketAddr::from_str(validator_0.net_address.as_ref().unwrap())
-                .unwrap();
-        let current_port = net_address_0.port();
-        net_address_0.set_port(current_port + ABCI_PLUS_PLUS_PORT_OFFSET);
-        validator_0.net_address = Some(net_address_0.to_string());
-    };
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);
@@ -429,16 +404,17 @@ impl Test {
 pub fn working_dir() -> PathBuf {
     let working_dir = fs::canonicalize("..").unwrap();
 
-    if cfg!(feature = "ABCI") {
-        // Check that tendermint is on $PATH
-        Command::new("which").arg("tendermint").assert().success();
-        std::env::var("TENDERMINT")
-            .expect_err("The env variable TENDERMINT must **not** be set");
-    } else {
-        std::env::var("TENDERMINT").expect(
-            "The env variable TENDERMINT must be set and point to a local \
-             build of the tendermint abci++ branch",
-        );
+    // Check that tendermint is either on $PATH or `TENDERMINT` env var is set
+    if std::env::var("TENDERMINT").is_err() {
+        Command::new("which")
+            .arg("tendermint")
+            .assert()
+            .try_success()
+            .expect(
+                "The env variable TENDERMINT must be set and point to a local \
+                 build of the tendermint abci++ branch, or the tendermint \
+                 binary must be on PATH",
+            );
     }
     working_dir
 }

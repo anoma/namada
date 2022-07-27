@@ -173,26 +173,13 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
     };
 
     if !use_prebuilt_binaries {
-        let build_cmd = if !cfg!(feature = "ABCI") {
-            CargoBuild::new()
-                .package(APPS_PACKAGE)
-                .manifest_path(manifest_path)
-                .no_default_features()
-                .features("ABCI-plus-plus")
-                // Explicitly disable dev, in case it's enabled when a test is
-                // invoked
-                .env("ANOMA_DEV", "false")
-                .bin(bin_name)
-        } else {
-            CargoBuild::new()
-                .package(APPS_PACKAGE)
-                .manifest_path(manifest_path)
-                .features("ABCI")
-                // Explicitly disable dev, in case it's enabled when a test is
-                // invoked
-                .env("ANOMA_DEV", "false")
-                .bin(bin_name)
-        };
+        let build_cmd = CargoBuild::new()
+            .package(APPS_PACKAGE)
+            .manifest_path(manifest_path)
+            // Explicitly disable dev, in case it's enabled when a test is
+            // invoked
+            .env("ANOMA_DEV", "false")
+            .bin(bin_name);
 
         let build_cmd = if run_debug {
             build_cmd

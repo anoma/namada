@@ -52,11 +52,7 @@ fn run_ledger() -> Result<()> {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
         ledger.exp_string("Anoma ledger node started")?;
-        if !cfg!(feature = "ABCI") {
-            ledger.exp_string("This node is a fullnode")?;
-        } else {
-            ledger.exp_string("This node is not a validator")?;
-        }
+        ledger.exp_string("This node is a fullnode")?;
     }
 
     Ok(())
@@ -66,8 +62,8 @@ fn run_ledger() -> Result<()> {
 /// 1. Run 2 genesis validator ledger nodes and 1 non-validator node
 /// 2. Submit a valid token transfer tx
 /// 3. Check that all the nodes processed the tx with the same result
-/// TODO: run this test for ABCI-plus-plus once https://github.com/tendermint/tendermint/issues/8840 is fixed
-#[cfg(not(feature = "ABCI-plus-plus"))]
+/// TODO: run this test once https://github.com/tendermint/tendermint/issues/8840 is fixed
+#[ignore]
 #[test]
 fn test_node_connectivity() -> Result<()> {
     // Setup 2 genesis validator nodes
@@ -87,11 +83,7 @@ fn test_node_connectivity() -> Result<()> {
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        non_validator.exp_string("This node is a fullnode")?;
-    } else {
-        non_validator.exp_string("This node is not a validator")?;
-    }
+    non_validator.exp_string("This node is a fullnode")?;
 
     // 2. Submit a valid token transfer tx
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -342,9 +334,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
 
             if !dry_run {
-                if !cfg!(feature = "ABCI") {
-                    client.exp_string("Transaction accepted")?;
-                }
+                client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
             }
             client.exp_string("Transaction is valid.")?;
@@ -460,9 +450,7 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    if !cfg!(feature = "ABCI") {
-        client.exp_string("Transaction accepted")?;
-    }
+    client.exp_string("Transaction accepted")?;
     client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is invalid")?;
     client.exp_string(r#""code": "1"#)?;
@@ -519,9 +507,7 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    if !cfg!(feature = "ABCI") {
-        client.exp_string("Transaction accepted")?;
-    }
+    client.exp_string("Transaction accepted")?;
     client.exp_string("Transaction applied")?;
 
     client.exp_string("Error trying to apply a transaction")?;
@@ -967,9 +953,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
                 let mut args = (*tx_args).clone();
                 args.push(&*validator_one_rpc);
                 let mut client = run!(*test, Bin::Client, args, Some(40))?;
-                if !cfg!(feature = "ABCI") {
-                    client.exp_string("Transaction accepted")?;
-                }
+                client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
                 client.exp_string("Transaction is valid.")?;
                 client.assert_success();
@@ -1516,8 +1500,8 @@ fn generate_proposal_json(
 /// 3. Setup and start the 2 genesis validator nodes and a non-validator node
 /// 4. Submit a valid token transfer tx from one validator to the other
 /// 5. Check that all the nodes processed the tx with the same result
-/// TODO: run this test for ABCI-plus-plus once https://github.com/tendermint/tendermint/issues/8840 is fixed
-#[cfg(not(feature = "ABCI-plus-plus"))]
+/// TODO: run this test once https://github.com/tendermint/tendermint/issues/8840 is fixed
+#[ignore]
 #[test]
 fn test_genesis_validators() -> Result<()> {
     use std::collections::HashMap;
@@ -1550,17 +1534,7 @@ fn test_genesis_validators() -> Result<()> {
     let net_address_port_0 = net_address_0.port();
     // Find the first port (ledger P2P) that should be used for a validator at
     // the given index
-    let get_first_port = |ix: u8| {
-        net_address_port_0
-            + 6 * (ix as u16 + 1)
-            + if cfg!(feature = "ABCI") {
-                0
-            } else {
-                // The ABCI++ ports at `26670 + ABCI_PLUS_PLUS_PORT_OFFSET`,
-                // see `network`
-                setup::ABCI_PLUS_PLUS_PORT_OFFSET
-            }
-    };
+    let get_first_port = |ix: u8| net_address_port_0 + 6 * (ix as u16 + 1);
 
     // 1. Setup 2 genesis validators
     let validator_0_alias = "validator-0";
@@ -1773,13 +1747,7 @@ fn test_genesis_validators() -> Result<()> {
     // We have to update the ports in the configs again, because the ones from
     // `join-network` use the defaults
     let update_config = |ix: u8, mut config: Config| {
-        let first_port = net_address_port_0
-            + 6 * (ix as u16 + 1)
-            + if cfg!(feature = "ABCI") {
-                0
-            } else {
-                setup::ABCI_PLUS_PLUS_PORT_OFFSET
-            };
+        let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
         config.ledger.tendermint.p2p_address.set_port(first_port);
         config
             .ledger
@@ -1829,11 +1797,7 @@ fn test_genesis_validators() -> Result<()> {
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        non_validator.exp_string("This node is a fullnode")?;
-    } else {
-        non_validator.exp_string("This node is not a validator")?;
-    }
+    non_validator.exp_string("This node is a fullnode")?;
 
     // 4. Submit a valid token transfer tx
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
