@@ -118,7 +118,7 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
         (Some(token), Some(owner)) => {
             let token = ctx.get(&token);
             let owner = ctx.get(&owner);
-            let key = match args.sub_prefix {
+            let key = match &args.sub_prefix {
                 Some(sub_prefix) => {
                     let sub_prefix = Key::parse(sub_prefix).unwrap();
                     let prefix =
@@ -132,9 +132,15 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
             match query_storage_value::<token::Amount>(&client, &key).await {
-                Some(balance) => {
-                    println!("{}: {}", currency_code, balance);
-                }
+                Some(balance) => match &args.sub_prefix {
+                    Some(sub_prefix) => {
+                        println!(
+                            "{} with {}: {}",
+                            currency_code, sub_prefix, balance
+                        );
+                    }
+                    None => println!("{}: {}", currency_code, balance),
+                },
                 None => {
                     println!("No {} balance found for {}", currency_code, owner)
                 }

@@ -319,6 +319,11 @@ pub fn is_any_multitoken_balance_key(key: &Key) -> Option<(Key, &Address)> {
 
 fn multitoken_balance_owner(key: &Key) -> Option<(Key, &Address)> {
     let len = key.segments.len();
+    if len < 4 {
+        // the key of a multitoken should have 1 or more segments other than
+        // token, balance, owner
+        return None;
+    }
     match key.get_at(len - 2) {
         Some(DbKeySeg::StringSeg(balance))
             if balance == BALANCE_STORAGE_KEY =>

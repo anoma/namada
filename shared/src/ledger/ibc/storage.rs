@@ -25,8 +25,8 @@ const CONNECTIONS_COUNTER: &str = "connections/counter";
 const CHANNELS_COUNTER: &str = "channelEnds/counter";
 const CAPABILITIES_INDEX: &str = "capabilities/index";
 const CAPABILITIES: &str = "capabilities";
-/// Key segment for a multitoken
-const MULTITOKEN_STORAGE_KEY: &str = "multitoken";
+/// Key segment for a multitoken related to IBC
+const MULTITOKEN_STORAGE_KEY: &str = "ibc";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
