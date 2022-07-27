@@ -41,38 +41,9 @@ where
             .txs
             .iter()
             .map(|tx_bytes| {
-                ExecTxResult::from(match Tx::try_from(tx_bytes.as_slice()) {
-                    Ok(tx) => match process_tx(tx) {
-                        // This occurs if the wrapper / protocol tx signature is invalid
-                        Err(err) => TxResult {
-                            code: ErrorCodes::InvalidSig.into(),
-                            info: err.to_string(),
-                        },
-                        Ok(tx) => {
-                            if let TxType::Protocol(ProtocolTx{tx: ProtocolTxType::EthereumEvents(_), ..}) = &tx {
-                                vote_ext_digest_num += 1;
-                                // genesis block should not have vote extensions
-                                if self.storage.last_height.0 == 0 {
-                                     TxResult {
-                                        code: ErrorCodes::InvalidVoteExntension.into(),
-                                        info: "No vote extensions should be included in block height 0".into()
-                                    }
-                                } else {
-                                    self.process_single_tx(tx)
-                                }
-                            } else {
-                                self.process_single_tx(tx)
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        TxResult {
-                            code: ErrorCodes::InvalidTx.into(),
-                            info: "The submitted transaction was not deserializable"
-                                .into(),
-                        }
-                    }
-                })
+                ExecTxResult::from(
+                    self.process_single_tx(tx_bytes, &mut vote_ext_digest_num),
+                )
             })
             .collect();
 
@@ -109,10 +80,38 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    pub(crate) fn process_single_tx(&mut self, tx: TxType) -> TxResult {
+    pub(crate) fn process_single_tx(
+        &mut self,
+        tx_bytes: &[u8],
+        vote_ext_digest_num: &mut usize,
+    ) -> TxResult {
+        let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
+            |_| {
+                Err(TxResult {
+                    code: ErrorCodes::InvalidTx.into(),
+                    info: "The submitted transaction was not deserializable"
+                        .into(),
+                })
+            },
+            |tx| {
+                process_tx(tx).map_err(|err| {
+                    // This occurs if the wrapper / protocol tx signature is
+                    // invalid
+                    TxResult {
+                        code: ErrorCodes::InvalidSig.into(),
+                        info: err.to_string(),
+                    }
+                })
+            },
+        );
+        let tx = match maybe_tx {
+            Ok(tx) => tx,
+            Err(tx_result) => return tx_result,
+        };
+
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-        let hash = hash_tx(&Tx::from(tx.clone()).to_bytes());
+
         match tx {
             // If it is a raw transaction, we do no further validation
             TxType::Raw(_) => TxResult {
@@ -123,10 +122,22 @@ where
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthereumEvents(digest) => {
+                    *vote_ext_digest_num += 1;
+
+                    if self.storage.last_height.0 == 0 {
+                        return TxResult {
+                            code: ErrorCodes::InvalidVoteExntension.into(),
+                            info: "No vote extensions should be included in \
+                                   block height 0"
+                                .into(),
+                        };
+                    }
+
                     let extensions =
                         digest.decompress(self.storage.last_height);
                     let filtered_extensions = self
                         .filter_invalid_vote_extensions_residuals(extensions);
+
                     let mut voting_power = FractionalVotingPower::default();
                     let total_power = {
                         let epoch =
@@ -135,6 +146,7 @@ where
                             );
                         u64::from(self.get_total_voting_power(epoch))
                     };
+
                     if filtered_extensions.into_iter().all(|maybe_ext| {
                         maybe_ext
                             .map(|(power, _)| {
@@ -215,7 +227,7 @@ where
                         code: ErrorCodes::InvalidTx.into(),
                         info: format!(
                             "The ciphertext of the wrapped tx {} is invalid",
-                            hash
+                            hash_tx(tx_bytes)
                         ),
                     }
                 } else {
@@ -269,7 +281,7 @@ where
         match process_tx(req_tx.clone()) {
             Ok(TxType::Wrapper(_)) => {}
             Ok(TxType::Protocol(_)) => {
-                let result = self.process_single_tx(&req.tx);
+                let result = self.process_single_tx(&req.tx, &mut 0usize);
                 return shim::request::ProcessedTx { tx: req.tx, result };
             }
             Ok(_) => {
@@ -289,7 +301,7 @@ where
             }
         }
 
-        let wrapper_resp = self.process_single_tx(&req.tx);
+        let wrapper_resp = self.process_single_tx(&req.tx, &mut 0usize);
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
         if wrapper_resp.code == 0 {
@@ -303,7 +315,8 @@ where
                 // we are not checking that txs are out of order
                 self.storage.tx_queue.push(wrapper);
                 // check the decoded tx
-                let decoded_resp = self.process_single_tx(&decoded);
+                let decoded_resp =
+                    self.process_single_tx(&decoded, &mut 0usize);
                 // this ensures that the tx queue is empty even if an error
                 // happened in [`process_proposal`].
                 self.storage.tx_queue.pop();
