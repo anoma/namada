@@ -363,14 +363,15 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
     use namada::types::address::xan;
     use namada::types::ethereum_events::vote_extensions::{
-        VoteExtension, VoteExtensionDigest,
+        MultiSignedEthEvent, VoteExtension, VoteExtensionDigest,
     };
+    use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
@@ -386,6 +387,7 @@ mod test_process_proposal {
     #[cfg(feature = "ABCI")]
     use tendermint_proto_abci::google::protobuf::Timestamp;
 
+    use super::super::vote_extensions::SignedExt;
     use super::*;
     #[cfg(not(feature = "ABCI"))]
     use crate::node::ledger::shell::test_utils::TestError;
@@ -431,6 +433,71 @@ mod test_process_proposal {
         let results = shell.process_proposal(request);
         assert!(
             matches!(results, Err(TestError::RejectProposal(s)) if s.len() == 2)
+        );
+    }
+
+    /// Test that if a proposal contains vote extensions with
+    /// invalid validator signatures, we reject it.
+    #[test]
+    fn test_drop_vext_digest_with_invalid_sigs() {
+        const LAST_HEIGHT: BlockHeight = BlockHeight(2);
+        let (mut shell, _, _) = test_utils::setup();
+        shell.storage.last_height = LAST_HEIGHT;
+        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let vote_extension_digest = {
+            let addr = wallet::defaults::validator_address();
+            let ext = {
+                // create a fake signature
+                let sig = common::Signature::Ed25519(ed25519::Signature(
+                    [0u8; 64].into(),
+                ));
+
+                let data = VoteExtension {
+                    validator_addr: addr.clone(),
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![],
+                };
+
+                SignedExt { sig, data }
+            };
+            let event = EthereumEvent::TransfersToNamada {
+                nonce: 1u64.into(),
+                transfers: vec![],
+            };
+            VoteExtensionDigest {
+                signatures: {
+                    let mut s = HashMap::new();
+                    s.insert(addr.clone(), ext.sig);
+                    s
+                },
+                events: vec![MultiSignedEthEvent {
+                    event,
+                    signers: {
+                        let mut s = HashSet::new();
+                        s.insert(addr);
+                        s
+                    },
+                }],
+            }
+        };
+        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+            .sign(&protocol_key)
+            .to_bytes();
+        let request = ProcessProposal { txs: vec![tx] };
+        let response = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
+        assert_eq!(
+            response.result.code,
+            u32::from(ErrorCodes::InvalidVoteExntension)
         );
     }
 
