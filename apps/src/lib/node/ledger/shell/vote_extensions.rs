@@ -111,9 +111,10 @@ mod extend_votes {
         pub fn validate_vote_extension(
             &self,
             ext: SignedExt,
-            height: BlockHeight,
+            last_height: BlockHeight,
         ) -> bool {
-            self.validate_vote_ext_and_get_it_back(ext, height).is_ok()
+            self.validate_vote_ext_and_get_it_back(ext, last_height)
+                .is_ok()
         }
 
         /// This method behaves exactly like [`Self::validate_vote_extension`],
@@ -122,18 +123,18 @@ mod extend_votes {
         pub fn validate_vote_ext_and_get_it_back(
             &self,
             ext: SignedExt,
-            height: BlockHeight,
+            last_height: BlockHeight,
         ) -> core::result::Result<(VotingPower, SignedExt), VoteExtensionError>
         {
-            if ext.data.block_height != height {
+            if ext.data.block_height != last_height {
                 let ext_height = ext.data.block_height;
                 tracing::error!(
                     "Vote extension issued for a block height {ext_height} \
-                     different from the expected height {height}"
+                     different from the expected height {last_height}"
                 );
                 return Err(VoteExtensionError::UnexpectedBlockHeight);
             }
-            if height.0 == 0 {
+            if last_height.0 == 0 {
                 tracing::error!("Dropping vote extension issued at genesis");
                 return Err(VoteExtensionError::IssuedAtGenesis);
             }
@@ -155,7 +156,7 @@ mod extend_votes {
                 return Err(VoteExtensionError::HaveDupesOrNonSorted);
             }
             // get the public key associated with this validator
-            let epoch = self.storage.block.pred_epochs.get_epoch(height);
+            let epoch = self.storage.block.pred_epochs.get_epoch(last_height);
             let (voting_power, pk) = self
                 .get_validator_from_address(validator, epoch)
                 .map_err(|err| {
