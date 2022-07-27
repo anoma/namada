@@ -98,7 +98,7 @@ where
             |err| {
                 tracing::debug!(
                     ?err,
-                    "couldn't deserialize transaction received during \
+                    "Couldn't deserialize transaction received during \
                      PrepareProposal"
                 );
                 Err(TxResult {
