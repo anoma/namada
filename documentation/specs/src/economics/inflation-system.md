@@ -26,10 +26,12 @@ Here are some numbers from other projects
 | Solana                                           | 77   |
 
 
-Our desired percentage for Namada is 33%-66%: Locked for validating and the rest %33-%66 is liquid. When the price of the token is low we can aim for a higher % of locked tokens and reduce this as the price and demand for liquid tokens increases. For example, we can set a range, in the beginning have 50 % and later aim for 1/3. I don't think we should go lower than that. The staking reward should be ideally set.
-```
-Jacob: Strange switch to first person here.
-```
+The desired percentage for Namada is 33%-66%: Locked for validating and the 
+rest %33-%66 is liquid. When the price of the token is low we can aim for a 
+higher % of locked tokens and reduce this as the price and demand for liquid 
+tokens increases. For example, we can set a range, in the beginning have 50 % 
+and later aim for 1/3. It should not go lower than that. The staking reward 
+should be ideally set.
 
 In Polkadot and Cosmos the total inflation rate that is paid as rewards to validators depends on the staking ratio. This is to incentivize validators and delegators to invest in the staking pool. We will follow the same idea and have inflation vary depending on our target staking ratio. Here is how we achieve that.
 
@@ -111,11 +113,6 @@ These bounds on $I_{PoS}$ and $I_L$ give us a min and max bound on the total inf
 ### Shielded pool rewards
 
 The privacy that MASP is providing depends on the asset in the shielded pool. A transaction can only be private if it can hide among other transactions, hence more funds and activity in the shielded pool increase privacy for transactions.
-
-```
-Jacob: Presumably there were supposed to be some words here saying we thus 
-incentivize people to the shielded pool to enhance overall privacy?
-```
 
 ### Public goods funding
 

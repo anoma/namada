@@ -105,11 +105,9 @@ flexibly (e.g. date, epoch num). When a new `timestamp` occurs, the
 `AllowedConversion` will be updated to support all the "history asset" conversion to the latest one.  
 
 ### Incentive AllowedConversion Operation
-`Incentive AllowedConversion` is governed by incentive system, who will be in charge of issuing new incentive plan, updating(modifying) to the latest `timestamp` and destroying the disabled.
-```
-Jacob: I'm not sure what "destroying the disabled" 
-is supposed to mean.
-```
+`Incentive AllowedConversion` is governed by the incentive system, which 
+will be in charge of issuing new incentive plan, updating(modifying) to the latest 
+`timestamp`, and removing disabled conversion permissions.
 
 * Issue 
     * Issue a new incentive plan for new asset. 

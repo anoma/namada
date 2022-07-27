@@ -5,9 +5,6 @@ The Namada ledger execution system is based on an initial version of the [Anoma 
 ## Namada ledger
 
 The Namada ledger is built on top of [Tendermint](https://docs.tendermint.com/master/spec/)'s [ABCI](https://docs.tendermint.com/master/spec/abci/) interface with a slight deviation from the ABCI convention: in Namada, the transactions are currently *not* being executed in ABCI's `DeliverTx` method, but rather in the `EndBlock` method. The reason for this is to prepare for future DKG and threshold decryption integration, which has not yet been fully finished and hence is out-of-scope for the initial release version of Namada.
-```
-Jacob: Are we using ABCI for Namada? The ethereum bridge requires ABCI++. 
-```
 
 The ledger features an account-based system (in which UTXO-based systems such as the MASP can be internally implemented as specific accounts), where each account has a unique address and a dynamic key-value storage sub-space. Every account in Namada is associated with exactly one validity predicate. Fungible tokens, for example, are accounts, whose rules are governed by their validity predicates. Many of the base ledger subsystems specified here are themselves just special Namada accounts too (e.g. PoS, IBC and MASP).
 

@@ -57,9 +57,6 @@ Directionality of allowed conversions must be enforced as well. That is, $v$ mus
 ### Cycles 
 
 It is also critical not to allow cycles. For example, if $\{(A_1, -1), (A_2, 2)\}$ and $\{(A_1, 1), (A_2, -1)\}$ are allowed conversions, then an unlimited amount of $A_2$ may be minted from a nonzero amount of $A_1$. Since 
-```
-Jacob: the anticipation is killing me
-```
 
 ## Alternative approaches
 

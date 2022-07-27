@@ -3,11 +3,6 @@
 In order to be accepted by the Namada ledger, transactions must pay fees in NAM. Transaction fees serve two purposes: first, the efficient allocation of block space given permissionless transaction submission and varying demand, and second, incentive-compatibility to encourage block producers to add transactions to the blocks which they create and publish.
 
 Namada follows a [tipless version](https://arxiv.org/pdf/2106.01340.pdf) of the EIP 1559 scheme. In contrast with the original EIP 1559, the transaction fee of this tipless version consists solely of a base fee, with no tip. The base fee increases whenever blocks are fuller than the desired capacity and decreases when the blocks haven't reached this capacity (i.e. a P-controller). Namada uses a target block fullness of 0.5 (adjustable by governance).
-```
-Jacob: What is the meaning of "target block fullness". Obviously the 
-following paragraph indicates that we incentivize as close to 100% fullness
-as possible. This naively suggests the target block fullness is 1, not 0.5
-```
 
 To provide an incentive for the inclusion of transactions by proposers, Namada transfers 50% of the base fee to the next few block proposers, proportional to block fullness. For example, if the block is 100% full, the proposer will receive full fees, whereas if the block is only 25% full, they will only receive 25% of the fees. These fees are kept in a temporary account, with at most a tenth used to pay out the current proposer. 
 
