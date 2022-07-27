@@ -167,7 +167,7 @@ where
                             }
                         } else {
                             TxResult {
-                                code: ErrorCodes::InvalidVoteExntension.into(),
+                                code: ErrorCodes::InvalidVoteExtension.into(),
                                 info: " Process proposal rejected this \
                                        proposal because the backing stake of \
                                        the vote extensions published in the \
@@ -180,7 +180,7 @@ where
                         // dropping a vote extension. we have access to the
                         // motives in `filtered_extensions`
                         TxResult {
-                            code: ErrorCodes::InvalidVoteExntension.into(),
+                            code: ErrorCodes::InvalidVoteExtension.into(),
                             info: "Process proposal rejected this proposal \
                                    because at least one of the vote \
                                    extensions included was invalid."
@@ -449,7 +449,7 @@ mod test_process_proposal {
         };
         assert_eq!(
             response.result.code,
-            u32::from(ErrorCodes::InvalidVoteExntension)
+            u32::from(ErrorCodes::InvalidVoteExtension)
         );
     }
 
