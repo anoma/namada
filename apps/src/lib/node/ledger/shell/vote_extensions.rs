@@ -11,16 +11,21 @@ mod extend_votes {
     pub type SignedExt = Signed<VoteExtension>;
 
     /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
+    #[derive(Error, Debug)]
     pub enum VoteExtensionError {
-        /// The vote extension has an unexpected block height.
+        #[error("The vote extension has an unexpected block height.")]
         UnexpectedBlockHeight,
-        /// The vote extension contains duplicate or non-sorted
-        /// Ethereum events.
+        #[error(
+            "The vote extension contains duplicate or non-sorted Ethereum \
+             events."
+        )]
         HaveDupesOrNonSorted,
-        /// The public key of the vote extension's associated validator
-        /// could not be found in storage.
+        #[error(
+            "The public key of the vote extension's associated validator \
+             could not be found in storage."
+        )]
         PubKeyNotInStorage,
-        /// The vote extension's signature is invalid.
+        #[error("The vote extension's signature is invalid.")]
         VerifySigFailed,
     }
 
