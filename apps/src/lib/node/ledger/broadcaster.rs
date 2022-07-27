@@ -1,7 +1,4 @@
-#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::{Client, HttpClient};
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{Client, HttpClient};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 /// A service for broadcasting txs via an HTTP client.
