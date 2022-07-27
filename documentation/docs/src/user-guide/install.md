@@ -56,8 +56,8 @@ During internal and private testnets, checkout the latest testnet branch using `
 ```
 
 ```shell
-git clone https://github.com/anoma/anoma.git
-cd anoma 
+git clone https://github.com/anoma/namada.git
+cd namada 
 make install
 ```
 
@@ -74,7 +74,7 @@ Let's install Tendermint.
 You can either follow the instructions on the [Tendermint guide](https://docs.tendermint.com/master/introduction/install.html) or download the `get_tendermint.sh` script from the [Namada repository](https://github.com/anoma/namada/blob/master/scripts/install/get_tendermint.sh) and execute it (will ask you for `root` access):
 
 ```shell
-curl -LO https://raw.githubusercontent.com/anoma/anoma/master/scripts/install/get_tendermint.sh
+curl -LO https://raw.githubusercontent.com/anoma/namada/master/scripts/install/get_tendermint.sh
 chmod +x get_tendermint.sh
 ./get_tendermint.sh
 ```
