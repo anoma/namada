@@ -63,7 +63,7 @@ The `content` value should follow a standard format. We leverage something simil
 `min_proposal_period` sets the minimum voting time window (in `Epoch`).\
 `max_proposal_content_size` tells the maximum number of characters allowed in the proposal content.\
 `min_proposal_grace_epochs` is the minimum required time window (in `Epoch`) between `end_epoch` and the epoch in which the proposal has to be executed.
-`/\$GovernanceAddress/pending/\$proposal_id` this storage key is written only before the execution of the the code defined in `/\$GovernanceAddress/proposal/\$id/proposal_code` and deleted afterwards. Since this storage key can be written only by the protocol itself (and by no other means), VPs can check for the presence of this storage key to be sure that a a proposal_code has been executed by the protocol and not by a transaction.
+`/$GovernanceAddress/pending/$proposal_id` this storage key is written only before the execution of the code defined in `/$GovernanceAddress/proposal/$id/proposal_code` and deleted afterwards. Since this storage key can be written only by the protocol itself (and by no other means), VPs can check for the presence of this storage key to be sure that a proposal_code has been executed by the protocol and not by a transaction.
 
 The governance machinery also relies on a subkey stored under the `NAM` token address:
 
