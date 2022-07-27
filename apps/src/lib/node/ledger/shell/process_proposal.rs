@@ -166,23 +166,14 @@ where
                                     .into(),
                             }
                         } else {
-                            // ```ignore
-                            // TxResult {
-                            //     code: ErrorCodes::InvalidVoteExntension. into(),
-                            //     info: " Process proposal rejected this \
-                            //            proposal because the backing stake of \
-                            //            the vote extensions published in the \
-                            //            proposal was insufficient"
-                            //         .into(),
-                            // }
-                            // ```
-                            //
-                            // TODO: is unreachable really fine?
-                            unreachable!(
-                                "We should never get an insufficient backing \
-                                 stake on vote extensions published in \
-                                 proposals."
-                            )
+                            TxResult {
+                                code: ErrorCodes::InvalidVoteExntension.into(),
+                                info: " Process proposal rejected this \
+                                       proposal because the backing stake of \
+                                       the vote extensions published in the \
+                                       proposal was insufficient"
+                                    .into(),
+                            }
                         }
                     } else {
                         // TODO: maybe return a summary of the reasons for
