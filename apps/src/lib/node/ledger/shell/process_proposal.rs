@@ -47,10 +47,19 @@ where
             })
             .collect();
 
+        // We should not have more than one `VoteExtensionDigest` in
+        // a proposal from some round's leader.
+        let too_many_vext_digests = vote_ext_digest_num > 1;
+
+        // Erroneous transactions were detected when processing
+        // the leader's proposal. We allow txs that do not
+        // deserialize properly, that have invalid signatures
+        // and that have invalid wasm code to reach FinalizeBlock.
+        // This is the reason behind that greater than three check.
+        let invalid_txs = tx_results.iter().any(|res| res.code > 3);
+
         ResponseProcessProposal {
-            status: if vote_ext_digest_num > 1
-                || tx_results.iter().any(|res| res.code > 3)
-            {
+            status: if too_many_vext_digests || invalid_txs {
                 ProposalStatus::Reject as i32
             } else {
                 ProposalStatus::Accept as i32
