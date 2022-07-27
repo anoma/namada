@@ -95,7 +95,12 @@ where
         vote_ext_digest_num: &mut usize,
     ) -> TxResult {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
-            |_| {
+            |err| {
+                tracing::debug!(
+                    ?err,
+                    "couldn't deserialize transaction received during \
+                     PrepareProposal"
+                );
                 Err(TxResult {
                     code: ErrorCodes::InvalidTx.into(),
                     info: "The submitted transaction was not deserializable"
