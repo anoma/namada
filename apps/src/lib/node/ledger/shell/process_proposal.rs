@@ -173,7 +173,7 @@ where
                         } else {
                             TxResult {
                                 code: ErrorCodes::InvalidVoteExtension.into(),
-                                info: " Process proposal rejected this \
+                                info: "Process proposal rejected this \
                                        proposal because the backing stake of \
                                        the vote extensions published in the \
                                        proposal was insufficient"
