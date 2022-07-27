@@ -10,6 +10,20 @@ mod extend_votes {
     /// A [`VoteExtension`] signed by a Namada validator.
     pub type SignedExt = Signed<VoteExtension>;
 
+    /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
+    pub enum VoteExtensionError {
+        /// The vote extension has an unexpected block height.
+        UnexpectedBlockHeight,
+        /// The vote extension contains duplicate or non-sorted
+        /// Ethereum events.
+        HaveDupesOrNonSorted,
+        /// The public key of the vote extension's associated validator
+        /// could not be found in storage.
+        PubKeyNotInStorage,
+        /// The vote extension's signature is invalid.
+        VerifySigFailed,
+    }
+
     impl<D, H> Shell<D, H>
     where
         D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -92,8 +106,7 @@ mod extend_votes {
             ext: SignedExt,
             height: BlockHeight,
         ) -> bool {
-            self.validate_vote_ext_and_get_it_back(ext, height)
-                .is_some()
+            self.validate_vote_ext_and_get_it_back(ext, height).is_ok()
         }
 
         /// This method behaves exactly like [`Self::validate_vote_extension`],
@@ -103,14 +116,15 @@ mod extend_votes {
             &self,
             ext: SignedExt,
             height: BlockHeight,
-        ) -> Option<(VotingPower, SignedExt)> {
+        ) -> core::result::Result<(VotingPower, SignedExt), VoteExtensionError>
+        {
             if ext.data.block_height != height {
                 let ext_height = ext.data.block_height;
                 tracing::error!(
                     "Vote extension issued for a block height {ext_height} \
                      different from the expected height {height}"
                 );
-                return None;
+                return Err(VoteExtensionError::UnexpectedBlockHeight);
             }
             // verify if we have any duplicate Ethereum events,
             // and if these are sorted in ascending order
@@ -127,7 +141,7 @@ mod extend_votes {
                     %validator,
                     "Found duplicate or non-sorted Ethereum events in a vote extension from validator"
                 );
-                return None;
+                return Err(VoteExtensionError::HaveDupesOrNonSorted);
             }
             // get the public key associated with this validator
             let epoch = self.storage.block.pred_epochs.get_epoch(height);
@@ -139,8 +153,8 @@ mod extend_votes {
                         %validator,
                         "Could not get public key from Storage for validator"
                     );
-                })
-                .ok()?;
+                    VoteExtensionError::PubKeyNotInStorage
+                })?;
             // verify the signature of the vote extension
             ext.verify(&pk)
                 .map_err(|err| {
@@ -149,8 +163,8 @@ mod extend_votes {
                         %validator,
                         "Failed to verify the signature of a vote extension issued by validator"
                     );
+                    VoteExtensionError::VerifySigFailed
                 })
-                .ok()
                 .map(|_| (voting_power, ext))
         }
 

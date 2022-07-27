@@ -165,7 +165,7 @@ where
                                 )
                                 .unwrap_or_default();
                             })
-                            .is_some()
+                            .is_ok()
                     }) {
                         if voting_power > FractionalVotingPower::TWO_THIRDS {
                             TxResult {
@@ -399,55 +399,53 @@ mod test_process_proposal {
     /// we reject it.
     #[test]
     fn test_more_than_one_vext_digest_rejected() {
-        let (mut shell, _, _) = test_utils::setup();
+        let (shell, _, _) = test_utils::setup();
         let validator_addr = wallet::defaults::validator_address();
         drop((shell, validator_addr));
-        /*
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
-        );
-        let wrapper = WrapperTx::new(
-            Fee {
-                amount: 0.into(),
-                token: xan(),
-            },
-            &keypair,
-            Epoch(0),
-            0.into(),
-            tx,
-            Default::default(),
-        );
-        let tx = Tx::new(
-            vec![],
-            Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
-        )
-        .to_bytes();
-        #[allow(clippy::redundant_clone)]
-        let request = ProcessProposal {
-            txs: vec![tx.clone()],
-        };
-
-        let response = if let [resp] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
-        assert_eq!(
-            response.result.info,
-            String::from("Wrapper transactions must be signed")
-        );
-        #[cfg(feature = "ABCI")]
-        {
-            assert_eq!(response.tx, tx);
-            assert!(shell.shell.storage.tx_queue.is_empty())
-        }
-        */
+        // let tx = Tx::new(
+        // "wasm_code".as_bytes().to_owned(),
+        // Some("transaction data".as_bytes().to_owned()),
+        // );
+        // let wrapper = WrapperTx::new(
+        // Fee {
+        // amount: 0.into(),
+        // token: xan(),
+        // },
+        // &keypair,
+        // Epoch(0),
+        // 0.into(),
+        // tx,
+        // Default::default(),
+        // );
+        // let tx = Tx::new(
+        // vec![],
+        // Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
+        // )
+        // .to_bytes();
+        // #[allow(clippy::redundant_clone)]
+        // let request = ProcessProposal {
+        // txs: vec![tx.clone()],
+        // };
+        //
+        // let response = if let [resp] = shell
+        // .process_proposal(request)
+        // .expect("Test failed")
+        // .as_slice()
+        // {
+        // resp.clone()
+        // } else {
+        // panic!("Test failed")
+        // };
+        // assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
+        // assert_eq!(
+        // response.result.info,
+        // String::from("Wrapper transactions must be signed")
+        // );
+        // #[cfg(feature = "ABCI")]
+        // {
+        // assert_eq!(response.tx, tx);
+        // assert!(shell.shell.storage.tx_queue.is_empty())
+        // }
     }
 
     /// Test that if a wrapper tx is not signed, it is rejected

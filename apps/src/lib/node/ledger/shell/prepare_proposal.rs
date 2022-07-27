@@ -15,7 +15,7 @@ mod prepare_block {
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
 
-    use super::super::vote_extensions::SignedExt;
+    use super::super::vote_extensions::{SignedExt, VoteExtensionError};
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -249,8 +249,12 @@ mod prepare_block {
         pub fn filter_invalid_vote_extensions_residuals(
             &self,
             vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
-        ) -> impl Iterator<Item = Option<(VotingPower, SignedExt)>> + '_
-        {
+        ) -> impl Iterator<
+            Item = core::result::Result<
+                (VotingPower, SignedExt),
+                VoteExtensionError,
+            >,
+        > + '_ {
             vote_extensions.into_iter().map(|vote_extension| {
                 self.validate_vote_ext_and_get_it_back(
                     vote_extension,
@@ -267,7 +271,7 @@ mod prepare_block {
             vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
         ) -> impl Iterator<Item = (VotingPower, SignedExt)> + '_ {
             self.filter_invalid_vote_extensions_residuals(vote_extensions)
-                .filter_map(|ext| ext)
+                .filter_map(|ext| ext.ok())
         }
     }
 
