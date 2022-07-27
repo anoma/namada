@@ -7,7 +7,6 @@
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod finalize_block;
 mod init_chain;
-#[cfg(not(feature = "ABCI"))]
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
@@ -45,29 +44,16 @@ use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType,
     RequestPrepareProposal, ValidatorUpdate,
 };
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::public_key;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::types::ConsensusParams;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::ConsensusParams;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::{Evidence, EvidenceType, ValidatorUpdate};
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::crypto::public_key;
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
-#[cfg(not(feature = "ABCI"))]
 use tower_abci::{request, response};
-#[cfg(feature = "ABCI")]
-use tower_abci_old::{request, response};
 
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
@@ -331,15 +317,8 @@ where
     }
 
     /// Iterate lazily over the wrapper txs in order
-    #[cfg(not(feature = "ABCI"))]
     fn next_wrapper(&mut self) -> Option<&WrapperTx> {
         self.storage.tx_queue.lazy_next()
-    }
-
-    /// Iterate lazily over the wrapper txs in order
-    #[cfg(feature = "ABCI")]
-    fn next_wrapper(&mut self) -> Option<WrapperTx> {
-        self.storage.tx_queue.pop()
     }
 
     /// If we reject the decrypted txs because they were out of
@@ -517,7 +496,6 @@ where
         }
     }
 
-    #[cfg(not(feature = "ABCI"))]
     /// INVARIANT: This method must be stateless.
     pub fn extend_vote(
         &self,
@@ -526,7 +504,6 @@ where
         Default::default()
     }
 
-    #[cfg(not(feature = "ABCI"))]
     /// INVARIANT: This method must be stateless.
     pub fn verify_vote_extension(
         &self,
@@ -621,7 +598,6 @@ where
 
     /// Lookup a validator's keypair for their established account from their
     /// wallet. If the node is not validator, this function returns None
-    #[cfg(not(feature = "ABCI"))]
     #[allow(dead_code)]
     fn get_account_keypair(&self) -> Option<Rc<common::SecretKey>> {
         let wallet_path = &self.base_dir.join(self.chain_id.as_str());
@@ -672,14 +648,8 @@ mod test_utils {
     use namada::types::storage::{BlockHash, Epoch, Header};
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
-    #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::{RequestInitChain, RequestProcessProposal};
-    #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::google::protobuf::Timestamp;
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::abci::{RequestDeliverTx, RequestInitChain};
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::google::protobuf::Timestamp;
     use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
@@ -786,39 +756,23 @@ mod test_utils {
             &mut self,
             req: ProcessProposal,
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
-            #[cfg(not(feature = "ABCI"))]
-            {
-                let resp =
-                    self.shell.process_proposal(RequestProcessProposal {
-                        txs: req.txs.clone(),
-                        ..Default::default()
-                    });
-                let results = resp
-                    .tx_results
-                    .iter()
-                    .zip(req.txs.into_iter())
-                    .map(|(res, tx_bytes)| ProcessedTx {
-                        result: res.into(),
-                        tx: tx_bytes,
-                    })
-                    .collect();
-                if resp.status != 1 {
-                    Err(TestError::RejectProposal(results))
-                } else {
-                    Ok(results)
-                }
-            }
-            #[cfg(feature = "ABCI")]
-            {
-                Ok(req
-                    .txs
-                    .into_iter()
-                    .map(|tx_bytes| {
-                        self.process_and_decode_proposal(RequestDeliverTx {
-                            tx: tx_bytes,
-                        })
-                    })
-                    .collect())
+            let resp = self.shell.process_proposal(RequestProcessProposal {
+                txs: req.txs.clone(),
+                ..Default::default()
+            });
+            let results = resp
+                .tx_results
+                .iter()
+                .zip(req.txs.into_iter())
+                .map(|(res, tx_bytes)| ProcessedTx {
+                    result: res.into(),
+                    tx: tx_bytes,
+                })
+                .collect();
+            if resp.status != 1 {
+                Err(TestError::RejectProposal(results))
+            } else {
+                Ok(results)
             }
         }
 

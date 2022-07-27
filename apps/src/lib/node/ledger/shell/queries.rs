@@ -10,18 +10,9 @@ use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Key, PrefixValue};
 use namada::types::token::{self, Amount};
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::{ProofOp, ProofOps};
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::google::protobuf;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::types::EvidenceParams;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::crypto::{ProofOp, ProofOps};
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::google::protobuf;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::types::EvidenceParams;
 
 use super::*;
 use crate::node::ledger::response;

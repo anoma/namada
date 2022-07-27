@@ -182,15 +182,8 @@ fn match_intents() -> Result<()> {
     let validator_one_gossiper =
         get_gossiper_mm_server(&test, &Who::Validator(0));
 
-    // The RPC port is either 27660 for ABCI or 28660 for ABCI++ (see
-    // `setup::network`)
-    let rpc_port = (27660
-        + if cfg!(feature = "ABCI") {
-            0
-        } else {
-            setup::ABCI_PLUS_PLUS_PORT_OFFSET
-        })
-    .to_string();
+    // The RPC port starts at 27660 (see `setup::network`)
+    let rpc_port = 27660;
     let rpc_address = format!("127.0.0.1:{}", rpc_port);
 
     // Start intent gossiper node

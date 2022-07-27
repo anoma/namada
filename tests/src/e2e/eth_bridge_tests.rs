@@ -76,9 +76,7 @@ fn everything() {
         .unwrap();
 
         if !dry_run {
-            if !cfg!(feature = "ABCI") {
-                anomac_tx.exp_string("Transaction accepted").unwrap();
-            }
+            anomac_tx.exp_string("Transaction accepted").unwrap();
             anomac_tx.exp_string("Transaction applied").unwrap();
         }
         // TODO: we should check here explicitly with the ledger via a
