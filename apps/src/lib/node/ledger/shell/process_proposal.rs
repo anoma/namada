@@ -83,7 +83,7 @@ where
     ///   3: Wasm runtime error
     ///   4: Invalid order of decrypted txs
     ///   5. More decrypted txs than expected
-    ///   6. A transaciton could not be decrypted
+    ///   6. A transaction could not be decrypted
     ///   7. An error in the vote extensions included in the proposal
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
