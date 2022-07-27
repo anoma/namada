@@ -9,10 +9,6 @@ const PROTO_SRC: &str = "./proto";
 const RUSTFMT_TOOLCHAIN_SRC: &str = "../rust-nightly-version";
 
 fn main() {
-    #[cfg(all(feature = "ABCI", feature = "ABCI-plus-plus"))]
-    compile_error!(
-        "`ABCI` and `ABCI-plus-plus` may not be used at the same time"
-    );
     if let Ok(val) = env::var("COMPILE_PROTO") {
         if val.to_ascii_lowercase() == "false" {
             // Skip compiling proto files

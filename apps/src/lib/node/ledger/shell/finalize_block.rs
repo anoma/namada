@@ -10,14 +10,8 @@ use namada::ledger::treasury::ADDRESS as treasury_address;
 use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
 use namada::types::storage::{BlockHash, Epoch, Header};
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::Misbehavior as Evidence;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::Evidence;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::crypto::PublicKey as TendermintPublicKey;
 
 use super::*;
 use crate::node::ledger::events::EventType;
@@ -302,16 +296,12 @@ where
 
             let mut tx_event = match &tx_type {
                 TxType::Wrapper(_wrapper) => {
-                    if !cfg!(feature = "ABCI") {
-                        self.storage.tx_queue.push(_wrapper.clone());
-                    }
+                    self.storage.tx_queue.push(_wrapper.clone());
                     Event::new_tx_event(&tx_type, height.0)
                 }
                 TxType::Decrypted(inner) => {
                     // We remove the corresponding wrapper tx from the queue
-                    if !cfg!(feature = "ABCI") {
-                        self.storage.tx_queue.pop();
-                    }
+                    self.storage.tx_queue.pop();
                     let mut event = Event::new_tx_event(&tx_type, height.0);
                     if let DecryptedTx::Undecryptable(_) = inner {
                         event["log"] =
@@ -525,7 +515,6 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    #[cfg(not(feature = "ABCI"))]
     /// Check that if a wrapper tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it does
     /// not appear in the queue of txs to be decrypted
@@ -600,62 +589,6 @@ mod test_finalize_block {
         assert_eq!(counter, 3);
     }
 
-    #[cfg(feature = "ABCI")]
-    /// Check that if a wrapper tx was rejected by [`process_proposal`],
-    /// check that the correct event is returned.
-    #[test]
-    fn test_process_proposal_rejected_wrapper_tx() {
-        let (mut shell, _) = setup();
-        let keypair = gen_keypair();
-        let mut processed_txs = vec![];
-        // create some wrapper txs
-        for i in 1..5 {
-            let raw_tx = Tx::new(
-                "wasm_code".as_bytes().to_owned(),
-                Some(format!("transaction data: {}", i).as_bytes().to_owned()),
-            );
-            let wrapper = WrapperTx::new(
-                Fee {
-                    amount: i.into(),
-                    token: xan(),
-                },
-                &keypair,
-                Epoch(0),
-                0.into(),
-                raw_tx.clone(),
-                Default::default(),
-            );
-            let tx = wrapper.sign(&keypair).expect("Test failed");
-            if i > 1 {
-                processed_txs.push(ProcessedTx {
-                    tx: tx.to_bytes(),
-                    result: TxResult {
-                        code: u32::try_from(i.rem_euclid(2))
-                            .expect("Test failed"),
-                        info: "".into(),
-                    },
-                });
-            }
-        }
-
-        // check that the correct events were created
-        for (index, event) in shell
-            .finalize_block(FinalizeBlock {
-                txs: processed_txs.clone(),
-                ..Default::default()
-            })
-            .expect("Test failed")
-            .iter()
-            .enumerate()
-        {
-            assert_eq!(event.event_type.to_string(), String::from("applied"));
-            let code =
-                event.attributes.get("code").expect("Test failed").clone();
-            assert_eq!(code, index.rem_euclid(2).to_string());
-        }
-    }
-
-    #[cfg(not(feature = "ABCI"))]
     /// Check that if a decrypted tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it is still
     /// removed from the queue of txs to be included in the next block
@@ -706,43 +639,6 @@ mod test_finalize_block {
         assert!(shell.next_wrapper().is_none());
     }
 
-    #[cfg(feature = "ABCI")]
-    /// Check that if a decrypted tx was rejected by [`process_proposal`],
-    /// check that the correct event is returned.
-    #[test]
-    fn test_process_proposal_rejected_decrypted_tx() {
-        let (mut shell, _) = setup();
-        let raw_tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(String::from("transaction data").as_bytes().to_owned()),
-        );
-        let processed_tx = ProcessedTx {
-            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
-                .to_bytes(),
-            result: TxResult {
-                code: ErrorCodes::InvalidTx.into(),
-                info: "".into(),
-            },
-        };
-
-        // check that the decrypted tx was not applied
-        for event in shell
-            .finalize_block(FinalizeBlock {
-                txs: vec![processed_tx],
-                ..Default::default()
-            })
-            .expect("Test failed")
-        {
-            assert_eq!(event.event_type.to_string(), String::from("applied"));
-            let code =
-                event.attributes.get("code").expect("Test failed").as_str();
-            assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
-        }
-        // check that the corresponding wrapper tx was removed from the queue
-        assert!(shell.next_wrapper().is_none());
-    }
-
-    #[cfg(not(feature = "ABCI"))]
     /// Test that if a tx is undecryptable, it is applied
     /// but the tx result contains the appropriate error code.
     #[test]
@@ -793,63 +689,6 @@ mod test_finalize_block {
             let code = event.attributes.get("code").expect("Test failed");
             assert_eq!(code, &String::from(ErrorCodes::Undecryptable));
             let log = event.attributes.get("log").expect("Test failed");
-            assert!(log.contains("Transaction could not be decrypted."))
-        }
-        // check that the corresponding wrapper tx was removed from the queue
-        assert!(shell.next_wrapper().is_none());
-    }
-
-    #[cfg(feature = "ABCI")]
-    /// Test that if a tx is undecryptable, it is applied
-    /// but the tx result contains the appropriate error code.
-    #[test]
-    fn test_undecryptable_returns_error_code() {
-        let (mut shell, _) = setup();
-
-        let keypair = crate::wallet::defaults::daewon_keypair();
-        let pubkey = EncryptionKey::default();
-        // not valid tx bytes
-        let tx = "garbage data".as_bytes().to_owned();
-        let inner_tx =
-            namada::types::transaction::encrypted::EncryptedTx::encrypt(
-                &tx, pubkey,
-            );
-        let wrapper = WrapperTx {
-            fee: Fee {
-                amount: 0.into(),
-                token: xan(),
-            },
-            pk: keypair.ref_to(),
-            epoch: Epoch(0),
-            gas_limit: 0.into(),
-            inner_tx,
-            tx_hash: hash_tx(&tx),
-        };
-        let processed_tx = ProcessedTx {
-            tx: Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-                wrapper,
-            )))
-            .to_bytes(),
-            result: TxResult {
-                code: ErrorCodes::Ok.into(),
-                info: "".into(),
-            },
-        };
-
-        // check that correct error message is returned
-        for event in shell
-            .finalize_block(FinalizeBlock {
-                txs: vec![processed_tx],
-                ..Default::default()
-            })
-            .expect("Test failed")
-        {
-            assert_eq!(event.event_type.to_string(), String::from("applied"));
-            let code =
-                event.attributes.get("code").expect("Test failed").as_str();
-            assert_eq!(code, String::from(ErrorCodes::Undecryptable).as_str());
-
-            let log = event.attributes.get("log").expect("Test failed").clone();
             assert!(log.contains("Transaction could not be decrypted."))
         }
         // check that the corresponding wrapper tx was removed from the queue
@@ -946,17 +785,10 @@ mod test_finalize_block {
         {
             if index < 2 {
                 // these should be accepted wrapper txs
-                if !cfg!(feature = "ABCI") {
-                    assert_eq!(
-                        event.event_type.to_string(),
-                        String::from("accepted")
-                    );
-                } else {
-                    assert_eq!(
-                        event.event_type.to_string(),
-                        String::from("applied")
-                    );
-                }
+                assert_eq!(
+                    event.event_type.to_string(),
+                    String::from("accepted")
+                );
                 let code =
                     event.attributes.get("code").expect("Test failed").as_str();
                 assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
@@ -972,21 +804,18 @@ mod test_finalize_block {
             }
         }
 
-        #[cfg(not(feature = "ABCI"))]
-        {
-            // check that the applied decrypted txs were dequeued and the
-            // accepted wrappers were enqueued in correct order
-            let mut txs = valid_txs.iter();
+        // check that the applied decrypted txs were dequeued and the
+        // accepted wrappers were enqueued in correct order
+        let mut txs = valid_txs.iter();
 
-            let mut counter = 0;
-            while let Some(wrapper) = shell.next_wrapper() {
-                assert_eq!(
-                    wrapper.tx_hash,
-                    txs.next().expect("Test failed").tx_hash
-                );
-                counter += 1;
-            }
-            assert_eq!(counter, 2);
+        let mut counter = 0;
+        while let Some(wrapper) = shell.next_wrapper() {
+            assert_eq!(
+                wrapper.tx_hash,
+                txs.next().expect("Test failed").tx_hash
+            );
+            counter += 1;
         }
+        assert_eq!(counter, 2);
     }
 }

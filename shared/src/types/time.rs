@@ -6,10 +6,7 @@ use std::ops::{Add, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::google::protobuf;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::google::protobuf;
 
 use crate::tendermint::time::Time;
 use crate::tendermint::Error as TendermintError;

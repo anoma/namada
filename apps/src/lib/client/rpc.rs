@@ -30,30 +30,13 @@ use namada::types::key::*;
 use namada::types::storage::{Epoch, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
-#[cfg(not(feature = "ABCI"))]
 use tendermint::abci::Code;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address as TendermintAddress;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::error::Error as TError;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::Query;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{Client, HttpClient};
-#[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{Order, SubscriptionClient, WebSocketClient};
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::error::Error as TError;
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::query::Query;
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{Client, HttpClient};
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{Order, SubscriptionClient, WebSocketClient};
-#[cfg(feature = "ABCI")]
-use tendermint_stable::abci::Code;
+use tendermint_rpc::{
+    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
+};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
