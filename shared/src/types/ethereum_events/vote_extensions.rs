@@ -323,10 +323,16 @@ mod tests {
 
         // finally, decompress the `VoteExtensionDigest` back into a
         // `Vec<Signed<VoteExtension>>`
-        let decompressed = digest
+        let mut decompressed = digest
             .decompress(last_block_height)
             .into_iter()
             .collect::<Vec<Signed<VoteExtension>>>();
+
+        // decompressing yields an arbitrary ordering of `VoteExtension`
+        // instances, which is fine
+        if decompressed[0].data.validator_addr != ext[0].data.validator_addr {
+            decompressed.swap(0, 1);
+        }
 
         assert_eq!(ext, decompressed);
         assert!(decompressed[0].verify(&sk_1.ref_to()).is_ok());
