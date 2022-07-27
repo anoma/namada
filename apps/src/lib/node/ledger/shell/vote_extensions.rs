@@ -180,7 +180,7 @@ mod extend_votes {
         }
 
         /// Checks the channel from the Ethereum oracle monitoring
-        /// the fullnode and retrieves all VoteExtensionmessages sent.
+        /// the fullnode and retrieves all VoteExtension messages sent.
         pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
             match &mut self.mode {
                 ShellMode::Validator {
