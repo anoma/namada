@@ -1,7 +1,7 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 use namada::types::ethereum_events::vote_extensions::FractionalVotingPower;
-use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
 #[cfg(not(feature = "ABCI"))]
@@ -48,8 +48,8 @@ where
             .collect();
 
         ResponseProcessProposal {
-            status: if vote_ext_digest_num <= 1
-                && tx_results.iter().any(|res| res.code > 3)
+            status: if vote_ext_digest_num > 1
+                || tx_results.iter().any(|res| res.code > 3)
             {
                 ProposalStatus::Reject as i32
             } else {
@@ -166,14 +166,23 @@ where
                                     .into(),
                             }
                         } else {
-                            TxResult {
-                                code: ErrorCodes::InvalidVoteExntension.into(),
-                                info: "Process proposal rejected this \
-                                       proposal because the backing stake of \
-                                       the vote extensions published in the \
-                                       proposal was insufficient"
-                                    .into(),
-                            }
+                            // ```ignore
+                            // TxResult {
+                            //     code: ErrorCodes::InvalidVoteExntension. into(),
+                            //     info: " Process proposal rejected this \
+                            //            proposal because the backing stake of \
+                            //            the vote extensions published in the \
+                            //            proposal was insufficient"
+                            //         .into(),
+                            // }
+                            // ```
+                            //
+                            // TODO: is unreachable really fine?
+                            unreachable!(
+                                "We should never get an insufficient backing \
+                                 stake on vote extensions published in \
+                                 proposals."
+                            )
                         }
                     } else {
                         TxResult {
