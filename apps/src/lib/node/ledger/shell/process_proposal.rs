@@ -185,6 +185,9 @@ where
                             )
                         }
                     } else {
+                        // TODO: maybe return a summary of the reasons for
+                        // dropping a vote extension. we have access to the
+                        // motives in `filtered_extensions`
                         TxResult {
                             code: ErrorCodes::InvalidVoteExntension.into(),
                             info: "Process proposal rejected this proposal \
@@ -360,9 +363,14 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
+    use std::collections::HashMap;
+
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
     use namada::types::address::xan;
+    use namada::types::ethereum_events::vote_extensions::{
+        VoteExtension, VoteExtensionDigest,
+    };
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
@@ -390,53 +398,40 @@ mod test_process_proposal {
     /// we reject it.
     #[test]
     fn test_more_than_one_vext_digest_rejected() {
-        let (shell, _, _) = test_utils::setup();
-        let validator_addr = wallet::defaults::validator_address();
-        drop((shell, validator_addr));
-        // let tx = Tx::new(
-        // "wasm_code".as_bytes().to_owned(),
-        // Some("transaction data".as_bytes().to_owned()),
-        // );
-        // let wrapper = WrapperTx::new(
-        // Fee {
-        // amount: 0.into(),
-        // token: xan(),
-        // },
-        // &keypair,
-        // Epoch(0),
-        // 0.into(),
-        // tx,
-        // Default::default(),
-        // );
-        // let tx = Tx::new(
-        // vec![],
-        // Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
-        // )
-        // .to_bytes();
-        // #[allow(clippy::redundant_clone)]
-        // let request = ProcessProposal {
-        // txs: vec![tx.clone()],
-        // };
-        //
-        // let response = if let [resp] = shell
-        // .process_proposal(request)
-        // .expect("Test failed")
-        // .as_slice()
-        // {
-        // resp.clone()
-        // } else {
-        // panic!("Test failed")
-        // };
-        // assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
-        // assert_eq!(
-        // response.result.info,
-        // String::from("Wrapper transactions must be signed")
-        // );
-        // #[cfg(feature = "ABCI")]
-        // {
-        // assert_eq!(response.tx, tx);
-        // assert!(shell.shell.storage.tx_queue.is_empty())
-        // }
+        const LAST_HEIGHT: BlockHeight = BlockHeight(2);
+        let (mut shell, _, _) = test_utils::setup();
+        shell.storage.last_height = LAST_HEIGHT;
+        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let vote_extension_digest = {
+            let validator_addr = wallet::defaults::validator_address();
+            let signed_vote_extension = {
+                let ext =
+                    VoteExtension::empty(LAST_HEIGHT, validator_addr.clone())
+                        .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+            // vote extension digest with no observed events
+            VoteExtensionDigest {
+                signatures: {
+                    let mut s = HashMap::new();
+                    s.insert(validator_addr, signed_vote_extension.sig);
+                    s
+                },
+                events: vec![],
+            }
+        };
+        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+            .sign(&protocol_key)
+            .to_bytes();
+        #[allow(clippy::redundant_clone)]
+        let request = ProcessProposal {
+            txs: vec![tx.clone(), tx],
+        };
+        let results = shell.process_proposal(request);
+        assert!(
+            matches!(results, Err(TestError::RejectProposal(s)) if s.len() == 2)
+        );
     }
 
     /// Test that if a wrapper tx is not signed, it is rejected
