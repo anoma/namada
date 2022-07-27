@@ -132,11 +132,15 @@ pub mod eth_fullnode {
                     tracing::info!("Finished syncing");
                     break;
                 }
-                if let Err(e) = client.eth_syncing().await {
+                if let Err(error) = client.eth_syncing().await {
                     // This is very noisy and usually not interesting.
                     // Still can be very useful
-                    tracing::debug!("Error trying to connect to Geth: {:?}", e);
+                    tracing::debug!(
+                        ?error,
+                        "Couldn't connect to Geth, will retry"
+                    );
                 }
+                std::thread::sleep(std::time::Duration::from_secs(1));
             }
 
             let (abort_sender, receiver) = channel();
