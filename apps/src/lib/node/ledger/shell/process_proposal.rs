@@ -165,9 +165,9 @@ where
                         }
                     } else {
                         TxResult {
-                            code: ErrorCodes::Ok.into(),
+                            code: ErrorCodes::InvalidVoteExntension.into(),
                             info: "Process proposal rejected this proposal \
-                                   because the at least on of the vote \
+                                   because at least one of the vote \
                                    extensions included was invalid."
                                 .into(),
                         }
