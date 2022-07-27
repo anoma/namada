@@ -203,7 +203,9 @@ impl EthereumReceiver {
                 new_events += 1;
             };
         }
-        tracing::debug!(n = new_events, "received Ethereum events");
+        if new_events > 0 {
+            tracing::info!(n = new_events, "received Ethereum events");
+        }
     }
 
     /// Get a copy of the queue
