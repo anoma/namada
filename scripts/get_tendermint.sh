@@ -45,4 +45,3 @@ curl -LsSfo "$TMP_PATH"/tendermint.tar.gz "$RELEASE_URL" || error_exit "tendermi
 
 cd $TARGET_PATH
 sudo tar -xvzf $TMP_PATH/tendermint.tar.gz tendermint || error_exit "tendermint release extraction failed"
-

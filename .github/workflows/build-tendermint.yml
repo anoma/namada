@@ -1,0 +1,40 @@
+name: Build tendermint binaries
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  GIT_LFS_SKIP_SMUDGE: 1
+
+
+jobs:
+  tendermint:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        make:
+          - name: tendermint-0.34.19
+            tendermint_version: 2f231ceb952a2426cf3c0abaf0b455aadd11e5b2
+          - name: tendermint-unreleased
+            tendermint_version: 29e5fbcc648510e4763bd0af0b461aed92c21f30
+          - name: tendermint-0.34.11
+            tendermint_version: c2908ef785bb5ca6e015910368e4b7a32821b9ff
+
+    steps:
+      - name: Build ${{ matrix.make.name }}
+        run: |
+          git clone https://github.com/tendermint/tendermint.git && cd tendermint
+          git checkout ${{ matrix.make.tendermint_version }} && make build
+      - name: Upload ${{ matrix.make.name }} binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.make.name }}-${{ matrix.make.tendermint_version }}
+          path: tendermint/build/tendermint

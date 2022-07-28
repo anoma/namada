@@ -1,0 +1,72 @@
+name: Run period checks
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+env:
+  GIT_LFS_SKIP_SMUDGE: 1
+
+jobs:
+  cron:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        nightly_version: [nightly-2022-05-20]
+        make:
+          - name: Audit
+            command: audit
+            version: rustsec/rustsec@cargo-audit/v0.17.0
+            cache_subkey: audit
+            cache_version: v1
+          - name: Unused dependencies
+            command: udeps
+            version: est31/cargo-udeps@v0.1.30
+            cache_subkey: udeps
+            cache_version: v1
+
+    env:
+      CARGO_INCREMENTAL: 0
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: minimal
+      - name: Show rust toolchain info
+        run: rustup show
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+            ./target
+          key: ${{ runner.os }}-${{ matrix.make.cache_subkey }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_subkey }}-${{ matrix.make.cache_version }}-cargo-
+      - name: Install cargo ${{ matrix.make.command }}
+        run: curl https://i.jpillora.com/${{ matrix.make.version }}! | bash
+      - name: ${{ matrix.make.name }}
+        working-directory: ./.github/workflows/scripts
+        run: |
+          pip3 install github3.py >/dev/null 2>&1
+          pip3 install -Iv cryptography==37.0.4 >/dev/null 2>&1
+          python3 ${{ matrix.make.command }}.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Clean cache folder
+        run: cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache && cargo-cache

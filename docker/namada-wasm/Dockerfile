@@ -10,7 +10,7 @@ RUN rustup toolchain install 1.61.0 --component rustc cargo rust-std rust-docs r
 RUN rustup target add wasm32-unknown-unknown
 
 # Download binaryen and verify checksum
-ADD https://github.com/WebAssembly/binaryen/releases/download/version_101/binaryen-version_101-x86_64-linux.tar.gz /tmp/binaryen.tar.gz
+ADD https://github.com/WebAssembly/binaryen/releases/download/version_109/binaryen-version_109-x86_64-linux.tar.gz /tmp/binaryen.tar.gz
 
 # Extract and install wasm-opt
 RUN tar -xf /tmp/binaryen.tar.gz
