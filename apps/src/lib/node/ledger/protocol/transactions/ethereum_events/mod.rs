@@ -1,14 +1,13 @@
+//! Code for handling [`ProtocolTxType::EthereumEvents`] transactions.
 use std::path::Path;
 
 use namada::proto::Tx;
 
 use super::super::{Error, Result};
 
-const TX_ETH_BRIDGE_WASM_NAME: &str = "tx_eth_bridge";
+const TX_WASM_NAME: &str = "tx_eth_bridge";
 
-pub(crate) fn construct_tx_eth_bridge(
-    wasm_dir: impl AsRef<Path>,
-) -> Result<Tx> {
+pub(crate) fn construct_tx(wasm_dir: impl AsRef<Path>) -> Result<Tx> {
     let tx_data = vec![];
     tracing::debug!(
         bytes = tx_data.len(),
@@ -25,9 +24,9 @@ pub(crate) fn construct_tx_eth_bridge(
         );
         let file_path = checksums
             .0
-            .get(&format!("{}.wasm", TX_ETH_BRIDGE_WASM_NAME))
+            .get(&format!("{}.wasm", TX_WASM_NAME))
             .ok_or_else(|| Error::ReadWasmError {
-                wasm_name: TX_ETH_BRIDGE_WASM_NAME.to_owned(),
+                wasm_name: TX_WASM_NAME.to_owned(),
             })?;
         tracing::debug!(
             file_path = file_path.as_str(),
@@ -77,11 +76,11 @@ mod test {
     }
 
     #[test]
-    fn test_construct_tx_eth_bridge() {
+    fn test_construct_tx() {
         let wasm_contents = b"arbitrary wasm contents";
-        let wasm_dir = fake_wasm_dir(TX_ETH_BRIDGE_WASM_NAME, wasm_contents);
+        let wasm_dir = fake_wasm_dir(TX_WASM_NAME, wasm_contents);
 
-        let result = construct_tx_eth_bridge(&wasm_dir);
+        let result = construct_tx(&wasm_dir);
 
         let tx = match result {
             Ok(tx) => tx,
@@ -92,13 +91,13 @@ mod test {
     }
 
     #[test]
-    fn test_construct_tx_eth_bridge_missing_wasm() {
+    fn test_construct_tx_eth_bridge() {
         let wasm_contents = b"arbitrary wasm contents";
         let wasm_name = "tx_something_else";
-        assert_ne!(wasm_name, TX_ETH_BRIDGE_WASM_NAME);
+        assert_ne!(wasm_name, TX_WASM_NAME);
         let wasm_dir = fake_wasm_dir(wasm_name, wasm_contents);
 
-        let result = construct_tx_eth_bridge(&wasm_dir);
+        let result = construct_tx(&wasm_dir);
 
         assert!(result.is_err());
     }

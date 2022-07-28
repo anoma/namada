@@ -173,7 +173,7 @@ where
                 "applying state update transaction derived from vote \
                  extension digest"
             );
-            let tx = ethereum_events::construct_tx_eth_bridge(wasm_dir)?;
+            let tx = ethereum_events::construct_tx(wasm_dir)?;
             let verifiers = execute_tx(
                 &tx,
                 storage,
