@@ -4,7 +4,7 @@
 
 set -e
 
-VERSION="$(git describe --tags)"
+VERSION="$(git describe --dirty --broken)"
 PLATFORM="$(uname -s)-$(uname -m)"
 PACKAGE_NAME="namada-${VERSION}-${PLATFORM}"
 BIN="namada namadac namadan namadaw"
