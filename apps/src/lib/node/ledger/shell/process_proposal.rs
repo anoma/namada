@@ -28,13 +28,7 @@ where
         &mut self,
         req: RequestProcessProposal,
     ) -> ResponseProcessProposal {
-        let tx_results: Vec<ExecTxResult> = req
-            .txs
-            .iter()
-            .map(|tx_bytes| {
-                ExecTxResult::from(self.process_single_tx(tx_bytes))
-            })
-            .collect();
+        let tx_results = self.process_txs(&req.txs);
 
         ResponseProcessProposal {
             status: if tx_results.iter().any(|res| res.code > 3) {
@@ -45,6 +39,15 @@ where
             tx_results,
             ..Default::default()
         }
+    }
+
+    /// Check all the given txs.
+    pub fn process_txs(&mut self, txs: &[Vec<u8>]) -> Vec<ExecTxResult> {
+        txs.iter()
+            .map(|tx_bytes| {
+                ExecTxResult::from(self.process_single_tx(tx_bytes))
+            })
+            .collect()
     }
 
     /// Checks if the Tx can be deserialized from bytes. Checks the fees and
