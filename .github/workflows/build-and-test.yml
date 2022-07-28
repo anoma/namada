@@ -35,10 +35,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
-      - name: Show rust toolchain info
-        run: rustup show
+      - name: Duplicate checksums file
+        run: cp wasm/checksums.json wasm/original-checksums.json
       - name: Build WASM
-        run: cp wasm/checksums.json wasm/original-checksums.json && make build-wasm-scripts
+        run: |
+          make build-wasm-scripts
       - name: Upload wasm artifacts
         uses: actions/upload-artifact@v3
         with:

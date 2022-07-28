@@ -229,7 +229,7 @@ build-wasm-image-docker:
 	docker build -t namada-wasm - < docker/namada-wasm/Dockerfile
 
 build-wasm-scripts-docker: build-wasm-image-docker
-	docker run --rm -v ${PWD}:/usr/local/rust/wasm namada-wasm make build-wasm-scripts
+	docker run --rm -v ${PWD}:/__w/namada/namada namada-wasm make build-wasm-scripts
 
 # Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
 build-wasm-scripts:
