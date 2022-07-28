@@ -26,7 +26,7 @@ use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 use transactions::ethereum_events;
-use transactions::ethereum_events::{eth_msg_update, voting_powers};
+use transactions::ethereum_events::voting_powers;
 
 mod transactions;
 
@@ -185,7 +185,7 @@ where
             );
             let (last_epoch, _) = storage.get_last_epoch();
             tracing::debug!(?last_epoch, "got epoch of last block");
-            let validators = eth_msg_update::get_all_voters(events.iter());
+            let validators = ethereum_events::get_all_voters(events.iter());
             tracing::debug!(?validators, "got relevant validators");
             let active_validators = get_active_validators(&storage, last_epoch);
             tracing::debug!(

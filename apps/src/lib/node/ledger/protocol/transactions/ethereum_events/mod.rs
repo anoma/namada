@@ -1,13 +1,17 @@
 //! Code for handling [`ProtocolTxType::EthereumEvents`] transactions.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use borsh::BorshSerialize;
+use eyre::{eyre, Context};
 use namada::ledger::pos::types::VotingPower;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
+use namada::types::ethereum_events::{EthMsgUpdate, TxEthBridgeData};
 
 use super::super::{Error, Result};
+use crate::node::ledger::protocol::transactions::ethereum_events;
 
 pub(crate) mod eth_msg_update;
 pub(crate) mod voting_powers;
@@ -21,7 +25,7 @@ pub(crate) fn construct_tx(
     wasm_dir: &Path,
 ) -> Result<Tx> {
     let updates = eth_msg_update::from_multisigneds(events);
-    let tx_data = eth_msg_update::construct_tx_data(
+    let tx_data = ethereum_events::construct_tx_data(
         updates,
         total_voting_power,
         voting_powers,
@@ -57,6 +61,29 @@ pub(crate) fn construct_tx(
     Ok(Tx::new(tx_code, Some(tx_data)))
 }
 
+pub(crate) fn construct_tx_data(
+    updates: Vec<EthMsgUpdate>,
+    total_voting_power: VotingPower,
+    voting_powers: HashMap<Address, VotingPower>,
+) -> eyre::Result<Vec<u8>> {
+    TxEthBridgeData {
+        updates,
+        total_voting_power,
+        voting_powers,
+    }
+    .try_to_vec()
+    .wrap_err_with(|| eyre!("couldn't serialize updates"))
+}
+
+pub(crate) fn get_all_voters<'a>(
+    v: impl Iterator<Item = &'a MultiSignedEthEvent>,
+) -> HashSet<Address> {
+    v.fold(HashSet::new(), |mut validators, event| {
+        validators.extend(event.signers.iter().map(|addr| addr.to_owned()));
+        validators
+    })
+}
+
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
@@ -72,6 +99,43 @@ mod test {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn test_calculate_construct_tx_data() {
+        let sole_validator = address::testing::established_address_1();
+        let update = eth_msg_update::from_multisigned(MultiSignedEthEvent {
+            event: arbitrary_single_transfer(
+                arbitrary_nonce(),
+                address::testing::established_address_2(),
+            ),
+            signers: HashSet::from_iter(vec![sole_validator.clone()]),
+        });
+        let updates = vec![update.clone()];
+        let total_voting_power = arbitrary_voting_power();
+        let voting_powers =
+            HashMap::from_iter(vec![(sole_validator, total_voting_power)]);
+
+        let result = construct_tx_data(
+            updates,
+            total_voting_power,
+            voting_powers.clone(),
+        );
+
+        let data = match result {
+            Ok(data) => data,
+            Err(err) => panic!("error: {:?}", err),
+        };
+        assert_eq!(
+            data,
+            TxEthBridgeData {
+                updates: vec![update.clone()],
+                total_voting_power,
+                voting_powers,
+            }
+            .try_to_vec()
+            .unwrap()
+        );
+    }
 
     // constructs a temporary fake wasm_dir with one wasm and a checksums.json
     fn fake_wasm_dir(

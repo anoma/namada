@@ -1,12 +1,6 @@
-use std::collections::{HashMap, HashSet};
-
-use borsh::BorshSerialize;
-use eyre::{eyre, Context, Result};
 use itertools::Itertools;
-use namada::ledger::pos::types::VotingPower;
-use namada::types::address::Address;
 use namada::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
-use namada::types::ethereum_events::{EthMsgUpdate, TxEthBridgeData};
+use namada::types::ethereum_events::EthMsgUpdate;
 
 pub(crate) fn from_multisigneds(
     multisigneds: Vec<MultiSignedEthEvent>,
@@ -30,77 +24,17 @@ pub(crate) fn from_multisigned(
     EthMsgUpdate { body, seen_by }
 }
 
-pub(crate) fn construct_tx_data(
-    updates: Vec<EthMsgUpdate>,
-    total_voting_power: VotingPower,
-    voting_powers: HashMap<Address, VotingPower>,
-) -> Result<Vec<u8>> {
-    TxEthBridgeData {
-        updates,
-        total_voting_power,
-        voting_powers,
-    }
-    .try_to_vec()
-    .wrap_err_with(|| eyre!("couldn't serialize updates"))
-}
-
-pub(crate) fn get_all_voters<'a>(
-    v: impl Iterator<Item = &'a MultiSignedEthEvent>,
-) -> HashSet<Address> {
-    v.fold(HashSet::new(), |mut validators, event| {
-        validators.extend(event.signers.iter().map(|addr| addr.to_owned()));
-        validators
-    })
-}
-
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
 
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
-        arbitrary_nonce, arbitrary_single_transfer, arbitrary_voting_power,
+        arbitrary_nonce, arbitrary_single_transfer,
     };
     use namada::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
 
     use super::*;
-
-    #[test]
-    fn test_calculate_construct_tx_data() {
-        let sole_validator = address::testing::established_address_1();
-        let update = from_multisigned(MultiSignedEthEvent {
-            event: arbitrary_single_transfer(
-                arbitrary_nonce(),
-                address::testing::established_address_2(),
-            ),
-            signers: HashSet::from_iter(vec![sole_validator.clone()]),
-        });
-        let updates = vec![update.clone()];
-        let total_voting_power = arbitrary_voting_power();
-        let voting_powers =
-            HashMap::from_iter(vec![(sole_validator, total_voting_power)]);
-
-        let result = construct_tx_data(
-            updates,
-            total_voting_power,
-            voting_powers.clone(),
-        );
-
-        let data = match result {
-            Ok(data) => data,
-            Err(err) => panic!("error: {:?}", err),
-        };
-        assert_eq!(
-            data,
-            TxEthBridgeData {
-                updates: vec![update.clone()],
-                total_voting_power,
-                voting_powers,
-            }
-            .try_to_vec()
-            .unwrap()
-        );
-    }
 
     #[test]
     fn test_from_multisigneds_empty() {
