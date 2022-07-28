@@ -4,6 +4,8 @@ use eyre::eyre;
 use namada::ledger::pos::types::{VotingPower, WeightedValidator};
 use namada::types::address::Address;
 
+/// Gets the voting power of `selected` from `validators`. Errors if a
+/// `selected` validator is not found in `validators`.
 pub(crate) fn for_selected(
     validators: &BTreeSet<WeightedValidator<Address>>,
     selected: HashSet<Address>,
@@ -65,6 +67,42 @@ mod tests {
         assert!(
             matches!(voting_powers.get(&sole_validator), Some(v) if *v == voting_power)
         )
+    }
+
+    #[test]
+    fn test_for_selected_two_validators() {
+        let validator_1 = address::testing::established_address_1();
+        let validator_2 = address::testing::established_address_2();
+        let voting_power_1 = VotingPower::from(100);
+        let voting_power_2 = VotingPower::from(200);
+        let weighted_validator_1 = WeightedValidator {
+            voting_power: voting_power_1,
+            address: validator_1.clone(),
+        };
+        let weighted_validator_2 = WeightedValidator {
+            voting_power: voting_power_2,
+            address: validator_2.clone(),
+        };
+        let validators =
+            HashSet::from_iter(vec![validator_1.clone(), validator_2.clone()]);
+        let active_validators = BTreeSet::from_iter(vec![
+            weighted_validator_1,
+            weighted_validator_2,
+        ]);
+
+        let result = for_selected(&active_validators, validators);
+
+        let voting_powers = match result {
+            Ok(voting_powers) => voting_powers,
+            Err(error) => panic!("error: {:?}", error),
+        };
+        assert_eq!(voting_powers.len(), 2);
+        assert!(
+            matches!(voting_powers.get(&validator_1), Some(v) if *v == voting_power_1)
+        );
+        assert!(
+            matches!(voting_powers.get(&validator_2), Some(v) if *v == voting_power_2)
+        );
     }
 
     #[test]
