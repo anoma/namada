@@ -41,33 +41,35 @@ comment_event = loads(environ['GITHUB_CONTEXT'])
 pr_comment = comment_event['event']['comment']['body']
 pr_number = comment_event['event']['issue']['number']
 
-if pr_comment == PR_COMMENT:
-    pr_info = api.pulls.get(pr_number)
-    head_sha = pr_info['head']['sha']
+if pr_comment != PR_COMMENT:
+    exit(0)
 
-    artifacts = api.actions.list_artifacts_for_repo(per_page=ARTIFACT_PER_PAGE)
+pr_info = api.pulls.get(pr_number)
+head_sha = pr_info['head']['sha']
 
-    for artifact in artifacts['artifacts']:
-        if 'wasm' in artifact['name'] and artifact['workflow_run']['head_sha'] == head_sha and not artifact['expired']:
-            artifact_download_url = artifact['archive_download_url']
+artifacts = api.actions.list_artifacts_for_repo(per_page=ARTIFACT_PER_PAGE)
 
-            log("Downloading artifacts...")
-            curl_command_outcome = download_artifact(
-                artifact_download_url, TMP_DIRECTORY, TOKEN)
-            if curl_command_outcome.returncode != 0:
-                exit(1)
+for artifact in artifacts['artifacts']:
+    if 'wasm' in artifact['name'] and artifact['workflow_run']['head_sha'] == head_sha and not artifact['expired']:
+        artifact_download_url = artifact['archive_download_url']
 
-            log("Unzipping wasm.zip...")
-            unzip_command_outcome = unzip(TMP_DIRECTORY)
-            if unzip_command_outcome.returncode != 0:
-                exit(1)
+        log("Downloading artifacts...")
+        curl_command_outcome = download_artifact(
+            artifact_download_url, TMP_DIRECTORY, TOKEN)
+        if curl_command_outcome.returncode != 0:
+            exit(1)
 
-            checksums = load(open("{}/checksums.json".format(TMP_DIRECTORY)))
-            for wasm in checksums.values():
-                log("Uploading {}...".format(wasm))
-                publish_wasm_command_outcome = publish_wasm(
-                    TMP_DIRECTORY, wasm, WASM_BUCKET)
-                if publish_wasm_command_outcome.returncode != 0:
-                    print("Error uploading {}!".format(wasm))
+        log("Unzipping wasm.zip...")
+        unzip_command_outcome = unzip(TMP_DIRECTORY)
+        if unzip_command_outcome.returncode != 0:
+            exit(1)
 
-            log("Done!")
+        checksums = load(open("{}/checksums.json".format(TMP_DIRECTORY)))
+        for wasm in checksums.values():
+            log("Uploading {}...".format(wasm))
+            publish_wasm_command_outcome = publish_wasm(
+                TMP_DIRECTORY, wasm, WASM_BUCKET)
+            if publish_wasm_command_outcome.returncode != 0:
+                print("Error uploading {}!".format(wasm))
+
+        log("Done!")

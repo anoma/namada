@@ -2,7 +2,6 @@ import os
 import json
 import subprocess
 import urllib
-import github3
 import urllib.request
 from urllib.request import urlopen
 
