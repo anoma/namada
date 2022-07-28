@@ -20,7 +20,7 @@ pub(crate) fn construct_tx(
     voting_powers: HashMap<Address, VotingPower>,
     wasm_dir: &Path,
 ) -> Result<Tx> {
-    let updates = eth_msg_update::calculate_eth_msg_updates(events);
+    let updates = eth_msg_update::from_multisigneds(events);
     let tx_data = eth_msg_update::construct_tx_data(
         updates,
         total_voting_power,

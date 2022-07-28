@@ -193,16 +193,13 @@ where
                 "got active validators - {:#?}",
                 active_validators,
             );
-            let voting_powers = voting_powers::get_voting_powers_for_selected(
-                &active_validators,
-                validators,
-            )?;
+            let voting_powers =
+                voting_powers::for_selected(&active_validators, validators)?;
             tracing::debug!(
                 ?voting_powers,
                 "got voting powers for relevant validators"
             );
-            let total_voting_power =
-                voting_powers::sum_voting_powers(&active_validators);
+            let total_voting_power = voting_powers::sum(&active_validators);
             tracing::debug!(
                 ?total_voting_power,
                 "got total voting power for epoch"

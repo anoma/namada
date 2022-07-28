@@ -4,7 +4,7 @@ use eyre::eyre;
 use namada::ledger::pos::types::{VotingPower, WeightedValidator};
 use namada::types::address::Address;
 
-pub(crate) fn get_voting_powers_for_selected(
+pub(crate) fn for_selected(
     validators: &BTreeSet<WeightedValidator<Address>>,
     selected: HashSet<Address>,
 ) -> eyre::Result<HashMap<Address, VotingPower>> {
@@ -24,7 +24,7 @@ pub(crate) fn get_voting_powers_for_selected(
     Ok(voting_powers)
 }
 
-pub(crate) fn sum_voting_powers(
+pub(crate) fn sum(
     validators: &BTreeSet<WeightedValidator<Address>>,
 ) -> VotingPower {
     validators
@@ -44,7 +44,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_voting_powers_for_selected_sole_validator() {
+    fn test_for_selected_sole_validator() {
         let sole_validator = address::testing::established_address_1();
         let voting_power = arbitrary_voting_power();
         let weighted_sole_validator = WeightedValidator {
@@ -55,8 +55,7 @@ mod tests {
         let active_validators =
             BTreeSet::from_iter(vec![weighted_sole_validator]);
 
-        let result =
-            get_voting_powers_for_selected(&active_validators, validators);
+        let result = for_selected(&active_validators, validators);
 
         let voting_powers = match result {
             Ok(voting_powers) => voting_powers,
@@ -69,7 +68,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sum_voting_powers_sole_validator() {
+    fn test_sum_sole_validator() {
         let sole_validator = address::testing::established_address_1();
         let voting_power = arbitrary_voting_power();
         let weighted_sole_validator = WeightedValidator {
@@ -78,7 +77,7 @@ mod tests {
         };
         let validators = BTreeSet::from_iter(vec![weighted_sole_validator]);
 
-        let total = sum_voting_powers(&validators);
+        let total = sum(&validators);
 
         assert_eq!(total, voting_power);
     }
