@@ -189,8 +189,6 @@ jobs:
           chmod +x target/release/namadan
           chmod +x target/release/namadac
           chmod +x /usr/local/bin/tendermint
-      - name: Set tendermint ENV for abci++ tests
-        run: echo "TENDERMINT=/usr/local/bin/tendermint" >> $GITHUB_ENV
       - name: Run e2e test
         run: make test-e2e${{ matrix.make.suffix }}
         env:
@@ -199,7 +197,6 @@ jobs:
           ANOMA_E2E_KEEP_TEMP: "true"
           ENV_VAR_TM_STDOUT: "false"
           ANOMA_LOG_COLOR: "false"
-          TM_LOG_LEVEL: "info"
           ANOMA_LOG: "info"
       - name: Upload e2e logs
         if: success() || failure()
