@@ -70,6 +70,27 @@ mod tests {
     }
 
     #[test]
+    fn test_for_selected_missing_validator() {
+        let present_validator = address::testing::established_address_1();
+        let missing_validator = address::testing::established_address_2();
+        let voting_power = arbitrary_voting_power();
+        let weighted_present_validator = WeightedValidator {
+            voting_power,
+            address: present_validator.clone(),
+        };
+        let validators = HashSet::from_iter(vec![
+            present_validator.clone(),
+            missing_validator.clone(),
+        ]);
+        let active_validators =
+            BTreeSet::from_iter(vec![weighted_present_validator]);
+
+        let result = for_selected(&active_validators, validators);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_for_selected_two_validators() {
         let validator_1 = address::testing::established_address_1();
         let validator_2 = address::testing::established_address_2();
@@ -118,5 +139,29 @@ mod tests {
         let total = sum(&validators);
 
         assert_eq!(total, voting_power);
+    }
+
+    #[test]
+    fn test_sum_two_validators() {
+        let validator_1 = address::testing::established_address_1();
+        let validator_2 = address::testing::established_address_2();
+        let voting_power_1 = VotingPower::from(100);
+        let voting_power_2 = VotingPower::from(200);
+        let weighted_validator_1 = WeightedValidator {
+            voting_power: voting_power_1,
+            address: validator_1.clone(),
+        };
+        let weighted_validator_2 = WeightedValidator {
+            voting_power: voting_power_2,
+            address: validator_2.clone(),
+        };
+        let validators = BTreeSet::from_iter(vec![
+            weighted_validator_1,
+            weighted_validator_2,
+        ]);
+
+        let total = sum(&validators);
+
+        assert_eq!(total, VotingPower::from(300));
     }
 }
