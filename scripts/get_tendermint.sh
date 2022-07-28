@@ -4,11 +4,13 @@ set -Eo pipefail
 
 # an examplary download-url
 # https://github.com/tendermint/tendermint/releases/download/v0.34.13/tendermint_0.34.13_linux_amd64.tar.gz
-TM_MAJORMINOR="0.34"
-TM_PATCH="13"
-TM_REPO="https://github.com/tendermint/tendermint"
+# https://github.com/heliaxdev/tendermint/releases/download/v0.1.1-abcipp/tendermint_0.1.0-abcipp_darwin_amd64.tar.gz
+TM_MAJORMINOR="0.1"
+TM_PATCH="1"
+TM_SUFFIX="-abcipp"
+TM_REPO="https://github.com/heliaxdev/tendermint"
 
-TM_VERSION="${TM_MAJORMINOR}.${TM_PATCH}"
+TM_VERSION="${TM_MAJORMINOR}.${TM_PATCH}${TM_SUFFIX}"
 
 TARGET_PATH="/usr/local/bin"
 TMP_PATH="/tmp"
