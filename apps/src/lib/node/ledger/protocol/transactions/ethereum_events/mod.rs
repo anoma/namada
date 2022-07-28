@@ -6,17 +6,21 @@ use super::super::{Error, Result};
 
 const TX_ETH_BRIDGE_WASM_NAME: &str = "tx_eth_bridge";
 
-pub(crate) fn construct_tx_eth_bridge(wasm_dir: &Path) -> Result<Tx> {
+pub(crate) fn construct_tx_eth_bridge(
+    wasm_dir: impl AsRef<Path>,
+) -> Result<Tx> {
     let tx_data = vec![];
     tracing::debug!(
         bytes = tx_data.len(),
         "serialized tx_data for state update transaction"
     );
     let tx_code = {
-        let checksums = crate::wasm_loader::Checksums::read_checksums(wasm_dir);
+        let checksums =
+            crate::wasm_loader::Checksums::read_checksums(&wasm_dir);
         tracing::debug!(
             checksums = checksums.0.len(),
-            wasm_dir = wasm_dir.to_string_lossy().into_owned().as_str(),
+            wasm_dir =
+                wasm_dir.as_ref().to_string_lossy().into_owned().as_str(),
             "loaded checksums.json from wasm directory"
         );
         let file_path = checksums
