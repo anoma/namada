@@ -62,8 +62,6 @@ fn run_ledger() -> Result<()> {
 /// 1. Run 2 genesis validator ledger nodes and 1 non-validator node
 /// 2. Submit a valid token transfer tx
 /// 3. Check that all the nodes processed the tx with the same result
-/// TODO: run this test once https://github.com/tendermint/tendermint/issues/8840 is fixed
-#[ignore]
 #[test]
 fn test_node_connectivity() -> Result<()> {
     // Setup 2 genesis validator nodes
@@ -84,6 +82,10 @@ fn test_node_connectivity() -> Result<()> {
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
     non_validator.exp_string("This node is a fullnode")?;
+
+    let bg_validator_0 = validator_0.background();
+    let bg_validator_1 = validator_1.background();
+    let bg_non_validator = non_validator.background();
 
     // 2. Submit a valid token transfer tx
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -111,6 +113,10 @@ fn test_node_connectivity() -> Result<()> {
     client.assert_success();
 
     // 3. Check that all the nodes processed the tx with the same result
+    let mut validator_0 = bg_validator_0.foreground();
+    let mut validator_1 = bg_validator_1.foreground();
+    let mut non_validator = bg_non_validator.foreground();
+
     let expected_result = "all VPs accepted transaction";
     validator_0.exp_string(expected_result)?;
     validator_1.exp_string(expected_result)?;
@@ -1500,8 +1506,6 @@ fn generate_proposal_json(
 /// 3. Setup and start the 2 genesis validator nodes and a non-validator node
 /// 4. Submit a valid token transfer tx from one validator to the other
 /// 5. Check that all the nodes processed the tx with the same result
-/// TODO: run this test once https://github.com/tendermint/tendermint/issues/8840 is fixed
-#[ignore]
 #[test]
 fn test_genesis_validators() -> Result<()> {
     use std::collections::HashMap;
@@ -1799,6 +1803,10 @@ fn test_genesis_validators() -> Result<()> {
     non_validator.exp_string("Anoma ledger node started")?;
     non_validator.exp_string("This node is a fullnode")?;
 
+    let bg_validator_0 = validator_0.background();
+    let bg_validator_1 = validator_1.background();
+    let bg_non_validator = non_validator.background();
+
     // 4. Submit a valid token transfer tx
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
     let tx_args = [
@@ -1826,6 +1834,10 @@ fn test_genesis_validators() -> Result<()> {
     client.assert_success();
 
     // 3. Check that all the nodes processed the tx with the same result
+    let mut validator_0 = bg_validator_0.foreground();
+    let mut validator_1 = bg_validator_1.foreground();
+    let mut non_validator = bg_non_validator.foreground();
+
     let expected_result = "all VPs accepted transaction";
     validator_0.exp_string(expected_result)?;
     validator_1.exp_string(expected_result)?;
