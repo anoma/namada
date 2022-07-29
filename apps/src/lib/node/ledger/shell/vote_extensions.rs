@@ -231,7 +231,7 @@ mod extend_votes {
     }
 
     /// Given a `Vec` of [`ExtendedVoteInfo`], return an iterator over the
-    /// deserialized [`SignedExt`] instances.
+    /// ones we could deserialize to [`SignedExt`] instances.
     pub fn deserialize_vote_extensions(
         vote_extensions: Vec<ExtendedVoteInfo>,
     ) -> impl Iterator<Item = SignedExt> + 'static {
