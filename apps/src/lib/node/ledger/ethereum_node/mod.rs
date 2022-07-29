@@ -139,10 +139,7 @@ pub mod eth_fullnode {
                 if let Err(error) = client.eth_syncing().await {
                     // This is very noisy and usually not interesting.
                     // Still can be very useful
-                    tracing::debug!(
-                        ?error,
-                        "Couldn't connect to Geth, will retry"
-                    );
+                    tracing::debug!(?error, "Couldn't check Geth sync status");
                 }
                 tokio::time::sleep(SLEEP_DUR).await;
             }
