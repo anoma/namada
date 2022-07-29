@@ -248,7 +248,16 @@ pub struct TokenWhitelist {
 }
 
 /// Represents an Ethereum event being seen by some validators
-#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Ord,
+    PartialOrd,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+)]
 pub struct EthMsgUpdate {
     /// the event being seen
     pub body: EthereumEvent,

@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use namada::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
 use namada::types::ethereum_events::EthMsgUpdate;
 
@@ -9,17 +8,14 @@ pub(crate) fn from_multisigneds(
 }
 
 // Derive the [`EthMsgUpdate`] for some given [`MultiSignedEthEvent`]. This
-// function is deterministic.
+// function is non-deterministic. The returned [`EthMsgUpdate`]'s `seen_by`
+// field may be in any order.
 pub(crate) fn from_multisigned(
     multisigned: MultiSignedEthEvent,
 ) -> EthMsgUpdate {
     let body = multisigned.event;
 
-    let seen_by = multisigned
-        .signers
-        .into_iter()
-        .sorted_by(|a, b| a.cmp(b))
-        .collect();
+    let seen_by = multisigned.signers.into_iter().collect();
 
     EthMsgUpdate { body, seen_by }
 }
@@ -103,7 +99,7 @@ mod test {
                 signers: HashSet::from_iter(vec![sole_validator.clone()]),
             },
         ];
-        let expected = vec![
+        let mut expected = vec![
             EthMsgUpdate {
                 body: event_b.clone(),
                 seen_by: vec![sole_validator.clone()],
@@ -114,9 +110,9 @@ mod test {
             },
         ];
 
-        let updates = from_multisigneds(with_signers);
+        let mut updates = from_multisigneds(with_signers);
 
-        assert_eq!(updates, expected);
+        assert_eq!(updates.sort(), expected.sort());
     }
 
     #[test]
@@ -144,7 +140,7 @@ mod test {
                 ]),
             },
         ];
-        let expected = vec![
+        let mut expected = vec![
             EthMsgUpdate {
                 body: event_b.clone(),
                 seen_by: vec![validator_b.clone(), validator_a.clone()],
@@ -155,8 +151,8 @@ mod test {
             },
         ];
 
-        let updates = from_multisigneds(with_signers);
+        let mut updates = from_multisigneds(with_signers);
 
-        assert_eq!(updates, expected);
+        assert_eq!(updates.sort(), expected.sort());
     }
 }
