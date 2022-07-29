@@ -55,8 +55,12 @@ where
         // the leader's proposal. We allow txs that do not
         // deserialize properly, that have invalid signatures
         // and that have invalid wasm code to reach FinalizeBlock.
-        // This is the reason behind that greater than three check.
-        let invalid_txs = tx_results.iter().any(|res| res.code > 3);
+        let invalid_txs = tx_results.iter().any(|res| {
+            let error = ErrorCodes::from_u32(res.code).expect(
+                "All error codes returned from process_single_tx are valid",
+            );
+            !error.is_recoverable()
+        });
 
         ResponseProcessProposal {
             status: if too_many_vext_digests || invalid_txs {
@@ -481,18 +485,9 @@ mod test_process_proposal {
                 }
                 .sign(&protocol_key);
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+
                 // modify this signature such that it becomes invalid
-                ext.sig = {
-                    let mut sig_bytes = match ext.sig {
-                        common::Signature::Ed25519(ed25519::Signature(
-                            ref sig,
-                        )) => sig.to_bytes(),
-                    };
-                    sig_bytes[0] = sig_bytes[0].wrapping_add(1);
-                    common::Signature::Ed25519(ed25519::Signature(
-                        sig_bytes.into(),
-                    ))
-                };
+                ext.sig = test_utils::invalidate_signature(ext.sig);
                 ext
             };
             VoteExtensionDigest {

@@ -283,7 +283,7 @@ mod prepare_block {
         use namada::types::address::xan;
         use namada::types::ethereum_events::vote_extensions::VoteExtension;
         use namada::types::ethereum_events::EthereumEvent;
-        use namada::types::key::{common, ed25519};
+        use namada::types::key::common;
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::protocol::ProtocolTxType;
         use namada::types::transaction::{Fee, TxType};
@@ -369,18 +369,7 @@ mod prepare_block {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
 
                 // modify this signature such that it becomes invalid
-                ext.sig = {
-                    let mut sig_bytes = match ext.sig {
-                        common::Signature::Ed25519(ed25519::Signature(
-                            ref sig,
-                        )) => sig.to_bytes(),
-                    };
-                    sig_bytes[0] = sig_bytes[0].wrapping_add(1);
-                    common::Signature::Ed25519(ed25519::Signature(
-                        sig_bytes.into(),
-                    ))
-                };
-
+                ext.sig = test_utils::invalidate_signature(ext.sig);
                 ext
             };
 
