@@ -88,4 +88,14 @@ mod tests {
         let env = tx_host_env::take();
         assert_eq!(env.all_touched_storage_keys().len(), 0);
     }
+
+    #[test]
+    fn test_apply_tx_bad_tx_data() {
+        let tx_data = b"bad data".try_to_vec().unwrap();
+        tx_host_env::init();
+
+        let result = apply_aux(tx_data);
+
+        assert!(result.is_err());
+    }
 }
