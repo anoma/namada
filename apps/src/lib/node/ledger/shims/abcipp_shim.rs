@@ -22,9 +22,6 @@ use crate::config;
 #[derive(Debug)]
 pub struct AbcippShim {
     service: Shell,
-    /// This is `Some` only when `ProcessProposal` request is received before
-    /// `FinalizeBlock`, which is optional for non-validator nodes.
-    processed_txs: Option<Vec<ProcessedTx>>,
     shell_recv: std::sync::mpsc::Receiver<(
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
@@ -55,7 +52,6 @@ impl AbcippShim {
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,
                 ),
-                processed_txs: None,
                 shell_recv,
             },
             AbciService { shell_send },
@@ -67,65 +63,30 @@ impl AbcippShim {
     pub fn run(mut self) {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
-                Req::ProcessProposal(proposal) => {
-                    let txs = proposal.txs.clone();
-                    self.service
-                        .call(Request::ProcessProposal(proposal))
-                        .map_err(Error::from)
-                        .and_then(|res| match res {
-                            Response::ProcessProposal(resp) => {
-                                self.processed_txs =
-                                    Some(Vec::with_capacity(txs.len()));
-                                let processed_txs =
-                                    self.processed_txs.as_mut().unwrap();
-                                for (result, tx) in resp
-                                    .tx_results
-                                    .iter()
-                                    .map(TxResult::from)
-                                    .zip(txs.into_iter())
-                                {
-                                    processed_txs
-                                        .push(ProcessedTx { tx, result });
-                                }
-                                Ok(Resp::ProcessProposal(resp))
-                            }
-                            _ => unreachable!(),
-                        })
-                }
+                Req::ProcessProposal(proposal) => self
+                    .service
+                    .call(Request::ProcessProposal(proposal))
+                    .map_err(Error::from)
+                    .and_then(|res| match res {
+                        Response::ProcessProposal(resp) => {
+                            Ok(Resp::ProcessProposal(resp))
+                        }
+                        _ => unreachable!(),
+                    }),
                 Req::FinalizeBlock(block) => {
-                    let (txs, processing_results) =
-                        match self.processed_txs.take() {
-                            Some(processed_txs) => {
-                                // When there are processed_txs from
-                                // `ProcessProposal`, we don't need to add
-                                // processing
-                                // results again
-                                (processed_txs, None)
-                            }
-                            None => {
-                                // When there are no processed txs, it means
-                                // that `ProcessProposal` request has not been
-                                // received and so we need to process
-                                // transactions first in the same way as
-                                // `ProcessProposal`.
-                                let unprocessed_txs = block.txs.clone();
-                                let processing_results =
-                                    self.service.process_txs(&block.txs);
-                                let mut txs =
-                                    Vec::with_capacity(unprocessed_txs.len());
-                                for (result, tx) in processing_results
-                                    .iter()
-                                    .map(TxResult::from)
-                                    .zip(unprocessed_txs.into_iter())
-                                {
-                                    txs.push(ProcessedTx { tx, result });
-                                }
-                                // Then we also have to add the processing
-                                // result events to the `FinalizeBlock`
-                                // tx_results
-                                (txs, Some(processing_results))
-                            }
-                        };
+                    // Process transactions first in the same way as
+                    // `ProcessProposal`.
+                    let unprocessed_txs = block.txs.clone();
+                    let processing_results =
+                        self.service.process_txs(&block.txs);
+                    let mut txs = Vec::with_capacity(unprocessed_txs.len());
+                    for (result, tx) in processing_results
+                        .iter()
+                        .map(TxResult::from)
+                        .zip(unprocessed_txs.into_iter())
+                    {
+                        txs.push(ProcessedTx { tx, result });
+                    }
 
                     let mut finalize_req: FinalizeBlock = block.into();
                     finalize_req.txs = txs;
@@ -138,19 +99,15 @@ impl AbcippShim {
                                 let mut resp: ResponseFinalizeBlock =
                                     resp.into();
 
-                                // Add processing results, if any
-                                if let Some(processing_results) =
-                                    processing_results
+                                // Add processing results
+                                for (tx_result, processing_result) in resp
+                                    .tx_results
+                                    .iter_mut()
+                                    .zip(processing_results)
                                 {
-                                    for (tx_result, processing_result) in resp
-                                        .tx_results
-                                        .iter_mut()
-                                        .zip(processing_results)
-                                    {
-                                        tx_result
-                                            .events
-                                            .extend(processing_result.events);
-                                    }
+                                    tx_result
+                                        .events
+                                        .extend(processing_result.events);
                                 }
 
                                 Ok(Resp::FinalizeBlock(resp))

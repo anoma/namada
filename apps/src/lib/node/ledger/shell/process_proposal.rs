@@ -25,7 +25,7 @@ where
     /// included txs violates the order decided upon in the previous
     /// block.
     pub fn process_proposal(
-        &mut self,
+        &self,
         req: RequestProcessProposal,
     ) -> ResponseProcessProposal {
         let tx_results = self.process_txs(&req.txs);
