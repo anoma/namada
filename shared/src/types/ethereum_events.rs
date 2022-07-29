@@ -2,7 +2,7 @@
 
 pub mod vote_extensions;
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -278,8 +278,9 @@ pub struct EthMsgUpdate {
 /// The data that is passed to tx_eth_bridge.wasm
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct TxEthBridgeData {
-    /// Updates to be applied to /eth_msgs storage
-    pub updates: Vec<EthMsgUpdate>,
+    /// Updates to be applied to /eth_msgs storage. The order in which updates
+    /// are applied does not matter.
+    pub updates: HashSet<EthMsgUpdate>,
     /// Total voting power for the epoch in which the Ethereum events were
     /// voted for
     pub total_voting_power: VotingPower,

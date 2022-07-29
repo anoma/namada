@@ -1,11 +1,11 @@
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use namada::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
 use namada::types::ethereum_events::EthMsgUpdate;
 
 pub(crate) fn from_multisigneds(
     multisigneds: Vec<MultiSignedEthEvent>,
-) -> BTreeSet<EthMsgUpdate> {
+) -> HashSet<EthMsgUpdate> {
     multisigneds.into_iter().map(from_multisigned).collect()
 }
 
@@ -104,7 +104,7 @@ mod test {
                 signers: HashSet::from_iter(vec![sole_validator.clone()]),
             },
         ];
-        let expected = BTreeSet::from_iter(vec![
+        let expected = HashSet::from_iter(vec![
             EthMsgUpdate {
                 body: event_b.clone(),
                 seen_by: BTreeSet::from_iter(vec![sole_validator.clone()]),
@@ -145,7 +145,7 @@ mod test {
                 ]),
             },
         ];
-        let expected = BTreeSet::from_iter(vec![
+        let expected = HashSet::from_iter(vec![
             EthMsgUpdate {
                 body: event_b.clone(),
                 seen_by: BTreeSet::from_iter(vec![

@@ -36,7 +36,7 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeSet, HashMap};
+    use std::collections::{BTreeSet, HashMap, HashSet};
 
     use borsh::BorshSerialize;
     use namada::types::address;
@@ -67,7 +67,7 @@ mod tests {
             },
             seen_by: BTreeSet::from_iter(vec![sole_validator.clone()]),
         };
-        let updates = vec![update];
+        let updates = HashSet::from_iter(vec![update]);
         let total_voting_power = arbitrary_voting_power();
         let voting_powers =
             HashMap::from_iter(vec![(sole_validator, total_voting_power)]);
