@@ -20,13 +20,9 @@ where
     /// the proposal is rejected (unless we can simply overwrite
     /// them in the next block).
     pub fn prepare_proposal(
-        &mut self,
+        &self,
         req: RequestPrepareProposal,
     ) -> response::PrepareProposal {
-        // We can safely reset meter, because if the block is rejected,
-        // we'll reset again on the next proposal, until the
-        // proposal is accepted
-        self.gas_meter.reset();
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // TODO: This should not be hardcoded
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
@@ -127,7 +123,7 @@ mod test_prepare_proposal {
     /// proposed block.
     #[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
-        let (mut shell, _) = TestShell::new();
+        let (shell, _) = TestShell::new();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
@@ -148,7 +144,7 @@ mod test_prepare_proposal {
     /// we simply exclude it from the proposal
     #[test]
     fn test_error_in_processing_tx() {
-        let (mut shell, _) = TestShell::new();
+        let (shell, _) = TestShell::new();
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
