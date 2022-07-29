@@ -2,7 +2,8 @@
 use std::error::Error;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada::ledger::eth_bridge::storage::{self, EthMsgKeys};
+use namada::ledger::eth_bridge::storage::eth_msgs::EthMsgKeys;
+use namada::ledger::eth_bridge::storage::{self};
 use namada::ledger::pos::types::VotingPower;
 use namada::types::address::Address;
 use namada::types::ethereum_events::{EthereumEvent, TxEthBridgeData};
@@ -64,7 +65,7 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
     let mut confirmed = vec![];
     for update in data.updates {
         let hash = update.body.hash()?;
-        let eth_msg_keys = storage::EthMsgKeys::new(hash);
+        let eth_msg_keys = storage::eth_msgs::EthMsgKeys::new(hash);
 
         // TODO: we arbitrarily look at whether the seen key is present to
         // determine if the /eth_msg already exists in storage, but maybe there
