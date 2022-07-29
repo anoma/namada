@@ -6,6 +6,7 @@ use ferveo_common::TendermintValidator;
 use namada::ledger::parameters::EpochDuration;
 #[cfg(not(feature = "ABCI"))]
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
+use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
 use namada::types::address::Address;
 use namada::types::key;
@@ -376,12 +377,7 @@ where
         epoch: Option<Epoch>,
     ) -> std::result::Result<(VotingPower, common::PublicKey), Error> {
         let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
-        // get the active validator set
-        self.storage
-            .read_validator_set()
-            .get(epoch)
-            .expect("Validators for an epoch should be known")
-            .active
+        get_active_validators(&self.storage, Some(epoch))
             .iter()
             .find(|validator| address == &validator.address)
             .map(|validator| {
@@ -405,21 +401,11 @@ where
     /// Lookup the total voting power for an epoch
     #[cfg(not(feature = "ABCI"))]
     pub fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
-        // get the current epoch
-        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
-        // get the active validator set
-        self.storage
-            .read_validator_set()
-            .get(epoch)
-            .map(|validators| {
-                validators
-                    .active
-                    .iter()
-                    .map(|validator| u64::from(validator.voting_power))
-                    .sum::<u64>()
-                    .into()
-            })
-            .unwrap_or_default()
+        get_active_validators(&self.storage, epoch)
+            .iter()
+            .map(|validator| u64::from(validator.voting_power))
+            .sum::<u64>()
+            .into()
     }
 
     /// Given a tendermint validator, the address is the hash
@@ -433,7 +419,6 @@ where
         tm_address: &[u8],
         epoch: Option<Epoch>,
     ) -> std::result::Result<Address, Error> {
-        // get the current epoch
         let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
         let validator_raw_hash = core::str::from_utf8(tm_address)
             .map_err(|_| Error::InvalidTMAddress)?;
@@ -446,4 +431,26 @@ where
                 )
             })
     }
+}
+
+// Some helper functions are not methods on the [`Shell`], so that we can use
+// them in other places such as `apply_tx`.
+
+/// Get the set of active validators for a given epoch (defaulting to the
+/// epoch of the current yet-to-be-committed block).
+pub fn get_active_validators<D, H>(
+    storage: &Storage<D, H>,
+    epoch: Option<Epoch>,
+) -> BTreeSet<WeightedValidator<Address>>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    let epoch = epoch.unwrap_or_else(|| storage.get_current_epoch().0);
+    let validator_set = storage.read_validator_set();
+    validator_set
+        .get(epoch)
+        .expect("Validators for an epoch should be known")
+        .active
+        .clone()
 }
