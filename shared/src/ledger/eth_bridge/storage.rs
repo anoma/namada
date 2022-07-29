@@ -18,14 +18,19 @@ pub mod eth_msgs {
     use crate::types::hash::Hash;
     use crate::types::storage::{DbKeySeg, Key};
 
-    const ETH_MSGS_STORAGE_KEY: &str = "eth_msgs";
+    const TOP_LEVEL_KEY: &str = "eth_msgs";
 
     /// Get the key corresponding to the /eth_msgs storage subspace
-    pub fn eth_msgs_key() -> Key {
-        Key::from(DbKeySeg::StringSeg(ETH_MSGS_STORAGE_KEY.to_owned()))
+    pub fn top_level_key() -> Key {
+        Key::from(DbKeySeg::StringSeg(TOP_LEVEL_KEY.to_owned()))
     }
 
-    /// Convenient way to generate /eth_msgs keys
+    const BODY_KEY: &str = "body";
+    const SEEN_KEY: &str = "seen";
+    const SEEN_BY_KEY: &str = "seen_by";
+    const VOTING_POWER_KEY: &str = "voting_power";
+
+    /// Handle for the storage space for a specific [`EthMsg`]
     pub struct EthMsgKeys {
         /// The prefix under which the keys for the EthMsg are stored
         pub prefix: Key,
@@ -35,7 +40,7 @@ pub mod eth_msgs {
         /// Create a new [`EthMsgKeys`] based on the hash
         pub fn new(msg_hash: Hash) -> Self {
             let hex = format!("{}", msg_hash);
-            let prefix = eth_msgs_key().push(&hex).expect(
+            let prefix = top_level_key().push(&hex).expect(
                 "should always be able to construct prefix, given hex-encoded \
                  hash",
             );
@@ -44,22 +49,22 @@ pub mod eth_msgs {
 
         /// Get the `body` key for the given EthMsg
         pub fn body(&self) -> Key {
-            self.prefix.push(&"body".to_owned()).unwrap()
+            self.prefix.push(&BODY_KEY.to_owned()).unwrap()
         }
 
         /// Get the `seen` key for the given EthMsg
         pub fn seen(&self) -> Key {
-            self.prefix.push(&"seen".to_owned()).unwrap()
+            self.prefix.push(&SEEN_KEY.to_owned()).unwrap()
         }
 
         /// Get the `seen_by` key for the given EthMsg
         pub fn seen_by(&self) -> Key {
-            self.prefix.push(&"seen_by".to_owned()).unwrap()
+            self.prefix.push(&SEEN_BY_KEY.to_owned()).unwrap()
         }
 
         /// Get the `voting_power` key for the given EthMsg
         pub fn voting_power(&self) -> Key {
-            self.prefix.push(&"voting_power".to_owned()).unwrap()
+            self.prefix.push(&VOTING_POWER_KEY.to_owned()).unwrap()
         }
     }
 
@@ -72,7 +77,7 @@ pub mod eth_msgs {
         #[test]
         fn test_eth_msgs_key() {
             assert!(
-                matches!(&eth_msgs_key().segments[..], [DbKeySeg::StringSeg(s)] if s == ETH_MSGS_STORAGE_KEY)
+                matches!(&top_level_key().segments[..], [DbKeySeg::StringSeg(s)] if s == TOP_LEVEL_KEY)
             )
         }
     }
