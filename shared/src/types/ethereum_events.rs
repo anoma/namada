@@ -275,6 +275,17 @@ pub struct EthMsgUpdate {
     pub seen_by: BTreeSet<Address>,
 }
 
+impl From<vote_extensions::MultiSignedEthEvent> for EthMsgUpdate {
+    fn from(
+        vote_extensions::MultiSignedEthEvent { event, signers }: vote_extensions::MultiSignedEthEvent,
+    ) -> Self {
+        Self {
+            body: event,
+            seen_by: signers.into_iter().collect(),
+        }
+    }
+}
+
 /// The data that is passed to tx_eth_bridge.wasm
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct TxEthBridgeData {
@@ -282,10 +293,41 @@ pub struct TxEthBridgeData {
     /// are applied does not matter.
     pub updates: HashSet<EthMsgUpdate>,
     /// Total voting power for the epoch in which the Ethereum events were
-    /// voted for
+    /// voted for.
     pub total_voting_power: VotingPower,
-    /// Voting powers for each validator seeing an event
+    /// Voting powers for each validator which is seeing an event in `updates`.
     pub voting_powers: HashMap<Address, VotingPower>,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeSet, HashSet};
+
+    use super::vote_extensions::MultiSignedEthEvent;
+    use super::*;
+    use crate::types::address;
+    use crate::types::ethereum_events::testing::{
+        arbitrary_nonce, arbitrary_single_transfer,
+    };
+
+    #[test]
+    fn test_from_multi_signed_eth_event_for_eth_msg_update() {
+        let sole_validator = address::testing::established_address_1();
+        let receiver = address::testing::established_address_2();
+        let event = arbitrary_single_transfer(arbitrary_nonce(), receiver);
+        let with_signers = MultiSignedEthEvent {
+            event: event.clone(),
+            signers: HashSet::from_iter(vec![sole_validator.clone()]),
+        };
+        let expected = EthMsgUpdate {
+            body: event.clone(),
+            seen_by: BTreeSet::from_iter(vec![sole_validator]),
+        };
+
+        let update: EthMsgUpdate = with_signers.into();
+
+        assert_eq!(update, expected);
+    }
 }
 
 #[allow(missing_docs)]

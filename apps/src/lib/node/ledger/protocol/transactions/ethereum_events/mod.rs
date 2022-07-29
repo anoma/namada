@@ -13,7 +13,6 @@ use namada::types::ethereum_events::{EthMsgUpdate, TxEthBridgeData};
 use super::super::{Error, Result};
 use crate::node::ledger::protocol::transactions::ethereum_events;
 
-pub(crate) mod eth_msg_updates;
 pub(crate) mod voting_powers;
 
 const TX_WASM_NAME: &str = "tx_eth_bridge";
@@ -24,10 +23,7 @@ pub(crate) fn construct_tx(
     voting_powers: HashMap<Address, VotingPower>,
     wasm_dir: impl AsRef<Path>,
 ) -> Result<Tx> {
-    let updates = events
-        .into_iter()
-        .map(eth_msg_updates::from_multisigned)
-        .collect();
+    let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
     let tx_data = ethereum_events::construct_tx_data(
         updates,
         total_voting_power,
@@ -99,13 +95,14 @@ mod test {
     #[test]
     fn test_calculate_construct_tx_data() {
         let sole_validator = address::testing::established_address_1();
-        let update = eth_msg_updates::from_multisigned(MultiSignedEthEvent {
+        let update: EthMsgUpdate = MultiSignedEthEvent {
             event: arbitrary_single_transfer(
                 arbitrary_nonce(),
                 address::testing::established_address_2(),
             ),
             signers: HashSet::from_iter(vec![sole_validator.clone()]),
-        });
+        }
+        .into();
         let updates = HashSet::from_iter(vec![update.clone()]);
         let total_voting_power = arbitrary_voting_power();
         let voting_powers =
