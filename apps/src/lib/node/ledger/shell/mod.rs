@@ -316,15 +316,10 @@ where
         }
     }
 
-    /// Iterate lazily over the wrapper txs in order
-    fn next_wrapper(&mut self) -> Option<&WrapperTx> {
-        self.storage.tx_queue.lazy_next()
-    }
-
-    /// If we reject the decrypted txs because they were out of
-    /// order, reset the iterator.
-    pub fn reset_tx_queue_iter(&mut self) {
-        self.storage.tx_queue.rewind()
+    /// Iterate over the wrapper txs in order
+    #[allow(dead_code)]
+    fn iter_tx_queue(&mut self) -> impl Iterator<Item = &WrapperTx> {
+        self.storage.tx_queue.iter()
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
@@ -793,7 +788,6 @@ mod test_utils {
         #[cfg(test)]
         pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
             self.shell.storage.tx_queue.push(wrapper);
-            self.shell.reset_tx_queue_iter();
         }
     }
 
