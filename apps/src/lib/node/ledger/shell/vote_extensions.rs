@@ -4,11 +4,33 @@ mod extend_votes {
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
     use namada::types::ethereum_events::vote_extensions::VoteExtension;
+    use tendermint_proto::abci::ExtendedVoteInfo;
 
     use super::super::*;
 
     /// A [`VoteExtension`] signed by a Namada validator.
     pub type SignedExt = Signed<VoteExtension>;
+
+    /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
+    #[derive(Error, Debug)]
+    pub enum VoteExtensionError {
+        #[error("The vote extension was issued at block height 0.")]
+        IssuedAtGenesis,
+        #[error("The vote extension has an unexpected block height.")]
+        UnexpectedBlockHeight,
+        #[error(
+            "The vote extension contains duplicate or non-sorted Ethereum \
+             events."
+        )]
+        HaveDupesOrNonSorted,
+        #[error(
+            "The public key of the vote extension's associated validator \
+             could not be found in storage."
+        )]
+        PubKeyNotInStorage,
+        #[error("The vote extension's signature is invalid.")]
+        VerifySigFailed,
+    }
 
     impl<D, H> Shell<D, H>
     where
@@ -90,10 +112,10 @@ mod extend_votes {
         pub fn validate_vote_extension(
             &self,
             ext: SignedExt,
-            height: BlockHeight,
+            last_height: BlockHeight,
         ) -> bool {
-            self.validate_vote_ext_and_get_it_back(ext, height)
-                .is_some()
+            self.validate_vote_ext_and_get_it_back(ext, last_height)
+                .is_ok()
         }
 
         /// This method behaves exactly like [`Self::validate_vote_extension`],
@@ -102,19 +124,40 @@ mod extend_votes {
         pub fn validate_vote_ext_and_get_it_back(
             &self,
             ext: SignedExt,
-            height: BlockHeight,
-        ) -> Option<(VotingPower, SignedExt)> {
-            if ext.data.block_height != height {
+            last_height: BlockHeight,
+        ) -> std::result::Result<(VotingPower, SignedExt), VoteExtensionError>
+        {
+            if ext.data.block_height != last_height {
                 let ext_height = ext.data.block_height;
                 tracing::error!(
                     "Vote extension issued for a block height {ext_height} \
-                     different from the expected height {height}"
+                     different from the expected height {last_height}"
                 );
-                return None;
+                return Err(VoteExtensionError::UnexpectedBlockHeight);
             }
-            let epoch = self.storage.block.pred_epochs.get_epoch(height);
-            // get the public key associated with this validator
+            if last_height.0 == 0 {
+                tracing::error!("Dropping vote extension issued at genesis");
+                return Err(VoteExtensionError::IssuedAtGenesis);
+            }
+            // verify if we have any duplicate Ethereum events,
+            // and if these are sorted in ascending order
+            let have_dupes_or_non_sorted = {
+                !ext.data
+                    .ethereum_events
+                    // TODO: move to `array_windows` when it reaches Rust stable
+                    .windows(2)
+                    .all(|evs| evs[0] < evs[1])
+            };
             let validator = &ext.data.validator_addr;
+            if have_dupes_or_non_sorted {
+                tracing::error!(
+                    %validator,
+                    "Found duplicate or non-sorted Ethereum events in a vote extension from validator"
+                );
+                return Err(VoteExtensionError::HaveDupesOrNonSorted);
+            }
+            // get the public key associated with this validator
+            let epoch = self.storage.block.pred_epochs.get_epoch(last_height);
             let (voting_power, pk) = self
                 .get_validator_from_address(validator, epoch)
                 .map_err(|err| {
@@ -123,8 +166,8 @@ mod extend_votes {
                         %validator,
                         "Could not get public key from Storage for validator"
                     );
-                })
-                .ok()?;
+                    VoteExtensionError::PubKeyNotInStorage
+                })?;
             // verify the signature of the vote extension
             ext.verify(&pk)
                 .map_err(|err| {
@@ -133,13 +176,13 @@ mod extend_votes {
                         %validator,
                         "Failed to verify the signature of a vote extension issued by validator"
                     );
+                    VoteExtensionError::VerifySigFailed
                 })
-                .ok()
                 .map(|_| (voting_power, ext))
         }
 
         /// Checks the channel from the Ethereum oracle monitoring
-        /// the fullnode and retrieves all VoteExtensionmessages sent.
+        /// the fullnode and retrieves all VoteExtension messages sent.
         pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
             match &mut self.mode {
                 ShellMode::Validator {
@@ -152,6 +195,56 @@ mod extend_votes {
                 _ => vec![],
             }
         }
+
+        /// Takes an iterator over signed vote extensions,
+        /// and returns another iterator. The latter yields
+        /// valid vote extensions, or the reason why these
+        /// are invalid, in the form of a [`VoteExtensionError`].
+        #[inline]
+        pub fn validate_vote_extension_list(
+            &self,
+            vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
+        ) -> impl Iterator<
+            Item = std::result::Result<
+                (VotingPower, SignedExt),
+                VoteExtensionError,
+            >,
+        > + '_ {
+            vote_extensions.into_iter().map(|vote_extension| {
+                self.validate_vote_ext_and_get_it_back(
+                    vote_extension,
+                    self.storage.last_height,
+                )
+            })
+        }
+
+        /// Takes a list of signed vote extensions,
+        /// and filters out invalid instances.
+        #[inline]
+        pub fn filter_invalid_vote_extensions(
+            &self,
+            vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
+        ) -> impl Iterator<Item = (VotingPower, SignedExt)> + '_ {
+            self.validate_vote_extension_list(vote_extensions)
+                .filter_map(|ext| ext.ok())
+        }
+    }
+
+    /// Given a `Vec` of [`ExtendedVoteInfo`], return an iterator over the
+    /// ones we could deserialize to [`SignedExt`] instances.
+    pub fn deserialize_vote_extensions(
+        vote_extensions: Vec<ExtendedVoteInfo>,
+    ) -> impl Iterator<Item = SignedExt> + 'static {
+        vote_extensions.into_iter().filter_map(|vote| {
+            SignedExt::try_from_slice(&vote.vote_extension[..])
+                .map_err(|err| {
+                    tracing::error!(
+                        ?err,
+                        "Failed to deserialize signed vote extension",
+                    );
+                })
+                .ok()
+        })
     }
 
     #[cfg(test)]

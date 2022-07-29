@@ -2,6 +2,7 @@
 //! in vote extensions.
 
 use std::collections::{HashMap, HashSet};
+use std::ops::{Add, AddAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
@@ -70,9 +71,29 @@ impl FractionalVotingPower {
     }
 }
 
+impl Default for FractionalVotingPower {
+    fn default() -> Self {
+        Self::new(0, 1).unwrap()
+    }
+}
+
 impl From<&FractionalVotingPower> for (u64, u64) {
     fn from(ratio: &FractionalVotingPower) -> Self {
         (ratio.0.numer().to_owned(), ratio.0.denom().to_owned())
+    }
+}
+
+impl Add<FractionalVotingPower> for FractionalVotingPower {
+    type Output = Self;
+
+    fn add(self, rhs: FractionalVotingPower) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl AddAssign<FractionalVotingPower> for FractionalVotingPower {
+    fn add_assign(&mut self, rhs: FractionalVotingPower) {
+        *self = Self(self.0 + rhs.0)
     }
 }
 
@@ -211,7 +232,7 @@ mod tests {
     #[test]
     fn test_fractional_voting_power_ord_eq() {
         assert!(
-            FractionalVotingPower::new(2, 3).unwrap()
+            FractionalVotingPower::TWO_THIRDS
                 > FractionalVotingPower::new(1, 4).unwrap()
         );
         assert!(
@@ -302,7 +323,16 @@ mod tests {
 
         // finally, decompress the `VoteExtensionDigest` back into a
         // `Vec<Signed<VoteExtension>>`
-        let decompressed = digest.decompress(last_block_height);
+        let mut decompressed = digest
+            .decompress(last_block_height)
+            .into_iter()
+            .collect::<Vec<Signed<VoteExtension>>>();
+
+        // decompressing yields an arbitrary ordering of `VoteExtension`
+        // instances, which is fine
+        if decompressed[0].data.validator_addr != ext[0].data.validator_addr {
+            decompressed.swap(0, 1);
+        }
 
         assert_eq!(ext, decompressed);
         assert!(decompressed[0].verify(&sk_1.ref_to()).is_ok());

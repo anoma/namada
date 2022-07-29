@@ -125,7 +125,7 @@ impl From<Error> for TxResult {
 /// The different error codes that the ledger may
 /// send back to a client indicating the status
 /// of their submitted tx
-#[derive(Debug, Clone, FromPrimitive, ToPrimitive, PartialEq)]
+#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum ErrorCodes {
     Ok = 0,
     InvalidTx = 1,
@@ -134,6 +134,17 @@ pub enum ErrorCodes {
     InvalidOrder = 4,
     ExtraTxs = 5,
     Undecryptable = 6,
+    InvalidVoteExtension = 7,
+    // NOTE: keep these values in sync with
+    // [`ErrorCodes::is_recoverable`]
+}
+
+impl ErrorCodes {
+    /// Checks if the given [`ErrorCodes`] value is a protocol level error,
+    /// that can be recovered from at the finalize block stage.
+    pub const fn is_recoverable(self) -> bool {
+        (self as u32) <= 3
+    }
 }
 
 impl From<ErrorCodes> for u32 {
@@ -775,6 +786,19 @@ mod test_utils {
 
         let mut rng: ThreadRng = thread_rng();
         ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
+    }
+
+    /// Invalidate a valid signature `sig`.
+    pub(super) fn invalidate_signature(
+        sig: common::Signature,
+    ) -> common::Signature {
+        let mut sig_bytes = match sig {
+            common::Signature::Ed25519(ed25519::Signature(ref sig)) => {
+                sig.to_bytes()
+            }
+        };
+        sig_bytes[0] = sig_bytes[0].wrapping_add(1);
+        common::Signature::Ed25519(ed25519::Signature(sig_bytes.into()))
     }
 
     /// A wrapper around the shell that implements

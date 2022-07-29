@@ -4,18 +4,15 @@
 mod prepare_block {
     use std::collections::{BTreeMap, HashMap, HashSet};
 
-    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
-    use namada::proto::Signed;
     use namada::types::ethereum_events::vote_extensions::{
-        FractionalVotingPower, MultiSignedEthEvent, VoteExtension,
-        VoteExtensionDigest,
+        FractionalVotingPower, MultiSignedEthEvent, VoteExtensionDigest,
     };
     use namada::types::transaction::protocol::ProtocolTxType;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
 
-    use super::super::vote_extensions::SignedExt;
+    use super::super::vote_extensions::deserialize_vote_extensions;
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -88,13 +85,10 @@ mod prepare_block {
                     // handle genesis block
                     (None, BlockHeight(0)) => return vec![],
                     (Some(_), BlockHeight(0)) => {
-                        tracing::error!(
-                            "The genesis block should not contain vote \
-                             extensions"
-                        );
-                        // TODO: maybe slash validators who claim to have
-                        // seen vote extensions at H=0
-                        return vec![];
+                        unreachable!(
+                            "We already handle this scenario in \
+                             validate_vote_extension."
+                        )
                     }
                     // handle block heights > 0
                     (Some(digest), _) => digest,
@@ -185,16 +179,26 @@ mod prepare_block {
             let mut signatures = HashMap::new();
 
             let total_voting_power =
-                self.get_total_voting_power(Some(events_epoch)).into();
-            let mut voting_power = 0u64;
+                u64::from(self.get_total_voting_power(Some(events_epoch)));
+            let mut voting_power = FractionalVotingPower::default();
+
+            let deserialized = deserialize_vote_extensions(vote_extensions);
 
             for (validator_voting_power, vote_extension) in
-                self.filter_invalid_vote_extensions(vote_extensions)
+                self.filter_invalid_vote_extensions(deserialized)
             {
                 let validator_addr = vote_extension.data.validator_addr;
 
                 // update voting power
-                voting_power += u64::from(validator_voting_power);
+                let validator_voting_power = u64::from(validator_voting_power);
+                voting_power += FractionalVotingPower::new(
+                    validator_voting_power,
+                    total_voting_power,
+                )
+                .expect(
+                    "The voting power we obtain from storage should always be \
+                     valid",
+                );
 
                 // register all ethereum events seen by `validator_addr`
                 for ev in vote_extension.data.ethereum_events {
@@ -218,10 +222,6 @@ mod prepare_block {
                 }
             }
 
-            let voting_power =
-                FractionalVotingPower::new(voting_power, total_voting_power)
-                    .unwrap();
-
             if voting_power <= FractionalVotingPower::TWO_THIRDS {
                 tracing::error!(
                     "Tendermint has decided on a block including vote \
@@ -236,31 +236,6 @@ mod prepare_block {
                 .collect();
 
             Some(VoteExtensionDigest { events, signatures })
-        }
-
-        /// Takes a list of signed vote extensions,
-        /// and filters out invalid instances.
-        fn filter_invalid_vote_extensions(
-            &self,
-            vote_extensions: Vec<ExtendedVoteInfo>,
-        ) -> impl Iterator<Item = (VotingPower, SignedExt)> + '_ {
-            vote_extensions.into_iter().filter_map(|vote| {
-                let vote_extension = Signed::<VoteExtension>::try_from_slice(
-                    &vote.vote_extension[..],
-                )
-                .map_err(|err| {
-                    tracing::error!(
-                        ?err,
-                        "Failed to deserialize signed vote extension",
-                    );
-                })
-                .ok()?;
-
-                self.validate_vote_ext_and_get_it_back(
-                    vote_extension,
-                    self.storage.last_height,
-                )
-            })
         }
     }
 
@@ -311,7 +286,7 @@ mod prepare_block {
         use namada::types::address::xan;
         use namada::types::ethereum_events::vote_extensions::VoteExtension;
         use namada::types::ethereum_events::EthereumEvent;
-        use namada::types::key::{common, ed25519};
+        use namada::types::key::common;
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::protocol::ProtocolTxType;
         use namada::types::transaction::{Fee, TxType};
@@ -362,7 +337,10 @@ mod prepare_block {
             shell: &mut TestShell,
             vext: SignedExt,
         ) {
-            let votes = vec![vote_extension_serialize(vext)];
+            let votes =
+                deserialize_vote_extensions(vec![vote_extension_serialize(
+                    vext,
+                )]);
             let filtered_votes: Vec<_> =
                 shell.filter_invalid_vote_extensions(votes).collect();
 
@@ -380,21 +358,22 @@ mod prepare_block {
             // artificially change the block height
             shell.storage.last_height = LAST_HEIGHT;
 
-            let validator_addr = wallet::defaults::validator_address();
-
             let signed_vote_extension = {
-                // create a fake signature
-                let sig = common::Signature::Ed25519(ed25519::Signature(
-                    [0u8; 64].into(),
-                ));
+                let (protocol_key, _) = wallet::defaults::validator_keys();
+                let validator_addr = wallet::defaults::validator_address();
 
-                let data = VoteExtension {
+                // generate a valid signature
+                let mut ext = VoteExtension {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![],
-                };
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
 
-                SignedExt { sig, data }
+                // modify this signature such that it becomes invalid
+                ext.sig = test_utils::invalidate_signature(ext.sig);
+                ext
             };
 
             check_vote_extension_filtering(&mut shell, signed_vote_extension);
@@ -461,10 +440,10 @@ mod prepare_block {
             check_vote_extension_filtering(&mut shell, signed_vote_extension);
         }
 
-        /// Test if we are de-duplicating Ethereum events in
+        /// Test if we are filtering out duped Ethereum events in
         /// prepare proposals.
         #[test]
-        fn test_prepare_proposal_deduplicate_ethereum_events() {
+        fn test_prepare_proposal_filter_duped_ethereum_events() {
             const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
             let (mut shell, _, _) = test_utils::setup();
@@ -480,7 +459,7 @@ mod prepare_block {
                 transfers: vec![],
             };
             let signed_vote_extension = {
-                let ev = ethereum_event.clone();
+                let ev = ethereum_event;
                 let ext = VoteExtension {
                     validator_addr,
                     block_height: LAST_HEIGHT,
@@ -491,24 +470,17 @@ mod prepare_block {
                 ext
             };
 
-            let digest = {
+            let maybe_digest = {
                 let votes =
                     vec![vote_extension_serialize(signed_vote_extension)];
-                shell.compress_vote_extensions(votes).unwrap()
+                shell.compress_vote_extensions(votes)
             };
-            let decompressed = digest.decompress(LAST_HEIGHT);
 
-            assert_eq!(decompressed.len(), 1);
-
-            // NOTE: this check is on purpose. we just want to check if the
-            // events were de-duped, obv the signature will be
-            // different, since we signed a `Vec` with duped events
-            assert!(decompressed[0].verify(&protocol_key.ref_to()).is_err());
-
-            assert_eq!(
-                decompressed[0].data.ethereum_events,
-                vec![ethereum_event]
-            );
+            // we should be filtering out the vote extension with
+            // duped ethereum events; therefore, no valid vote
+            // extensions will remain, and we will get no
+            // digest from compressing nil vote extensions
+            assert!(maybe_digest.is_none());
         }
 
         /// Creates a vote extension digest manually, and encodes it as a
@@ -628,7 +600,7 @@ mod prepare_block {
         /// Test if vote extension validation and inclusion in a block
         /// behaves as expected, considering <= 2/3 voting power.
         #[test]
-        #[should_panic(expected = "entered unreachable code")]
+        #[should_panic(expected = "Honest Namada validators")]
         fn test_prepare_proposal_vext_insufficient_voting_power() {
             const FIRST_HEIGHT: BlockHeight = BlockHeight(0);
             const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
