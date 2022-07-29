@@ -22,7 +22,7 @@ pub(crate) fn construct_tx(
     events: Vec<MultiSignedEthEvent>,
     total_voting_power: VotingPower,
     voting_powers: HashMap<Address, VotingPower>,
-    wasm_dir: &Path,
+    wasm_dir: impl AsRef<Path>,
 ) -> Result<Tx> {
     let updates = eth_msg_updates::from_multisigneds(events);
     let tx_data = ethereum_events::construct_tx_data(
@@ -36,10 +36,12 @@ pub(crate) fn construct_tx(
         "serialized tx_data for state update transaction"
     );
     let tx_code = {
-        let checksums = crate::wasm_loader::Checksums::read_checksums(wasm_dir);
+        let checksums =
+            crate::wasm_loader::Checksums::read_checksums(&wasm_dir);
         tracing::debug!(
             checksums = checksums.0.len(),
-            wasm_dir = wasm_dir.to_string_lossy().into_owned().as_str(),
+            wasm_dir =
+                wasm_dir.as_ref().to_string_lossy().into_owned().as_str(),
             "loaded checksums.json from wasm directory"
         );
         let file_path = checksums
