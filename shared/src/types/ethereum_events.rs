@@ -2,7 +2,7 @@
 
 pub mod vote_extensions;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -20,6 +20,7 @@ use crate::types::token::Amount;
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -53,6 +54,7 @@ impl From<u64> for Uint {
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -88,6 +90,7 @@ impl FromStr for EthAddress {
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -101,6 +104,7 @@ pub struct KeccakHash(pub [u8; 32]);
     PartialEq,
     Eq,
     PartialOrd,
+    Hash,
     Ord,
     Clone,
     Debug,
@@ -189,6 +193,7 @@ impl EthereumEvent {
     PartialEq,
     Eq,
     PartialOrd,
+    Hash,
     Ord,
     BorshSerialize,
     BorshDeserialize,
@@ -209,6 +214,7 @@ pub struct TransferToNamada {
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -233,6 +239,7 @@ pub struct TransferToEthereum {
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -255,6 +262,7 @@ pub struct TokenWhitelist {
     PartialOrd,
     PartialEq,
     Eq,
+    Hash,
     BorshSerialize,
     BorshDeserialize,
 )]
@@ -262,7 +270,9 @@ pub struct EthMsgUpdate {
     /// the event being seen
     pub body: EthereumEvent,
     /// addresses of the validators who have just seen this event
-    pub seen_by: Vec<Address>,
+    /// we use [`BTreeSet`] even though ordering is not important here, so that
+    /// we can derive [`Hash`] for [`EthMsgUpdate`]
+    pub seen_by: BTreeSet<Address>,
 }
 
 /// The data that is passed to tx_eth_bridge.wasm

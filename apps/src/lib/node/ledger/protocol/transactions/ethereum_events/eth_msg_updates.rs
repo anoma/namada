@@ -1,9 +1,11 @@
+use std::collections::BTreeSet;
+
 use namada::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
 use namada::types::ethereum_events::EthMsgUpdate;
 
 pub(crate) fn from_multisigneds(
     multisigneds: Vec<MultiSignedEthEvent>,
-) -> Vec<EthMsgUpdate> {
+) -> BTreeSet<EthMsgUpdate> {
     multisigneds.into_iter().map(from_multisigned).collect()
 }
 
@@ -22,7 +24,7 @@ pub(crate) fn from_multisigned(
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
+    use std::collections::{BTreeSet, HashSet};
 
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
@@ -50,7 +52,7 @@ mod test {
         };
         let expected = EthMsgUpdate {
             body: event.clone(),
-            seen_by: vec![sole_validator],
+            seen_by: BTreeSet::from_iter(vec![sole_validator]),
         };
 
         let update = from_multisigned(with_signers);
@@ -73,7 +75,10 @@ mod test {
         };
         let expected = EthMsgUpdate {
             body: event.clone(),
-            seen_by: vec![validator_b.clone(), validator_a.clone()],
+            seen_by: BTreeSet::from_iter(vec![
+                validator_b.clone(),
+                validator_a.clone(),
+            ]),
         };
 
         let update = from_multisigned(with_signers);
@@ -99,20 +104,20 @@ mod test {
                 signers: HashSet::from_iter(vec![sole_validator.clone()]),
             },
         ];
-        let mut expected = vec![
+        let expected = BTreeSet::from_iter(vec![
             EthMsgUpdate {
                 body: event_b.clone(),
-                seen_by: vec![sole_validator.clone()],
+                seen_by: BTreeSet::from_iter(vec![sole_validator.clone()]),
             },
             EthMsgUpdate {
                 body: event_a.clone(),
-                seen_by: vec![sole_validator.clone()],
+                seen_by: BTreeSet::from_iter(vec![sole_validator.clone()]),
             },
-        ];
+        ]);
 
-        let mut updates = from_multisigneds(with_signers);
+        let updates = from_multisigneds(with_signers);
 
-        assert_eq!(updates.sort(), expected.sort());
+        assert_eq!(updates, expected);
     }
 
     #[test]
@@ -140,19 +145,25 @@ mod test {
                 ]),
             },
         ];
-        let mut expected = vec![
+        let expected = BTreeSet::from_iter(vec![
             EthMsgUpdate {
                 body: event_b.clone(),
-                seen_by: vec![validator_b.clone(), validator_a.clone()],
+                seen_by: BTreeSet::from_iter(vec![
+                    validator_b.clone(),
+                    validator_a.clone(),
+                ]),
             },
             EthMsgUpdate {
                 body: event_a.clone(),
-                seen_by: vec![validator_b.clone(), validator_a.clone()],
+                seen_by: BTreeSet::from_iter(vec![
+                    validator_b.clone(),
+                    validator_a.clone(),
+                ]),
             },
-        ];
+        ]);
 
-        let mut updates = from_multisigneds(with_signers);
+        let updates = from_multisigneds(with_signers);
 
-        assert_eq!(updates.sort(), expected.sort());
+        assert_eq!(updates, expected);
     }
 }

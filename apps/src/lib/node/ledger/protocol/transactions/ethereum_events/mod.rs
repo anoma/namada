@@ -1,5 +1,5 @@
 //! Code for handling [`ProtocolTxType::EthereumEvents`] transactions.
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 
 use borsh::BorshSerialize;
@@ -64,12 +64,12 @@ pub(crate) fn construct_tx(
 }
 
 pub(crate) fn construct_tx_data(
-    updates: Vec<EthMsgUpdate>,
+    updates: BTreeSet<EthMsgUpdate>,
     total_voting_power: VotingPower,
     voting_powers: HashMap<Address, VotingPower>,
 ) -> eyre::Result<Vec<u8>> {
     TxEthBridgeData {
-        updates,
+        updates: updates.into_iter().collect(),
         total_voting_power,
         voting_powers,
     }
@@ -103,7 +103,7 @@ mod test {
             ),
             signers: HashSet::from_iter(vec![sole_validator.clone()]),
         });
-        let updates = vec![update.clone()];
+        let updates = BTreeSet::from_iter(vec![update.clone()]);
         let total_voting_power = arbitrary_voting_power();
         let voting_powers =
             HashMap::from_iter(vec![(sole_validator, total_voting_power)]);
