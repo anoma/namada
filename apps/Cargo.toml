@@ -152,6 +152,7 @@ websocket = "0.26.2"
 winapi = "0.3.9"
 
 [dev-dependencies]
+assert_matches = "1.5.0"
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 cargo-watch = "7.5.0"
 bit-set = "0.5.2"

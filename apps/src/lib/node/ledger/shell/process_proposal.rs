@@ -361,6 +361,7 @@ where
 mod test_process_proposal {
     use std::collections::{HashMap, HashSet};
 
+    use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
     use namada::types::address::xan;
@@ -427,8 +428,8 @@ mod test_process_proposal {
             txs: vec![tx.clone(), tx],
         };
         let results = shell.process_proposal(request);
-        assert!(
-            matches!(results, Err(TestError::RejectProposal(s)) if s.len() == 2)
+        assert_matches!(
+            results, Err(TestError::RejectProposal(s)) if s.len() == 2
         );
     }
 
