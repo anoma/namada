@@ -24,7 +24,10 @@ pub(crate) fn construct_tx(
     voting_powers: HashMap<Address, VotingPower>,
     wasm_dir: impl AsRef<Path>,
 ) -> Result<Tx> {
-    let updates = eth_msg_updates::from_multisigneds(events);
+    let updates = events
+        .into_iter()
+        .map(eth_msg_updates::from_multisigned)
+        .collect();
     let tx_data = ethereum_events::construct_tx_data(
         updates,
         total_voting_power,
