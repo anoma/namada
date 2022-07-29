@@ -68,17 +68,71 @@ pub mod eth_msgs {
         }
     }
 
-    // TODO: tests for EthMsgKeys
-
     #[cfg(test)]
     mod test {
         use super::*;
 
+        fn arbitrary_hash_with_hex() -> (Hash, String) {
+            (Hash::sha256(b"arbitrary"), "87288D68ED71BF8FA35E531A1E56F3B3705FA0EEA54A2AA689B41694A8F83F5B".to_owned())
+        }
+
         #[test]
-        fn test_eth_msgs_key() {
+        fn test_eth_msgs_keys() {
             assert!(
                 matches!(&top_level_key().segments[..], [DbKeySeg::StringSeg(s)] if s == TOP_LEVEL_KEY)
             )
+        }
+
+        #[test]
+        fn test_eth_msgs_key_body() {
+            let (msg_hash, hex) = arbitrary_hash_with_hex();
+            let keys = EthMsgKeys::new(msg_hash);
+            let body_key = keys.body();
+            assert_eq!(
+                body_key.segments,
+                vec![
+                    DbKeySeg::StringSeg(TOP_LEVEL_KEY.to_owned()),
+                    DbKeySeg::StringSeg(hex),
+                    DbKeySeg::StringSeg(BODY_KEY.to_owned()),
+                ]
+            );
+        }
+
+        #[test]
+        fn test_eth_msgs_keys_all_keys() {
+            let (msg_hash, hex) = arbitrary_hash_with_hex();
+            let keys = EthMsgKeys::new(msg_hash);
+            let prefix = vec![
+                DbKeySeg::StringSeg(TOP_LEVEL_KEY.to_owned()),
+                DbKeySeg::StringSeg(hex),
+            ];
+            let body_key = keys.body();
+            assert_eq!(body_key.segments[..2], prefix[..]);
+            assert_eq!(
+                body_key.segments[2],
+                DbKeySeg::StringSeg(BODY_KEY.to_owned())
+            );
+
+            let seen_key = keys.seen();
+            assert_eq!(seen_key.segments[..2], prefix[..]);
+            assert_eq!(
+                seen_key.segments[2],
+                DbKeySeg::StringSeg(SEEN_KEY.to_owned())
+            );
+
+            let seen_by_key = keys.seen_by();
+            assert_eq!(seen_by_key.segments[..2], prefix[..]);
+            assert_eq!(
+                seen_by_key.segments[2],
+                DbKeySeg::StringSeg(SEEN_BY_KEY.to_owned())
+            );
+
+            let voting_power_key = keys.voting_power();
+            assert_eq!(voting_power_key.segments[..2], prefix[..]);
+            assert_eq!(
+                voting_power_key.segments[2],
+                DbKeySeg::StringSeg(VOTING_POWER_KEY.to_owned())
+            );
         }
     }
 }
