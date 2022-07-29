@@ -355,21 +355,33 @@ mod prepare_block {
             // artificially change the block height
             shell.storage.last_height = LAST_HEIGHT;
 
-            let validator_addr = wallet::defaults::validator_address();
-
             let signed_vote_extension = {
-                // create a fake signature
-                let sig = common::Signature::Ed25519(ed25519::Signature(
-                    [0u8; 64].into(),
-                ));
+                let (protocol_key, _) = wallet::defaults::validator_keys();
+                let validator_addr = wallet::defaults::validator_address();
 
-                let data = VoteExtension {
+                // generate a valid signature
+                let mut ext = VoteExtension {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+
+                // modify this signature such that it becomes invalid
+                ext.sig = {
+                    let mut sig_bytes = match ext.sig {
+                        common::Signature::Ed25519(ed25519::Signature(
+                            ref sig,
+                        )) => sig.to_bytes(),
+                    };
+                    sig_bytes[0] = sig_bytes[0].wrapping_add(1);
+                    common::Signature::Ed25519(ed25519::Signature(
+                        sig_bytes.into(),
+                    ))
                 };
 
-                SignedExt { sig, data }
+                ext
             };
 
             check_vote_extension_filtering(&mut shell, signed_vote_extension);
