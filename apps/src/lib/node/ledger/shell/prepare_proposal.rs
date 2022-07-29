@@ -195,7 +195,10 @@ mod prepare_block {
                     validator_voting_power,
                     total_voting_power,
                 )
-                .unwrap_or_default();
+                .expect(
+                    "The voting power we obtain from storage should always be \
+                     valid",
+                );
 
                 // register all ethereum events seen by `validator_addr`
                 for ev in vote_extension.data.ethereum_events {

@@ -163,7 +163,10 @@ where
                                     u64::from(power),
                                     total_power,
                                 )
-                                .unwrap_or_default();
+                                .expect(
+                                    "The voting power we obtain from storage \
+                                     should always be valid",
+                                );
                             })
                             .is_ok()
                     }) {
