@@ -93,7 +93,7 @@ pub fn apply_aux(tx_data: Vec<u8>) -> Result<(), Box<dyn Error>> {
             EthMsg {
                 body: update.body,
                 voting_power: fvp.into(),
-                seen_by: update.seen_by,
+                seen_by: update.seen_by.into_iter().collect(), /* this should result in a sorted vector as update.seen_by is a [`BTreeSet`] */
                 seen,
             }
         } else {
