@@ -4,18 +4,15 @@
 mod prepare_block {
     use std::collections::{BTreeMap, HashMap, HashSet};
 
-    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
-    use namada::proto::Signed;
     use namada::types::ethereum_events::vote_extensions::{
-        FractionalVotingPower, MultiSignedEthEvent, VoteExtension,
-        VoteExtensionDigest,
+        FractionalVotingPower, MultiSignedEthEvent, VoteExtensionDigest,
     };
     use namada::types::transaction::protocol::ProtocolTxType;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
 
-    use super::super::vote_extensions::{SignedExt, VoteExtensionError};
+    use super::super::vote_extensions::deserialize_vote_extensions;
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -237,56 +234,6 @@ mod prepare_block {
 
             Some(VoteExtensionDigest { events, signatures })
         }
-
-        /// Takes a list of signed vote extensions,
-        /// and filters out invalid instances, returning
-        /// all residual values (including invalid vote
-        /// extensions).
-        #[inline]
-        pub fn filter_invalid_vote_extensions_residuals(
-            &self,
-            vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
-        ) -> impl Iterator<
-            Item = core::result::Result<
-                (VotingPower, SignedExt),
-                VoteExtensionError,
-            >,
-        > + '_ {
-            vote_extensions.into_iter().map(|vote_extension| {
-                self.validate_vote_ext_and_get_it_back(
-                    vote_extension,
-                    self.storage.last_height,
-                )
-            })
-        }
-
-        /// Takes a list of signed vote extensions,
-        /// and filters out invalid instances.
-        #[inline]
-        pub fn filter_invalid_vote_extensions(
-            &self,
-            vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
-        ) -> impl Iterator<Item = (VotingPower, SignedExt)> + '_ {
-            self.filter_invalid_vote_extensions_residuals(vote_extensions)
-                .filter_map(|ext| ext.ok())
-        }
-    }
-
-    /// Given a `Vec` of [`ExtendedVoteInfo`], return an iterator over the
-    /// deserialized [`SignedExt`] instances.
-    fn deserialize_vote_extensions(
-        vote_extensions: Vec<ExtendedVoteInfo>,
-    ) -> impl Iterator<Item = SignedExt> + 'static {
-        vote_extensions.into_iter().filter_map(|vote| {
-            Signed::<VoteExtension>::try_from_slice(&vote.vote_extension[..])
-                .map_err(|err| {
-                    tracing::error!(
-                        ?err,
-                        "Failed to deserialize signed vote extension",
-                    );
-                })
-                .ok()
-        })
     }
 
     /// Functions for creating the appropriate TxRecord given the
