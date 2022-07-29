@@ -144,8 +144,8 @@ where
 
                     let extensions =
                         digest.decompress(self.storage.last_height);
-                    let filtered_extensions = self
-                        .filter_invalid_vote_extensions_residuals(extensions);
+                    let valid_extensions =
+                        self.validate_vote_extension_list(extensions);
 
                     let mut voting_power = FractionalVotingPower::default();
                     let total_power = {
@@ -156,7 +156,7 @@ where
                         u64::from(self.get_total_voting_power(epoch))
                     };
 
-                    if filtered_extensions.into_iter().all(|maybe_ext| {
+                    if valid_extensions.into_iter().all(|maybe_ext| {
                         maybe_ext
                             .map(|(power, _)| {
                                 voting_power += FractionalVotingPower::new(

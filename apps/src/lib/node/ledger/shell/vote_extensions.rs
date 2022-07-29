@@ -196,16 +196,16 @@ mod extend_votes {
             }
         }
 
-        /// Takes a list of signed vote extensions,
-        /// and filters out invalid instances, returning
-        /// all residual values (including invalid vote
-        /// extensions).
+        /// Takes an iterator over signed vote extensions,
+        /// and returns another iterator. The latter yields
+        /// valid vote extensions, or the reason why these
+        /// are invalid, in the form of a [`VoteExtensionError`].
         #[inline]
-        pub fn filter_invalid_vote_extensions_residuals(
+        pub fn validate_vote_extension_list(
             &self,
             vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
         ) -> impl Iterator<
-            Item = core::result::Result<
+            Item = std::result::Result<
                 (VotingPower, SignedExt),
                 VoteExtensionError,
             >,
@@ -225,7 +225,7 @@ mod extend_votes {
             &self,
             vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
         ) -> impl Iterator<Item = (VotingPower, SignedExt)> + '_ {
-            self.filter_invalid_vote_extensions_residuals(vote_extensions)
+            self.validate_vote_extension_list(vote_extensions)
                 .filter_map(|ext| ext.ok())
         }
     }
