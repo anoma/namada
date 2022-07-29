@@ -398,16 +398,6 @@ where
             .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))
     }
 
-    /// Lookup the total voting power for an epoch
-    #[cfg(not(feature = "ABCI"))]
-    pub fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
-        get_active_validators(&self.storage, epoch)
-            .iter()
-            .map(|validator| u64::from(validator.voting_power))
-            .sum::<u64>()
-            .into()
-    }
-
     /// Given a tendermint validator, the address is the hash
     /// of the validators public key. We look up the native
     /// address from storage using this hash.
@@ -453,4 +443,21 @@ where
         .expect("Validators for an epoch should be known")
         .active
         .clone()
+}
+
+/// Lookup the total voting power for an epoch
+#[cfg(not(feature = "ABCI"))]
+pub fn get_total_voting_power<D, H>(
+    storage: &Storage<D, H>,
+    epoch: Option<Epoch>,
+) -> VotingPower
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    get_active_validators(storage, epoch)
+        .iter()
+        .map(|validator| u64::from(validator.voting_power))
+        .sum::<u64>()
+        .into()
 }

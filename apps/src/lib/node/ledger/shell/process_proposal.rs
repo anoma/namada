@@ -11,6 +11,7 @@ use tendermint_proto::abci::{
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci::RequestDeliverTx;
 
+use super::queries::get_total_voting_power;
 use super::*;
 
 impl<D, H> Shell<D, H>
@@ -153,7 +154,7 @@ where
                             self.storage.block.pred_epochs.get_epoch(
                                 BlockHeight(self.storage.last_height.0),
                             );
-                        u64::from(self.get_total_voting_power(epoch))
+                        u64::from(get_total_voting_power(&self.storage, epoch))
                     };
 
                     if valid_extensions.into_iter().all(|maybe_ext| {

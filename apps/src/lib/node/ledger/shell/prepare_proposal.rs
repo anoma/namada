@@ -14,6 +14,7 @@ mod prepare_block {
 
     use super::super::vote_extensions::deserialize_vote_extensions;
     use super::super::*;
+    use crate::node::ledger::shell::queries::get_total_voting_power;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
     impl<D, H> Shell<D, H>
@@ -178,8 +179,10 @@ mod prepare_block {
             let mut event_observers = BTreeMap::new();
             let mut signatures = HashMap::new();
 
-            let total_voting_power =
-                u64::from(self.get_total_voting_power(Some(events_epoch)));
+            let total_voting_power = u64::from(get_total_voting_power(
+                &self.storage,
+                Some(events_epoch),
+            ));
             let mut voting_power = FractionalVotingPower::default();
 
             let deserialized = deserialize_vote_extensions(vote_extensions);
