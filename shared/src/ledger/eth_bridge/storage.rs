@@ -77,7 +77,7 @@ pub mod eth_msgs {
         }
 
         #[test]
-        fn test_eth_msgs_keys() {
+        fn test_top_level_key() {
             assert!(
                 matches!(&top_level_key().segments[..], [DbKeySeg::StringSeg(s)] if s == TOP_LEVEL_KEY)
             )
