@@ -125,7 +125,7 @@ mod extend_votes {
             &self,
             ext: SignedExt,
             last_height: BlockHeight,
-        ) -> core::result::Result<(VotingPower, SignedExt), VoteExtensionError>
+        ) -> std::result::Result<(VotingPower, SignedExt), VoteExtensionError>
         {
             if ext.data.block_height != last_height {
                 let ext_height = ext.data.block_height;
