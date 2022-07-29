@@ -84,21 +84,6 @@ pub mod eth_msgs {
         }
 
         #[test]
-        fn test_eth_msgs_key_body() {
-            let (msg_hash, hex) = arbitrary_hash_with_hex();
-            let keys = EthMsgKeys::new(msg_hash);
-            let body_key = keys.body();
-            assert_eq!(
-                body_key.segments,
-                vec![
-                    DbKeySeg::StringSeg(TOP_LEVEL_KEY.to_owned()),
-                    DbKeySeg::StringSeg(hex),
-                    DbKeySeg::StringSeg(BODY_KEY.to_owned()),
-                ]
-            );
-        }
-
-        #[test]
         fn test_eth_msgs_keys_all_keys() {
             let (msg_hash, hex) = arbitrary_hash_with_hex();
             let keys = EthMsgKeys::new(msg_hash);
