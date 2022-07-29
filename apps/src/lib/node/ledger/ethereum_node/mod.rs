@@ -63,6 +63,8 @@ pub async fn run(
 #[cfg(feature = "eth-fullnode")]
 /// Tools for running a geth fullnode process
 pub mod eth_fullnode {
+    use std::time::Duration;
+
     use tokio::process::{Child, Command};
     use tokio::sync::oneshot::error::TryRecvError;
     use tokio::sync::oneshot::{channel, Receiver, Sender};
@@ -125,8 +127,10 @@ pub mod eth_fullnode {
 
             // it takes a brief amount of time to open up the websocket on
             // geth's end
-            let client = Web3::new(url, std::time::Duration::from_secs(5));
+            const CLIENT_TIMEOUT: Duration = Duration::from_secs(5);
+            let client = Web3::new(url, CLIENT_TIMEOUT);
 
+            const SLEEP_DUR: Duration = Duration::from_secs(1);
             loop {
                 if let Ok(false) = client.eth_syncing().await {
                     tracing::info!("Finished syncing");
@@ -140,7 +144,7 @@ pub mod eth_fullnode {
                         "Couldn't connect to Geth, will retry"
                     );
                 }
-                std::thread::sleep(std::time::Duration::from_secs(1));
+                tokio::time::sleep(SLEEP_DUR).await;
             }
 
             let (abort_sender, receiver) = channel();
