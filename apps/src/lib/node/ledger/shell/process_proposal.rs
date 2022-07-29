@@ -42,10 +42,13 @@ where
     }
 
     /// Check all the given txs.
-    pub fn process_txs(&mut self, txs: &[Vec<u8>]) -> Vec<ExecTxResult> {
+    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<ExecTxResult> {
+        let mut tx_queue_iter = self.storage.tx_queue.iter();
         txs.iter()
             .map(|tx_bytes| {
-                ExecTxResult::from(self.process_single_tx(tx_bytes))
+                ExecTxResult::from(
+                    self.process_single_tx(tx_bytes, &mut tx_queue_iter),
+                )
             })
             .collect()
     }
@@ -68,7 +71,11 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    pub(crate) fn process_single_tx(&mut self, tx_bytes: &[u8]) -> TxResult {
+    pub(crate) fn process_single_tx<'a>(
+        &self,
+        tx_bytes: &[u8],
+        tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
+    ) -> TxResult {
         let tx = match Tx::try_from(tx_bytes) {
             Ok(tx) => tx,
             Err(_) => {
@@ -102,7 +109,7 @@ where
                            is coming soon to a blockchain near you. Patience."
                         .into(),
                 },
-                TxType::Decrypted(tx) => match self.next_wrapper() {
+                TxType::Decrypted(tx) => match tx_queue_iter.next() {
                     Some(wrapper) => {
                         if wrapper.tx_hash != tx.hash_commitment() {
                             TxResult {

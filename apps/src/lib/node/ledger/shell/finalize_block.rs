@@ -399,7 +399,6 @@ where
             }
             response.events.push(tx_event);
         }
-        self.reset_tx_queue_iter();
 
         if new_epoch {
             self.update_epoch(&mut response);
@@ -577,7 +576,7 @@ mod test_finalize_block {
         // verify that the queue of wrapper txs to be processed is correct
         let mut valid_tx = valid_wrappers.iter();
         let mut counter = 0;
-        while let Some(wrapper) = shell.next_wrapper() {
+        for wrapper in shell.iter_tx_queue() {
             // we cannot easily implement the PartialEq trait for WrapperTx
             // so we check the hashes of the inner txs for equality
             assert_eq!(
@@ -636,7 +635,7 @@ mod test_finalize_block {
             assert_eq!(code, &String::from(ErrorCodes::InvalidTx));
         }
         // check that the corresponding wrapper tx was removed from the queue
-        assert!(shell.next_wrapper().is_none());
+        assert!(shell.storage.tx_queue.is_empty());
     }
 
     /// Test that if a tx is undecryptable, it is applied
@@ -692,7 +691,7 @@ mod test_finalize_block {
             assert!(log.contains("Transaction could not be decrypted."))
         }
         // check that the corresponding wrapper tx was removed from the queue
-        assert!(shell.next_wrapper().is_none());
+        assert!(shell.storage.tx_queue.is_empty());
     }
 
     /// Test that the wrapper txs are queued in the order they
@@ -809,7 +808,7 @@ mod test_finalize_block {
         let mut txs = valid_txs.iter();
 
         let mut counter = 0;
-        while let Some(wrapper) = shell.next_wrapper() {
+        for wrapper in shell.iter_tx_queue() {
             assert_eq!(
                 wrapper.tx_hash,
                 txs.next().expect("Test failed").tx_hash
