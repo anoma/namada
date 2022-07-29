@@ -185,7 +185,7 @@ where
             );
             let (last_epoch, _) = storage.get_last_epoch();
             tracing::debug!(?last_epoch, "got epoch of last block");
-            let validators = ethereum_events::get_all_voters(events.iter());
+            let validators = voting_powers::get_all_voters(events.iter());
             tracing::debug!(?validators, "got relevant validators");
             let active_validators = get_active_validators(&storage, last_epoch);
             tracing::debug!(

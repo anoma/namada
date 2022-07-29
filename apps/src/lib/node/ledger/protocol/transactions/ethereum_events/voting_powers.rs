@@ -3,6 +3,17 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use eyre::eyre;
 use namada::ledger::pos::types::{VotingPower, WeightedValidator};
 use namada::types::address::Address;
+use namada::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
+
+/// Gets all the voters from the given events.
+pub(crate) fn get_all_voters<'a>(
+    v: impl Iterator<Item = &'a MultiSignedEthEvent>,
+) -> HashSet<Address> {
+    v.fold(HashSet::new(), |mut validators, event| {
+        validators.extend(event.signers.iter().map(|addr| addr.to_owned()));
+        validators
+    })
+}
 
 /// Gets the voting power of `selected` from `validators`. Errors if a
 /// `selected` validator is not found in `validators`.

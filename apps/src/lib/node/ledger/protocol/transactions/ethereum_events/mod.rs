@@ -1,5 +1,5 @@
 //! Code for handling [`ProtocolTxType::EthereumEvents`] transactions.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 use borsh::BorshSerialize;
@@ -75,15 +75,6 @@ pub(crate) fn construct_tx_data(
     }
     .try_to_vec()
     .wrap_err_with(|| eyre!("couldn't serialize updates"))
-}
-
-pub(crate) fn get_all_voters<'a>(
-    v: impl Iterator<Item = &'a MultiSignedEthEvent>,
-) -> HashSet<Address> {
-    v.fold(HashSet::new(), |mut validators, event| {
-        validators.extend(event.signers.iter().map(|addr| addr.to_owned()));
-        validators
-    })
 }
 
 #[cfg(test)]
