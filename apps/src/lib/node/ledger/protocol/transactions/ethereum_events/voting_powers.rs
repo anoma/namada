@@ -7,9 +7,9 @@ use namada::types::ethereum_events::vote_extensions::MultiSignedEthEvent;
 
 /// Gets all the voters from the given events.
 pub(crate) fn get_all_voters<'a>(
-    v: impl Iterator<Item = &'a MultiSignedEthEvent>,
+    events: impl Iterator<Item = &'a MultiSignedEthEvent>,
 ) -> HashSet<Address> {
-    v.fold(HashSet::new(), |mut validators, event| {
+    events.fold(HashSet::new(), |mut validators, event| {
         validators.extend(event.signers.iter().map(|addr| addr.to_owned()));
         validators
     })
