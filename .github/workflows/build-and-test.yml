@@ -26,7 +26,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     container: 
       image: ghcr.io/anoma/namada:wasm-0.6.1
-      options: -v /home/runner/work/namada":"/usr/local/rust/wasm
     strategy:
       fail-fast: false
       matrix:
