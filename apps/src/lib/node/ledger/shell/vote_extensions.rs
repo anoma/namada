@@ -241,8 +241,14 @@ mod extend_votes {
                     tracing::warn!(
                         ?err,
                         validator_tendermint_addr = ?vote.validator,
+                        vote_extension_len = vote.vote_extension.len(),
                         "Failed to deserialize signed vote extension, will \
                          ignore",
+                    );
+                    tracing::debug!(
+                        ?vote.vote_extension,
+                        validator_tendermint_addr = ?vote.validator,
+                        "Raw undeserializable vote extension for validator",
                     );
                 })
                 .ok()
