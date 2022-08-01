@@ -21,7 +21,6 @@ def log(data: str):
     print(data)
 
 
-PR_COMMENT = 'pls publish wasm'
 TOKEN = environ["GITHUB_TOKEN"]
 READ_ORG_TOKEN = environ['GITHUB_READ_ORG_TOKEN']
 REPOSITORY_NAME = environ['GITHUB_REPOSITORY_OWNER']
@@ -32,17 +31,16 @@ WASM_BUCKET = 'namada-wasm-master'
 read_org_api = GhApi(token=READ_ORG_TOKEN)
 api = GhApi(owner=REPOSITORY_NAME, repo="namada", token=TOKEN)
 
+comment_event = loads(environ['GITHUB_CONTEXT'])
+
 user_membership = read_org_api.teams.get_membership_for_user_in_org(
-    'heliaxdev', 'company', 'fraccaman')
+    'heliaxdev', 'company', comment_event['event']['sender']['login'])
 if user_membership['state'] != 'active':
     exit(0)
 
 comment_event = loads(environ['GITHUB_CONTEXT'])
 pr_comment = comment_event['event']['comment']['body']
 pr_number = comment_event['event']['issue']['number']
-
-if pr_comment != PR_COMMENT:
-    exit(0)
 
 pr_info = api.pulls.get(pr_number)
 head_sha = pr_info['head']['sha']

@@ -51,7 +51,6 @@ jobs:
         # to disallow that.
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-
       - name: Duplicate checksums file
         run: cp wasm/checksums.json wasm/original-checksums.json
       - name: Build WASM
@@ -201,7 +200,7 @@ jobs:
           github_token: ${{secrets.GITHUB_TOKEN}}
           workflow: build-tendermint.yml
           workflow_conclusion: success
-          name: ${{ matrix.make.tendermint_artifact }}
+          name: ${{ matrix.os }}-${{ matrix.make.tendermint_artifact }}
           path: /usr/local/bin
       - name: Download anoma binaries
         uses: actions/download-artifact@v3

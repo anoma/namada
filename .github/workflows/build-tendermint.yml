@@ -19,19 +19,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, macos-latest]
         make:
           - name: tendermint-unreleased
             repository: heliaxdev/tendermint
             tendermint_version: 559fb33ff9b27503ce7ac1c7d8589fe1d8b3e900
 
     steps:
-      - name: Build ${{ matrix.make.name }}
+      - name: Build ${{ matrix.make.name }} on ${{ matrix.os }}
         run: |
           git clone https://github.com/${{ matrix.make.repository }}.git && cd tendermint
           git checkout ${{ matrix.make.tendermint_version }} && make build
-      - name: Upload ${{ matrix.make.name }} binary
+      - name: Upload ${{ matrix.os }} ${{ matrix.make.name }} binary
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.make.name }}-${{ matrix.make.tendermint_version }}
+          name: ${{ matrix.os }}-${{ matrix.make.name }}-${{ matrix.make.tendermint_version }}
           path: tendermint/build/tendermint
