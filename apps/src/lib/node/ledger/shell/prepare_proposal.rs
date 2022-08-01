@@ -9,7 +9,7 @@ mod prepare_block {
     };
     use namada::types::transaction::protocol::ProtocolTxType;
     use tendermint_proto::abci::{
-        ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
+        ExtendedCommitInfo, ExtendedVoteInfo, TxRecord, Validator,
     };
 
     use super::super::vote_extensions::deserialize_vote_extensions;
@@ -80,6 +80,13 @@ mod prepare_block {
             &mut self,
             local_last_commit: ExtendedCommitInfo,
         ) -> Vec<TxRecord> {
+            if is_sole_validators(&local_last_commit.votes) {
+                tracing::info!(
+                    "Sole validator and block proposer, no vote extensions to \
+                     include this round"
+                );
+                return vec![];
+            }
             let protocol_key = self
                 .mode
                 .get_protocol_key()
@@ -244,6 +251,25 @@ mod prepare_block {
 
             Some(VoteExtensionDigest { events, signatures })
         }
+    }
+
+    /// Returns whether some vote extensions match what Tendermint gives to a
+    /// sole validator when they restart their node
+    // TODO(https://github.com/anoma/namada/issues/200): we need to be able to get the Tendermint address for the block proposer
+    fn is_sole_validators(votes: &[ExtendedVoteInfo]) -> bool {
+        matches!(
+            votes,
+            [
+                ExtendedVoteInfo {
+                    validator: Some(Validator {
+                        // TODO(https://github.com/anoma/namada/issues/200): we must check the Tendermint address matches this block proposer
+                        ..
+                     }),
+                    vote_extension,
+                    ..
+                },
+            ] if vote_extension.is_empty(),
+        )
     }
 
     /// Functions for creating the appropriate TxRecord given the
@@ -806,6 +832,28 @@ mod prepare_block {
                 .collect();
             // check that the order of the txs is correct
             assert_eq!(received, expected_txs);
+        }
+
+        #[test]
+        fn test_is_sole_validators() {
+            assert!(!is_sole_validators(&vec![]));
+            assert!(!is_sole_validators(&vec![ExtendedVoteInfo {
+                validator: Some(Validator {
+                    address: [0u8; 20].into(),
+                    power: 100,
+                }),
+                vote_extension: [0u8; 64].into(),
+                signed_last_block: true,
+            },]));
+
+            assert!(is_sole_validators(&vec![ExtendedVoteInfo {
+                validator: Some(Validator {
+                    address: [0u8; 20].into(),
+                    power: 100,
+                }),
+                vote_extension: vec![],
+                signed_last_block: true,
+            },]));
         }
     }
 }
