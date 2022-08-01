@@ -282,12 +282,6 @@ pub(crate) trait QueriesExt {
         token: &Address,
         owner: &Address,
     ) -> std::result::Result<Amount, String>;
-    fn read_storage_value(
-        &self,
-        key: &Key,
-        height: BlockHeight,
-        is_proven: bool,
-    ) -> response::Query;
     fn get_evidence_params(
         &self,
         epoch_duration: &EpochDuration,
@@ -348,83 +342,30 @@ where
         owner: &Address,
     ) -> std::result::Result<Amount, String> {
         let height = self.get_block_height().0;
-        let query_resp = self.read_storage_value(
-            &token::balance_key(token, owner),
-            height,
-            false,
-        );
-        if query_resp.code != 0 {
-            Err(format!(
-                "Unable to read token {} balance of the given address {}",
-                token, owner
-            ))
-        } else {
-            BorshDeserialize::try_from_slice(&query_resp.value[..]).map_err(
-                |_| {
-                    "Unable to deserialize the balance of the given address"
-                        .into()
-                },
+        let (balance, _) = self
+            .read_with_height(&token::balance_key(token, owner), height)
+            .map_err(|err| {
+                format!(
+                    "Unable to read token {} balance of the given address {}: \
+                     {:?}",
+                    token, owner, err
+                )
+            })?;
+        let balance = match balance {
+            Some(balance) => balance,
+            None => {
+                return Err(format!(
+                    "Unable to read token {} balance of the given address {}",
+                    token, owner
+                ));
+            }
+        };
+        BorshDeserialize::try_from_slice(&balance[..]).map_err(|err| {
+            format!(
+                "Unable to deserialize the balance of the given address: {:?}",
+                err
             )
-        }
-    }
-
-    /// Query to read a value from storage
-    fn read_storage_value(
-        &self,
-        key: &Key,
-        height: BlockHeight,
-        is_proven: bool,
-    ) -> response::Query {
-        match self.read_with_height(key, height) {
-            Ok((Some(value), _gas)) => {
-                let proof_ops = if is_proven {
-                    match self.get_existence_proof(key, value.clone(), height) {
-                        Ok(proof) => Some(proof.into()),
-                        Err(err) => {
-                            return response::Query {
-                                code: 2,
-                                info: format!("Storage error: {}", err),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-                response::Query {
-                    value,
-                    proof_ops,
-                    ..Default::default()
-                }
-            }
-            Ok((None, _gas)) => {
-                let proof_ops = if is_proven {
-                    match self.get_non_existence_proof(key, height) {
-                        Ok(proof) => Some(proof.into()),
-                        Err(err) => {
-                            return response::Query {
-                                code: 2,
-                                info: format!("Storage error: {}", err),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-                response::Query {
-                    code: 1,
-                    info: format!("No value found for key: {}", key),
-                    proof_ops,
-                    ..Default::default()
-                }
-            }
-            Err(err) => response::Query {
-                code: 2,
-                info: format!("Storage error: {}", err),
-                ..Default::default()
-            },
-        }
+        })
     }
 
     fn get_evidence_params(
