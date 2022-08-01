@@ -6,8 +6,8 @@ mod extend_votes {
     use namada::types::ethereum_events::vote_extensions::VoteExtension;
     use tendermint_proto::abci::ExtendedVoteInfo;
 
+    use super::super::queries::QueriesExt;
     use super::super::*;
-    use crate::node::ledger::shell::queries::QueriesExt;
 
     /// A [`VoteExtension`] signed by a Namada validator.
     pub type SignedExt = Signed<VoteExtension>;

@@ -12,9 +12,9 @@ mod prepare_block {
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
 
+    use super::super::queries::QueriesExt;
     use super::super::vote_extensions::deserialize_vote_extensions;
     use super::super::*;
-    use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
     impl<D, H> Shell<D, H>
