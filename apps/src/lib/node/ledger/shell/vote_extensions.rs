@@ -238,9 +238,11 @@ mod extend_votes {
         vote_extensions.into_iter().filter_map(|vote| {
             SignedExt::try_from_slice(&vote.vote_extension[..])
                 .map_err(|err| {
-                    tracing::error!(
+                    tracing::warn!(
                         ?err,
-                        "Failed to deserialize signed vote extension",
+                        validator_tendermint_addr = ?vote.validator,
+                        "Failed to deserialize signed vote extension, will \
+                         ignore",
                     );
                 })
                 .ok()
