@@ -42,8 +42,18 @@ mod prepare_block {
                 // TODO: add some info logging
 
                 // add ethereum events as protocol txs
-                let mut txs =
-                    self.build_vote_extensions_txs(req.local_last_commit);
+                let mut txs = match req.local_last_commit {
+                    Some(local_last_commit) => {
+                        self.build_vote_extensions_txs(local_last_commit)
+                    }
+                    None => {
+                        tracing::info!(
+                            "No local last commit, skipping including vote \
+                             extensions"
+                        );
+                        vec![]
+                    }
+                };
 
                 // add mempool txs
                 let mut mempool_txs = self.build_mempool_txs(req.txs);
@@ -68,7 +78,7 @@ mod prepare_block {
         /// events
         fn build_vote_extensions_txs(
             &mut self,
-            local_last_commit: Option<ExtendedCommitInfo>,
+            local_last_commit: ExtendedCommitInfo,
         ) -> Vec<TxRecord> {
             let protocol_key = self
                 .mode
@@ -76,10 +86,7 @@ mod prepare_block {
                 .expect("Validators should always have a protocol key");
 
             let vote_extension_digest =
-                local_last_commit.and_then(|local_last_commit| {
-                    let votes = local_last_commit.votes;
-                    self.compress_vote_extensions(votes)
-                });
+                self.compress_vote_extensions(local_last_commit.votes);
             let vote_extension_digest =
                 match (vote_extension_digest, self.storage.last_height) {
                     // handle genesis block
