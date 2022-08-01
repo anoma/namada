@@ -8,10 +8,7 @@ pub mod write_log;
 
 use core::fmt::Debug;
 
-#[cfg(not(feature = "ABCI"))]
 use tendermint::merkle::proof::Proof;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::merkle::proof::Proof;
 use thiserror::Error;
 
 use super::parameters;

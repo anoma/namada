@@ -14,14 +14,8 @@ use namada::types::intent::{IntentTransfers, MatchedExchanges};
 use namada::types::key::*;
 use namada::types::matchmaker::AddIntentResult;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
-#[cfg(not(feature = "ABCI"))]
 use tendermint_config::net;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address as TendermintAddress;
 
 use super::gossip::rpc::matchmakers::{
     ClientDialer, ClientListener, MsgFromClient, MsgFromServer,
@@ -331,17 +325,9 @@ impl ResultHandler {
                 // TODO: Actually use the fetched encryption key
                 Default::default(),
             );
-            let wrapper_hash = if !cfg!(feature = "ABCI") {
-                hash_tx(&tx.try_to_vec().unwrap()).to_string()
-            } else {
-                tx.tx_hash.to_string()
-            };
+            let wrapper_hash = hash_tx(&tx.try_to_vec().unwrap()).to_string();
 
-            let decrypted_hash = if !cfg!(feature = "ABCI") {
-                Some(tx.tx_hash.to_string())
-            } else {
-                None
-            };
+            let decrypted_hash = tx.tx_hash.to_string();
             TxBroadcastData::Wrapper {
                 tx: tx
                     .sign(&self.tx_signing_key)
