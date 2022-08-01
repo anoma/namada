@@ -2,8 +2,11 @@
 
 pub mod vote_extensions;
 
+use std::str::FromStr;
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::Uint as ethUint;
+use eyre::{eyre, Context};
 
 use crate::types::address::Address;
 use crate::types::hash::Hash;
@@ -41,7 +44,8 @@ impl From<u64> for Uint {
     }
 }
 
-/// Representation of address on Ethereum
+/// Representation of address on Ethereum. The inner value is the last 20 bytes
+/// of the public key that controls the account.
 #[derive(
     Clone,
     Debug,
@@ -54,6 +58,27 @@ impl From<u64> for Uint {
     BorshSchema,
 )]
 pub struct EthAddress(pub [u8; 20]);
+
+impl EthAddress {
+    /// The canonical way we represent an [`EthAddress`] in storage keys. A
+    /// 40-character lower case hexadecimal address prefixed by '0x'.
+    /// e.g. "0x6b175474e89094c44da98b954eedeac495271d0f"
+    pub fn to_canonical(&self) -> String {
+        format!("{:?}", ethabi::ethereum_types::Address::from(&self.0))
+    }
+}
+
+impl FromStr for EthAddress {
+    type Err = eyre::Error;
+
+    /// Parses an [`EthAddress`] from a standard hex-encoded Ethereum address
+    /// string. e.g. "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let h160 = ethabi::ethereum_types::Address::from_str(s)
+            .wrap_err_with(|| eyre!("couldn't parse Ethereum address {}", s))?;
+        Ok(Self(h160.into()))
+    }
+}
 
 /// A Keccak hash
 #[derive(
@@ -218,4 +243,52 @@ pub struct TokenWhitelist {
     pub token: EthAddress,
     /// Maximum amount of token allowed on the bridge
     pub cap: Amount,
+}
+
+#[cfg(test)]
+pub mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn test_eth_address_to_canonical() {
+        let canonical = testing::DAI_ERC20_ETH_ADDRESS.to_canonical();
+
+        assert_eq!(
+            testing::DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase(),
+            canonical,
+        );
+    }
+
+    #[test]
+    fn test_eth_address_from_str() {
+        let addr =
+            EthAddress::from_str(testing::DAI_ERC20_ETH_ADDRESS_CHECKSUMMED)
+                .unwrap();
+
+        assert_eq!(testing::DAI_ERC20_ETH_ADDRESS, addr);
+    }
+
+    #[test]
+    fn test_eth_address_from_str_error() {
+        let result = EthAddress::from_str(
+            "arbitrary string which isn't an Ethereum address",
+        );
+
+        assert!(result.is_err());
+    }
+}
+
+#[allow(missing_docs)]
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use super::*;
+
+    pub const DAI_ERC20_ETH_ADDRESS_CHECKSUMMED: &str =
+        "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+    pub const DAI_ERC20_ETH_ADDRESS: EthAddress = EthAddress([
+        107, 23, 84, 116, 232, 144, 148, 196, 77, 169, 139, 149, 78, 237, 234,
+        196, 149, 39, 29, 15,
+    ]);
 }
