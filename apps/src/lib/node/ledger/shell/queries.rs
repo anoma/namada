@@ -103,89 +103,13 @@ where
         }
     }
 
-    /// Simple helper function for the ledger to get balances
-    /// of the specified token at the specified address
-    pub fn get_balance(
-        &self,
-        token: &Address,
-        owner: &Address,
-    ) -> std::result::Result<Amount, String> {
-        let height = self.storage.get_block_height().0;
-        let query_resp = self.read_storage_value(
-            &token::balance_key(token, owner),
-            height,
-            false,
-        );
-        if query_resp.code != 0 {
-            Err(format!(
-                "Unable to read token {} balance of the given address {}",
-                token, owner
-            ))
-        } else {
-            BorshDeserialize::try_from_slice(&query_resp.value[..]).map_err(
-                |_| {
-                    "Unable to deserialize the balance of the given address"
-                        .into()
-                },
-            )
-        }
-    }
-
-    /// Query to read a value from storage
-    pub fn read_storage_value(
-        &self,
-        key: &Key,
-        height: BlockHeight,
-        is_proven: bool,
-    ) -> response::Query {
-        match self.storage.read_with_height(key, height) {
-            Ok((Some(value), _gas)) => {
-                let proof_ops = if is_proven {
-                    match self.storage.get_existence_proof(
-                        key,
-                        value.clone(),
-                        height,
-                    ) {
-                        Ok(proof) => Some(proof.into()),
-                        Err(err) => {
-                            return response::Query {
-                                code: 2,
-                                info: format!("Storage error: {}", err),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-                response::Query {
-                    value,
-                    proof_ops,
-                    ..Default::default()
-                }
-            }
-            Ok((None, _gas)) => {
-                let proof_ops = if is_proven {
-                    match self.storage.get_non_existence_proof(key, height) {
-                        Ok(proof) => Some(proof.into()),
-                        Err(err) => {
-                            return response::Query {
-                                code: 2,
-                                info: format!("Storage error: {}", err),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-                response::Query {
-                    code: 1,
-                    info: format!("No value found for key: {}", key),
-                    proof_ops,
-                    ..Default::default()
-                }
-            }
+    /// Query to check if a storage key exists.
+    fn has_storage_key(&self, key: &Key) -> response::Query {
+        match self.storage.has_key(key) {
+            Ok((has_key, _gas)) => response::Query {
+                value: has_key.try_to_vec().unwrap(),
+                ..Default::default()
+            },
             Err(err) => response::Query {
                 code: 2,
                 info: format!("Storage error: {}", err),
@@ -197,7 +121,7 @@ where
     /// Query to read a range of values from storage with a matching prefix. The
     /// value in successful response is a [`Vec<PrefixValue>`] encoded with
     /// [`BorshSerialize`].
-    pub fn read_storage_prefix(
+    fn read_storage_prefix(
         &self,
         key: &Key,
         height: BlockHeight,
@@ -282,13 +206,219 @@ where
         }
     }
 
-    /// Query to check if a storage key exists.
-    fn has_storage_key(&self, key: &Key) -> response::Query {
-        match self.storage.has_key(key) {
-            Ok((has_key, _gas)) => response::Query {
-                value: has_key.try_to_vec().unwrap(),
+    /// Query to read a value from storage
+    fn read_storage_value(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_proven: bool,
+    ) -> response::Query {
+        match self.storage.read_with_height(key, height) {
+            Ok((Some(value), _gas)) => {
+                let proof_ops = if is_proven {
+                    match self.storage.get_existence_proof(
+                        key,
+                        value.clone(),
+                        height,
+                    ) {
+                        Ok(proof) => Some(proof.into()),
+                        Err(err) => {
+                            return response::Query {
+                                code: 2,
+                                info: format!("Storage error: {}", err),
+                                ..Default::default()
+                            };
+                        }
+                    }
+                } else {
+                    None
+                };
+                response::Query {
+                    value,
+                    proof_ops,
+                    ..Default::default()
+                }
+            }
+            Ok((None, _gas)) => {
+                let proof_ops = if is_proven {
+                    match self.storage.get_non_existence_proof(key, height) {
+                        Ok(proof) => Some(proof.into()),
+                        Err(err) => {
+                            return response::Query {
+                                code: 2,
+                                info: format!("Storage error: {}", err),
+                                ..Default::default()
+                            };
+                        }
+                    }
+                } else {
+                    None
+                };
+                response::Query {
+                    code: 1,
+                    info: format!("No value found for key: {}", key),
+                    proof_ops,
+                    ..Default::default()
+                }
+            }
+            Err(err) => response::Query {
+                code: 2,
+                info: format!("Storage error: {}", err),
                 ..Default::default()
             },
+        }
+    }
+}
+
+/// API for querying the blockchain state.
+pub(crate) trait QueriesExt {
+    fn get_active_validators(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> BTreeSet<WeightedValidator<Address>>;
+    fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower;
+    fn get_balance(
+        &self,
+        token: &Address,
+        owner: &Address,
+    ) -> std::result::Result<Amount, String>;
+    fn read_storage_value(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_proven: bool,
+    ) -> response::Query;
+    fn get_evidence_params(
+        &self,
+        epoch_duration: &EpochDuration,
+        pos_params: &PosParams,
+    ) -> EvidenceParams;
+    fn get_validator_from_protocol_pk(
+        &self,
+        pk: &key::common::PublicKey,
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<TendermintValidator<EllipticCurve>, Error>;
+    fn get_validator_from_address(
+        &self,
+        address: &Address,
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<(VotingPower, common::PublicKey), Error>;
+    fn get_validator_from_tm_address(
+        &self,
+        tm_address: &[u8],
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<Address, Error>;
+}
+
+impl<D, H> QueriesExt for Storage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Get the set of active validators for a given epoch (defaulting to the
+    /// epoch of the current yet-to-be-committed block).
+    fn get_active_validators(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> BTreeSet<WeightedValidator<Address>> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        let validator_set = self.read_validator_set();
+        validator_set
+            .get(epoch)
+            .expect("Validators for an epoch should be known")
+            .active
+            .clone()
+    }
+
+    /// Lookup the total voting power for an epoch
+    #[cfg(not(feature = "ABCI"))]
+    fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
+        self.get_active_validators(epoch)
+            .iter()
+            .map(|validator| u64::from(validator.voting_power))
+            .sum::<u64>()
+            .into()
+    }
+
+    /// Simple helper function for the ledger to get balances
+    /// of the specified token at the specified address
+    fn get_balance(
+        &self,
+        token: &Address,
+        owner: &Address,
+    ) -> std::result::Result<Amount, String> {
+        let height = self.get_block_height().0;
+        let query_resp = self.read_storage_value(
+            &token::balance_key(token, owner),
+            height,
+            false,
+        );
+        if query_resp.code != 0 {
+            Err(format!(
+                "Unable to read token {} balance of the given address {}",
+                token, owner
+            ))
+        } else {
+            BorshDeserialize::try_from_slice(&query_resp.value[..]).map_err(
+                |_| {
+                    "Unable to deserialize the balance of the given address"
+                        .into()
+                },
+            )
+        }
+    }
+
+    /// Query to read a value from storage
+    fn read_storage_value(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_proven: bool,
+    ) -> response::Query {
+        match self.read_with_height(key, height) {
+            Ok((Some(value), _gas)) => {
+                let proof_ops = if is_proven {
+                    match self.get_existence_proof(key, value.clone(), height) {
+                        Ok(proof) => Some(proof.into()),
+                        Err(err) => {
+                            return response::Query {
+                                code: 2,
+                                info: format!("Storage error: {}", err),
+                                ..Default::default()
+                            };
+                        }
+                    }
+                } else {
+                    None
+                };
+                response::Query {
+                    value,
+                    proof_ops,
+                    ..Default::default()
+                }
+            }
+            Ok((None, _gas)) => {
+                let proof_ops = if is_proven {
+                    match self.get_non_existence_proof(key, height) {
+                        Ok(proof) => Some(proof.into()),
+                        Err(err) => {
+                            return response::Query {
+                                code: 2,
+                                info: format!("Storage error: {}", err),
+                                ..Default::default()
+                            };
+                        }
+                    }
+                } else {
+                    None
+                };
+                response::Query {
+                    code: 1,
+                    info: format!("No value found for key: {}", key),
+                    proof_ops,
+                    ..Default::default()
+                }
+            }
             Err(err) => response::Query {
                 code: 2,
                 info: format!("Storage error: {}", err),
@@ -297,7 +427,7 @@ where
         }
     }
 
-    pub fn get_evidence_params(
+    fn get_evidence_params(
         &self,
         epoch_duration: &EpochDuration,
         pos_params: &PosParams,
@@ -321,7 +451,7 @@ where
 
     /// Lookup data about a validator from their protocol signing key
     #[allow(dead_code)]
-    pub fn get_validator_from_protocol_pk(
+    fn get_validator_from_protocol_pk(
         &self,
         pk: &key::common::PublicKey,
         epoch: Option<Epoch>,
@@ -329,17 +459,16 @@ where
         let pk_bytes = pk
             .try_to_vec()
             .expect("Serializing public key should not fail");
-        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
         // get the active validator set
-        self.storage
-            .read_validator_set()
+        self.read_validator_set()
             .get(epoch)
             .expect("Validators for an epoch should be known")
             .active
             .iter()
             .find(|validator| {
                 let pk_key = key::protocol_pk_key(&validator.address);
-                match self.storage.read(&pk_key) {
+                match self.read(&pk_key) {
                     Ok((Some(bytes), _)) => bytes == pk_bytes,
                     _ => false,
                 }
@@ -348,7 +477,6 @@ where
                 let dkg_key =
                     key::dkg_session_keys::dkg_pk_key(&validator.address);
                 let bytes = self
-                    .storage
                     .read(&dkg_key)
                     .expect("Validator should have public dkg key")
                     .0
@@ -371,19 +499,18 @@ where
 
     /// Lookup data about a validator from their address
     #[cfg(not(feature = "ABCI"))]
-    pub fn get_validator_from_address(
+    fn get_validator_from_address(
         &self,
         address: &Address,
         epoch: Option<Epoch>,
     ) -> std::result::Result<(VotingPower, common::PublicKey), Error> {
-        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
-        get_active_validators(&self.storage, Some(epoch))
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.get_active_validators(Some(epoch))
             .iter()
             .find(|validator| address == &validator.address)
             .map(|validator| {
                 let protocol_pk_key = key::protocol_pk_key(&validator.address);
                 let bytes = self
-                    .storage
                     .read(&protocol_pk_key)
                     .expect("Validator should have public protocol key")
                     .0
@@ -404,16 +531,15 @@ where
     // TODO: We may change how this lookup is done, see
     // https://github.com/anoma/namada/issues/200
     #[allow(dead_code)]
-    pub fn get_validator_from_tm_address(
+    fn get_validator_from_tm_address(
         &self,
         tm_address: &[u8],
         epoch: Option<Epoch>,
     ) -> std::result::Result<Address, Error> {
-        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
         let validator_raw_hash = core::str::from_utf8(tm_address)
             .map_err(|_| Error::InvalidTMAddress)?;
-        self.storage
-            .read_validator_address_raw_hash(&validator_raw_hash)
+        self.read_validator_address_raw_hash(&validator_raw_hash)
             .ok_or_else(|| {
                 Error::NotValidatorKeyHash(
                     validator_raw_hash.to_string(),
@@ -421,43 +547,4 @@ where
                 )
             })
     }
-}
-
-// Some helper functions are not methods on the [`Shell`], so that we can use
-// them in other places such as `apply_tx`.
-
-/// Get the set of active validators for a given epoch (defaulting to the
-/// epoch of the current yet-to-be-committed block).
-pub fn get_active_validators<D, H>(
-    storage: &Storage<D, H>,
-    epoch: Option<Epoch>,
-) -> BTreeSet<WeightedValidator<Address>>
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    let epoch = epoch.unwrap_or_else(|| storage.get_current_epoch().0);
-    let validator_set = storage.read_validator_set();
-    validator_set
-        .get(epoch)
-        .expect("Validators for an epoch should be known")
-        .active
-        .clone()
-}
-
-/// Lookup the total voting power for an epoch
-#[cfg(not(feature = "ABCI"))]
-pub fn get_total_voting_power<D, H>(
-    storage: &Storage<D, H>,
-    epoch: Option<Epoch>,
-) -> VotingPower
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    get_active_validators(storage, epoch)
-        .iter()
-        .map(|validator| u64::from(validator.voting_power))
-        .sum::<u64>()
-        .into()
 }
