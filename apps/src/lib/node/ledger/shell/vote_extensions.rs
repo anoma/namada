@@ -129,14 +129,14 @@ mod extend_votes {
             ext: SignedEthEventsVext,
             last_height: BlockHeight,
         ) -> bool {
-            self.validate_vote_ext_and_get_it_back(ext, last_height)
+            self.validate_eth_events_vext_and_get_it_back(ext, last_height)
                 .is_ok()
         }
 
-        /// This method behaves exactly like [`Self::validate_vote_extension`],
+        /// This method behaves exactly like [`Self::validate_eth_events_vext`],
         /// with the added bonus of returning the vote extension back, if it
         /// is valid.
-        pub fn validate_vote_ext_and_get_it_back(
+        pub fn validate_eth_events_vext_and_get_it_back(
             &self,
             ext: SignedEthEventsVext,
             last_height: BlockHeight,
@@ -229,7 +229,7 @@ mod extend_votes {
             >,
         > + '_ {
             vote_extensions.into_iter().map(|vote_extension| {
-                self.validate_vote_ext_and_get_it_back(
+                self.validate_eth_events_vext_and_get_it_back(
                     vote_extension,
                     self.storage.last_height,
                 )
