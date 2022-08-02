@@ -89,7 +89,7 @@ mod prepare_block {
                     (Some(_), BlockHeight(0)) => {
                         unreachable!(
                             "We already handle this scenario in \
-                             validate_vote_extension."
+                             validate_eth_events_vext."
                         )
                     }
                     // handle block heights > 0

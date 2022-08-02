@@ -85,7 +85,7 @@ mod extend_votes {
                 SignedEthEventsVext::try_from_slice(&req.vote_extension[..])
             {
                 response::VerifyVoteExtension {
-                    status: if self.validate_vote_extension(
+                    status: if self.validate_eth_events_vext(
                         signed,
                         self.storage.last_height + 1,
                     ) {
@@ -113,14 +113,18 @@ mod extend_votes {
             }
         }
 
-        /// Validates a vote extension issued at the provided block height
-        /// Checks that at epoch of the provided height
-        ///  * The tendermint address corresponds to an active validator
+        /// Validates an Ethereum events vote extension issued at the provided
+        /// block height
+        ///
+        /// Checks that at epoch of the provided height:
+        ///  * The Tendermint address corresponds to an active validator
         ///  * The validator correctly signed the extension
         ///  * The validator signed over the correct height inside of the
         ///    extension
+        ///  * There are no duplicate Ethereum events in this vote extension,
+        ///    and the events are sorted in ascending order
         #[inline]
-        pub fn validate_vote_extension(
+        pub fn validate_eth_events_vext(
             &self,
             ext: SignedEthEventsVext,
             last_height: BlockHeight,
@@ -497,7 +501,7 @@ mod extend_votes {
                     .is_ok()
             );
 
-            assert!(shell.validate_vote_extension(vote_ext, signed_height));
+            assert!(shell.validate_eth_events_vext(vote_ext, signed_height));
         }
 
         /// Test that an [`EthEventsVext`] that incorrectly labels what block it
