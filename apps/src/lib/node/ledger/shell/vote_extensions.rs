@@ -251,6 +251,9 @@ mod extend_votes {
 
     /// Given a `Vec` of [`ExtendedVoteInfo`], return an iterator over the
     /// ones we could deserialize to [`SignedEthEventsVext`] instances.
+    // TODO: we need to return an iterator over instances of `VoteExtension`,
+    // which contain both the ethereum events vote extensions and validator
+    // set update vote extensions
     pub fn deserialize_vote_extensions(
         vote_extensions: Vec<ExtendedVoteInfo>,
     ) -> impl Iterator<Item = SignedEthEventsVext> + 'static {
