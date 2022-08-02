@@ -8,8 +8,6 @@ use namada::ledger::governance::GovernanceVp;
 use namada::ledger::ibc::vp::{Ibc, IbcToken};
 use namada::ledger::native_vp::{self, NativeVp};
 use namada::ledger::parameters::{self, ParametersVp};
-use namada::ledger::pos::namada_proof_of_stake::PosBase;
-use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::{self, PosVP};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
@@ -18,7 +16,6 @@ use namada::proto::{self, Tx};
 use namada::types::address::{Address, InternalAddress};
 use namada::types::ethereum_events::vote_extensions::VoteExtensionDigest;
 use namada::types::storage;
-use namada::types::storage::Epoch;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use namada::vm::wasm::{TxCache, VpCache};
@@ -252,24 +249,6 @@ where
             })
         }
     }
-}
-
-/// This is a helper function for getting the set of active validators for a
-/// given epoch.
-pub fn get_active_validators<D, H>(
-    storage: &Storage<D, H>,
-    epoch: Epoch,
-) -> BTreeSet<WeightedValidator<Address>>
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    let validator_set = storage.read_validator_set();
-    validator_set
-        .get(epoch)
-        .expect("Validators for an epoch should be known")
-        .active
-        .clone()
 }
 
 /// Execute a transaction code. Returns verifiers requested by the transaction.
