@@ -18,6 +18,7 @@ use tendermint_proto_abci::crypto::PublicKey as TendermintPublicKey;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::google::protobuf;
 
+use super::queries::QueriesExt;
 use super::*;
 use crate::wasm_loader;
 
@@ -266,7 +267,7 @@ where
         );
         ibc::init_genesis_storage(&mut self.storage);
 
-        let evidence_params = self.get_evidence_params(
+        let evidence_params = self.storage.get_evidence_params(
             &genesis.parameters.epoch_duration,
             &genesis.pos_params,
         );

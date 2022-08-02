@@ -20,6 +20,7 @@ use tendermint_proto_abci::abci::Evidence;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::crypto::PublicKey as TendermintPublicKey;
 
+use super::queries::QueriesExt;
 use super::*;
 use crate::node::ledger::events::EventType;
 
@@ -496,8 +497,9 @@ where
             parameters::read_epoch_parameter(&self.storage)
                 .expect("Couldn't read epoch duration parameters");
         let pos_params = self.storage.read_pos_params();
-        let evidence_params =
-            self.get_evidence_params(&epoch_duration, &pos_params);
+        let evidence_params = self
+            .storage
+            .get_evidence_params(&epoch_duration, &pos_params);
         response.consensus_param_updates = Some(ConsensusParams {
             evidence: Some(evidence_params),
             ..response.consensus_param_updates.take().unwrap_or_default()
