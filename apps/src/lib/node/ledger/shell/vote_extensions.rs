@@ -240,14 +240,15 @@ mod extend_votes {
                 .map_err(|err| {
                     tracing::warn!(
                         ?err,
-                        validator_tendermint_addr = ?vote.validator,
-                        vote_extension_len = vote.vote_extension.len(),
+                        ?vote.validator,
+                        vote.vote_extension.len = vote.vote_extension.len(),
+                        vote.signed_last_block,
                         "Failed to deserialize signed Ethereum events vote extension, will \
                          ignore",
                     );
                     tracing::debug!(
+                        ?vote.validator,
                         ?vote.vote_extension,
-                        validator_tendermint_addr = ?vote.validator,
                         "Raw undeserializable signed Ethereum events vote extension for validator",
                     );
                 })
