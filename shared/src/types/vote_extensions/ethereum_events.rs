@@ -8,9 +8,9 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
 use num_rational::Ratio;
 
-use super::EthereumEvent;
 use crate::proto::Signed;
 use crate::types::address::Address;
+use crate::types::ethereum_events::EthereumEvent;
 use crate::types::key::common::{self, Signature};
 use crate::types::storage::BlockHeight;
 
@@ -200,11 +200,10 @@ impl EthEventsVextDigest {
 mod tests {
     use std::collections::HashSet;
 
-    use super::super::EthereumEvent;
     use super::*;
     use crate::proto::Signed;
     use crate::types::address::{self, Address};
-    use crate::types::ethereum_events::Uint;
+    use crate::types::ethereum_events::{EthereumEvent, Uint};
     use crate::types::hash::Hash;
     use crate::types::key;
     use crate::types::key::RefTo;

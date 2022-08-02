@@ -33,9 +33,9 @@ mod protocol_txs {
 
     use super::*;
     use crate::proto::Tx;
-    use crate::types::ethereum_events::vote_extensions::EthEventsVextDigest;
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
+    use crate::types::vote_extensions::ethereum_events::EthEventsVextDigest;
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
 

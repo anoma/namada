@@ -3,7 +3,7 @@ mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
-    use namada::types::ethereum_events::vote_extensions::EthEventsVext;
+    use namada::types::vote_extensions::ethereum_events::EthEventsVext;
     use tendermint_proto::abci::ExtendedVoteInfo;
 
     use super::super::*;
@@ -268,12 +268,12 @@ mod extend_votes {
         use borsh::{BorshDeserialize, BorshSerialize};
         use namada::ledger::pos;
         use namada::ledger::pos::namada_proof_of_stake::PosBase;
-        use namada::types::ethereum_events::vote_extensions::EthEventsVext;
         use namada::types::ethereum_events::{
             EthAddress, EthereumEvent, TransferToEthereum,
         };
         use namada::types::key::*;
         use namada::types::storage::{BlockHeight, Epoch};
+        use namada::types::vote_extensions::ethereum_events::EthEventsVext;
         use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
         use tower_abci::request;
 

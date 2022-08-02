@@ -4,10 +4,10 @@
 mod prepare_block {
     use std::collections::{BTreeMap, HashMap, HashSet};
 
-    use namada::types::ethereum_events::vote_extensions::{
+    use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::vote_extensions::ethereum_events::{
         EthEventsVextDigest, FractionalVotingPower, MultiSignedEthEvent,
     };
-    use namada::types::transaction::protocol::ProtocolTxType;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
@@ -286,12 +286,12 @@ mod prepare_block {
         };
         use namada::proto::SignedTxData;
         use namada::types::address::xan;
-        use namada::types::ethereum_events::vote_extensions::EthEventsVext;
         use namada::types::ethereum_events::EthereumEvent;
         use namada::types::key::common;
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::protocol::ProtocolTxType;
         use namada::types::transaction::{Fee, TxType};
+        use namada::types::vote_extensions::ethereum_events::EthEventsVext;
         use tendermint_proto::abci::tx_record::TxAction;
         use tendermint_proto::abci::{
             ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,

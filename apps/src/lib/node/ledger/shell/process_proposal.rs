@@ -1,7 +1,7 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
-use namada::types::ethereum_events::vote_extensions::FractionalVotingPower;
 use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::vote_extensions::ethereum_events::FractionalVotingPower;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
 #[cfg(not(feature = "ABCI"))]
@@ -372,9 +372,6 @@ mod test_process_proposal {
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
     use namada::types::address::xan;
-    use namada::types::ethereum_events::vote_extensions::{
-        EthEventsVext, EthEventsVextDigest, MultiSignedEthEvent,
-    };
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -382,6 +379,9 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
+    use namada::types::vote_extensions::ethereum_events::{
+        EthEventsVext, EthEventsVextDigest, MultiSignedEthEvent,
+    };
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::RequestInitChain;
     #[cfg(not(feature = "ABCI"))]
