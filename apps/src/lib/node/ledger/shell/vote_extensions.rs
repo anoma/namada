@@ -9,7 +9,7 @@ mod extend_votes {
     use super::super::queries::QueriesExt;
     use super::super::*;
 
-    /// A [`EthEventsVext`] signed by a Namada validator.
+    /// An [`EthEventsVext`] signed by a Namada validator.
     pub type SignedEthEventsVext = Signed<EthEventsVext>;
 
     /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
