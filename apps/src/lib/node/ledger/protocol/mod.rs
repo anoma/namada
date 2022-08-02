@@ -14,7 +14,7 @@ use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada::ledger::treasury::TreasuryVp;
 use namada::proto::{self, Tx};
 use namada::types::address::{Address, InternalAddress};
-use namada::types::ethereum_events::vote_extensions::VoteExtensionDigest;
+use namada::types::ethereum_events::vote_extensions::EthEventsVextDigest;
 use namada::types::storage;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
@@ -159,7 +159,7 @@ where
         }
         TxType::Protocol(ProtocolTx {
             tx:
-                ProtocolTxType::EthereumEvents(VoteExtensionDigest {
+                ProtocolTxType::EthereumEvents(EthEventsVextDigest {
                     events, ..
                 }),
             ..

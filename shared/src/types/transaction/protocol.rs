@@ -33,7 +33,7 @@ mod protocol_txs {
 
     use super::*;
     use crate::proto::Tx;
-    use crate::types::ethereum_events::vote_extensions::VoteExtensionDigest;
+    use crate::types::ethereum_events::vote_extensions::EthEventsVextDigest;
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
 
@@ -78,7 +78,7 @@ mod protocol_txs {
         /// Tx requesting a new DKG session keypair
         NewDkgKeypair(Tx),
         /// Ethereum events contained in vote extensions
-        EthereumEvents(VoteExtensionDigest),
+        EthereumEvents(EthEventsVextDigest),
     }
 
     impl ProtocolTxType {

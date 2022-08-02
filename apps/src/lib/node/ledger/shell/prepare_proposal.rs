@@ -5,7 +5,7 @@ mod prepare_block {
     use std::collections::{BTreeMap, HashMap, HashSet};
 
     use namada::types::ethereum_events::vote_extensions::{
-        FractionalVotingPower, MultiSignedEthEvent, VoteExtensionDigest,
+        EthEventsVextDigest, FractionalVotingPower, MultiSignedEthEvent,
     };
     use namada::types::transaction::protocol::ProtocolTxType;
     use tendermint_proto::abci::{
@@ -78,7 +78,7 @@ mod prepare_block {
             let vote_extension_digest =
                 local_last_commit.and_then(|local_last_commit| {
                     let votes = local_last_commit.votes;
-                    self.compress_vote_extensions(votes)
+                    self.compress_ethereum_events(votes)
                 });
             let vote_extension_digest =
                 match (vote_extension_digest, self.storage.last_height) {
@@ -161,13 +161,13 @@ mod prepare_block {
                 .collect()
         }
 
-        /// Compresses a set of vote extensions into a single
-        /// [`VoteExtensionDigest`], whilst filtering invalid
+        /// Compresses a set of signed Ethereum events into a single
+        /// [`EthEventsVextDigest`], whilst filtering invalid
         /// [`SignedExt`] instances in the process
-        fn compress_vote_extensions(
+        fn compress_ethereum_events(
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
-        ) -> Option<VoteExtensionDigest> {
+        ) -> Option<EthEventsVextDigest> {
             let events_epoch = self
                 .storage
                 .block
@@ -219,15 +219,15 @@ mod prepare_block {
                         ?sig,
                         ?validator_addr,
                         "Overwrote old signature from validator while \
-                         constructing VoteExtensionDigest"
+                         constructing EthEventsVextDigest"
                     );
                 }
             }
 
             if voting_power <= FractionalVotingPower::TWO_THIRDS {
                 tracing::error!(
-                    "Tendermint has decided on a block including vote \
-                     extensions reflecting <= 2/3 of the total stake"
+                    "Tendermint has decided on a block including Ethereum \
+                     events reflecting <= 2/3 of the total stake"
                 );
                 return None;
             }
@@ -237,7 +237,7 @@ mod prepare_block {
                 .map(|(event, signers)| MultiSignedEthEvent { event, signers })
                 .collect();
 
-            Some(VoteExtensionDigest { events, signatures })
+            Some(EthEventsVextDigest { events, signatures })
         }
     }
 
@@ -472,7 +472,7 @@ mod prepare_block {
             let maybe_digest = {
                 let votes =
                     vec![vote_extension_serialize(signed_vote_extension)];
-                shell.compress_vote_extensions(votes)
+                shell.compress_ethereum_events(votes)
             };
 
             // we should be filtering out the vote extension with
@@ -482,13 +482,13 @@ mod prepare_block {
             assert!(maybe_digest.is_none());
         }
 
-        /// Creates a vote extension digest manually, and encodes it as a
+        /// Creates an Ethereum events digest manually, and encodes it as a
         /// [`TxRecord`].
         fn manually_assemble_digest(
             _protocol_key: &common::SecretKey,
             ext: SignedExt,
             last_height: BlockHeight,
-        ) -> VoteExtensionDigest {
+        ) -> EthEventsVextDigest {
             let events = vec![MultiSignedEthEvent {
                 event: ext.data.ethereum_events[0].clone(),
                 signers: {
@@ -504,7 +504,7 @@ mod prepare_block {
             };
 
             let vote_extension_digest =
-                VoteExtensionDigest { events, signatures };
+                EthEventsVextDigest { events, signatures };
 
             assert_eq!(
                 vec![ext],

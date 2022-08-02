@@ -157,20 +157,20 @@ pub struct MultiSignedEthEvent {
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
-pub struct VoteExtensionDigest {
+pub struct EthEventsVextDigest {
     /// The signatures and signing address of each [`EthEventsVext`]
     pub signatures: HashMap<Address, Signature>,
     /// The events that were reported
     pub events: Vec<MultiSignedEthEvent>,
 }
 
-impl VoteExtensionDigest {
+impl EthEventsVextDigest {
     /// Decompresses a set of signed [`EthEventsVext`] instances.
     pub fn decompress(
         self,
         last_height: BlockHeight,
     ) -> Vec<Signed<EthEventsVext>> {
-        let VoteExtensionDigest { signatures, events } = self;
+        let EthEventsVextDigest { signatures, events } = self;
 
         let mut extensions = vec![];
 
@@ -300,7 +300,7 @@ mod tests {
         let ext = vec![ext_1, ext_2];
 
         // we have the `Signed<EthEventsVext>` instances we need,
-        // let us now compress them into a single `VoteExtensionDigest`
+        // let us now compress them into a single `EthEventsVextDigest`
         let signatures: HashMap<_, _> = [
             (validator_1.clone(), ext[0].sig.clone()),
             (validator_2.clone(), ext[1].sig.clone()),
@@ -324,9 +324,9 @@ mod tests {
             },
         ];
 
-        let digest = VoteExtensionDigest { events, signatures };
+        let digest = EthEventsVextDigest { events, signatures };
 
-        // finally, decompress the `VoteExtensionDigest` back into a
+        // finally, decompress the `EthEventsVextDigest` back into a
         // `Vec<Signed<EthEventsVext>>`
         let mut decompressed = digest
             .decompress(last_block_height)

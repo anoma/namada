@@ -47,7 +47,7 @@ where
             })
             .collect();
 
-        // We should not have more than one `VoteExtensionDigest` in
+        // We should not have more than one `EthEventsVextDigest` in
         // a proposal from some round's leader.
         let too_many_vext_digests = vote_ext_digest_num > 1;
 
@@ -373,7 +373,7 @@ mod test_process_proposal {
     use namada::proto::SignedTxData;
     use namada::types::address::xan;
     use namada::types::ethereum_events::vote_extensions::{
-        EthEventsVext, MultiSignedEthEvent, VoteExtensionDigest,
+        EthEventsVext, EthEventsVextDigest, MultiSignedEthEvent,
     };
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
@@ -399,7 +399,7 @@ mod test_process_proposal {
     };
     use crate::wallet;
 
-    /// Test that if a proposal contains more than one `VoteExtensionDigest`,
+    /// Test that if a proposal contains more than one `EthEventsVextDigest`,
     /// we reject it.
     #[test]
     fn test_more_than_one_vext_digest_rejected() {
@@ -416,8 +416,8 @@ mod test_process_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            // vote extension digest with no observed events
-            VoteExtensionDigest {
+            // Ethereum events digest with no observed events
+            EthEventsVextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(validator_addr, signed_vote_extension.sig);
@@ -441,7 +441,7 @@ mod test_process_proposal {
 
     fn check_rejected_digest(
         shell: &mut TestShell,
-        vote_extension_digest: VoteExtensionDigest,
+        vote_extension_digest: EthEventsVextDigest,
         protocol_key: common::SecretKey,
     ) {
         let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
@@ -493,7 +493,7 @@ mod test_process_proposal {
                 ext.sig = test_utils::invalidate_signature(ext.sig);
                 ext
             };
-            VoteExtensionDigest {
+            EthEventsVextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(addr.clone(), ext.sig);
@@ -537,7 +537,7 @@ mod test_process_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            VoteExtensionDigest {
+            EthEventsVextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(addr.clone(), ext.sig);
@@ -583,7 +583,7 @@ mod test_process_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            VoteExtensionDigest {
+            EthEventsVextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(addr.clone(), ext.sig);
