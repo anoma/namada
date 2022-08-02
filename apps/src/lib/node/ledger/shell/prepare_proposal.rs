@@ -34,38 +34,52 @@ mod prepare_block {
             &mut self,
             req: RequestPrepareProposal,
         ) -> response::PrepareProposal {
+            if !matches!(self.mode, ShellMode::Validator { .. }) {
+                panic!(
+                    "PrepareProposal was called even though we are not a \
+                     validator"
+                );
+            }
+
             // We can safely reset meter, because if the block is rejected,
             // we'll reset again on the next proposal, until the
             // proposal is accepted
             self.gas_meter.reset();
-            let txs = if let ShellMode::Validator { .. } = self.mode {
-                // TODO: add some info logging
 
-                let mut txs = match req.local_last_commit {
-                    Some(local_last_commit) => {
-                        // add ethereum events as protocol txs
-                        self.build_vote_extensions_txs(local_last_commit)
+            let mut txs = vec![];
+
+            // add mempool txs
+            let mut mempool_txs = self.build_mempool_txs(req.txs);
+            txs.append(&mut mempool_txs);
+
+            // decrypt the wrapper txs included in the previous block
+            let mut decrypted_txs = self.build_decrypted_txs();
+            txs.append(&mut decrypted_txs);
+
+            // add any needed protocol txs based on vote extensions
+            match req.local_last_commit {
+                Some(local_last_commit) => {
+                    match self.build_vote_extensions_txs(local_last_commit) {
+                        Ok(mut vote_exts_txs) => txs.append(&mut vote_exts_txs),
+                        Err(error) => {
+                            tracing::error!(
+                                ?error,
+                                "Could not add vote extension transaction, \
+                                 this block is likely to be rejected by other \
+                                 validators"
+                            );
+                        }
                     }
-                    None => {
-                        tracing::info!(
-                            "No local last commit, skipping including vote \
-                             extensions"
-                        );
-                        vec![]
-                    }
-                };
-
-                // add mempool txs
-                let mut mempool_txs = self.build_mempool_txs(req.txs);
-                txs.append(&mut mempool_txs);
-
-                // decrypt the wrapper txs included in the previous block
-                let mut decrypted_txs = self.build_decrypted_txs();
-                txs.append(&mut decrypted_txs);
-
-                txs
-            } else {
-                vec![]
+                }
+                None => {
+                    // ?: in what situations would we not get a local last
+                    // commit? is this code path reachable?
+                    tracing::error!(
+                        "No local last commit so could not add vote extension \
+                         transaction, this block is likely to be rejected by \
+                         other validators"
+                    );
+                }
             };
 
             response::PrepareProposal {
@@ -79,14 +93,7 @@ mod prepare_block {
         fn build_vote_extensions_txs(
             &mut self,
             local_last_commit: ExtendedCommitInfo,
-        ) -> Vec<TxRecord> {
-            if is_sole_validators(&local_last_commit.votes) {
-                tracing::info!(
-                    "Sole validator and block proposer, no vote extensions to \
-                     include this round"
-                );
-                return vec![];
-            }
+        ) -> std::result::Result<Vec<TxRecord>, String> {
             let protocol_key = self
                 .mode
                 .get_protocol_key()
@@ -97,27 +104,33 @@ mod prepare_block {
             let vote_extension_digest =
                 match (vote_extension_digest, self.storage.last_height) {
                     // handle genesis block
-                    (None, BlockHeight(0)) => return vec![],
+                    (None, BlockHeight(0)) => return Ok(vec![]),
                     (Some(_), BlockHeight(0)) => {
-                        unreachable!(
-                            "We already handle this scenario in \
-                             validate_vote_extension."
-                        )
+                        // we should never expect to reach here
+                        return Err("Found unexpected vote extensions while \
+                                    proposing genesis block"
+                            .to_owned());
                     }
                     // handle block heights > 0
                     (Some(digest), _) => digest,
-                    _ => unreachable!(
-                        "Honest Namada validators will always sign a \
-                         VoteExtension, even if no Ethereum events were \
-                         observed at a given block height. In fact, a quorum \
-                         of signed empty VoteExtension commits the fact no \
-                         events were observed by a majority of validators. \
-                         Likewise, a Tendermint quorum should never decide on \
-                         a block including vote extensions reflecting less \
-                         than or equal to 2/3 of the total stake. These \
-                         scenarios are virtually impossible, so we will panic \
-                         here."
-                    ),
+                    // Honest Namada validators will always
+                    // sign a VoteExtension, even if no
+                    // Ethereum events were observed at a
+                    // given block height. In fact, a quorum
+                    // of signed empty VoteExtension commits
+                    // the fact no events were observed by a
+                    // majority of validators. Likewise, a
+                    // Tendermint quorum should never decide
+                    // on a block including vote extensions
+                    // reflecting less than or equal to 2/3 of
+                    // the total stake."
+                    _ => {
+                        return Err(format!(
+                            "Couldn't construct VoteExtensionDigest for block \
+                             height {}",
+                            self.storage.last_height + 1
+                        ));
+                    }
                 };
 
             let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
@@ -125,7 +138,7 @@ mod prepare_block {
                 .to_bytes();
             let tx_record = record::add(tx);
 
-            vec![tx_record]
+            Ok(vec![tx_record])
         }
 
         /// Builds a batch of mempool transactions
@@ -832,28 +845,6 @@ mod prepare_block {
                 .collect();
             // check that the order of the txs is correct
             assert_eq!(received, expected_txs);
-        }
-
-        #[test]
-        fn test_is_sole_validators() {
-            assert!(!is_sole_validators(&vec![]));
-            assert!(!is_sole_validators(&vec![ExtendedVoteInfo {
-                validator: Some(Validator {
-                    address: [0u8; 20].into(),
-                    power: 100,
-                }),
-                vote_extension: [0u8; 64].into(),
-                signed_last_block: true,
-            },]));
-
-            assert!(is_sole_validators(&vec![ExtendedVoteInfo {
-                validator: Some(Validator {
-                    address: [0u8; 20].into(),
-                    power: 100,
-                }),
-                vote_extension: vec![],
-                signed_last_block: true,
-            },]));
         }
     }
 }
