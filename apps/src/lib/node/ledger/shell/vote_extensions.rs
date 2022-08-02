@@ -248,6 +248,8 @@ mod extend_votes {
                 .map_err(|err| {
                     tracing::error!(
                         ?err,
+                        // TODO: change this error message, probably, such that
+                        // it mentions Ethereum events rather than vote extensions
                         "Failed to deserialize signed vote extension",
                     );
                 })
