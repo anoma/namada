@@ -41,9 +41,9 @@ mod prepare_block {
             let txs = if let ShellMode::Validator { .. } = self.mode {
                 // TODO: add some info logging
 
-                // add ethereum events as protocol txs
                 let mut txs = match req.local_last_commit {
                     Some(local_last_commit) => {
+                        // add ethereum events as protocol txs
                         self.build_vote_extensions_txs(local_last_commit)
                     }
                     None => {
