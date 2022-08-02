@@ -9,7 +9,7 @@ mod extend_votes {
     use super::super::*;
 
     /// A [`EthEventsVext`] signed by a Namada validator.
-    pub type SignedExt = Signed<EthEventsVext>;
+    pub type SignedEthEventsVext = Signed<EthEventsVext>;
 
     /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
     #[derive(Error, Debug)]
@@ -79,7 +79,7 @@ mod extend_votes {
             req: request::VerifyVoteExtension,
         ) -> response::VerifyVoteExtension {
             if let Ok(signed) =
-                SignedExt::try_from_slice(&req.vote_extension[..])
+                SignedEthEventsVext::try_from_slice(&req.vote_extension[..])
             {
                 response::VerifyVoteExtension {
                     status: if self.validate_vote_extension(
@@ -119,7 +119,7 @@ mod extend_votes {
         #[inline]
         pub fn validate_vote_extension(
             &self,
-            ext: SignedExt,
+            ext: SignedEthEventsVext,
             last_height: BlockHeight,
         ) -> bool {
             self.validate_vote_ext_and_get_it_back(ext, last_height)
@@ -131,10 +131,12 @@ mod extend_votes {
         /// is valid.
         pub fn validate_vote_ext_and_get_it_back(
             &self,
-            ext: SignedExt,
+            ext: SignedEthEventsVext,
             last_height: BlockHeight,
-        ) -> std::result::Result<(VotingPower, SignedExt), EthEventsVextError>
-        {
+        ) -> std::result::Result<
+            (VotingPower, SignedEthEventsVext),
+            EthEventsVextError,
+        > {
             if ext.data.block_height != last_height {
                 let ext_height = ext.data.block_height;
                 tracing::error!(
@@ -211,10 +213,10 @@ mod extend_votes {
         #[inline]
         pub fn validate_vote_extension_list(
             &self,
-            vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
+            vote_extensions: impl IntoIterator<Item = SignedEthEventsVext> + 'static,
         ) -> impl Iterator<
             Item = std::result::Result<
-                (VotingPower, SignedExt),
+                (VotingPower, SignedEthEventsVext),
                 EthEventsVextError,
             >,
         > + '_ {
@@ -231,25 +233,27 @@ mod extend_votes {
         #[inline]
         pub fn filter_invalid_vote_extensions(
             &self,
-            vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
-        ) -> impl Iterator<Item = (VotingPower, SignedExt)> + '_ {
+            vote_extensions: impl IntoIterator<Item = SignedEthEventsVext> + 'static,
+        ) -> impl Iterator<Item = (VotingPower, SignedEthEventsVext)> + '_
+        {
             self.validate_vote_extension_list(vote_extensions)
                 .filter_map(|ext| ext.ok())
         }
     }
 
     /// Given a `Vec` of [`ExtendedVoteInfo`], return an iterator over the
-    /// ones we could deserialize to [`SignedExt`] instances.
+    /// ones we could deserialize to [`SignedEthEventsVext`] instances.
     pub fn deserialize_vote_extensions(
         vote_extensions: Vec<ExtendedVoteInfo>,
-    ) -> impl Iterator<Item = SignedExt> + 'static {
+    ) -> impl Iterator<Item = SignedEthEventsVext> + 'static {
         vote_extensions.into_iter().filter_map(|vote| {
-            SignedExt::try_from_slice(&vote.vote_extension[..])
+            SignedEthEventsVext::try_from_slice(&vote.vote_extension[..])
                 .map_err(|err| {
                     tracing::error!(
                         ?err,
                         // TODO: change this error message, probably, such that
-                        // it mentions Ethereum events rather than vote extensions
+                        // it mentions Ethereum events rather than vote
+                        // extensions
                         "Failed to deserialize signed vote extension",
                     );
                 })
@@ -273,7 +277,7 @@ mod extend_votes {
         use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
         use tower_abci::request;
 
-        use super::SignedExt;
+        use super::SignedEthEventsVext;
         use crate::node::ledger::shell::test_utils::*;
         use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
@@ -350,7 +354,7 @@ mod extend_votes {
             oracle.send(event_1.clone()).expect("Test failed");
             oracle.send(event_2.clone()).expect("Test failed");
             let vote_extension =
-                <SignedExt as BorshDeserialize>::try_from_slice(
+                <SignedEthEventsVext as BorshDeserialize>::try_from_slice(
                     &shell.extend_vote(Default::default()).vote_extension[..],
                 )
                 .expect("Test failed");

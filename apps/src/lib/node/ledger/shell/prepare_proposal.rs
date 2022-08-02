@@ -163,7 +163,7 @@ mod prepare_block {
 
         /// Compresses a set of signed Ethereum events into a single
         /// [`EthEventsVextDigest`], whilst filtering invalid
-        /// [`SignedExt`] instances in the process
+        /// [`SignedEthEventsVext`] instances in the process
         fn compress_ethereum_events(
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
@@ -297,7 +297,7 @@ mod prepare_block {
             ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
         };
 
-        use super::super::super::vote_extensions::SignedExt;
+        use super::super::super::vote_extensions::SignedEthEventsVext;
         use super::*;
         use crate::node::ledger::shell::test_utils::{
             self, gen_keypair, TestShell,
@@ -326,8 +326,10 @@ mod prepare_block {
             );
         }
 
-        /// Serialize a [`SignedExt`] to an [`ExtendedVoteInfo`]
-        fn vote_extension_serialize(vext: SignedExt) -> ExtendedVoteInfo {
+        /// Serialize a [`SignedEthEventsVext`] to an [`ExtendedVoteInfo`]
+        fn vote_extension_serialize(
+            vext: SignedEthEventsVext,
+        ) -> ExtendedVoteInfo {
             ExtendedVoteInfo {
                 vote_extension: vext.try_to_vec().unwrap(),
                 ..Default::default()
@@ -335,7 +337,10 @@ mod prepare_block {
         }
 
         /// Check if we are filtering out an invalid vote extension `vext`
-        fn check_eth_events_filtering(shell: &mut TestShell, vext: SignedExt) {
+        fn check_eth_events_filtering(
+            shell: &mut TestShell,
+            vext: SignedEthEventsVext,
+        ) {
             let votes =
                 deserialize_vote_extensions(vec![vote_extension_serialize(
                     vext,
@@ -486,7 +491,7 @@ mod prepare_block {
         /// [`TxRecord`].
         fn manually_assemble_digest(
             _protocol_key: &common::SecretKey,
-            ext: SignedExt,
+            ext: SignedEthEventsVext,
             last_height: BlockHeight,
         ) -> EthEventsVextDigest {
             let events = vec![MultiSignedEthEvent {
