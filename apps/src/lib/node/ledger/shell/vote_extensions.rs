@@ -13,7 +13,7 @@ mod extend_votes {
 
     /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
     #[derive(Error, Debug)]
-    pub enum VoteExtensionError {
+    pub enum EthEventsVextError {
         #[error("The vote extension was issued at block height 0.")]
         IssuedAtGenesis,
         #[error("The vote extension has an unexpected block height.")]
@@ -125,7 +125,7 @@ mod extend_votes {
             &self,
             ext: SignedExt,
             last_height: BlockHeight,
-        ) -> std::result::Result<(VotingPower, SignedExt), VoteExtensionError>
+        ) -> std::result::Result<(VotingPower, SignedExt), EthEventsVextError>
         {
             if ext.data.block_height != last_height {
                 let ext_height = ext.data.block_height;
@@ -133,11 +133,11 @@ mod extend_votes {
                     "Vote extension issued for a block height {ext_height} \
                      different from the expected height {last_height}"
                 );
-                return Err(VoteExtensionError::UnexpectedBlockHeight);
+                return Err(EthEventsVextError::UnexpectedBlockHeight);
             }
             if last_height.0 == 0 {
                 tracing::error!("Dropping vote extension issued at genesis");
-                return Err(VoteExtensionError::IssuedAtGenesis);
+                return Err(EthEventsVextError::IssuedAtGenesis);
             }
             // verify if we have any duplicate Ethereum events,
             // and if these are sorted in ascending order
@@ -154,7 +154,7 @@ mod extend_votes {
                     %validator,
                     "Found duplicate or non-sorted Ethereum events in a vote extension from validator"
                 );
-                return Err(VoteExtensionError::HaveDupesOrNonSorted);
+                return Err(EthEventsVextError::HaveDupesOrNonSorted);
             }
             // get the public key associated with this validator
             let epoch = self.storage.block.pred_epochs.get_epoch(last_height);
@@ -166,7 +166,7 @@ mod extend_votes {
                         %validator,
                         "Could not get public key from Storage for validator"
                     );
-                    VoteExtensionError::PubKeyNotInStorage
+                    EthEventsVextError::PubKeyNotInStorage
                 })?;
             // verify the signature of the vote extension
             ext.verify(&pk)
@@ -176,7 +176,7 @@ mod extend_votes {
                         %validator,
                         "Failed to verify the signature of a vote extension issued by validator"
                     );
-                    VoteExtensionError::VerifySigFailed
+                    EthEventsVextError::VerifySigFailed
                 })
                 .map(|_| (voting_power, ext))
         }
@@ -199,7 +199,7 @@ mod extend_votes {
         /// Takes an iterator over signed vote extensions,
         /// and returns another iterator. The latter yields
         /// valid vote extensions, or the reason why these
-        /// are invalid, in the form of a [`VoteExtensionError`].
+        /// are invalid, in the form of a [`EthEventsVextError`].
         #[inline]
         pub fn validate_vote_extension_list(
             &self,
@@ -207,7 +207,7 @@ mod extend_votes {
         ) -> impl Iterator<
             Item = std::result::Result<
                 (VotingPower, SignedExt),
-                VoteExtensionError,
+                EthEventsVextError,
             >,
         > + '_ {
             vote_extensions.into_iter().map(|vote_extension| {
