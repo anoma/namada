@@ -272,31 +272,50 @@ where
 
 /// API for querying the blockchain state.
 pub(crate) trait QueriesExt {
+    /// Get the set of active validators for a given epoch (defaulting to the
+    /// epoch of the current yet-to-be-committed block).
     fn get_active_validators(
         &self,
         epoch: Option<Epoch>,
     ) -> BTreeSet<WeightedValidator<Address>>;
+
+    /// Lookup the total voting power for an epoch (defaulting to the
+    /// epoch of the current yet-to-be-committed block).
     fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower;
+
+    /// Simple helper function for the ledger to get balances
+    /// of the specified token at the specified address
     fn get_balance(
         &self,
         token: &Address,
         owner: &Address,
     ) -> std::result::Result<Amount, String>;
+
     fn get_evidence_params(
         &self,
         epoch_duration: &EpochDuration,
         pos_params: &PosParams,
     ) -> EvidenceParams;
+
+    /// Lookup data about a validator from their protocol signing key
     fn get_validator_from_protocol_pk(
         &self,
         pk: &key::common::PublicKey,
         epoch: Option<Epoch>,
     ) -> std::result::Result<TendermintValidator<EllipticCurve>, Error>;
+
+    /// Lookup data about a validator from their address
     fn get_validator_from_address(
         &self,
         address: &Address,
         epoch: Option<Epoch>,
     ) -> std::result::Result<(VotingPower, common::PublicKey), Error>;
+
+    /// Given a tendermint validator, the address is the hash
+    /// of the validators public key. We look up the native
+    /// address from storage using this hash.
+    // TODO: We may change how this lookup is done, see
+    // https://github.com/anoma/namada/issues/200
     fn get_validator_from_tm_address(
         &self,
         tm_address: &[u8],
@@ -309,8 +328,6 @@ where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
-    /// Get the set of active validators for a given epoch (defaulting to the
-    /// epoch of the current yet-to-be-committed block).
     fn get_active_validators(
         &self,
         epoch: Option<Epoch>,
@@ -324,7 +341,6 @@ where
             .clone()
     }
 
-    /// Lookup the total voting power for an epoch
     #[cfg(not(feature = "ABCI"))]
     fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
         self.get_active_validators(epoch)
@@ -334,8 +350,6 @@ where
             .into()
     }
 
-    /// Simple helper function for the ledger to get balances
-    /// of the specified token at the specified address
     fn get_balance(
         &self,
         token: &Address,
@@ -390,7 +404,6 @@ where
         }
     }
 
-    /// Lookup data about a validator from their protocol signing key
     #[allow(dead_code)]
     fn get_validator_from_protocol_pk(
         &self,
@@ -438,7 +451,6 @@ where
             .ok_or_else(|| Error::NotValidatorKey(pk.to_string(), epoch))
     }
 
-    /// Lookup data about a validator from their address
     #[cfg(not(feature = "ABCI"))]
     fn get_validator_from_address(
         &self,
@@ -466,11 +478,6 @@ where
             .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))
     }
 
-    /// Given a tendermint validator, the address is the hash
-    /// of the validators public key. We look up the native
-    /// address from storage using this hash.
-    // TODO: We may change how this lookup is done, see
-    // https://github.com/anoma/namada/issues/200
     #[allow(dead_code)]
     fn get_validator_from_tm_address(
         &self,
