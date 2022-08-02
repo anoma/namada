@@ -12,6 +12,7 @@ mod prepare_block {
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
 
+    use super::super::queries::QueriesExt;
     use super::super::vote_extensions::deserialize_vote_extensions;
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -178,8 +179,9 @@ mod prepare_block {
             let mut event_observers = BTreeMap::new();
             let mut signatures = HashMap::new();
 
-            let total_voting_power =
-                u64::from(self.get_total_voting_power(Some(events_epoch)));
+            let total_voting_power = u64::from(
+                self.storage.get_total_voting_power(Some(events_epoch)),
+            );
             let mut voting_power = FractionalVotingPower::default();
 
             let deserialized = deserialize_vote_extensions(vote_extensions);

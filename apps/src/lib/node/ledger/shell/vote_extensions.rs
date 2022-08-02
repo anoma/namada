@@ -6,6 +6,7 @@ mod extend_votes {
     use namada::types::ethereum_events::vote_extensions::VoteExtension;
     use tendermint_proto::abci::ExtendedVoteInfo;
 
+    use super::super::queries::QueriesExt;
     use super::super::*;
 
     /// A [`VoteExtension`] signed by a Namada validator.
@@ -159,6 +160,7 @@ mod extend_votes {
             // get the public key associated with this validator
             let epoch = self.storage.block.pred_epochs.get_epoch(last_height);
             let (voting_power, pk) = self
+                .storage
                 .get_validator_from_address(validator, epoch)
                 .map_err(|err| {
                     tracing::error!(
@@ -264,6 +266,7 @@ mod extend_votes {
         use tower_abci::request;
 
         use super::SignedExt;
+        use crate::node::ledger::shell::queries::QueriesExt;
         use crate::node::ledger::shell::test_utils::*;
         use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
@@ -462,6 +465,7 @@ mod extend_votes {
             assert_eq!(shell.storage.get_current_epoch().0.0, 1);
             assert!(
                 shell
+                    .storage
                     .get_validator_from_protocol_pk(&signing_key.ref_to(), None)
                     .is_err()
             );
@@ -469,6 +473,7 @@ mod extend_votes {
             assert!(
                 shell
                     .shell
+                    .storage
                     .get_validator_from_protocol_pk(
                         &signing_key.ref_to(),
                         Some(prev_epoch)
