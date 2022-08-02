@@ -30,6 +30,7 @@ use transactions::ethereum_events::voting_powers;
 
 mod transactions;
 
+use crate::node::ledger::shell::queries::QueriesExt;
 use crate::node::ledger::shell::Shell;
 
 #[derive(Error, Debug)]
@@ -187,7 +188,8 @@ where
             tracing::debug!(?last_epoch, "got epoch of last block");
             let validators = voting_powers::get_all_voters(events.iter());
             tracing::debug!(?validators, "got relevant validators");
-            let active_validators = get_active_validators(&storage, last_epoch);
+            let active_validators =
+                storage.get_active_validators(Some(last_epoch));
             tracing::debug!(
                 n = active_validators.len(),
                 "got active validators - {:#?}",

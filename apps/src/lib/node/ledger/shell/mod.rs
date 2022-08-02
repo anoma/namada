@@ -10,7 +10,7 @@ mod init_chain;
 #[cfg(not(feature = "ABCI"))]
 mod prepare_proposal;
 mod process_proposal;
-mod queries;
+pub(crate) mod queries;
 mod vote_extensions;
 
 use std::collections::{BTreeSet, HashSet};
