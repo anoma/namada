@@ -77,6 +77,10 @@ mod extend_votes {
             &self,
             req: request::VerifyVoteExtension,
         ) -> response::VerifyVoteExtension {
+            // TODO: this should deserialize to
+            // `namada::types::vote_extensions::VoteExtension`,
+            // which contains an optional validator set update and
+            // a set of ethereum events seen at the previous block height
             if let Ok(signed) =
                 SignedEthEventsVext::try_from_slice(&req.vote_extension[..])
             {
