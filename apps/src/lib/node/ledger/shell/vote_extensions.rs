@@ -3,13 +3,13 @@ mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
-    use namada::types::ethereum_events::vote_extensions::VoteExtension;
+    use namada::types::ethereum_events::vote_extensions::EthEventsVext;
     use tendermint_proto::abci::ExtendedVoteInfo;
 
     use super::super::*;
 
-    /// A [`VoteExtension`] signed by a Namada validator.
-    pub type SignedExt = Signed<VoteExtension>;
+    /// A [`EthEventsVext`] signed by a Namada validator.
+    pub type SignedExt = Signed<EthEventsVext>;
 
     /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
     #[derive(Error, Debug)]
@@ -47,7 +47,7 @@ mod extend_votes {
                 .get_validator_address()
                 .expect("only validators should receive this method call")
                 .to_owned();
-            let ext = VoteExtension {
+            let ext = EthEventsVext {
                 block_height: self.storage.last_height + 1,
                 ethereum_events: self.new_ethereum_events(),
                 validator_addr,
@@ -182,7 +182,7 @@ mod extend_votes {
         }
 
         /// Checks the channel from the Ethereum oracle monitoring
-        /// the fullnode and retrieves all VoteExtension messages sent.
+        /// the fullnode and retrieves all seen Ethereum events.
         pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
             match &mut self.mode {
                 ShellMode::Validator {
@@ -254,7 +254,7 @@ mod extend_votes {
         use borsh::{BorshDeserialize, BorshSerialize};
         use namada::ledger::pos;
         use namada::ledger::pos::namada_proof_of_stake::PosBase;
-        use namada::types::ethereum_events::vote_extensions::VoteExtension;
+        use namada::types::ethereum_events::vote_extensions::EthEventsVext;
         use namada::types::ethereum_events::{
             EthAddress, EthereumEvent, TransferToEthereum,
         };
@@ -371,7 +371,7 @@ mod extend_votes {
             assert_eq!(res.status, i32::from(VerifyStatus::Accept));
         }
 
-        /// Test that Ethereum headers signed by a non-validator is rejected
+        /// Test that Ethereum events signed by a non-validator are rejected
         #[test]
         fn test_eth_events_must_be_signed_by_validator() {
             let (shell, _, _) = setup();
@@ -381,7 +381,7 @@ mod extend_votes {
                 .get_validator_address()
                 .expect("Test failed")
                 .clone();
-            let vote_ext = VoteExtension {
+            let vote_ext = EthEventsVext {
                 ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                     nonce: 1.into(),
                     transfers: vec![TransferToEthereum {
@@ -412,7 +412,7 @@ mod extend_votes {
             );
         }
 
-        /// Test that validation of vote extensions cast during the
+        /// Test that validation of Ethereum events cast during the
         /// previous block are accepted for the current block. This
         /// should pass even if the epoch changed resulting in a
         /// change to the validator set.
@@ -427,7 +427,7 @@ mod extend_votes {
                 .expect("Test failed")
                 .clone();
             let signed_height = shell.storage.last_height + 1;
-            let vote_ext = VoteExtension {
+            let vote_ext = EthEventsVext {
                 ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                     nonce: 1.into(),
                     transfers: vec![TransferToEthereum {
@@ -479,13 +479,13 @@ mod extend_votes {
             assert!(shell.validate_vote_extension(vote_ext, signed_height));
         }
 
-        /// Test that that an event that incorrectly labels what block it was
-        /// included in a vote extension on is rejected
+        /// Test that an [`EthEventsVext`] that incorrectly labels what block it
+        /// was included on in a vote extension is rejected
         #[test]
         fn reject_incorrect_block_number() {
             let (shell, _, _) = setup();
             let address = shell.mode.get_validator_address().unwrap().clone();
-            let vote_ext = VoteExtension {
+            let vote_ext = EthEventsVext {
                 ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                     nonce: 1.into(),
                     transfers: vec![TransferToEthereum {

@@ -65,7 +65,7 @@ mod prepare_block {
         }
 
         /// Builds a batch of vote extension transactions, comprised of Ethereum
-        /// events
+        /// events and, optionally, a validator set update
         fn build_vote_extensions_txs(
             &mut self,
             local_last_commit: Option<ExtendedCommitInfo>,
@@ -93,16 +93,16 @@ mod prepare_block {
                     // handle block heights > 0
                     (Some(digest), _) => digest,
                     _ => unreachable!(
-                        "Honest Namada validators will always sign a \
-                         VoteExtension, even if no Ethereum events were \
-                         observed at a given block height. In fact, a quorum \
-                         of signed empty VoteExtension commits the fact no \
-                         events were observed by a majority of validators. \
-                         Likewise, a Tendermint quorum should never decide on \
-                         a block including vote extensions reflecting less \
-                         than or equal to 2/3 of the total stake. These \
-                         scenarios are virtually impossible, so we will panic \
-                         here."
+                        "Honest Namada validators will always sign \
+                         EthEventsVext instances, even if no Ethereum events \
+                         were observed at a given block height. In fact, a \
+                         quorum of signed empty EthEventsVext instances \
+                         commits the fact no events were observed by a \
+                         majority of validators. Likewise, a Tendermint \
+                         quorum should never decide on a block including vote \
+                         extensions reflecting less than or equal to 2/3 of \
+                         the total stake. These scenarios are virtually \
+                         impossible, so we will panic here."
                     ),
                 };
 
@@ -111,6 +111,8 @@ mod prepare_block {
                 .to_bytes();
             let tx_record = record::add(tx);
 
+            // TODO: include here a validator set update tx,
+            // if we are at the end of an epoch
             vec![tx_record]
         }
 
@@ -284,7 +286,7 @@ mod prepare_block {
         };
         use namada::proto::SignedTxData;
         use namada::types::address::xan;
-        use namada::types::ethereum_events::vote_extensions::VoteExtension;
+        use namada::types::ethereum_events::vote_extensions::EthEventsVext;
         use namada::types::ethereum_events::EthereumEvent;
         use namada::types::key::common;
         use namada::types::storage::{BlockHeight, Epoch};
@@ -333,10 +335,7 @@ mod prepare_block {
         }
 
         /// Check if we are filtering out an invalid vote extension `vext`
-        fn check_vote_extension_filtering(
-            shell: &mut TestShell,
-            vext: SignedExt,
-        ) {
+        fn check_eth_events_filtering(shell: &mut TestShell, vext: SignedExt) {
             let votes =
                 deserialize_vote_extensions(vec![vote_extension_serialize(
                     vext,
@@ -347,7 +346,7 @@ mod prepare_block {
             assert_eq!(filtered_votes, vec![]);
         }
 
-        /// Test if we are filtering out vote extensinos with bad
+        /// Test if we are filtering out Ethereum events with bad
         /// signatures in a prepare proposal.
         #[test]
         fn test_prepare_proposal_filter_out_bad_vext_signatures() {
@@ -363,7 +362,7 @@ mod prepare_block {
                 let validator_addr = wallet::defaults::validator_address();
 
                 // generate a valid signature
-                let mut ext = VoteExtension {
+                let mut ext = EthEventsVext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![],
@@ -376,10 +375,10 @@ mod prepare_block {
                 ext
             };
 
-            check_vote_extension_filtering(&mut shell, signed_vote_extension);
+            check_eth_events_filtering(&mut shell, signed_vote_extension);
         }
 
-        /// Test if we are filtering out vote extensinos for
+        /// Test if we are filtering out Ethereum events seen at
         /// block heights different than the last height.
         #[test]
         fn test_prepare_proposal_filter_out_bad_vext_bheights() {
@@ -396,7 +395,7 @@ mod prepare_block {
             let validator_addr = wallet::defaults::validator_address();
 
             let signed_vote_extension = {
-                let ext = VoteExtension {
+                let ext = EthEventsVext {
                     validator_addr,
                     block_height: PRED_LAST_HEIGHT,
                     ethereum_events: vec![],
@@ -406,10 +405,10 @@ mod prepare_block {
                 ext
             };
 
-            check_vote_extension_filtering(&mut shell, signed_vote_extension);
+            check_eth_events_filtering(&mut shell, signed_vote_extension);
         }
 
-        /// Test if we are filtering out vote extensinos for
+        /// Test if we are filtering out Ethereum events seen by
         /// non-validator nodes.
         #[test]
         fn test_prepare_proposal_filter_out_bad_vext_validators() {
@@ -427,7 +426,7 @@ mod prepare_block {
             };
 
             let signed_vote_extension = {
-                let ext = VoteExtension {
+                let ext = EthEventsVext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![],
@@ -437,7 +436,7 @@ mod prepare_block {
                 ext
             };
 
-            check_vote_extension_filtering(&mut shell, signed_vote_extension);
+            check_eth_events_filtering(&mut shell, signed_vote_extension);
         }
 
         /// Test if we are filtering out duped Ethereum events in
@@ -460,7 +459,7 @@ mod prepare_block {
             };
             let signed_vote_extension = {
                 let ev = ethereum_event;
-                let ext = VoteExtension {
+                let ext = EthEventsVext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![ev.clone(), ev.clone(), ev],
@@ -520,7 +519,7 @@ mod prepare_block {
             // super::record::add(tx)
         }
 
-        /// Test if vote extension validation and inclusion in a block
+        /// Test if Ethereum events validation and inclusion in a block
         /// behaves as expected, considering honest validators.
         #[test]
         fn test_prepare_proposal_vext_normal_op() {
@@ -539,7 +538,7 @@ mod prepare_block {
                 transfers: vec![],
             };
             let signed_vote_extension = {
-                let ext = VoteExtension {
+                let ext = EthEventsVext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![ethereum_event],
@@ -597,7 +596,7 @@ mod prepare_block {
             // assert_eq!(rsp.tx_records, vec![digest]);
         }
 
-        /// Test if vote extension validation and inclusion in a block
+        /// Test if Ethereum events validation and inclusion in a block
         /// behaves as expected, considering <= 2/3 voting power.
         #[test]
         #[should_panic(expected = "Honest Namada validators")]
@@ -654,7 +653,7 @@ mod prepare_block {
                 transfers: vec![],
             };
             let signed_vote_extension = {
-                let ext = VoteExtension {
+                let ext = EthEventsVext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![ethereum_event],
