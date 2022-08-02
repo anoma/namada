@@ -214,10 +214,22 @@ mod extend_votes {
             }
         }
 
-        /// Takes an iterator over signed vote extensions,
+        /// Takes an iterator over vote extension instances,
         /// and returns another iterator. The latter yields
         /// valid vote extensions, or the reason why these
         /// are invalid, in the form of a [`EthEventsVextError`].
+        // TODO: the error type we return should be some kind of
+        // enum like:
+        //
+        // ```ignore
+        // enum VoteExtensionError {
+        //     EthEventsVext(EthEventsVextError),
+        //     ValidatorSetUpdateVext(ValidatorSetUpdateVextError),
+        // }
+        // ```
+        //
+        // the `vote_extensions` iterator should be over `VoteExtension`
+        // instances
         #[inline]
         pub fn validate_vote_extension_list(
             &self,
@@ -238,6 +250,8 @@ mod extend_votes {
 
         /// Takes a list of signed vote extensions,
         /// and filters out invalid instances.
+        // TODO: the `vote_extensions` iterator should be over `VoteExtension`
+        // instances
         #[inline]
         pub fn filter_invalid_vote_extensions(
             &self,
