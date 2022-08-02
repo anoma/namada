@@ -11,6 +11,9 @@ use crate::types::ethereum_events::EthereumEvent;
 use crate::types::key::common::{self, Signature};
 use crate::types::storage::BlockHeight;
 
+/// An [`EthEventsVext`] instance signed by a Namada validator.
+pub type SignedEthEventsVext = Signed<EthEventsVext>;
+
 /// Represents a set of `EthereumEvent` instances
 /// seen by some validator.
 ///
@@ -42,7 +45,7 @@ impl EthEventsVext {
 
     /// Sign a [`EthEventsVext`] with a validator's `signing_key`,
     /// and return the signed data.
-    pub fn sign(self, signing_key: &common::SecretKey) -> Signed<Self> {
+    pub fn sign(self, signing_key: &common::SecretKey) -> SignedEthEventsVext {
         Signed::new(signing_key, self)
     }
 }
@@ -76,7 +79,7 @@ impl EthEventsVextDigest {
     pub fn decompress(
         self,
         last_height: BlockHeight,
-    ) -> Vec<Signed<EthEventsVext>> {
+    ) -> Vec<SignedEthEventsVext> {
         let EthEventsVextDigest { signatures, events } = self;
 
         let mut extensions = vec![];
@@ -139,7 +142,7 @@ mod tests {
     /// Test decompression of a set of Ethereum events
     #[test]
     fn test_decompress_ethereum_events() {
-        // we need to construct a `Vec<Signed<EthEventsVext>>`
+        // we need to construct a `Vec<SignedEthEventsVext>`
         let sk_1 = key::testing::keypair_1();
         let sk_2 = key::testing::keypair_2();
 
@@ -174,7 +177,7 @@ mod tests {
 
         let ext = vec![ext_1, ext_2];
 
-        // we have the `Signed<EthEventsVext>` instances we need,
+        // we have the `SignedEthEventsVext` instances we need,
         // let us now compress them into a single `EthEventsVextDigest`
         let signatures: HashMap<_, _> = [
             (validator_1.clone(), ext[0].sig.clone()),
@@ -202,11 +205,11 @@ mod tests {
         let digest = EthEventsVextDigest { events, signatures };
 
         // finally, decompress the `EthEventsVextDigest` back into a
-        // `Vec<Signed<EthEventsVext>>`
+        // `Vec<SignedEthEventsVext>`
         let mut decompressed = digest
             .decompress(last_block_height)
             .into_iter()
-            .collect::<Vec<Signed<EthEventsVext>>>();
+            .collect::<Vec<SignedEthEventsVext>>();
 
         // decompressing yields an arbitrary ordering of `EthEventsVext`
         // instances, which is fine

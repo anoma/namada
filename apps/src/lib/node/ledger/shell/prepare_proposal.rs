@@ -294,13 +294,14 @@ mod prepare_block {
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::protocol::ProtocolTxType;
         use namada::types::transaction::{Fee, TxType};
-        use namada::types::vote_extensions::ethereum_events::EthEventsVext;
+        use namada::types::vote_extensions::ethereum_events::{
+            EthEventsVext, SignedEthEventsVext,
+        };
         use tendermint_proto::abci::tx_record::TxAction;
         use tendermint_proto::abci::{
             ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
         };
 
-        use super::super::super::vote_extensions::SignedEthEventsVext;
         use super::*;
         use crate::node::ledger::shell::test_utils::{
             self, gen_keypair, TestShell,

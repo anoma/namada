@@ -2,15 +2,13 @@
 mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
-    use namada::proto::Signed;
-    use namada::types::vote_extensions::ethereum_events::EthEventsVext;
+    use namada::types::vote_extensions::ethereum_events::{
+        EthEventsVext, SignedEthEventsVext,
+    };
     use tendermint_proto::abci::ExtendedVoteInfo;
 
     use super::super::queries::QueriesExt;
     use super::super::*;
-
-    /// An [`EthEventsVext`] signed by a Namada validator.
-    pub type SignedEthEventsVext = Signed<EthEventsVext>;
 
     /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
     #[derive(Error, Debug)]
