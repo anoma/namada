@@ -18,3 +18,4 @@ pub mod token;
 pub mod transaction;
 pub mod validity_predicate;
 pub mod vote_extensions;
+pub mod voting_power;

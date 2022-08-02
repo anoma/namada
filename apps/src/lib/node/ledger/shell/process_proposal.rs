@@ -1,7 +1,7 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 use namada::types::transaction::protocol::ProtocolTxType;
-use namada::types::vote_extensions::ethereum_events::FractionalVotingPower;
+use namada::types::voting_power::FractionalVotingPower;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
 #[cfg(not(feature = "ABCI"))]

@@ -6,8 +6,9 @@ mod prepare_block {
 
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::vote_extensions::ethereum_events::{
-        EthEventsVextDigest, FractionalVotingPower, MultiSignedEthEvent,
+        EthEventsVextDigest, MultiSignedEthEvent,
     };
+    use namada::types::voting_power::FractionalVotingPower;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
