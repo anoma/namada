@@ -4,7 +4,7 @@
 mod prepare_block {
     use std::collections::{BTreeMap, HashMap, HashSet};
 
-    use eyre::eyre;
+    use eyre::{eyre, Context};
     use namada::types::ethereum_events::vote_extensions::{
         FractionalVotingPower, MultiSignedEthEvent, VoteExtensionDigest,
     };
@@ -110,28 +110,26 @@ mod prepare_block {
                 return Ok(vec![]);
             }
 
-            let vote_extension_digest =
-                match self.compress_vote_extensions(local_last_commit.votes) {
-                    Some(vote_extension_digest) => vote_extension_digest,
-                    None => {
-                        // Honest Namada validators will always
-                        // sign a VoteExtension, even if no
-                        // Ethereum events were observed at a
-                        // given block height. In fact, a quorum
-                        // of signed empty VoteExtension commits
-                        // the fact no events were observed by a
-                        // majority of validators. Likewise, a
-                        // Tendermint quorum should never decide
-                        // on a block including vote extensions
-                        // reflecting less than or equal to 2/3 of
-                        // the total stake."
-                        return Err(eyre!(
-                            "Couldn't construct VoteExtensionDigest for block \
-                             height {}",
-                            self.storage.last_height + 1
-                        ));
-                    }
-                };
+            let vote_extension_digest = self
+                .compress_vote_extensions(local_last_commit.votes)
+                .wrap_err_with(|| {
+                    // Honest Namada validators will always
+                    // sign a VoteExtension, even if no
+                    // Ethereum events were observed at a
+                    // given block height. In fact, a quorum
+                    // of signed empty VoteExtension commits
+                    // the fact no events were observed by a
+                    // majority of validators. Likewise, a
+                    // Tendermint quorum should never decide
+                    // on a block including vote extensions
+                    // reflecting less than or equal to 2/3 of
+                    // the total stake."
+                    format!(
+                        "Couldn't construct VoteExtensionDigest for block \
+                         height {}",
+                        self.storage.last_height + 1
+                    )
+                })?;
 
             let protocol_key = self
                 .mode
@@ -196,7 +194,7 @@ mod prepare_block {
         fn compress_vote_extensions(
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
-        ) -> Option<VoteExtensionDigest> {
+        ) -> eyre::Result<VoteExtensionDigest> {
             let events_epoch = self
                 .storage
                 .block
@@ -254,11 +252,13 @@ mod prepare_block {
             }
 
             if voting_power <= FractionalVotingPower::TWO_THIRDS {
-                tracing::error!(
-                    "Tendermint has decided on a block including vote \
-                     extensions reflecting <= 2/3 of the total stake"
-                );
-                return None;
+                // Tendermint should never decide on a block including vote
+                // extensions reflecting <= 2/3 of the total stake
+                return Err(eyre!(
+                    "Total voting power of vote extensions is {:?}, less than \
+                     2/3",
+                    voting_power
+                ));
             }
 
             let events = event_observers
@@ -266,7 +266,7 @@ mod prepare_block {
                 .map(|(event, signers)| MultiSignedEthEvent { event, signers })
                 .collect();
 
-            Some(VoteExtensionDigest { events, signatures })
+            Ok(VoteExtensionDigest { events, signatures })
         }
     }
 
