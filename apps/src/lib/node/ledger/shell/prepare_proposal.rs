@@ -8,9 +8,7 @@ mod prepare_block {
         FractionalVotingPower, MultiSignedEthEvent, VoteExtensionDigest,
     };
     use namada::types::transaction::protocol::ProtocolTxType;
-    use tendermint_proto::abci::{
-        ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
-    };
+    use tendermint_proto::abci::{ExtendedVoteInfo, TxRecord};
 
     use super::super::queries::QueriesExt;
     use super::super::vote_extensions::deserialize_vote_extensions;
@@ -40,11 +38,17 @@ mod prepare_block {
             // proposal is accepted
             self.gas_meter.reset();
             let txs = if let ShellMode::Validator { .. } = self.mode {
-                // TODO: add some info logging
-
-                // add ethereum events as protocol txs
+                let local_last_commit = req.local_last_commit.expect(
+                    "No local last commit provided by Tendermint, but this is \
+                     expected for every block proposal",
+                );
+                tracing::debug!(
+                    local_last_commit.round,
+                    votes = local_last_commit.votes.len(),
+                    "Got local last commit",
+                );
                 let mut txs =
-                    self.build_vote_extensions_txs(req.local_last_commit);
+                    self.build_vote_extensions_txs(local_last_commit.votes);
 
                 // add mempool txs
                 let mut mempool_txs = self.build_mempool_txs(req.txs);
@@ -56,7 +60,10 @@ mod prepare_block {
 
                 txs
             } else {
-                vec![]
+                panic!(
+                    "PrepareProposal should only ever be called for validator \
+                     nodes"
+                )
             };
 
             response::PrepareProposal {
@@ -69,43 +76,50 @@ mod prepare_block {
         /// events
         fn build_vote_extensions_txs(
             &mut self,
-            local_last_commit: Option<ExtendedCommitInfo>,
+            votes: Vec<ExtendedVoteInfo>,
         ) -> Vec<TxRecord> {
             let protocol_key = self
                 .mode
                 .get_protocol_key()
                 .expect("Validators should always have a protocol key");
 
-            let vote_extension_digest =
-                local_last_commit.and_then(|local_last_commit| {
-                    let votes = local_last_commit.votes;
-                    self.compress_vote_extensions(votes)
-                });
-            let vote_extension_digest =
-                match (vote_extension_digest, self.storage.last_height) {
-                    // handle genesis block
-                    (None, BlockHeight(0)) => return vec![],
-                    (Some(_), BlockHeight(0)) => {
-                        unreachable!(
-                            "We already handle this scenario in \
-                             validate_vote_extension."
-                        )
-                    }
-                    // handle block heights > 0
-                    (Some(digest), _) => digest,
-                    _ => unreachable!(
-                        "Honest Namada validators will always sign a \
-                         VoteExtension, even if no Ethereum events were \
-                         observed at a given block height. In fact, a quorum \
-                         of signed empty VoteExtension commits the fact no \
-                         events were observed by a majority of validators. \
-                         Likewise, a Tendermint quorum should never decide on \
-                         a block including vote extensions reflecting less \
-                         than or equal to 2/3 of the total stake. These \
-                         scenarios are virtually impossible, so we will panic \
-                         here."
-                    ),
-                };
+            let vote_extension_digest = match (
+                self.compress_vote_extensions(votes),
+                self.storage.last_height,
+            ) {
+                // handle genesis block
+                (None, BlockHeight(0)) => return vec![],
+                (Some(_), BlockHeight(0)) => {
+                    panic!(
+                        "We should not have received vote extensions when \
+                         proposing the genesis block"
+                    )
+                }
+                // handle block heights > 0
+                (Some(digest), _) => digest,
+                _ => {
+                    // Honest Namada validators will always
+                    // sign a VoteExtension, even if no
+                    // Ethereum events were observed at a
+                    // given block height. In fact, a quorum
+                    // of signed empty VoteExtension commits
+                    // the fact no events were observed by a
+                    // majority of validators. Likewise, a
+                    // Tendermint quorum should never decide
+                    // on a block including vote extensions
+                    // reflecting less than or equal to 2/3 of
+                    // the total stake.
+                    // TODO: in theory we should always be able to construct a
+                    // `VoteExtensionDigest`, in which case this branch can be
+                    // eliminated
+                    tracing::warn!(
+                        "Could not construct a vote extension digest, this \
+                         may mean the block will be rejected by other \
+                         validators"
+                    );
+                    return vec![];
+                }
+            };
 
             let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
                 .sign(protocol_key)
@@ -226,8 +240,9 @@ mod prepare_block {
 
             if voting_power <= FractionalVotingPower::TWO_THIRDS {
                 tracing::error!(
-                    "Tendermint has decided on a block including vote \
-                     extensions reflecting <= 2/3 of the total stake"
+                    ?voting_power,
+                    "Sum of voting powers for valid vote extensions was not \
+                     >2/3 total voting power"
                 );
                 return None;
             }
