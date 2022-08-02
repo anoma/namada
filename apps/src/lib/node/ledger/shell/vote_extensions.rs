@@ -14,13 +14,18 @@ mod extend_votes {
     /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
     #[derive(Error, Debug)]
     pub enum EthEventsVextError {
-        #[error("The vote extension was issued at block height 0.")]
+        #[error(
+            "The Ethereum events vote extension was issued at block height 0."
+        )]
         IssuedAtGenesis,
-        #[error("The vote extension has an unexpected block height.")]
+        #[error(
+            "The Ethereum events vote extension has an unexpected block \
+             height."
+        )]
         UnexpectedBlockHeight,
         #[error(
-            "The vote extension contains duplicate or non-sorted Ethereum \
-             events."
+            "The Ethereum events vote extension contains duplicate or \
+             non-sorted events."
         )]
         HaveDupesOrNonSorted,
         #[error(
@@ -28,7 +33,10 @@ mod extend_votes {
              could not be found in storage."
         )]
         PubKeyNotInStorage,
-        #[error("The vote extension's signature is invalid.")]
+        #[error(
+            "The signature of the vote extension containing the given \
+             Ethereum events is invalid."
+        )]
         VerifySigFailed,
     }
 
