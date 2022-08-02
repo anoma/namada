@@ -166,6 +166,9 @@ mod prepare_block {
         /// Compresses a set of signed Ethereum events into a single
         /// [`EthEventsVextDigest`], whilst filtering invalid
         /// [`SignedEthEventsVext`] instances in the process
+        // TODO: rename this as `compress_vote_extensions`, and return
+        // a `VoteExtensionDigest`, which will contain both digests of
+        // ethereum events and validator set update vote extensions
         fn compress_ethereum_events(
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
