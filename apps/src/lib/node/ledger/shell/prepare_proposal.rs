@@ -4,12 +4,13 @@
 mod prepare_block {
     use std::collections::{BTreeMap, HashMap, HashSet};
 
+    use eyre::eyre;
     use namada::types::ethereum_events::vote_extensions::{
         FractionalVotingPower, MultiSignedEthEvent, VoteExtensionDigest,
     };
     use namada::types::transaction::protocol::ProtocolTxType;
     use tendermint_proto::abci::{
-        ExtendedCommitInfo, ExtendedVoteInfo, TxRecord, Validator,
+        ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
 
     use super::super::vote_extensions::deserialize_vote_extensions;
@@ -93,39 +94,38 @@ mod prepare_block {
         fn build_vote_extensions_txs(
             &mut self,
             local_last_commit: ExtendedCommitInfo,
-        ) -> std::result::Result<Vec<TxRecord>, String> {
-            let protocol_key = self
-                .mode
-                .get_protocol_key()
-                .expect("Validators should always have a protocol key");
+        ) -> eyre::Result<Vec<TxRecord>> {
+            // handle genesis block
+            if self.storage.last_height == BlockHeight(0) {
+                if !local_last_commit.votes.is_empty() {
+                    // we should never expect to reach here
+                    return Err(eyre!(
+                        "Found unexpected vote extensions while proposing \
+                         genesis block"
+                    ));
+                }
+                tracing::info!(
+                    "Genesis block will not have vote extension transactions"
+                );
+                return Ok(vec![]);
+            }
 
             let vote_extension_digest =
-                self.compress_vote_extensions(local_last_commit.votes);
-            let vote_extension_digest =
-                match (vote_extension_digest, self.storage.last_height) {
-                    // handle genesis block
-                    (None, BlockHeight(0)) => return Ok(vec![]),
-                    (Some(_), BlockHeight(0)) => {
-                        // we should never expect to reach here
-                        return Err("Found unexpected vote extensions while \
-                                    proposing genesis block"
-                            .to_owned());
-                    }
-                    // handle block heights > 0
-                    (Some(digest), _) => digest,
-                    // Honest Namada validators will always
-                    // sign a VoteExtension, even if no
-                    // Ethereum events were observed at a
-                    // given block height. In fact, a quorum
-                    // of signed empty VoteExtension commits
-                    // the fact no events were observed by a
-                    // majority of validators. Likewise, a
-                    // Tendermint quorum should never decide
-                    // on a block including vote extensions
-                    // reflecting less than or equal to 2/3 of
-                    // the total stake."
-                    _ => {
-                        return Err(format!(
+                match self.compress_vote_extensions(local_last_commit.votes) {
+                    Some(vote_extension_digest) => vote_extension_digest,
+                    None => {
+                        // Honest Namada validators will always
+                        // sign a VoteExtension, even if no
+                        // Ethereum events were observed at a
+                        // given block height. In fact, a quorum
+                        // of signed empty VoteExtension commits
+                        // the fact no events were observed by a
+                        // majority of validators. Likewise, a
+                        // Tendermint quorum should never decide
+                        // on a block including vote extensions
+                        // reflecting less than or equal to 2/3 of
+                        // the total stake."
+                        return Err(eyre!(
                             "Couldn't construct VoteExtensionDigest for block \
                              height {}",
                             self.storage.last_height + 1
@@ -133,6 +133,10 @@ mod prepare_block {
                     }
                 };
 
+            let protocol_key = self
+                .mode
+                .get_protocol_key()
+                .expect("Validators should always have a protocol key");
             let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
                 .sign(protocol_key)
                 .to_bytes();
@@ -264,25 +268,6 @@ mod prepare_block {
 
             Some(VoteExtensionDigest { events, signatures })
         }
-    }
-
-    /// Returns whether some vote extensions match what Tendermint gives to a
-    /// sole validator when they restart their node
-    // TODO(https://github.com/anoma/namada/issues/200): we need to be able to get the Tendermint address for the block proposer
-    fn is_sole_validators(votes: &[ExtendedVoteInfo]) -> bool {
-        matches!(
-            votes,
-            [
-                ExtendedVoteInfo {
-                    validator: Some(Validator {
-                        // TODO(https://github.com/anoma/namada/issues/200): we must check the Tendermint address matches this block proposer
-                        ..
-                     }),
-                    vote_extension,
-                    ..
-                },
-            ] if vote_extension.is_empty(),
-        )
     }
 
     /// Functions for creating the appropriate TxRecord given the
