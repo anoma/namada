@@ -414,11 +414,7 @@ where
             .try_to_vec()
             .expect("Serializing public key should not fail");
         let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
-        // get the active validator set
-        self.read_validator_set()
-            .get(epoch)
-            .expect("Validators for an epoch should be known")
-            .active
+        self.get_active_validators(Some(epoch))
             .iter()
             .find(|validator| {
                 let pk_key = key::protocol_pk_key(&validator.address);
