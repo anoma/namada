@@ -11,18 +11,15 @@ use crate::types::ethereum_events::EthereumEvent;
 use crate::types::key::common::{self, Signature};
 use crate::types::storage::BlockHeight;
 
-/// An [`EthEventsVext`] instance signed by a Namada validator.
-pub type SignedEthEventsVext = Signed<EthEventsVext>;
-
-/// Represents a set of `EthereumEvent` instances
+/// Represents a set of [`EthereumEvent`] instances
 /// seen by some validator.
 ///
 /// This struct will be created and signed over by each
 /// active validator, to be included as a vote extension at the end of a
 /// Tendermint PreCommit phase.
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-pub struct EthEventsVext {
-    /// The block height for which this [`EthEventsVext`] was made.
+pub struct Vext {
+    /// The block height for which this [`Vext`] was made.
     pub block_height: BlockHeight,
     /// TODO: the validator's address is temporarily being included
     /// until we're able to map a Tendermint address to a validator
@@ -33,8 +30,8 @@ pub struct EthEventsVext {
     pub ethereum_events: Vec<EthereumEvent>,
 }
 
-impl EthEventsVext {
-    /// Creates a [`EthEventsVext`] without any Ethereum events.
+impl Vext {
+    /// Creates a [`Vext`] without any Ethereum events.
     pub fn empty(block_height: BlockHeight, validator_addr: Address) -> Self {
         Self {
             block_height,
@@ -43,9 +40,9 @@ impl EthEventsVext {
         }
     }
 
-    /// Sign a [`EthEventsVext`] with a validator's `signing_key`,
+    /// Sign a [`Vext`] with a validator's `signing_key`,
     /// and return the signed data.
-    pub fn sign(self, signing_key: &common::SecretKey) -> SignedEthEventsVext {
+    pub fn sign(self, signing_key: &common::SecretKey) -> Signed<Self> {
         Signed::new(signing_key, self)
     }
 }
@@ -62,30 +59,27 @@ pub struct MultiSignedEthEvent {
     pub signers: HashSet<Address>,
 }
 
-/// Compresses a set of signed [`EthEventsVext`] instances, to save
+/// Compresses a set of signed [`Vext`] instances, to save
 /// space on a block.
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct EthEventsVextDigest {
-    /// The signatures and signing address of each [`EthEventsVext`]
+    /// The signatures and signing address of each [`Vext`]
     pub signatures: HashMap<Address, Signature>,
     /// The events that were reported
     pub events: Vec<MultiSignedEthEvent>,
 }
 
 impl EthEventsVextDigest {
-    /// Decompresses a set of signed [`EthEventsVext`] instances.
-    pub fn decompress(
-        self,
-        last_height: BlockHeight,
-    ) -> Vec<SignedEthEventsVext> {
+    /// Decompresses a set of signed [`Vext`] instances.
+    pub fn decompress(self, last_height: BlockHeight) -> Vec<Signed<Vext>> {
         let EthEventsVextDigest { signatures, events } = self;
 
         let mut extensions = vec![];
 
         for (addr, sig) in signatures.into_iter() {
-            let mut ext = EthEventsVext::empty(last_height, addr.clone());
+            let mut ext = Vext::empty(last_height, addr.clone());
 
             for event in events.iter() {
                 if event.signers.contains(&addr) {
@@ -142,7 +136,7 @@ mod tests {
     /// Test decompression of a set of Ethereum events
     #[test]
     fn test_decompress_ethereum_events() {
-        // we need to construct a `Vec<SignedEthEventsVext>`
+        // we need to construct a `Vec<Signed<Vext>>`
         let sk_1 = key::testing::keypair_1();
         let sk_2 = key::testing::keypair_2();
 
@@ -160,8 +154,8 @@ mod tests {
         let validator_1 = address::testing::established_address_1();
         let validator_2 = address::testing::established_address_2();
 
-        let ext = |validator: Address| -> EthEventsVext {
-            let mut ext = EthEventsVext::empty(last_block_height, validator);
+        let ext = |validator: Address| -> Vext {
+            let mut ext = Vext::empty(last_block_height, validator);
 
             ext.ethereum_events.push(ev_1.clone());
             ext.ethereum_events.push(ev_2.clone());
@@ -177,7 +171,7 @@ mod tests {
 
         let ext = vec![ext_1, ext_2];
 
-        // we have the `SignedEthEventsVext` instances we need,
+        // we have the `Signed<Vext>` instances we need,
         // let us now compress them into a single `EthEventsVextDigest`
         let signatures: HashMap<_, _> = [
             (validator_1.clone(), ext[0].sig.clone()),
@@ -205,13 +199,13 @@ mod tests {
         let digest = EthEventsVextDigest { events, signatures };
 
         // finally, decompress the `EthEventsVextDigest` back into a
-        // `Vec<SignedEthEventsVext>`
+        // `Vec<Signed<Vext>>`
         let mut decompressed = digest
             .decompress(last_block_height)
             .into_iter()
-            .collect::<Vec<SignedEthEventsVext>>();
+            .collect::<Vec<Signed<Vext>>>();
 
-        // decompressing yields an arbitrary ordering of `EthEventsVext`
+        // decompressing yields an arbitrary ordering of `Vext`
         // instances, which is fine
         if decompressed[0].data.validator_addr != ext[0].data.validator_addr {
             decompressed.swap(0, 1);

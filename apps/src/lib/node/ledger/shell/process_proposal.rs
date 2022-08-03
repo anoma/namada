@@ -382,7 +382,7 @@ mod test_process_proposal {
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
     use namada::types::vote_extensions::ethereum_events::{
-        EthEventsVext, EthEventsVextDigest, MultiSignedEthEvent,
+        self, EthEventsVextDigest, MultiSignedEthEvent,
     };
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::RequestInitChain;
@@ -412,9 +412,11 @@ mod test_process_proposal {
         let vote_extension_digest = {
             let validator_addr = wallet::defaults::validator_address();
             let signed_vote_extension = {
-                let ext =
-                    EthEventsVext::empty(LAST_HEIGHT, validator_addr.clone())
-                        .sign(&protocol_key);
+                let ext = ethereum_events::Vext::empty(
+                    LAST_HEIGHT,
+                    validator_addr.clone(),
+                )
+                .sign(&protocol_key);
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
@@ -483,7 +485,7 @@ mod test_process_proposal {
             };
             let ext = {
                 // generate a valid signature
-                let mut ext = EthEventsVext {
+                let mut ext = ethereum_events::Vext {
                     validator_addr: addr.clone(),
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![event.clone()],
@@ -530,7 +532,7 @@ mod test_process_proposal {
                 transfers: vec![],
             };
             let ext = {
-                let ext = EthEventsVext {
+                let ext = ethereum_events::Vext {
                     validator_addr: addr.clone(),
                     block_height: PRED_LAST_HEIGHT,
                     ethereum_events: vec![event.clone()],
@@ -576,7 +578,7 @@ mod test_process_proposal {
                 transfers: vec![],
             };
             let ext = {
-                let ext = EthEventsVext {
+                let ext = ethereum_events::Vext {
                     validator_addr: addr.clone(),
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![event.clone()],

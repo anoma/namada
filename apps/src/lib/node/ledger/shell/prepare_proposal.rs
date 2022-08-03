@@ -98,11 +98,11 @@ mod prepare_block {
                     (Some(digest), _) => digest,
                     _ => unreachable!(
                         "Honest Namada validators will always sign \
-                         EthEventsVext instances, even if no Ethereum events \
-                         were observed at a given block height. In fact, a \
-                         quorum of signed empty EthEventsVext instances \
-                         commits the fact no events were observed by a \
-                         majority of validators. Likewise, a Tendermint \
+                         ethereum_events::Vext instances, even if no Ethereum \
+                         events were observed at a given block height. In \
+                         fact, a quorum of signed empty ethereum_events::Vext \
+                         instances commits the fact no events were observed \
+                         by a majority of validators. Likewise, a Tendermint \
                          quorum should never decide on a block including vote \
                          extensions reflecting less than or equal to 2/3 of \
                          the total stake. These scenarios are virtually \
@@ -167,7 +167,7 @@ mod prepare_block {
 
         /// Compresses a set of signed Ethereum events into a single
         /// [`EthEventsVextDigest`], whilst filtering invalid
-        /// [`SignedEthEventsVext`] instances in the process
+        /// [`Signed<ethereum_events::Vext>`] instances in the process
         // TODO: rename this as `compress_vote_extensions`, and return
         // a `VoteExtensionDigest`, which will contain both digests of
         // ethereum events and validator set update vote extensions
@@ -292,16 +292,14 @@ mod prepare_block {
         use namada::ledger::pos::namada_proof_of_stake::types::{
             VotingPower, WeightedValidator,
         };
-        use namada::proto::SignedTxData;
+        use namada::proto::{Signed, SignedTxData};
         use namada::types::address::xan;
         use namada::types::ethereum_events::EthereumEvent;
         use namada::types::key::common;
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::protocol::ProtocolTxType;
         use namada::types::transaction::{Fee, TxType};
-        use namada::types::vote_extensions::ethereum_events::{
-            EthEventsVext, SignedEthEventsVext,
-        };
+        use namada::types::vote_extensions::ethereum_events;
         use tendermint_proto::abci::tx_record::TxAction;
         use tendermint_proto::abci::{
             ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
@@ -335,9 +333,10 @@ mod prepare_block {
             );
         }
 
-        /// Serialize a [`SignedEthEventsVext`] to an [`ExtendedVoteInfo`]
+        /// Serialize a [`Signed<ethereum_events::Vext>`] to an
+        /// [`ExtendedVoteInfo`]
         fn vote_extension_serialize(
-            vext: SignedEthEventsVext,
+            vext: Signed<ethereum_events::Vext>,
         ) -> ExtendedVoteInfo {
             ExtendedVoteInfo {
                 vote_extension: vext.try_to_vec().unwrap(),
@@ -348,7 +347,7 @@ mod prepare_block {
         /// Check if we are filtering out an invalid vote extension `vext`
         fn check_eth_events_filtering(
             shell: &mut TestShell,
-            vext: SignedEthEventsVext,
+            vext: Signed<ethereum_events::Vext>,
         ) {
             let votes =
                 deserialize_vote_extensions(vec![vote_extension_serialize(
@@ -376,7 +375,7 @@ mod prepare_block {
                 let validator_addr = wallet::defaults::validator_address();
 
                 // generate a valid signature
-                let mut ext = EthEventsVext {
+                let mut ext = ethereum_events::Vext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![],
@@ -409,7 +408,7 @@ mod prepare_block {
             let validator_addr = wallet::defaults::validator_address();
 
             let signed_vote_extension = {
-                let ext = EthEventsVext {
+                let ext = ethereum_events::Vext {
                     validator_addr,
                     block_height: PRED_LAST_HEIGHT,
                     ethereum_events: vec![],
@@ -440,7 +439,7 @@ mod prepare_block {
             };
 
             let signed_vote_extension = {
-                let ext = EthEventsVext {
+                let ext = ethereum_events::Vext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![],
@@ -473,7 +472,7 @@ mod prepare_block {
             };
             let signed_vote_extension = {
                 let ev = ethereum_event;
-                let ext = EthEventsVext {
+                let ext = ethereum_events::Vext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![ev.clone(), ev.clone(), ev],
@@ -500,7 +499,7 @@ mod prepare_block {
         /// [`TxRecord`].
         fn manually_assemble_digest(
             _protocol_key: &common::SecretKey,
-            ext: SignedEthEventsVext,
+            ext: Signed<ethereum_events::Vext>,
             last_height: BlockHeight,
         ) -> EthEventsVextDigest {
             let events = vec![MultiSignedEthEvent {
@@ -552,7 +551,7 @@ mod prepare_block {
                 transfers: vec![],
             };
             let signed_vote_extension = {
-                let ext = EthEventsVext {
+                let ext = ethereum_events::Vext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![ethereum_event],
@@ -667,7 +666,7 @@ mod prepare_block {
                 transfers: vec![],
             };
             let signed_vote_extension = {
-                let ext = EthEventsVext {
+                let ext = ethereum_events::Vext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![ethereum_event],
