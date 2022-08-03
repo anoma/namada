@@ -33,7 +33,7 @@ pub mod mock_oracle {
     use tokio::task::LocalSet;
 
     pub fn run_oracle(
-        _: &str,
+        _: impl AsRef<str>,
         _: UnboundedSender<EthereumEvent>,
         abort: Sender<()>,
     ) -> tokio::task::JoinHandle<()> {
