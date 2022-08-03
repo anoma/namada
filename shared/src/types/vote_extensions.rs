@@ -6,8 +6,8 @@ pub mod ethereum_events;
 //
 // ```ignore
 // pub struct VoteExtension {
-//     pub ethereum_events: SignedEthEventsVext,
-//     pub validator_set_update: Option<SignedValidatorSetUpdateVext>,
+//     pub ethereum_events: Signed<ethereum_events::Vext>,
+//     pub validator_set_update: Option<validator_set_update::EthSignedVext>,
 // }
 // ```
 
@@ -18,8 +18,8 @@ pub mod ethereum_events;
 //
 // ```ignore
 // pub struct VoteExtensionDigest {
-//     pub ethereum_events: EthEventsVextDigest,
-//     pub validator_set_update: Option<ValidatorSetUpdateVextDigest>,
+//     pub ethereum_events: ethereum_events::VextDigest,
+//     pub validator_set_update: Option<validator_set_update::VextDigest>,
 // }
 // ```
 //
