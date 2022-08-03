@@ -7,6 +7,7 @@ pub mod oracle_process {
     use num256::Uint256;
     use tokio::sync::mpsc::UnboundedSender;
     use tokio::sync::oneshot::Sender;
+    use tokio::task::LocalSet;
     #[cfg(not(test))]
     use web30::client::Web3;
 
@@ -93,11 +94,12 @@ pub mod oracle_process {
         abort_sender: Sender<()>,
     ) -> tokio::task::JoinHandle<()> {
         let url = url.as_ref().to_owned();
+        // we have to run the oracle in a [`LocalSet`] due to the web30
+        // crate
         tokio::task::spawn_blocking(move || {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async move {
-                let local = tokio::task::LocalSet::new();
-                local
+                LocalSet::new()
                     .run_until(async move {
                         tracing::info!("Ethereum event oracle is starting");
 
