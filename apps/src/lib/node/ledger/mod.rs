@@ -351,12 +351,16 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
                 let local = tokio::task::LocalSet::new();
                 local
                     .run_until(async move {
+                        tracing::info!("Ethereum event oracle is starting");
                         ethereum_node::run_oracle(
                             &ethereum_url,
                             eth_sender,
                             abort_sender,
                         )
-                        .await
+                        .await;
+                        tracing::info!(
+                            "Ethereum event oracle is no longer running"
+                        );
                     })
                     .await
             });
