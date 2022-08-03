@@ -88,12 +88,29 @@ pub mod oracle_process {
     /// Set up an Oracle and run the process where the Oracle
     /// processes and forwards Ethereum events to the ledger
     pub async fn run_oracle(
-        url: &str,
+        url: impl AsRef<str>,
         sender: UnboundedSender<EthereumEvent>,
         abort_sender: Sender<()>,
     ) {
-        let oracle = Oracle::new(url, sender, abort_sender);
-        run_oracle_aux(oracle).await;
+        let url = url.as_ref().to_owned();
+        tokio::task::spawn_blocking(move || {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async move {
+                let local = tokio::task::LocalSet::new();
+                local
+                    .run_until(async move {
+                        tracing::info!("Ethereum event oracle is starting");
+
+                        let oracle = Oracle::new(&url, sender, abort_sender);
+                        run_oracle_aux(oracle).await;
+
+                        tracing::info!(
+                            "Ethereum event oracle is no longer running"
+                        );
+                    })
+                    .await
+            });
+        });
     }
 
     /// Given an oracle, watch for new Ethereum events, processing
