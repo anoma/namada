@@ -318,16 +318,9 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         // boot up the ethereum node process and wait for it to finish syncing
         let (eth_sender, eth_receiver) = unbounded_channel();
         let url = ethereum_url.clone();
-        let (ethereum_node, abort_sender) = {
-            let local = tokio::task::LocalSet::new();
-            local
-                .run_until(async move {
-                    EthereumNode::new(&url)
-                        .await
-                        .expect("Unable to start the Ethereum fullnode")
-                })
-                .await
-        };
+        let (ethereum_node, abort_sender) = EthereumNode::new(&url)
+            .await
+            .expect("Unable to start the Ethereum fullnode");
 
         // Start Ethereum fullnode
         // Channel for signalling shut down to Tendermint process
