@@ -78,7 +78,7 @@ use crate::types::ibc::data::{
     PacketReceipt,
 };
 use crate::types::ibc::IbcEvent as AnomaIbcEvent;
-use crate::types::storage::{BlockHeight, Key};
+use crate::types::storage::{BlockHeight, Key, KeySeg};
 use crate::types::time::Rfc3339String;
 use crate::types::token::{self, Amount};
 
@@ -115,6 +115,8 @@ pub enum Error {
     SendingToken(String),
     #[error("Receiving a token error: {0}")]
     ReceivingToken(String),
+    #[error("IBC storage error: {0}")]
+    IbcStorage(storage::Error),
 }
 
 /// for handling IBC modules
@@ -866,19 +868,28 @@ pub trait IbcActions {
 
     /// Send the specified token by escrowing or burning
     fn send_token(&self, msg: &MsgTransfer) -> Result<()> {
-        let data = FungibleTokenPacketData::from(msg.clone());
-        let token_str = data.denom.split('/').last().ok_or_else(|| {
-            Error::SendingToken(format!(
-                "No token was specified: {}",
-                data.denom
-            ))
-        })?;
-        let token = Address::decode(token_str).map_err(|e| {
-            Error::SendingToken(format!(
-                "Invalid token address: token {}, error {}",
-                token_str, e
-            ))
-        })?;
+        let mut data = FungibleTokenPacketData::from(msg.clone());
+        if let Some(denom) = data
+            .denom
+            .strip_prefix(&format!("{}/", storage::MULTITOKEN_STORAGE_KEY))
+        {
+            let denom_key = storage::ibc_denom_key(&denom);
+            let denom_bytes =
+                self.read_ibc_data(&denom_key).ok_or_else(|| {
+                    Error::SendingToken(format!(
+                        "No original denom: denom_key {}",
+                        denom_key
+                    ))
+                })?;
+            let denom = std::str::from_utf8(&denom_bytes).map_err(|e| {
+                Error::SendingToken(format!(
+                    "Decoding the denom failed: denom_key {}, error {}",
+                    denom_key, e
+                ))
+            })?;
+            data.denom = denom.to_string();
+        }
+        let token = storage::token(&data.denom)?;
         let amount = Amount::from_str(&data.amount).map_err(|e| {
             Error::SendingToken(format!(
                 "Invalid amount: amount {}, error {}",
@@ -886,22 +897,13 @@ pub trait IbcActions {
             ))
         })?;
 
-        let source = if data.sender.contains('/') {
-            Key::parse(&data.sender).map_err(|e| {
-                Error::SendingToken(format!(
-                    "Invalid sender account key: sender {}, error {}",
-                    data.sender, e
-                ))
-            })?
-        } else {
-            let addr = Address::decode(data.sender.clone()).map_err(|e| {
+        let source_addr =
+            Address::decode(data.sender.clone()).map_err(|e| {
                 Error::SendingToken(format!(
                     "Invalid sender address: sender {}, error {}",
                     data.sender, e
                 ))
             })?;
-            token::balance_key(&token, &addr)
-        };
 
         // check the denom field
         let prefix = format!(
@@ -909,26 +911,46 @@ pub trait IbcActions {
             msg.source_port.clone(),
             msg.source_channel.clone()
         );
-        let key_prefix = storage::ibc_token_prefix(
-            &msg.source_port,
-            &msg.source_channel,
-            &token,
-        );
-        if data.denom.starts_with(&prefix) {
-            // sink zone
+        let (source, target) = if data.denom.starts_with(&prefix) {
+            // the receiver's chain was the source
+            // transfer from the origin-specific account of the token
+            let key_prefix = storage::ibc_token_prefix(&data.denom)?;
+            let src = token::multitoken_balance_key(&key_prefix, &source_addr);
+
+            let key_prefix = storage::ibc_account_prefix(
+                &msg.source_port,
+                &msg.source_channel,
+                &token,
+            );
             let burn = token::multitoken_balance_key(
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcBurn),
             );
-            self.transfer_token(&source, &burn, amount);
+
+            (src, burn)
         } else {
-            // source zone
+            // this chain is the source
+            // escrow the amount of the token
+            let src = if data.denom == token.to_string() {
+                token::balance_key(&token, &source_addr)
+            } else {
+                let key_prefix = storage::ibc_token_prefix(&data.denom)?;
+                token::multitoken_balance_key(&key_prefix, &source_addr)
+            };
+
+            let key_prefix = storage::ibc_account_prefix(
+                &msg.source_port,
+                &msg.source_channel,
+                &token,
+            );
             let escrow = token::multitoken_balance_key(
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcEscrow),
             );
-            self.transfer_token(&source, &escrow, amount);
-        }
+
+            (src, escrow)
+        };
+        self.transfer_token(&source, &target, amount);
 
         // send a packet
         let port_channel_id =
@@ -949,18 +971,7 @@ pub trait IbcActions {
         packet: &Packet,
         data: &FungibleTokenPacketData,
     ) -> Result<()> {
-        let token_str = data.denom.split('/').last().ok_or_else(|| {
-            Error::ReceivingToken(format!(
-                "No token was specified: {}",
-                data.denom
-            ))
-        })?;
-        let token = Address::decode(token_str).map_err(|e| {
-            Error::ReceivingToken(format!(
-                "Invalid token address: token {}, error {}",
-                token_str, e
-            ))
-        })?;
+        let token = storage::token(&data.denom)?;
         let amount = Amount::from_str(&data.amount).map_err(|e| {
             Error::ReceivingToken(format!(
                 "Invalid amount: amount {}, error {}",
@@ -977,33 +988,65 @@ pub trait IbcActions {
                     data.receiver, e
                 ))
             })?;
-        let key_prefix = storage::ibc_token_prefix(
-            &packet.source_port,
-            &packet.source_channel,
-            &token,
-        );
-        let dest = token::multitoken_balance_key(&key_prefix, &dest_addr);
 
         let prefix = format!(
             "{}/{}/",
             packet.source_port.clone(),
             packet.source_channel.clone()
         );
-        if data.denom.starts_with(&prefix) {
-            // unescrow the token because this chain is the source
-            let escrow = token::multitoken_balance_key(
-                &key_prefix,
-                &Address::Internal(InternalAddress::IbcEscrow),
-            );
-            self.transfer_token(&escrow, &dest, amount);
-        } else {
-            // mint the token because the sender chain is the source
-            let mint = token::multitoken_balance_key(
-                &key_prefix,
-                &Address::Internal(InternalAddress::IbcMint),
-            );
-            self.transfer_token(&mint, &dest, amount);
-        }
+        let (source, target) = match data.denom.strip_prefix(&prefix) {
+            Some(denom) => {
+                // unescrow the token because this chain was the source
+                let escrow_prefix = storage::ibc_account_prefix(
+                    &packet.destination_port,
+                    &packet.destination_channel,
+                    &token,
+                );
+                let escrow = token::multitoken_balance_key(
+                    &escrow_prefix,
+                    &Address::Internal(InternalAddress::IbcEscrow),
+                );
+                let dest = if denom == token.to_string() {
+                    token::balance_key(&token, &dest_addr)
+                } else {
+                    let key_prefix = storage::ibc_token_prefix(denom)?;
+                    token::multitoken_balance_key(&key_prefix, &dest_addr)
+                };
+                (escrow, dest)
+            }
+            None => {
+                // mint the token because the sender chain is the source
+                let key_prefix = storage::ibc_account_prefix(
+                    &packet.destination_port,
+                    &packet.destination_channel,
+                    &token,
+                );
+                let mint = token::multitoken_balance_key(
+                    &key_prefix,
+                    &Address::Internal(InternalAddress::IbcMint),
+                );
+
+                // prefix the denom with the this chain port and channel
+                let denom = format!(
+                    "{}/{}/{}",
+                    &packet.destination_port,
+                    &packet.destination_channel,
+                    &data.denom
+                );
+                let key_prefix = storage::ibc_token_prefix(&denom)?;
+                let dest =
+                    token::multitoken_balance_key(&key_prefix, &dest_addr);
+
+                // store the prefixed denom
+                let token_hash = storage::ibc_token_hash(&denom);
+                let denom_key = storage::ibc_denom_key(&token_hash.raw());
+                self.write_ibc_data(&denom_key, denom.as_bytes());
+
+                (mint, dest)
+            }
+        };
+        self.transfer_token(&source, &target, amount);
+
         Ok(())
     }
 
@@ -1013,18 +1056,7 @@ pub trait IbcActions {
         packet: &Packet,
         data: &FungibleTokenPacketData,
     ) -> Result<()> {
-        let token_str = data.denom.split('/').last().ok_or_else(|| {
-            Error::ReceivingToken(format!(
-                "No token was specified: {}",
-                data.denom
-            ))
-        })?;
-        let token = Address::decode(token_str).map_err(|e| {
-            Error::ReceivingToken(format!(
-                "Invalid token address: token {}, error {}",
-                token_str, e
-            ))
-        })?;
+        let token = storage::token(&data.denom)?;
         let amount = Amount::from_str(&data.amount).map_err(|e| {
             Error::ReceivingToken(format!(
                 "Invalid amount: amount {}, error {}",
@@ -1032,48 +1064,54 @@ pub trait IbcActions {
             ))
         })?;
 
-        let dest = if data.sender.contains('/') {
-            Key::parse(&data.sender).map_err(|e| {
-                Error::SendingToken(format!(
-                    "Invalid sender account key: sender {}, error {}",
-                    data.sender, e
-                ))
-            })?
-        } else {
-            let addr = Address::decode(data.sender.clone()).map_err(|e| {
-                Error::SendingToken(format!(
-                    "Invalid sender address: sender {}, error {}",
-                    data.sender, e
-                ))
-            })?;
-            token::balance_key(&token, &addr)
-        };
+        let dest_addr = Address::decode(data.sender.clone()).map_err(|e| {
+            Error::SendingToken(format!(
+                "Invalid sender address: sender {}, error {}",
+                data.sender, e
+            ))
+        })?;
 
         let prefix = format!(
             "{}/{}/",
             packet.source_port.clone(),
             packet.source_channel.clone()
         );
-        let key_prefix = storage::ibc_token_prefix(
-            &packet.source_port,
-            &packet.source_channel,
-            &token,
-        );
-        if data.denom.starts_with(&prefix) {
-            // mint the token because the sender chain is the sink zone
+        let (source, target) = if data.denom.starts_with(&prefix) {
+            // mint the token because the amount was burned
+            let key_prefix = storage::ibc_account_prefix(
+                &packet.source_port,
+                &packet.source_channel,
+                &token,
+            );
             let mint = token::multitoken_balance_key(
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcMint),
             );
-            self.transfer_token(&mint, &dest, amount);
+            let key_prefix = storage::ibc_token_prefix(&data.denom)?;
+            let dest = token::multitoken_balance_key(&key_prefix, &dest_addr);
+            (mint, dest)
         } else {
-            // unescrow the token because the sender chain is the source zone
+            // unescrow the token because the acount was escrowed
+            let dest = if data.denom == token.to_string() {
+                token::balance_key(&token, &dest_addr)
+            } else {
+                let key_prefix = storage::ibc_token_prefix(&data.denom)?;
+                token::multitoken_balance_key(&key_prefix, &dest_addr)
+            };
+
+            let key_prefix = storage::ibc_account_prefix(
+                &packet.source_port,
+                &packet.source_channel,
+                &token,
+            );
             let escrow = token::multitoken_balance_key(
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcEscrow),
             );
-            self.transfer_token(&escrow, &dest, amount);
-        }
+            (escrow, dest)
+        };
+        self.transfer_token(&source, &target, amount);
+
         Ok(())
     }
 }
@@ -1487,4 +1525,10 @@ pub fn make_timeout_event(packet: Packet) -> IbcEvent {
         height: Height::default(),
         packet,
     })
+}
+
+impl From<storage::Error> for Error {
+    fn from(err: storage::Error) -> Self {
+        Self::IbcStorage(err)
+    }
 }

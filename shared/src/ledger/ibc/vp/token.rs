@@ -31,17 +31,17 @@ pub enum Error {
     IbcMessage(IbcDataError),
     #[error("Invalid message error")]
     InvalidMessage,
-    #[error("Invalid address error")]
+    #[error("Invalid address error: {0}")]
     Address(AddressError),
     #[error("Token error")]
     NoToken,
-    #[error("Parsing amount error")]
+    #[error("Parsing amount error: {0}")]
     Amount(AmountParseError),
-    #[error("Decoding error")]
+    #[error("Decoding error: {0}")]
     Decoding(std::io::Error),
-    #[error("Decoding PacketData error")]
+    #[error("Decoding PacketData error: {0}")]
     DecodingPacketData(serde_json::Error),
-    #[error("Invalid token transfer error")]
+    #[error("Invalid token transfer error: {0}")]
     TokenTransfer(String),
     #[error("IBC message is required as transaction data")]
     NoTxData,
@@ -143,19 +143,46 @@ where
         let token = Address::decode(token_str).map_err(Error::Address)?;
         let amount = Amount::from_str(&data.amount).map_err(Error::Amount)?;
 
+        let denom = if let Some(denom) = data
+            .denom
+            .strip_prefix(&format!("{}/", ibc_storage::MULTITOKEN_STORAGE_KEY))
+        {
+            let denom_key = ibc_storage::ibc_denom_key(&denom);
+            match self.ctx.read_pre(&denom_key)? {
+                Some(v) => std::str::from_utf8(&v)
+                    .map_err(|e| {
+                        Error::TokenTransfer(format!(
+                            "Decoding the denom failed: denom_key {}, error {}",
+                            denom_key, e
+                        ))
+                    })?
+                    .to_string(),
+                None => {
+                    return Err(Error::TokenTransfer(format!(
+                        "No original denom: denom_key {}",
+                        denom_key
+                    )));
+                }
+            }
+        } else {
+            data.denom.clone()
+        };
+
         // check the denom field
         let prefix = format!(
             "{}/{}/",
             msg.source_port.clone(),
             msg.source_channel.clone()
         );
-        let key_prefix = ibc_storage::ibc_token_prefix(
+        let key_prefix = ibc_storage::ibc_account_prefix(
             &msg.source_port,
             &msg.source_channel,
             &token,
         );
-        let change = if data.denom.starts_with(&prefix) {
+
+        let change = if denom.starts_with(&prefix) {
             // sink zone
+            // check the amount of the token has been burned
             let target_key = token::multitoken_balance_key(
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcBurn),
@@ -167,6 +194,7 @@ where
             post.change()
         } else {
             // source zone
+            // check the amount of the token has been escrowed
             let target_key = token::multitoken_balance_key(
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcEscrow),
@@ -202,13 +230,14 @@ where
             packet.source_port.clone(),
             packet.source_channel.clone()
         );
-        let key_prefix = ibc_storage::ibc_token_prefix(
-            &packet.source_port,
-            &packet.source_channel,
+        let key_prefix = ibc_storage::ibc_account_prefix(
+            &packet.destination_port,
+            &packet.destination_channel,
             &token,
         );
         let change = if data.denom.starts_with(&prefix) {
             // this chain is the source
+            // check the amount of the token has been unescrowed
             let source_key = token::multitoken_balance_key(
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcEscrow),
@@ -221,6 +250,7 @@ where
             pre.change() - post.change()
         } else {
             // the sender is the source
+            // check the amount of the token has been minted
             let source_key = token::multitoken_balance_key(
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcMint),
@@ -228,7 +258,8 @@ where
             let post =
                 try_decode_token_amount(self.ctx.read_temp(&source_key)?)?
                     .unwrap_or_default();
-            // the previous balance of the mint address should be the maximum
+            // the previous balance of the mint address should be the
+            // maximum
             Amount::max().change() - post.change()
         };
 
@@ -256,7 +287,7 @@ where
             packet.source_port.clone(),
             packet.source_channel.clone()
         );
-        let key_prefix = ibc_storage::ibc_token_prefix(
+        let key_prefix = ibc_storage::ibc_account_prefix(
             &packet.source_port,
             &packet.source_channel,
             &token,

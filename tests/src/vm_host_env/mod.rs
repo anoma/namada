@@ -1216,7 +1216,7 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was escrowed
-        let key_prefix = ibc_storage::ibc_token_prefix(
+        let key_prefix = ibc_storage::ibc_account_prefix(
             &msg.source_port,
             &msg.source_channel,
             &token,
@@ -1277,6 +1277,13 @@ mod tests {
         let (port_id, channel_id, channel_writes) =
             ibc::prepare_opened_channel(&conn_id, false);
         writes.extend(channel_writes);
+        // the origin-specific token
+        let denom = format!("{}/{}/{}", port_id, channel_id, token);
+        let key_prefix = ibc_storage::ibc_token_prefix(&denom).unwrap();
+        let key = token::multitoken_balance_key(&key_prefix, &sender);
+        let init_bal = Amount::from(1_000_000_000u64);
+        writes.insert(key, init_bal.try_to_vec().unwrap());
+
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
                 env.storage.write(&key, &val).expect("write error");
@@ -1315,7 +1322,7 @@ mod tests {
         );
         // Check if the token was burned
         let key_prefix =
-            ibc_storage::ibc_token_prefix(&port_id, &channel_id, &token);
+            ibc_storage::ibc_account_prefix(&port_id, &channel_id, &token);
         let burn = token::multitoken_balance_key(
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcBurn),
@@ -1349,7 +1356,7 @@ mod tests {
 
         // packet
         let packet = ibc::received_packet(
-            port_id,
+            port_id.clone(),
             channel_id,
             ibc::sequence(1),
             token.to_string(),
@@ -1380,12 +1387,8 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was minted
-        let counterparty = ibc::dummy_channel_counterparty();
-        let key_prefix = ibc_storage::ibc_token_prefix(
-            counterparty.port_id(),
-            counterparty.channel_id().unwrap(),
-            &token,
-        );
+        let key_prefix =
+            ibc_storage::ibc_account_prefix(&port_id, &channel_id, &token);
         let mint = token::multitoken_balance_key(
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcMint),
@@ -1418,11 +1421,8 @@ mod tests {
         });
         // escrow in advance
         let counterparty = ibc::dummy_channel_counterparty();
-        let key_prefix = ibc_storage::ibc_token_prefix(
-            counterparty.port_id(),
-            counterparty.channel_id().unwrap(),
-            &token,
-        );
+        let key_prefix =
+            ibc_storage::ibc_account_prefix(&port_id, &channel_id, &token);
         let escrow = token::multitoken_balance_key(
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
@@ -1682,7 +1682,7 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was refunded
-        let key_prefix = ibc_storage::ibc_token_prefix(
+        let key_prefix = ibc_storage::ibc_account_prefix(
             &packet.source_port,
             &packet.source_channel,
             &token,
@@ -1762,7 +1762,7 @@ mod tests {
                 .expect("validation failed unexpectedly")
         );
         // Check if the token was refunded
-        let key_prefix = ibc_storage::ibc_token_prefix(
+        let key_prefix = ibc_storage::ibc_account_prefix(
             &packet.source_port,
             &packet.source_channel,
             &token,

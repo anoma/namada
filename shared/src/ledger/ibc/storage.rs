@@ -25,8 +25,9 @@ const CONNECTIONS_COUNTER: &str = "connections/counter";
 const CHANNELS_COUNTER: &str = "channelEnds/counter";
 const CAPABILITIES_INDEX: &str = "capabilities/index";
 const CAPABILITIES: &str = "capabilities";
+const DENOM: &str = "denom";
 /// Key segment for a multitoken related to IBC
-const MULTITOKEN_STORAGE_KEY: &str = "ibc";
+pub const MULTITOKEN_STORAGE_KEY: &str = "ibc";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -37,6 +38,8 @@ pub enum Error {
     InvalidKey(String),
     #[error("Port capability error: {0}")]
     InvalidPortCapability(String),
+    #[error("Denom error: {0}")]
+    Denom(String),
 }
 
 /// IBC storage functions result
@@ -57,6 +60,7 @@ pub enum IbcPrefix {
     Receipt,
     Ack,
     Event,
+    Denom,
     Unknown,
 }
 
@@ -79,6 +83,7 @@ pub fn ibc_prefix(key: &Key) -> Option<IbcPrefix> {
                 "receipts" => IbcPrefix::Receipt,
                 "acks" => IbcPrefix::Ack,
                 "event" => IbcPrefix::Event,
+                "denom" => IbcPrefix::Denom,
                 _ => IbcPrefix::Unknown,
             })
         }
@@ -486,21 +491,56 @@ pub fn capability(key: &Key) -> Result<Capability> {
     }
 }
 
-/// Returns the account key of the received token over IBC
-pub fn ibc_token_prefix(
+/// The storage key to get the denom name from the hashed token
+pub fn ibc_denom_key(token_hash: impl AsRef<str>) -> Key {
+    let path = format!("{}/{}", DENOM, token_hash.as_ref());
+    ibc_key(path).expect("Creating a key for the denom key shouldn't fail")
+}
+
+/// Key's prefix for the escrow, burn, or mint account
+pub fn ibc_account_prefix(
     port_id: &PortId,
     channel_id: &ChannelId,
     token: &Address,
 ) -> Key {
-    let mut hasher = Sha256::new();
-    let s = format!("{}/{}/{}", port_id, channel_id, token);
-    hasher.update(&s);
-    let hash = format!("{:.width$x}", hasher.finalize(), width = HASH_LEN);
-
-    let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
     Key::from(token.to_db_key())
         .push(&MULTITOKEN_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
-        .push(&ibc_token.to_db_key())
+        .push(&port_id.to_string().to_db_key())
         .expect("Cannot obtain a storage key")
+        .push(&channel_id.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Token address from the denom string
+pub fn token(denom: impl AsRef<str>) -> Result<Address> {
+    let token_str = denom.as_ref().split('/').last().ok_or_else(|| {
+        Error::Denom(format!("No token was specified: {}", denom.as_ref()))
+    })?;
+    Address::decode(token_str).map_err(|e| {
+        Error::Denom(format!(
+            "Invalid token address: token {}, error {}",
+            token_str, e
+        ))
+    })
+}
+
+/// Hash the denom
+pub fn ibc_token_hash(denom: impl AsRef<str>) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(denom.as_ref());
+    format!("{:.width$x}", hasher.finalize(), width = HASH_LEN)
+}
+
+/// Key's prefix of the received token over IBC
+pub fn ibc_token_prefix(denom: impl AsRef<str>) -> Result<Key> {
+    let token = token(&denom)?;
+    let hash = ibc_token_hash(&denom);
+    let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
+    let prefix = Key::from(token.to_db_key())
+        .push(&MULTITOKEN_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&ibc_token.to_db_key())
+        .expect("Cannot obtain a storage key");
+    Ok(prefix)
 }
