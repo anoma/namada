@@ -17,7 +17,7 @@ use namada::types::address::{Address, InternalAddress};
 use namada::types::storage;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
-use namada::types::vote_extensions::ethereum_events::EthEventsVextDigest;
+use namada::types::vote_extensions::ethereum_events;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -159,8 +159,9 @@ where
         }
         TxType::Protocol(ProtocolTx {
             tx:
-                ProtocolTxType::EthereumEvents(EthEventsVextDigest {
-                    events, ..
+                ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
+                    events,
+                    ..
                 }),
             ..
         }) if !events.is_empty() => {

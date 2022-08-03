@@ -6,7 +6,7 @@ mod prepare_block {
 
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::vote_extensions::ethereum_events::{
-        EthEventsVextDigest, MultiSignedEthEvent,
+        self, MultiSignedEthEvent,
     };
     use namada::types::voting_power::FractionalVotingPower;
     use tendermint_proto::abci::{
@@ -166,7 +166,7 @@ mod prepare_block {
         }
 
         /// Compresses a set of signed Ethereum events into a single
-        /// [`EthEventsVextDigest`], whilst filtering invalid
+        /// [`ethereum_events::VextDigest`], whilst filtering invalid
         /// [`Signed<ethereum_events::Vext>`] instances in the process
         // TODO: rename this as `compress_vote_extensions`, and return
         // a `VoteExtensionDigest`, which will contain both digests of
@@ -174,7 +174,7 @@ mod prepare_block {
         fn compress_ethereum_events(
             &self,
             vote_extensions: Vec<ExtendedVoteInfo>,
-        ) -> Option<EthEventsVextDigest> {
+        ) -> Option<ethereum_events::VextDigest> {
             let events_epoch = self
                 .storage
                 .block
@@ -227,7 +227,7 @@ mod prepare_block {
                         ?sig,
                         ?validator_addr,
                         "Overwrote old signature from validator while \
-                         constructing EthEventsVextDigest"
+                         constructing ethereum_events::VextDigest"
                     );
                 }
             }
@@ -245,7 +245,7 @@ mod prepare_block {
                 .map(|(event, signers)| MultiSignedEthEvent { event, signers })
                 .collect();
 
-            Some(EthEventsVextDigest { events, signatures })
+            Some(ethereum_events::VextDigest { events, signatures })
         }
     }
 
@@ -501,7 +501,7 @@ mod prepare_block {
             _protocol_key: &common::SecretKey,
             ext: Signed<ethereum_events::Vext>,
             last_height: BlockHeight,
-        ) -> EthEventsVextDigest {
+        ) -> ethereum_events::VextDigest {
             let events = vec![MultiSignedEthEvent {
                 event: ext.data.ethereum_events[0].clone(),
                 signers: {
@@ -517,7 +517,7 @@ mod prepare_block {
             };
 
             let vote_extension_digest =
-                EthEventsVextDigest { events, signatures };
+                ethereum_events::VextDigest { events, signatures };
 
             assert_eq!(
                 vec![ext],

@@ -48,7 +48,7 @@ where
             })
             .collect();
 
-        // We should not have more than one `EthEventsVextDigest` in
+        // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
         let too_many_vext_digests = vote_ext_digest_num > 1;
 
@@ -382,7 +382,7 @@ mod test_process_proposal {
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
     use namada::types::vote_extensions::ethereum_events::{
-        self, EthEventsVextDigest, MultiSignedEthEvent,
+        self, MultiSignedEthEvent,
     };
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::RequestInitChain;
@@ -401,8 +401,8 @@ mod test_process_proposal {
     };
     use crate::wallet;
 
-    /// Test that if a proposal contains more than one `EthEventsVextDigest`,
-    /// we reject it.
+    /// Test that if a proposal contains more than one
+    /// `ethereum_events::VextDigest`, we reject it.
     #[test]
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
@@ -421,7 +421,7 @@ mod test_process_proposal {
                 ext
             };
             // Ethereum events digest with no observed events
-            EthEventsVextDigest {
+            ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(validator_addr, signed_vote_extension.sig);
@@ -445,7 +445,7 @@ mod test_process_proposal {
 
     fn check_rejected_digest(
         shell: &mut TestShell,
-        vote_extension_digest: EthEventsVextDigest,
+        vote_extension_digest: ethereum_events::VextDigest,
         protocol_key: common::SecretKey,
     ) {
         let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
@@ -497,7 +497,7 @@ mod test_process_proposal {
                 ext.sig = test_utils::invalidate_signature(ext.sig);
                 ext
             };
-            EthEventsVextDigest {
+            ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(addr.clone(), ext.sig);
@@ -541,7 +541,7 @@ mod test_process_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            EthEventsVextDigest {
+            ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(addr.clone(), ext.sig);
@@ -587,7 +587,7 @@ mod test_process_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            EthEventsVextDigest {
+            ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(addr.clone(), ext.sig);
