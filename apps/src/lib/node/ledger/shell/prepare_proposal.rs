@@ -67,7 +67,9 @@ mod prepare_block {
         }
 
         /// Builds a batch of vote extension transactions, comprised of Ethereum
-        /// events and, optionally, a validator set update
+        /// events
+        // TODO: add `and, optionally, a validator set update` to the docstring,
+        // after validator set updates are implemented
         fn build_vote_extensions_txs(
             &mut self,
             local_last_commit: Option<ExtendedCommitInfo>,
