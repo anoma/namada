@@ -1,6 +1,7 @@
 //! This module contains types necessary for processing vote extensions.
 
 pub mod ethereum_events;
+pub mod validator_set_update;
 
 // TODO: add a `VoteExtension` type
 //
