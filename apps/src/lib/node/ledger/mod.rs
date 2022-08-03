@@ -345,26 +345,8 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
             res
         });
 
-        let oracle = tokio::task::spawn_blocking(move || {
-            let rt = tokio::runtime::Handle::current();
-            rt.block_on(async move {
-                let local = tokio::task::LocalSet::new();
-                local
-                    .run_until(async move {
-                        tracing::info!("Ethereum event oracle is starting");
-                        ethereum_node::run_oracle(
-                            &ethereum_url,
-                            eth_sender,
-                            abort_sender,
-                        )
-                        .await;
-                        tracing::info!(
-                            "Ethereum event oracle is no longer running"
-                        );
-                    })
-                    .await
-            });
-        });
+        let oracle =
+            ethereum_node::run_oracle(&ethereum_url, eth_sender, abort_sender);
 
         // Shutdown ethereum_node via a message to ensure that the child process
         // is properly cleaned-up.
