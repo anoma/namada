@@ -355,12 +355,17 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         let oracle = tokio::task::spawn_blocking(move || {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async move {
-                ethereum_node::run_oracle(
-                    &ethereum_url,
-                    eth_sender,
-                    abort_sender,
-                )
-                .await
+                let local = tokio::task::LocalSet::new();
+                local
+                    .run_until(async move {
+                        ethereum_node::run_oracle(
+                            &ethereum_url,
+                            eth_sender,
+                            abort_sender,
+                        )
+                        .await
+                    })
+                    .await
             });
         });
 
