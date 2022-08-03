@@ -215,6 +215,12 @@ jobs:
           chmod +x target/release/namadan
           chmod +x target/release/namadac
           chmod +x /usr/local/bin/tendermint
+      - name: Download masp parameters
+        run: |
+          mkdir /home/runner/work/masp
+          curl -o /home/runner/work/masp/masp-spend.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-spend.params?raw=true
+          curl -o /home/runner/work/masp/masp-output.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-output.params?raw=true
+          curl -o /home/runner/work/masp/masp-convert.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-convert.params?raw=true
       - name: Run e2e test
         run: make test-e2e${{ matrix.make.suffix }}
         env:
@@ -223,6 +229,7 @@ jobs:
           ANOMA_E2E_KEEP_TEMP: "true"
           ENV_VAR_TM_STDOUT: "false"
           ANOMA_LOG_COLOR: "false"
+          ANOMA_MASP_PARAMS_DIR: "/home/runner/work/masp"
           ANOMA_LOG: "info"
       - name: Upload e2e logs
         if: success() || failure()
