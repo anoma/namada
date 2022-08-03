@@ -30,17 +30,35 @@ pub mod mock_oracle {
     use namada::types::ethereum_events::EthereumEvent;
     use tokio::sync::mpsc::UnboundedSender;
     use tokio::sync::oneshot::Sender;
+    use tokio::task::LocalSet;
 
-    pub async fn run_oracle(
+    pub fn run_oracle(
         _: &str,
         _: UnboundedSender<EthereumEvent>,
         abort: Sender<()>,
-    ) {
-        loop {
-            if abort.is_closed() {
-                return;
-            }
-        }
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::task::spawn_blocking(move || {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async move {
+                LocalSet::new()
+                    .run_until(async move {
+                        tracing::info!(
+                            "Mock Ethereum event oracle is starting"
+                        );
+
+                        loop {
+                            if abort.is_closed() {
+                                break;
+                            }
+                        }
+
+                        tracing::info!(
+                            "Mock Ethereum event oracle is no longer running"
+                        );
+                    })
+                    .await
+            });
+        })
     }
 }
 
