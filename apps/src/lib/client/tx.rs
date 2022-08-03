@@ -89,6 +89,16 @@ const VP_NFT: &str = "vp_nft.wasm";
 const ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: &str =
     "ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT";
 
+/// Env var to point to a dir with MASP parameters. When not specified,
+/// the default OS specific path is used.
+const ENV_VAR_MASP_PARAMS_DIR: &str = "ANOMA_MASP_PARAMS_DIR";
+
+// Circuit names
+// TODO these could be exported from masp_proof crate
+const MASP_SPEND_NAME: &str = "masp-spend.params";
+const MASP_OUTPUT_NAME: &str = "masp-output.params";
+const MASP_CONVERT_NAME: &str = "masp-convert.params";
+
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
     let data = args.data_path.map(|data_path| {
@@ -656,10 +666,16 @@ impl ShieldedContext {
     pub fn new(context_dir: PathBuf) -> ShieldedContext {
         // Make sure that MASP parameters are downloaded to enable MASP
         // transaction building and verification later on
-        let params_dir = masp_proofs::default_params_folder().unwrap();
-        let spend_path = params_dir.join("masp-spend.params");
-        let convert_path = params_dir.join("masp-convert.params");
-        let output_path = params_dir.join("masp-output.params");
+        let params_dir =
+            if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
+                println!("Using {} as masp parameter folder.", params_dir);
+                PathBuf::from(params_dir)
+            } else {
+                masp_proofs::default_params_folder().unwrap()
+            };
+        let spend_path = params_dir.join(MASP_SPEND_NAME);
+        let convert_path = params_dir.join(MASP_CONVERT_NAME);
+        let output_path = params_dir.join(MASP_OUTPUT_NAME);
         if !(spend_path.exists()
             && convert_path.exists()
             && output_path.exists())
@@ -1389,14 +1405,18 @@ async fn gen_shielded_transfer(
             amt,
         )?;
     }
+    let prover = if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
+        let params_dir = PathBuf::from(params_dir);
+        let spend_path = params_dir.join(MASP_SPEND_NAME);
+        let convert_path = params_dir.join(MASP_CONVERT_NAME);
+        let output_path = params_dir.join(MASP_OUTPUT_NAME);
+        LocalTxProver::new(&spend_path, &output_path, &convert_path)
+    } else {
+        LocalTxProver::with_default_location()
+            .expect("unable to load MASP Parameters")
+    };
     // Build and return the constructed transaction
-    builder
-        .build(
-            consensus_branch_id,
-            &LocalTxProver::with_default_location()
-                .expect("unable to load MASP Parameters"),
-        )
-        .map(Some)
+    builder.build(consensus_branch_id, &prover).map(Some)
 }
 
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
