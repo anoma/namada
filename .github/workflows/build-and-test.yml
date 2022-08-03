@@ -205,7 +205,9 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: logs-e2e${{ matrix.make.suffix }}-${{ github.sha }}
-          path: /tmp/.*/logs/
+          path: |
+            /tmp/.*/logs/
+            /tmp/.*/e2e-test.*/setup/validator-*/.anoma/logs/*.log
           retention-days: 5
       - name: Print sccache stats
         if: always()
