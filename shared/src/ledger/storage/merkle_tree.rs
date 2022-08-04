@@ -421,19 +421,8 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         // exist
         let (store_type, _) = StoreType::sub_key(key)?;
         let base_key = store_type.to_string();
-        let cp = self.base.membership_proof(&H::hash(&base_key).into())?;
-        // Replace the values and the leaf op for the verification
-        let base_proof = match cp.proof.expect("The proof should exist") {
-            Ics23Proof::Exist(ep) => CommitmentProof {
-                proof: Some(Ics23Proof::Exist(ExistenceProof {
-                    key: base_key.as_bytes().to_vec(),
-                    leaf: Some(self.base_leaf_spec()),
-                    ..ep
-                })),
-            },
-            // the proof should have an ExistenceProof
-            _ => unreachable!(),
-        };
+        let base_proof =
+            self.base.membership_proof(&H::hash(&base_key).into())?;
 
         let mut data = vec![];
         base_proof
@@ -746,7 +735,12 @@ mod test {
         let proof =
             tree.get_existence_proof(&ibc_key, ibc_val.clone()).unwrap();
         let (store_type, sub_key) = StoreType::sub_key(&ibc_key).unwrap();
-        let paths = vec![sub_key.to_string(), store_type.to_string()];
+        let paths = vec![
+            sub_key.to_string().as_bytes().to_vec(),
+            Sha256Hasher::hash(&store_type.to_string())
+                .as_slice()
+                .to_vec(),
+        ];
         let mut sub_root = ibc_val.clone();
         let mut value = ibc_val;
         let mut second = false;
@@ -772,7 +766,7 @@ mod test {
                 &commitment_proof,
                 spec,
                 &sub_root,
-                key.as_bytes(),
+                key.as_slice(),
                 hashed.as_slice(),
             ));
             second = true;
