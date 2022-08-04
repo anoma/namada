@@ -2,7 +2,6 @@
 //! smart contracts.
 // TODO: probably move this module elsewhere
 
-// TODO: I think we are missing `uint8` types
 #[doc(inline)]
 pub use ethabi::token::Token;
 use tiny_keccak::{Hasher, Keccak};
