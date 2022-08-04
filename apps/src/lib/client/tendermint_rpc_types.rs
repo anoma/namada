@@ -5,7 +5,6 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::cli::safe_exit;
-#[cfg(not(feature = "ABCI"))]
 use crate::node::ledger::events::Attributes;
 
 /// Errors from interacting with Tendermint's jsonrpc endpoint
@@ -15,7 +14,6 @@ pub enum Error {
     Address(String),
     #[error("Error in sending JSON RPC request to Tendermint")]
     Send,
-    #[cfg(not(feature = "ABCI"))]
     #[error("Received an error response from Tendermint: {0:?}")]
     Rpc(tendermint_rpc::response_error::ResponseError),
     #[error("Received malformed JSON response from Tendermint")]
@@ -40,7 +38,7 @@ pub enum TxBroadcastData {
     Wrapper {
         tx: Tx,
         wrapper_hash: String,
-        decrypted_hash: Option<String>,
+        decrypted_hash: String,
     },
 }
 
@@ -63,9 +61,6 @@ impl TxResponse {
         let tx_hash_json = serde_json::Value::String(tx_hash.to_string());
         let mut selector = jsonpath::selector(&json);
         let mut index = 0;
-        #[cfg(feature = "ABCI")]
-        let evt_key = "applied";
-        #[cfg(not(feature = "ABCI"))]
         let evt_key = "accepted";
         // Find the tx with a matching hash
         let hash = loop {
@@ -134,7 +129,6 @@ impl TxResponse {
     }
 }
 
-#[cfg(not(feature = "ABCI"))]
 mod params {
     use std::convert::TryFrom;
     use std::time::Duration;
@@ -259,7 +253,6 @@ mod params {
     /// Searches for custom events emitted from the ledger and converts
     /// them back to thin wrapper around a hashmap for further parsing.
     /// Returns none if the event is not found.
-    #[cfg(not(feature = "ABCI"))]
     pub fn parse(reply: EventReply, tx_hash: &str) -> Option<TxResponse> {
         let mut event = reply
             .items
@@ -339,5 +332,4 @@ mod params {
     }
 }
 
-#[cfg(not(feature = "ABCI"))]
 pub use params::*;

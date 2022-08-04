@@ -1372,14 +1372,8 @@ pub mod args {
     use namada::types::token;
     use namada::types::transaction::GasLimit;
     use serde::Deserialize;
-    #[cfg(not(feature = "ABCI"))]
     use tendermint::Timeout;
-    #[cfg(not(feature = "ABCI"))]
     use tendermint_config::net::Address as TendermintAddress;
-    #[cfg(feature = "ABCI")]
-    use tendermint_config_abci::net::Address as TendermintAddress;
-    #[cfg(feature = "ABCI")]
-    use tendermint_stable::Timeout;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;

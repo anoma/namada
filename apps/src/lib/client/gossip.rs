@@ -4,10 +4,7 @@ use std::io::Write;
 use borsh::BorshSerialize;
 use namada::proto::Signed;
 use namada::types::intent::{Exchange, FungibleTokenIntent};
-#[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address as TendermintAddress;
 
 use super::signing;
 use crate::cli::{self, args, Context};

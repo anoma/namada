@@ -6,14 +6,8 @@ use std::ops::Deref;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-#[cfg(not(feature = "ABCI"))]
 use tendermint::abci::transaction;
-#[cfg(not(feature = "ABCI"))]
 use tendermint::Hash as TmHash;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::abci::transaction;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::Hash as TmHash;
 use thiserror::Error;
 
 /// The length of the transaction hash string

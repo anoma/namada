@@ -18,15 +18,9 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::CheckTxType;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::CheckTxType;
 use tower::ServiceBuilder;
-#[cfg(not(feature = "ABCI"))]
 use tower_abci::{response, split, Server};
-#[cfg(feature = "ABCI")]
-use tower_abci_old::{response, split, Server};
 
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
@@ -92,42 +86,43 @@ impl Shell {
     fn call(&mut self, req: Request) -> Result<Response, Error> {
         match req {
             Request::InitChain(init) => {
+                tracing::debug!("Request InitChain");
                 self.init_chain(init).map(Response::InitChain)
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
-            #[cfg(not(feature = "ABCI"))]
             Request::PrepareProposal(block) => {
+                tracing::debug!("Request PrepareProposal");
                 Ok(Response::PrepareProposal(self.prepare_proposal(block)))
             }
             Request::VerifyHeader(_req) => {
                 Ok(Response::VerifyHeader(self.verify_header(_req)))
             }
-            #[cfg(not(feature = "ABCI"))]
             Request::ProcessProposal(block) => {
+                tracing::debug!("Request ProcessProposal");
                 Ok(Response::ProcessProposal(self.process_proposal(block)))
             }
-            #[cfg(feature = "ABCI")]
-            Request::DeliverTx(deliver_tx) => Ok(Response::DeliverTx(
-                self.process_and_decode_proposal(deliver_tx),
-            )),
-            #[cfg(not(feature = "ABCI"))]
             Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
-            #[cfg(not(feature = "ABCI"))]
             Request::ExtendVote(_req) => {
                 Ok(Response::ExtendVote(self.extend_vote(_req)))
             }
-            #[cfg(not(feature = "ABCI"))]
-            Request::VerifyVoteExtension(_req) => Ok(
-                Response::VerifyVoteExtension(self.verify_vote_extension(_req)),
-            ),
+            Request::VerifyVoteExtension(_req) => {
+                tracing::debug!("Request VerifyVoteExtension");
+                Ok(Response::VerifyVoteExtension(
+                    self.verify_vote_extension(_req),
+                ))
+            }
             Request::FinalizeBlock(finalize) => {
+                tracing::debug!("Request FinalizeBlock");
                 self.load_proposals();
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
-            Request::Commit(_) => Ok(Response::Commit(self.commit())),
+            Request::Commit(_) => {
+                tracing::debug!("Request Commit");
+                Ok(Response::Commit(self.commit()))
+            }
             Request::Flush(_) => Ok(Response::Flush(Default::default())),
             Request::Echo(msg) => Ok(Response::Echo(response::Echo {
                 message: msg.message,

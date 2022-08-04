@@ -18,14 +18,8 @@ use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-#[cfg(not(feature = "ABCI"))]
 use tendermint::node::Id as TendermintNodeId;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::node::Id as TendermintNodeId;
 
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::cli::{self, args};
