@@ -5,24 +5,13 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
-#[cfg(feature = "ABCI")]
-use namada::types::hash::Hash;
-#[cfg(feature = "ABCI")]
-use namada::types::storage::BlockHash;
-#[cfg(feature = "ABCI")]
-use namada::types::transaction::hash_tx;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::RequestBeginBlock;
+use tendermint_proto::abci::ResponseFinalizeBlock;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
-#[cfg(not(feature = "ABCI"))]
 use tower_abci::{BoxError, Request as Req, Response as Resp};
-#[cfg(feature = "ABCI")]
-use tower_abci_old::{BoxError, Request as Req, Response as Resp};
 
 use super::super::Shell;
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
-#[cfg(not(feature = "ABCI"))]
 use super::abcipp_shim_types::shim::response::TxResult;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
@@ -33,9 +22,6 @@ use crate::config;
 #[derive(Debug)]
 pub struct AbcippShim {
     service: Shell,
-    #[cfg(feature = "ABCI")]
-    begin_block_request: Option<RequestBeginBlock>,
-    processed_txs: Vec<ProcessedTx>,
     shell_recv: std::sync::mpsc::Receiver<(
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
@@ -66,24 +52,10 @@ impl AbcippShim {
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,
                 ),
-                #[cfg(feature = "ABCI")]
-                begin_block_request: None,
-                processed_txs: vec![],
                 shell_recv,
             },
             AbciService { shell_send },
         )
-    }
-
-    #[cfg(feature = "ABCI")]
-    /// Get the hash of the txs in the block
-    pub fn get_hash(&self) -> Hash {
-        let bytes: Vec<u8> = self
-            .processed_txs
-            .iter()
-            .flat_map(|processed| processed.tx.clone())
-            .collect();
-        hash_tx(bytes.as_slice())
     }
 
     /// Run the shell's blocking loop that receives messages from the
@@ -91,81 +63,54 @@ impl AbcippShim {
     pub fn run(mut self) {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
-                #[cfg(not(feature = "ABCI"))]
-                Req::ProcessProposal(proposal) => {
-                    let txs = proposal.txs.clone();
-                    self.service
-                        .call(Request::ProcessProposal(proposal))
-                        .map_err(Error::from)
-                        .and_then(|res| match res {
-                            Response::ProcessProposal(resp) => {
-                                for (result, tx) in resp
-                                    .tx_results
-                                    .iter()
-                                    .map(TxResult::from)
-                                    .zip(txs.into_iter())
-                                {
-                                    self.processed_txs
-                                        .push(ProcessedTx { tx, result });
-                                }
-                                Ok(Resp::ProcessProposal(resp))
-                            }
-                            _ => unreachable!(),
-                        })
-                }
-                #[cfg(not(feature = "ABCI"))]
+                Req::ProcessProposal(proposal) => self
+                    .service
+                    .call(Request::ProcessProposal(proposal))
+                    .map_err(Error::from)
+                    .and_then(|res| match res {
+                        Response::ProcessProposal(resp) => {
+                            Ok(Resp::ProcessProposal(resp))
+                        }
+                        _ => unreachable!(),
+                    }),
                 Req::FinalizeBlock(block) => {
-                    let mut txs = vec![];
-                    std::mem::swap(&mut txs, &mut self.processed_txs);
+                    // Process transactions first in the same way as
+                    // `ProcessProposal`.
+                    let unprocessed_txs = block.txs.clone();
+                    let processing_results =
+                        self.service.process_txs(&block.txs);
+                    let mut txs = Vec::with_capacity(unprocessed_txs.len());
+                    for (result, tx) in processing_results
+                        .iter()
+                        .map(TxResult::from)
+                        .zip(unprocessed_txs.into_iter())
+                    {
+                        txs.push(ProcessedTx { tx, result });
+                    }
+
                     let mut finalize_req: FinalizeBlock = block.into();
                     finalize_req.txs = txs;
+
                     self.service
                         .call(Request::FinalizeBlock(finalize_req))
                         .map_err(Error::from)
                         .and_then(|res| match res {
                             Response::FinalizeBlock(resp) => {
-                                Ok(Resp::FinalizeBlock(resp.into()))
-                            }
-                            _ => Err(Error::ConvertResp(res)),
-                        })
-                }
-                #[cfg(feature = "ABCI")]
-                Req::BeginBlock(block) => {
-                    // we save this data to be forwarded to finalize later
-                    self.begin_block_request = Some(block);
-                    Ok(Resp::BeginBlock(Default::default()))
-                }
-                #[cfg(feature = "ABCI")]
-                Req::DeliverTx(deliver_tx) => {
-                    // We call [`process_single_tx`] to report back the validity
-                    // of the tx to tendermint.
-                    self.service
-                        .call(Request::DeliverTx(deliver_tx))
-                        .map_err(Error::from)
-                        .and_then(|res| match res {
-                            Response::DeliverTx(resp) => {
-                                self.processed_txs.push(resp);
-                                Ok(Resp::DeliverTx(Default::default()))
-                            }
-                            _ => unreachable!(),
-                        })
-                }
-                #[cfg(feature = "ABCI")]
-                Req::EndBlock(_) => {
-                    let mut txs = vec![];
-                    std::mem::swap(&mut txs, &mut self.processed_txs);
-                    let mut end_block_request: FinalizeBlock =
-                        self.begin_block_request.take().unwrap().into();
-                    let hash = self.get_hash();
-                    end_block_request.hash = BlockHash::from(hash.clone());
-                    end_block_request.header.hash = hash;
-                    end_block_request.txs = txs;
-                    self.service
-                        .call(Request::FinalizeBlock(end_block_request))
-                        .map_err(Error::from)
-                        .and_then(|res| match res {
-                            Response::FinalizeBlock(resp) => {
-                                Ok(Resp::EndBlock(resp.into()))
+                                let mut resp: ResponseFinalizeBlock =
+                                    resp.into();
+
+                                // Add processing results
+                                for (tx_result, processing_result) in resp
+                                    .tx_results
+                                    .iter_mut()
+                                    .zip(processing_results)
+                                {
+                                    tx_result
+                                        .events
+                                        .extend(processing_result.events);
+                                }
+
+                                Ok(Resp::FinalizeBlock(resp))
                             }
                             _ => Err(Error::ConvertResp(res)),
                         })
