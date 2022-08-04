@@ -102,7 +102,7 @@ jobs:
 
   anoma:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 80
     strategy:
       fail-fast: false
       matrix:
