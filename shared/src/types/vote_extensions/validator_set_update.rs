@@ -3,11 +3,11 @@
 
 use std::collections::HashMap;
 
-use tiny_keccak::{Hasher, Keccak};
 use ethabi::ethereum_types as ethereum;
+use tiny_keccak::{Hasher, Keccak};
 
-use crate::types::ethereum_events::KeccakHash;
 use crate::ledger::pos::types::{Epoch, VotingPower};
+use crate::types::ethereum_events::KeccakHash;
 
 // TODO: finish signed vote extension
 // ```ignore
@@ -49,5 +49,30 @@ impl Vext {
         // state.update(&[...]);
         state.finalize(&mut output);
         todo!()
+    }
+
+    /// Returns the list of Ethereum validator addresses and their respective
+    /// voting power.
+    #[allow(dead_code)]
+    fn get_validators_and_addresses(
+        &self,
+    ) -> (Vec<ethereum::Address>, Vec<ethereum::U256>) {
+        // get addresses and voting powers all into one vec
+        let mut unsorted: Vec<_> = self.voting_powers.iter().collect();
+
+        // sort it by voting power, in descending order
+        unsorted.sort_by(|&(_, ref power_1), &(_, ref power_2)| {
+            power_2.cmp(power_1)
+        });
+
+        // split the vec into two
+        unsorted
+            .into_iter()
+            .map(|(&addr, &voting_power)| {
+                let voting_power: u64 = voting_power.into();
+                let voting_power: ethereum::U256 = voting_power.into();
+                (addr, voting_power)
+            })
+            .unzip()
     }
 }
