@@ -1409,7 +1409,7 @@ async fn gen_shielded_transfer(
         let spend_path = params_dir.join(MASP_SPEND_NAME);
         let convert_path = params_dir.join(MASP_CONVERT_NAME);
         let output_path = params_dir.join(MASP_OUTPUT_NAME);
-        LocalTxProver::new(&spend_path, &convert_path, &output_path)
+        LocalTxProver::new(&spend_path, &output_path, &convert_path)
     } else {
         LocalTxProver::with_default_location()
             .expect("unable to load MASP Parameters")
