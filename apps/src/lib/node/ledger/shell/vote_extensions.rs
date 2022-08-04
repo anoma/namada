@@ -543,5 +543,49 @@ mod extend_votes {
     }
 }
 
+#[cfg(feature = "ABCI")]
+#[allow(dead_code)]
+/// ABCI is soon being removed - this is solely so that we can still compile
+/// with the default features
+mod extend_votes_stub {
+    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
+    use namada::proto::Signed;
+    use namada::types::vote_extensions::ethereum_events;
+
+    use super::super::*;
+
+    #[derive(Error, Debug)]
+    pub enum VoteExtensionError {
+        #[error("This is a stub error")]
+        StubError,
+    }
+
+    impl<D, H> Shell<D, H>
+    where
+        D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+        H: StorageHasher + Sync + 'static,
+    {
+        pub fn validate_vote_extension_list(
+            &self,
+            _vote_extensions: impl IntoIterator<
+                Item = Signed<ethereum_events::Vext>,
+            > + 'static,
+        ) -> impl Iterator<
+            Item = std::result::Result<
+                (VotingPower, Signed<ethereum_events::Vext>),
+                VoteExtensionError,
+            >,
+        > + '_ {
+            unimplemented!(
+                "validate_vote_extension_list is not implemented for ABCI"
+            );
+            #[allow(unreachable_code)]
+            vec![].into_iter()
+        }
+    }
+}
+
 #[cfg(not(feature = "ABCI"))]
 pub use extend_votes::*;
+#[cfg(feature = "ABCI")]
+pub use extend_votes_stub::*;
