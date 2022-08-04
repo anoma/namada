@@ -1566,7 +1566,7 @@ fn test_genesis_validators() -> Result<()> {
     let validator_0_alias = "validator-0";
     let validator_1_alias = "validator-1";
 
-    let init_genesis_validator_0 = setup::run_cmd(
+    let mut init_genesis_validator_0 = setup::run_cmd(
         Bin::Client,
         [
             "utils",
@@ -1602,7 +1602,7 @@ fn test_genesis_validators() -> Result<()> {
         .remove(validator_0_alias)
         .unwrap();
 
-    let init_genesis_validator_1 = setup::run_cmd(
+    let mut init_genesis_validator_1 = setup::run_cmd(
         Bin::Client,
         [
             "utils",
