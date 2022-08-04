@@ -4,7 +4,6 @@ use std::cmp::max;
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
 use namada::ledger::parameters::EpochDuration;
-#[cfg(not(feature = "ABCI"))]
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
@@ -341,7 +340,6 @@ where
             .clone()
     }
 
-    #[cfg(not(feature = "ABCI"))]
     fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
         self.get_active_validators(epoch)
             .iter()
@@ -447,7 +445,6 @@ where
             .ok_or_else(|| Error::NotValidatorKey(pk.to_string(), epoch))
     }
 
-    #[cfg(not(feature = "ABCI"))]
     fn get_validator_from_address(
         &self,
         address: &Address,
