@@ -45,6 +45,8 @@ pub enum Error {
     TokenTransfer(String),
     #[error("IBC message is required as transaction data")]
     NoTxData,
+    #[error("Invalid denom error: {0}")]
+    Denom(String),
 }
 
 /// Result for IBC token VP
@@ -138,7 +140,29 @@ where
     CA: 'static + WasmCacheAccess,
 {
     fn validate_sending_token(&self, msg: &MsgTransfer) -> Result<bool> {
-        let data = FungibleTokenPacketData::from(msg.clone());
+        let mut data = FungibleTokenPacketData::from(msg.clone());
+        if let Some(denom) = data
+            .denom
+            .strip_prefix(&format!("{}/", ibc_storage::MULTITOKEN_STORAGE_KEY))
+        {
+            let denom_key = ibc_storage::ibc_denom_key(&denom);
+            let denom_bytes = match self.ctx.read_pre(&denom_key) {
+                Ok(Some(v)) => v,
+                _ => {
+                    return Err(Error::Denom(format!(
+                        "No original denom: denom_key {}",
+                        denom_key
+                    )));
+                }
+            };
+            let denom = std::str::from_utf8(&denom_bytes).map_err(|e| {
+                Error::Denom(format!(
+                    "Decoding the denom failed: denom_key {}, error {}",
+                    denom_key, e
+                ))
+            })?;
+            data.denom = denom.to_string();
+        }
         let token_str = data.denom.split('/').last().ok_or(Error::NoToken)?;
         let token = Address::decode(token_str).map_err(Error::Address)?;
         let amount = Amount::from_str(&data.amount).map_err(Error::Amount)?;
