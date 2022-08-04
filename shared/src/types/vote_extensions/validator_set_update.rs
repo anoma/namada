@@ -44,29 +44,76 @@ pub struct Vext {
 }
 
 impl Vext {
-    /// TODO
-    pub fn get_keccak_hash(&self) -> [u8; 32] {
+    /// Returns the keccak hash of this [`Vext`] to be signed
+    /// by an Ethereum validator key.
+    pub fn get_bridge_hash(&self) -> [u8; 32] {
+        // TODO: we need to get this value from `Storage`
+        // related issue: https://github.com/anoma/namada/issues/249
+        const BRIDGE_CONTRACT_VERSION: u8 = 1;
+
+        const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
+
+        let (validators, voting_powers) =
+            self.get_validators_and_voting_powers();
+
+        self.compute_hash(
+            BRIDGE_CONTRACT_VERSION,
+            BRIDGE_CONTRACT_NAMESPACE,
+            validators,
+            voting_powers,
+        )
+    }
+
+    /// Returns the keccak hash of this [`Vext`] to be signed
+    /// by an Ethereum governance key.
+    pub fn get_governance_hash(&self) -> [u8; 32] {
         // TODO: we need to get this value from `Storage`
         // related issue: https://github.com/anoma/namada/issues/249
         const GOVERNANCE_CONTRACT_VERSION: u8 = 1;
 
+        const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
+
+        self.compute_hash(
+            GOVERNANCE_CONTRACT_VERSION,
+            GOVERNANCE_CONTRACT_NAMESPACE,
+            // TODO: get governance validators
+            vec![],
+            // TODO: get governance voting powers
+            vec![],
+        )
+    }
+
+    /// Compute the keccak hash of this [`Vext`].
+    ///
+    /// For more information, check the Ethereum bridge smart contracts:
+    //    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Governance.sol#L232>
+    //    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L201>
+    #[inline]
+    fn compute_hash(
+        &self,
+        version: u8,
+        namespace: &str,
+        validators: Vec<Token>,
+        voting_powers: Vec<Token>,
+    ) -> [u8; 32] {
+        let nonce = u64::from(self.epoch).into();
         AbiEncode::keccak256(&[
-            // the version of the governance smart contract
-            //
             // TODO: in the Ethereum bridge smart contracts, the version
-            // fields are of type `uint8`. we might need to adjust this
-            // line accordingly
-            Token::Uint(ethereum::U256::from(GOVERNANCE_CONTRACT_VERSION)),
-            // TODO: add the other fields
+            // fields are of type `uint8`. we need to adjust this
+            // line accordingly, since packed serialization yields
+            // a different result from `uint256` for `uint8` values
+            Token::Uint(ethereum::U256::from(version)),
+            Token::String(namespace.into()),
+            Token::Array(validators),
+            Token::Array(voting_powers),
+            Token::Uint(nonce),
         ])
     }
 
     /// Returns the list of Ethereum validator addresses and their respective
     /// voting power.
     #[allow(dead_code)]
-    fn get_validators_and_addresses(
-        &self,
-    ) -> (Vec<ethereum::Address>, Vec<ethereum::U256>) {
+    fn get_validators_and_voting_powers(&self) -> (Vec<Token>, Vec<Token>) {
         // get addresses and voting powers all into one vec
         let mut unsorted: Vec<_> = self.voting_powers.iter().collect();
 
@@ -94,9 +141,9 @@ impl Vext {
                 let voting_power = Ratio::new(voting_power, total_voting_power)
                     * NORMALIZED_VOTING_POWER;
                 let voting_power = voting_power.round().to_integer();
-
                 let voting_power: ethereum::U256 = voting_power.into();
-                (addr, voting_power)
+
+                (Token::Address(addr), Token::Uint(voting_power))
             })
             .unzip()
     }
