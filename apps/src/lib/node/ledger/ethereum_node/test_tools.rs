@@ -35,11 +35,12 @@ pub mod mock_oracle {
     pub fn run_oracle(
         _: impl AsRef<str>,
         _: UnboundedSender<EthereumEvent>,
-        mut abort: Sender<()>,
+        abort: Sender<()>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             tracing::info!("Mock Ethereum event oracle is starting");
 
+            let mut abort = abort;
             poll_fn(|cx| abort.poll_closed(cx)).await;
 
             tracing::info!("Mock Ethereum event oracle is no longer running");
