@@ -42,18 +42,6 @@ impl Encode for AbiEncode {
     }
 }
 
-/// Represents an Ethereum encoding method equivalent
-/// to `abi.encodePacked`.
-pub struct AbiEncodePacked;
-
-impl Encode for AbiEncodePacked {
-    type EncodedData = String;
-
-    fn encode(_tokens: &[Token]) -> Self::EncodedData {
-        todo!()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use ethabi::ethereum_types::U256;
