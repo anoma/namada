@@ -346,7 +346,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         });
 
         let oracle =
-            ethereum_node::run_oracle(&ethereum_url, eth_sender, abort_sender);
+            ethereum_node::run_oracle(ethereum_url, eth_sender, abort_sender);
 
         // Shutdown ethereum_node via a message to ensure that the child process
         // is properly cleaned-up.
