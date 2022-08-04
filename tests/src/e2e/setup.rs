@@ -503,7 +503,7 @@ impl AnomaCmd {
     /// Wrapper over the inner `PtySession`'s functions with custom error
     /// reporting.
     pub fn exp_string(&mut self, needle: &str) -> Result<String> {
-        let found = self.session.expect_eager(needle).map_err(|e| {
+        let found = self.session.expect(needle).map_err(|e| {
             eyre!("{}\nCommand: {}\n Needle: {}", e, self, needle)
         })?;
         if found.is_empty() {
@@ -528,7 +528,7 @@ impl AnomaCmd {
     pub fn exp_regex(&mut self, regex: &str) -> Result<(String, String)> {
         let found = self
             .session
-            .expect_eager(expectrl::Regex(regex))
+            .expect(expectrl::Regex(regex))
             .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))?;
         if found.is_empty() {
             Err(eyre!(
@@ -555,7 +555,7 @@ impl AnomaCmd {
     pub fn exp_eof(&mut self) -> Result<String> {
         let found = self
             .session
-            .expect_eager(Eof)
+            .expect(Eof)
             .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))?;
         if found.is_empty() {
             Err(eyre!("Expected EOF\nCommand: {}", self))
