@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 
 use ethabi::ethereum_types as ethereum;
+use num_rational::Ratio;
 use tiny_keccak::{Hasher, Keccak};
 
 use crate::ledger::pos::types::{Epoch, VotingPower};
@@ -65,11 +66,26 @@ impl Vext {
             power_2.cmp(power_1)
         });
 
+        let sorted = unsorted;
+        let total_voting_power: u64 = sorted
+            .iter()
+            .map(|&(_, &voting_power)| u64::from(voting_power))
+            .sum();
+
         // split the vec into two
-        unsorted
+        sorted
             .into_iter()
             .map(|(&addr, &voting_power)| {
                 let voting_power: u64 = voting_power.into();
+
+                // normalize the voting power
+                // https://github.com/anoma/ethereum-bridge/blob/main/test/utils/utilities.js#L29
+                const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
+
+                let voting_power = Ratio::new(voting_power, total_voting_power)
+                    * NORMALIZED_VOTING_POWER;
+                let voting_power = voting_power.round().to_integer();
+
                 let voting_power: ethereum::U256 = voting_power.into();
                 (addr, voting_power)
             })
