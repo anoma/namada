@@ -190,6 +190,7 @@ pub(super) enum ShellMode {
 /// and queueing them up for inclusion in vote extensions
 #[derive(Debug)]
 pub(super) struct EthereumReceiver {
+    #[cfg_attr(feature = "ABCI", allow(dead_code))]
     channel: UnboundedReceiver<EthereumEvent>,
     queue: BTreeSet<EthereumEvent>,
 }
@@ -207,6 +208,7 @@ impl EthereumReceiver {
     /// Pull messages from the channel and add to queue
     /// Since vote extensions require ordering of ethereum
     /// events, we do that here. We also de-duplicate events
+    #[cfg_attr(feature = "ABCI", allow(dead_code))]
     pub fn fill_queue(&mut self) {
         let mut new_events = 0;
         while let Ok(eth_event) = self.channel.try_recv() {
@@ -220,6 +222,7 @@ impl EthereumReceiver {
     }
 
     /// Get a copy of the queue
+    #[cfg_attr(feature = "ABCI", allow(dead_code))]
     pub fn get_events(&self) -> Vec<EthereumEvent> {
         self.queue.iter().cloned().collect()
     }
