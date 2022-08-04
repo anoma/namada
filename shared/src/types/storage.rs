@@ -1,6 +1,7 @@
 //! Storage types
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
+use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::ops::{Add, Div, Mul, Rem, Sub};
 use std::str::FromStr;
@@ -12,6 +13,7 @@ use thiserror::Error;
 #[cfg(feature = "ferveo-tpke")]
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
+use crate::ledger::storage::StorageHasher;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
@@ -220,6 +222,16 @@ impl FromStr for Key {
     fn from_str(s: &str) -> Result<Self> {
         Key::parse(s)
     }
+}
+
+/// A type for converting an Anoma storage key
+/// to that of the right type for the different
+/// merkle trees used.
+pub enum MerkleKey<H: StorageHasher> {
+    /// A key that needs to be hashed
+    Sha256(Key, PhantomData<H>),
+    /// A key that can be given as raw bytes
+    Raw(Key),
 }
 
 impl Key {

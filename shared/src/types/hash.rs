@@ -3,6 +3,8 @@
 use std::fmt::{self, Display};
 use std::ops::Deref;
 
+use arse_merkle_tree::traits::Value;
+use arse_merkle_tree::H256;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -95,10 +97,44 @@ impl Hash {
         let digest = Sha256::digest(data.as_ref());
         Self(*digest.as_ref())
     }
+
+    /// Check if the hash is all zeros
+    pub fn is_zero(&self) -> bool {
+        self == &Self::zero()
+    }
 }
 
 impl From<Hash> for TmHash {
     fn from(hash: Hash) -> Self {
         TmHash::Sha256(hash.0)
+    }
+}
+
+impl From<H256> for Hash {
+    fn from(hash: H256) -> Self {
+        Hash(hash.into())
+    }
+}
+
+impl From<&H256> for Hash {
+    fn from(hash: &H256) -> Self {
+        let hash = *hash;
+        Hash(hash.into())
+    }
+}
+
+impl From<Hash> for H256 {
+    fn from(hash: Hash) -> H256 {
+        hash.to_h256()
+    }
+}
+
+impl Value for Hash {
+    fn to_h256(&self) -> H256 {
+        self.0.into()
+    }
+
+    fn zero() -> Self {
+        Hash([0u8; 32])
     }
 }

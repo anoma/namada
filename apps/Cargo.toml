@@ -49,6 +49,7 @@ testing = ["dev"]
 namada = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "bat/arse-merkle-tree", features = ["std", "borsh"]}
 async-std = {version = "1.9.0", features = ["unstable"]}
 async-trait = "0.1.51"
 base64 = "0.13.0"
@@ -100,7 +101,6 @@ serde_json = {version = "1.0.62", features = ["raw_value"]}
 serde_regex = "1.1.0"
 sha2 = "0.9.3"
 signal-hook = "0.3.9"
-sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "yuji/prost-0.9", features = ["borsh"]}
 # sysinfo with disabled multithread feature
 sysinfo = {version = "=0.21.1", default-features = false}
 tar = "0.4.37"
