@@ -5,9 +5,10 @@ pub mod encoding;
 
 use std::collections::HashMap;
 
+use num_rational::Ratio;
 use encoding::{AbiEncode, Encode, Token};
 use ethabi::ethereum_types as ethereum;
-use num_rational::Ratio;
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 
 use crate::ledger::pos::types::{Epoch, VotingPower};
 
@@ -15,19 +16,60 @@ use crate::ledger::pos::types::{Epoch, VotingPower};
 // TODO: remove this when the secp keys PR lands
 pub type Signature = ();
 
+/// Wrapper type for [`ethereum::Address`]
+pub struct Validator(pub ethereum::Address);
+
+impl BorshSerialize for Validator {
+    fn serialize<W: ark_serialize::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        let (numer, denom): (u64, u64) = self.into();
+        (numer, denom).serialize(writer)
+    }
+}
+
+impl BorshDeserialize for Validator {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        let (numer, denom): (u64, u64) = BorshDeserialize::deserialize(buf)?;
+        Ok(Validator(todo!()))
+    }
+}
+
+impl BorshSchema for Validator {
+    fn add_definitions_recursively(
+        definitions: &mut std::collections::HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                u64::declaration(),
+                u64::declaration()
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "validator_set_update::Validator".into()
+    }
+}
+
 /// Contains the digest of all signatures from a quorum of
 /// validators for a [`Vext`].
-#[derive(Debug)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct VextDigest {
     /// A mapping from a validator Ethereum address to a [`Signature`].
-    pub signatures: HashMap<ethereum::Address, Signature>,
+    pub signatures: HashMap<Validator, Signature>,
     /// The validator set update vote extension, signed by the quorum
     /// of validators.
     pub validator_set_update: Vext,
 }
 
 /// Represents a validator set update, for some new [`Epoch`].
-#[derive(Debug)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct Vext {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
@@ -36,7 +78,7 @@ pub struct Vext {
     /// into two arrays: one for its keys, and another for its
     /// values. The arrays are sorted in descending order based
     /// on the voting power of each validator.
-    pub voting_powers: HashMap<ethereum::Address, VotingPower>,
+    pub voting_powers: HashMap<Validator, VotingPower>,
     /// The new [`Epoch`].
     ///
     /// Since this is a monotonically growing sequence number,
@@ -100,10 +142,6 @@ impl Vext {
     ) -> [u8; 32] {
         let nonce = u64::from(self.epoch).into();
         AbiEncode::keccak256(&[
-            // TODO: in the Ethereum bridge smart contracts, the version
-            // fields are of type `uint8`. we need to adjust this
-            // line accordingly, since packed serialization yields
-            // a different result from `uint256` for `uint8` values
             Token::Uint(ethereum::U256::from(version)),
             Token::String(namespace.into()),
             Token::Array(validators),
@@ -133,7 +171,7 @@ impl Vext {
         // split the vec into two
         sorted
             .into_iter()
-            .map(|(&addr, &voting_power)| {
+            .map(|(&Validator(addr), &voting_power)| {
                 let voting_power: u64 = voting_power.into();
 
                 // normalize the voting power

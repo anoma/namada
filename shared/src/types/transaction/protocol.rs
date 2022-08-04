@@ -79,6 +79,8 @@ mod protocol_txs {
         NewDkgKeypair(Tx),
         /// Ethereum events contained in vote extensions
         EthereumEvents(ethereum_events::VextDigest),
+        /// Validator set updates contained in vote extensions
+        ValidatorSetUpdate(validator_set_update::VextDigest),
     }
 
     impl ProtocolTxType {
