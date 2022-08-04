@@ -24,7 +24,7 @@ jobs:
   build-wasm:
     timeout-minutes: 30
     runs-on: ${{ matrix.os }}
-    container:
+    container: 
       image: ghcr.io/anoma/namada:wasm-0.6.1
     strategy:
       fail-fast: false
