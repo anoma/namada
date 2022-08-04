@@ -1,14 +1,15 @@
 //! Contains types necessary for processing validator set updates
 //! in vote extensions.
 
+pub mod encoding;
+
 use std::collections::HashMap;
 
+use encoding::{AbiEncode, Encode, Token};
 use ethabi::ethereum_types as ethereum;
 use num_rational::Ratio;
-use tiny_keccak::{Hasher, Keccak};
 
 use crate::ledger::pos::types::{Epoch, VotingPower};
-use crate::types::ethereum_events::KeccakHash;
 
 // TODO: finish signed vote extension
 // ```ignore
@@ -44,12 +45,20 @@ pub struct Vext {
 
 impl Vext {
     /// TODO
-    pub fn get_keccak_hash(&self) -> KeccakHash {
-        let state = Keccak::v256();
-        let mut output = [0u8; 32];
-        // state.update(&[...]);
-        state.finalize(&mut output);
-        todo!()
+    pub fn get_keccak_hash(&self) -> [u8; 32] {
+        // TODO: we need to get this value from `Storage`
+        // related issue: https://github.com/anoma/namada/issues/249
+        const GOVERNANCE_CONTRACT_VERSION: u8 = 1;
+
+        AbiEncode::keccak256(&[
+            // the version of the governance smart contract
+            //
+            // TODO: in the Ethereum bridge smart contracts, the version
+            // fields are of type `uint8`. we might need to adjust this
+            // line accordingly
+            Token::Uint(ethereum::U256::from(GOVERNANCE_CONTRACT_VERSION)),
+            // TODO: add the other fields
+        ])
     }
 
     /// Returns the list of Ethereum validator addresses and their respective
