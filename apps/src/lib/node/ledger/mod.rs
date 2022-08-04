@@ -315,17 +315,12 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         config.tendermint.tendermint_mode,
         TendermintMode::Validator
     ) {
-        let local = tokio::task::LocalSet::new();
         // boot up the ethereum node process and wait for it to finish syncing
         let (eth_sender, eth_receiver) = unbounded_channel();
         let url = ethereum_url.clone();
-        let (ethereum_node, abort_sender) = local
-            .run_until(async move {
-                EthereumNode::new(&url)
-                    .await
-                    .expect("Unable to start the Ethereum fullnode")
-            })
-            .await;
+        let (ethereum_node, abort_sender) = EthereumNode::new(&url)
+            .await
+            .expect("Unable to start the Ethereum fullnode");
 
         // Start Ethereum fullnode
         // Channel for signalling shut down to Tendermint process
@@ -350,10 +345,8 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
             res
         });
 
-        let oracle = local.spawn_local(async move {
-            ethereum_node::run_oracle(&ethereum_url, eth_sender, abort_sender)
-                .await
-        });
+        let oracle =
+            ethereum_node::run_oracle(ethereum_url, eth_sender, abort_sender);
 
         // Shutdown ethereum_node via a message to ensure that the child process
         // is properly cleaned-up.
@@ -372,7 +365,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
                 eth_abort_resp_send,
                 eth_abort_resp_recv,
             )),
-            Some((local, oracle, eth_receiver)),
+            Some((oracle, eth_receiver)),
             Some((
                 tokio::spawn(async move {
                     // Construct a service for broadcasting protocol txs from
@@ -397,11 +390,11 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         (None, None, None)
     };
 
-    let (rt, oracle_proc, eth_receiver) = match oracle {
-        Some((rt, oracle_proc, oracle_channel)) => {
-            (Some(rt), Some(oracle_proc), Some(oracle_channel))
+    let (oracle_proc, eth_receiver) = match oracle {
+        Some((oracle_proc, oracle_channel)) => {
+            (Some(oracle_proc), Some(oracle_channel))
         }
-        None => (None, None, None),
+        None => (None, None),
     };
 
     // Channel for signalling shut down to Tendermint process
@@ -501,10 +494,9 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
             eth_abort_resp_send,
             eth_abort_resp_recv,
         )),
-        Some(local),
         Some(oracle),
         Some((broadcaster, bc_abort_send)),
-    ) = (ethereum_node, rt, oracle_proc, broadcaster)
+    ) = (ethereum_node, oracle_proc, broadcaster)
     {
         // Ask to shutdown tendermint node cleanly. Ignore error, which can
         // happen if the tendermint_node task has already finished.
@@ -525,7 +517,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         tokio::try_join!(
             tendermint_node,
             ethereum_node,
-            local.run_until(async move { oracle.await }),
+            oracle,
             abci,
             broadcaster
         )
