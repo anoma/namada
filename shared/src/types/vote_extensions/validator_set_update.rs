@@ -11,21 +11,23 @@ use num_rational::Ratio;
 
 use crate::ledger::pos::types::{Epoch, VotingPower};
 
-// TODO: finish signed vote extension
-// ```ignore
-// struct Vext {
-//     ...?
-// }
-// struct SignedVext {
-//     signature: EthereumSignature,
-//     data: Vext,
-// }
-// ```
-// we derive a keccak hash from the `Vext` data
-// in `SignedVext`, which we can sign with an
-// Ethereum key. that is the content of `signature`
+/// Placeholder type for an Ethereum signature.
+// TODO: remove this when the secp keys PR lands
+pub type Signature = ();
+
+/// Contains the digest of all signatures from a quorum of
+/// validators for a [`Vext`].
+#[derive(Debug)]
+pub struct VextDigest {
+    /// A mapping from a validator Ethereum address to a [`Signature`].
+    pub signatures: HashMap<ethereum::Address, Signature>,
+    /// The validator set update vote extension, signed by the quorum
+    /// of validators.
+    pub validator_set_update: Vext,
+}
 
 /// Represents a validator set update, for some new [`Epoch`].
+#[derive(Debug)]
 pub struct Vext {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
