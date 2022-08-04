@@ -53,3 +53,20 @@ impl Encode for AbiEncodePacked {
         todo!()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use ethabi::ethereum_types::U256;
+
+    use super::*;
+
+    #[test]
+    fn test_abi_encode() {
+        let expected = "0x000000000000000000000000000000000000000000000000000000000000002a000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000047465737400000000000000000000000000000000000000000000000000000000";
+        let got = AbiEncode::encode(&[
+            Token::Uint(U256::from(42u64)),
+            Token::String("test".into()),
+        ]);
+        assert_eq!(expected, got);
+    }
+}
