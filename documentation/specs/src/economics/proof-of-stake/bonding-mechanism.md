@@ -6,7 +6,8 @@ An epoch is a range of blocks or time that is defined by the base ledger and mad
 
 ### Epoched data
 
-Epoched data are data associated with a specific epoch that are set in advance. The data relevant to the PoS system in the ledger's state are epoched. Each data can be uniquely identified. These are:
+Epoched data is data associated with a specific epoch that is set in advance.
+The data relevant to the PoS system in the ledger's state are epoched. Each data can be uniquely identified. These are:
 - [System parameters](#system-parameters). A single value for each epoch.
 - [Active validator set](#active-validator-set). A single value for each epoch.
 - Total voting power. A sum of all active and inactive validators' voting power. A single value for each epoch.

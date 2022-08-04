@@ -1,4 +1,4 @@
-package = anoma
+package = namada
 
 cargo := $(env) cargo
 rustup := $(env) rustup
@@ -29,7 +29,10 @@ build-test-abci-plus-plus:
 	$(cargo) build --tests --no-default-features --features "ABCI-plus-plus eth-fullnode"
 
 build-release:
-	ANOMA_DEV=false $(cargo) build --release --package namada_apps
+	ANOMA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml --features "ABCI"
+
+build-release-abci-plus-plus:
+	ANOMA_DEV=false $(cargo) build --release --package namada_apps --no-default-features --features "ABCI-plus-plus"
 
 check-release:
 	ANOMA_DEV=false $(cargo) check --release --package namada_apps
@@ -38,13 +41,13 @@ package: build-release
 	scripts/make-package.sh
 
 build-release-image-docker:
-	docker build -t anoma-build - < docker/anoma-build/Dockerfile
+	docker build -t namada-build - < docker/namada-build/Dockerfile
 
 build-release-docker: build-release-image-docker
-	docker run --rm -v ${PWD}:/var/build anoma-build make build-release
+	docker run --rm -v ${PWD}:/var/build namada-build make build-release
 
 package-docker: build-release-image-docker
-	docker run --rm -v ${PWD}:/var/build anoma-build make package
+	docker run --rm -v ${PWD}:/var/build namada-build make package
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
@@ -97,27 +100,27 @@ install: tendermint
 	ANOMA_DEV=false $(cargo) install --path ./apps --locked
 
 tendermint:
-	./scripts/install/get_tendermint.sh
+	./scripts/get_tendermint.sh
 
 run-ledger:
 	# runs the node
-	$(cargo) run --bin anoman -- ledger run
+	$(cargo) run --bin namadan -- ledger run
 
 run-ledger-abci-plus-plus:
 	# runs the node
-	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger run
+	$(cargo) run --bin namadan --no-default-features --features "ABCI-plus-plus" -- ledger run
 
 run-gossip:
 	# runs the node gossip node
-	$(cargo) run --bin anoman -- gossip run
+	$(cargo) run --bin namadan -- gossip run
 
 reset-ledger:
 	# runs the node
-	$(cargo) run --bin anoman -- ledger reset
+	$(cargo) run --bin namadan -- ledger reset
 
 reset-ledger-abci-plus-plus:
 	# runs the node
-	$(cargo) run --bin anoman --no-default-features --features "ABCI-plus-plus" -- ledger reset
+	$(cargo) run --bin namadan --no-default-features --features "ABCI-plus-plus" -- ledger reset
 
 audit:
 	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
@@ -125,50 +128,75 @@ audit:
 test: test-unit test-e2e test-wasm
 
 test-e2e:
-	RUST_BACKTRACE=1 $(cargo) test e2e -- --test-threads=1
+	RUST_BACKTRACE=1 $(cargo) test e2e \
+		-- \
+		--test-threads=1 \
+		-Z unstable-options --report-time
 
 test-e2e-abci-plus-plus:
 	RUST_BACKTRACE=1 $(cargo) test e2e \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
 		--features "wasm-runtime ABCI-plus-plus namada_apps/ABCI-plus-plus" \
-		-- --test-threads=1
+			-- \
+			--test-threads=1 \
+			-Z unstable-options --report-time
 
 test-unit-abci-plus-plus:
 	$(cargo) test \
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
-		--features "testing std ABCI-plus-plus eth-fullnode" && \
-	$(cargo) test --manifest-path ./proof_of_stake/Cargo.toml \
-		--features "testing" && \
+		--features "testing std ABCI-plus-plus eth-fullnode" \
+			-- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
+		--manifest-path \
+		./proof_of_stake/Cargo.toml \
+		--features "testing" \
+			-- \
+			-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
-		--features "testing wasm-runtime ABCI-plus-plus ibc-mocks" && \
+		--features "testing wasm-runtime ABCI-plus-plus ibc-mocks" \
+			-- \
+			-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./tests/Cargo.toml \
 		--no-default-features \
 		--features "wasm-runtime ABCI-plus-plus namada_apps/ABCI-plus-plus namada_apps/eth-fullnode" \
-		-- --skip e2e && \
+			-- \
+			--skip e2e \
+			-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./vm_env/Cargo.toml \
 		--no-default-features \
-		--features "ABCI-plus-plus"
+		--features "ABCI-plus-plus" \
+			-- \
+			-Z unstable-options --report-time
 
 test-unit:
 	$(cargo) test --no-default-features \
 		--features "wasm-runtime ABCI ibc-mocks-abci eth-fullnode" \
-		-- --skip e2e
+			-- \
+			--skip e2e \
+			-Z unstable-options --report-time
 
 test-wasm:
 	make -C $(wasms) test
 
-test-wasm-template = $(cargo) test --manifest-path $(wasm)/Cargo.toml
+test-wasm-template = $(cargo) test \
+	--manifest-path $(wasm)/Cargo.toml \
+		-- \
+		-Z unstable-options --report-time
 test-wasm-templates:
 	$(foreach wasm,$(wasm_templates),$(test-wasm-template) && ) true
 
 test-debug:
-	$(debug-cargo) test -- --nocapture
+	$(debug-cargo) test \
+		-- \
+		--nocapture \
+		-Z unstable-options --report-time
 
 fmt-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml
 fmt:
@@ -198,10 +226,10 @@ doc:
 	$(cargo) doc --open
 
 build-wasm-image-docker:
-	docker build -t anoma-wasm - < docker/anoma-wasm/Dockerfile
+	docker build -t namada-wasm - < docker/namada-wasm/Dockerfile
 
 build-wasm-scripts-docker: build-wasm-image-docker
-	docker run --rm -v ${PWD}:/usr/local/rust/wasm anoma-wasm make build-wasm-scripts
+	docker run --rm -v ${PWD}:/__w/namada/namada namada-wasm make build-wasm-scripts
 
 # Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
 build-wasm-scripts:
@@ -219,9 +247,6 @@ opt-wasm:
 
 clean-wasm-scripts:
 	make -C $(wasms) clean
-
-publish-wasm:
-	aws s3 sync wasm s3://heliax-anoma-wasm-v1 --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*"
 
 dev-deps:
 	$(rustup) toolchain install $(nightly)
