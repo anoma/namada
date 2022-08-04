@@ -28,19 +28,22 @@ pub mod mock_eth_fullnode {
 pub mod mock_oracle {
 
     use namada::types::ethereum_events::EthereumEvent;
+    use tokio::macros::support::poll_fn;
     use tokio::sync::mpsc::UnboundedSender;
     use tokio::sync::oneshot::Sender;
 
-    pub async fn run_oracle(
-        _: &str,
+    pub fn run_oracle(
+        _: impl AsRef<str>,
         _: UnboundedSender<EthereumEvent>,
-        abort: Sender<()>,
-    ) {
-        loop {
-            if abort.is_closed() {
-                return;
-            }
-        }
+        mut abort: Sender<()>,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            tracing::info!("Mock Ethereum event oracle is starting");
+
+            poll_fn(|cx| abort.poll_closed(cx)).await;
+
+            tracing::info!("Mock Ethereum event oracle is no longer running");
+        })
     }
 }
 

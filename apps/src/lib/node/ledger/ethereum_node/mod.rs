@@ -68,6 +68,7 @@ pub mod eth_fullnode {
     use tokio::process::{Child, Command};
     use tokio::sync::oneshot::error::TryRecvError;
     use tokio::sync::oneshot::{channel, Receiver, Sender};
+    use tokio::task::LocalSet;
     use web30::client::Web3;
 
     use super::{Error, Result};
@@ -110,46 +111,60 @@ pub mod eth_fullnode {
         /// It then starts the process and waits for it to finish
         /// syncing.
         pub async fn new(url: &str) -> Result<(EthereumNode, Sender<()>)> {
-            // the geth fullnode process
-            let network = get_eth_network()?;
-            let args = match &network {
-                Some(network) => {
-                    vec!["--syncmode", "snap", network.as_str(), "--http"]
-                }
-                None => vec!["--syncmode", "snap", "--http"],
-            };
-            let ethereum_node = Command::new("geth")
-                .args(&args)
-                .kill_on_drop(true)
-                .spawn()
-                .map_err(Error::StartUp)?;
-            tracing::info!("Ethereum fullnode started");
+            // we have to start the node in a [`LocalSet`] due to the web30
+            // crate
+            LocalSet::new()
+                .run_until(async move {
+                    // the geth fullnode process
+                    let network = get_eth_network()?;
+                    let args = match &network {
+                        Some(network) => {
+                            vec![
+                                "--syncmode",
+                                "snap",
+                                network.as_str(),
+                                "--http",
+                            ]
+                        }
+                        None => vec!["--syncmode", "snap", "--http"],
+                    };
+                    let ethereum_node = Command::new("geth")
+                        .args(&args)
+                        .kill_on_drop(true)
+                        .spawn()
+                        .map_err(Error::StartUp)?;
+                    tracing::info!("Ethereum fullnode started");
 
-            // it takes a brief amount of time to open up the websocket on
-            // geth's end
-            const CLIENT_TIMEOUT: Duration = Duration::from_secs(5);
-            let client = Web3::new(url, CLIENT_TIMEOUT);
+                    // it takes a brief amount of time to open up the websocket
+                    // on geth's end
+                    const CLIENT_TIMEOUT: Duration = Duration::from_secs(5);
+                    let client = Web3::new(url, CLIENT_TIMEOUT);
 
-            const SLEEP_DUR: Duration = Duration::from_secs(1);
-            loop {
-                if let Ok(false) = client.eth_syncing().await {
-                    tracing::info!("Finished syncing");
-                    break;
-                }
-                if let Err(error) = client.eth_syncing().await {
-                    // This is very noisy and usually not interesting.
-                    // Still can be very useful
-                    tracing::debug!(?error, "Couldn't check Geth sync status");
-                }
-                tokio::time::sleep(SLEEP_DUR).await;
-            }
+                    const SLEEP_DUR: Duration = Duration::from_secs(1);
+                    loop {
+                        if let Ok(false) = client.eth_syncing().await {
+                            tracing::info!("Finished syncing");
+                            break;
+                        }
+                        if let Err(error) = client.eth_syncing().await {
+                            // This is very noisy and usually not interesting.
+                            // Still can be very useful
+                            tracing::debug!(
+                                ?error,
+                                "Couldn't check Geth sync status"
+                            );
+                        }
+                        tokio::time::sleep(SLEEP_DUR).await;
+                    }
 
-            let (abort_sender, receiver) = channel();
-            let node = Self {
-                process: ethereum_node,
-                abort_recv: receiver,
-            };
-            Ok((node, abort_sender))
+                    let (abort_sender, receiver) = channel();
+                    let node = Self {
+                        process: ethereum_node,
+                        abort_recv: receiver,
+                    };
+                    Ok((node, abort_sender))
+                })
+                .await
         }
 
         /// Wait for the process to finish or an abort message was
