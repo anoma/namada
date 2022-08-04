@@ -1,7 +1,7 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
-use namada::types::ethereum_events::vote_extensions::FractionalVotingPower;
 use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::voting_power::FractionalVotingPower;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
 #[cfg(not(feature = "ABCI"))]
@@ -48,7 +48,7 @@ where
             })
             .collect();
 
-        // We should not have more than one `VoteExtensionDigest` in
+        // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
         let too_many_vext_digests = vote_ext_digest_num > 1;
 
@@ -374,9 +374,6 @@ mod test_process_proposal {
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
     use namada::types::address::xan;
-    use namada::types::ethereum_events::vote_extensions::{
-        MultiSignedEthEvent, VoteExtension, VoteExtensionDigest,
-    };
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -384,6 +381,9 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
+    use namada::types::vote_extensions::ethereum_events::{
+        self, MultiSignedEthEvent,
+    };
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::RequestInitChain;
     #[cfg(not(feature = "ABCI"))]
@@ -401,8 +401,8 @@ mod test_process_proposal {
     };
     use crate::wallet;
 
-    /// Test that if a proposal contains more than one `VoteExtensionDigest`,
-    /// we reject it.
+    /// Test that if a proposal contains more than one
+    /// `ethereum_events::VextDigest`, we reject it.
     #[test]
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
@@ -412,14 +412,16 @@ mod test_process_proposal {
         let vote_extension_digest = {
             let validator_addr = wallet::defaults::validator_address();
             let signed_vote_extension = {
-                let ext =
-                    VoteExtension::empty(LAST_HEIGHT, validator_addr.clone())
-                        .sign(&protocol_key);
+                let ext = ethereum_events::Vext::empty(
+                    LAST_HEIGHT,
+                    validator_addr.clone(),
+                )
+                .sign(&protocol_key);
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            // vote extension digest with no observed events
-            VoteExtensionDigest {
+            // Ethereum events digest with no observed events
+            ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(validator_addr, signed_vote_extension.sig);
@@ -443,7 +445,7 @@ mod test_process_proposal {
 
     fn check_rejected_digest(
         shell: &mut TestShell,
-        vote_extension_digest: VoteExtensionDigest,
+        vote_extension_digest: ethereum_events::VextDigest,
         protocol_key: common::SecretKey,
     ) {
         let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
@@ -467,7 +469,7 @@ mod test_process_proposal {
         );
     }
 
-    /// Test that if a proposal contains vote extensions with
+    /// Test that if a proposal contains Ethereum events with
     /// invalid validator signatures, we reject it.
     #[test]
     fn test_drop_vext_digest_with_invalid_sigs() {
@@ -483,7 +485,7 @@ mod test_process_proposal {
             };
             let ext = {
                 // generate a valid signature
-                let mut ext = VoteExtension {
+                let mut ext = ethereum_events::Vext {
                     validator_addr: addr.clone(),
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![event.clone()],
@@ -495,7 +497,7 @@ mod test_process_proposal {
                 ext.sig = test_utils::invalidate_signature(ext.sig);
                 ext
             };
-            VoteExtensionDigest {
+            ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(addr.clone(), ext.sig);
@@ -514,7 +516,7 @@ mod test_process_proposal {
         check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
     }
 
-    /// Test that if a proposal contains vote extensions with
+    /// Test that if a proposal contains Ethereum events with
     /// invalid block heights, we reject it.
     #[test]
     fn test_drop_vext_digest_with_invalid_bheights() {
@@ -530,7 +532,7 @@ mod test_process_proposal {
                 transfers: vec![],
             };
             let ext = {
-                let ext = VoteExtension {
+                let ext = ethereum_events::Vext {
                     validator_addr: addr.clone(),
                     block_height: PRED_LAST_HEIGHT,
                     ethereum_events: vec![event.clone()],
@@ -539,7 +541,7 @@ mod test_process_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            VoteExtensionDigest {
+            ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(addr.clone(), ext.sig);
@@ -558,7 +560,7 @@ mod test_process_proposal {
         check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
     }
 
-    /// Test that if a proposal contains vote extensions with
+    /// Test that if a proposal contains Ethereum events with
     /// invalid validators, we reject it.
     #[test]
     fn test_drop_vext_digest_with_invalid_validators() {
@@ -576,7 +578,7 @@ mod test_process_proposal {
                 transfers: vec![],
             };
             let ext = {
-                let ext = VoteExtension {
+                let ext = ethereum_events::Vext {
                     validator_addr: addr.clone(),
                     block_height: LAST_HEIGHT,
                     ethereum_events: vec![event.clone()],
@@ -585,7 +587,7 @@ mod test_process_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            VoteExtensionDigest {
+            ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(addr.clone(), ext.sig);

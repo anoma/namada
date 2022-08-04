@@ -1,7 +1,5 @@
 //! Types representing data intended for Anoma via Ethereum events
 
-pub mod vote_extensions;
-
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -174,7 +172,7 @@ pub enum EthereumEvent {
 impl EthereumEvent {
     /// SHA256 of the Borsh serialization of the [`EthereumEvent`].
     #[allow(dead_code)]
-    fn hash(&self) -> Result<Hash, std::io::Error> {
+    pub(crate) fn hash(&self) -> Result<Hash, std::io::Error> {
         let bytes = self.try_to_vec()?;
         Ok(Hash::sha256(&bytes))
     }

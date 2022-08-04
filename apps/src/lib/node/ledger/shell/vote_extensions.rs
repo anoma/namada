@@ -3,16 +3,13 @@ mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
-    use namada::types::ethereum_events::vote_extensions::VoteExtension;
+    use namada::types::vote_extensions::ethereum_events;
     use tendermint_proto::abci::ExtendedVoteInfo;
 
     use super::super::queries::QueriesExt;
     use super::super::*;
 
-    /// A [`VoteExtension`] signed by a Namada validator.
-    pub type SignedExt = Signed<VoteExtension>;
-
-    /// The error yielded from [`Shell::validate_vote_ext_and_get_it_back`].
+    /// The error yielded from validating faulty vote extensions in the shell
     #[derive(Error, Debug)]
     pub enum VoteExtensionError {
         #[error("The vote extension was issued at block height 0.")]
@@ -48,7 +45,7 @@ mod extend_votes {
                 .get_validator_address()
                 .expect("only validators should receive this method call")
                 .to_owned();
-            let ext = VoteExtension {
+            let ext = ethereum_events::Vext {
                 block_height: self.storage.last_height + 1,
                 ethereum_events: self.new_ethereum_events(),
                 validator_addr,
@@ -71,11 +68,15 @@ mod extend_votes {
             &self,
             req: request::VerifyVoteExtension,
         ) -> response::VerifyVoteExtension {
-            if let Ok(signed) =
-                SignedExt::try_from_slice(&req.vote_extension[..])
-            {
+            // TODO: this should deserialize to
+            // `namada::types::vote_extensions::VoteExtension`,
+            // which contains an optional validator set update and
+            // a set of ethereum events seen at the previous block height
+            if let Ok(signed) = Signed::<ethereum_events::Vext>::try_from_slice(
+                &req.vote_extension[..],
+            ) {
                 response::VerifyVoteExtension {
-                    status: if self.validate_vote_extension(
+                    status: if self.validate_eth_events_vext(
                         signed,
                         self.storage.last_height + 1,
                     ) {
@@ -103,31 +104,37 @@ mod extend_votes {
             }
         }
 
-        /// Validates a vote extension issued at the provided block height
-        /// Checks that at epoch of the provided height
-        ///  * The tendermint address corresponds to an active validator
+        /// Validates an Ethereum events vote extension issued at the provided
+        /// block height
+        ///
+        /// Checks that at epoch of the provided height:
+        ///  * The Tendermint address corresponds to an active validator
         ///  * The validator correctly signed the extension
         ///  * The validator signed over the correct height inside of the
         ///    extension
+        ///  * There are no duplicate Ethereum events in this vote extension,
+        ///    and the events are sorted in ascending order
         #[inline]
-        pub fn validate_vote_extension(
+        pub fn validate_eth_events_vext(
             &self,
-            ext: SignedExt,
+            ext: Signed<ethereum_events::Vext>,
             last_height: BlockHeight,
         ) -> bool {
-            self.validate_vote_ext_and_get_it_back(ext, last_height)
+            self.validate_eth_events_vext_and_get_it_back(ext, last_height)
                 .is_ok()
         }
 
-        /// This method behaves exactly like [`Self::validate_vote_extension`],
+        /// This method behaves exactly like [`Self::validate_eth_events_vext`],
         /// with the added bonus of returning the vote extension back, if it
         /// is valid.
-        pub fn validate_vote_ext_and_get_it_back(
+        pub fn validate_eth_events_vext_and_get_it_back(
             &self,
-            ext: SignedExt,
+            ext: Signed<ethereum_events::Vext>,
             last_height: BlockHeight,
-        ) -> std::result::Result<(VotingPower, SignedExt), VoteExtensionError>
-        {
+        ) -> std::result::Result<
+            (VotingPower, Signed<ethereum_events::Vext>),
+            VoteExtensionError,
+        > {
             if ext.data.block_height != last_height {
                 let ext_height = ext.data.block_height;
                 tracing::error!(
@@ -184,7 +191,7 @@ mod extend_votes {
         }
 
         /// Checks the channel from the Ethereum oracle monitoring
-        /// the fullnode and retrieves all VoteExtension messages sent.
+        /// the fullnode and retrieves all seen Ethereum events.
         pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
             match &mut self.mode {
                 ShellMode::Validator {
@@ -198,22 +205,25 @@ mod extend_votes {
             }
         }
 
-        /// Takes an iterator over signed vote extensions,
+        /// Takes an iterator over vote extension instances,
         /// and returns another iterator. The latter yields
         /// valid vote extensions, or the reason why these
         /// are invalid, in the form of a [`VoteExtensionError`].
+        // TODO: the `vote_extensions` iterator should be over `VoteExtension`
+        // instances, I guess? to be determined in the next PR
         #[inline]
         pub fn validate_vote_extension_list(
             &self,
-            vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
+            vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
+            + 'static,
         ) -> impl Iterator<
             Item = std::result::Result<
-                (VotingPower, SignedExt),
+                (VotingPower, Signed<ethereum_events::Vext>),
                 VoteExtensionError,
             >,
         > + '_ {
             vote_extensions.into_iter().map(|vote_extension| {
-                self.validate_vote_ext_and_get_it_back(
+                self.validate_eth_events_vext_and_get_it_back(
                     vote_extension,
                     self.storage.last_height,
                 )
@@ -222,30 +232,43 @@ mod extend_votes {
 
         /// Takes a list of signed vote extensions,
         /// and filters out invalid instances.
+        // TODO: the `vote_extensions` iterator should be over `VoteExtension`
+        // instances, I guess? to be determined in the next PR
         #[inline]
         pub fn filter_invalid_vote_extensions(
             &self,
-            vote_extensions: impl IntoIterator<Item = SignedExt> + 'static,
-        ) -> impl Iterator<Item = (VotingPower, SignedExt)> + '_ {
+            vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
+            + 'static,
+        ) -> impl Iterator<Item = (VotingPower, Signed<ethereum_events::Vext>)> + '_
+        {
             self.validate_vote_extension_list(vote_extensions)
                 .filter_map(|ext| ext.ok())
         }
     }
 
     /// Given a `Vec` of [`ExtendedVoteInfo`], return an iterator over the
-    /// ones we could deserialize to [`SignedExt`] instances.
+    /// ones we could deserialize to [`Signed<ethereum_events::Vext>`]
+    /// instances.
+    // TODO: we need to return an iterator over instances of `VoteExtension`,
+    // which contain both the ethereum events vote extensions and validator
+    // set update vote extensions
     pub fn deserialize_vote_extensions(
         vote_extensions: Vec<ExtendedVoteInfo>,
-    ) -> impl Iterator<Item = SignedExt> + 'static {
+    ) -> impl Iterator<Item = Signed<ethereum_events::Vext>> + 'static {
         vote_extensions.into_iter().filter_map(|vote| {
-            SignedExt::try_from_slice(&vote.vote_extension[..])
-                .map_err(|err| {
-                    tracing::error!(
-                        ?err,
-                        "Failed to deserialize signed vote extension",
-                    );
-                })
-                .ok()
+            Signed::<ethereum_events::Vext>::try_from_slice(
+                &vote.vote_extension[..],
+            )
+            .map_err(|err| {
+                tracing::error!(
+                    ?err,
+                    // TODO: change this error message, probably, such that
+                    // it mentions Ethereum events rather than vote
+                    // extensions
+                    "Failed to deserialize signed vote extension",
+                );
+            })
+            .ok()
         })
     }
 
@@ -256,16 +279,16 @@ mod extend_votes {
         use borsh::{BorshDeserialize, BorshSerialize};
         use namada::ledger::pos;
         use namada::ledger::pos::namada_proof_of_stake::PosBase;
-        use namada::types::ethereum_events::vote_extensions::VoteExtension;
+        use namada::proto::Signed;
         use namada::types::ethereum_events::{
             EthAddress, EthereumEvent, TransferToEthereum,
         };
         use namada::types::key::*;
         use namada::types::storage::{BlockHeight, Epoch};
+        use namada::types::vote_extensions::ethereum_events;
         use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
         use tower_abci::request;
 
-        use super::SignedExt;
         use crate::node::ledger::shell::queries::QueriesExt;
         use crate::node::ledger::shell::test_utils::*;
         use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
@@ -343,7 +366,7 @@ mod extend_votes {
             oracle.send(event_1.clone()).expect("Test failed");
             oracle.send(event_2.clone()).expect("Test failed");
             let vote_extension =
-                <SignedExt as BorshDeserialize>::try_from_slice(
+                <Signed<ethereum_events::Vext> as BorshDeserialize>::try_from_slice(
                     &shell.extend_vote(Default::default()).vote_extension[..],
                 )
                 .expect("Test failed");
@@ -374,7 +397,7 @@ mod extend_votes {
             assert_eq!(res.status, i32::from(VerifyStatus::Accept));
         }
 
-        /// Test that Ethereum headers signed by a non-validator is rejected
+        /// Test that Ethereum events signed by a non-validator are rejected
         #[test]
         fn test_eth_events_must_be_signed_by_validator() {
             let (shell, _, _) = setup();
@@ -384,7 +407,7 @@ mod extend_votes {
                 .get_validator_address()
                 .expect("Test failed")
                 .clone();
-            let vote_ext = VoteExtension {
+            let vote_ext = ethereum_events::Vext {
                 ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                     nonce: 1.into(),
                     transfers: vec![TransferToEthereum {
@@ -415,7 +438,7 @@ mod extend_votes {
             );
         }
 
-        /// Test that validation of vote extensions cast during the
+        /// Test that validation of Ethereum events cast during the
         /// previous block are accepted for the current block. This
         /// should pass even if the epoch changed resulting in a
         /// change to the validator set.
@@ -430,7 +453,7 @@ mod extend_votes {
                 .expect("Test failed")
                 .clone();
             let signed_height = shell.storage.last_height + 1;
-            let vote_ext = VoteExtension {
+            let vote_ext = ethereum_events::Vext {
                 ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                     nonce: 1.into(),
                     transfers: vec![TransferToEthereum {
@@ -481,16 +504,16 @@ mod extend_votes {
                     .is_ok()
             );
 
-            assert!(shell.validate_vote_extension(vote_ext, signed_height));
+            assert!(shell.validate_eth_events_vext(vote_ext, signed_height));
         }
 
-        /// Test that that an event that incorrectly labels what block it was
-        /// included in a vote extension on is rejected
+        /// Test that an [`ethereum_events::Vext`] that incorrectly labels what
+        /// block it was included on in a vote extension is rejected
         #[test]
         fn reject_incorrect_block_number() {
             let (shell, _, _) = setup();
             let address = shell.mode.get_validator_address().unwrap().clone();
-            let vote_ext = VoteExtension {
+            let vote_ext = ethereum_events::Vext {
                 ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                     nonce: 1.into(),
                     transfers: vec![TransferToEthereum {
