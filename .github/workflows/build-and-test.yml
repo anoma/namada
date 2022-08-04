@@ -208,7 +208,7 @@ jobs:
           ANOMA_MASP_PARAMS_DIR: "/home/runner/work/masp"
           ANOMA_LOG: "info"
       - name: Upload e2e logs
-        if: success() || failure()
+        if: always()
         uses: actions/upload-artifact@v3
         with:
           name: logs-e2e${{ matrix.make.suffix }}-${{ github.sha }}
