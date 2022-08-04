@@ -672,7 +672,7 @@ impl ShieldedContext {
             } else {
                 masp_proofs::default_params_folder().unwrap()
             };
-        let spend_path = params_dir.join(MASP_SPEND_NAME);
+        let spend_path = dbg!(params_dir.join(MASP_SPEND_NAME));
         let convert_path = params_dir.join(MASP_CONVERT_NAME);
         let output_path = params_dir.join(MASP_OUTPUT_NAME);
         if !(spend_path.exists()
