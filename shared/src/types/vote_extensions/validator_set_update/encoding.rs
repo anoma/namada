@@ -10,10 +10,10 @@ use tiny_keccak::{Hasher, Keccak};
 pub trait Encode {
     /// The data type to be encoded to. Must deref to a hex string with
     /// a `0x` prefix.
-    type EncodedData: AsRef<str>;
+    type HexString: AsRef<str>;
 
     /// Returns the encoded [`Token`] instances.
-    fn encode(tokens: &[Token]) -> Self::EncodedData;
+    fn encode(tokens: &[Token]) -> Self::HexString;
 
     /// Encodes a slice of [`Token`] instances, and returns the
     /// keccak hash of the encoded string.
@@ -33,9 +33,9 @@ pub trait Encode {
 pub struct AbiEncode;
 
 impl Encode for AbiEncode {
-    type EncodedData = String;
+    type HexString = String;
 
-    fn encode(tokens: &[Token]) -> Self::EncodedData {
+    fn encode(tokens: &[Token]) -> Self::HexString {
         let encoded_data = hex::encode(ethabi::encode(tokens));
         format!("0x{encoded_data}")
     }
