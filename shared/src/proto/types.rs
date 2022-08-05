@@ -58,6 +58,8 @@ pub struct SignedTxData {
 pub enum SerializeWithBorsch {}
 
 /// A generic signed data wrapper for serialize-able types.
+///
+/// The default serialization method is [`BorshSerialize`].
 #[derive(
     Eq, Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
