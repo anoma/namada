@@ -12,7 +12,7 @@ use num_rational::Ratio;
 
 use crate::ledger::pos::types::{Epoch, VotingPower};
 use crate::types::address::Address;
-use crate::types::key::common::Signature;
+use crate::types::key::common::{self, Signature};
 
 /// Wrapper type for [`ethereum::Address`]
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -224,5 +224,13 @@ impl Vext {
                 (Token::Address(addr), Token::Uint(voting_power))
             })
             .unzip()
+    }
+
+    /// Sign this [`Vext`] with an Ethereum key.
+    ///
+    /// For more information, check the Ethereum bridge smart contract code:
+    ///   - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L186>
+    pub fn sign(&self, _sk: &common::SecretKey) -> SignedVext {
+        todo!()
     }
 }
