@@ -3,14 +3,14 @@
 pub mod ethereum_events;
 pub mod validator_set_update;
 
-// TODO: add a `VoteExtension` type
-//
-// ```ignore
-// pub struct VoteExtension {
-//     pub ethereum_events: Signed<ethereum_events::Vext>,
-//     pub validator_set_update: Option<validator_set_update::EthSignedVext>,
-// }
-// ```
+/// This type represents the data we pass to the extension of
+/// a vote at the PreCommit phase of Tendermint.
+pub struct VoteExtension {
+    /// Vote extension data related with Ethereum events.
+    pub ethereum_events: Signed<ethereum_events::Vext>,
+    /// Vote extension data related with validator set updates.
+    pub validator_set_update: Option<validator_set_update::SignedVext>,
+}
 
 // TODO: add a `VoteExtensionDigest` type; this will contain
 // the values to be proposed, for a quorum of Ethereum events
