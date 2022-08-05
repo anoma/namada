@@ -91,6 +91,12 @@ impl VextDigest {
         }
         extensions
     }
+
+    /// Returns an Ethereum ABI encoded string with the
+    /// params to feed to the Ethereum bridge smart contracts.
+    pub fn abi_params(&self) -> String {
+        todo!()
+    }
 }
 
 /// Represents a [`Vext`] signed by some validator, with
