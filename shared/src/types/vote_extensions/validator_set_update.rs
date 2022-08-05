@@ -5,10 +5,10 @@ pub mod encoding;
 
 use std::collections::HashMap;
 
-use num_rational::Ratio;
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use encoding::{AbiEncode, Encode, Token};
 use ethabi::ethereum_types as ethereum;
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use num_rational::Ratio;
 
 use crate::ledger::pos::types::{Epoch, VotingPower};
 
@@ -17,6 +17,7 @@ use crate::ledger::pos::types::{Epoch, VotingPower};
 pub type Signature = ();
 
 /// Wrapper type for [`ethereum::Address`]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Validator(pub ethereum::Address);
 
 impl BorshSerialize for Validator {
@@ -24,15 +25,15 @@ impl BorshSerialize for Validator {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        let (numer, denom): (u64, u64) = self.into();
-        (numer, denom).serialize(writer)
+        let Validator(ethereum::H160(inner_array)) = self;
+        inner_array.serialize(writer)
     }
 }
 
 impl BorshDeserialize for Validator {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        let (numer, denom): (u64, u64) = BorshDeserialize::deserialize(buf)?;
-        Ok(Validator(todo!()))
+        let inner = <[u8; 20]>::deserialize(buf)?;
+        Ok(Validator(ethereum::H160(inner)))
     }
 }
 
@@ -45,8 +46,7 @@ impl BorshSchema for Validator {
     ) {
         let fields =
             borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
-                u64::declaration(),
-                u64::declaration()
+                <[u8; 20]>::declaration()
             ]);
         let definition = borsh::schema::Definition::Struct { fields };
         Self::add_definition(Self::declaration(), definition, definitions);
