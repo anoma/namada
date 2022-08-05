@@ -10,8 +10,9 @@ use encoding::{AbiEncode, Encode, Token};
 use ethabi::ethereum_types as ethereum;
 use num_rational::Ratio;
 
-use crate::types::key::common::Signature;
 use crate::ledger::pos::types::{Epoch, VotingPower};
+use crate::types::address::Address;
+use crate::types::key::common::Signature;
 
 /// Wrapper type for [`ethereum::Address`]
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -58,8 +59,8 @@ impl BorshSchema for EthAddr {
 /// validators for a [`Vext`].
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct VextDigest {
-    /// A mapping from a validator Ethereum address to a [`Signature`].
-    pub signatures: HashMap<EthAddr, Signature>,
+    /// A mapping from a validator address to a [`Signature`].
+    pub signatures: HashMap<Address, Signature>,
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     pub voting_powers: HashMap<EthAddr, VotingPower>,
@@ -68,12 +69,20 @@ pub struct VextDigest {
 impl VextDigest {
     /// Decompresses a set of signed [`Vext`] instances.
     pub fn decompress(self, epoch: Epoch) -> Vec<SignedVext> {
-        let VextDigest { signatures, validator_set_update } = self;
+        let VextDigest {
+            signatures,
+            voting_powers,
+        } = self;
 
         let mut extensions = vec![];
 
-        for (_addr, signature) in signatures.into_iter() {
-            let validator_set_update = validator_set_update.clone();
+        for (validator_addr, signature) in signatures.into_iter() {
+            let voting_powers = voting_powers.clone();
+            let validator_set_update = Vext {
+                validator_addr,
+                voting_powers,
+                epoch,
+            };
             let signed = SignedVext {
                 signature,
                 validator_set_update,
@@ -104,6 +113,10 @@ pub struct Vext {
     /// values. The arrays are sorted in descending order based
     /// on the voting power of each validator.
     pub voting_powers: HashMap<EthAddr, VotingPower>,
+    /// TODO: the validator's address is temporarily being included
+    /// until we're able to map a Tendermint address to a validator
+    /// address (see https://github.com/anoma/namada/issues/200)
+    pub validator_addr: Address,
     /// The new [`Epoch`].
     ///
     /// Since this is a monotonically growing sequence number,
