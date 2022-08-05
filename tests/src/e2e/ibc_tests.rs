@@ -130,7 +130,7 @@ fn run_ledger_ibc() -> Result<()> {
         &conn_id_b,
     )?;
 
-    // transfer from the normal account
+    // Transfer from the normal account on Chain A to Chain B
     transfer_token(
         &test_a,
         &test_b,
@@ -140,7 +140,7 @@ fn run_ledger_ibc() -> Result<()> {
     )?;
     check_balances(&port_channel_id_a, &port_channel_id_b, &test_a, &test_b)?;
 
-    // transfer back from the origin-specific account
+    // Transfer back from the origin-specific account on Chain B to Chain A
     transfer_back(
         &test_a,
         &test_b,
@@ -155,9 +155,9 @@ fn run_ledger_ibc() -> Result<()> {
         &test_b,
     )?;
 
-    // transfer a token and it will time out
+    // Transfer a token and it will time out and refund
     transfer_timeout(&test_a, &test_b, &client_id_a, &port_channel_id_a)?;
-    // the balance should not be changed
+    // The balance should not be changed
     check_balances_after_back(
         &port_channel_id_a,
         &port_channel_id_b,
@@ -177,7 +177,7 @@ fn run_ledger_ibc() -> Result<()> {
         &port_channel_id_a,
         &port_channel_id_b,
     )?;
-    // the balance should not be changed
+    // The balance should not be changed
     check_balances_after_back(
         &port_channel_id_a,
         &port_channel_id_b,
@@ -194,6 +194,9 @@ fn run_ledger_ibc() -> Result<()> {
         &port_channel_id_a,
         &port_channel_id_b,
     )?;
+
+    // Check a transfer will fail
+    try_transfer_on_close(&test_a, &test_b, &port_channel_id_a)?;
 
     Ok(())
 }
@@ -691,7 +694,7 @@ fn transfer_token(
     test_b: &Test,
     client_id_a: &ClientId,
     client_id_b: &ClientId,
-    source_port_channel_id: &PortChannelId,
+    port_channel_id_a: &PortChannelId,
 ) -> Result<()> {
     let xan = find_address(test_a, XAN)?;
     let sender = find_address(test_a, ALBERT)?;
@@ -702,8 +705,8 @@ fn transfer_token(
         amount: "100000".to_string(),
     });
     let msg = MsgTransfer {
-        source_port: source_port_channel_id.port_id.clone(),
-        source_channel: source_port_channel_id.channel_id,
+        source_port: port_channel_id_a.port_id.clone(),
+        source_channel: port_channel_id_a.channel_id,
         token,
         sender: Signer::new(sender.to_string()),
         receiver: Signer::new(receiver.to_string()),
@@ -829,7 +832,7 @@ fn transfer_timeout(
     test_a: &Test,
     test_b: &Test,
     client_id_a: &ClientId,
-    source_port_channel_id: &PortChannelId,
+    port_channel_id_a: &PortChannelId,
 ) -> Result<()> {
     let xan = find_address(test_a, XAN)?;
     let sender = find_address(test_a, ALBERT)?;
@@ -840,8 +843,8 @@ fn transfer_timeout(
         amount: "100000".to_string(),
     });
     let msg = MsgTransfer {
-        source_port: source_port_channel_id.port_id.clone(),
-        source_channel: source_port_channel_id.channel_id,
+        source_port: port_channel_id_a.port_id.clone(),
+        source_channel: port_channel_id_a.channel_id,
         token,
         sender: Signer::new(sender.to_string()),
         receiver: Signer::new(receiver.to_string()),
@@ -922,6 +925,37 @@ fn transfer_timeout_on_close(
     submit_ibc_tx(test_b, msg, ALBERT)?;
 
     Ok(())
+}
+
+fn try_transfer_on_close(
+    test_a: &Test,
+    test_b: &Test,
+    port_channel_id_a: &PortChannelId,
+) -> Result<()> {
+    let xan = find_address(test_a, XAN)?;
+    let sender = find_address(test_a, ALBERT)?;
+    let receiver = find_address(test_b, BERTHA)?;
+
+    let token = Some(Coin {
+        denom: xan.to_string(),
+        amount: "100000".to_string(),
+    });
+    let msg = MsgTransfer {
+        source_port: port_channel_id_a.port_id.clone(),
+        source_channel: port_channel_id_a.channel_id,
+        token,
+        sender: Signer::new(sender.to_string()),
+        receiver: Signer::new(receiver.to_string()),
+        timeout_height: Height::new(100, 100),
+        timeout_timestamp: (Timestamp::now() + Duration::new(30, 0)).unwrap(),
+    };
+    // Send a token from Chain A
+    match submit_ibc_tx(test_a, msg, ALBERT) {
+        Ok(_) => Err(eyre!(
+            "Sending a token succeeded in spite of closing the channel"
+        )),
+        Err(_) => Ok(()),
+    }
 }
 
 fn get_commitment_proof(
