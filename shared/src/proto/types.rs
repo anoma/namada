@@ -121,10 +121,7 @@ impl<T, S> Signed<T, S> {
     }
 }
 
-impl<T> Signed<T, SerializeWithBorsch>
-where
-    T: BorshSerialize + BorshDeserialize,
-{
+impl<T: BorshSerialize> Signed<T, SerializeWithBorsch> {
     /// Initialize a new [`Signed`] instance.
     pub fn new(keypair: &common::SecretKey, data: T) -> Self {
         let to_sign = data
