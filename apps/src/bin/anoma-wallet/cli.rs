@@ -194,7 +194,7 @@ fn address_list(ctx: Context) {
 fn address_or_alias_find(ctx: Context, args: args::AddressOrAliasFind) {
     let wallet = ctx.wallet;
     if args.address.is_some() && args.alias.is_some() {
-        println!(
+        assert!(false,
             "This should not be happening, as clap should emit its own error \
              message."
         );
