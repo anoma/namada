@@ -107,7 +107,7 @@ impl VextDigest {
 
 /// Represents a [`Vext`] signed by some validator, with
 /// an Ethereum key.
-pub type SignedVext = Signed<Vext, tag::SerializeWithAbiEncode>;
+pub type SignedVext = Signed<Vext, SerializeWithAbiEncode>;
 
 impl SignedVext {
     /// Sign this [`Vext`] with an Ethereum key.
@@ -248,10 +248,9 @@ impl Vext {
     }
 }
 
-pub mod tag {
-    //! This module holds [`SerializeWithAbiEncode`], which is a tag enum
-    //! to be passed to `Signed` instances.
-
+// this is only here so we don't pollute the
+// outer namespace with serde traits
+mod tag {
     use serde::{Deserialize, Serialize};
 
     /// Tag type that indicates we should use [`AbiEncode::encode`]
@@ -259,3 +258,6 @@ pub mod tag {
     #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
     pub enum SerializeWithAbiEncode {}
 }
+
+#[doc(inline)]
+pub use tag::SerializeWithAbiEncode;
