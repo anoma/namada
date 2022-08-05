@@ -11,8 +11,18 @@ use ethabi::ethereum_types as ethereum;
 use num_rational::Ratio;
 
 use crate::ledger::pos::types::{Epoch, VotingPower};
+use crate::proto::Signed;
 use crate::types::address::Address;
 use crate::types::key::common::{self, Signature};
+
+// TODO: we need to get these values from `Storage`
+// related issue: https://github.com/anoma/namada/issues/249
+const BRIDGE_CONTRACT_VERSION: u8 = 1;
+const GOVERNANCE_CONTRACT_VERSION: u8 = 1;
+
+// the namespace strings plugged into validator set hashes
+const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
+const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
 
 /// Wrapper type for [`ethereum::Address`]
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -78,16 +88,12 @@ impl VextDigest {
 
         for (validator_addr, signature) in signatures.into_iter() {
             let voting_powers = voting_powers.clone();
-            let validator_set_update = Vext {
+            let data = Vext {
                 validator_addr,
                 voting_powers,
                 epoch,
             };
-            let signed = SignedVext {
-                signature,
-                validator_set_update,
-            };
-            extensions.push(signed);
+            extensions.push(SignedVext::new_from(data, signature));
         }
         extensions
     }
@@ -101,15 +107,27 @@ impl VextDigest {
 
 /// Represents a [`Vext`] signed by some validator, with
 /// an Ethereum key.
-pub struct SignedVext {
-    /// The signed [`Vext`].
-    pub validator_set_update: Vext,
-    /// The signature of the signed [`Vext`].
-    pub signature: Signature,
+pub type SignedVext = Signed<Vext, tag::SerializeWithAbiEncode>;
+
+impl SignedVext {
+    /// Sign this [`Vext`] with an Ethereum key.
+    ///
+    /// For more information, check the Ethereum bridge smart contract code:
+    ///   - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L186>
+    pub fn new_abi_encoded(
+        _keypair: &common::SecretKey,
+        _vote_extension: Vext,
+    ) -> Self {
+        todo!()
+    }
+
+    // TODO: verify
 }
 
 /// Represents a validator set update, for some new [`Epoch`].
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct Vext {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
@@ -134,13 +152,8 @@ pub struct Vext {
 impl Vext {
     /// Returns the keccak hash of this [`Vext`] to be signed
     /// by an Ethereum validator key.
+    #[inline]
     pub fn get_bridge_hash(&self) -> [u8; 32] {
-        // TODO: we need to get this value from `Storage`
-        // related issue: https://github.com/anoma/namada/issues/249
-        const BRIDGE_CONTRACT_VERSION: u8 = 1;
-
-        const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
-
         let (validators, voting_powers) =
             self.get_validators_and_voting_powers();
 
@@ -154,13 +167,8 @@ impl Vext {
 
     /// Returns the keccak hash of this [`Vext`] to be signed
     /// by an Ethereum governance key.
+    #[inline]
     pub fn get_governance_hash(&self) -> [u8; 32] {
-        // TODO: we need to get this value from `Storage`
-        // related issue: https://github.com/anoma/namada/issues/249
-        const GOVERNANCE_CONTRACT_VERSION: u8 = 1;
-
-        const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
-
         self.compute_hash(
             GOVERNANCE_CONTRACT_VERSION,
             GOVERNANCE_CONTRACT_NAMESPACE,
@@ -196,7 +204,6 @@ impl Vext {
 
     /// Returns the list of Ethereum validator addresses and their respective
     /// voting power.
-    #[allow(dead_code)]
     fn get_validators_and_voting_powers(&self) -> (Vec<Token>, Vec<Token>) {
         // get addresses and voting powers all into one vec
         let mut unsorted: Vec<_> = self.voting_powers.iter().collect();
@@ -232,11 +239,23 @@ impl Vext {
             .unzip()
     }
 
-    /// Sign this [`Vext`] with an Ethereum key.
+    /// Creates a new signed [`Vext`].
     ///
-    /// For more information, check the Ethereum bridge smart contract code:
-    ///   - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L186>
-    pub fn sign(&self, _sk: &common::SecretKey) -> SignedVext {
-        todo!()
+    /// For more information, read the docs of [`SignedVext::new`].
+    #[inline]
+    pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
+        SignedVext::new_abi_encoded(sk, self.clone())
     }
+}
+
+pub mod tag {
+    //! This module holds [`SerializeWithAbiEncode`], which is a tag enum
+    //! to be passed to `Signed` instances.
+
+    use serde::{Deserialize, Serialize};
+
+    /// Tag type that indicates we should use [`AbiEncode::encode`]
+    /// to sign data in a [`Signed`] wrapper.
+    #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+    pub enum SerializeWithAbiEncode {}
 }
