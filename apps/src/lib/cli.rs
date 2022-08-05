@@ -551,7 +551,9 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Find an address by its alias or an alias by its address.")
+                .about(
+                    "Find an address by its alias or an alias by its address.",
+                )
                 .add_args::<args::AddressOrAliasFind>()
         }
     }
