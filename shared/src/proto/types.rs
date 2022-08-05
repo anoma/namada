@@ -55,7 +55,7 @@ pub struct SignedTxData {
 /// Tag type that indicates we should use [`BorshSerialize`]
 /// to sign data in a [`Signed`] wrapper.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub enum SerializeWithBorsch {}
+pub enum SerializeWithBorsh {}
 
 /// A generic signed data wrapper for serialize-able types.
 ///
@@ -63,7 +63,7 @@ pub enum SerializeWithBorsch {}
 #[derive(
     Eq, Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
-pub struct Signed<T, S = SerializeWithBorsch> {
+pub struct Signed<T, S = SerializeWithBorsh> {
     /// Arbitrary data to be signed
     pub data: T,
     /// The signature of the data
@@ -123,7 +123,7 @@ impl<T, S> Signed<T, S> {
     }
 }
 
-impl<T: BorshSerialize> Signed<T, SerializeWithBorsch> {
+impl<T: BorshSerialize> Signed<T, SerializeWithBorsh> {
     /// Initialize a new [`Signed`] instance.
     pub fn new(keypair: &common::SecretKey, data: T) -> Self {
         let to_sign = data
