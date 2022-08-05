@@ -93,7 +93,7 @@ impl VextDigest {
             // of crate versions changing and such
             ext.ethereum_events.sort();
 
-            let signed = Signed { data: ext, sig };
+            let signed = Signed::new_from(ext, sig);
             extensions.push(signed);
         }
         extensions

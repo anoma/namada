@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
 
 use borsh::schema::{Declaration, Definition};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -51,54 +52,45 @@ pub struct SignedTxData {
     pub sig: common::Signature,
 }
 
-/// A generic signed data wrapper for Borsh encode-able data.
+/// Tag type that indicates we should use [`BorshSerialize`]
+/// to sign data in a [`Signed`] wrapper.
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub enum SerializeWithBorsch {}
+
+/// A generic signed data wrapper for serialize-able types.
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Eq, Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
-pub struct Signed<T: BorshSerialize + BorshDeserialize> {
+pub struct Signed<T, S = SerializeWithBorsch> {
     /// Arbitrary data to be signed
     pub data: T,
     /// The signature of the data
     pub sig: common::Signature,
+    /// The method to serialize the data with,
+    /// before it being signed
+    _serialization: PhantomData<S>,
 }
 
-impl<T> PartialEq for Signed<T>
-where
-    T: BorshSerialize + BorshDeserialize + PartialEq,
-{
+impl<S, T: PartialEq> PartialEq for Signed<T, S> {
     fn eq(&self, other: &Self) -> bool {
         self.data == other.data && self.sig == other.sig
     }
 }
 
-impl<T> Eq for Signed<T> where
-    T: BorshSerialize + BorshDeserialize + Eq + PartialEq
-{
-}
-
-impl<T> Hash for Signed<T>
-where
-    T: BorshSerialize + BorshDeserialize + Hash,
-{
+impl<S, T: Hash> Hash for Signed<T, S> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.data.hash(state);
         self.sig.hash(state);
     }
 }
 
-impl<T> PartialOrd for Signed<T>
-where
-    T: BorshSerialize + BorshDeserialize + PartialOrd,
-{
+impl<S, T: PartialOrd> PartialOrd for Signed<T, S> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.data.partial_cmp(&other.data)
     }
 }
 
-impl<T> BorshSchema for Signed<T>
-where
-    T: BorshSerialize + BorshDeserialize + BorshSchema,
-{
+impl<S, T: BorshSchema> BorshSchema for Signed<T, S> {
     fn add_definitions_recursively(
         definitions: &mut HashMap<Declaration, Definition>,
     ) {
@@ -117,17 +109,29 @@ where
     }
 }
 
-impl<T> Signed<T>
+impl<T, S> Signed<T, S> {
+    /// Initialize a new [`Signed`] instance from an existing signature.
+    #[inline]
+    pub fn new_from(data: T, sig: common::Signature) -> Self {
+        Self {
+            data,
+            sig,
+            _serialization: PhantomData,
+        }
+    }
+}
+
+impl<T> Signed<T, SerializeWithBorsch>
 where
     T: BorshSerialize + BorshDeserialize,
 {
-    /// Initialize a new signed data.
+    /// Initialize a new [`Signed`] instance.
     pub fn new(keypair: &common::SecretKey, data: T) -> Self {
         let to_sign = data
             .try_to_vec()
             .expect("Encoding data for signing shouldn't fail");
         let sig = common::SigScheme::sign(keypair, &to_sign);
-        Self { data, sig }
+        Self::new_from(data, sig)
     }
 
     /// Verify that the data has been signed by the secret key
