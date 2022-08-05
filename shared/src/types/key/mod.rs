@@ -465,11 +465,26 @@ mod more_tests {
     fn zeroize_keypair_ed25519() {
         use rand::thread_rng;
 
-        let sk = ed25519::SecretKey(Box::new(
-            ed25519_consensus::SigningKey::new(thread_rng()),
-        ));
-        let len = sk.0.as_bytes().len();
-        let ptr = sk.0.as_bytes().as_ptr();
+        let sk = ed25519::SigScheme::generate(&mut thread_rng());
+        let sk_bytes = sk.0.as_bytes();
+        let len = sk_bytes.len();
+        let ptr = sk_bytes.as_ptr();
+
+        drop(sk);
+
+        assert_eq!(&[0u8; 32], unsafe {
+            core::slice::from_raw_parts(ptr, len)
+        });
+    }
+
+    #[test]
+    fn zeroize_keypair_seck256k1() {
+        use rand::thread_rng;
+
+        let sk = secp256k1::SigScheme::generate(&mut thread_rng());
+        let sk_bytes = sk.0.serialize();
+        let len = sk_bytes.len();
+        let ptr = sk_bytes.as_ptr();
 
         drop(sk);
 
