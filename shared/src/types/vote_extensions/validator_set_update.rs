@@ -253,8 +253,8 @@ impl Vext {
 mod tag {
     use serde::{Deserialize, Serialize};
 
-    /// Tag type that indicates we should use [`AbiEncode::encode`]
-    /// to sign data in a [`Signed`] wrapper.
+    /// Tag type that indicates we should use [`super::encoding::AbiEncode`]
+    /// to sign data in a [`crate::proto::Signed`] wrapper.
     #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
     pub enum SerializeWithAbiEncode {}
 }
