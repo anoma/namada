@@ -10,34 +10,31 @@ use encoding::{AbiEncode, Encode, Token};
 use ethabi::ethereum_types as ethereum;
 use num_rational::Ratio;
 
+use crate::types::key::common::Signature;
 use crate::ledger::pos::types::{Epoch, VotingPower};
-
-/// Placeholder type for an Ethereum signature.
-// TODO: remove this when the secp keys PR lands
-pub type Signature = ();
 
 /// Wrapper type for [`ethereum::Address`]
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Validator(pub ethereum::Address);
+pub struct EthAddr(pub ethereum::Address);
 
-impl BorshSerialize for Validator {
+impl BorshSerialize for EthAddr {
     fn serialize<W: ark_serialize::Write>(
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        let Validator(ethereum::H160(inner_array)) = self;
+        let EthAddr(ethereum::H160(inner_array)) = self;
         inner_array.serialize(writer)
     }
 }
 
-impl BorshDeserialize for Validator {
+impl BorshDeserialize for EthAddr {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         let inner = <[u8; 20]>::deserialize(buf)?;
-        Ok(Validator(ethereum::H160(inner)))
+        Ok(EthAddr(ethereum::H160(inner)))
     }
 }
 
-impl BorshSchema for Validator {
+impl BorshSchema for EthAddr {
     fn add_definitions_recursively(
         definitions: &mut std::collections::HashMap<
             borsh::schema::Declaration,
@@ -53,7 +50,7 @@ impl BorshSchema for Validator {
     }
 
     fn declaration() -> borsh::schema::Declaration {
-        "validator_set_update::Validator".into()
+        "validator_set_update::EthAddr".into()
     }
 }
 
@@ -62,10 +59,38 @@ impl BorshSchema for Validator {
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct VextDigest {
     /// A mapping from a validator Ethereum address to a [`Signature`].
-    pub signatures: HashMap<Validator, Signature>,
-    /// The validator set update vote extension, signed by the quorum
-    /// of validators.
+    pub signatures: HashMap<EthAddr, Signature>,
+    /// The addresses of the validators in the new [`Epoch`],
+    /// and their respective voting power.
+    pub voting_powers: HashMap<EthAddr, VotingPower>,
+}
+
+impl VextDigest {
+    /// Decompresses a set of signed [`Vext`] instances.
+    pub fn decompress(self, epoch: Epoch) -> Vec<SignedVext> {
+        let VextDigest { signatures, validator_set_update } = self;
+
+        let mut extensions = vec![];
+
+        for (_addr, signature) in signatures.into_iter() {
+            let validator_set_update = validator_set_update.clone();
+            let signed = SignedVext {
+                signature,
+                validator_set_update,
+            };
+            extensions.push(signed);
+        }
+        extensions
+    }
+}
+
+/// Represents a [`Vext`] signed by some validator, with
+/// an Ethereum key.
+pub struct SignedVext {
+    /// The signed [`Vext`].
     pub validator_set_update: Vext,
+    /// The signature of the signed [`Vext`].
+    pub signature: Signature,
 }
 
 /// Represents a validator set update, for some new [`Epoch`].
@@ -78,7 +103,7 @@ pub struct Vext {
     /// into two arrays: one for its keys, and another for its
     /// values. The arrays are sorted in descending order based
     /// on the voting power of each validator.
-    pub voting_powers: HashMap<Validator, VotingPower>,
+    pub voting_powers: HashMap<EthAddr, VotingPower>,
     /// The new [`Epoch`].
     ///
     /// Since this is a monotonically growing sequence number,
@@ -171,7 +196,7 @@ impl Vext {
         // split the vec into two
         sorted
             .into_iter()
-            .map(|(&Validator(addr), &voting_power)| {
+            .map(|(&EthAddr(addr), &voting_power)| {
                 let voting_power: u64 = voting_power.into();
 
                 // normalize the voting power
