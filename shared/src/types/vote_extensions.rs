@@ -3,6 +3,8 @@
 pub mod ethereum_events;
 pub mod validator_set_update;
 
+use crate::proto::Signed;
+
 /// This type represents the data we pass to the extension of
 /// a vote at the PreCommit phase of Tendermint.
 pub struct VoteExtension {
@@ -12,18 +14,16 @@ pub struct VoteExtension {
     pub validator_set_update: Option<validator_set_update::SignedVext>,
 }
 
-// TODO: add a `VoteExtensionDigest` type; this will contain
-// the values to be proposed, for a quorum of Ethereum events
-// vote extensions, and a separate quorum of validator set update
-// vote extensions
-//
-// ```ignore
-// pub struct VoteExtensionDigest {
-//     pub ethereum_events: ethereum_events::VextDigest,
-//     pub validator_set_update: Option<validator_set_update::VextDigest>,
-// }
-// ```
-//
-// from a `VoteExtensionDigest` we yield two signed `ProtocolTxType` values,
-// one of `ProtocolTxType::EthereumEvents` and the other of
-// `ProtocolTxType::ValidatorSetUpdate`
+/// The digest of the signatures from different validators
+/// in [`VoteExtension`] instances.
+///
+/// From a [`VoteExtensionDigest`] we yield two signed
+/// [`crate::types::transaction::protocol::ProtocolTxType`] transactions:
+///   - A `ProtocolTxType::EthereumEvents` tx, and
+///   - A `ProtocolTxType::ValidatorSetUpdate` tx
+pub struct VoteExtensionDigest {
+    /// The digest of Ethereum events vote extension signatures.
+    pub ethereum_events: ethereum_events::VextDigest,
+    /// The digest of validator set updates vote extension signatures.
+    pub validator_set_update: Option<validator_set_update::VextDigest>,
+}
