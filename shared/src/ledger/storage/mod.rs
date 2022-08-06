@@ -34,6 +34,8 @@ use crate::types::time::DateTimeUtc;
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
+/// The maximum size of an IBC key (in bytes) allowed in merkle-ized storage
+pub const IBC_KEY_LIMIT: usize = 120;
 
 /// The storage data
 #[derive(Debug)]

@@ -3,9 +3,10 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::marker::PhantomData;
 use std::num::ParseIntError;
-use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::ops::{Add, Deref, DerefMut, Div, Mul, Rem, Sub};
 use std::str::FromStr;
 
+use arse_merkle_tree::TreeKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -13,7 +14,7 @@ use thiserror::Error;
 #[cfg(feature = "ferveo-tpke")]
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
-use crate::ledger::storage::StorageHasher;
+use crate::ledger::storage::{StorageHasher, IBC_KEY_LIMIT};
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
@@ -232,6 +233,31 @@ pub enum MerkleKey<H: StorageHasher> {
     Sha256(Key, PhantomData<H>),
     /// A key that can be given as raw bytes
     Raw(Key),
+}
+
+/// Storage keys that are utf8 encoded strings
+#[derive(
+    Eq, PartialEq, Copy, Clone, Hash, BorshSerialize, BorshDeserialize,
+)]
+pub struct StringKey {
+    /// The utf8 bytes representation
+    pub inner: TreeKey<IBC_KEY_LIMIT>,
+    /// The length of the input (without the padding)
+    pub length: usize,
+}
+
+impl Deref for StringKey {
+    type Target = TreeKey<IBC_KEY_LIMIT>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for StringKey {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
 }
 
 impl Key {
