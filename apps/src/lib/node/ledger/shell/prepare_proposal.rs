@@ -38,7 +38,7 @@ mod prepare_block {
         ) -> response::PrepareProposal {
             tracing::info!(
                 height = req.height,
-                req.txs.len = req.txs.len(),
+                txs_from_tendermint.len = req.txs.len(),
                 "Preparing block proposal"
             );
             // We can safely reset meter, because if the block is rejected,
