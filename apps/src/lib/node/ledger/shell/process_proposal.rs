@@ -36,6 +36,13 @@ where
         &mut self,
         req: RequestProcessProposal,
     ) -> ResponseProcessProposal {
+        tracing::info!(
+            ?req.proposer_address,
+            req.height,
+            ?req.hash,
+            n_transactions = req.txs.len(),
+            "Received block proposal",
+        );
         // the number of vote extension digests included in the block proposal
         let mut vote_ext_digest_num = 0;
         let tx_results: Vec<ExecTxResult> = req
@@ -47,16 +54,15 @@ where
                 )
             })
             .collect();
-        tracing::info!(
-            n = req.txs.len(),
-            "Processed transactions in proposed block",
-        );
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
         let too_many_vext_digests = vote_ext_digest_num > 1;
         if too_many_vext_digests {
             tracing::warn!(
+                ?req.proposer_address,
+                req.height,
+                ?req.hash,
                 vote_ext_digest_num,
                 "found too many vote extension transactions, proposed block \
                  will be rejected"
@@ -75,16 +81,27 @@ where
         });
         if invalid_txs {
             tracing::warn!(
+                ?req.proposer_address,
+                req.height,
+                ?req.hash,
                 "found invalid transactions, proposed block will be rejected"
             );
         }
 
+        let status = if too_many_vext_digests || invalid_txs {
+            ProposalStatus::Reject as i32
+        } else {
+            ProposalStatus::Accept as i32
+        };
+        tracing::info!(
+            ?req.proposer_address,
+            req.height,
+            ?req.hash,
+            %status,
+            "Processed block proposal",
+        );
         ResponseProcessProposal {
-            status: if too_many_vext_digests || invalid_txs {
-                ProposalStatus::Reject as i32
-            } else {
-                ProposalStatus::Accept as i32
-            },
+            status,
             tx_results,
             ..Default::default()
         }
