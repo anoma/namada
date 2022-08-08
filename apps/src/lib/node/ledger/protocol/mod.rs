@@ -164,8 +164,10 @@ where
                     ..
                 }),
             ..
-        }) if !events.is_empty() => {
-            tracing::debug!("Ethereum events received");
+        }) => {
+            if !events.is_empty() {
+                tracing::debug!("Ethereum events received");
+            }
             let gas_used = block_gas_meter
                 .finalize_transaction()
                 .map_err(Error::GasError)?;
