@@ -51,6 +51,13 @@ where
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
         let too_many_vext_digests = vote_ext_digest_num > 1;
+        if too_many_vext_digests {
+            tracing::warn!(
+                vote_ext_digest_num,
+                "found too many vote extension transactions, proposed block \
+                 will be rejected"
+            );
+        }
 
         // Erroneous transactions were detected when processing
         // the leader's proposal. We allow txs that do not
@@ -62,6 +69,11 @@ where
             );
             !error.is_recoverable()
         });
+        if invalid_txs {
+            tracing::warn!(
+                "found invalid transactions, proposed block will be rejected"
+            );
+        }
 
         ResponseProcessProposal {
             status: if too_many_vext_digests || invalid_txs {
