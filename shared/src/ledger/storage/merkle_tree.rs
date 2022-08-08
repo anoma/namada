@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use arse_merkle_tree::default_store::DefaultStore;
 use arse_merkle_tree::error::Error as MtError;
-use arse_merkle_tree::traits::Hasher;
+use arse_merkle_tree::traits::{Hasher, Value};
 use arse_merkle_tree::{
     Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree, H256,
 };
@@ -28,7 +28,7 @@ use crate::ledger::storage::types;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::storage::{
-    DbKeySeg, Error as StorageError, Key, MerkleKey, StringKey,
+    DbKeySeg, Error as StorageError, Key, MerkleKey, StringKey, TreeBytes,
 };
 
 #[allow(missing_docs)]
@@ -53,9 +53,10 @@ type Result<T> = std::result::Result<T, Error>;
 
 /// Type aliases for the different merkle trees and backing stores
 pub type SmtStore = DefaultStore<SmtHash, Hash, 32>;
-pub type AmtStore = DefaultStore<StringKey, Hash, IBC_KEY_LIMIT>;
+pub type AmtStore = DefaultStore<StringKey, TreeBytes, IBC_KEY_LIMIT>;
 pub type Smt<H> = ArseMerkleTree<H, SmtHash, Hash, SmtStore, 32>;
-pub type Amt<H> = ArseMerkleTree<H, StringKey, Hash, AmtStore, IBC_KEY_LIMIT>;
+pub type Amt<H> =
+    ArseMerkleTree<H, StringKey, TreeBytes, AmtStore, IBC_KEY_LIMIT>;
 
 /// Store types for the merkle tree
 #[derive(
@@ -265,20 +266,20 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         &mut self,
         store_type: &StoreType,
         key: MerkleKey<H>,
-        value: Hash,
+        value: Either<Hash, TreeBytes>,
     ) -> Result<()> {
         let sub_root = match store_type {
             StoreType::Account => self
                 .account
-                .update(key.try_into()?, value)
+                .update(key.try_into()?, value.unwrap_left())
                 .map_err(Error::MerkleTree)?,
             StoreType::Ibc => self
                 .ibc
-                .update(key.try_into()?, value)
+                .update(key.try_into()?, value.unwrap_right())
                 .map_err(Error::MerkleTree)?,
             StoreType::PoS => self
                 .pos
-                .update(key.try_into()?, value)
+                .update(key.try_into()?, value.unwrap_left())
                 .map_err(Error::MerkleTree)?,
             // base tree should not be directly updated
             StoreType::Base => unreachable!(),
@@ -297,29 +298,39 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
         let value = match self.tree(&store_type) {
             Either::Left(smt) => {
-                smt.get(&H::hash(sub_key.to_string()).into())?
+                smt.get(&H::hash(sub_key.to_string()).into())?.is_zero()
             }
             Either::Right(amt) => {
                 let key =
                     StringKey::try_from_bytes(sub_key.to_string().as_bytes())?;
-                amt.get(&key)?
+                amt.get(&key)?.is_zero()
             }
         };
-        Ok(!value.is_zero())
+        Ok(!value)
     }
 
     /// Update the tree with the given key and value
     pub fn update(&mut self, key: &Key, value: impl AsRef<[u8]>) -> Result<()> {
         let sub_key = StoreType::sub_key(key)?;
         let store_type = sub_key.0;
-        self.update_tree(&store_type, sub_key.into(), H::hash(value).into())
+        let value = match store_type {
+            StoreType::Ibc => {
+                Either::Right(TreeBytes::from(value.as_ref().to_vec()))
+            }
+            _ => Either::Left(H::hash(value).into()),
+        };
+        self.update_tree(&store_type, sub_key.into(), value)
     }
 
     /// Delete the value corresponding to the given key
     pub fn delete(&mut self, key: &Key) -> Result<()> {
         let sub_key = StoreType::sub_key(key)?;
         let store_type = sub_key.0;
-        self.update_tree(&store_type, sub_key.into(), H256::zero().into())
+        let value = match store_type {
+            StoreType::Ibc => Either::Right(TreeBytes::zero()),
+            _ => Either::Left(H256::zero().into()),
+        };
+        self.update_tree(&store_type, sub_key.into(), value)
     }
 
     /// Get the root
@@ -353,7 +364,6 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
                     Ics23Proof::Exist(ep) => CommitmentProof {
                         proof: Some(Ics23Proof::Exist(ExistenceProof {
                             key: sub_key.to_string().as_bytes().to_vec(),
-                            value,
                             leaf: Some(self.leaf_spec()),
                             ..ep
                         })),
@@ -394,8 +404,6 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
                 let key =
                     StringKey::try_from_bytes(sub_key.to_string().as_bytes())?;
                 let mut nep = amt.non_membership_proof(&key)?;
-                let mut spec = self.ibc_leaf_spec();
-                spec.prehash_value = HashOp::NoHash.into();
                 // Replace the values and the leaf op for the verification
                 if let Some(ref mut nep) = nep.proof {
                     match nep {
@@ -408,7 +416,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
                             let ep = left.as_mut().or(right.as_mut()).expect(
                                 "A left or right existence proof should exist.",
                             );
-                            ep.leaf = Some(spec);
+                            ep.leaf = Some(self.ibc_leaf_spec());
                         }
                         _ => unreachable!(),
                     }
@@ -531,7 +539,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         LeafOp {
             hash: H::hash_op().into(),
             prehash_key: HashOp::NoHash.into(),
-            prehash_value: H::hash_op().into(),
+            prehash_value: HashOp::NoHash.into(),
             length: LengthOp::NoPrefix.into(),
             prefix: H256::zero().as_slice().to_vec(),
         }
@@ -563,9 +571,9 @@ impl fmt::Display for MerkleRoot {
 impl<H: StorageHasher> From<(StoreType, Key)> for MerkleKey<H> {
     fn from((store, key): (StoreType, Key)) -> Self {
         match store {
-            StoreType::Base => MerkleKey::Sha256(key, PhantomData),
-            StoreType::Account => MerkleKey::Sha256(key, PhantomData),
-            StoreType::PoS => MerkleKey::Sha256(key, PhantomData),
+            StoreType::Base | StoreType::Account | StoreType::PoS => {
+                MerkleKey::Sha256(key, PhantomData)
+            }
             StoreType::Ibc => MerkleKey::Raw(key),
         }
     }
@@ -686,6 +694,16 @@ impl TreeKey<IBC_KEY_LIMIT> for StringKey {
             tree_key: tree_key.into(),
             length,
         })
+    }
+}
+
+impl Value for TreeBytes {
+    fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    fn zero() -> Self {
+        TreeBytes::zero()
     }
 }
 
@@ -941,14 +959,11 @@ mod test {
         };
         let (store_type, sub_key) =
             StoreType::sub_key(&ibc_non_key).expect("Test failed");
-
         let specs = tree.ibc_proof_specs();
-        let mut spec = specs[0].clone();
-        spec.leaf_spec.as_mut().unwrap().prehash_value = HashOp::NoHash.into();
 
         let nep_verification_res = ics23::verify_non_membership(
             &nep_commitment_proof,
-            &spec,
+            &specs[0],
             &subtree_root,
             sub_key.to_string().as_bytes(),
         );

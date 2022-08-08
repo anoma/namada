@@ -237,9 +237,7 @@ pub enum MerkleKey<H: StorageHasher> {
 }
 
 /// Storage keys that are utf8 encoded strings
-#[derive(
-    Eq, PartialEq, Copy, Clone, Hash,
-)]
+#[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub struct StringKey {
     /// The original key string, in bytes
     pub original: [u8; IBC_KEY_LIMIT],
@@ -268,15 +266,52 @@ impl BorshSerialize for StringKey {
 impl BorshDeserialize for StringKey {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         use std::io::ErrorKind;
-        let (original, tree_key, length): (Vec<u8>, InternalKey<IBC_KEY_LIMIT>, usize) = BorshDeserialize::deserialize(buf)?;
-        let original: [u8; IBC_KEY_LIMIT] = original.try_into().map_err(|_| {
-            std::io::Error::new(ErrorKind::InvalidData, "Input byte vector is too large")
-        })?;
+        let (original, tree_key, length): (
+            Vec<u8>,
+            InternalKey<IBC_KEY_LIMIT>,
+            usize,
+        ) = BorshDeserialize::deserialize(buf)?;
+        let original: [u8; IBC_KEY_LIMIT] =
+            original.try_into().map_err(|_| {
+                std::io::Error::new(
+                    ErrorKind::InvalidData,
+                    "Input byte vector is too large",
+                )
+            })?;
         Ok(Self {
             original,
             tree_key,
             length,
         })
+    }
+}
+
+/// A wrapper around raw bytes to be stored as values
+/// in a merkle tree
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct TreeBytes(pub Vec<u8>);
+
+impl TreeBytes {
+    /// The value indicating that a leaf should be deleted
+    pub fn zero() -> Self {
+        Self(vec![])
+    }
+
+    /// Check if an instance is the zero value
+    pub fn is_zero(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl From<Vec<u8>> for TreeBytes {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+}
+
+impl From<TreeBytes> for Vec<u8> {
+    fn from(bytes: TreeBytes) -> Self {
+        bytes.0
     }
 }
 
