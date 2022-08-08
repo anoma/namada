@@ -32,7 +32,7 @@ pub struct VoteExtensionDigest {
 impl VoteExtensionDigest {
     /// Yields an iterator over the [`ProtocolTxType`] transactions
     /// in this [`VoteExtensionDigest`].
-    pub fn get_protocol_txs(self) -> impl Iterator<Item = ProtocolTxType> {
+    pub fn into_protocol_txs(self) -> impl Iterator<Item = ProtocolTxType> {
         [
             Some(ProtocolTxType::EthereumEvents(self.ethereum_events)),
             self.validator_set_update
