@@ -64,7 +64,7 @@ where
                 height = req.height,
                 hash = ?hex::encode(&req.hash),
                 vote_ext_digest_num,
-                "found too many vote extension transactions, proposed block \
+                "Found too many vote extension transactions, proposed block \
                  will be rejected"
             );
         }
@@ -84,7 +84,7 @@ where
                 proposer = ?hex::encode(&req.proposer_address),
                 height = req.height,
                 hash = ?hex::encode(&req.hash),
-                "found invalid transactions, proposed block will be rejected"
+                "Found invalid transactions, proposed block will be rejected"
             );
         }
 
