@@ -174,7 +174,11 @@ where
                 ..Default::default()
             })
         }
-        _ => {
+        tx_type @ _ => {
+            tracing::error!(
+                "Attempt made to apply an unsupported transaction! - {:#?}",
+                tx_type
+            );
             let gas_used = block_gas_meter
                 .finalize_transaction()
                 .map_err(Error::GasError)?;
