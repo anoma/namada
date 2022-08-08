@@ -36,6 +36,7 @@ mod prepare_block {
             &mut self,
             req: RequestPrepareProposal,
         ) -> response::PrepareProposal {
+            tracing::info!("Preparing block proposal");
             // We can safely reset meter, because if the block is rejected,
             // we'll reset again on the next proposal, until the
             // proposal is accepted
@@ -66,6 +67,7 @@ mod prepare_block {
                 vec![]
             };
 
+            tracing::info!(n_transactions = txs.len(), "Proposing block");
             response::PrepareProposal {
                 tx_records: txs,
                 ..Default::default()
