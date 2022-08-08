@@ -4,7 +4,7 @@ use std::fmt::{self, Display};
 use std::ops::Deref;
 
 use arse_merkle_tree::traits::Value;
-use arse_merkle_tree::{PaddedKey, H256};
+use arse_merkle_tree::{H256, Hash as TreeHash};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -129,6 +129,12 @@ impl From<Hash> for H256 {
     }
 }
 
+impl From<Hash> for TreeHash {
+    fn from(hash: Hash) -> Self {
+        Self::from(hash.0)
+    }
+}
+
 impl Value for Hash {
     fn to_h256(&self) -> H256 {
         self.0.into()
@@ -139,8 +145,3 @@ impl Value for Hash {
     }
 }
 
-impl From<Hash> for PaddedKey<32> {
-    fn from(hash: Hash) -> Self {
-        Self::from(hash.0)
-    }
-}

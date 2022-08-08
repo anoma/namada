@@ -8,7 +8,7 @@ use arse_merkle_tree::default_store::DefaultStore;
 use arse_merkle_tree::error::Error as MtError;
 use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::{
-    Key as Keyable, PaddedKey, SparseMerkleTree as ArseMerkleTree, H256,
+    Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree, H256,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use ics23::commitment_proof::Proof as Ics23Proof;
@@ -52,9 +52,9 @@ pub enum Error {
 type Result<T> = std::result::Result<T, Error>;
 
 /// Type aliases for the different merkle trees and backing stores
-pub type SmtStore = DefaultStore<PaddedKey<32>, Hash, 32>;
+pub type SmtStore = DefaultStore<SmtHash, Hash, 32>;
 pub type AmtStore = DefaultStore<StringKey, Hash, IBC_KEY_LIMIT>;
-pub type Smt<H> = ArseMerkleTree<H, PaddedKey<32>, Hash, SmtStore, 32>;
+pub type Smt<H> = ArseMerkleTree<H, SmtHash, Hash, SmtStore, 32>;
 pub type Amt<H> = ArseMerkleTree<H, StringKey, Hash, AmtStore, IBC_KEY_LIMIT>;
 
 /// Store types for the merkle tree
@@ -571,7 +571,7 @@ impl<H: StorageHasher> From<(StoreType, Key)> for MerkleKey<H> {
     }
 }
 
-impl<H: StorageHasher> TryFrom<MerkleKey<H>> for PaddedKey<32> {
+impl<H: StorageHasher> TryFrom<MerkleKey<H>> for SmtHash {
     type Error = Error;
 
     fn try_from(value: MerkleKey<H>) -> Result<Self> {
@@ -660,20 +660,16 @@ impl<'a> MerkleTreeStoresWrite<'a> {
     }
 }
 
-impl Keyable<IBC_KEY_LIMIT> for StringKey {
+impl TreeKey<IBC_KEY_LIMIT> for StringKey {
     type Error = Error;
 
-    fn to_vec(&self) -> Vec<u8> {
-        let array: [u8; IBC_KEY_LIMIT] = self.inner.into();
-        let mut dec = [0u8; IBC_KEY_LIMIT];
-        for (i, byte) in array.iter().enumerate() {
-            dec[i] = byte.wrapping_sub(1);
-        }
-        dec[..self.length].to_vec()
+    fn as_slice(&self) -> &[u8] {
+        &self.original.as_slice()[..self.length]
     }
 
     fn try_from_bytes(bytes: &[u8]) -> Result<Self> {
-        let mut array = [0u8; IBC_KEY_LIMIT];
+        let mut tree_key = [0u8; IBC_KEY_LIMIT];
+        let mut original = [0u8; IBC_KEY_LIMIT];
         let mut length = 0;
         for (i, byte) in bytes.iter().enumerate() {
             if i >= IBC_KEY_LIMIT {
@@ -681,11 +677,13 @@ impl Keyable<IBC_KEY_LIMIT> for StringKey {
                     "Input IBC key is too large".into(),
                 ));
             }
-            array[i] = byte.wrapping_add(1);
+            original[i] = *byte;
+            tree_key[i] = byte.wrapping_add(1);
             length += 1;
         }
         Ok(Self {
-            inner: array.into(),
+            original,
+            tree_key: tree_key.into(),
             length,
         })
     }
