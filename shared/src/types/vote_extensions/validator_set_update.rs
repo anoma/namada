@@ -74,7 +74,7 @@ pub struct VextDigest {
     pub signatures: HashMap<Address, Signature>,
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
-    pub voting_powers: HashMap<EthAddr, VotingPower>,
+    pub voting_powers: VotingPowersMap,
 }
 
 impl VextDigest {
@@ -140,11 +140,11 @@ pub struct Vext {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     ///
-    /// When signing a [`Vext`], this [`HashMap`] is converted
+    /// When signing a [`Vext`], this [`VotingPowersMap`] is converted
     /// into two arrays: one for its keys, and another for its
     /// values. The arrays are sorted in descending order based
     /// on the voting power of each validator.
-    pub voting_powers: HashMap<EthAddr, VotingPower>,
+    pub voting_powers: VotingPowersMap,
     /// TODO: the validator's address is temporarily being included
     /// until we're able to map a Tendermint address to a validator
     /// address (see https://github.com/anoma/namada/issues/200)
@@ -158,14 +158,41 @@ pub struct Vext {
 }
 
 impl Vext {
-    /// Returns the keccak hash of this [`Vext`] to be signed
-    /// by an Ethereum validator key.
+    /// Creates a new signed [`Vext`].
+    ///
+    /// For more information, read the docs of [`SignedVext::new`].
     #[inline]
-    pub fn get_bridge_hash(&self) -> [u8; 32] {
-        let (validators, voting_powers) =
-            self.get_validators_and_voting_powers();
+    pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
+        SignedVext::new_abi_encoded(sk, self.clone())
+    }
+}
 
-        self.compute_hash(
+/// Provides a mapping between [`EthAddr`] and [`VotingPower`] instances.
+pub type VotingPowersMap = HashMap<EthAddr, VotingPower>;
+
+/// This trait contains additional methods for a [`HashMap`], related
+/// with validator set update vote extensions logic.
+pub trait VotingPowersMapExt {
+    /// Returns the keccak hash of this [`VotingPowersMap`]
+    /// to be signed by an Ethereum validator key.
+    fn get_bridge_hash(&self, epoch: Epoch) -> [u8; 32];
+
+    /// Returns the keccak hash of this [`VotingPowersMap`]
+    /// to be signed by an Ethereum governance key.
+    fn get_governance_hash(&self, epoch: Epoch) -> [u8; 32];
+
+    /// Returns the list of Ethereum validator addresses and their respective
+    /// voting power (in this order), with an Ethereum ABI compatible encoding.
+    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>);
+}
+
+impl VotingPowersMapExt for VotingPowersMap {
+    #[inline]
+    fn get_bridge_hash(&self, epoch: Epoch) -> [u8; 32] {
+        let (validators, voting_powers) = self.get_abi_encoded();
+
+        compute_hash(
+            epoch,
             BRIDGE_CONTRACT_VERSION,
             BRIDGE_CONTRACT_NAMESPACE,
             validators,
@@ -173,11 +200,10 @@ impl Vext {
         )
     }
 
-    /// Returns the keccak hash of this [`Vext`] to be signed
-    /// by an Ethereum governance key.
     #[inline]
-    pub fn get_governance_hash(&self) -> [u8; 32] {
-        self.compute_hash(
+    fn get_governance_hash(&self, epoch: Epoch) -> [u8; 32] {
+        compute_hash(
+            epoch,
             GOVERNANCE_CONTRACT_VERSION,
             GOVERNANCE_CONTRACT_NAMESPACE,
             // TODO: get governance validators
@@ -187,34 +213,9 @@ impl Vext {
         )
     }
 
-    /// Compute the keccak hash of this [`Vext`].
-    ///
-    /// For more information, check the Ethereum bridge smart contracts:
-    //    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Governance.sol#L232>
-    //    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L201>
-    #[inline]
-    fn compute_hash(
-        &self,
-        version: u8,
-        namespace: &str,
-        validators: Vec<Token>,
-        voting_powers: Vec<Token>,
-    ) -> [u8; 32] {
-        let nonce = u64::from(self.epoch).into();
-        AbiEncode::keccak256(&[
-            Token::Uint(ethereum::U256::from(version)),
-            Token::String(namespace.into()),
-            Token::Array(validators),
-            Token::Array(voting_powers),
-            Token::Uint(nonce),
-        ])
-    }
-
-    /// Returns the list of Ethereum validator addresses and their respective
-    /// voting power.
-    fn get_validators_and_voting_powers(&self) -> (Vec<Token>, Vec<Token>) {
+    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>) {
         // get addresses and voting powers all into one vec
-        let mut unsorted: Vec<_> = self.voting_powers.iter().collect();
+        let mut unsorted: Vec<_> = self.iter().collect();
 
         // sort it by voting power, in descending order
         unsorted.sort_by(|&(_, ref power_1), &(_, ref power_2)| {
@@ -246,14 +247,29 @@ impl Vext {
             })
             .unzip()
     }
+}
 
-    /// Creates a new signed [`Vext`].
-    ///
-    /// For more information, read the docs of [`SignedVext::new`].
-    #[inline]
-    pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
-        SignedVext::new_abi_encoded(sk, self.clone())
-    }
+/// Compute the keccak hash of a validator set update.
+///
+/// For more information, check the Ethereum bridge smart contracts:
+//    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Governance.sol#L232>
+//    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L201>
+#[inline]
+fn compute_hash(
+    epoch: Epoch,
+    version: u8,
+    namespace: &str,
+    validators: Vec<Token>,
+    voting_powers: Vec<Token>,
+) -> [u8; 32] {
+    let nonce = u64::from(epoch).into();
+    AbiEncode::keccak256(&[
+        Token::Uint(ethereum::U256::from(version)),
+        Token::String(namespace.into()),
+        Token::Array(validators),
+        Token::Array(voting_powers),
+        Token::Uint(nonce),
+    ])
 }
 
 // this is only here so we don't pollute the
