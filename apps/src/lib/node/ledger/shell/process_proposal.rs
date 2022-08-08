@@ -47,6 +47,10 @@ where
                 )
             })
             .collect();
+        tracing::info!(
+            n = req.txs.len(),
+            "Processed transactions in proposed block",
+        );
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
