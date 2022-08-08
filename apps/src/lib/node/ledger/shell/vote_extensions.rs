@@ -1,3 +1,8 @@
+//! Extend Tendermint votes with Ethereum bridge logic.
+
+#[cfg(not(feature = "ABCI"))]
+pub mod ethereum_events;
+
 #[cfg(not(feature = "ABCI"))]
 mod extend_votes {
     use borsh::BorshDeserialize;
