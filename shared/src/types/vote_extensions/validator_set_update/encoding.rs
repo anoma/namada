@@ -26,6 +26,30 @@ pub trait Encode {
 
         output
     }
+
+    /// Encodes a slice of [`Token`] instances, and returns the
+    /// keccak hash of the encoded string appended to an Ethereum
+    /// signature header.
+    fn signed_keccak256(tokens: &[Token]) -> [u8; 32] {
+        let mut output = [0; 32];
+
+        let eth_message = {
+            let encoded = Self::encode(tokens);
+            let message: &[u8] = encoded.as_ref().as_ref();
+
+            let mut eth_message =
+                format!("\x19Ethereum Signed Message:\n{}", message.len())
+                    .into_bytes();
+            eth_message.extend_from_slice(message);
+            eth_message
+        };
+
+        let mut state = Keccak::v256();
+        state.update(&eth_message);
+        state.finalize(&mut output);
+
+        output
+    }
 }
 
 /// Represents an Ethereum encoding method equivalent
