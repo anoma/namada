@@ -106,12 +106,9 @@ impl VextDigest {
 pub type SignedVext = Signed<Vext, SerializeWithAbiEncode>;
 
 impl SignedVext {
-    /// Sign this [`Vext`] with an Ethereum key.
-    ///
-    /// For more information, check the Ethereum bridge smart contract code:
-    ///   - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L186>
-    pub fn new_abi_encoded(keypair: &common::SecretKey, ext: Vext) -> Self {
-        let to_sign = AbiEncode::signed_keccak256(&[
+    /// Serialize a [`Vext`] to be signed.
+    fn serialize_vext(ext: &Vext) -> [u8; 32] {
+        AbiEncode::signed_keccak256(&[
             Token::String("updateValidatorsSet".into()),
             Token::FixedBytes(
                 ext.voting_powers.get_bridge_hash(ext.epoch).to_vec(),
@@ -120,7 +117,15 @@ impl SignedVext {
                 ext.voting_powers.get_governance_hash(ext.epoch).to_vec(),
             ),
             epoch_to_token(ext.epoch),
-        ]);
+        ])
+    }
+
+    /// Sign this [`Vext`] with an Ethereum key.
+    ///
+    /// For more information, check the Ethereum bridge smart contract code:
+    ///   - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L186>
+    pub fn new_abi_encoded(keypair: &common::SecretKey, ext: Vext) -> Self {
+        let to_sign = Self::serialize_vext(&ext);
         let sig = common::SigScheme::sign(keypair, &to_sign);
         Self::new_from(ext, sig)
     }
@@ -129,9 +134,10 @@ impl SignedVext {
     /// Ethereum key.
     pub fn verify_abi_encoded(
         &self,
-        _pk: &common::PublicKey,
+        pk: &common::PublicKey,
     ) -> Result<(), VerifySigError> {
-        todo!()
+        let bytes = Self::serialize_vext(&self.data);
+        common::SigScheme::verify_signature_raw(pk, &bytes, &self.sig)
     }
 }
 
