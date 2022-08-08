@@ -63,13 +63,27 @@ fn run_ledger() -> Result<()> {
 
 /// In this test we:
 /// 1. Run 2 genesis validator ledger nodes and 1 non-validator node
-/// 2. Submit a valid token transfer tx
-/// 3. Check that all the nodes processed the tx with the same result
+/// 2. Cross over epoch to check for consensus with multiple nodes
+/// 3. Submit a valid token transfer tx
+/// 4. Check that all the nodes processed the tx with the same result
 #[test]
-fn test_node_connectivity() -> Result<()> {
+fn test_node_connectivity_and_consensus() -> Result<()> {
     // Setup 2 genesis validator nodes
-    let test =
-        setup::network(|genesis| setup::add_validators(1, genesis), None)?;
+    let test = setup::network(
+        |genesis| {
+            let genesis = setup::add_validators(1, genesis);
+            let parameters = ParametersConfig {
+                min_duration: 1,
+                min_num_of_blocks: 5,
+                ..genesis.parameters
+            };
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
 
     // 1. Run 2 genesis validator ledger nodes and 1 non-validator node
     let args = ["ledger"];
@@ -90,8 +104,11 @@ fn test_node_connectivity() -> Result<()> {
     let bg_validator_1 = validator_1.background();
     let bg_non_validator = non_validator.background();
 
-    // 2. Submit a valid token transfer tx
+    // 2. Cross over epoch to check for consensus with multiple nodes
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let _ = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    // 3. Submit a valid token transfer tx
     let tx_args = [
         "transfer",
         "--source",
@@ -115,7 +132,7 @@ fn test_node_connectivity() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 3. Check that all the nodes processed the tx with the same result
+    // 4. Check that all the nodes processed the tx with the same result
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
     let mut non_validator = bg_non_validator.foreground();
