@@ -16,11 +16,6 @@ use crate::types::address::Address;
 use crate::types::key::common::{self, Signature};
 use crate::types::key::VerifySigError;
 
-// TODO: we need to get these values from `Storage`
-// related issue: https://github.com/anoma/namada/issues/249
-const BRIDGE_CONTRACT_VERSION: u8 = 1;
-const GOVERNANCE_CONTRACT_VERSION: u8 = 1;
-
 // the namespace strings plugged into validator set hashes
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
 const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
@@ -193,7 +188,6 @@ impl VotingPowersMapExt for VotingPowersMap {
 
         compute_hash(
             epoch,
-            BRIDGE_CONTRACT_VERSION,
             BRIDGE_CONTRACT_NAMESPACE,
             validators,
             voting_powers,
@@ -204,7 +198,6 @@ impl VotingPowersMapExt for VotingPowersMap {
     fn get_governance_hash(&self, epoch: Epoch) -> [u8; 32] {
         compute_hash(
             epoch,
-            GOVERNANCE_CONTRACT_VERSION,
             GOVERNANCE_CONTRACT_NAMESPACE,
             // TODO: get governance validators
             vec![],
@@ -257,14 +250,12 @@ impl VotingPowersMapExt for VotingPowersMap {
 #[inline]
 fn compute_hash(
     epoch: Epoch,
-    version: u8,
     namespace: &str,
     validators: Vec<Token>,
     voting_powers: Vec<Token>,
 ) -> [u8; 32] {
     let nonce = u64::from(epoch).into();
     AbiEncode::keccak256(&[
-        Token::Uint(ethereum::U256::from(version)),
         Token::String(namespace.into()),
         Token::Array(validators),
         Token::Array(voting_powers),
