@@ -37,9 +37,9 @@ where
         req: RequestProcessProposal,
     ) -> ResponseProcessProposal {
         tracing::info!(
-            proposer = ?req.proposer_address,
+            proposer = ?hex::encode(&req.proposer_address),
             height = req.height,
-            hash = ?req.hash,
+            hash = ?hex::encode(&req.hash),
             n_txs = req.txs.len(),
             "Received block proposal",
         );
@@ -60,9 +60,9 @@ where
         let too_many_vext_digests = vote_ext_digest_num > 1;
         if too_many_vext_digests {
             tracing::warn!(
-                proposer = ?req.proposer_address,
+                proposer = ?hex::encode(&req.proposer_address),
                 height = req.height,
-                hash = ?req.hash,
+                hash = ?hex::encode(&req.hash),
                 vote_ext_digest_num,
                 "found too many vote extension transactions, proposed block \
                  will be rejected"
@@ -81,27 +81,27 @@ where
         });
         if invalid_txs {
             tracing::warn!(
-                proposer = ?req.proposer_address,
+                proposer = ?hex::encode(&req.proposer_address),
                 height = req.height,
-                hash = ?req.hash,
+                hash = ?hex::encode(&req.hash),
                 "found invalid transactions, proposed block will be rejected"
             );
         }
 
         let status = if too_many_vext_digests || invalid_txs {
-            ProposalStatus::Reject as i32
+            ProposalStatus::Reject
         } else {
-            ProposalStatus::Accept as i32
+            ProposalStatus::Accept
         };
         tracing::info!(
-            proposer = ?req.proposer_address,
+            proposer = ?hex::encode(&req.proposer_address),
             height = req.height,
-            hash = ?req.hash,
-            %status,
+            hash = ?hex::encode(&req.hash),
+            ?status,
             "Processed block proposal",
         );
         ResponseProcessProposal {
-            status,
+            status: status as i32,
             tx_results,
             ..Default::default()
         }
