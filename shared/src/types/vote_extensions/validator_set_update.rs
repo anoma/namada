@@ -14,7 +14,7 @@ use crate::ledger::pos::types::{Epoch, VotingPower};
 use crate::proto::Signed;
 use crate::types::address::Address;
 use crate::types::key::common::{self, Signature};
-use crate::types::key::VerifySigError;
+use crate::types::key::{SigScheme, VerifySigError};
 
 // the namespace strings plugged into validator set hashes
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
@@ -110,11 +110,19 @@ impl SignedVext {
     ///
     /// For more information, check the Ethereum bridge smart contract code:
     ///   - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L186>
-    pub fn new_abi_encoded(
-        _keypair: &common::SecretKey,
-        _vote_extension: Vext,
-    ) -> Self {
-        todo!()
+    pub fn new_abi_encoded(keypair: &common::SecretKey, ext: Vext) -> Self {
+        let to_sign = AbiEncode::signed_keccak256(&[
+            Token::String("updateValidatorsSet".into()),
+            Token::FixedBytes(
+                ext.voting_powers.get_bridge_hash(ext.epoch).to_vec(),
+            ),
+            Token::FixedBytes(
+                ext.voting_powers.get_governance_hash(ext.epoch).to_vec(),
+            ),
+            epoch_to_token(ext.epoch),
+        ]);
+        let sig = common::SigScheme::sign(keypair, &to_sign);
+        Self::new_from(ext, sig)
     }
 
     /// Verify the signature of a [`Vext`], signed by some
@@ -242,6 +250,12 @@ impl VotingPowersMapExt for VotingPowersMap {
     }
 }
 
+/// Convert an [`Epoch`] to a [`Token`].
+#[inline]
+fn epoch_to_token(epoch: Epoch) -> Token {
+    Token::Uint(u64::from(epoch).into())
+}
+
 /// Compute the keccak hash of a validator set update.
 ///
 /// For more information, check the Ethereum bridge smart contracts:
@@ -254,12 +268,11 @@ fn compute_hash(
     validators: Vec<Token>,
     voting_powers: Vec<Token>,
 ) -> [u8; 32] {
-    let nonce = u64::from(epoch).into();
     AbiEncode::keccak256(&[
         Token::String(namespace.into()),
         Token::Array(validators),
         Token::Array(voting_powers),
-        Token::Uint(nonce),
+        epoch_to_token(epoch),
     ])
 }
 
