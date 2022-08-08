@@ -7,7 +7,7 @@ pub mod types;
 pub mod write_log;
 
 use core::fmt::Debug;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
@@ -55,7 +55,7 @@ pub struct ConversionState {
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<Node>,
     /// Map assets to their latest conversion and position in Merkle tree
-    pub assets: HashMap<AssetType, (Address, Epoch, AllowedConversion, usize)>,
+    pub assets: BTreeMap<AssetType, (Address, Epoch, AllowedConversion, usize)>,
 }
 
 /// The storage data
@@ -713,7 +713,7 @@ where
         let reward_asset = AssetType::new(reward_asset_bytes.as_ref())
             .expect("unable to derive asset identifier");
         // Conversions from the previous to current asset for each address
-        let mut current_convs = HashMap::<Address, AllowedConversion>::new();
+        let mut current_convs = BTreeMap::<Address, AllowedConversion>::new();
         // Reward all tokens according to above reward rates
         for (addr, reward) in &masp_rewards {
             // Dispence a transparent reward in parallel to the shielded rewards
