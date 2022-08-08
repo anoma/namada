@@ -48,8 +48,14 @@ mod prepare_block {
                     self.build_vote_extensions_txs(req.local_last_commit);
 
                 // add mempool txs
-                let mut mempool_txs = self.build_mempool_txs(req.txs);
-                txs.append(&mut mempool_txs);
+                if !req.txs.is_empty() {
+                    tracing::info!(
+                        n = req.txs.len(),
+                        "Received transactions from mempool"
+                    );
+                    let mut mempool_txs = self.build_mempool_txs(req.txs);
+                    txs.append(&mut mempool_txs);
+                }
 
                 // decrypt the wrapper txs included in the previous block
                 let mut decrypted_txs = self.build_decrypted_txs();
