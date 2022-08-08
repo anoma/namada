@@ -8,7 +8,7 @@ mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
-    use namada::types::vote_extensions::ethereum_events;
+    use namada::types::vote_extensions::{ethereum_events, VoteExtension};
     use tendermint_proto::abci::ExtendedVoteInfo;
 
     use super::super::queries::QueriesExt;
@@ -259,21 +259,16 @@ mod extend_votes {
     // set update vote extensions
     pub fn deserialize_vote_extensions(
         vote_extensions: Vec<ExtendedVoteInfo>,
-    ) -> impl Iterator<Item = Signed<ethereum_events::Vext>> + 'static {
+    ) -> impl Iterator<Item = VoteExtension> + 'static {
         vote_extensions.into_iter().filter_map(|vote| {
-            Signed::<ethereum_events::Vext>::try_from_slice(
-                &vote.vote_extension[..],
-            )
-            .map_err(|err| {
-                tracing::error!(
-                    ?err,
-                    // TODO: change this error message, probably, such that
-                    // it mentions Ethereum events rather than vote
-                    // extensions
-                    "Failed to deserialize signed vote extension",
-                );
-            })
-            .ok()
+            VoteExtension::try_from_slice(&vote.vote_extension[..])
+                .map_err(|err| {
+                    tracing::error!(
+                        ?err,
+                        "Failed to deserialize signed vote extension",
+                    );
+                })
+                .ok()
         })
     }
 

@@ -22,7 +22,9 @@ const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
 
 /// Contains the digest of all signatures from a quorum of
 /// validators for a [`Vext`].
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct VextDigest {
     /// A mapping from a validator address to a [`Signature`].
     pub signatures: HashMap<Address, Signature>,

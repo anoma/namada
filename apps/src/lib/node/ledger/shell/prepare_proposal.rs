@@ -192,7 +192,8 @@ mod prepare_block {
             );
             let mut voting_power = FractionalVotingPower::default();
 
-            let deserialized = deserialize_vote_extensions(vote_extensions);
+            let deserialized = deserialize_vote_extensions(vote_extensions)
+                .map(|vext| vext.ethereum_events);
 
             for (validator_voting_power, vote_extension) in
                 self.filter_invalid_vote_extensions(deserialized)
@@ -352,7 +353,8 @@ mod prepare_block {
             let votes =
                 deserialize_vote_extensions(vec![vote_extension_serialize(
                     vext,
-                )]);
+                )])
+                .map(|vext| vext.ethereum_events);
             let filtered_votes: Vec<_> =
                 shell.filter_invalid_vote_extensions(votes).collect();
 

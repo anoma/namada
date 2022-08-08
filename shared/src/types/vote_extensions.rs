@@ -3,10 +3,13 @@
 pub mod ethereum_events;
 pub mod validator_set_update;
 
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+
 use crate::proto::Signed;
 
 /// This type represents the data we pass to the extension of
 /// a vote at the PreCommit phase of Tendermint.
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct VoteExtension {
     /// Vote extension data related with Ethereum events.
     pub ethereum_events: Signed<ethereum_events::Vext>,
@@ -21,6 +24,9 @@ pub struct VoteExtension {
 /// [`crate::types::transaction::protocol::ProtocolTxType`] transactions:
 ///   - A `ProtocolTxType::EthereumEvents` tx, and
 ///   - A `ProtocolTxType::ValidatorSetUpdate` tx
+#[derive(
+    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct VoteExtensionDigest {
     /// The digest of Ethereum events vote extension signatures.
     pub ethereum_events: ethereum_events::VextDigest,
