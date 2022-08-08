@@ -14,6 +14,7 @@ use crate::ledger::pos::types::{Epoch, VotingPower};
 use crate::proto::Signed;
 use crate::types::address::Address;
 use crate::types::key::common::{self, Signature};
+use crate::types::key::VerifySigError;
 
 // TODO: we need to get these values from `Storage`
 // related issue: https://github.com/anoma/namada/issues/249
@@ -121,7 +122,14 @@ impl SignedVext {
         todo!()
     }
 
-    // TODO: verify
+    /// Verify the signature of a [`Vext`], signed by some
+    /// Ethereum key.
+    pub fn verify_abi_encoded(
+        &self,
+        _pk: &common::PublicKey,
+    ) -> Result<(), VerifySigError> {
+        todo!()
+    }
 }
 
 /// Represents a validator set update, for some new [`Epoch`].
