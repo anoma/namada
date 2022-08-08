@@ -36,7 +36,11 @@ mod prepare_block {
             &mut self,
             req: RequestPrepareProposal,
         ) -> response::PrepareProposal {
-            tracing::info!("Preparing block proposal");
+            tracing::info!(
+                height = req.height,
+                req.txs.len = req.txs.len(),
+                "Preparing block proposal"
+            );
             // We can safely reset meter, because if the block is rejected,
             // we'll reset again on the next proposal, until the
             // proposal is accepted
@@ -49,14 +53,8 @@ mod prepare_block {
                     self.build_vote_extensions_txs(req.local_last_commit);
 
                 // add mempool txs
-                if !req.txs.is_empty() {
-                    tracing::info!(
-                        n = req.txs.len(),
-                        "Received transactions from mempool"
-                    );
-                    let mut mempool_txs = self.build_mempool_txs(req.txs);
-                    txs.append(&mut mempool_txs);
-                }
+                let mut mempool_txs = self.build_mempool_txs(req.txs);
+                txs.append(&mut mempool_txs);
 
                 // decrypt the wrapper txs included in the previous block
                 let mut decrypted_txs = self.build_decrypted_txs();
@@ -67,7 +65,11 @@ mod prepare_block {
                 vec![]
             };
 
-            tracing::info!(n_transactions = txs.len(), "Proposing block");
+            tracing::info!(
+                height = req.height,
+                tx_records = txs.len(),
+                "Proposing block"
+            );
             response::PrepareProposal {
                 tx_records: txs,
                 ..Default::default()
