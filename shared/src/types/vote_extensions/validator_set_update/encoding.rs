@@ -65,6 +65,7 @@ impl Encode for AbiEncode {
     }
 }
 
+// TODO: test signatures here once we merge secp keys
 #[cfg(test)]
 mod tests {
     use ethabi::ethereum_types::U256;
