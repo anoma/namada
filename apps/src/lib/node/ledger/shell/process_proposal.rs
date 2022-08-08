@@ -37,10 +37,10 @@ where
         req: RequestProcessProposal,
     ) -> ResponseProcessProposal {
         tracing::info!(
-            ?req.proposer_address,
-            req.height,
-            ?req.hash,
-            n_transactions = req.txs.len(),
+            proposer = ?req.proposer_address,
+            height = req.height,
+            hash = ?req.hash,
+            n_txs = req.txs.len(),
             "Received block proposal",
         );
         // the number of vote extension digests included in the block proposal
@@ -60,9 +60,9 @@ where
         let too_many_vext_digests = vote_ext_digest_num > 1;
         if too_many_vext_digests {
             tracing::warn!(
-                ?req.proposer_address,
-                req.height,
-                ?req.hash,
+                proposer = ?req.proposer_address,
+                height = req.height,
+                hash = ?req.hash,
                 vote_ext_digest_num,
                 "found too many vote extension transactions, proposed block \
                  will be rejected"
@@ -81,9 +81,9 @@ where
         });
         if invalid_txs {
             tracing::warn!(
-                ?req.proposer_address,
-                req.height,
-                ?req.hash,
+                proposer = ?req.proposer_address,
+                height = req.height,
+                hash = ?req.hash,
                 "found invalid transactions, proposed block will be rejected"
             );
         }
@@ -94,9 +94,9 @@ where
             ProposalStatus::Accept as i32
         };
         tracing::info!(
-            ?req.proposer_address,
-            req.height,
-            ?req.hash,
+            proposer = ?req.proposer_address,
+            height = req.height,
+            hash = ?req.hash,
             %status,
             "Processed block proposal",
         );
