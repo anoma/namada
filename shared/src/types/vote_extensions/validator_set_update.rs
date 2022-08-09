@@ -25,7 +25,7 @@ const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
 pub struct EthAddr(pub ethereum::Address);
 
 impl BorshSerialize for EthAddr {
-    fn serialize<W: ark_serialize::Write>(
+    fn serialize<W: std::io::Write>(
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
