@@ -86,6 +86,9 @@ pub struct Vext {
     /// Since this is a monotonically growing sequence number,
     /// it is signed together with the rest of the data to
     /// prevent replay attacks on validator set updates.
+    ///
+    /// Additionally, we can use this [`Epoch`] value to query the appropriate
+    /// validator set to verify signatures with.
     pub epoch: Epoch,
 }
 
