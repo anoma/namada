@@ -6,12 +6,10 @@ pub mod ethereum_events;
 #[cfg(not(feature = "ABCI"))]
 mod extend_votes {
     use borsh::BorshDeserialize;
-    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
     use namada::types::vote_extensions::{ethereum_events, VoteExtension};
     use tendermint_proto::abci::ExtendedVoteInfo;
 
-    use super::super::queries::QueriesExt;
     use super::super::*;
 
     /// The error yielded from validating faulty vote extensions in the shell

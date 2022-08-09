@@ -1,6 +1,15 @@
 //! Extend Tendermint votes with Ethereum events seen by a quorum of validators.
 
-// TODO: import deps here
+use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
+use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::proto::Signed;
+use namada::types::ethereum_events::EthereumEvent;
+use namada::types::storage::BlockHeight;
+use namada::types::vote_extensions::ethereum_events;
+
+use super::*;
+use crate::node::ledger::shell::queries::QueriesExt;
+use crate::node::ledger::shell::{Shell, ShellMode};
 
 impl<D, H> Shell<D, H>
 where
@@ -13,10 +22,9 @@ where
     /// Checks that at epoch of the provided height:
     ///  * The Tendermint address corresponds to an active validator
     ///  * The validator correctly signed the extension
-    ///  * The validator signed over the correct height inside of the
-    ///    extension
-    ///  * There are no duplicate Ethereum events in this vote extension,
-    ///    and the events are sorted in ascending order
+    ///  * The validator signed over the correct height inside of the extension
+    ///  * There are no duplicate Ethereum events in this vote extension, and
+    ///    the events are sorted in ascending order
     #[inline]
     pub fn validate_eth_events_vext(
         &self,
@@ -248,13 +256,12 @@ mod test_vote_extensions {
             )
             .expect("Test failed");
 
-        let [event_first, event_second]: [EthereumEvent; 2] =
-            vote_extension
-                .data
-                .ethereum_events
-                .clone()
-                .try_into()
-                .expect("Test failed");
+        let [event_first, event_second]: [EthereumEvent; 2] = vote_extension
+            .data
+            .ethereum_events
+            .clone()
+            .try_into()
+            .expect("Test failed");
 
         assert_eq!(event_first, event_1);
         assert_eq!(event_second, event_2);
@@ -266,9 +273,7 @@ mod test_vote_extensions {
                 .as_bytes()
                 .to_vec(),
             height: 0,
-            vote_extension: vote_extension
-                .try_to_vec()
-                .expect("Test failed"),
+            vote_extension: vote_extension.try_to_vec().expect("Test failed"),
         };
         let res = shell.verify_vote_extension(req);
         assert_eq!(res.status, i32::from(VerifyStatus::Accept));
