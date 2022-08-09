@@ -52,10 +52,30 @@ pub struct SignedTxData {
     pub sig: common::Signature,
 }
 
+/// A serialization method to provide to [`Signed`], such
+/// that we may sign serialized data.
+pub trait SignedSerialize<T> {
+    /// A byte vector containing the serialized data.
+    type Output: AsRef<[u8]>;
+
+    /// Encodes `data` as a byte vector,
+    /// with some arbitrary serialization method.
+    fn serialize(data: &T) -> Self::Output;
+}
+
 /// Tag type that indicates we should use [`BorshSerialize`]
 /// to sign data in a [`Signed`] wrapper.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub enum SerializeWithBorsh {}
+pub struct SerializeWithBorsh;
+
+impl<T: BorshSerialize> SignedSerialize<T> for SerializeWithBorsh {
+    type Output = Vec<u8>;
+
+    fn serialize(data: &T) -> Vec<u8> {
+        data.try_to_vec()
+            .expect("Encoding data for signing shouldn't fail")
+    }
+}
 
 /// A generic signed data wrapper for serialize-able types.
 ///
@@ -125,13 +145,11 @@ impl<T, S> Signed<T, S> {
     }
 }
 
-impl<T: BorshSerialize> Signed<T, SerializeWithBorsh> {
+impl<T, S: SignedSerialize<T>> Signed<T, S> {
     /// Initialize a new [`Signed`] instance.
     pub fn new(keypair: &common::SecretKey, data: T) -> Self {
-        let to_sign = data
-            .try_to_vec()
-            .expect("Encoding data for signing shouldn't fail");
-        let sig = common::SigScheme::sign(keypair, &to_sign);
+        let to_sign = S::serialize(&data);
+        let sig = common::SigScheme::sign(keypair, to_sign.as_ref());
         Self::new_from(data, sig)
     }
 
@@ -141,11 +159,8 @@ impl<T: BorshSerialize> Signed<T, SerializeWithBorsh> {
         &self,
         pk: &common::PublicKey,
     ) -> std::result::Result<(), VerifySigError> {
-        let bytes = self
-            .data
-            .try_to_vec()
-            .expect("Encoding data for verifying signature shouldn't fail");
-        common::SigScheme::verify_signature_raw(pk, &bytes, &self.sig)
+        let bytes = S::serialize(&self.data);
+        common::SigScheme::verify_signature_raw(pk, bytes.as_ref(), &self.sig)
     }
 }
 

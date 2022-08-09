@@ -15,7 +15,6 @@ use crate::proto::Signed;
 use crate::types::address::Address;
 use crate::types::ethereum_events::{EthAddress, KeccakHash};
 use crate::types::key::common::{self, Signature};
-use crate::types::key::{SigScheme, VerifySigError};
 
 // the namespace strings plugged into validator set hashes
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
@@ -65,42 +64,6 @@ impl VextDigest {
 /// an Ethereum key.
 pub type SignedVext = Signed<Vext, SerializeWithAbiEncode>;
 
-impl SignedVext {
-    /// Serialize a [`Vext`] to be signed.
-    fn serialize_vext(ext: &Vext) -> KeccakHash {
-        AbiEncode::signed_keccak256(&[
-            Token::String("updateValidatorsSet".into()),
-            Token::FixedBytes(
-                ext.voting_powers.get_bridge_hash(ext.epoch).0.to_vec(),
-            ),
-            Token::FixedBytes(
-                ext.voting_powers.get_governance_hash(ext.epoch).0.to_vec(),
-            ),
-            epoch_to_token(ext.epoch),
-        ])
-    }
-
-    /// Sign this [`Vext`] with an Ethereum key.
-    ///
-    /// For more information, check the Ethereum bridge smart contract code:
-    ///   - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L186>
-    pub fn new_abi_encoded(keypair: &common::SecretKey, ext: Vext) -> Self {
-        let KeccakHash(to_sign) = Self::serialize_vext(&ext);
-        let sig = common::SigScheme::sign(keypair, &to_sign);
-        Self::new_from(ext, sig)
-    }
-
-    /// Verify the signature of a [`Vext`], signed by some
-    /// Ethereum key.
-    pub fn verify_abi_encoded(
-        &self,
-        pk: &common::PublicKey,
-    ) -> Result<(), VerifySigError> {
-        let KeccakHash(bytes) = Self::serialize_vext(&self.data);
-        common::SigScheme::verify_signature_raw(pk, &bytes, &self.sig)
-    }
-}
-
 /// Represents a validator set update, for some new [`Epoch`].
 #[derive(
     Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
@@ -132,7 +95,7 @@ impl Vext {
     /// For more information, read the docs of [`SignedVext::new`].
     #[inline]
     pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
-        SignedVext::new_abi_encoded(sk, self.clone())
+        SignedVext::new(sk, self.clone())
     }
 }
 
@@ -250,10 +213,33 @@ fn compute_hash(
 mod tag {
     use serde::{Deserialize, Serialize};
 
-    /// Tag type that indicates we should use [`super::encoding::AbiEncode`]
+    use super::encoding::{AbiEncode, Encode, Token};
+    use super::{epoch_to_token, Vext, VotingPowersMapExt};
+    use crate::proto::SignedSerialize;
+    use crate::types::ethereum_events::KeccakHash;
+
+    /// Tag type that indicates we should use [`AbiEncode`]
     /// to sign data in a [`crate::proto::Signed`] wrapper.
     #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-    pub enum SerializeWithAbiEncode {}
+    pub struct SerializeWithAbiEncode;
+
+    impl SignedSerialize<Vext> for SerializeWithAbiEncode {
+        type Output = [u8; 32];
+
+        fn serialize(ext: &Vext) -> Self::Output {
+            let KeccakHash(output) = AbiEncode::signed_keccak256(&[
+                Token::String("updateValidatorsSet".into()),
+                Token::FixedBytes(
+                    ext.voting_powers.get_bridge_hash(ext.epoch).0.to_vec(),
+                ),
+                Token::FixedBytes(
+                    ext.voting_powers.get_governance_hash(ext.epoch).0.to_vec(),
+                ),
+                epoch_to_token(ext.epoch),
+            ]);
+            output
+        }
+    }
 }
 
 #[doc(inline)]
