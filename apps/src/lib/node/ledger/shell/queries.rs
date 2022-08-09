@@ -501,10 +501,15 @@ where
             })
     }
 
+    // TODO: we might need to add some param here to perform
+    // the same check when we receive a validator set update
+    // vote extension
     fn can_send_validator_set_update(&self) -> bool {
-        // let current_height = self.last_height.0 + 1;
-        // let new_epoch_height = self.next_epoch_min_start_height.0;
-        // new_epoch_height.wrapping_sub(current_height) == 1
-        todo!()
+        self.last_height.0 == 0 || {
+            // let current_height = self.last_height.0 + 1;
+            // let new_epoch_height = self.next_epoch_min_start_height.0;
+            // new_epoch_height.wrapping_sub(current_height) == 1
+            todo!()
+        }
     }
 }
