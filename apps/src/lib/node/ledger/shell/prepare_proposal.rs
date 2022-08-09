@@ -36,11 +36,6 @@ mod prepare_block {
             &mut self,
             req: RequestPrepareProposal,
         ) -> response::PrepareProposal {
-            tracing::info!(
-                height = req.height,
-                txs_from_tendermint.len = req.txs.len(),
-                "Preparing block proposal"
-            );
             // We can safely reset meter, because if the block is rejected,
             // we'll reset again on the next proposal, until the
             // proposal is accepted
