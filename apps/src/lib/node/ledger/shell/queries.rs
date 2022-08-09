@@ -408,7 +408,6 @@ where
         }
     }
 
-    #[allow(dead_code)]
     fn get_validator_from_protocol_pk(
         &self,
         pk: &key::common::PublicKey,
@@ -478,7 +477,6 @@ where
             .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))
     }
 
-    #[allow(dead_code)]
     fn get_validator_from_tm_address(
         &self,
         tm_address: &[u8],
@@ -499,7 +497,6 @@ where
     fn is_last_block_before_new_epoch(&self) -> bool {
         let current_height = self.last_height.0 + 1;
         let new_epoch_height = self.next_epoch_min_start_height.0;
-
-        (new_epoch_height - current_height) == 1
+        new_epoch_height.wrapping_sub(current_height) == 1
     }
 }
