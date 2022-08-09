@@ -321,6 +321,10 @@ pub(crate) trait QueriesExt {
         tm_address: &[u8],
         epoch: Option<Epoch>,
     ) -> std::result::Result<Address, Error>;
+
+    /// Verifies if we are at the last block before the
+    /// start of a new epoch.
+    fn is_last_block_before_new_epoch(&self) -> bool;
 }
 
 impl<D, H> QueriesExt for Storage<D, H>
@@ -490,5 +494,12 @@ where
                     epoch,
                 )
             })
+    }
+
+    fn is_last_block_before_new_epoch(&self) -> bool {
+        let current_height = self.last_height.0 + 1;
+        let new_epoch_height = self.next_epoch_min_start_height.0;
+
+        (new_epoch_height - current_height) == 1
     }
 }
