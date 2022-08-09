@@ -107,9 +107,6 @@ where
                             Some(proposal_code) => {
                                 let tx =
                                     Tx::new(proposal_code, Some(encode(&id)));
-                                let tx_type = TxType::Decrypted(
-                                    DecryptedTx::Decrypted(tx),
-                                );
                                 let pending_execution_key =
                                     gov_storage::get_proposal_execution_key(id);
                                 self.storage
@@ -117,12 +114,16 @@ where
                                     .expect(
                                         "Should be able to write to storage.",
                                     );
-                                let tx_result = protocol::apply_tx(
-                                    tx_type,
+                                let tx_result = protocol::apply_wasm_tx(
+                                    tx,
                                     0, /* this is used to compute the fee
                                         * based on the code size. We dont
                                         * need it here. */
-                                    self.into(),
+                                    &mut BlockGasMeter::default(),
+                                    &mut self.write_log,
+                                    &self.storage,
+                                    &mut self.vp_wasm_cache,
+                                    &mut self.tx_wasm_cache,
                                 );
                                 self.storage
                                     .delete(&pending_execution_key)
@@ -344,8 +345,16 @@ where
                 },
             };
 
-            match protocol::apply_tx(tx_type, tx_length, self.into())
-                .map_err(Error::TxApply)
+            match protocol::dispatch_tx(
+                tx_type,
+                tx_length,
+                &mut self.gas_meter,
+                &mut self.write_log,
+                &mut self.storage,
+                &mut self.vp_wasm_cache,
+                &mut self.tx_wasm_cache,
+            )
+            .map_err(Error::TxApply)
             {
                 Ok(result) => {
                     if result.is_accepted() {
