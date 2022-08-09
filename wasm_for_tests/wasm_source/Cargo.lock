@@ -1523,6 +1523,7 @@ dependencies = [
  "tendermint",
  "tendermint-proto",
  "thiserror",
+ "tiny-keccak",
  "tonic-build",
  "tracing",
  "wasmer",
