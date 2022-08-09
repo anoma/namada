@@ -322,9 +322,16 @@ pub(crate) trait QueriesExt {
         epoch: Option<Epoch>,
     ) -> std::result::Result<Address, Error>;
 
-    /// Verifies if we are at the last block before the
-    /// start of a new epoch.
-    fn is_last_block_before_new_epoch(&self) -> bool;
+    /// Determines if we are able to send a validator set update vote extension.
+    /// This is done by checking if we are at the first block of a new epoch,
+    /// or if we are at block height 1 of the first epoch.
+    ///
+    /// The genesis block will not have vote extensions,
+    /// therefore it is a special case, which we account for
+    /// by checking if the block height is 1. Otherwise,
+    /// validator set update vote extensions will always
+    /// be included at the first block of an epoch.
+    fn can_send_validator_set_update(&self) -> bool;
 }
 
 impl<D, H> QueriesExt for Storage<D, H>
@@ -494,9 +501,10 @@ where
             })
     }
 
-    fn is_last_block_before_new_epoch(&self) -> bool {
-        let current_height = self.last_height.0 + 1;
-        let new_epoch_height = self.next_epoch_min_start_height.0;
-        new_epoch_height.wrapping_sub(current_height) == 1
+    fn can_send_validator_set_update(&self) -> bool {
+        // let current_height = self.last_height.0 + 1;
+        // let new_epoch_height = self.next_epoch_min_start_height.0;
+        // new_epoch_height.wrapping_sub(current_height) == 1
+        todo!()
     }
 }

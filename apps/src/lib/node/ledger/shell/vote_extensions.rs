@@ -7,6 +7,7 @@ pub mod ethereum_events;
 mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::proto::Signed;
+    use namada::types::storage::Epoch;
     use namada::types::vote_extensions::{
         ethereum_events, validator_set_update, VoteExtension,
     };
@@ -46,19 +47,36 @@ mod extend_votes {
             &mut self,
             _req: request::ExtendVote,
         ) -> response::ExtendVote {
-            let validator_addr = self
+            let addr = self
                 .mode
                 .get_validator_address()
                 .expect("only validators should receive this method call")
                 .to_owned();
+
+            let validator_addr = addr.clone();
             let eth_evs = ethereum_events::Vext {
                 block_height: self.storage.last_height + 1,
                 ethereum_events: self.new_ethereum_events(),
                 validator_addr,
             };
-            let vset_upd = if self.storage.is_last_block_before_new_epoch() {
-                // TODO: get new validator set
-                todo!()
+
+            let validator_addr = addr;
+            let vset_upd = if self.storage.can_send_validator_set_update() {
+                let (Epoch(current_epoch), _) =
+                    self.storage.get_current_epoch();
+                let next_epoch = Epoch(current_epoch + 1);
+                let _validator_set =
+                    self.storage.get_active_validators(Some(next_epoch));
+
+                Some(validator_set_update::Vext {
+                    validator_addr,
+                    // TODO: we need a way to map ethereum addresses to
+                    // namada validator addresses
+                    voting_powers: todo!(),
+                    // TODO: switch to storage epoch? or keep the pos epoch
+                    // type?
+                    epoch: next_epoch.into(),
+                })
             } else {
                 None
             };
