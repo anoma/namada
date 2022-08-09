@@ -74,7 +74,6 @@ use tower_abci_old::{request, response};
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
 use crate::node::ledger::events::Event;
-use crate::node::ledger::protocol::ShellParams;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
@@ -671,18 +670,14 @@ where
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
         match Tx::try_from(tx_bytes) {
             Ok(tx) => {
-                let tx = TxType::Decrypted(DecryptedTx::Decrypted(tx));
-                match protocol::apply_tx(
+                match protocol::apply_wasm_tx(
                     tx,
                     tx_bytes.len(),
-                    ShellParams {
-                        block_gas_meter: &mut gas_meter,
-                        write_log: &mut write_log,
-                        storage: &self.storage,
-                        wasm_dir: self.wasm_dir.as_path(),
-                        vp_wasm_cache: &mut vp_wasm_cache,
-                        tx_wasm_cache: &mut tx_wasm_cache,
-                    },
+                    &mut gas_meter,
+                    &mut write_log,
+                    &self.storage,
+                    &mut vp_wasm_cache,
+                    &mut tx_wasm_cache,
                 )
                 .map_err(Error::TxApply)
                 {
