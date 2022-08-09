@@ -13,53 +13,13 @@ use num_rational::Ratio;
 use crate::ledger::pos::types::{Epoch, VotingPower};
 use crate::proto::Signed;
 use crate::types::address::Address;
+use crate::types::ethereum_events::EthAddress;
 use crate::types::key::common::{self, Signature};
 use crate::types::key::{SigScheme, VerifySigError};
 
 // the namespace strings plugged into validator set hashes
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
 const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
-
-/// Wrapper type for [`ethereum::Address`]
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct EthAddr(pub ethereum::Address);
-
-impl BorshSerialize for EthAddr {
-    fn serialize<W: std::io::Write>(
-        &self,
-        writer: &mut W,
-    ) -> std::io::Result<()> {
-        let EthAddr(ethereum::H160(inner_array)) = self;
-        inner_array.serialize(writer)
-    }
-}
-
-impl BorshDeserialize for EthAddr {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        let inner = <[u8; 20]>::deserialize(buf)?;
-        Ok(EthAddr(ethereum::H160(inner)))
-    }
-}
-
-impl BorshSchema for EthAddr {
-    fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        let fields =
-            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
-                <[u8; 20]>::declaration()
-            ]);
-        let definition = borsh::schema::Definition::Struct { fields };
-        Self::add_definition(Self::declaration(), definition, definitions);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "validator_set_update::EthAddr".into()
-    }
-}
 
 /// Contains the digest of all signatures from a quorum of
 /// validators for a [`Vext`].
@@ -176,8 +136,8 @@ impl Vext {
     }
 }
 
-/// Provides a mapping between [`EthAddr`] and [`VotingPower`] instances.
-pub type VotingPowersMap = HashMap<EthAddr, VotingPower>;
+/// Provides a mapping between [`EthAddress`] and [`VotingPower`] instances.
+pub type VotingPowersMap = HashMap<EthAddress, VotingPower>;
 
 /// This trait contains additional methods for a [`HashMap`], related
 /// with validator set update vote extensions logic.
@@ -238,7 +198,7 @@ impl VotingPowersMapExt for VotingPowersMap {
         // split the vec into two
         sorted
             .into_iter()
-            .map(|(&EthAddr(addr), &voting_power)| {
+            .map(|(&EthAddress(addr), &voting_power)| {
                 let voting_power: u64 = voting_power.into();
 
                 // normalize the voting power
@@ -250,7 +210,10 @@ impl VotingPowersMapExt for VotingPowersMap {
                 let voting_power = voting_power.round().to_integer();
                 let voting_power: ethereum::U256 = voting_power.into();
 
-                (Token::Address(addr), Token::Uint(voting_power))
+                (
+                    Token::Address(ethereum::H160(addr)),
+                    Token::Uint(voting_power),
+                )
             })
             .unzip()
     }

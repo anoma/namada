@@ -51,6 +51,7 @@ impl From<u64> for Uint {
     Eq,
     PartialOrd,
     Ord,
+    Hash,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
