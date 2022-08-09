@@ -6,6 +6,8 @@
 pub use ethabi::token::Token;
 use tiny_keccak::{Hasher, Keccak};
 
+use crate::types::ethereum_events::KeccakHash;
+
 /// Contains a method to encode data to a format compatible with Ethereum.
 pub trait Encode {
     /// The data type to be encoded to. Must deref to a hex string with
@@ -17,20 +19,20 @@ pub trait Encode {
 
     /// Encodes a slice of [`Token`] instances, and returns the
     /// keccak hash of the encoded string.
-    fn keccak256(tokens: &[Token]) -> [u8; 32] {
+    fn keccak256(tokens: &[Token]) -> KeccakHash {
         let mut output = [0; 32];
 
         let mut state = Keccak::v256();
         state.update(Self::encode(tokens).as_ref().as_ref());
         state.finalize(&mut output);
 
-        output
+        KeccakHash(output)
     }
 
     /// Encodes a slice of [`Token`] instances, and returns the
     /// keccak hash of the encoded string appended to an Ethereum
     /// signature header.
-    fn signed_keccak256(tokens: &[Token]) -> [u8; 32] {
+    fn signed_keccak256(tokens: &[Token]) -> KeccakHash {
         let mut output = [0; 32];
 
         let eth_message = {
@@ -48,7 +50,7 @@ pub trait Encode {
         state.update(&eth_message);
         state.finalize(&mut output);
 
-        output
+        KeccakHash(output)
     }
 }
 

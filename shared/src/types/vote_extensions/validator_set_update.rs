@@ -13,7 +13,7 @@ use num_rational::Ratio;
 use crate::ledger::pos::types::{Epoch, VotingPower};
 use crate::proto::Signed;
 use crate::types::address::Address;
-use crate::types::ethereum_events::EthAddress;
+use crate::types::ethereum_events::{EthAddress, KeccakHash};
 use crate::types::key::common::{self, Signature};
 use crate::types::key::{SigScheme, VerifySigError};
 
@@ -67,14 +67,14 @@ pub type SignedVext = Signed<Vext, SerializeWithAbiEncode>;
 
 impl SignedVext {
     /// Serialize a [`Vext`] to be signed.
-    fn serialize_vext(ext: &Vext) -> [u8; 32] {
+    fn serialize_vext(ext: &Vext) -> KeccakHash {
         AbiEncode::signed_keccak256(&[
             Token::String("updateValidatorsSet".into()),
             Token::FixedBytes(
-                ext.voting_powers.get_bridge_hash(ext.epoch).to_vec(),
+                ext.voting_powers.get_bridge_hash(ext.epoch).0.to_vec(),
             ),
             Token::FixedBytes(
-                ext.voting_powers.get_governance_hash(ext.epoch).to_vec(),
+                ext.voting_powers.get_governance_hash(ext.epoch).0.to_vec(),
             ),
             epoch_to_token(ext.epoch),
         ])
@@ -85,7 +85,7 @@ impl SignedVext {
     /// For more information, check the Ethereum bridge smart contract code:
     ///   - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L186>
     pub fn new_abi_encoded(keypair: &common::SecretKey, ext: Vext) -> Self {
-        let to_sign = Self::serialize_vext(&ext);
+        let KeccakHash(to_sign) = Self::serialize_vext(&ext);
         let sig = common::SigScheme::sign(keypair, &to_sign);
         Self::new_from(ext, sig)
     }
@@ -96,7 +96,7 @@ impl SignedVext {
         &self,
         pk: &common::PublicKey,
     ) -> Result<(), VerifySigError> {
-        let bytes = Self::serialize_vext(&self.data);
+        let KeccakHash(bytes) = Self::serialize_vext(&self.data);
         common::SigScheme::verify_signature_raw(pk, &bytes, &self.sig)
     }
 }
@@ -144,11 +144,11 @@ pub type VotingPowersMap = HashMap<EthAddress, VotingPower>;
 pub trait VotingPowersMapExt {
     /// Returns the keccak hash of this [`VotingPowersMap`]
     /// to be signed by an Ethereum validator key.
-    fn get_bridge_hash(&self, epoch: Epoch) -> [u8; 32];
+    fn get_bridge_hash(&self, epoch: Epoch) -> KeccakHash;
 
     /// Returns the keccak hash of this [`VotingPowersMap`]
     /// to be signed by an Ethereum governance key.
-    fn get_governance_hash(&self, epoch: Epoch) -> [u8; 32];
+    fn get_governance_hash(&self, epoch: Epoch) -> KeccakHash;
 
     /// Returns the list of Ethereum validator addresses and their respective
     /// voting power (in this order), with an Ethereum ABI compatible encoding.
@@ -157,7 +157,7 @@ pub trait VotingPowersMapExt {
 
 impl VotingPowersMapExt for VotingPowersMap {
     #[inline]
-    fn get_bridge_hash(&self, epoch: Epoch) -> [u8; 32] {
+    fn get_bridge_hash(&self, epoch: Epoch) -> KeccakHash {
         let (validators, voting_powers) = self.get_abi_encoded();
 
         compute_hash(
@@ -169,7 +169,7 @@ impl VotingPowersMapExt for VotingPowersMap {
     }
 
     #[inline]
-    fn get_governance_hash(&self, epoch: Epoch) -> [u8; 32] {
+    fn get_governance_hash(&self, epoch: Epoch) -> KeccakHash {
         compute_hash(
             epoch,
             GOVERNANCE_CONTRACT_NAMESPACE,
@@ -236,7 +236,7 @@ fn compute_hash(
     namespace: &str,
     validators: Vec<Token>,
     voting_powers: Vec<Token>,
-) -> [u8; 32] {
+) -> KeccakHash {
     AbiEncode::keccak256(&[
         Token::String(namespace.into()),
         Token::Array(validators),
