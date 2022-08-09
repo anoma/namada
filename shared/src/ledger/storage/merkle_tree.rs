@@ -364,6 +364,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
                     Ics23Proof::Exist(ep) => CommitmentProof {
                         proof: Some(Ics23Proof::Exist(ExistenceProof {
                             key: sub_key.to_string().as_bytes().to_vec(),
+                            value,
                             leaf: Some(self.leaf_spec()),
                             ..ep
                         })),
@@ -381,7 +382,6 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
                 match cp.proof.expect("The proof should exist") {
                     Ics23Proof::Exist(ep) => CommitmentProof {
                         proof: Some(Ics23Proof::Exist(ExistenceProof {
-                            value,
                             leaf: Some(self.ibc_leaf_spec()),
                             ..ep
                         })),
