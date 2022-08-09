@@ -7,10 +7,13 @@ pub mod ethereum_events;
 mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::proto::Signed;
-    use namada::types::vote_extensions::{ethereum_events, VoteExtension};
+    use namada::types::vote_extensions::{
+        ethereum_events, validator_set_update, VoteExtension,
+    };
     use tendermint_proto::abci::ExtendedVoteInfo;
 
     use super::super::*;
+    use crate::node::ledger::shell::queries::QueriesExt;
 
     /// The error yielded from validating faulty vote extensions in the shell
     #[derive(Error, Debug)]
@@ -48,17 +51,40 @@ mod extend_votes {
                 .get_validator_address()
                 .expect("only validators should receive this method call")
                 .to_owned();
-            let ext = ethereum_events::Vext {
+            let eth_evs = ethereum_events::Vext {
                 block_height: self.storage.last_height + 1,
                 ethereum_events: self.new_ethereum_events(),
                 validator_addr,
             };
-            self.mode
-                .get_protocol_key()
-                .map(|signing_key| response::ExtendVote {
-                    vote_extension: ext.sign(signing_key).try_to_vec().unwrap(),
-                })
-                .unwrap_or_default()
+            let vset_upd = if self.storage.is_last_block_before_new_epoch() {
+                // TODO: get new validator set
+                todo!()
+            } else {
+                None
+            };
+
+            if let ShellMode::Validator { data, .. } = &self.mode {
+                let protocol_key = &data.keys.protocol_keypair;
+
+                let vset_upd =
+                    vset_upd.map(|ext: validator_set_update::Vext| {
+                        // TODO: sign validator set update with secp key instead
+                        ext.sign(protocol_key)
+                    });
+
+                let eth_evs = eth_evs.sign(protocol_key);
+
+                let vote_extension = VoteExtension {
+                    ethereum_events: eth_evs,
+                    validator_set_update: vset_upd,
+                }
+                .try_to_vec()
+                .unwrap();
+
+                response::ExtendVote { vote_extension }
+            } else {
+                Default::default()
+            }
         }
 
         /// This checks that the vote extension:
