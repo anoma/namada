@@ -61,7 +61,7 @@ pub enum SerializeWithBorsh {}
 ///
 /// The default serialization method is [`BorshSerialize`].
 #[derive(
-    Eq, Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct Signed<T, S = SerializeWithBorsh> {
     /// Arbitrary data to be signed
@@ -72,6 +72,8 @@ pub struct Signed<T, S = SerializeWithBorsh> {
     /// before it being signed
     _serialization: PhantomData<S>,
 }
+
+impl<S, T: Eq> Eq for Signed<T, S> {}
 
 impl<S, T: PartialEq> PartialEq for Signed<T, S> {
     fn eq(&self, other: &Self) -> bool {
