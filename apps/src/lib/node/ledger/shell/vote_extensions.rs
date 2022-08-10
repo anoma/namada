@@ -145,13 +145,14 @@ mod extend_votes {
                 });
             let validated_valset_upd = self.storage.can_send_validator_set_update().then(|| {
                 ext.validator_set_update
-                    .map(|ext| {
+                    .and_then(|ext| {
                         let next_epoch = {
                             let (Epoch(current_epoch), _) =
                                 self.storage.get_current_epoch();
                             Epoch(current_epoch + 1)
                         };
                         self.validate_valset_upd_vext(ext, next_epoch)
+                            .then(|| true)
                     })
                     .unwrap_or_else(|| {
                         tracing::warn!(
