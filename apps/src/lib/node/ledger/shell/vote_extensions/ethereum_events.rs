@@ -49,10 +49,10 @@ where
         if ext.data.block_height != last_height {
             let ext_height = ext.data.block_height;
             tracing::error!(
-                "Vote extension issued for a block height {ext_height} \
-                 different from the expected height {last_height}"
+                "Ethereum events vote extension issued for a block height \
+                 {ext_height} different from the expected height {last_height}"
             );
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
+            return Err(VoteExtensionError::UnexpectedSequenceNumber);
         }
         if last_height.0 == 0 {
             tracing::error!("Dropping vote extension issued at genesis");
@@ -71,7 +71,7 @@ where
         if have_dupes_or_non_sorted {
             tracing::error!(
                 %validator,
-                "Found duplicate or non-sorted Ethereum events in a vote extension from validator"
+                "Found duplicate or non-sorted Ethereum events in a vote extension from some validator"
             );
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }

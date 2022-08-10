@@ -39,12 +39,20 @@ where
     #[allow(dead_code)]
     pub fn validate_valset_upd_vext_and_get_it_back(
         &self,
-        _ext: validator_set_update::SignedVext,
-        _new_epoch: Epoch,
+        ext: validator_set_update::SignedVext,
+        new_epoch: Epoch,
     ) -> std::result::Result<
         (VotingPower, validator_set_update::SignedVext),
         VoteExtensionError,
     > {
+        if ext.data.epoch != new_epoch {
+            let ext_epoch = ext.data.epoch;
+            tracing::error!(
+                "Validator set update vote extension issued for an epoch \
+                 {ext_epoch} different from the expected epoch {new_epoch}"
+            );
+            return Err(VoteExtensionError::UnexpectedSequenceNumber);
+        }
         todo!()
     }
 }

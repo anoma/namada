@@ -24,8 +24,11 @@ mod extend_votes {
     pub enum VoteExtensionError {
         #[error("The vote extension was issued at block height 0.")]
         IssuedAtGenesis,
-        #[error("The vote extension has an unexpected block height.")]
-        UnexpectedBlockHeight,
+        #[error(
+            "The vote extension has an unexpected sequence number (e.g. block \
+             height)."
+        )]
+        UnexpectedSequenceNumber,
         #[error(
             "The vote extension contains duplicate or non-sorted Ethereum \
              events."
