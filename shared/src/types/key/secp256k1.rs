@@ -136,7 +136,7 @@ impl From<libsecp256k1::PublicKey> for PublicKey {
 
 /// Secp256k1 secret key
 #[derive(Debug, Clone)]
-pub struct SecretKey(pub libsecp256k1::SecretKey);
+pub struct SecretKey(pub Box<libsecp256k1::SecretKey>);
 
 impl super::SecretKey for SecretKey {
     type PublicKey = PublicKey;
@@ -179,14 +179,14 @@ impl<'de> Deserialize<'de> for SecretKey {
             serde::Deserialize::deserialize(deserializer)?;
         let key = libsecp256k1::SecretKey::parse_slice(&arr_res)
             .map_err(D::Error::custom);
-        Ok(SecretKey(key.unwrap()))
+        Ok(SecretKey(Box::new(key.unwrap())))
     }
 }
 
 impl BorshDeserialize for SecretKey {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         // deserialize the bytes first
-        Ok(SecretKey(
+        Ok(SecretKey(Box::new(
             libsecp256k1::SecretKey::parse(
                 &(BorshDeserialize::deserialize(buf)?),
             )
@@ -196,7 +196,7 @@ impl BorshDeserialize for SecretKey {
                     format!("Error decoding secp256k1 secret key: {}", e),
                 )
             })?,
-        ))
+        )))
     }
 }
 
@@ -417,7 +417,7 @@ impl super::SigScheme for SigScheme {
     where
         R: CryptoRng + RngCore,
     {
-        SecretKey(libsecp256k1::SecretKey::random(csprng))
+        SecretKey(Box::new(libsecp256k1::SecretKey::random(csprng)))
     }
 
     /// Sign the data with a key
