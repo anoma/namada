@@ -495,6 +495,12 @@ where
             })
     }
 
+    // TODO:
+    // - accept last_height param
+    // - get epoch duration from storage
+    // - use modulo arithmetic (???? maybe) to calc offset of block within the
+    //   epoch
+    // - we must be at the last block of the epoch
     fn can_send_validator_set_update(&self) -> bool {
         let current_height = self.last_height.0 + 1;
         let new_epoch_height = self.next_epoch_min_start_height.0;
