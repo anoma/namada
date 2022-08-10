@@ -35,7 +35,9 @@ mod protocol_txs {
     use crate::proto::Tx;
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
-    use crate::types::vote_extensions::ethereum_events;
+    use crate::types::vote_extensions::{
+        ethereum_events, validator_set_update,
+    };
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
 
@@ -79,6 +81,8 @@ mod protocol_txs {
         NewDkgKeypair(Tx),
         /// Ethereum events contained in vote extensions
         EthereumEvents(ethereum_events::VextDigest),
+        /// Validator set updates contained in vote extensions
+        ValidatorSetUpdate(validator_set_update::VextDigest),
     }
 
     impl ProtocolTxType {
