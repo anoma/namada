@@ -67,23 +67,22 @@ mod extend_votes {
             };
 
             let validator_addr = addr;
-            let vset_upd = if self.storage.can_send_validator_set_update() {
-                let (Epoch(current_epoch), _) =
-                    self.storage.get_current_epoch();
-                let next_epoch = Epoch(current_epoch + 1);
-                let _validator_set =
-                    self.storage.get_active_validators(Some(next_epoch));
+            let vset_upd =
+                self.storage.can_send_validator_set_update().then(|| {
+                    let (Epoch(current_epoch), _) =
+                        self.storage.get_current_epoch();
+                    let next_epoch = Epoch(current_epoch + 1);
+                    let _validator_set =
+                        self.storage.get_active_validators(Some(next_epoch));
 
-                Some(validator_set_update::Vext {
-                    validator_addr,
-                    // TODO: we need a way to map ethereum addresses to
-                    // namada validator addresses
-                    voting_powers: todo!(),
-                    epoch: next_epoch,
-                })
-            } else {
-                None
-            };
+                    validator_set_update::Vext {
+                        validator_addr,
+                        // TODO: we need a way to map ethereum addresses to
+                        // namada validator addresses
+                        voting_powers: todo!(),
+                        epoch: next_epoch,
+                    }
+                });
 
             if let ShellMode::Validator { data, .. } = &self.mode {
                 let protocol_key = &data.keys.protocol_keypair;
