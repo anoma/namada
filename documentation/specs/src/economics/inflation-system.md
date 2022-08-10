@@ -1,126 +1,80 @@
-# Inflation system
+## Inflation system
 
-## Token flow
+The Namada protocol controls the Namada token NAM (the native staking token), which is programmatically minted to pay for algorithmically measurable public goods - proof-of-stake security and shielded pool usage - and out-of-band public goods. Proof-of-stake rewards are paid into the reward distribution mechanism in order to distribute them to validators and delegators. Shielded pool rewards are paid into the shielded pool reward mechanism, where users who kept tokens in the shielded pool can claim them asynchronously. Public goods funding is paid to the public goods distribution mechanism, which further splits funding between proactive and retroactive funding and into separate categories.
 
-The protocol controls Namada token NAM (the native staking token) sourced from two locations:
+### Proof-of-stake rewards
 
-- Fees paid for transactions per the description in [fee system](./fee-system.md), 50 % goes to block production and 50 % goes to treasury.  
-- Inflation (described below), as in tokens directly printed by the protocol (which we can do arbitrarily), where these tokens then flow to many different sinks:
+The security of the proof-of-stake voting power allocation mechanism used by Namada is depenedent in part upon locking (bonding) tokens to validators, where these tokens can be slashed should the validators misbehave. Funds so locked are only able to be withdrawn after an unbonding period. In order to reward validators and delegators for locking their stake and participating in the consensus mechanism, Namada pays a variable amount of inflation to all delegators and validators. The amount of inflation paid is varied on a PD-controller in order to target a particular bonding ratio (fraction of the NAM token being locked in proof-of-stake). Namada targets a bonding ratio of 2/3, paying up to 10% inflation per annum to proof-of-stake rewards. See [reward distribution mechanism](./proof-of-stake/reward-distribution.md) for details.
 
-1. Proof-of-stake rewards, which are paid into the reward distribution mechanism in order to distribute them to validators and delegators.
-2. Shielded pool rewards, which are locked in a way such that they can be eventually paid to users who kept tokens in the shielded pool.
-3. A governance pool - aka treasury.
-    - These tokens are slowly burned at a fixed fraction per epoch.
-4. A set of configurable custom sinks, which can be addresses on Namada, addresses on Ethereum (over the Ethereum bridge), or addresses on other chains connected over IBC.
-    - These can be paid fixed amounts per epoch.
-    - Initial recipients will be configured at genesis, and recipients can be added, removed, or altered by Namada governance.
+### Shielded pool rewards
 
-## Token Inflation
-In general, inflation refers to the process of a currency losing its purchasing power over time. While this is a classical economic phenomenon, the way cryptocurrencies are produced permits great control over money supply, and doing so cleverly can have positive effects such as increasing incentives. The Namada inflation model depends on several factors, such as ratio between locked and liquid tokens (described below), the multi-asset shielded pool, and funds for treasury. 
+Privacy provided by the MASP in practice depends on how many users use the shielded pool and what assets they use it with. To increase the likelihood of a sizeable privacy set, Namada pays a variable portion of inflation, up to 10% per annum, to shielded pool incentives, which are allocated on a per-asset basis by a PD-controller targeting specific amounts of each asset being locked in the shielded pool. See [shielded pool incentives](./shielded-pool-incentives.md) for details.
 
-When validators are selected they need to be backed by funds. These funds are locked for the duration of an epoch and 21 days after the epoch has ended. Locked tokens help secure the system while liquidity supports its activity and liveness. We need to choose the ratio between locked and liquid tokens carefully. Liquid tokens make sure the price of the token is not increasing out of scarcity and users have access to tokens to pay transaction fees, while locked tokens are the guarantee that attacking the system is expensive for an adversary. 
+### Public goods funding
 
-Here are some numbers from other projects
+Namada provides 10% per annum inflation for other non-algorithmically-measurable public goods. See [public goods funding](./public-goods-funding.md) for details.
 
-| Blockchain platform | Approximate locking %       |
-|--------------------------------------------------|------|
-| Cosmos                                           | 66.7 |
-| Polkadot                                         | 50   |
-| Ethereum                                         | 47   |
-| Solana                                           | 77   |
+## Detailed inflation calculation model
 
+Inflation is calculated and paid per-epoch as follows.
 
-Our desired percentage for Namada is 33%-66%: Locked for validating and the rest %33-%66 is liquid. When the price of the token is low we can aim for a higher % of locked tokens and reduce this as the price and demand for liquid tokens increases. For example, we can set a range, in the beginning have 50 % and later aim for 1/3. I don't think we should go lower than that. The staking reward should be ideally set. 
+First, we start with the following fixed (governance-alterable) parameters:
 
+- $Cap_{PoS}$ is the cap of proof-of-stake reward rate, in units of percent per annum
+- $Cap_{SP-A}$ is the cap of shielded pool reward rate for each asset $A$, in units of percent per annum
+- $R_{PGF}$ is the public goods funding reward rate, in units of percent per annum
+- $R_{PoS-Target}$ is the target staking ratio (genesis default 2/3)
+- $R_{SP-A-Target}$ is the target amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
+- $EpochsPerYear$ is the number of epochs per year (genesis default 365)
+- ${KP}_{PoS}$ is the proportional gain of the proof-of-stake PD controller, as a fraction of the total input range
+- ${KD}_{PoS}$ is the derivative gain of the proof-of-stake PD controller, as a fraction of the total input range
+- ${KP}_{SP_A}$ is the proportional gain of the shielded pool reward controller for asset $A$, as a fraction of the total input range (separate value for each asset $A$)
+- ${KD}_{SP_A}$ is the derivative gain of the shielded pool reward controller for asset $A$, as a fraction of the total input range (separate value for each asset $A$) 
 
-<!--## Inflation rates for popular platforms
-_insert table here_
-Solana has the following model where the inflation that is produced for rewards is independent of the staking ratio:
-1. Define a starting inflation rate for year 1.
-2. The inflation rate decreases thereon at a fixed pace until it reaches a desired rate.
-3. Once this desired rate is attained, the inflation rate remains constant.
+Second, we take as input the following state values:
 
-In Polkadot and Cosmos the total inflation rate that is paid as rewards to validators depends on the staking ratio. This is to incentivize validators and delegators to invest in the staking pool. We will follow the same idea and have inflation vary depending on our target staking ratio. Here is how we achieve that. -->
+- $S_{NAM}$ is the current supply of NAM
+- $L_{NAM}$ is the current amount of NAM locked in proof-of-stake
+- $I_{PoS}$ is the current proof-of-stake reward rate, in units of tokens per epoch
+- $E_{PoS-last}$ is the error in proof-of-stake lock ratio (stored from the past epoch)
+- $L_{SP_A}$ is the current amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
+- $I_{SP_A}$ is the current shielded pool reward rate for asset $A$, in units of tokens per epoch
+- $E_{SP_A-last}$ is the error in shielded pool lock amount for asset $A$ (stored from the past epoch) (separate value for each asset $A$)
 
-The privacy that MASP is providing depends on the asset in the shielded pool. A transaction can only be private if it can hide among other transactions, hence more funds and activity in the shielded pool increase privacy for transactions. 
+Public goods funding inflation can be calculated and paid immediately:
 
-The Treasury is a pool of native tokens that can be appropriated for funding public-good products for Namada. The decision on spending these funds will be assigned to governance. 
+- $I_{PGF} := R_{PGF} * S_{NAM} / EpochsPerYear$
 
-### Related work
-Ethereum 2.0, Solana, and Near protocols inflation rate are independent of how much tokens are staked. Near protocol and Ethereum 2.0 have fixed inflation rates, while Solana start with a high inflation rate that decreases over time, as less transaction fees are burned. 
+These tokens are distributed to the public goods funding validity predicate.
 
-In Polkadot and Cosmos the total inflation rate that is paid as rewards to validators depends on the staking ratio. This is to incentivize validators and delegators to invest in the staking pool. We will follow the same idea and have inflation vary depending on our target staking ratio. Here is how we achieve that. 
+To run the PD-controllers for proof-of-stake and shielded pool rewards, we first calculate some intermediate values:
 
-For funds going to treasury Near protocol where 5 % goes to treasury and Polkadot sends the difference between inflation for PoS and the total constant inflation to treasury.
+- Calculate the staking ratio $R_{PoS}$ as $L_{NAM} / S_{NAM}$
+- Calculate the per-epoch cap on proof-of-stake and shielded pool reward rates
+    - $Cap_{PoS-Epoch} := S_{NAM} * Cap_{PoS} / EpochsPerYear$
+    - $Cap_{SP_A-Epoch} := S_{NAM} * Cap_{SP_A} / EpochsPerYear$ (separate value for each $A$)
+- Calculate PD-controller constants
+    - ${KP}_{PoS} := {KP}_{PoS} * Cap_{PoS-Epoch}$
+    - ${KD}_{PoS} := {KD}_{PoS} * Cap_{PoS-Epoch}$
+    - ${KP}_{SP_A} := {KP}_{SP_A} * Cap_{SP_A-Epoch}$
+    - ${KD}_{SP_A} := {KD}_{SP_A} * Cap_{SP_A-Epoch}$
 
-###  Model
+Then, for proof-of-stake first, run the PD-controller:
 
-Let us assume $T$ is the total token supply and $I$ is the total inflation of Namada. 
+- Calculate the error $E_{PoS} := R_{PoS-Target} - R_{PoS}$
+- Calculate the error derivative $E'_{PoS} := E_{PoS} - E_{PoS-last}$
+- Calculate the control value $C_{PoS} := (KP_{PoS} * E_{PoS}) - (KD_{PoS} * E'_{PoS})$
+- Calculate the new $I_{PoS} := max(0, min(I_{PoS} + C_{PoS}, Cap_{PoS}))$
 
-$$I=\frac{T_\textrm{end of year}-T_\textrm{beginning of year}}{T_\textrm{beginning of year}}$$
+These tokens are distributed to the proof-of-stake reward distribution validity predicate.
 
-The total inflation consists of several components as follows. 
+Similarly, for each asset $A$ for which shielded pool rewards are being paid:
 
-$$I=I_{PoS}+I_L+I_T-D_T$$
+- Calculate the error $E_{SP_A} := L_{SP_A-Target} - L_{SP_A}$
+- Calculate the error derivative $E'_{SP_A} := E_{SP-A} - E_{SP_A-last}$
+- Calculate the control value $C_{SP_A} := (KP_{SP_A} * E_{SP_A}) - (KD_{SP_A} * E'{SP_A})$
+- Calculate the new $I_{SP_A} := max(0, min(I_{SP_A} + C_{SP_A}, Cap_{SP_A-Epoch}))$
 
-where $I_T$ is our inflation that goes to treasury, $I_{PoS}$ is inflation that is paid as PoS rewards, and $I_L$ is the inflation for locking that is paid to accounts in shielded pool. We can extend the $I_L$ be extended to be for many other types of $I_L1,...,I_Ln$. For simplicity we only assume to have one $I_L$. $D_T$ is the constant deflation of the treasury. This is applied to incentivize governance voters to spend treasury funds. 
+These tokens are distributed to the shielded pool reward distribution validity predicate.
 
-These components are each varying depending on independent factors as follows. The $I_{PoS}$ depends on the staking ratio $R(t)$. The locking inflation $I_L$ depends on the locking ratio $L(t)$. Ideally we want the total token supply to consist of tokens locked for staking and shielded pool and the rest are liquid tokens $Y$. 
-
-$$T=T*R_{target}+T*L_{target}+Y$$
-
-where $R_{target}$ is the target staking ratio and $L_{target}$ is the target locking of assets in the shielded pool.
-  
-We assume further assume $I_{target}$ is our target total inflation that we want to achieve on the long term, where we split it up into $I_{PoS,target}$ and $I_{L,target}$ for staking and locking respectivly. 
-
-We define $I_{PoS}$ as a PD controller as follows. 
-
-$$A(t)=K_1(R(t)-R_{target})+K_2(\frac{dR}{dt})$$
-
-If $I_{PoS}^{min}< I_{PoS}< I_{PoS}^{max}$ then $\frac{dI_{PoS}}{dt}=A(t)$.
-
-If $I_{PoS}{min}< I_{PoS}$ then $\frac{dI_{PoS}}{dt}=max(A(t),0$.
-
-If $I_{PoS}< I_{PoS}^{max}$ then $\frac{dI_{PoS}}{dt}=min(A(t),0)$.
-
-For $I_{PoS}^{min}=0.05$, $I_{PoS}^{max}=0.15$, $I_{PoS,target}=0.10$, and $R_{target}=0.50$ we set $K_1=-0.01$ and $K_2=-0.2$. Lets review what these parameters give us with examples as follows. 
-
-**Example 1:** If $I= I_{PoS,target}=0.10$ and $R_{target}=0.50$, but then $R$ drops quickly to $0.25$, then the effect of the $K_2$ term will be to increase $I_{PoS}$ by $-0.2 \times -0.25=0.05$ and inflation will hit its maximum value of $0.15$. Changes in $R$ smaller than $0.25$ will not cause inflation to hit its maximum or minimum quickly.
-
-**Example 2:** If $I_{PoS}=0.05$, but $R$ holds steady at $0.40$, then $K_1$ term will cause $I$ to increase by $-0.01 \times -0.10=0.001$ per day/epoch. $I_{PoS}$ will take 100 days to reach its maximum. This is slow compared to the unbonding period, allowing delegators time to react.
-
-
----
-
-We define $I_{L}$ as a PD controller follows. 
-
-$$A(t)=K_1(L(t)-L_{target})+K_2(\frac{dL}{dt})$$
-
-If $I_{L}^{min}< I_{L}< I_{L}^{max}$ then $\frac{dI_{L}}{dt}=A(t)$.
-
-If $I_{L}^{min}< I_{L}$ then $\frac{dI_{L}}{dt}=max(A(t),0$.
-
-If $I_{L}< I_{L}^{max}$ then $\frac{dI_{L}}{dt}=min(A(t),0)$.
-
-For $I_{L}^{min}=0.03$, $I_{L}^{max}=0.07$, $I_{L,target}=0.05$, and $L_{target}=0.30$ we set $K_1=-0.05$ and $K_2=-0.1$. Lets review what these parameters give us with examples as follows. 
-
-**Example 1:** If $I= I_{L,target}=0.05$ and $L_{target}=0.30$, but then $L$ drops quickly to $0.15$, then the effect of the $K_2$ term will be to increase $I_L$ by $-0.1 \times -0.15=0.015$ and inflation will hit $0.065$ which is short of its maximum value of $0.07$. Changes in $L$ smaller than $0.15$ will not cause inflation to hit its maximum or minimum quickly.
-
-**Example 2:** If $I_{L}=0.03$, but $L$ holds steady at $0.20$, then $K_1$ term will cause $I_L$ to increase by $-0.05 \times -0.10=0.005$ per day/epoch. $I_{L}$ will take 8 days to reach its maximum. 
-
-TODO: Why we chose those min and max values. 
-TODO: Dt and It based on Chris proposal
-
-The ratio between staking and locking in the shielded pool is a trade off between security, privacy, and liveness. A higher staking ratio means more security, a higher locking ratio means more privacy, and if both are too high there wont be enough liquidity for transactions. It would be easier to consider these separately, for example, setting the target staking ratio to 50 % and the target locking ratio to 30 %. 
-
-The funds minted for the treasury is a constant %, for example 1 %. Same goes for $D_T$. 
-
-We need to define $I_{PoS}^{max}$, $I_{L}^{max}$, and $I_{T}$ to bound total inflation. 
-
-$$I_{PoS}^{max}+I_{L}^{max}+I_T=< I^{max}$$
-
-The sum of $I_L$ and other $I_L1, ..., I_Ln$ will also be limited. If their sum would exceed the limit, then we need to scale them down to stay within the limit. 
-
-These bounds on $I_{PoS}$ and $I_L$ give us a min and max bound on the total inflation, where the total inflation depends on $L_{target}$ and $R_{target}$ independently. 
-
-
+Finally, we store the current inflation and error values for the next controller round.
