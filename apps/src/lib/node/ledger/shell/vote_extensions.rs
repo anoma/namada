@@ -4,6 +4,9 @@
 pub mod ethereum_events;
 
 #[cfg(not(feature = "ABCI"))]
+pub mod validator_set_update;
+
+#[cfg(not(feature = "ABCI"))]
 mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::proto::Signed;
