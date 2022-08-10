@@ -84,7 +84,7 @@ where
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Could not get public key from Storage for validator"
+                    "Could not get public key from Storage for some validator, while validating Ethereum events vote extension"
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
@@ -94,7 +94,7 @@ where
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Failed to verify the signature of a vote extension issued by validator"
+                    "Failed to verify the signature of an Ethereum events vote extension issued by some validator"
                 );
                 VoteExtensionError::VerifySigFailed
             })

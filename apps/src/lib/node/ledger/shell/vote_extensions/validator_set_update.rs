@@ -67,7 +67,7 @@ where
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Could not get public key from Storage for validator"
+                    "Could not get public key from Storage for some validator, while validating validator set update vote extension"
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
