@@ -79,7 +79,7 @@ mod extend_votes {
                         validator_addr,
                         // TODO: we need a way to map ethereum addresses to
                         // namada validator addresses
-                        voting_powers: todo!(),
+                        voting_powers: std::collections::HashMap::new(),
                         epoch: next_epoch,
                     }
                 });
