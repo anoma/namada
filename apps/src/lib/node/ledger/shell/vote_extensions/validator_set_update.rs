@@ -41,6 +41,12 @@ where
     /// with the added bonus of returning the vote extension back, if it
     /// is valid.
     #[allow(dead_code)]
+    // TODO:
+    // - verify if the voting powers in the vote extension are the same
+    // as the ones in storage. we can't do this yet, because we need to map
+    // ethereum addresses to namada validator addresses
+    //
+    // - verify signatures with a secp key, instead of an ed25519 key
     pub fn validate_valset_upd_vext_and_get_it_back(
         &self,
         ext: validator_set_update::SignedVext,
@@ -71,6 +77,16 @@ where
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
-        todo!()
+        // verify the signature of the vote extension
+        ext.verify(&pk)
+            .map_err(|err| {
+                tracing::error!(
+                    ?err,
+                    %validator,
+                    "Failed to verify the signature of a validator set update vote extension issued by some validator"
+                );
+                VoteExtensionError::VerifySigFailed
+            })
+            .map(|_| (voting_power, ext))
     }
 }
