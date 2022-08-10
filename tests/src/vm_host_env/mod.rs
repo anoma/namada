@@ -1617,7 +1617,7 @@ mod tests {
         // Start a transaction to send a packet
         let mut msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        ibc::set_timeout_height(&mut msg);
+        ibc::set_timeout_timestamp(&mut msg);
         let mut tx_data = vec![];
         msg.clone()
             .to_any()

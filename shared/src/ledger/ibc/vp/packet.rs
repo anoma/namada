@@ -62,6 +62,8 @@ pub enum Error {
     IbcStorage(IbcStorageError),
     #[error("IBC event error: {0}")]
     IbcEvent(String),
+    #[error("IBC proof error: {0}")]
+    Proof(String),
 }
 
 /// IBC packet functions result
@@ -601,13 +603,14 @@ where
                     channel.version().clone(),
                 );
 
+                let proofs_closed = make_proofs_for_channel(&proofs)?;
                 verify_channel_proofs(
                     self,
                     height,
                     &channel,
                     &connection,
                     &expected_channel,
-                    &proofs,
+                    &proofs_closed,
                 )
                 .map_err(Error::ProofVerificationFailure)?;
             }
@@ -691,6 +694,25 @@ where
             Ok(())
         }
     }
+}
+
+/// The proof for the counterpart channel should be in proofs.other_proof
+/// `verify_channel_proofs()` requires the proof is in proofs.object_proof
+fn make_proofs_for_channel(proofs: &Proofs) -> Result<Proofs> {
+    let proof_closed = match proofs.other_proof() {
+        Some(p) => p.clone(),
+        None => {
+            return Err(Error::Proof(
+                "No proof for the counterpart channel".to_string(),
+            ));
+        }
+    };
+    Proofs::new(proof_closed, None, None, None, proofs.height()).map_err(|e| {
+        Error::Proof(format!(
+            "Creating Proofs for the counterpart channel failed: error {}",
+            e
+        ))
+    })
 }
 
 impl From<IbcStorageError> for Error {

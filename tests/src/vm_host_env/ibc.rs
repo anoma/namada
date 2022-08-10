@@ -595,8 +595,9 @@ pub fn msg_transfer(
     }
 }
 
-pub fn set_timeout_height(msg: &mut MsgTransfer) {
-    msg.timeout_height = Height::new(1, 1);
+pub fn set_timeout_timestamp(msg: &mut MsgTransfer) {
+    msg.timeout_timestamp =
+        (msg.timeout_timestamp - Duration::from_secs(101)).unwrap();
 }
 
 pub fn msg_packet_recv(packet: Packet) -> MsgRecvPacket {
@@ -657,10 +658,22 @@ pub fn msg_timeout_on_close(
     packet: Packet,
     next_sequence_recv: Sequence,
 ) -> MsgTimeoutOnClose {
+    // add the channel proof
+    let height = Height::new(0, 1);
+    let consensus_proof =
+        ConsensusProof::new(vec![0].try_into().unwrap(), height).unwrap();
+    let proofs = Proofs::new(
+        vec![0].try_into().unwrap(),
+        Some(vec![0].try_into().unwrap()),
+        Some(consensus_proof),
+        Some(vec![0].try_into().unwrap()),
+        height,
+    )
+    .unwrap();
     MsgTimeoutOnClose {
         packet,
         next_sequence_recv,
-        proofs: dummy_proofs(),
+        proofs,
         signer: Signer::new("test"),
     }
 }
