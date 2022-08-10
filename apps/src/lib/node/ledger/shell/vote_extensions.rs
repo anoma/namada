@@ -9,7 +9,6 @@ pub mod validator_set_update;
 #[cfg(not(feature = "ABCI"))]
 mod extend_votes {
     use borsh::BorshDeserialize;
-    use namada::proto::Signed;
     use namada::types::storage::Epoch;
     use namada::types::vote_extensions::{
         ethereum_events, validator_set_update, VoteExtension,
@@ -117,39 +116,64 @@ mod extend_votes {
             &self,
             req: request::VerifyVoteExtension,
         ) -> response::VerifyVoteExtension {
-            // TODO: this should deserialize to
-            // `namada::types::vote_extensions::VoteExtension`,
-            // which contains an optional validator set update and
-            // a set of ethereum events seen at the previous block height
-            if let Ok(signed) = Signed::<ethereum_events::Vext>::try_from_slice(
-                &req.vote_extension[..],
-            ) {
-                response::VerifyVoteExtension {
-                    status: if self.validate_eth_events_vext(
-                        signed,
-                        self.storage.last_height + 1,
-                    ) {
-                        VerifyStatus::Accept.into()
-                    } else {
+            let ext =
+                match VoteExtension::try_from_slice(&req.vote_extension[..]) {
+                    Ok(ext) => ext,
+                    Err(err) => {
+                        tracing::warn!(
+                            ?err,
+                            ?req.validator_address,
+                            ?req.hash,
+                            req.height,
+                            "Received undeserializable vote extension"
+                        );
+                        return response::VerifyVoteExtension {
+                            status: VerifyStatus::Reject.into(),
+                        };
+                    }
+                };
+            let validated_eth_events = self.validate_eth_events_vext(ext.ethereum_events, self.storage.last_height + 1)
+                .then(|| true)
+                .unwrap_or_else(|| {
+                    tracing::warn!(
+                        ?req.validator_address,
+                        ?req.hash,
+                        req.height,
+                        "Received Ethereum events vote extension that didn't validate"
+                    );
+                    false
+                });
+            let validated_valset_upd = self.storage.can_send_validator_set_update().then(|| {
+                ext.validator_set_update
+                    .map(|ext| {
+                        let next_epoch = {
+                            let (Epoch(current_epoch), _) =
+                                self.storage.get_current_epoch();
+                            Epoch(current_epoch + 1)
+                        };
+                        self.validate_valset_upd_vext(ext, next_epoch)
+                    })
+                    .unwrap_or_else(|| {
                         tracing::warn!(
                             ?req.validator_address,
                             ?req.hash,
                             req.height,
-                            "received vote extension that didn't validate"
+                            "Received validator set update vote extension that didn't validate"
                         );
-                        VerifyStatus::Reject.into()
-                    },
-                }
-            } else {
-                tracing::warn!(
-                    ?req.validator_address,
-                    ?req.hash,
-                    req.height,
-                    "received undeserializable vote extension"
-                );
-                response::VerifyVoteExtension {
-                    status: VerifyStatus::Reject.into(),
-                }
+                        false
+                    })
+            }).unwrap_or({
+                // NOTE: if we're not supposed to send a validator set update
+                // vote extension at a particular block height, we will
+                // just return true as the validation result
+                true
+            });
+            response::VerifyVoteExtension {
+                status: if validated_eth_events && validated_valset_upd {
+                    VerifyStatus::Accept.into()
+                } else {
+                    VerifyStatus::Reject.into()
+                },
             }
         }
     }
