@@ -18,15 +18,50 @@ In Namada, the sending tokens is triggered by a transaction having [MsgTransfer]
 
 Namada chain receives the tokens by a transaction having [MsgRecvPacket](https://github.com/informalsystems/ibc-rs/blob/0a952b295dbcf67bcabb79ce57ce92c9c8d7e5c6/modules/src/core/ics04_channel/msgs/recv_packet.rs#L19-L23) which has the packet including `FungibleTokenPacketData`.
 
-The sending and receiving tokens in a transaction are validated by not only 
-IBC validity predicate but also [IBC token validity predicate](https://github.com/anoma/namada/blob/50b5e77f04a9afc036656353335bd232fcdba8a7/shared/src/ledger/ibc/vp/token.rs). IBC validity predicate validates if sending and receiving the packet is proper. IBC token validity predicate is also one of the native validity predicates and checks if the token transfer is valid. If the transfer is not valid, e.g. an unexpected amount is minted, the validity predicate makes the transaction fail.
+The sending and receiving tokens in a transaction are validated by not only IBC validity predicate but also [IBC token validity predicate](https://github.com/anoma/namada/blob/50b5e77f04a9afc036656353335bd232fcdba8a7/shared/src/ledger/ibc/vp/token.rs). IBC validity predicate validates if sending and receiving the packet is proper. IBC token validity predicate is also one of the native validity predicates and checks if the token transfer is valid. If the transfer is not valid, e.g. an unexpected amount is minted, the validity predicate makes the transaction fail.
 
-A transaction escrowing/unescrowing a token changes the escrow account's 
-balance of the token. The key is `{token_addr}/balance/{escrow_addr}`. A 
-transaction burning a token changes the burn account's balance of the token. 
-The key is `{token_addr}/balance/BURN_ADDR`. A transaction minting a token 
-changes the mint account's balance of the token. The key is `{token_addr}
-/balance/MINT_ADDR`. `{escrow_addr}`, `{BURN_ADDR}`, and `{MINT_ADDR}` are addresses of [`InternalAddress`](https://github.com/anoma/namada/blob/50b5e77f04a9afc036656353335bd232fcdba8a7/shared/src/types/address.rs). When these addresses are included in the changed keys after transaction execution, IBC token validity predicate is executed.
+A transaction escrowing/unescrowing a token changes the escrow account's balance of the token. The key is `{token_addr}/ibc/{port_id}/{channel_id}/balance/ESCROW_ADDR`. A transaction burning a token changes the burn account's balance of the token. The key is `{token_addr}/ibc/{port_id}/{channel_id}/balance/BURN_ADDR`. A transaction minting a token changes the mint account's balance of the token. The key is `{token_addr}/ibc/{port_id}/{channel_id}/balance/MINT_ADDR`. `ESCROW_ADDR`, `BURN_ADDR`, and `MINT_ADDR` are addresses of [`InternalAddress`](https://github.com/anoma/namada/blob/50b5e77f04a9afc036656353335bd232fcdba8a7/shared/src/types/address.rs). When these addresses are included in the changed keys after transaction execution, IBC token validity predicate is executed.
+
+The receiver's account is `{token_addr}/ibc/{ibc_token_hash}/balance/{receiver_addr}`. `{ibc_token_hash}` is a hash calculated with the denomination prefixed with the port ID and channel ID. It is NOT the same as the normal account `{token_addr}/balance/{receiver_addr}`. That's because it should be origin-specific for transfer back to the source chain. We can transfer back the received token by prefixing the denomination with `{ibc_token_hash}/`, or `{port_id}/{channel_id}/`.
+
+For example, we transfer a token `#my_token` from a user `#user_a` on Chain A to a user `#user_b` on Chain B, then transfer back the token from `#user_b` to `#user_a`. The port ID and channel ID on Chain A for Chain B are `transfer` and `channel_42`, those on Chain B for Chain A are `transfer` and `channel_24`. The denomination in the `FungibleTokenTransferData` at the first transfer should be `#my_token`.
+1. User A makes `MsgTransfer` as a transaction data and submits a transaction from Chain A
+```rust
+    let token = Some(Coin {
+        denom, // #my_token
+        amount: "100000".to_string(),
+    });
+    let msg = MsgTransfer {
+        source_port,    // transfer
+        source_channel, // channel_42
+        token,
+        sender,   // #user_a
+        receiver, // #user_b
+        timeout_height: Height::new(0, 1000),
+        timeout_timestamp: (Timestamp::now() + Duration::new(100, 0)).unwrap(),
+    };
+```
+1. On Chain A, the specified amount of the token is transferred from the sender's account `#my_token/balance/#user_a` to the escrow account `#my_token/ibc/transfer/channel_42/balance/ESCROW_ADDR`
+1. On Chain B, the amount of the token is transferred from `#my_token/ibc/transfer/channel_24/balance/MINT_ADDR` to `#my_token/ibc/{hash}/balance/#user_b`
+    - The `{hash}` is calculated from a string `transfer/channel_24/#my_token` with SHA256
+1. To transfer back, User B makes `MsgTransfer` and submits a transaction from Chain B
+```rust
+    let token = Some(Coin {
+        denom, // ibc/{hash}/#my_token or transfer/channel_24/#my_token
+        amount: "100000".to_string(),
+    });
+    let msg = MsgTransfer {
+        source_port,    // transfer
+        source_channel, // channel_24
+        token,
+        sender,   // #user_b
+        receiver, // #user_a
+        timeout_height: Height::new(0, 1000),
+        timeout_timestamp: (Timestamp::now() + Duration::new(100, 0)).unwrap(),
+    };
+```
+1. On Chain B, the amount of the token is transferred from `#my_token/ibc/{hash}/balance/#user_b` to `#my_token/ibc/transfer/channel_24/BURN_ADDR`
+1. On Chain A, the amount of the token is transferred from `#my_token/ibc/transfer/channel_42/balance/ESCROW_ADDR` to `#my_token/balance/#user_a`
 
 ## IBC message
 
