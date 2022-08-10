@@ -10,11 +10,12 @@ use encoding::{AbiEncode, Encode, Token};
 use ethabi::ethereum_types as ethereum;
 use num_rational::Ratio;
 
-use crate::ledger::pos::types::{Epoch, VotingPower};
+use crate::ledger::pos::types::VotingPower;
 use crate::proto::Signed;
 use crate::types::address::Address;
 use crate::types::ethereum_events::{EthAddress, KeccakHash};
 use crate::types::key::common::{self, Signature};
+use crate::types::storage::Epoch;
 
 // the namespace strings plugged into validator set hashes
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";

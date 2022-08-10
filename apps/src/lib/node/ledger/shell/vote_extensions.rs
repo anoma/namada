@@ -79,9 +79,7 @@ mod extend_votes {
                     // TODO: we need a way to map ethereum addresses to
                     // namada validator addresses
                     voting_powers: todo!(),
-                    // TODO: switch to storage epoch? or keep the pos epoch
-                    // type?
-                    epoch: next_epoch.into(),
+                    epoch: next_epoch,
                 })
             } else {
                 None

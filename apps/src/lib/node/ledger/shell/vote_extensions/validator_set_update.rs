@@ -1,11 +1,13 @@
 //! Extend Tendermint votes with validator set updates, to be relayed to
 //! Namada's Ethereum bridge smart contracts.
 
-use namada::ledger::pos::types::{Epoch, VotingPower};
+use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::types::storage::Epoch;
 use namada::types::vote_extensions::validator_set_update;
 
 use super::*;
+use crate::node::ledger::shell::queries::QueriesExt;
 use crate::node::ledger::shell::Shell;
 
 impl<D, H> Shell<D, H>
@@ -53,6 +55,20 @@ where
             );
             return Err(VoteExtensionError::UnexpectedSequenceNumber);
         }
+        // get the public key associated with this validator
+        let validator = &ext.data.validator_addr;
+        let prev_epoch = todo!();
+        let (voting_power, pk) = self
+            .storage
+            .get_validator_from_address(validator, prev_epoch)
+            .map_err(|err| {
+                tracing::error!(
+                    ?err,
+                    %validator,
+                    "Could not get public key from Storage for validator"
+                );
+                VoteExtensionError::PubKeyNotInStorage
+            })?;
         todo!()
     }
 }
