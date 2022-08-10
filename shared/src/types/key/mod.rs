@@ -486,13 +486,12 @@ mod more_tests {
         let len = sk_scalar.0.len();
         let ptr = sk_scalar.0.as_ref().as_ptr();
 
-        let original_data = sk_scalar.0.clone();
+        let original_data = sk_scalar.0;
 
         drop(sk);
 
         assert_ne!(&original_data, unsafe {
             core::slice::from_raw_parts(ptr, len)
         });
-
     }
 }
