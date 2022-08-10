@@ -88,11 +88,10 @@ mod extend_votes {
             if let ShellMode::Validator { data, .. } = &self.mode {
                 let protocol_key = &data.keys.protocol_keypair;
 
-                let vset_upd =
-                    vset_upd.map(|ext: validator_set_update::Vext| {
-                        // TODO: sign validator set update with secp key instead
-                        ext.sign(protocol_key)
-                    });
+                let vset_upd = vset_upd.map(|ext| {
+                    // TODO: sign validator set update with secp key instead
+                    ext.sign(protocol_key)
+                });
 
                 let eth_evs = eth_evs.sign(protocol_key);
 
