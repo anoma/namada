@@ -76,7 +76,7 @@ where
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }
         // get the public key associated with this validator
-        let epoch = self.storage.block.pred_epochs.get_epoch(last_height);
+        let epoch = self.storage.get_epoch_from_height(last_height);
         let (voting_power, pk) = self
             .storage
             .get_validator_from_address(validator, epoch)

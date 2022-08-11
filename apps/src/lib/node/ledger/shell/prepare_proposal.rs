@@ -177,9 +177,7 @@ mod prepare_block {
         ) -> Option<ethereum_events::VextDigest> {
             let events_epoch = self
                 .storage
-                .block
-                .pred_epochs
-                .get_epoch(self.storage.last_height)
+                .get_epoch_from_height(self.storage.last_height)
                 .expect(
                     "The epoch of the last block height should always be known",
                 );
@@ -628,9 +626,7 @@ mod prepare_block {
             // to move to a new epoch
             let events_epoch = shell
                 .storage
-                .block
-                .pred_epochs
-                .get_epoch(FIRST_HEIGHT)
+                .get_epoch_from_height(FIRST_HEIGHT)
                 .expect("Test failed");
             let validator_set = {
                 let params = shell.storage.read_pos_params();

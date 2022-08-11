@@ -326,6 +326,9 @@ pub(crate) trait QueriesExt {
     /// This is done by checking if we are at the last block of the current
     /// epoch.
     fn can_send_validator_set_update(&self) -> bool;
+
+    /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
+    fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch>;
 }
 
 impl<D, H> QueriesExt for Storage<D, H>
@@ -505,5 +508,9 @@ where
         let current_height = self.last_height.0 + 1;
         let new_epoch_height = self.next_epoch_min_start_height.0;
         new_epoch_height.wrapping_sub(current_height) == 1
+    }
+
+    fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch> {
+        self.block.pred_epochs.get_epoch(height)
     }
 }
