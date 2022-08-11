@@ -37,7 +37,7 @@ mod prepare_block {
             let txs = if let ShellMode::Validator { .. } = self.mode {
                 // TODO: add some info logging?
 
-                // add ethereum events as protocol txs
+                // add ethereum events and validator set updates as protocol txs
                 let mut txs =
                     self.build_vote_extensions_txs(req.local_last_commit);
 
