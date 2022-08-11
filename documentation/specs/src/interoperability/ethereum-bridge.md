@@ -92,8 +92,8 @@ nodes as part of the ledger code based on the aggregate of vote
 extensions for the last Tendermint round. That is, changes to `/eth_msgs` happen 
 in block `n+1` in a deterministic manner based on the vote extensions of the 
 Tendermint round for block `n`. The `/eth_msgs` storage subspace will belong 
-the the `EthBridge` validity predicate. It should disallow any changes to 
-this storage from transactions.
+to the `EthBridge` validity predicate. It should disallow any changes to 
+this storage from wasm transactions.
 
 ### Including events into storage
 
