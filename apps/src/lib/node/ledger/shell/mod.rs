@@ -71,10 +71,10 @@ use tower_abci::{request, response};
 #[cfg(feature = "ABCI")]
 use tower_abci_old::{request, response};
 
+use super::protocol::ShellParams;
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
 use crate::node::ledger::events::Event;
-use crate::node::ledger::protocol::ShellParams;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
@@ -243,6 +243,18 @@ impl ShellMode {
         }
     }
 
+    /// Remove an Ethereum event from the internal queue
+    pub fn deque_eth_event(&mut self, event: &EthereumEvent) {
+        if let ShellMode::Validator {
+            ethereum_recv: EthereumReceiver { ref mut queue, .. },
+            ..
+        } = self
+        {
+            queue.remove(event);
+        }
+    }
+
+    /// Get the protocol keypair for this validator
     pub fn get_protocol_key(&self) -> Option<&common::SecretKey> {
         match &self {
             ShellMode::Validator {
@@ -659,15 +671,13 @@ where
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
         match Tx::try_from(tx_bytes) {
             Ok(tx) => {
-                let tx = TxType::Decrypted(DecryptedTx::Decrypted(tx));
-                match protocol::apply_tx(
+                match protocol::apply_wasm_tx(
                     tx,
                     tx_bytes.len(),
                     ShellParams {
                         block_gas_meter: &mut gas_meter,
                         write_log: &mut write_log,
                         storage: &self.storage,
-                        wasm_dir: self.wasm_dir.as_path(),
                         vp_wasm_cache: &mut vp_wasm_cache,
                         tx_wasm_cache: &mut tx_wasm_cache,
                     },

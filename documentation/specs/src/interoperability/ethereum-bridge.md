@@ -78,33 +78,28 @@ the state with the new state rather than applying state diffs. The storage
 keys involved are:
 ```
 # all values are Borsh-serialized
-/eth_msgs/$msg_hash/body : EthereumEvent
-/eth_msgs/$msg_hash/seen_by : Vec<Address>
-/eth_msgs/$msg_hash/voting_power: (u64, u64)  # reduced fraction < 1 e.g. (2, 3)
-/eth_msgs/$msg_hash/seen: bool
+/eth_msgs/\$msg_hash/body : EthereumEvent
+/eth_msgs/\$msg_hash/seen_by : Vec<Address>
+/eth_msgs/\$msg_hash/voting_power: (u64, u64)  # reduced fraction < 1 e.g. (2, 3)
+/eth_msgs/\$msg_hash/seen: bool
 ```
 
-`$msg_hash` is the SHA256 digest of the Borsh serialization of the relevant 
+`\$msg_hash` is the SHA256 digest of the Borsh serialization of the relevant 
 `EthereumEvent`.
 
-Changes to this `/eth_msgs` storage subspace are only ever made by internal 
-transactions crafted and applied by all nodes based on the aggregate of vote 
+Changes to this `/eth_msgs` storage subspace are only ever made by 
+nodes as part of the ledger code based on the aggregate of vote 
 extensions for the last Tendermint round. That is, changes to `/eth_msgs` happen 
 in block `n+1` in a deterministic manner based on the vote extensions of the 
-Tendermint round for block `n`.
-
-The `/eth_msgs` storage subspace does not belong to any account and cannot be 
-modified by transactions submitted from outside of the ledger via Tendermint. 
-The storage will be guarded by a special validity predicate - `EthSentinel` - 
-that is part of the verifier set by default for every transaction, but will be 
-removed by the ledger code for the specific permitted transactions that are 
-allowed to update `/eth_msgs`.
+Tendermint round for block `n`. The `/eth_msgs` storage subspace will belong 
+to the `EthBridge` validity predicate. It should disallow any changes to 
+this storage from wasm transactions.
 
 ### Including events into storage
-For every Namada block proposal, each validator must include a vote extension
-containing the events of the Ethereum blocks they have seen via their full node 
-such that:
-1. The storage value `/eth_msgs/$msg_hash/seen_by` does not include their
+
+For every Namada block proposal, the vote extension of a validator should include
+the events of the Ethereum blocks they have seen via their full node such that:
+1. The storage value `/eth_msgs/\$msg_hash/seen_by` does not include their
    address.
 2. It's correctly formatted.
 3. It's reached the required number of confirmations on the Ethereum chain
@@ -175,7 +170,7 @@ of events from validators by the block proposer.
 In `FinalizeBlock`, we derive a second transaction (the "state update" 
 transaction) from the vote extensions transaction that:
 - calculates the required changes to `/eth_msgs` storage and applies it
-- acts on any `/eth_msgs/$msg_hash` where `seen` is going from `false` to `true`
+- acts on any `/eth_msgs/\$msg_hash` where `seen` is going from `false` to `true`
   (e.g. appropriately minting wrapped Ethereum assets)
 
 This state update transaction will not be recorded on chain but will be 
@@ -185,7 +180,7 @@ their own local blockchain state, whenever they receive a block with a vote
 extensions transaction. This transaction cannot require a protocol signature 
 as even non-validator full nodes of Namada will be expected to do this.
 
-The value of `/eth_msgs/$msg_hash/seen` will also indicate if the event 
+The value of `/eth_msgs/\$msg_hash/seen` will also indicate if the event 
 has been acted on on the Namada side. The appropriate transfers of tokens to the
 given user will be included on chain free of charge and requires no
 additional actions from the end user.

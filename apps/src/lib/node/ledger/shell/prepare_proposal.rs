@@ -53,6 +53,11 @@ mod prepare_block {
                 vec![]
             };
 
+            tracing::info!(
+                height = req.height,
+                tx_records = txs.len(),
+                "Proposing block"
+            );
             response::PrepareProposal {
                 tx_records: txs,
                 ..Default::default()

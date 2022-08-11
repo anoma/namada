@@ -107,9 +107,6 @@ where
                             Some(proposal_code) => {
                                 let tx =
                                     Tx::new(proposal_code, Some(encode(&id)));
-                                let tx_type = TxType::Decrypted(
-                                    DecryptedTx::Decrypted(tx),
-                                );
                                 let pending_execution_key =
                                     gov_storage::get_proposal_execution_key(id);
                                 self.storage
@@ -117,8 +114,8 @@ where
                                     .expect(
                                         "Should be able to write to storage.",
                                     );
-                                let tx_result = protocol::apply_tx(
-                                    tx_type,
+                                let tx_result = protocol::apply_wasm_tx(
+                                    tx,
                                     0, /* this is used to compute the fee
                                         * based on the code size. We dont
                                         * need it here. */
@@ -326,7 +323,12 @@ where
                     continue;
                 }
                 TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::EthereumEvents(_) => {
+                    ProtocolTxType::EthereumEvents(ref digest) => {
+                        for event in
+                            digest.events.iter().map(|signed| &signed.event)
+                        {
+                            self.mode.deque_eth_event(event);
+                        }
                         Event::new_tx_event(&tx_type, height.0)
                     }
                     _ => {
@@ -339,8 +341,16 @@ where
                 },
             };
 
-            match protocol::apply_tx(tx_type, tx_length, self.into())
-                .map_err(Error::TxApply)
+            match protocol::dispatch_tx(
+                tx_type,
+                tx_length,
+                &mut self.gas_meter,
+                &mut self.write_log,
+                &mut self.storage,
+                &mut self.vp_wasm_cache,
+                &mut self.tx_wasm_cache,
+            )
+            .map_err(Error::TxApply)
             {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -512,8 +522,12 @@ where
 #[cfg(test)]
 mod test_finalize_block {
     use namada::types::address::xan;
+    use namada::types::ethereum_events::EthAddress;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};
+    use namada::types::vote_extensions::ethereum_events::{
+        self, MultiSignedEthEvent,
+    };
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;
@@ -984,5 +998,72 @@ mod test_finalize_block {
             }
             assert_eq!(counter, 2);
         }
+    }
+
+    /// Test that once a validator's vote for an Ethereum event lands
+    /// on-chain, it dequeues from the list of events to vote on.
+    #[test]
+    fn test_eth_events_dequeued() {
+        let (mut shell, _, oracle) = setup();
+        let protocol_key =
+            shell.mode.get_protocol_key().expect("Test failed").clone();
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+
+        // ---- the ledger receives a new Ethereum event
+        let event = EthereumEvent::NewContract {
+            name: "Test".to_string(),
+            address: EthAddress([0; 20]),
+        };
+        oracle.send(event.clone()).expect("Test failed");
+        let [queued_event]: [EthereumEvent; 1] =
+            shell.new_ethereum_events().try_into().expect("Test failed");
+        assert_eq!(queued_event, event);
+
+        // ---- The protocol tx that includes this event on-chain
+        let signature = ethereum_events::Vext {
+            block_height: shell.storage.last_height,
+            ethereum_events: vec![event.clone()],
+            validator_addr: address.clone(),
+        }
+        .sign(&protocol_key)
+        .sig;
+        let signed = MultiSignedEthEvent {
+            event,
+            signers: HashSet::from([address.clone()]),
+        };
+
+        let digest = ethereum_events::VextDigest {
+            signatures: vec![(address, signature)].into_iter().collect(),
+            events: vec![signed],
+        };
+        let processed_tx = ProcessedTx {
+            tx: ProtocolTxType::EthereumEvents(digest)
+                .sign(&protocol_key)
+                .to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        // ---- This protocol tx is accepted
+        let [result]: [Event; 1] = shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
+        assert_eq!(result.event_type.to_string(), String::from("applied"));
+        let code = result.attributes.get("code").expect("Test failed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+
+        // --- The event is removed from the queue
+        assert!(shell.new_ethereum_events().is_empty());
     }
 }
