@@ -79,7 +79,7 @@ pub struct Vext {
     pub voting_powers: VotingPowersMap,
     /// TODO: the validator's address is temporarily being included
     /// until we're able to map a Tendermint address to a validator
-    /// address (see https://github.com/anoma/namada/issues/200)
+    /// address (see <https://github.com/anoma/namada/issues/200>)
     pub validator_addr: Address,
     /// The new [`Epoch`].
     ///
