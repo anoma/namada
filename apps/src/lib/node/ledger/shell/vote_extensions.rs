@@ -9,8 +9,11 @@ pub mod validator_set_update;
 #[cfg(not(feature = "ABCI"))]
 mod extend_votes {
     use borsh::BorshDeserialize;
+    use namada::proto::Signed;
+    use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::vote_extensions::{
         ethereum_events, validator_set_update, VoteExtension,
+        VoteExtensionDigest,
     };
     use tendermint_proto::abci::ExtendedVoteInfo;
 
@@ -187,6 +190,43 @@ mod extend_votes {
                 })
                 .ok()
         })
+    }
+
+    /// Yields an iterator over the [`ProtocolTxType`] transactions
+    /// in a [`VoteExtensionDigest`].
+    pub fn iter_protocol_txs(
+        digest: VoteExtensionDigest,
+    ) -> impl Iterator<Item = ProtocolTxType> {
+        [
+            Some(ProtocolTxType::EthereumEvents(digest.ethereum_events)),
+            digest
+                .validator_set_update
+                .map(ProtocolTxType::ValidatorSetUpdate),
+        ]
+        .into_iter()
+        .flat_map(|tx| tx)
+    }
+
+    /// Deserializes `vote_extensions` as [`VoteExtension`] instances, filtering
+    /// out invalid data, and splits these into [`ethereum_events::Vext`]
+    /// and [`validator_set_update::Vext`] instances.
+    pub fn split_vote_extensions(
+        vote_extensions: Vec<ExtendedVoteInfo>,
+    ) -> (
+        Vec<Signed<ethereum_events::Vext>>,
+        Vec<validator_set_update::SignedVext>,
+    ) {
+        let mut eth_evs = vec![];
+        let mut valset_upds = vec![];
+
+        for ext in deserialize_vote_extensions(vote_extensions) {
+            if let Some(validator_set_update) = ext.validator_set_update {
+                valset_upds.push(validator_set_update);
+            }
+            eth_evs.push(ext.ethereum_events);
+        }
+
+        (eth_evs, valset_upds)
     }
 }
 
