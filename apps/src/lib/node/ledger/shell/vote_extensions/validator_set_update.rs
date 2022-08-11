@@ -192,8 +192,8 @@ where
 
         if voting_power <= FractionalVotingPower::TWO_THIRDS {
             tracing::error!(
-                "Tendermint has decided on a block including Ethereum events \
-                 reflecting <= 2/3 of the total stake"
+                "Tendermint has decided on a block including validator set \
+                 update vote extensions reflecting <= 2/3 of the total stake"
             );
             return None;
         }
