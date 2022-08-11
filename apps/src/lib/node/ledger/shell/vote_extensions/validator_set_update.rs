@@ -1,10 +1,13 @@
 //! Extend Tendermint votes with validator set updates, to be relayed to
 //! Namada's Ethereum bridge smart contracts.
 
+use std::collections::HashMap;
+
 use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::types::storage::Epoch;
 use namada::types::vote_extensions::validator_set_update;
+use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
 use crate::node::ledger::shell::queries::QueriesExt;
@@ -138,8 +141,71 @@ where
     #[allow(dead_code)]
     pub fn compress_valset_updates(
         &self,
-        _vote_extensions: Vec<validator_set_update::SignedVext>,
+        vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
-        todo!()
+        let total_voting_power = {
+            let prev_valset_epoch = self.storage.get_current_epoch().0 - 1;
+            u64::from(
+                self.storage.get_total_voting_power(Some(prev_valset_epoch)),
+            )
+        };
+        let mut voting_power = FractionalVotingPower::default();
+
+        let mut voting_powers = None;
+        let mut signatures = HashMap::new();
+
+        for (validator_voting_power, mut vote_extension) in
+            self.filter_invalid_valset_upd_vexts(vote_extensions)
+        {
+            if voting_powers.is_none() {
+                voting_powers = Some(std::mem::take(
+                    &mut vote_extension.data.voting_powers,
+                ));
+            }
+
+            let validator_addr = vote_extension.data.validator_addr;
+
+            // update voting power
+            let validator_voting_power = u64::from(validator_voting_power);
+            voting_power += FractionalVotingPower::new(
+                validator_voting_power,
+                total_voting_power,
+            )
+            .expect(
+                "The voting power we obtain from storage should always be \
+                 valid",
+            );
+
+            // register the signature of `validator_addr`
+            let addr = validator_addr.clone();
+            let sig = vote_extension.sig;
+
+            if let Some(sig) = signatures.insert(addr, sig) {
+                tracing::warn!(
+                    ?sig,
+                    ?validator_addr,
+                    "Overwrote old signature from validator while \
+                     constructing validator_set_update::VextDigest"
+                );
+            }
+        }
+
+        if voting_power <= FractionalVotingPower::TWO_THIRDS {
+            tracing::error!(
+                "Tendermint has decided on a block including Ethereum events \
+                 reflecting <= 2/3 of the total stake"
+            );
+            return None;
+        }
+
+        let voting_powers = voting_powers.expect(
+            "We have enough voting power, so at least one validator set \
+             update vote extension must have been validated.",
+        );
+
+        Some(validator_set_update::VextDigest {
+            signatures,
+            voting_powers,
+        })
     }
 }
