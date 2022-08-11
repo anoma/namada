@@ -98,21 +98,14 @@ mod prepare_block {
                     .votes,
             );
 
-            let ethereum_events = self.compress_ethereum_events(eth_events);
-            let ethereum_events =
-                match (ethereum_events, self.storage.last_height) {
-                    // handle genesis block
-                    (_, BlockHeight(0)) => unreachable!(
-                        "We guard the genesis block at the top of this method."
-                    ),
-                    // handle block heights > 0
-                    (Some(digest), _) => digest,
-                    _ => unreachable!(
-                        "A Tendermint quorum should never decide on a block \
-                         including vote extensions reflecting less than or \
-                         equal to 2/3 of the total stake."
-                    ),
-                };
+            const NOT_ENOUGH_VOTING_POWER_MSG: &str =
+                "A Tendermint quorum should never decide on a block including \
+                 vote extensions reflecting less than or equal to 2/3 of the \
+                 total stake.";
+
+            let ethereum_events = self
+                .compress_ethereum_events(eth_events)
+                .expect(NOT_ENOUGH_VOTING_POWER_MSG);
 
             let protocol_key = self
                 .mode
