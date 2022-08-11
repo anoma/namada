@@ -89,4 +89,42 @@ where
             })
             .map(|_| (voting_power, ext))
     }
+
+    /// Takes an iterator over validator set update vote extension instances,
+    /// and returns another iterator. The latter yields
+    /// valid validator set update vote extensions, or the reason why these
+    /// are invalid, in the form of a [`VoteExtensionError`].
+    #[inline]
+    #[allow(dead_code)]
+    pub fn validate_valset_upd_vext_list(
+        &self,
+        vote_extensions: impl IntoIterator<Item = validator_set_update::SignedVext>
+        + 'static,
+    ) -> impl Iterator<
+        Item = std::result::Result<
+            (VotingPower, validator_set_update::SignedVext),
+            VoteExtensionError,
+        >,
+    > + '_ {
+        vote_extensions.into_iter().map(|vote_extension| {
+            self.validate_valset_upd_vext_and_get_it_back(
+                vote_extension,
+                self.storage.get_current_epoch().0,
+            )
+        })
+    }
+
+    /// Takes a list of signed validator set update vote extensions,
+    /// and filters out invalid instances.
+    #[inline]
+    #[allow(dead_code)]
+    pub fn filter_invalid_valset_upd_vexts(
+        &self,
+        vote_extensions: impl IntoIterator<Item = validator_set_update::SignedVext>
+        + 'static,
+    ) -> impl Iterator<Item = (VotingPower, validator_set_update::SignedVext)> + '_
+    {
+        self.validate_valset_upd_vext_list(vote_extensions)
+            .filter_map(|ext| ext.ok())
+    }
 }
