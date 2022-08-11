@@ -130,4 +130,16 @@ where
         self.validate_valset_upd_vext_list(vote_extensions)
             .filter_map(|ext| ext.ok())
     }
+
+    /// Compresses a set of signed validator set update vote extensions into a
+    /// single [`validator_set_update::VextDigest`], whilst filtering
+    /// invalid [`validator_set_update::SignedVext`] instances in the
+    /// process.
+    #[allow(dead_code)]
+    pub fn compress_valset_updates(
+        &self,
+        _vote_extensions: Vec<validator_set_update::SignedVext>,
+    ) -> Option<validator_set_update::VextDigest> {
+        todo!()
+    }
 }
