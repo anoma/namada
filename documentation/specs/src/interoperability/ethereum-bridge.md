@@ -87,18 +87,13 @@ keys involved are:
 `\$msg_hash` is the SHA256 digest of the Borsh serialization of the relevant 
 `EthereumEvent`.
 
-Changes to this `/eth_msgs` storage subspace are only ever made by internal 
-transactions crafted and applied by all nodes based on the aggregate of vote 
+Changes to this `/eth_msgs` storage subspace are only ever made by 
+validators as part of the ledger code based on the aggregate of vote 
 extensions for the last Tendermint round. That is, changes to `/eth_msgs` happen 
 in block `n+1` in a deterministic manner based on the vote extensions of the 
-Tendermint round for block `n`.
-
-The `/eth_msgs` storage subspace does not belong to any account and cannot be 
-modified by transactions submitted from outside of the ledger via Tendermint. 
-The storage will be guarded by a special validity predicate - `EthSentinel` - 
-that is part of the verifier set by default for every transaction, but will be 
-removed by the ledger code for the specific permitted transactions that are 
-allowed to update `/eth_msgs`.
+Tendermint round for block `n`. The `/eth_msgs` storage subspace will belong 
+the the `EthBridge` validity predicate. It should disallow any changes to 
+this storage from transactions.
 
 ### Including events into storage
 
