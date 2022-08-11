@@ -322,10 +322,11 @@ pub(crate) trait QueriesExt {
         epoch: Option<Epoch>,
     ) -> std::result::Result<Address, Error>;
 
-    /// Determines if we are able to send a validator set update vote extension.
-    /// This is done by checking if we are at the last block of the current
-    /// epoch.
-    fn can_send_validator_set_update(&self) -> bool;
+    /// Determines if it is possible to send a validator set update vote
+    /// extension at the provided [`BlockHeight`].
+    ///
+    /// This is done by checking if `height` is the last block of its epoch.
+    fn can_send_validator_set_update(&self, height: BlockHeight) -> bool;
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
     fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch>;
@@ -499,15 +500,15 @@ where
     }
 
     // TODO:
-    // - accept last_height param
+    // - accept `height` param
     // - get epoch duration from storage
-    // - use modulo arithmetic (???? maybe) to calc offset of block within the
-    //   epoch
+    // - calc offset of block height within epoch
     // - we must be at the last block of the epoch
-    fn can_send_validator_set_update(&self) -> bool {
-        let current_height = self.last_height.0 + 1;
-        let new_epoch_height = self.next_epoch_min_start_height.0;
-        new_epoch_height.wrapping_sub(current_height) == 1
+    fn can_send_validator_set_update(&self, _height: BlockHeight) -> bool {
+        todo!()
+        // let current_height = self.last_height.0 + 1;
+        // let new_epoch_height = self.next_epoch_min_start_height.0;
+        // new_epoch_height.wrapping_sub(current_height) == 1
     }
 
     fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch> {

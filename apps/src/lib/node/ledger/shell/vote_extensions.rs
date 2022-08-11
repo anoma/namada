@@ -60,16 +60,20 @@ mod extend_votes {
                 .expect("only validators should receive this method call")
                 .to_owned();
 
+            let new_height = self.storage.last_height + 1;
+
             let validator_addr = addr.clone();
             let eth_evs = ethereum_events::Vext {
-                block_height: self.storage.last_height + 1,
+                block_height: new_height,
                 ethereum_events: self.new_ethereum_events(),
                 validator_addr,
             };
 
             let validator_addr = addr;
-            let vset_upd =
-                self.storage.can_send_validator_set_update().then(|| {
+            let vset_upd = self
+                .storage
+                .can_send_validator_set_update(new_height)
+                .then(|| {
                     let next_epoch = self.storage.get_current_epoch().0.next();
                     let _validator_set =
                         self.storage.get_active_validators(Some(next_epoch));
@@ -132,7 +136,8 @@ mod extend_votes {
                         };
                     }
                 };
-            let validated_eth_events = self.validate_eth_events_vext(ext.ethereum_events, self.storage.last_height + 1)
+            let new_height = self.storage.last_height + 1;
+            let validated_eth_events = self.validate_eth_events_vext(ext.ethereum_events, new_height)
                 .then(|| true)
                 .unwrap_or_else(|| {
                     tracing::warn!(
@@ -143,7 +148,7 @@ mod extend_votes {
                     );
                     false
                 });
-            let validated_valset_upd = self.storage.can_send_validator_set_update().then(|| {
+            let validated_valset_upd = self.storage.can_send_validator_set_update(new_height).then(|| {
                 ext.validator_set_update
                     .and_then(|ext| {
                         self.validate_valset_upd_vext(ext, self.storage.get_current_epoch().0.next())
