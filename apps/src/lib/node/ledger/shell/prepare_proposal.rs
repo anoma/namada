@@ -86,8 +86,14 @@ mod prepare_block {
             let (eth_events, _valset_upds) = split_vote_extensions(
                 local_last_commit
                     .expect(
-                        "Block heights >0 should always contain vote \
-                         extensions",
+                        "Honest Namada validators will always sign \
+                         ethereum_events::Vext instances, even if no Ethereum \
+                         events were observed at a given block height. In \
+                         fact, a quorum of signed empty ethereum_events::Vext \
+                         instances commits the fact no events were observed \
+                         by a majority of validators. Therefore, for block \
+                         heights greater than zero, we should always have \
+                         vote extensions.",
                     )
                     .votes,
             );
@@ -106,16 +112,9 @@ mod prepare_block {
                     // handle block heights > 0
                     (Some(digest), _) => digest,
                     _ => unreachable!(
-                        "Honest Namada validators will always sign \
-                         ethereum_events::Vext instances, even if no Ethereum \
-                         events were observed at a given block height. In \
-                         fact, a quorum of signed empty ethereum_events::Vext \
-                         instances commits the fact no events were observed \
-                         by a majority of validators. Likewise, a Tendermint \
-                         quorum should never decide on a block including vote \
-                         extensions reflecting less than or equal to 2/3 of \
-                         the total stake. These scenarios are virtually \
-                         impossible, so we will panic here."
+                        "A Tendermint quorum should never decide on a block \
+                         including vote extensions reflecting less than or \
+                         equal to 2/3 of the total stake."
                     ),
                 };
 
@@ -643,7 +642,7 @@ mod prepare_block {
         /// Test if Ethereum events validation and inclusion in a block
         /// behaves as expected, considering <= 2/3 voting power.
         #[test]
-        #[should_panic(expected = "Honest Namada validators")]
+        #[should_panic(expected = "A Tendermint quorum should never")]
         fn test_prepare_proposal_vext_insufficient_voting_power() {
             const FIRST_HEIGHT: BlockHeight = BlockHeight(0);
             const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
