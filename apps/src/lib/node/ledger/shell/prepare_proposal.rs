@@ -102,13 +102,9 @@ mod prepare_block {
             let ethereum_events =
                 match (ethereum_events, self.storage.last_height) {
                     // handle genesis block
-                    (None, BlockHeight(0)) => return vec![],
-                    (Some(_), BlockHeight(0)) => {
-                        unreachable!(
-                            "We already handle this scenario in \
-                             validate_eth_events_vext."
-                        )
-                    }
+                    (_, BlockHeight(0)) => unreachable!(
+                        "We guard the genesis block at the top of this method."
+                    ),
                     // handle block heights > 0
                     (Some(digest), _) => digest,
                     _ => unreachable!(
