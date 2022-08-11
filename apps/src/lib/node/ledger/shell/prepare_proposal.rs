@@ -1,4 +1,4 @@
-//! Implementation of the [`PrepareProposal`] ABCI++ method for the Shell
+//! Implementation of the `PrepareProposal` ABCI++ method for the Shell
 
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
