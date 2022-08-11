@@ -109,6 +109,9 @@ where
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_valset_upd_vext_and_get_it_back(
                 vote_extension,
+                // NOTE: assumes we are in the new epoch,
+                // after the prev valset signed off the
+                // set of the new epoch
                 self.storage.get_current_epoch().0,
             )
         })
