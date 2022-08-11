@@ -547,7 +547,6 @@ mod extend_votes {
 pub use extend_votes::*;
 
 #[cfg(feature = "ABCI")]
-#[allow(dead_code)]
 /// ABCI is soon being removed - this is solely so that we can still compile
 /// with the default features
 mod extend_votes_stub {
@@ -559,6 +558,7 @@ mod extend_votes_stub {
 
     #[derive(Error, Debug)]
     pub enum VoteExtensionError {
+        #[allow(dead_code)]
         #[error("This is a stub error")]
         StubError,
     }

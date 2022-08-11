@@ -435,6 +435,7 @@ mod test_process_proposal {
     /// Test that if a proposal contains more than one
     /// `ethereum_events::VextDigest`, we reject it.
     #[test]
+    #[cfg(not(feature = "ABCI"))]
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _, _) = test_utils::setup();
@@ -503,6 +504,7 @@ mod test_process_proposal {
     /// Test that if a proposal contains Ethereum events with
     /// invalid validator signatures, we reject it.
     #[test]
+    #[cfg(not(feature = "ABCI"))]
     fn test_drop_vext_digest_with_invalid_sigs() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _, _) = test_utils::setup();
@@ -550,6 +552,7 @@ mod test_process_proposal {
     /// Test that if a proposal contains Ethereum events with
     /// invalid block heights, we reject it.
     #[test]
+    #[cfg(not(feature = "ABCI"))]
     fn test_drop_vext_digest_with_invalid_bheights() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
         const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
@@ -594,6 +597,7 @@ mod test_process_proposal {
     /// Test that if a proposal contains Ethereum events with
     /// invalid validators, we reject it.
     #[test]
+    #[cfg(not(feature = "ABCI"))]
     fn test_drop_vext_digest_with_invalid_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _, _) = test_utils::setup();
