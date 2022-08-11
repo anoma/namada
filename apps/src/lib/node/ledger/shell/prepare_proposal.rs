@@ -2,22 +2,15 @@
 
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
-    use std::collections::{BTreeMap, HashMap, HashSet};
-
     use namada::proto::Signed;
     use namada::types::transaction::protocol::ProtocolTxType;
-    use namada::types::vote_extensions::ethereum_events::{
-        self, MultiSignedEthEvent,
-    };
     use namada::types::vote_extensions::{
-        validator_set_update, VoteExtensionDigest,
+        ethereum_events, validator_set_update, VoteExtensionDigest,
     };
-    use namada::types::voting_power::FractionalVotingPower;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
 
-    use super::super::queries::QueriesExt;
     use super::super::vote_extensions::deserialize_vote_extensions;
     use super::super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -164,85 +157,6 @@ mod prepare_block {
                 .map(record::add)
                 .collect()
         }
-
-        /// Compresses a set of signed Ethereum events into a single
-        /// [`ethereum_events::VextDigest`], whilst filtering invalid
-        /// [`Signed<ethereum_events::Vext>`] instances in the process
-        // TODO: rename this as `compress_vote_extensions`, and return
-        // a `VoteExtensionDigest`, which will contain both digests of
-        // ethereum events and validator set update vote extensions
-        fn compress_ethereum_events(
-            &self,
-            vote_extensions: Vec<Signed<ethereum_events::Vext>>,
-        ) -> Option<ethereum_events::VextDigest> {
-            let events_epoch = self
-                .storage
-                .get_epoch_from_height(self.storage.last_height)
-                .expect(
-                    "The epoch of the last block height should always be known",
-                );
-
-            let mut event_observers = BTreeMap::new();
-            let mut signatures = HashMap::new();
-
-            let total_voting_power = u64::from(
-                self.storage.get_total_voting_power(Some(events_epoch)),
-            );
-            let mut voting_power = FractionalVotingPower::default();
-
-            for (validator_voting_power, vote_extension) in
-                self.filter_invalid_eth_events_vexts(vote_extensions)
-            {
-                let validator_addr = vote_extension.data.validator_addr;
-
-                // update voting power
-                let validator_voting_power = u64::from(validator_voting_power);
-                voting_power += FractionalVotingPower::new(
-                    validator_voting_power,
-                    total_voting_power,
-                )
-                .expect(
-                    "The voting power we obtain from storage should always be \
-                     valid",
-                );
-
-                // register all ethereum events seen by `validator_addr`
-                for ev in vote_extension.data.ethereum_events {
-                    let signers =
-                        event_observers.entry(ev).or_insert_with(HashSet::new);
-
-                    signers.insert(validator_addr.clone());
-                }
-
-                // register the signature of `validator_addr`
-                let addr = validator_addr.clone();
-                let sig = vote_extension.sig;
-
-                if let Some(sig) = signatures.insert(addr, sig) {
-                    tracing::warn!(
-                        ?sig,
-                        ?validator_addr,
-                        "Overwrote old signature from validator while \
-                         constructing ethereum_events::VextDigest"
-                    );
-                }
-            }
-
-            if voting_power <= FractionalVotingPower::TWO_THIRDS {
-                tracing::error!(
-                    "Tendermint has decided on a block including Ethereum \
-                     events reflecting <= 2/3 of the total stake"
-                );
-                return None;
-            }
-
-            let events = event_observers
-                .into_iter()
-                .map(|(event, signers)| MultiSignedEthEvent { event, signers })
-                .collect();
-
-            Some(ethereum_events::VextDigest { events, signatures })
-        }
     }
 
     /// Yields an iterator over the [`ProtocolTxType`] transactions
@@ -332,13 +246,17 @@ mod prepare_block {
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::protocol::ProtocolTxType;
         use namada::types::transaction::{Fee, TxType};
-        use namada::types::vote_extensions::{ethereum_events, VoteExtension};
+        use namada::types::vote_extensions::ethereum_events::{
+            self, MultiSignedEthEvent,
+        };
+        use namada::types::vote_extensions::VoteExtension;
         use tendermint_proto::abci::tx_record::TxAction;
         use tendermint_proto::abci::{
             ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
         };
 
         use super::*;
+        use crate::node::ledger::shell::queries::QueriesExt;
         use crate::node::ledger::shell::test_utils::{
             self, gen_keypair, TestShell,
         };
@@ -526,7 +444,7 @@ mod prepare_block {
                 },
             }];
             let signatures = {
-                let mut s = HashMap::new();
+                let mut s = std::collections::HashMap::new();
                 s.insert(ext.data.validator_addr.clone(), ext.sig.clone());
                 s
             };
