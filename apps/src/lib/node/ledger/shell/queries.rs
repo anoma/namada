@@ -60,7 +60,7 @@ where
     /// right query method and returns the result (which may be
     /// the default if `path` is not a supported string.
     /// INVARIANT: This method must be stateless.
-    pub fn query(&mut self, query: request::Query) -> response::Query {
+    pub fn query(&self, query: request::Query) -> response::Query {
         use rpc::Path;
         let height = match query.height {
             0 => self.storage.get_block_height().0,
