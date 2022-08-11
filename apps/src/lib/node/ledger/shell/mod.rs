@@ -243,6 +243,18 @@ impl ShellMode {
         }
     }
 
+    /// Remove an Ethereum event from the internal queue
+    pub fn deque_eth_event(&mut self, event: &EthereumEvent) {
+        if let ShellMode::Validator {
+            ethereum_recv: EthereumReceiver { ref mut queue, .. },
+            ..
+        } = self
+        {
+            queue.remove(event);
+        }
+    }
+
+    /// Get the protocol keypair for this validator
     pub fn get_protocol_key(&self) -> Option<&common::SecretKey> {
         match &self {
             ShellMode::Validator {
