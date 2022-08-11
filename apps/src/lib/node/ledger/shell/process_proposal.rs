@@ -36,6 +36,13 @@ where
         &mut self,
         req: RequestProcessProposal,
     ) -> ResponseProcessProposal {
+        tracing::info!(
+            proposer = ?hex::encode(&req.proposer_address),
+            height = req.height,
+            hash = ?hex::encode(&req.hash),
+            n_txs = req.txs.len(),
+            "Received block proposal",
+        );
         // the number of vote extension digests included in the block proposal
         let mut vote_ext_digest_num = 0;
         let tx_results: Vec<ExecTxResult> = req
@@ -51,6 +58,16 @@ where
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
         let too_many_vext_digests = vote_ext_digest_num > 1;
+        if too_many_vext_digests {
+            tracing::warn!(
+                proposer = ?hex::encode(&req.proposer_address),
+                height = req.height,
+                hash = ?hex::encode(&req.hash),
+                vote_ext_digest_num,
+                "Found too many vote extension transactions, proposed block \
+                 will be rejected"
+            );
+        }
 
         // Erroneous transactions were detected when processing
         // the leader's proposal. We allow txs that do not
@@ -62,13 +79,29 @@ where
             );
             !error.is_recoverable()
         });
+        if invalid_txs {
+            tracing::warn!(
+                proposer = ?hex::encode(&req.proposer_address),
+                height = req.height,
+                hash = ?hex::encode(&req.hash),
+                "Found invalid transactions, proposed block will be rejected"
+            );
+        }
 
+        let status = if too_many_vext_digests || invalid_txs {
+            ProposalStatus::Reject
+        } else {
+            ProposalStatus::Accept
+        };
+        tracing::info!(
+            proposer = ?hex::encode(&req.proposer_address),
+            height = req.height,
+            hash = ?hex::encode(&req.hash),
+            ?status,
+            "Processed block proposal",
+        );
         ResponseProcessProposal {
-            status: if too_many_vext_digests || invalid_txs {
-                ProposalStatus::Reject as i32
-            } else {
-                ProposalStatus::Accept as i32
-            },
+            status: status as i32,
             tx_results,
             ..Default::default()
         }
