@@ -2,13 +2,14 @@
 authors = ["Heliax R&D Team"]
 language = "en"
 multilingual = false
-site-url = "https://docs.anoma.network/master/"
+# This book is currently not being hosted
+# site-url = "https://docs.anoma.network/master/"
 src = "src"
 title = "Anoma - DOCS"
 
 [output.html]
-edit-url-template = "https://github.com/anoma/anoma/edit/master/docs/{path}"
-git-repository-url = "https://github.com/anoma/anoma"
+edit-url-template = "https://github.com/anoma/namada/edit/master/documentation/dev/{path}"
+git-repository-url = "https://github.com/anoma/namada"
 additional-css = ["assets/custom.css", "assets/mdbook-admonish.css"]
 additional-js = ["assets/mermaid.min.js", "assets/mermaid-init.js"]
 mathjax-support = true
