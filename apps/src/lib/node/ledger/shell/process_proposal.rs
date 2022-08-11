@@ -146,7 +146,7 @@ where
                     let extensions =
                         digest.decompress(self.storage.last_height);
                     let valid_extensions =
-                        self.validate_vote_extension_list(extensions);
+                        self.validate_eth_events_vext_list(extensions);
 
                     let mut voting_power = FractionalVotingPower::default();
                     let total_power = {

@@ -116,14 +116,12 @@ where
         }
     }
 
-    /// Takes an iterator over vote extension instances,
+    /// Takes an iterator over Ethereum events vote extension instances,
     /// and returns another iterator. The latter yields
-    /// valid vote extensions, or the reason why these
+    /// valid Ethereum events vote extensions, or the reason why these
     /// are invalid, in the form of a [`VoteExtensionError`].
-    // TODO: the `vote_extensions` iterator should be over `VoteExtension`
-    // instances, I guess? to be determined in the next PR
     #[inline]
-    pub fn validate_vote_extension_list(
+    pub fn validate_eth_events_vext_list(
         &self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
         + 'static,
@@ -141,18 +139,16 @@ where
         })
     }
 
-    /// Takes a list of signed vote extensions,
+    /// Takes a list of signed Ethereum events vote extensions,
     /// and filters out invalid instances.
-    // TODO: the `vote_extensions` iterator should be over `VoteExtension`
-    // instances, I guess? to be determined in the next PR
     #[inline]
-    pub fn filter_invalid_vote_extensions(
+    pub fn filter_invalid_eth_events_vexts(
         &self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
         + 'static,
     ) -> impl Iterator<Item = (VotingPower, Signed<ethereum_events::Vext>)> + '_
     {
-        self.validate_vote_extension_list(vote_extensions)
+        self.validate_eth_events_vext_list(vote_extensions)
             .filter_map(|ext| ext.ok())
     }
 }
@@ -164,13 +160,12 @@ mod test_vote_extensions {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::proto::Signed;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum,
     };
     use namada::types::key::*;
     use namada::types::storage::{BlockHeight, Epoch};
-    use namada::types::vote_extensions::ethereum_events;
+    use namada::types::vote_extensions::{ethereum_events, VoteExtension};
     use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
     use tower_abci::request;
 
@@ -251,12 +246,13 @@ mod test_vote_extensions {
         oracle.send(event_1.clone()).expect("Test failed");
         oracle.send(event_2.clone()).expect("Test failed");
         let vote_extension =
-            <Signed<ethereum_events::Vext> as BorshDeserialize>::try_from_slice(
+            <VoteExtension as BorshDeserialize>::try_from_slice(
                 &shell.extend_vote(Default::default()).vote_extension[..],
             )
             .expect("Test failed");
 
         let [event_first, event_second]: [EthereumEvent; 2] = vote_extension
+            .ethereum_events
             .data
             .ethereum_events
             .clone()
@@ -289,7 +285,7 @@ mod test_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        let vote_ext = ethereum_events::Vext {
+        let ethereum_events = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
@@ -301,9 +297,7 @@ mod test_vote_extensions {
             block_height: shell.storage.last_height + 1,
             validator_addr: address.clone(),
         }
-        .sign(&signing_key)
-        .try_to_vec()
-        .expect("Test failed");
+        .sign(&signing_key);
         let req = request::VerifyVoteExtension {
             hash: vec![],
             validator_address: address
@@ -312,7 +306,12 @@ mod test_vote_extensions {
                 .as_bytes()
                 .to_vec(),
             height: 0,
-            vote_extension: vote_ext,
+            vote_extension: VoteExtension {
+                ethereum_events,
+                validator_set_update: None,
+            }
+            .try_to_vec()
+            .expect("Test failed"),
         };
         assert_eq!(
             shell.verify_vote_extension(req).status,
@@ -395,7 +394,7 @@ mod test_vote_extensions {
     fn reject_incorrect_block_number() {
         let (shell, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
-        let vote_ext = ethereum_events::Vext {
+        let ethereum_events = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
@@ -407,15 +406,18 @@ mod test_vote_extensions {
             block_height: shell.storage.last_height,
             validator_addr: address.clone(),
         }
-        .sign(shell.mode.get_protocol_key().expect("Test failed"))
-        .try_to_vec()
-        .expect("Test failed");
+        .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
         let req = request::VerifyVoteExtension {
             hash: vec![],
             validator_address: address.try_to_vec().expect("Test failed"),
             height: 0,
-            vote_extension: vote_ext,
+            vote_extension: VoteExtension {
+                ethereum_events,
+                validator_set_update: None,
+            }
+            .try_to_vec()
+            .expect("Test failed"),
         };
         assert_eq!(
             shell.verify_vote_extension(req).status,

@@ -4,11 +4,14 @@
 mod prepare_block {
     use std::collections::{BTreeMap, HashMap, HashSet};
 
+    use namada::proto::Signed;
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::vote_extensions::ethereum_events::{
         self, MultiSignedEthEvent,
     };
-    use namada::types::vote_extensions::VoteExtensionDigest;
+    use namada::types::vote_extensions::{
+        validator_set_update, VoteExtensionDigest,
+    };
     use namada::types::voting_power::FractionalVotingPower;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
@@ -75,16 +78,21 @@ mod prepare_block {
             &mut self,
             local_last_commit: Option<ExtendedCommitInfo>,
         ) -> Vec<TxRecord> {
-            let protocol_key = self
-                .mode
-                .get_protocol_key()
-                .expect("Validators should always have a protocol key");
+            // genesis block should not contain vote extensions
+            if self.storage.last_height == BlockHeight(0) {
+                return vec![];
+            }
 
-            let ethereum_events =
-                local_last_commit.and_then(|local_last_commit| {
-                    let votes = local_last_commit.votes;
-                    self.compress_ethereum_events(votes)
-                });
+            let (eth_events, _valset_upds) = split_vote_extensions(
+                local_last_commit
+                    .expect(
+                        "Block heights >0 should always contain vote \
+                         extensions",
+                    )
+                    .votes,
+            );
+
+            let ethereum_events = self.compress_ethereum_events(eth_events);
             let ethereum_events =
                 match (ethereum_events, self.storage.last_height) {
                     // handle genesis block
@@ -110,6 +118,11 @@ mod prepare_block {
                          impossible, so we will panic here."
                     ),
                 };
+
+            let protocol_key = self
+                .mode
+                .get_protocol_key()
+                .expect("Validators should always have a protocol key");
 
             iter_protocol_txs(VoteExtensionDigest {
                 ethereum_events,
@@ -172,7 +185,7 @@ mod prepare_block {
         // ethereum events and validator set update vote extensions
         fn compress_ethereum_events(
             &self,
-            vote_extensions: Vec<ExtendedVoteInfo>,
+            vote_extensions: Vec<Signed<ethereum_events::Vext>>,
         ) -> Option<ethereum_events::VextDigest> {
             let events_epoch = self
                 .storage
@@ -189,11 +202,8 @@ mod prepare_block {
             );
             let mut voting_power = FractionalVotingPower::default();
 
-            let deserialized = deserialize_vote_extensions(vote_extensions)
-                .map(|vext| vext.ethereum_events);
-
             for (validator_voting_power, vote_extension) in
-                self.filter_invalid_vote_extensions(deserialized)
+                self.filter_invalid_eth_events_vexts(vote_extensions)
             {
                 let validator_addr = vote_extension.data.validator_addr;
 
@@ -262,6 +272,28 @@ mod prepare_block {
         .flat_map(|tx| tx)
     }
 
+    /// Deserializes `vote_extensions` as [`VoteExtension`] instances, filtering
+    /// out invalid data, and splits these into [`ethereum_events::Vext`]
+    /// and [`validator_set_update::Vext`] instances.
+    fn split_vote_extensions(
+        vote_extensions: Vec<ExtendedVoteInfo>,
+    ) -> (
+        Vec<Signed<ethereum_events::Vext>>,
+        Vec<validator_set_update::SignedVext>,
+    ) {
+        let mut eth_evs = vec![];
+        let mut valset_upds = vec![];
+
+        for ext in deserialize_vote_extensions(vote_extensions) {
+            if let Some(validator_set_update) = ext.validator_set_update {
+                valset_upds.push(validator_set_update);
+            }
+            eth_evs.push(ext.ethereum_events);
+        }
+
+        (eth_evs, valset_upds)
+    }
+
     /// Functions for creating the appropriate TxRecord given the
     /// numeric code
     pub(super) mod record {
@@ -312,7 +344,7 @@ mod prepare_block {
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::transaction::protocol::ProtocolTxType;
         use namada::types::transaction::{Fee, TxType};
-        use namada::types::vote_extensions::ethereum_events;
+        use namada::types::vote_extensions::{ethereum_events, VoteExtension};
         use tendermint_proto::abci::tx_record::TxAction;
         use tendermint_proto::abci::{
             ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
@@ -346,29 +378,13 @@ mod prepare_block {
             );
         }
 
-        /// Serialize a [`Signed<ethereum_events::Vext>`] to an
-        /// [`ExtendedVoteInfo`]
-        fn vote_extension_serialize(
-            vext: Signed<ethereum_events::Vext>,
-        ) -> ExtendedVoteInfo {
-            ExtendedVoteInfo {
-                vote_extension: vext.try_to_vec().unwrap(),
-                ..Default::default()
-            }
-        }
-
         /// Check if we are filtering out an invalid vote extension `vext`
         fn check_eth_events_filtering(
             shell: &mut TestShell,
             vext: Signed<ethereum_events::Vext>,
         ) {
-            let votes =
-                deserialize_vote_extensions(vec![vote_extension_serialize(
-                    vext,
-                )])
-                .map(|vext| vext.ethereum_events);
             let filtered_votes: Vec<_> =
-                shell.filter_invalid_vote_extensions(votes).collect();
+                shell.filter_invalid_eth_events_vexts(vec![vext]).collect();
 
             assert_eq!(filtered_votes, vec![]);
         }
@@ -496,11 +512,8 @@ mod prepare_block {
                 ext
             };
 
-            let maybe_digest = {
-                let votes =
-                    vec![vote_extension_serialize(signed_vote_extension)];
-                shell.compress_ethereum_events(votes)
-            };
+            let maybe_digest =
+                shell.compress_ethereum_events(vec![signed_vote_extension]);
 
             // we should be filtering out the vote extension with
             // duped ethereum events; therefore, no valid vote
@@ -564,7 +577,7 @@ mod prepare_block {
                 nonce: 1u64.into(),
                 transfers: vec![],
             };
-            let signed_vote_extension = {
+            let ethereum_events = {
                 let ext = ethereum_events::Vext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
@@ -574,8 +587,12 @@ mod prepare_block {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
+            let vote_extension = VoteExtension {
+                ethereum_events,
+                validator_set_update: None,
+            };
             let vote = ExtendedVoteInfo {
-                vote_extension: signed_vote_extension.try_to_vec().unwrap(),
+                vote_extension: vote_extension.try_to_vec().unwrap(),
                 ..Default::default()
             };
 
@@ -613,7 +630,7 @@ mod prepare_block {
 
             let digest = manually_assemble_digest(
                 &protocol_key,
-                signed_vote_extension,
+                vote_extension.ethereum_events,
                 LAST_HEIGHT,
             );
 
@@ -677,7 +694,7 @@ mod prepare_block {
                 nonce: 1u64.into(),
                 transfers: vec![],
             };
-            let signed_vote_extension = {
+            let ethereum_events = {
                 let ext = ethereum_events::Vext {
                     validator_addr,
                     block_height: LAST_HEIGHT,
@@ -688,7 +705,12 @@ mod prepare_block {
                 ext
             };
             let vote = ExtendedVoteInfo {
-                vote_extension: signed_vote_extension.try_to_vec().unwrap(),
+                vote_extension: VoteExtension {
+                    ethereum_events,
+                    validator_set_update: None,
+                }
+                .try_to_vec()
+                .unwrap(),
                 ..Default::default()
             };
 
