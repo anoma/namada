@@ -1,6 +1,6 @@
 ### Motivation
 
-**Public goods** are non-excludable non-rivalrous items which provide benefits of some sort to their users. Examples include languages, open-source software, research, designs, Earth's atmosphere, and art (conceptually - a physical painting is excludable and rivalrous, but the painting as-such is not). Namada's software stack, supporting research, and ecosystem tooling are all public goods, as are the information ecosystem and education which provide for the technology to be used safety, the hardware designs and software stacks (e.g. instruction set, OS, programming language) on which it runs, and the atmosphere and biodiverse environment which renders its operation possible. Without these things, Namada could not exist, and without their continued sustenance it will not continue to. Public goods, by their nature as non-excludable and non-rivalrous, are mis-modeled by economic systems (such as payment-for-goods) built upon the assumption of scarcity, and are usually either under-funded (relative to their public benefit) or funded in ways which require artificial scarcity and thus a public loss. For this reason, it is in the interest of Namada to help out, where possible, in funding the public goods upon which its existence depends in ways which do not require the introduction of artificial scarcity, balancing the costs of available resources and operational complexity. This is a proposal for a mechanism to be built into the Namada protocol, community governance precedent, and surrounding social structures in order to fund public goods while balancing these constraints.
+**Public goods** are non-excludable non-rivalrous items which provide benefits of some sort to their users. Examples include languages, open-source software, research, designs, Earth's atmosphere, and art (conceptually - a physical painting is excludable and rivalrous, but the painting as-such is not). Namada's software stack, supporting research, and ecosystem tooling are all public goods, as are the information ecosystem and education which provide for the technology to be used safety, the hardware designs and software stacks (e.g. instruction set, OS, programming language) on which it runs, and the atmosphere and biodiverse environment which renders its operation possible. Without these things, Namada could not exist, and without their continued sustenance it will not continue to. Public goods, by their nature as non-excludable and non-rivalrous, are mis-modeled by economic systems (such as payment-for-goods) built upon the assumption of scarcity, and are usually either under-funded (relative to their public benefit) or funded in ways which require artificial scarcity and thus a public loss. For this reason, it is in the interest of Namada to help out, where possible, in funding the public goods upon which its existence depends in ways which do not require the introduction of artificial scarcity, balancing the costs of available resources and operational complexity. 
 
 ### Design precedent
 
@@ -19,13 +19,13 @@ This proposal requires the following protocol components:
 - Stake-weighted approval voting: as public goods councils are exclusive, we can use a stake-weighted form of approval voting. Governance voters include all public goods council candidates of which they approve, and the council candidate with the most stake approving it wins. This doesn't have game-theoretic properties as nice as ranked-choice voting (especially when votes are public, as they are at the moment), but it is _much_ simpler ([background](https://en.wikipedia.org/wiki/Condorcet_method)), and in practice I do not think there will be too many public goods council candidates.
 - Interface support: the interface should support limited liquid democracy for delegate selection and approval voting for public goods council candidates. The interface or explorer should display past retroactive PGF winners and past/current continuous funding recipients. Proposal submission for continuous and retroactive funding will happen separately, in whatever manner the public goods council deems fit.
 
----
+### Funding categories
 
-Please note that the following is _social consensus_, precedent which can be set at genesis and ratified by governance but does not require any protocol changes.
+> Note that the following is _social consensus_, precedent which can be set at genesis and ratified by governance but does not require any protocol changes.
 
 _Categories of public-goods funding_
 
-I propose that the Namada public-goods funding council group public goods into four categories, with earmarked pools of funding:
+Namada groups public goods into four categories, with earmarked pools of funding:
 
 - Technical research
   _Technical research_ covers funding for technical research topics related to Namada and Anoma, such as cryptography, distributed systems, programming language theory, and human-computer interface design, both inside and outside the academy. Possible funding forms could include PhD sponsorships, independent researcher grants, institutional funding, funding for experimental resources (e.g. compute resources for benchmarking), funding for prizes (e.g. theoretical cryptography optimisations), and similar.
@@ -36,8 +36,10 @@ I propose that the Namada public-goods funding council group public goods into f
 - External public goods
   _External public goods_ covers funding for public goods explicitly external to the Namada and Anoma ecosystem, including carbon sequestration, independent journalism, direct cash transfers, legal advocacy, etc. Possible funding forms could include direct purchase of tokenised assets such as carbon credits, direct cash transfers (e.g. GiveDirectly), institutional funding (e.g. Wikileaks), and similar.
 
-_Amounts_
+### Funding amounts
 
-I propose 10% total per annum inflation, 5% to continuous funding and 5% to retroactive funding (this is chosen in-protocol, so this suggestion is merely a genesis default and can be altered by governance).
+In Namada, 10% inflation per annum of the NAM token is directed to this public goods mechanism, 5% to continuous funding and 5% to retroactive funding. This is a genesis default and can be altered by governance.
 
-I proposal a social consensus of an equal split between categories, meaning 1.25% per annum inflation for each category (e.g. 1.25% for technical research continuous funding, 1.25% for technical research retroactive PGF).
+Namada encourages the public goods council to adopt a default social consensus of an equal split between categories, meaning 1.25% per annum inflation for each category (e.g. 1.25% for technical research continuous funding, 1.25% for technical research retroactive PGF). If no qualified recipients are available, funds may be redirected or burnt.
+
+Namada also pays the public goods council members themselves (in total) a default of 0.1% inflation per annum.
