@@ -35,7 +35,7 @@ mod prepare_block {
             // proposal is accepted
             self.gas_meter.reset();
             let txs = if let ShellMode::Validator { .. } = self.mode {
-                // TODO: add some info logging
+                // TODO: add some info logging?
 
                 // add ethereum events as protocol txs
                 let mut txs =
@@ -66,9 +66,7 @@ mod prepare_block {
         }
 
         /// Builds a batch of vote extension transactions, comprised of Ethereum
-        /// events
-        // TODO: add `and, optionally, a validator set update` to the docstring,
-        // after validator set updates are implemented
+        /// events and, optionally, a validator set update
         fn build_vote_extensions_txs(
             &mut self,
             local_last_commit: Option<ExtendedCommitInfo>,
@@ -205,8 +203,8 @@ mod prepare_block {
     }
 
     #[cfg(test)]
-    // TODO: write a test to check for unreachable code paths in
-    // prepare proposals, when processing ethereum events
+    // TODO: write tests for validator set update vote extensions in
+    // prepare proposals
     mod test_prepare_proposal {
         use std::collections::HashSet;
 
