@@ -69,7 +69,7 @@ where
 {
     pub block_gas_meter: &'a mut BlockGasMeter,
     pub write_log: &'a mut WriteLog,
-    pub storage: &'a mut Storage<D, H>,
+    pub storage: &'a Storage<D, H>,
     pub vp_wasm_cache: &'a mut VpCache<CA>,
     pub tx_wasm_cache: &'a mut TxCache<CA>,
 }
@@ -84,7 +84,7 @@ where
         Self {
             block_gas_meter: &mut shell.gas_meter,
             write_log: &mut shell.write_log,
-            storage: &mut shell.storage,
+            storage: &shell.storage,
             vp_wasm_cache: &mut shell.vp_wasm_cache,
             tx_wasm_cache: &mut shell.tx_wasm_cache,
         }
@@ -103,13 +103,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub(crate) fn dispatch_tx<'a, D, H, CA>(
     tx_type: TxType,
     tx_length: usize,
-    ShellParams {
-        block_gas_meter,
-        write_log,
-        storage,
-        vp_wasm_cache,
-        tx_wasm_cache,
-    }: ShellParams<'a, D, H, CA>,
+    block_gas_meter: &'a mut BlockGasMeter,
+    write_log: &'a mut WriteLog,
+    storage: &'a mut Storage<D, H>,
+    vp_wasm_cache: &'a mut VpCache<CA>,
+    tx_wasm_cache: &'a mut TxCache<CA>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
