@@ -8,6 +8,7 @@ mod prepare_block {
     use namada::types::vote_extensions::ethereum_events::{
         self, MultiSignedEthEvent,
     };
+    use namada::types::vote_extensions::VoteExtensionDigest;
     use namada::types::voting_power::FractionalVotingPower;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
@@ -79,13 +80,13 @@ mod prepare_block {
                 .get_protocol_key()
                 .expect("Validators should always have a protocol key");
 
-            let vote_extension_digest =
+            let ethereum_events =
                 local_last_commit.and_then(|local_last_commit| {
                     let votes = local_last_commit.votes;
                     self.compress_ethereum_events(votes)
                 });
-            let vote_extension_digest =
-                match (vote_extension_digest, self.storage.last_height) {
+            let ethereum_events =
+                match (ethereum_events, self.storage.last_height) {
                     // handle genesis block
                     (None, BlockHeight(0)) => return vec![],
                     (Some(_), BlockHeight(0)) => {
@@ -110,14 +111,12 @@ mod prepare_block {
                     ),
                 };
 
-            let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-                .sign(protocol_key)
-                .to_bytes();
-            let tx_record = record::add(tx);
-
-            // TODO: include here a validator set update tx,
-            // if we are at the end of an epoch
-            vec![tx_record]
+            iter_protocol_txs(VoteExtensionDigest {
+                ethereum_events,
+                validator_set_update: None,
+            })
+            .map(|tx| record::add(tx.sign(protocol_key).to_bytes()))
+            .collect()
         }
 
         /// Builds a batch of mempool transactions
@@ -246,6 +245,21 @@ mod prepare_block {
 
             Some(ethereum_events::VextDigest { events, signatures })
         }
+    }
+
+    /// Yields an iterator over the [`ProtocolTxType`] transactions
+    /// in a [`VoteExtensionDigest`].
+    fn iter_protocol_txs(
+        digest: VoteExtensionDigest,
+    ) -> impl Iterator<Item = ProtocolTxType> {
+        [
+            Some(ProtocolTxType::EthereumEvents(digest.ethereum_events)),
+            digest
+                .validator_set_update
+                .map(ProtocolTxType::ValidatorSetUpdate),
+        ]
+        .into_iter()
+        .flat_map(|tx| tx)
     }
 
     /// Functions for creating the appropriate TxRecord given the
