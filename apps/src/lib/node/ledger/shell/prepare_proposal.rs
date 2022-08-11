@@ -9,6 +9,7 @@ mod prepare_block {
         iter_protocol_txs, split_vote_extensions,
     };
     use super::super::*;
+    use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
     impl<D, H> Shell<D, H>
@@ -77,7 +78,7 @@ mod prepare_block {
                 return vec![];
             }
 
-            let (eth_events, _valset_upds) = split_vote_extensions(
+            let (eth_events, valset_upds) = split_vote_extensions(
                 local_last_commit
                     .expect(
                         "Honest Namada validators will always sign \
@@ -101,6 +102,15 @@ mod prepare_block {
                 .compress_ethereum_events(eth_events)
                 .expect(NOT_ENOUGH_VOTING_POWER_MSG);
 
+            let validator_set_update = self
+                .storage
+                .can_send_validator_set_update(self.storage.last_height)
+                .then(|| ())
+                .map(|()| {
+                    self.compress_valset_updates(valset_upds)
+                        .expect(NOT_ENOUGH_VOTING_POWER_MSG)
+                });
+
             let protocol_key = self
                 .mode
                 .get_protocol_key()
@@ -108,7 +118,7 @@ mod prepare_block {
 
             iter_protocol_txs(VoteExtensionDigest {
                 ethereum_events,
-                validator_set_update: None,
+                validator_set_update,
             })
             .map(|tx| record::add(tx.sign(protocol_key).to_bytes()))
             .collect()
