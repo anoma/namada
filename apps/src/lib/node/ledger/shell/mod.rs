@@ -71,6 +71,7 @@ use tower_abci::{request, response};
 #[cfg(feature = "ABCI")]
 use tower_abci_old::{request, response};
 
+use super::protocol::ShellParams;
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
 use crate::node::ledger::events::Event;
@@ -662,7 +663,7 @@ where
     }
 
     /// Simulate validation and application of a transaction.
-    fn dry_run_tx(&mut self, tx_bytes: &[u8]) -> response::Query {
+    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
         let mut response = response::Query::default();
         let mut gas_meter = BlockGasMeter::default();
         let mut write_log = WriteLog::default();
@@ -670,8 +671,18 @@ where
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
         match Tx::try_from(tx_bytes) {
             Ok(tx) => {
-                match protocol::apply_wasm_tx(tx, tx_bytes.len(), self.into())
-                    .map_err(Error::TxApply)
+                match protocol::apply_wasm_tx(
+                    tx,
+                    tx_bytes.len(),
+                    ShellParams {
+                        block_gas_meter: &mut gas_meter,
+                        write_log: &mut write_log,
+                        storage: &self.storage,
+                        vp_wasm_cache: &mut vp_wasm_cache,
+                        tx_wasm_cache: &mut tx_wasm_cache,
+                    },
+                )
+                .map_err(Error::TxApply)
                 {
                     Ok(result) => response.info = result.to_string(),
                     Err(error) => {
