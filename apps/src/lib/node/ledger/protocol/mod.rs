@@ -23,6 +23,8 @@ use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
+use crate::node::ledger::shell::Shell;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
@@ -59,6 +61,36 @@ pub enum Error {
     AccessForbidden(InternalAddress),
 }
 
+pub(crate) struct ShellParams<'a, D, H, CA>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    pub block_gas_meter: &'a mut BlockGasMeter,
+    pub write_log: &'a mut WriteLog,
+    pub storage: &'a mut Storage<D, H>,
+    pub vp_wasm_cache: &'a mut VpCache<CA>,
+    pub tx_wasm_cache: &'a mut TxCache<CA>,
+}
+
+impl<'a, D, H> From<&'a mut Shell<D, H>>
+    for ShellParams<'a, D, H, namada::vm::WasmCacheRwAccess>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    fn from(shell: &'a mut Shell<D, H>) -> Self {
+        Self {
+            block_gas_meter: &mut shell.gas_meter,
+            write_log: &mut shell.write_log,
+            storage: &mut shell.storage,
+            vp_wasm_cache: &mut shell.vp_wasm_cache,
+            tx_wasm_cache: &mut shell.tx_wasm_cache,
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Dispatch a given transaction to be applied based on its type. Some storage
@@ -71,11 +103,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub(crate) fn dispatch_tx<'a, D, H, CA>(
     tx_type: TxType,
     tx_length: usize,
-    block_gas_meter: &'a mut BlockGasMeter,
-    write_log: &'a mut WriteLog,
-    storage: &'a mut Storage<D, H>,
-    vp_wasm_cache: &'a mut VpCache<CA>,
-    tx_wasm_cache: &'a mut TxCache<CA>,
+    ShellParams {
+        block_gas_meter,
+        write_log,
+        storage,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    }: ShellParams<'a, D, H, CA>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -87,11 +121,13 @@ where
         TxType::Decrypted(DecryptedTx::Decrypted(tx)) => apply_wasm_tx(
             tx,
             tx_length,
-            block_gas_meter,
-            write_log,
-            storage,
-            vp_wasm_cache,
-            tx_wasm_cache,
+            ShellParams {
+                block_gas_meter,
+                write_log,
+                storage,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            },
         ),
         TxType::Protocol(ProtocolTx { tx, .. }) => {
             apply_protocol_tx(tx, storage)
@@ -108,11 +144,13 @@ where
 pub(crate) fn apply_wasm_tx<'a, D, H, CA>(
     tx: Tx,
     tx_length: usize,
-    block_gas_meter: &'a mut BlockGasMeter,
-    write_log: &'a mut WriteLog,
-    storage: &'a Storage<D, H>,
-    vp_wasm_cache: &'a mut VpCache<CA>,
-    tx_wasm_cache: &'a mut TxCache<CA>,
+    ShellParams {
+        block_gas_meter,
+        write_log,
+        storage,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    }: ShellParams<'a, D, H, CA>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -186,11 +224,12 @@ where
         }
         _ => {
             tracing::error!(
-                "Attempt made to apply an unsupported protocol transaction! - {:#?}",
+                "Attempt made to apply an unsupported protocol transaction! - \
+                 {:#?}",
                 tx
             );
             Err(Error::TxTypeError)
-        },
+        }
     }
 }
 
