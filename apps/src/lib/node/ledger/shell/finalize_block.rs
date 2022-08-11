@@ -521,7 +521,7 @@ mod test_finalize_block {
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};
     use namada::types::vote_extensions::ethereum_events::{
-        MultiSignedEthEvent, Vext, VextDigest,
+        self, MultiSignedEthEvent,
     };
 
     use super::*;
@@ -1019,7 +1019,7 @@ mod test_finalize_block {
         assert_eq!(queued_event, event);
 
         // ---- The protocol tx that includes this event on-chain
-        let signature = Vext {
+        let signature = ethereum_events::Vext {
             block_height: shell.storage.last_height,
             ethereum_events: vec![event.clone()],
             validator_addr: address.clone(),
@@ -1031,7 +1031,7 @@ mod test_finalize_block {
             signers: HashSet::from([address.clone()]),
         };
 
-        let digest = VextDigest {
+        let digest = ethereum_events::VextDigest {
             signatures: vec![(address, signature)].into_iter().collect(),
             events: vec![signed],
         };
