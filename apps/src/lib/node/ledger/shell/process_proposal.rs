@@ -427,10 +427,8 @@ mod test_process_proposal {
     use tendermint_proto_abci::google::protobuf::Timestamp;
 
     use super::*;
-    #[cfg(not(feature = "ABCI"))]
-    use crate::node::ledger::shell::test_utils::TestError;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, ProcessProposal, TestShell,
+        self, gen_keypair, ProcessProposal, TestError, TestShell,
     };
     use crate::wallet;
 

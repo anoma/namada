@@ -1003,6 +1003,7 @@ mod test_finalize_block {
     /// Test that once a validator's vote for an Ethereum event lands
     /// on-chain, it dequeues from the list of events to vote on.
     #[test]
+    #[cfg(not(feature = "ABCI"))]
     fn test_eth_events_dequeued() {
         let (mut shell, _, oracle) = setup();
         let protocol_key =
