@@ -144,10 +144,17 @@ impl ValidatorWallet {
     fn gen(scheme: SchemeType, unsafe_dont_encrypt: bool) -> Self {
         let password = wallet::read_and_confirm_pwd(unsafe_dont_encrypt);
         let (account_key, account_sk) = gen_key_to_store(scheme, &password);
-        let (consensus_key, consensus_sk) = gen_key_to_store(scheme, &password);
+        let (consensus_key, consensus_sk) = gen_key_to_store(
+            // Note that TM only allows ed25519 for consensus key
+            SchemeType::Ed25519,
+            &password,
+        );
         let (rewards_key, rewards_sk) = gen_key_to_store(scheme, &password);
-        let (tendermint_node_key, tendermint_node_sk) =
-            gen_key_to_store(scheme, &password);
+        let (tendermint_node_key, tendermint_node_sk) = gen_key_to_store(
+            // Note that TM only allows ed25519 for node IDs
+            SchemeType::Ed25519,
+            &password,
+        );
         let validator_keys = store::Store::gen_validator_keys(None, scheme);
         let store = ValidatorStore {
             account_key,
