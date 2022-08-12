@@ -111,9 +111,16 @@ mod extend_votes {
         }
 
         /// This checks that the vote extension:
-        /// * Correctly deserializes
-        /// * Was correctly signed by an active validator.
-        /// * The block height signed over is correct (replay protection)
+        /// * Correctly deserializes.
+        /// * The Ethereum events vote extension within was correctly signed by
+        ///   an active validator.
+        /// * The validator set update vote extension within was correctly
+        ///   signed by an active validator, in case it could have been sent at
+        ///   the current block height.
+        /// * The Ethereum events vote extension block height signed over is
+        ///   correct (for replay protection).
+        /// * The validator set update vote extension epoch signed over is
+        ///   correct (for replay protection).
         ///
         /// INVARIANT: This method must be stateless.
         pub fn verify_vote_extension(
@@ -136,8 +143,8 @@ mod extend_votes {
                         };
                     }
                 };
-            let new_height = self.storage.last_height + 1;
-            let validated_eth_events = self.validate_eth_events_vext(ext.ethereum_events, new_height)
+            let curr_height = self.storage.last_height + 1;
+            let validated_eth_events = self.validate_eth_events_vext(ext.ethereum_events, curr_height)
                 .then(|| true)
                 .unwrap_or_else(|| {
                     tracing::warn!(
@@ -148,7 +155,7 @@ mod extend_votes {
                     );
                     false
                 });
-            let validated_valset_upd = self.storage.can_send_validator_set_update(new_height).then(|| {
+            let validated_valset_upd = self.storage.can_send_validator_set_update(curr_height).then(|| {
                 ext.validator_set_update
                     .and_then(|ext| {
                         self.validate_valset_upd_vext(ext, self.storage.get_current_epoch().0.next())
