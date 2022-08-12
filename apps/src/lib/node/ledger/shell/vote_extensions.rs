@@ -69,6 +69,10 @@ mod extend_votes {
                 validator_addr,
             };
 
+            // TODO: should we move this inside the if block below?
+            // non-validator nodes don't need to perform these checks;
+            // similarly, the ethereum events stuff above could be moved
+            // to the if block below
             let validator_addr = addr;
             let vset_upd = self
                 .storage
