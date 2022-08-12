@@ -2,6 +2,7 @@
 //! and VPs (both native and WASM).
 
 mod error;
+pub mod collections;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::{CustomError, Error, Result, ResultExt};
