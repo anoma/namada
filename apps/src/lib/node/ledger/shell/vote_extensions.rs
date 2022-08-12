@@ -60,11 +60,11 @@ mod extend_votes {
                 .expect("only validators should receive this method call")
                 .to_owned();
 
-            let new_height = self.storage.last_height + 1;
+            let curr_height = self.storage.last_height + 1;
 
             let validator_addr = addr.clone();
             let eth_evs = ethereum_events::Vext {
-                block_height: new_height,
+                block_height: curr_height,
                 ethereum_events: self.new_ethereum_events(),
                 validator_addr,
             };
@@ -72,7 +72,7 @@ mod extend_votes {
             let validator_addr = addr;
             let vset_upd = self
                 .storage
-                .can_send_validator_set_update(new_height)
+                .can_send_validator_set_update(curr_height)
                 .then(|| {
                     let next_epoch = self.storage.get_current_epoch().0.next();
                     let _validator_set =
