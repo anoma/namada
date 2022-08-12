@@ -3,6 +3,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use eyre::eyre;
+use itertools::Itertools;
 
 use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
 use crate::ledger::native_vp::{Ctx, NativeVp};
@@ -114,7 +115,18 @@ fn validate_tx(
         keys.insert(key);
     }
 
-    Ok(false)
+    // We can .unwrap() here as we know for sure that this set has len=2
+    let (key_a, key_b) = keys.into_iter().collect_tuple().unwrap();
+    if key_a.asset != key_b.asset {
+        tracing::debug!(
+            ?key_a,
+            ?key_b,
+            "Rejecting transaction as keys are for different assets"
+        );
+        return Ok(false);
+    }
+
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -124,8 +136,10 @@ mod tests {
     use super::*;
     use crate::types::ethereum_events;
 
-    const ARBITRARY_OWNER_ADDRESS: &str =
+    const ARBITRARY_OWNER_A_ADDRESS: &str =
         "atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4";
+    const ARBITRARY_OWNER_B_ADDRESS: &str =
+        "atest1v4ehgw36xuunwd6989prwdfkxqmnvsfjxs6nvv6xxucrs3f3xcmns3fcxdzrvvz9xverzvzr56le8f";
 
     /// Return some arbitrary random key belonging to this account
     fn arbitrary_key() -> Key {
@@ -205,7 +219,35 @@ mod tests {
                     &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
                 )
                 .balance(
-                    &Address::decode(ARBITRARY_OWNER_ADDRESS)
+                    &Address::decode(ARBITRARY_OWNER_A_ADDRESS)
+                        .expect("Couldn't set up test"),
+                ),
+            ]);
+
+            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+
+            assert!(matches!(result, Ok(false)));
+        }
+    }
+
+    #[test]
+    fn test_rejects_if_multitoken_keys_for_different_assets() {
+        let tx_data = vec![];
+        let verifiers = BTreeSet::new();
+        {
+            let keys_changed = BTreeSet::from_iter(vec![
+                wrapped_erc20s::Keys::from(
+                    &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
+                )
+                .balance(
+                    &Address::decode(ARBITRARY_OWNER_A_ADDRESS)
+                        .expect("Couldn't set up test"),
+                ),
+                wrapped_erc20s::Keys::from(
+                    &ethereum_events::testing::USDC_ERC20_ETH_ADDRESS,
+                )
+                .balance(
+                    &Address::decode(ARBITRARY_OWNER_B_ADDRESS)
                         .expect("Couldn't set up test"),
                 ),
             ]);
