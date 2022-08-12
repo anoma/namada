@@ -22,6 +22,8 @@ pub use error::*;
 pub use namada::ledger::governance::storage as gov_storage;
 pub use namada::ledger::parameters::storage as parameters_storage;
 pub use namada::ledger::storage::types::encode;
+use namada::ledger::storage_api;
+pub use namada::ledger::storage_api::StorageRead;
 pub use namada::ledger::treasury::storage as treasury_storage;
 pub use namada::ledger::tx_env::TxEnv;
 pub use namada::proto::{Signed, SignedTxData};
@@ -105,14 +107,13 @@ pub type TxResult = EnvResult<()>;
 #[derive(Debug)]
 pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 
-impl TxEnv for Ctx {
-    type Error = Error;
+impl StorageRead for Ctx {
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
 
     fn read<T: BorshDeserialize>(
         &self,
         key: &namada::types::storage::Key,
-    ) -> Result<Option<T>, Error> {
+    ) -> Result<Option<T>, storage_api::Error> {
         let key = key.to_string();
         let read_result =
             unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
@@ -123,7 +124,7 @@ impl TxEnv for Ctx {
     fn read_bytes(
         &self,
         key: &namada::types::storage::Key,
-    ) -> Result<Option<Vec<u8>>, Error> {
+    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
         let key = key.to_string();
         let read_result =
             unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
@@ -133,14 +134,14 @@ impl TxEnv for Ctx {
     fn has_key(
         &self,
         key: &namada::types::storage::Key,
-    ) -> Result<bool, Error> {
+    ) -> Result<bool, storage_api::Error> {
         let key = key.to_string();
         let found =
             unsafe { anoma_tx_has_key(key.as_ptr() as _, key.len() as _) };
         Ok(HostEnvResult::is_success(found))
     }
 
-    fn get_chain_id(&self) -> Result<String, Error> {
+    fn get_chain_id(&self) -> Result<String, storage_api::Error> {
         let result = Vec::with_capacity(CHAIN_ID_LENGTH);
         unsafe {
             anoma_tx_get_chain_id(result.as_ptr() as _);
@@ -153,13 +154,13 @@ impl TxEnv for Ctx {
 
     fn get_block_height(
         &self,
-    ) -> Result<namada::types::storage::BlockHeight, Error> {
+    ) -> Result<namada::types::storage::BlockHeight, storage_api::Error> {
         Ok(BlockHeight(unsafe { anoma_tx_get_block_height() }))
     }
 
     fn get_block_hash(
         &self,
-    ) -> Result<namada::types::storage::BlockHash, Error> {
+    ) -> Result<namada::types::storage::BlockHash, storage_api::Error> {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
         unsafe {
             anoma_tx_get_block_hash(result.as_ptr() as _);
@@ -170,9 +171,37 @@ impl TxEnv for Ctx {
         Ok(BlockHash::try_from(slice).expect("Cannot convert the hash"))
     }
 
-    fn get_block_epoch(&self) -> Result<namada::types::storage::Epoch, Error> {
+    fn get_block_epoch(
+        &self,
+    ) -> Result<namada::types::storage::Epoch, storage_api::Error> {
         Ok(Epoch(unsafe { anoma_tx_get_block_epoch() }))
     }
+
+    fn iter_prefix(
+        &self,
+        prefix: &namada::types::storage::Key,
+    ) -> Result<Self::PrefixIter, storage_api::Error> {
+        let prefix = prefix.to_string();
+        let iter_id = unsafe {
+            anoma_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        };
+        Ok(KeyValIterator(iter_id, PhantomData))
+    }
+
+    fn iter_next(
+        &self,
+        iter: &mut Self::PrefixIter,
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        let read_result = unsafe { anoma_tx_iter_next(iter.0) };
+        Ok(read_key_val_bytes_from_buffer(
+            read_result,
+            anoma_tx_result_buffer,
+        ))
+    }
+}
+
+impl TxEnv for Ctx {
+    type Error = Error;
 
     fn get_block_time(&self) -> Result<time::Rfc3339String, Error> {
         let read_result = unsafe { anoma_tx_get_block_time() };
@@ -184,33 +213,11 @@ impl TxEnv for Ctx {
         ))
     }
 
-    fn iter_prefix(
-        &self,
-        prefix: &namada::types::storage::Key,
-    ) -> Result<Self::PrefixIter, Error> {
-        let prefix = prefix.to_string();
-        let iter_id = unsafe {
-            anoma_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
-        };
-        Ok(KeyValIterator(iter_id, PhantomData))
-    }
-
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, Error> {
-        let read_result = unsafe { anoma_tx_iter_next(iter.0) };
-        Ok(read_key_val_bytes_from_buffer(
-            read_result,
-            anoma_tx_result_buffer,
-        ))
-    }
-
     fn write<T: BorshSerialize>(
         &mut self,
         key: &namada::types::storage::Key,
         val: T,
-    ) -> Result<(), Error> {
+    ) -> storage_api::Result<()> {
         let buf = val.try_to_vec().unwrap();
         self.write_bytes(key, buf)
     }
@@ -219,7 +226,7 @@ impl TxEnv for Ctx {
         &mut self,
         key: &namada::types::storage::Key,
         val: impl AsRef<[u8]>,
-    ) -> Result<(), Error> {
+    ) -> storage_api::Result<()> {
         let key = key.to_string();
         unsafe {
             anoma_tx_write(
@@ -261,7 +268,7 @@ impl TxEnv for Ctx {
     fn delete(
         &mut self,
         key: &namada::types::storage::Key,
-    ) -> Result<(), Error> {
+    ) -> storage_api::Result<()> {
         let key = key.to_string();
         unsafe { anoma_tx_delete(key.as_ptr() as _, key.len() as _) };
         Ok(())
