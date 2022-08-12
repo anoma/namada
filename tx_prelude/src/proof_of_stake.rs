@@ -1,6 +1,5 @@
 //! Proof of Stake system integration with functions for transactions
 
-use namada::ledger::pos::types::Slash;
 pub use namada::ledger::pos::*;
 use namada::ledger::pos::{
     bond_key, namada_proof_of_stake, params_key, total_voting_power_key,
@@ -9,7 +8,7 @@ use namada::ledger::pos::{
     validator_staking_reward_address_key, validator_state_key,
     validator_total_deltas_key, validator_voting_power_key,
 };
-use namada::types::address::{self, Address, InternalAddress};
+use namada::types::address::Address;
 use namada::types::transaction::InitValidator;
 use namada::types::{key, token};
 pub use namada_proof_of_stake::{
@@ -114,89 +113,9 @@ impl Ctx {
     }
 }
 
-impl namada_proof_of_stake::PosReadOnly for Ctx {
-    type Address = Address;
+namada::impl_pos_read_only! {
     type Error = crate::Error;
-    type PublicKey = key::common::PublicKey;
-    type TokenAmount = token::Amount;
-    type TokenChange = token::Change;
-
-    const POS_ADDRESS: Self::Address = Address::Internal(InternalAddress::PoS);
-
-    fn staking_token_address() -> Self::Address {
-        address::xan()
-    }
-
-    fn read_pos_params(&self) -> Result<PosParams, Self::Error> {
-        let params = self.read(&params_key())?;
-        Ok(params.expect("PoS params should always be set"))
-    }
-
-    fn read_validator_staking_reward_address(
-        &self,
-        key: &Self::Address,
-    ) -> Result<Option<Self::Address>, Self::Error> {
-        self.read(&validator_staking_reward_address_key(key))
-    }
-
-    fn read_validator_consensus_key(
-        &self,
-        key: &Self::Address,
-    ) -> Result<Option<ValidatorConsensusKeys>, Self::Error> {
-        self.read(&validator_consensus_key_key(key))
-    }
-
-    fn read_validator_state(
-        &self,
-        key: &Self::Address,
-    ) -> Result<Option<ValidatorStates>, Self::Error> {
-        self.read(&validator_state_key(key))
-    }
-
-    fn read_validator_total_deltas(
-        &self,
-        key: &Self::Address,
-    ) -> Result<Option<ValidatorTotalDeltas>, Self::Error> {
-        self.read(&validator_total_deltas_key(key))
-    }
-
-    fn read_validator_voting_power(
-        &self,
-        key: &Self::Address,
-    ) -> Result<Option<ValidatorVotingPowers>, Self::Error> {
-        self.read(&validator_voting_power_key(key))
-    }
-
-    fn read_validator_slashes(
-        &self,
-        key: &Self::Address,
-    ) -> Result<Vec<Slash>, Self::Error> {
-        let val = self.read(&validator_slashes_key(key))?;
-        Ok(val.unwrap_or_default())
-    }
-
-    fn read_bond(&self, key: &BondId) -> Result<Option<Bonds>, Self::Error> {
-        self.read(&bond_key(key))
-    }
-
-    fn read_unbond(
-        &self,
-        key: &BondId,
-    ) -> Result<Option<Unbonds>, Self::Error> {
-        self.read(&unbond_key(key))
-    }
-
-    fn read_validator_set(&self) -> Result<ValidatorSets, Self::Error> {
-        let val = self.read(&validator_set_key())?;
-        Ok(val.expect("Validator sets must always have a value"))
-    }
-
-    fn read_total_voting_power(
-        &self,
-    ) -> Result<TotalVotingPowers, Self::Error> {
-        let val = self.read(&total_voting_power_key())?;
-        Ok(val.expect("Total voting power must always have a value"))
-    }
+    impl namada_proof_of_stake::PosReadOnly for Ctx
 }
 
 impl From<namada_proof_of_stake::BecomeValidatorError<Address>> for Error {
@@ -237,7 +156,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         &mut self,
         params: &PosParams,
     ) -> Result<(), Self::Error> {
-        self.write(&params_key(), params)
+        self.write(&params_key(), params).into_env_result()
     }
 
     fn write_validator_address_raw_hash(
@@ -246,6 +165,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
     ) -> Result<(), Self::Error> {
         let raw_hash = address.raw_hash().unwrap().to_owned();
         self.write(&validator_address_raw_hash_key(raw_hash), address)
+            .into_env_result()
     }
 
     fn write_validator_staking_reward_address(
@@ -254,6 +174,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: Self::Address,
     ) -> Result<(), Self::Error> {
         self.write(&validator_staking_reward_address_key(key), &value)
+            .into_env_result()
     }
 
     fn write_validator_consensus_key(
@@ -262,6 +183,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: ValidatorConsensusKeys,
     ) -> Result<(), Self::Error> {
         self.write(&validator_consensus_key_key(key), &value)
+            .into_env_result()
     }
 
     fn write_validator_state(
@@ -270,6 +192,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: ValidatorStates,
     ) -> Result<(), Self::Error> {
         self.write(&validator_state_key(key), &value)
+            .into_env_result()
     }
 
     fn write_validator_total_deltas(
@@ -278,6 +201,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: ValidatorTotalDeltas,
     ) -> Result<(), Self::Error> {
         self.write(&validator_total_deltas_key(key), &value)
+            .into_env_result()
     }
 
     fn write_validator_voting_power(
@@ -286,6 +210,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: ValidatorVotingPowers,
     ) -> Result<(), Self::Error> {
         self.write(&validator_voting_power_key(key), &value)
+            .into_env_result()
     }
 
     fn write_bond(
@@ -293,7 +218,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         key: &BondId,
         value: Bonds,
     ) -> Result<(), Self::Error> {
-        self.write(&bond_key(key), &value)
+        self.write(&bond_key(key), &value).into_env_result()
     }
 
     fn write_unbond(
@@ -301,14 +226,14 @@ impl namada_proof_of_stake::PosActions for Ctx {
         key: &BondId,
         value: Unbonds,
     ) -> Result<(), Self::Error> {
-        self.write(&unbond_key(key), &value)
+        self.write(&unbond_key(key), &value).into_env_result()
     }
 
     fn write_validator_set(
         &mut self,
         value: ValidatorSets,
     ) -> Result<(), Self::Error> {
-        self.write(&validator_set_key(), &value)
+        self.write(&validator_set_key(), &value).into_env_result()
     }
 
     fn write_total_voting_power(
@@ -316,14 +241,15 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: TotalVotingPowers,
     ) -> Result<(), Self::Error> {
         self.write(&total_voting_power_key(), &value)
+            .into_env_result()
     }
 
     fn delete_bond(&mut self, key: &BondId) -> Result<(), Self::Error> {
-        self.delete(&bond_key(key))
+        self.delete(&bond_key(key)).into_env_result()
     }
 
     fn delete_unbond(&mut self, key: &BondId) -> Result<(), Self::Error> {
-        self.delete(&unbond_key(key))
+        self.delete(&unbond_key(key)).into_env_result()
     }
 
     fn transfer(

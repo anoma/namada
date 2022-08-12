@@ -552,7 +552,7 @@ pub mod testing {
     use namada_tx_prelude::proof_of_stake::{
         staking_token_address, BondId, Bonds, PosParams, Unbonds,
     };
-    use namada_tx_prelude::Address;
+    use namada_tx_prelude::{Address, StorageRead};
     use proptest::prelude::*;
 
     use crate::tx::{self, tx_host_env};
