@@ -1,10 +1,13 @@
 //! Validity predicate for the Ethereum bridge
 
+mod store;
+
 use std::collections::{BTreeSet, HashSet};
 
-use eyre::{eyre, Context, Result};
+use eyre::{eyre, Result};
 use itertools::Itertools;
 
+use self::store::StorageReader;
 use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage as ledger_storage;
@@ -12,34 +15,6 @@ use crate::ledger::storage::StorageHasher;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
-
-trait StorageReader {
-    /// Storage read prior state (before tx execution). It will try to read from
-    /// the storage.
-    fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>>;
-
-    /// Storage read posterior state (after tx execution). It will try to read
-    /// from the write log first and if no entry found then from the
-    /// storage.
-    fn read_post(&self, key: &Key) -> Result<Option<Vec<u8>>>;
-}
-
-impl<'ctx, DB, H, CA> StorageReader for &Ctx<'ctx, DB, H, CA>
-where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> + 'static,
-    H: StorageHasher + 'static,
-    CA: 'static + WasmCacheAccess,
-{
-    fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        Ctx::read_pre(&self, key)
-            .wrap_err_with(|| format!("couldn't read_pre {}", key))
-    }
-
-    fn read_post(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        Ctx::read_post(&self, key)
-            .wrap_err_with(|| format!("couldn't read_post {}", key))
-    }
-}
 
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, DB, H, CA>
