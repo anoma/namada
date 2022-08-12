@@ -20,6 +20,10 @@ mod extend_votes {
     use super::super::*;
     use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
 
+    /// Message to be passed to `.expect()` calls in this module.
+    const VALIDATOR_EXPECT_MSG: &str =
+        "Only validators receive this method call.";
+
     /// The error yielded from validating faulty vote extensions in the shell
     #[derive(Error, Debug)]
     pub enum VoteExtensionError {
@@ -54,61 +58,80 @@ mod extend_votes {
             &mut self,
             _req: request::ExtendVote,
         ) -> response::ExtendVote {
-            let addr = self
+            let vote_extension = VoteExtension {
+                ethereum_events: self.extend_vote_with_ethereum_events(),
+                validator_set_update: self.extend_vote_with_valset_update(),
+            }
+            .try_to_vec()
+            .unwrap();
+
+            response::ExtendVote { vote_extension }
+        }
+
+        /// Extend PreCommit votes with [`ethereum_events::Vext`] instances.
+        pub fn extend_vote_with_ethereum_events(
+            &mut self,
+        ) -> Signed<ethereum_events::Vext> {
+            let validator_addr = self
                 .mode
                 .get_validator_address()
-                .expect("only validators should receive this method call")
+                .expect(VALIDATOR_EXPECT_MSG)
                 .to_owned();
 
             let curr_height = self.storage.last_height + 1;
 
-            let validator_addr = addr.clone();
-            let eth_evs = ethereum_events::Vext {
+            let ext = ethereum_events::Vext {
                 block_height: curr_height,
                 ethereum_events: self.new_ethereum_events(),
                 validator_addr,
             };
 
-            let validator_addr = addr;
-            let vset_upd = self
-                .storage
+            let protocol_key = match &self.mode {
+                ShellMode::Validator { data, .. } => {
+                    &data.keys.protocol_keypair
+                }
+                _ => unreachable!("{VALIDATOR_EXPECT_MSG}"),
+            };
+
+            ext.sign(protocol_key)
+        }
+
+        /// Extend PreCommit votes with [`validator_set_update::Vext`]
+        /// instances.
+        pub fn extend_vote_with_valset_update(
+            &mut self,
+        ) -> Option<validator_set_update::SignedVext> {
+            let validator_addr = self
+                .mode
+                .get_validator_address()
+                .expect(VALIDATOR_EXPECT_MSG)
+                .to_owned();
+
+            self.storage
                 .can_send_validator_set_update(SendValsetUpd::Now)
                 .then(|| {
                     let next_epoch = self.storage.get_current_epoch().0.next();
                     let _validator_set =
                         self.storage.get_active_validators(Some(next_epoch));
 
-                    validator_set_update::Vext {
+                    let ext = validator_set_update::Vext {
                         validator_addr,
                         // TODO: we need a way to map ethereum addresses to
                         // namada validator addresses
                         voting_powers: std::collections::HashMap::new(),
                         epoch: next_epoch,
-                    }
-                });
+                    };
 
-            let validator_data = match &self.mode {
-                ShellMode::Validator { data, .. } => data,
-                _ => unreachable!("only validators receive this method call"),
-            };
+                    let protocol_key = match &self.mode {
+                        ShellMode::Validator { data, .. } => {
+                            &data.keys.protocol_keypair
+                        }
+                        _ => unreachable!("{VALIDATOR_EXPECT_MSG}"),
+                    };
 
-            let protocol_key = &validator_data.keys.protocol_keypair;
-
-            let vset_upd = vset_upd.map(|ext| {
-                // TODO: sign validator set update with secp key instead
-                ext.sign(protocol_key)
-            });
-
-            let eth_evs = eth_evs.sign(protocol_key);
-
-            let vote_extension = VoteExtension {
-                ethereum_events: eth_evs,
-                validator_set_update: vset_upd,
-            }
-            .try_to_vec()
-            .unwrap();
-
-            response::ExtendVote { vote_extension }
+                    // TODO: sign validator set update with secp key instead
+                    ext.sign(protocol_key)
+                })
         }
 
         /// This checks that the vote extension:
@@ -144,8 +167,29 @@ mod extend_votes {
                         };
                     }
                 };
+
+            let validated_eth_events =
+                self.verify_ethereum_events(&req, ext.ethereum_events);
+            let validated_valset_upd =
+                self.verify_valset_update(&req, ext.validator_set_update);
+
+            response::VerifyVoteExtension {
+                status: if validated_eth_events && validated_valset_upd {
+                    VerifyStatus::Accept.into()
+                } else {
+                    VerifyStatus::Reject.into()
+                },
+            }
+        }
+
+        /// Check if [`ethereum_events::Vext`] instances are valid.
+        pub fn verify_ethereum_events(
+            &self,
+            req: &request::VerifyVoteExtension,
+            ext: Signed<ethereum_events::Vext>,
+        ) -> bool {
             let curr_height = self.storage.last_height + 1;
-            let validated_eth_events = self.validate_eth_events_vext(ext.ethereum_events, curr_height)
+            self.validate_eth_events_vext(ext, curr_height)
                 .then(|| true)
                 .unwrap_or_else(|| {
                     tracing::warn!(
@@ -155,19 +199,31 @@ mod extend_votes {
                         "Received Ethereum events vote extension that didn't validate"
                     );
                     false
-                });
-            let validated_valset_upd = self.storage.can_send_validator_set_update(SendValsetUpd::Now).then(|| {
-                ext.validator_set_update
+                })
+        }
+
+        /// Check if [`validator_set_update::Vext`] instances are valid.
+        pub fn verify_valset_update(
+            &self,
+            req: &request::VerifyVoteExtension,
+            ext: Option<validator_set_update::SignedVext>,
+        ) -> bool {
+            self.storage.can_send_validator_set_update(SendValsetUpd::Now).then(|| {
+                ext
                     .and_then(|ext| {
+                        // we have a valset update vext when we're expecting one, cool,
+                        // let's validate it
                         self.validate_valset_upd_vext(ext, self.storage.get_current_epoch().0.next())
                             .then(|| true)
                     })
                     .unwrap_or_else(|| {
+                        // either validation failed, or we were expecting a valset update
+                        // vext and got none
                         tracing::warn!(
                             ?req.validator_address,
                             ?req.hash,
                             req.height,
-                            "Received validator set update vote extension that didn't validate"
+                            "Missing or invalid validator set update vote extension"
                         );
                         false
                     })
@@ -176,14 +232,7 @@ mod extend_votes {
                 // vote extension at a particular block height, we will
                 // just return true as the validation result
                 true
-            });
-            response::VerifyVoteExtension {
-                status: if validated_eth_events && validated_valset_upd {
-                    VerifyStatus::Accept.into()
-                } else {
-                    VerifyStatus::Reject.into()
-                },
-            }
+            })
         }
     }
 
