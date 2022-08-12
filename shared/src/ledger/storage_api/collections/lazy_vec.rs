@@ -79,7 +79,7 @@ impl<T> LazyVec<T> where T: BorshSerialize + BorshDeserialize {
     }
 
     /// get the data held at a specific index within the data subkey
-    fn get(&self, sub_index: u64, storage_read: &impl StorageRead) -> Result<Option<T>> {
+    pub fn get(&self, sub_index: u64, storage_read: &impl StorageRead) -> Result<Option<T>> {
         storage_read.read(&self.get_data_key(sub_index))
     }
 
