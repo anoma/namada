@@ -89,20 +89,65 @@ fn validate_tx(
         relevant_keys.len = keys_changed.len(),
         "Found keys changed under our account"
     );
+
+    if keys_changed.len() != 2 {
+        tracing::debug!(
+            relevant_keys.len = keys_changed.len(),
+            "Rejecting transaction as only two keys should have changed"
+        );
+        return Ok(false);
+    }
+
     Ok(false)
 }
 
 #[cfg(test)]
 mod tests {
+    use rand::Rng;
+
     use super::*;
+
+    /// Return some arbitrary random key belonging to this account
+    fn arbitrary_key() -> Key {
+        let mut rng = rand::thread_rng();
+        let rn = rng.gen::<u64>();
+        storage::prefix()
+            .push(&format!("arbitrary key segment {}", rn))
+            .expect("should always be able to construct this key")
+    }
 
     #[test]
     fn test_error_if_triggered_without_keys_changed() {
         let tx_data = vec![];
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
+
         let result = validate_tx(&tx_data, &keys_changed, &verifiers);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rejects_if_not_two_keys_changed() {
+        let tx_data = vec![];
+        let verifiers = BTreeSet::new();
+        {
+            let keys_changed = BTreeSet::from_iter(vec![arbitrary_key()]);
+
+            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+
+            assert!(matches!(result, Ok(false)));
+        }
+        {
+            let keys_changed = BTreeSet::from_iter(vec![
+                arbitrary_key(),
+                arbitrary_key(),
+                arbitrary_key(),
+            ]);
+
+            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+
+            assert!(matches!(result, Ok(false)));
+        }
     }
 }
