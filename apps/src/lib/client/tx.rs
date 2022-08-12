@@ -234,7 +234,8 @@ pub async fn submit_init_validator(
         println!("Generating protocol signing key...");
     }
     // Generate the validator keys
-    let validator_keys = ctx.wallet.gen_validator_keys(protocol_key).unwrap();
+    let validator_keys =
+        ctx.wallet.gen_validator_keys(protocol_key, scheme).unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair
