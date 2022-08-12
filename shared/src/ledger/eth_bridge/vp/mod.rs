@@ -14,8 +14,10 @@ use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::StorageHasher;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
+use crate::types::token::Amount;
 use crate::vm::WasmCacheAccess;
 
+type ERC20Amount = Amount;
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, DB, H, CA>
 where
@@ -182,26 +184,81 @@ fn validate_balance_change(
         };
     // TODO: check total delta = 0 AND tx_data was signed by decreasing
     // balance's owner
-    let balance_a = match reader.read_pre(&balance_a)? {
+    let balance_a_pre = match reader.read_pre::<ERC20Amount>(&balance_a)? {
         Some(value) => value,
         None => {
             tracing::debug!(
                 ?balance_a,
-                "Rejecting transaction as could not read balance key"
+                "Rejecting transaction as could not read_pre balance key"
             );
             return Ok(false);
         }
-    };
-    let balance_b = match reader.read_pre(&balance_b)? {
+    }
+    .change();
+    let balance_a_post = match reader.read_post::<ERC20Amount>(&balance_a)? {
+        Some(value) => value,
+        None => {
+            tracing::debug!(
+                ?balance_a,
+                "Rejecting transaction as could not read_post balance key"
+            );
+            return Ok(false);
+        }
+    }
+    .change();
+    let balance_b_pre = match reader.read_pre::<ERC20Amount>(&balance_b)? {
         Some(value) => value,
         None => {
             tracing::debug!(
                 ?balance_b,
-                "Rejecting transaction as could not read balance key"
+                "Rejecting transaction as could not read_pre balance key"
             );
             return Ok(false);
         }
-    };
+    }
+    .change();
+    let balance_b_post = match reader.read_post::<ERC20Amount>(&balance_b)? {
+        Some(value) => value,
+        None => {
+            tracing::debug!(
+                ?balance_b,
+                "Rejecting transaction as could not read_post balance key"
+            );
+            return Ok(false);
+        }
+    }
+    .change();
+
+    // TODO: check for underflows/overflows
+    let balance_a_delta = balance_a_post - balance_a_pre;
+    let balance_b_delta = balance_b_post - balance_b_pre;
+    if balance_a_delta != -balance_b_delta {
+        tracing::debug!(
+            ?balance_a_pre,
+            ?balance_b_pre,
+            ?balance_a_post,
+            ?balance_b_post,
+            ?balance_a_delta,
+            ?balance_b_delta,
+            "Rejecting transaction as balance changes do not match"
+        );
+        return Ok(false);
+    }
+    if balance_a_post < 0 {
+        tracing::debug!(
+            ?balance_a_post,
+            "Rejecting transaction as balance is negative"
+        );
+        return Ok(false);
+    }
+    if balance_b_post < 0 {
+        tracing::debug!(
+            ?balance_b_post,
+            "Rejecting transaction as balance is negative"
+        );
+        return Ok(false);
+    }
+
     Ok(true)
 }
 
