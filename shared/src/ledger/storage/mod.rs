@@ -24,7 +24,7 @@ use tendermint::merkle::proof::Proof;
 use thiserror::Error;
 
 use super::parameters::Parameters;
-use super::storage_api::{ResultExt, StorageRead};
+use super::storage_api::{ResultExt, StorageRead, StorageWrite};
 use super::{parameters, storage_api};
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::EpochDuration;
@@ -982,6 +982,44 @@ where
         &self,
     ) -> std::result::Result<Epoch, storage_api::Error> {
         Ok(self.block.epoch)
+    }
+}
+
+impl<D, H> StorageWrite for Storage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn write<T: borsh::BorshSerialize>(
+        &mut self,
+        key: &crate::types::storage::Key,
+        val: T,
+    ) -> storage_api::Result<()> {
+        let val = val.try_to_vec().unwrap();
+        self.write_bytes(key, val)
+    }
+
+    fn write_bytes(
+        &mut self,
+        key: &crate::types::storage::Key,
+        val: impl AsRef<[u8]>,
+    ) -> storage_api::Result<()> {
+        let _ = self
+            .db
+            .write_subspace_val(self.block.height, key, val)
+            .into_storage_result()?;
+        Ok(())
+    }
+
+    fn delete(
+        &mut self,
+        key: &crate::types::storage::Key,
+    ) -> storage_api::Result<()> {
+        let _ = self
+            .db
+            .delete_subspace_val(self.block.height, key)
+            .into_storage_result()?;
+        Ok(())
     }
 }
 
