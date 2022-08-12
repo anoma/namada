@@ -3,7 +3,7 @@
 
 mod error;
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::{CustomError, Error, Result, ResultExt};
 
 use crate::types::storage::{self, BlockHash, BlockHeight, Epoch};
@@ -50,4 +50,24 @@ pub trait StorageRead {
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch>;
+}
+
+/// Common storage write interface
+pub trait StorageWrite {
+    /// Write a value to be encoded with Borsh at the given key to storage.
+    fn write<T: BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<()>;
+
+    /// Write a value as bytes at the given key to storage.
+    fn write_bytes(
+        &mut self,
+        key: &storage::Key,
+        val: impl AsRef<[u8]>,
+    ) -> Result<()>;
+
+    /// Delete a value at the given key from storage.
+    fn delete(&mut self, key: &storage::Key) -> Result<()>;
 }

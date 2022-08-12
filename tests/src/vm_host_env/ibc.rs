@@ -68,6 +68,7 @@ use namada::types::ibc::data::FungibleTokenPacketData;
 use namada::types::storage::{self, BlockHash, BlockHeight};
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
+use namada_tx_prelude::StorageWrite;
 
 use crate::tx::{self, *};
 
