@@ -126,7 +126,47 @@ fn validate_tx(
         return Ok(false);
     }
 
-    Ok(true)
+    match (key_a.suffix.clone(), key_b.suffix.clone()) {
+        (
+            wrapped_erc20s::MultitokenKeyType::Balance { owner: owner_a },
+            wrapped_erc20s::MultitokenKeyType::Balance { owner: owner_b },
+        ) => {
+            // TODO: check total delta = 0 AND tx_data was signed by decreasing
+            // balance's owner
+            Ok(true)
+        }
+        (
+            wrapped_erc20s::MultitokenKeyType::Balance { .. },
+            wrapped_erc20s::MultitokenKeyType::Supply,
+        )
+        | (
+            wrapped_erc20s::MultitokenKeyType::Supply,
+            wrapped_erc20s::MultitokenKeyType::Balance { .. },
+        ) => {
+            // TODO: eventually we will permit burns here
+            tracing::debug!(
+                ?key_a,
+                ?key_b,
+                "Rejecting transaction that is attempting to change a supply \
+                 key"
+            );
+            Ok(false)
+        }
+        (
+            wrapped_erc20s::MultitokenKeyType::Supply,
+            wrapped_erc20s::MultitokenKeyType::Supply,
+        ) => {
+            // in theory, this should be unreachable!() as we would have already
+            // rejected if both supply keys were for the same asset
+            tracing::debug!(
+                ?key_a,
+                ?key_b,
+                "Rejecting transaction that is attempting to change two \
+                 supply keys"
+            );
+            Ok(false)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -247,6 +287,27 @@ mod tests {
                     &ethereum_events::testing::USDC_ERC20_ETH_ADDRESS,
                 )
                 .balance(
+                    &Address::decode(ARBITRARY_OWNER_B_ADDRESS)
+                        .expect("Couldn't set up test"),
+                ),
+            ]);
+
+            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+
+            assert!(matches!(result, Ok(false)));
+        }
+    }
+
+    #[test]
+    // TODO: this test will no longer be valid once we allow burning
+    fn test_rejects_if_supply_key_changed() {
+        let tx_data = vec![];
+        let verifiers = BTreeSet::new();
+        let asset = &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+        {
+            let keys_changed = BTreeSet::from_iter(vec![
+                wrapped_erc20s::Keys::from(asset).supply(),
+                wrapped_erc20s::Keys::from(asset).balance(
                     &Address::decode(ARBITRARY_OWNER_B_ADDRESS)
                         .expect("Couldn't set up test"),
                 ),
