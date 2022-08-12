@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeSet, HashSet};
 
-use eyre::eyre;
+use eyre::{eyre, Context, Result};
 use itertools::Itertools;
 
 use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
@@ -12,6 +12,34 @@ use crate::ledger::storage::StorageHasher;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
+
+trait StorageReader {
+    /// Storage read prior state (before tx execution). It will try to read from
+    /// the storage.
+    fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>>;
+
+    /// Storage read posterior state (after tx execution). It will try to read
+    /// from the write log first and if no entry found then from the
+    /// storage.
+    fn read_post(&self, key: &Key) -> Result<Option<Vec<u8>>>;
+}
+
+impl<'ctx, DB, H, CA> StorageReader for &Ctx<'ctx, DB, H, CA>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> + 'static,
+    H: StorageHasher + 'static,
+    CA: 'static + WasmCacheAccess,
+{
+    fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
+        Ctx::read_pre(&self, key)
+            .wrap_err_with(|| format!("couldn't read_pre {}", key))
+    }
+
+    fn read_post(&self, key: &Key) -> Result<Option<Vec<u8>>> {
+        Ctx::read_post(&self, key)
+            .wrap_err_with(|| format!("couldn't read_post {}", key))
+    }
+}
 
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, DB, H, CA>
@@ -68,7 +96,7 @@ where
             Some((key_a, key_b)) => (key_a, key_b),
             None => return Ok(false),
         };
-        Ok(validate_balance_change(key_a, key_b))
+        Ok(validate_balance_change(&self.ctx, key_a, key_b))
     }
 }
 
@@ -134,6 +162,7 @@ fn extract_valid_keys_changed(
 }
 
 fn validate_balance_change(
+    _reader: impl StorageReader,
     key_a: wrapped_erc20s::MultitokenKey,
     key_b: wrapped_erc20s::MultitokenKey,
 ) -> bool {
@@ -176,6 +205,35 @@ fn validate_balance_change(
                  supply keys"
             );
             false
+        }
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+mod testing {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[derive(Debug, Default)]
+    pub(super) struct FakeStorageReader {
+        pre: HashMap<Key, Vec<u8>>,
+        post: HashMap<Key, Vec<u8>>,
+    }
+
+    impl StorageReader for FakeStorageReader {
+        fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
+            match self.pre.get(key) {
+                Some(bytes) => Ok(Some(bytes.to_owned())),
+                None => Ok(None),
+            }
+        }
+
+        fn read_post(&self, key: &Key) -> Result<Option<Vec<u8>>> {
+            match self.post.get(key) {
+                Some(bytes) => Ok(Some(bytes.to_owned())),
+                None => Ok(None),
+            }
         }
     }
 }
