@@ -404,7 +404,7 @@ where
 pub fn get_tx_index(
     gas_meter: &mut VpGasMeter,
     tx_index: &TxIndex,
-) -> Result<TxIndex> {
+) -> EnvResult<TxIndex> {
     add_gas(gas_meter, MIN_STORAGE_GAS)?;
     Ok(*tx_index)
 }

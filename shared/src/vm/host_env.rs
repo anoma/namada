@@ -1476,7 +1476,7 @@ where
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn tx_get_tx_index<MEM, DB, H, CA>(
-    env: &TxEnv<MEM, DB, H, CA>,
+    env: &TxVmEnv<MEM, DB, H, CA>,
 ) -> TxResult<u32>
 where
     MEM: VmMemory,
@@ -1493,8 +1493,8 @@ where
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn vp_get_tx_index<MEM, DB, H, EVAL, CA>(
-    env: &VpEnv<MEM, DB, H, EVAL, CA>,
-) -> vp_env::Result<u32>
+    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+) -> TxResult<u32>
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,

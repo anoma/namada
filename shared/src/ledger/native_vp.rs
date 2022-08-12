@@ -393,6 +393,10 @@ where
         vp_env::get_block_epoch(&mut *self.gas_meter.borrow_mut(), self.storage)
     }
 
+    fn get_tx_index(&self) -> Result<TxIndex, Self::Error> {
+        vp_env::get_tx_index(&mut *self.gas_meter.borrow_mut(), self.tx_index)
+    }
+
     fn iter_prefix(
         &self,
         prefix: &Key,

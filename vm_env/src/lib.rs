@@ -93,9 +93,6 @@ pub mod tx {
         // Get the current block epoch
         pub fn anoma_tx_get_block_epoch() -> u64;
 
-        // Get the current transaction index
-        pub fn anoma_tx_get_tx_index() -> u32;
-
         // Requires a node running with "Info" log level
         pub fn anoma_tx_log_string(str_ptr: u64, str_len: u64);
     }
