@@ -61,24 +61,19 @@ impl From<&EthAddress> for Keys {
 
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub enum MultitokenKey {
-    Balance(MultitokenBalanceKey),
-    Supply(MultitokenSupplyKey),
+pub enum MultitokenKeyType {
+    Balance { owner: Address },
+    Supply,
 }
 
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub struct MultitokenBalanceKey {
+pub struct MultitokenKey {
     pub asset: EthAddress,
-    pub owner: Address,
+    pub suffix: MultitokenKeyType,
 }
 
 #[allow(missing_docs)]
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub struct MultitokenSupplyKey {
-    pub asset: EthAddress,
-}
-
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
 /// Generic error that may be returned
@@ -151,8 +146,11 @@ impl TryFrom<&Key> for MultitokenKey {
 
         match segment_3.as_str() {
             SUPPLY_KEY_SEGMENT => {
-                let supply_key = MultitokenSupplyKey { asset };
-                return Ok(MultitokenKey::Supply(supply_key));
+                let supply_key = MultitokenKey {
+                    asset,
+                    suffix: MultitokenKeyType::Supply,
+                };
+                return Ok(supply_key);
             }
             BALANCE_KEY_SEGMENT => {
                 let owner = match key.segments.get(4) {
@@ -177,8 +175,11 @@ impl TryFrom<&Key> for MultitokenKey {
                         )));
                     }
                 };
-                let balance_key = MultitokenBalanceKey { asset, owner };
-                return Ok(MultitokenKey::Balance(balance_key));
+                let balance_key = MultitokenKey {
+                    asset,
+                    suffix: MultitokenKeyType::Balance { owner },
+                };
+                return Ok(balance_key);
             }
             _ => {
                 return Err(Error::from(eyre!(
