@@ -53,13 +53,13 @@ where
 }
 
 #[cfg(any(test, feature = "testing"))]
-mod testing {
+pub(super) mod testing {
     use std::collections::HashMap;
 
     use super::*;
 
     #[derive(Debug, Default)]
-    pub(super) struct FakeReader {
+    pub(in super::super) struct FakeReader {
         pre: HashMap<Key, Vec<u8>>,
         post: HashMap<Key, Vec<u8>>,
     }
