@@ -73,7 +73,11 @@ where
             Some((key_a, key_b)) => (key_a, key_b),
             None => return Ok(false),
         };
-        Ok(validate_balance_change(&self.ctx, key_a, key_b)?)
+        let owner = match validate_balance_change(&self.ctx, key_a, key_b)? {
+            Some(owner) => owner,
+            None => return Ok(false),
+        };
+        Ok(true)
     }
 }
 
@@ -138,11 +142,13 @@ fn extract_valid_keys_changed(
     Ok(Some((key_a, key_b)))
 }
 
+/// Returns the address which should be authorizing the balance change, or None
+/// if the balance change is invalid.
 fn validate_balance_change(
     reader: impl Reader,
     key_a: wrapped_erc20s::MultitokenKey,
     key_b: wrapped_erc20s::MultitokenKey,
-) -> Result<bool> {
+) -> Result<Option<Address>> {
     let (balance_a, balance_b) =
         match (key_a.suffix.clone(), key_b.suffix.clone()) {
             (
@@ -164,7 +170,7 @@ fn validate_balance_change(
                     "Rejecting transaction that is attempting to change a \
                      supply key"
                 );
-                return Ok(false);
+                return Ok(None);
             }
             (
                 wrapped_erc20s::MultitokenKeyType::Supply,
@@ -179,7 +185,7 @@ fn validate_balance_change(
                     "Rejecting transaction that is attempting to change two \
                      supply keys"
                 );
-                return Ok(false);
+                return Ok(None);
             }
         };
     // TODO: check total delta = 0 AND tx_data was signed by decreasing
@@ -191,7 +197,7 @@ fn validate_balance_change(
                 ?balance_a,
                 "Rejecting transaction as could not read_pre balance key"
             );
-            return Ok(false);
+            return Ok(None);
         }
     }
     .change();
@@ -202,7 +208,7 @@ fn validate_balance_change(
                 ?balance_a,
                 "Rejecting transaction as could not read_post balance key"
             );
-            return Ok(false);
+            return Ok(None);
         }
     }
     .change();
@@ -213,7 +219,7 @@ fn validate_balance_change(
                 ?balance_b,
                 "Rejecting transaction as could not read_pre balance key"
             );
-            return Ok(false);
+            return Ok(None);
         }
     }
     .change();
@@ -224,7 +230,7 @@ fn validate_balance_change(
                 ?balance_b,
                 "Rejecting transaction as could not read_post balance key"
             );
-            return Ok(false);
+            return Ok(None);
         }
     }
     .change();
@@ -242,24 +248,46 @@ fn validate_balance_change(
             ?balance_b_delta,
             "Rejecting transaction as balance changes do not match"
         );
-        return Ok(false);
+        return Ok(None);
+    }
+    if balance_a_delta == 0 {
+        assert_eq!(balance_b_delta, 0);
+        tracing::debug!("Rejecting transaction as no balance change");
+        return Ok(None);
     }
     if balance_a_post < 0 {
         tracing::debug!(
             ?balance_a_post,
             "Rejecting transaction as balance is negative"
         );
-        return Ok(false);
+        return Ok(None);
     }
     if balance_b_post < 0 {
         tracing::debug!(
             ?balance_b_post,
             "Rejecting transaction as balance is negative"
         );
-        return Ok(false);
+        return Ok(None);
     }
 
-    Ok(true)
+    if balance_a_delta < 0 {
+        if let wrapped_erc20s::MultitokenKeyType::Balance { owner } =
+            key_a.suffix
+        {
+            Ok(Some(owner))
+        } else {
+            unreachable!()
+        }
+    } else {
+        assert!(balance_b_delta < 0);
+        if let wrapped_erc20s::MultitokenKeyType::Balance { owner } =
+            key_b.suffix
+        {
+            Ok(Some(owner))
+        } else {
+            unreachable!()
+        }
+    }
 }
 
 #[cfg(test)]
