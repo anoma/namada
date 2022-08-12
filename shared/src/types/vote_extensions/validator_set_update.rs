@@ -250,3 +250,36 @@ mod tag {
 
 #[doc(inline)]
 pub use tag::SerializeWithAbiEncode;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test the keccak hash of a validator set update
+    // TODO: fix this :|
+    #[test]
+    fn test_validator_set_update_keccak_hash() {
+        // ```js
+        // const ethers = require('ethers');
+        // const keccak256 = require('keccak256')
+        //
+        // const abiEncoder = new ethers.utils.AbiCoder();
+        //
+        // const output = abiEncoder.encode(
+        //     ['string', 'address[]', 'uint256[]', 'uint256'],
+        //     ['bridge', [], [], 0],
+        // );
+        //
+        // const hash = keccak256(output).toString('hex');
+        //
+        // console.log(hash);
+        // ```
+        const EXPECTED: &str =
+            "36bcf52e7ae929b6df7489d012c8ca63eddb35c1b0baf10f46cac81f6728e0a6";
+
+        let KeccakHash(got) =
+            compute_hash(Epoch(0), BRIDGE_CONTRACT_NAMESPACE, vec![], vec![]);
+
+        assert_eq!(&hex::encode(got), EXPECTED);
+    }
+}
