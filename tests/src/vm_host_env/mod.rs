@@ -34,7 +34,9 @@ mod tests {
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
     use namada::types::{address, key};
-    use namada_tx_prelude::{BorshDeserialize, BorshSerialize, StorageRead};
+    use namada_tx_prelude::{
+        BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
+    };
     use namada_vp_prelude::VpEnv;
     use prost::Message;
     use test_log::test;

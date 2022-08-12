@@ -43,7 +43,7 @@ mod tests {
     use namada_tests::log::test;
     use namada_tests::tx::{self, tx_host_env, TestTxEnv};
     use namada_tests::vp::*;
-    use namada_tx_prelude::TxEnv;
+    use namada_tx_prelude::{StorageWrite, TxEnv};
 
     use super::*;
 

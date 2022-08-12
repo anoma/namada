@@ -70,6 +70,7 @@ use namada::types::storage::{BlockHash, BlockHeight, Key, TxIndex};
 use namada::types::time::Rfc3339String;
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
+use namada_tx_prelude::StorageWrite;
 
 use crate::tx::{self, *};
 

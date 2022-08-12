@@ -3,33 +3,16 @@
 
 use borsh::BorshSerialize;
 
-use crate::ledger::storage_api::{self, StorageRead};
+use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::address::Address;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;
 use crate::types::time::Rfc3339String;
 
 /// Transaction host functions
-pub trait TxEnv: StorageRead {
+pub trait TxEnv: StorageRead + StorageWrite {
     /// Host env functions possible errors
     type Error;
-
-    /// Write a value to be encoded with Borsh at the given key to storage.
-    fn write<T: BorshSerialize>(
-        &mut self,
-        key: &storage::Key,
-        val: T,
-    ) -> Result<(), storage_api::Error>;
-
-    /// Write a value as bytes at the given key to storage.
-    fn write_bytes(
-        &mut self,
-        key: &storage::Key,
-        val: impl AsRef<[u8]>,
-    ) -> Result<(), storage_api::Error>;
-
-    /// Delete a value at the given key from storage.
-    fn delete(&mut self, key: &storage::Key) -> Result<(), storage_api::Error>;
 
     /// Write a temporary value to be encoded with Borsh at the given key to
     /// storage.
