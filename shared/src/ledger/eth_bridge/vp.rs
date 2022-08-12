@@ -53,31 +53,56 @@ where
     /// no wasm transactions should be able to modify those keys.
     fn validate_tx(
         &self,
-        _tx_data: &[u8],
+        tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
-        _verifiers: &BTreeSet<Address>,
+        verifiers: &BTreeSet<Address>,
     ) -> Result<bool, Self::Error> {
         tracing::debug!(
-            tx_data_len = _tx_data.len(),
+            tx_data_len = tx_data.len(),
             keys_changed_len = keys_changed.len(),
-            verifiers_len = _verifiers.len(),
+            verifiers_len = verifiers.len(),
             "Validity predicate triggered",
         );
-        // we aren't concerned with keys that changed outside of our account
-        let keys_changed: BTreeSet<_> = keys_changed
-            .into_iter()
-            .filter(|key| storage::is_eth_bridge_key(key))
-            .collect();
-        if keys_changed.is_empty() {
-            return Err(Error(eyre!(
-                "No keys changed under our account so this validity predicate \
-                 shouldn't have been triggered"
-            )));
-        }
-        tracing::debug!(
-            relevant_keys.len = keys_changed.len(),
-            "Found keys changed under our account"
-        );
-        Ok(false)
+        validate_tx(tx_data, keys_changed, verifiers)
+    }
+}
+
+/// Pure function not attached to the [`EthBridge`] struct so that it is easier
+/// to test
+fn validate_tx(
+    _tx_data: &[u8],
+    keys_changed: &BTreeSet<Key>,
+    _verifiers: &BTreeSet<Address>,
+) -> Result<bool, Error> {
+    // we aren't concerned with keys that changed outside of our account
+    let keys_changed: BTreeSet<_> = keys_changed
+        .into_iter()
+        .filter(|key| storage::is_eth_bridge_key(key))
+        .collect();
+    if keys_changed.is_empty() {
+        return Err(Error(eyre!(
+            "No keys changed under our account so this validity predicate \
+             shouldn't have been triggered"
+        )));
+    }
+    tracing::debug!(
+        relevant_keys.len = keys_changed.len(),
+        "Found keys changed under our account"
+    );
+    Ok(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_if_triggered_without_keys_changed() {
+        let tx_data = vec![];
+        let keys_changed = BTreeSet::new();
+        let verifiers = BTreeSet::new();
+        let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+
+        assert!(result.is_err());
     }
 }
