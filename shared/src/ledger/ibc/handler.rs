@@ -869,11 +869,8 @@ pub trait IbcActions {
     /// Send the specified token by escrowing or burning
     fn send_token(&self, msg: &MsgTransfer) -> Result<()> {
         let mut data = FungibleTokenPacketData::from(msg.clone());
-        if let Some(denom) = data
-            .denom
-            .strip_prefix(&format!("{}/", storage::MULTITOKEN_STORAGE_KEY))
-        {
-            let denom_key = storage::ibc_denom_key(&denom);
+        if let Some(hash) = storage::token_hash_from_denom(&data.denom)? {
+            let denom_key = storage::ibc_denom_key(&hash);
             let denom_bytes =
                 self.read_ibc_data(&denom_key).ok_or_else(|| {
                     Error::SendingToken(format!(
@@ -1038,7 +1035,7 @@ pub trait IbcActions {
                     token::multitoken_balance_key(&key_prefix, &dest_addr);
 
                 // store the prefixed denom
-                let token_hash = storage::ibc_token_hash(&denom);
+                let token_hash = storage::calc_hash(&denom);
                 let denom_key = storage::ibc_denom_key(&token_hash.raw());
                 self.write_ibc_data(&denom_key, denom.as_bytes());
 

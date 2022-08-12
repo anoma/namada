@@ -46,7 +46,7 @@ where
                     &msg.packet.destination_channel,
                     &data.denom
                 );
-                let token_hash = storage::ibc_token_hash(&denom);
+                let token_hash = storage::calc_hash(&denom);
                 let denom_key = storage::ibc_denom_key(&token_hash.raw());
                 match self.ctx.read_post(&denom_key) {
                     Ok(Some(v)) => match std::str::from_utf8(&v) {

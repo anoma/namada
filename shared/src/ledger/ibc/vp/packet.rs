@@ -6,8 +6,8 @@ use super::super::handler::{
     self, make_send_packet_event, make_timeout_event, packet_from_message,
 };
 use super::super::storage::{
-    ibc_denom_key, port_channel_sequence_id, Error as IbcStorageError,
-    MULTITOKEN_STORAGE_KEY,
+    ibc_denom_key, port_channel_sequence_id, token_hash_from_denom,
+    Error as IbcStorageError,
 };
 use super::{Ibc, StateChange};
 use crate::ibc::core::ics02_client::height::Height;
@@ -702,11 +702,12 @@ where
         if let Ok(mut data) =
             serde_json::from_slice::<FungibleTokenPacketData>(&packet.data)
         {
-            if let Some(denom) = data
-                .denom
-                .strip_prefix(&format!("{}/", MULTITOKEN_STORAGE_KEY))
+            if let Some(token_hash) = token_hash_from_denom(&data.denom)
+                .map_err(|e| {
+                    Error::Denom(format!("Invalid denom: error {}", e))
+                })?
             {
-                let denom_key = ibc_denom_key(&denom);
+                let denom_key = ibc_denom_key(&token_hash);
                 let denom_bytes = match self.ctx.read_pre(&denom_key) {
                     Ok(Some(v)) => v,
                     _ => {

@@ -141,11 +141,12 @@ where
 {
     fn validate_sending_token(&self, msg: &MsgTransfer) -> Result<bool> {
         let mut data = FungibleTokenPacketData::from(msg.clone());
-        if let Some(denom) = data
-            .denom
-            .strip_prefix(&format!("{}/", ibc_storage::MULTITOKEN_STORAGE_KEY))
+        if let Some(token_hash) =
+            ibc_storage::token_hash_from_denom(&data.denom).map_err(|e| {
+                Error::Denom(format!("Invalid denom: error {}", e))
+            })?
         {
-            let denom_key = ibc_storage::ibc_denom_key(&denom);
+            let denom_key = ibc_storage::ibc_denom_key(&token_hash);
             let denom_bytes = match self.ctx.read_pre(&denom_key) {
                 Ok(Some(v)) => v,
                 _ => {

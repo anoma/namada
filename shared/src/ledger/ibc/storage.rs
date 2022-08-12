@@ -525,8 +525,33 @@ pub fn token(denom: impl AsRef<str>) -> Result<Address> {
     })
 }
 
+/// Get the hash of IBC token address from the denom string
+pub fn token_hash_from_denom(denom: impl AsRef<str>) -> Result<Option<String>> {
+    match denom
+        .as_ref()
+        .strip_prefix(&format!("{}/", MULTITOKEN_STORAGE_KEY))
+    {
+        Some(addr_str) => {
+            let addr = Address::decode(addr_str).map_err(|e| {
+                Error::Denom(format!(
+                    "Decoding the denom failed: ibc_token {}, error {}",
+                    addr_str, e
+                ))
+            })?;
+            match addr {
+                Address::Internal(InternalAddress::IbcToken(h)) => Ok(Some(h)),
+                _ => Err(Error::Denom(format!(
+                    "Unexpected address was given: {}",
+                    addr
+                ))),
+            }
+        }
+        None => Ok(None),
+    }
+}
+
 /// Hash the denom
-pub fn ibc_token_hash(denom: impl AsRef<str>) -> String {
+pub fn calc_hash(denom: impl AsRef<str>) -> String {
     let mut hasher = Sha256::new();
     hasher.update(denom.as_ref());
     format!("{:.width$x}", hasher.finalize(), width = HASH_LEN)
@@ -535,7 +560,7 @@ pub fn ibc_token_hash(denom: impl AsRef<str>) -> String {
 /// Key's prefix of the received token over IBC
 pub fn ibc_token_prefix(denom: impl AsRef<str>) -> Result<Key> {
     let token = token(&denom)?;
-    let hash = ibc_token_hash(&denom);
+    let hash = calc_hash(&denom);
     let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
     let prefix = Key::from(token.to_db_key())
         .push(&MULTITOKEN_STORAGE_KEY.to_owned())
