@@ -187,8 +187,16 @@ pub async fn submit_init_validator(
             .ref_to()
     });
 
-    let consensus_key =
-        ctx.get_opt_cached(&consensus_key).unwrap_or_else(|| {
+    let consensus_key = ctx
+        .get_opt_cached(&consensus_key)
+        .map(|key| match *key {
+            common::SecretKey::Ed25519(_) => key,
+            common::SecretKey::Secp256k1(_) => {
+                eprintln!("Consensus key can only be ed25519");
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
             println!("Generating consensus key...");
             ctx.wallet
                 .gen_key(
