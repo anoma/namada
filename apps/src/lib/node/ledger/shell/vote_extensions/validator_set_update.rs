@@ -215,3 +215,67 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod test_vote_extensions {
+    use std::default::Default;
+
+    use borsh::BorshSerialize;
+    use namada::types::storage::{BlockHeight, Epoch};
+    use namada::types::vote_extensions::{
+        ethereum_events, validator_set_update, VoteExtension,
+    };
+    use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
+    use tower_abci::request;
+
+    use crate::node::ledger::shell::test_utils;
+
+    const FIRST_HEIGHT_WITH_VEXTS: BlockHeight = BlockHeight(1);
+
+    /// Test if a [`validator_set_update::Vext`] that incorrectly labels what
+    /// epoch it was included on in a vote extension is rejected
+    // TODO:
+    // - sign with secp key
+    // - add validator voting powers from storage
+    #[test]
+    fn test_reject_incorrect_epoch() {
+        let (mut shell, _, _) = test_utils::setup();
+        shell.storage.last_height = FIRST_HEIGHT_WITH_VEXTS;
+        let validator_addr =
+            shell.mode.get_validator_address().unwrap().clone();
+
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+
+        let ethereum_events = ethereum_events::Vext::empty(
+            FIRST_HEIGHT_WITH_VEXTS,
+            validator_addr.clone(),
+        )
+        .sign(protocol_key);
+
+        let validator_set_update = Some(
+            validator_set_update::Vext {
+                // TODO: get voting powers from storage, associated with eth
+                // addrs
+                voting_powers: std::collections::HashMap::new(),
+                validator_addr,
+                // invalid epoch, should have been: current epoch + 1
+                epoch: Epoch(2),
+            }
+            .sign(protocol_key),
+        );
+
+        let req = request::VerifyVoteExtension {
+            vote_extension: VoteExtension {
+                ethereum_events,
+                validator_set_update,
+            }
+            .try_to_vec()
+            .expect("Test failed"),
+            ..Default::default()
+        };
+        assert_eq!(
+            shell.verify_vote_extension(req).status,
+            i32::from(VerifyStatus::Reject)
+        );
+    }
+}
