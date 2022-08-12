@@ -1,10 +1,10 @@
 //! Validity predicate for the Ethereum bridge
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use eyre::eyre;
 
-use crate::ledger::eth_bridge::storage;
+use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::StorageHasher;
@@ -75,7 +75,7 @@ fn validate_tx(
     _verifiers: &BTreeSet<Address>,
 ) -> Result<bool, Error> {
     // we aren't concerned with keys that changed outside of our account
-    let keys_changed: BTreeSet<_> = keys_changed
+    let keys_changed: HashSet<_> = keys_changed
         .into_iter()
         .filter(|key| storage::is_eth_bridge_key(key))
         .collect();
@@ -98,6 +98,22 @@ fn validate_tx(
         return Ok(false);
     }
 
+    let mut keys = HashSet::<_>::default();
+    for key in keys_changed.into_iter() {
+        let key = match wrapped_erc20s::MultitokenKey::try_from(key) {
+            Ok(key) => key,
+            Err(error) => {
+                tracing::debug!(
+                    %key,
+                    ?error,
+                    "Rejecting transaction as key is not a wrapped ERC20 key"
+                );
+                return Ok(false);
+            }
+        };
+        keys.insert(key);
+    }
+
     Ok(false)
 }
 
@@ -106,6 +122,10 @@ mod tests {
     use rand::Rng;
 
     use super::*;
+    use crate::types::ethereum_events;
+
+    const ARBITRARY_OWNER_ADDRESS: &str =
+        "atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4";
 
     /// Return some arbitrary random key belonging to this account
     fn arbitrary_key() -> Key {
@@ -143,6 +163,51 @@ mod tests {
                 arbitrary_key(),
                 arbitrary_key(),
                 arbitrary_key(),
+            ]);
+
+            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+
+            assert!(matches!(result, Ok(false)));
+        }
+    }
+
+    #[test]
+    fn test_rejects_if_not_two_multitoken_keys_changed() {
+        let tx_data = vec![];
+        let verifiers = BTreeSet::new();
+        {
+            let keys_changed =
+                BTreeSet::from_iter(vec![arbitrary_key(), arbitrary_key()]);
+
+            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+
+            assert!(matches!(result, Ok(false)));
+        }
+
+        {
+            let keys_changed = BTreeSet::from_iter(vec![
+                arbitrary_key(),
+                wrapped_erc20s::Keys::from(
+                    &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
+                )
+                .supply(),
+            ]);
+
+            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+
+            assert!(matches!(result, Ok(false)));
+        }
+
+        {
+            let keys_changed = BTreeSet::from_iter(vec![
+                arbitrary_key(),
+                wrapped_erc20s::Keys::from(
+                    &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
+                )
+                .balance(
+                    &Address::decode(ARBITRARY_OWNER_ADDRESS)
+                        .expect("Couldn't set up test"),
+                ),
             ]);
 
             let result = validate_tx(&tx_data, &keys_changed, &verifiers);
