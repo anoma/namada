@@ -334,7 +334,7 @@ pub(crate) trait QueriesExt {
     /// validator set update votes will always extend
     /// Tendermint's PreCommit phase of the first block of
     /// an epoch.
-    fn can_send_validator_set_update(&self, height: BlockHeight) -> bool;
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
     fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch>;
@@ -507,7 +507,12 @@ where
             })
     }
 
-    fn can_send_validator_set_update(&self, height: BlockHeight) -> bool {
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
+        let (check_prev_heights, height) = match can_send {
+            SendValsetUpd::Now => (false, self.last_height + 1),
+            SendValsetUpd::AtPrevHeight(h) => (true, h),
+        };
+
         // handle genesis block corner case
         if height == BlockHeight(1) {
             return true;
@@ -527,10 +532,21 @@ where
 
         // the values in `first_epoch_heights` are stored in ascending
         // order, so we can just do a binary search over them
-        first_epoch_heights.binary_search(&height).is_ok()
+        check_prev_heights && first_epoch_heights.binary_search(&height).is_ok()
     }
 
     fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch> {
         self.block.pred_epochs.get_epoch(height)
     }
+}
+
+/// This enum is used as a parameter to
+/// [`QueriesExt::can_send_validator_set_update`].
+pub enum SendValsetUpd {
+    /// Check if it is possible to send a validator set update
+    /// vote extension at the current block height.
+    Now,
+    /// Check if it is possible to send a validator set update
+    /// vote extension at any previous block height.
+    AtPrevHeight(BlockHeight),
 }

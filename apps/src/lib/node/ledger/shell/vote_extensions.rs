@@ -18,7 +18,7 @@ mod extend_votes {
     use tendermint_proto::abci::ExtendedVoteInfo;
 
     use super::super::*;
-    use crate::node::ledger::shell::queries::QueriesExt;
+    use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
 
     /// The error yielded from validating faulty vote extensions in the shell
     #[derive(Error, Debug)]
@@ -76,7 +76,7 @@ mod extend_votes {
             let validator_addr = addr;
             let vset_upd = self
                 .storage
-                .can_send_validator_set_update(curr_height)
+                .can_send_validator_set_update(SendValsetUpd::Now)
                 .then(|| {
                     let next_epoch = self.storage.get_current_epoch().0.next();
                     let _validator_set =
@@ -159,7 +159,7 @@ mod extend_votes {
                     );
                     false
                 });
-            let validated_valset_upd = self.storage.can_send_validator_set_update(curr_height).then(|| {
+            let validated_valset_upd = self.storage.can_send_validator_set_update(SendValsetUpd::Now).then(|| {
                 ext.validator_set_update
                     .and_then(|ext| {
                         self.validate_valset_upd_vext(ext, self.storage.get_current_epoch().0.next())

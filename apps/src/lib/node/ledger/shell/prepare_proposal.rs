@@ -9,7 +9,7 @@ mod prepare_block {
         iter_protocol_txs, split_vote_extensions,
     };
     use super::super::*;
-    use crate::node::ledger::shell::queries::QueriesExt;
+    use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
     impl<D, H> Shell<D, H>
@@ -102,7 +102,9 @@ mod prepare_block {
 
             let validator_set_update = self
                 .storage
-                .can_send_validator_set_update(self.storage.last_height)
+                .can_send_validator_set_update(SendValsetUpd::AtPrevHeight(
+                    self.storage.last_height,
+                ))
                 .then(|| ())
                 .map(|()| {
                     self.compress_valset_updates(valset_upds)
