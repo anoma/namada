@@ -285,7 +285,8 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     ) -> Result<(), VerifySigError>;
 }
 
-/// Ed25519 public key hash
+/// Public key hash derived from `common::Key` borsh encoded bytes (hex string
+/// of the first 40 chars of sha256 hash)
 #[derive(
     Debug,
     Clone,
