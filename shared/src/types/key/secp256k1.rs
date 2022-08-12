@@ -421,14 +421,14 @@ impl super::SigScheme for SigScheme {
 
     /// Sign the data with a key
     fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
-        #[cfg(not(features = "secp256k1-sign-verify"))]
+        #[cfg(not(any(test, features = "secp256k1-sign-verify")))]
         {
             // to avoid `unused-variables` warn
             let _ = (keypair, data);
             panic!("\"secp256k1-sign-verify\" feature must be enabled");
         }
 
-        #[cfg(features = "secp256k1-sign-verify")]
+        #[cfg(any(test, features = "secp256k1-sign-verify"))]
         {
             use sha2::{Digest, Sha256};
             let hash = Sha256::digest(data.as_ref());
@@ -443,14 +443,14 @@ impl super::SigScheme for SigScheme {
         data: &T,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
-        #[cfg(not(features = "secp256k1-sign-verify"))]
+        #[cfg(not(any(test, features = "secp256k1-sign-verify")))]
         {
             // to avoid `unused-variables` warn
             let _ = (pk, data, sig);
             panic!("\"secp256k1-sign-verify\" feature must be enabled");
         }
 
-        #[cfg(features = "secp256k1-sign-verify")]
+        #[cfg(any(test, features = "secp256k1-sign-verify"))]
         {
             use sha2::{Digest, Sha256};
             let bytes = &data
@@ -476,14 +476,14 @@ impl super::SigScheme for SigScheme {
         data: &[u8],
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
-        #[cfg(not(features = "secp256k1-sign-verify"))]
+        #[cfg(not(any(test, features = "secp256k1-sign-verify")))]
         {
             // to avoid `unused-variables` warn
             let _ = (pk, data, sig);
             panic!("\"secp256k1-sign-verify\" feature must be enabled");
         }
 
-        #[cfg(features = "secp256k1-sign-verify")]
+        #[cfg(any(test, features = "secp256k1-sign-verify"))]
         {
             use sha2::{Digest, Sha256};
             let hash = Sha256::digest(data);

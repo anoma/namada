@@ -127,6 +127,7 @@ zeroize = "1.5.5"
 [dev-dependencies]
 assert_matches = "1.5.0"
 byte-unit = "4.0.13"
+libsecp256k1 = {git = "https://github.com/brentstone/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
 pretty_assertions = "0.7.2"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
