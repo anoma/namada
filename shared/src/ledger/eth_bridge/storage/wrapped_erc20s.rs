@@ -79,6 +79,16 @@ pub struct MultitokenKey {
 /// Generic error that may be returned
 pub struct Error(#[from] eyre::Error);
 
+impl From<&MultitokenKey> for Key {
+    fn from(mt_key: &MultitokenKey) -> Self {
+        let keys = Keys::from(&mt_key.asset);
+        match &mt_key.suffix {
+            MultitokenKeyType::Balance { owner } => keys.balance(owner),
+            MultitokenKeyType::Supply => keys.supply(),
+        }
+    }
+}
+
 impl TryFrom<&Key> for MultitokenKey {
     type Error = Error;
 
