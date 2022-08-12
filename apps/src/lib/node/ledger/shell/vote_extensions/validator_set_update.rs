@@ -112,10 +112,16 @@ where
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_valset_upd_vext_and_get_it_back(
                 vote_extension,
-                // NOTE: assumes we are in the new epoch,
-                // after the prev valset signed off the
-                // set of the new epoch
-                self.storage.get_current_epoch().0,
+                // NOTE: make sure we do not change epochs between
+                // extending votes and deciding on the validator
+                // set update through consensus. otherwise, this
+                // is going to fail.
+                //
+                // as an alternative to using epochs, we can use
+                // block heights as a nonce, that way we can
+                // always retrieve the proper epoch from the
+                // block height
+                self.storage.get_current_epoch().0.next(),
             )
         })
     }
