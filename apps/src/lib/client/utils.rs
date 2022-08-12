@@ -613,7 +613,10 @@ pub fn init_network(
                 );
 
                 let validator_keys = wallet
-                    .gen_validator_keys(Some(protocol_pk.clone()))
+                    .gen_validator_keys(
+                        Some(protocol_pk.clone()),
+                        SchemeType::Ed25519,
+                    )
                     .expect("Generating new validator keys should not fail");
                 let pk = validator_keys.dkg_keypair.as_ref().unwrap().public();
                 wallet.add_validator_data(address.clone(), validator_keys);
