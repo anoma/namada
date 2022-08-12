@@ -7,7 +7,7 @@ use std::collections::{BTreeSet, HashSet};
 use eyre::{eyre, Result};
 use itertools::Itertools;
 
-use self::store::StorageReader;
+use self::store::Reader;
 use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage as ledger_storage;
@@ -137,7 +137,7 @@ fn extract_valid_keys_changed(
 }
 
 fn validate_balance_change(
-    reader: impl StorageReader,
+    reader: impl Reader,
     key_a: wrapped_erc20s::MultitokenKey,
     key_b: wrapped_erc20s::MultitokenKey,
 ) -> Result<bool> {
@@ -217,7 +217,7 @@ mod testing {
         post: HashMap<Key, Vec<u8>>,
     }
 
-    impl StorageReader for FakeStorageReader {
+    impl Reader for FakeStorageReader {
         fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
             match self.pre.get(key) {
                 Some(bytes) => Ok(Some(bytes.to_owned())),

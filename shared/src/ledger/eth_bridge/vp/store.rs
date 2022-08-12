@@ -8,7 +8,8 @@ use crate::ledger::storage::StorageHasher;
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 
-pub(super) trait StorageReader {
+/// Read pre/post storage
+pub(super) trait Reader {
     /// Storage read prior state (before tx execution). It will try to read from
     /// the storage.
     fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>>;
@@ -19,7 +20,7 @@ pub(super) trait StorageReader {
     fn read_post(&self, key: &Key) -> Result<Option<Vec<u8>>>;
 }
 
-impl<'ctx, DB, H, CA> StorageReader for &Ctx<'ctx, DB, H, CA>
+impl<'ctx, DB, H, CA> Reader for &Ctx<'ctx, DB, H, CA>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> + 'static,
     H: StorageHasher + 'static,
