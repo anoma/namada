@@ -85,4 +85,21 @@ mod tests {
         ]);
         assert_eq!(expected, got);
     }
+
+    /// Sanity check our keccak hash implementation.
+    #[test]
+    fn test_keccak_hash_impl() {
+        let expected =
+            "1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8";
+        assert_eq!(
+            expected,
+            &hex::encode({
+                let mut st = Keccak::v256();
+                let mut output = [0; 32];
+                st.update(b"hello");
+                st.finalize(&mut output);
+                output
+            })
+        );
+    }
 }
