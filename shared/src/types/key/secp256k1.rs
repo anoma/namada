@@ -12,7 +12,6 @@ use rand::{CryptoRng, RngCore};
 use serde::de::{Error, SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Serialize, Serializer};
-use sha2::{Digest, Sha256};
 
 use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
@@ -422,10 +421,21 @@ impl super::SigScheme for SigScheme {
 
     /// Sign the data with a key
     fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
-        let hash = Sha256::digest(data.as_ref());
-        let message = libsecp256k1::Message::parse_slice(hash.as_ref())
-            .expect("Message encoding should not fail");
-        Signature(libsecp256k1::sign(&message, &keypair.0).0)
+        #[cfg(not(features = "secp256k1-sign-verify"))]
+        {
+            // to avoid `unused-variables` warn
+            let _ = (keypair, data);
+            panic!("\"secp256k1-sign-verify\" feature must be enabled");
+        }
+
+        #[cfg(features = "secp256k1-sign-verify")]
+        {
+            use sha2::{Digest, Sha256};
+            let hash = Sha256::digest(data.as_ref());
+            let message = libsecp256k1::Message::parse_slice(hash.as_ref())
+                .expect("Message encoding should not fail");
+            Signature(libsecp256k1::sign(&message, &keypair.0).0)
+        }
     }
 
     fn verify_signature<T: BorshSerialize>(
@@ -433,19 +443,31 @@ impl super::SigScheme for SigScheme {
         data: &T,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
-        let bytes = &data
-            .try_to_vec()
-            .map_err(VerifySigError::DataEncodingError)?[..];
-        let hash = Sha256::digest(bytes);
-        let message = &libsecp256k1::Message::parse_slice(hash.as_ref())
-            .expect("Error parsing given data");
-        let check = libsecp256k1::verify(message, &sig.0, &pk.0);
-        match check {
-            true => Ok(()),
-            false => Err(VerifySigError::SigVerifyError(format!(
-                "Error verifying secp256k1 signature: {}",
-                libsecp256k1::Error::InvalidSignature
-            ))),
+        #[cfg(not(features = "secp256k1-sign-verify"))]
+        {
+            // to avoid `unused-variables` warn
+            let _ = (pk, data, sig);
+            panic!("\"secp256k1-sign-verify\" feature must be enabled");
+        }
+
+        #[cfg(features = "secp256k1-sign-verify")]
+        {
+            use sha2::{Digest, Sha256};
+            let bytes = &data
+                .try_to_vec()
+                .map_err(VerifySigError::DataEncodingError)?[..];
+            let hash = Sha256::digest(bytes);
+            let message = &libsecp256k1::Message::parse_slice(hash.as_ref())
+                .expect("Error parsing given data");
+            let is_valid = libsecp256k1::verify(message, &sig.0, &pk.0);
+            if is_valid {
+                Ok(())
+            } else {
+                Err(VerifySigError::SigVerifyError(format!(
+                    "Error verifying secp256k1 signature: {}",
+                    libsecp256k1::Error::InvalidSignature
+                )))
+            }
         }
     }
 
@@ -454,16 +476,28 @@ impl super::SigScheme for SigScheme {
         data: &[u8],
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
-        let hash = Sha256::digest(data);
-        let message = &libsecp256k1::Message::parse_slice(hash.as_ref())
-            .expect("Error parsing raw data");
-        let check = libsecp256k1::verify(message, &sig.0, &pk.0);
-        match check {
-            true => Ok(()),
-            false => Err(VerifySigError::SigVerifyError(format!(
-                "Error verifying secp256k1 signature: {}",
-                libsecp256k1::Error::InvalidSignature
-            ))),
+        #[cfg(not(features = "secp256k1-sign-verify"))]
+        {
+            // to avoid `unused-variables` warn
+            let _ = (pk, data, sig);
+            panic!("\"secp256k1-sign-verify\" feature must be enabled");
+        }
+
+        #[cfg(features = "secp256k1-sign-verify")]
+        {
+            use sha2::{Digest, Sha256};
+            let hash = Sha256::digest(data);
+            let message = &libsecp256k1::Message::parse_slice(hash.as_ref())
+                .expect("Error parsing raw data");
+            let is_valid = libsecp256k1::verify(message, &sig.0, &pk.0);
+            if is_valid {
+                Ok(())
+            } else {
+                Err(VerifySigError::SigVerifyError(format!(
+                    "Error verifying secp256k1 signature: {}",
+                    libsecp256k1::Error::InvalidSignature
+                )))
+            }
         }
     }
 }

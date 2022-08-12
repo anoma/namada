@@ -64,7 +64,7 @@ ABCI-plus-plus = [
 testing = ["dev"]
 
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke", "rand"]}
+namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke", "rand", "secp256k1-sign-verify"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 async-std = {version = "1.9.0", features = ["unstable"]}
