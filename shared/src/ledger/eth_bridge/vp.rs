@@ -96,7 +96,7 @@ where
             Some((key_a, key_b)) => (key_a, key_b),
             None => return Ok(false),
         };
-        Ok(validate_balance_change(&self.ctx, key_a, key_b))
+        Ok(validate_balance_change(&self.ctx, key_a, key_b)?)
     }
 }
 
@@ -162,51 +162,72 @@ fn extract_valid_keys_changed(
 }
 
 fn validate_balance_change(
-    _reader: impl StorageReader,
+    reader: impl StorageReader,
     key_a: wrapped_erc20s::MultitokenKey,
     key_b: wrapped_erc20s::MultitokenKey,
-) -> bool {
-    match (key_a.suffix.clone(), key_b.suffix.clone()) {
-        (
-            wrapped_erc20s::MultitokenKeyType::Balance { owner: owner_a },
-            wrapped_erc20s::MultitokenKeyType::Balance { owner: owner_b },
-        ) => {
-            // TODO: check total delta = 0 AND tx_data was signed by decreasing
-            // balance's owner
-            true
-        }
-        (
-            wrapped_erc20s::MultitokenKeyType::Balance { .. },
-            wrapped_erc20s::MultitokenKeyType::Supply,
-        )
-        | (
-            wrapped_erc20s::MultitokenKeyType::Supply,
-            wrapped_erc20s::MultitokenKeyType::Balance { .. },
-        ) => {
-            // TODO: eventually we will permit burns here
+) -> Result<bool> {
+    let (balance_a, balance_b) =
+        match (key_a.suffix.clone(), key_b.suffix.clone()) {
+            (
+                wrapped_erc20s::MultitokenKeyType::Balance { .. },
+                wrapped_erc20s::MultitokenKeyType::Balance { .. },
+            ) => (Key::from(&key_a), Key::from(&key_b)),
+            (
+                wrapped_erc20s::MultitokenKeyType::Balance { .. },
+                wrapped_erc20s::MultitokenKeyType::Supply,
+            )
+            | (
+                wrapped_erc20s::MultitokenKeyType::Supply,
+                wrapped_erc20s::MultitokenKeyType::Balance { .. },
+            ) => {
+                // TODO: eventually we will permit burns here
+                tracing::debug!(
+                    ?key_a,
+                    ?key_b,
+                    "Rejecting transaction that is attempting to change a \
+                     supply key"
+                );
+                return Ok(false);
+            }
+            (
+                wrapped_erc20s::MultitokenKeyType::Supply,
+                wrapped_erc20s::MultitokenKeyType::Supply,
+            ) => {
+                // in theory, this should be unreachable!() as we would have
+                // already rejected if both supply keys were for
+                // the same asset
+                tracing::debug!(
+                    ?key_a,
+                    ?key_b,
+                    "Rejecting transaction that is attempting to change two \
+                     supply keys"
+                );
+                return Ok(false);
+            }
+        };
+    // TODO: check total delta = 0 AND tx_data was signed by decreasing
+    // balance's owner
+    let balance_a = match reader.read_pre(&balance_a)? {
+        Some(value) => value,
+        None => {
             tracing::debug!(
-                ?key_a,
-                ?key_b,
-                "Rejecting transaction that is attempting to change a supply \
-                 key"
+                ?balance_a,
+                "Rejecting transaction as could not read balance key"
             );
-            false
+            return Ok(false);
         }
-        (
-            wrapped_erc20s::MultitokenKeyType::Supply,
-            wrapped_erc20s::MultitokenKeyType::Supply,
-        ) => {
-            // in theory, this should be unreachable!() as we would have already
-            // rejected if both supply keys were for the same asset
+    };
+    let balance_b = match reader.read_pre(&balance_b)? {
+        Some(value) => value,
+        None => {
             tracing::debug!(
-                ?key_a,
-                ?key_b,
-                "Rejecting transaction that is attempting to change two \
-                 supply keys"
+                ?balance_b,
+                "Rejecting transaction as could not read balance key"
             );
-            false
+            return Ok(false);
         }
-    }
+    };
+    Ok(true)
 }
 
 #[cfg(any(test, feature = "testing"))]
