@@ -35,6 +35,19 @@ where
 
     const ADDR: InternalAddress = super::INTERNAL_ADDRESS;
 
+    /// Validate that a wasm transaction is permitted to change keys under this
+    /// account.
+    ///
+    /// We permit only the following changes via wasm for the time being:
+    /// - a wrapped ERC20's supply key to decrease iff one of its balance keys
+    ///   decreased by the same amount
+    /// - a wrapped ERC20's balance key to decrease iff another one of its
+    ///   balance keys increased by the same amount
+    ///
+    /// Some other changes to the storage subspace of this account are expected
+    /// to happen natively i.e. bypassing this validity predicate. For example,
+    /// changes to the `eth_msgs/...` keys. For those cases, we reject here as
+    /// no wasm transactions should be able to modify those keys.
     fn validate_tx(
         &self,
         _tx_data: &[u8],
