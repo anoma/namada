@@ -513,13 +513,21 @@ where
             return true;
         }
 
+        let first_epoch_heights = self.block.pred_epochs.first_block_heights();
+
+        // tentatively check if the last stored height
+        // is the one we are looking for
+        if first_epoch_heights
+            .last()
+            .map(|&h| h == height)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+
         // the values in `first_epoch_heights` are stored in ascending
         // order, so we can just do a binary search over them
-        self.block
-            .pred_epochs
-            .first_block_heights()
-            .binary_search(&height)
-            .is_ok()
+        first_epoch_heights.binary_search(&height).is_ok()
     }
 
     fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch> {
