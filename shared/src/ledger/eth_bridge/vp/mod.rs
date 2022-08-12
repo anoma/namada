@@ -205,35 +205,6 @@ fn validate_balance_change(
     Ok(true)
 }
 
-#[cfg(any(test, feature = "testing"))]
-mod testing {
-    use std::collections::HashMap;
-
-    use super::*;
-
-    #[derive(Debug, Default)]
-    pub(super) struct FakeStorageReader {
-        pre: HashMap<Key, Vec<u8>>,
-        post: HashMap<Key, Vec<u8>>,
-    }
-
-    impl Reader for FakeStorageReader {
-        fn read_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-            match self.pre.get(key) {
-                Some(bytes) => Ok(Some(bytes.to_owned())),
-                None => Ok(None),
-            }
-        }
-
-        fn read_post(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-            match self.post.get(key) {
-                Some(bytes) => Ok(Some(bytes.to_owned())),
-                None => Ok(None),
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use rand::Rng;
