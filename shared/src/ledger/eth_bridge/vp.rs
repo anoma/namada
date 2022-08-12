@@ -64,17 +64,22 @@ where
             verifiers_len = verifiers.len(),
             "Validity predicate triggered",
         );
-        validate_tx(tx_data, keys_changed, verifiers)
+        let (key_a, key_b) = match extract_valid_keys_changed(keys_changed)? {
+            Some((key_a, key_b)) => (key_a, key_b),
+            None => return Ok(false),
+        };
+        Ok(validate_balance_change(key_a, key_b))
     }
 }
 
 /// Pure function not attached to the [`EthBridge`] struct so that it is easier
 /// to test
-fn validate_tx(
-    _tx_data: &[u8],
+fn extract_valid_keys_changed(
     keys_changed: &BTreeSet<Key>,
-    _verifiers: &BTreeSet<Address>,
-) -> Result<bool, Error> {
+) -> Result<
+    Option<(wrapped_erc20s::MultitokenKey, wrapped_erc20s::MultitokenKey)>,
+    Error,
+> {
     // we aren't concerned with keys that changed outside of our account
     let keys_changed: HashSet<_> = keys_changed
         .into_iter()
@@ -96,7 +101,7 @@ fn validate_tx(
             relevant_keys.len = keys_changed.len(),
             "Rejecting transaction as only two keys should have changed"
         );
-        return Ok(false);
+        return Ok(None);
     }
 
     let mut keys = HashSet::<_>::default();
@@ -109,7 +114,7 @@ fn validate_tx(
                     ?error,
                     "Rejecting transaction as key is not a wrapped ERC20 key"
                 );
-                return Ok(false);
+                return Ok(None);
             }
         };
         keys.insert(key);
@@ -123,9 +128,15 @@ fn validate_tx(
             ?key_b,
             "Rejecting transaction as keys are for different assets"
         );
-        return Ok(false);
+        return Ok(None);
     }
+    Ok(Some((key_a, key_b)))
+}
 
+fn validate_balance_change(
+    key_a: wrapped_erc20s::MultitokenKey,
+    key_b: wrapped_erc20s::MultitokenKey,
+) -> bool {
     match (key_a.suffix.clone(), key_b.suffix.clone()) {
         (
             wrapped_erc20s::MultitokenKeyType::Balance { owner: owner_a },
@@ -133,7 +144,7 @@ fn validate_tx(
         ) => {
             // TODO: check total delta = 0 AND tx_data was signed by decreasing
             // balance's owner
-            Ok(true)
+            true
         }
         (
             wrapped_erc20s::MultitokenKeyType::Balance { .. },
@@ -150,7 +161,7 @@ fn validate_tx(
                 "Rejecting transaction that is attempting to change a supply \
                  key"
             );
-            Ok(false)
+            false
         }
         (
             wrapped_erc20s::MultitokenKeyType::Supply,
@@ -164,7 +175,7 @@ fn validate_tx(
                 "Rejecting transaction that is attempting to change two \
                  supply keys"
             );
-            Ok(false)
+            false
         }
     }
 }
@@ -192,25 +203,21 @@ mod tests {
 
     #[test]
     fn test_error_if_triggered_without_keys_changed() {
-        let tx_data = vec![];
         let keys_changed = BTreeSet::new();
-        let verifiers = BTreeSet::new();
 
-        let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+        let result = extract_valid_keys_changed(&keys_changed);
 
         assert!(result.is_err());
     }
 
     #[test]
     fn test_rejects_if_not_two_keys_changed() {
-        let tx_data = vec![];
-        let verifiers = BTreeSet::new();
         {
             let keys_changed = BTreeSet::from_iter(vec![arbitrary_key()]);
 
-            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+            let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(false)));
+            assert!(matches!(result, Ok(None)));
         }
         {
             let keys_changed = BTreeSet::from_iter(vec![
@@ -219,23 +226,21 @@ mod tests {
                 arbitrary_key(),
             ]);
 
-            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+            let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(false)));
+            assert!(matches!(result, Ok(None)));
         }
     }
 
     #[test]
     fn test_rejects_if_not_two_multitoken_keys_changed() {
-        let tx_data = vec![];
-        let verifiers = BTreeSet::new();
         {
             let keys_changed =
                 BTreeSet::from_iter(vec![arbitrary_key(), arbitrary_key()]);
 
-            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+            let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(false)));
+            assert!(matches!(result, Ok(None)));
         }
 
         {
@@ -247,9 +252,9 @@ mod tests {
                 .supply(),
             ]);
 
-            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+            let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(false)));
+            assert!(matches!(result, Ok(None)));
         }
 
         {
@@ -264,16 +269,14 @@ mod tests {
                 ),
             ]);
 
-            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+            let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(false)));
+            assert!(matches!(result, Ok(None)));
         }
     }
 
     #[test]
     fn test_rejects_if_multitoken_keys_for_different_assets() {
-        let tx_data = vec![];
-        let verifiers = BTreeSet::new();
         {
             let keys_changed = BTreeSet::from_iter(vec![
                 wrapped_erc20s::Keys::from(
@@ -292,17 +295,15 @@ mod tests {
                 ),
             ]);
 
-            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+            let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(false)));
+            assert!(matches!(result, Ok(None)));
         }
     }
 
     #[test]
     // TODO: this test will no longer be valid once we allow burning
     fn test_rejects_if_supply_key_changed() {
-        let tx_data = vec![];
-        let verifiers = BTreeSet::new();
         let asset = &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
         {
             let keys_changed = BTreeSet::from_iter(vec![
@@ -313,9 +314,9 @@ mod tests {
                 ),
             ]);
 
-            let result = validate_tx(&tx_data, &keys_changed, &verifiers);
+            let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(false)));
+            assert!(matches!(result, Ok(None)));
         }
     }
 }
