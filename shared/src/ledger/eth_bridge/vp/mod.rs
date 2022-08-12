@@ -1,5 +1,6 @@
 //! Validity predicate for the Ethereum bridge
 
+mod authorize;
 mod store;
 
 use std::collections::{BTreeSet, HashSet};
@@ -77,7 +78,8 @@ where
             Some(owner) => owner,
             None => return Ok(false),
         };
-        Ok(true)
+        let authed = authorize::is_authorized(&self.ctx, tx_data, &owner)?;
+        Ok(authed)
     }
 }
 
