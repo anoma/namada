@@ -69,10 +69,6 @@ mod extend_votes {
                 validator_addr,
             };
 
-            // TODO: should we move this inside the if block below?
-            // non-validator nodes don't need to perform these checks;
-            // similarly, the ethereum events stuff above could be moved
-            // to the if block below
             let validator_addr = addr;
             let vset_upd = self
                 .storage
@@ -91,27 +87,28 @@ mod extend_votes {
                     }
                 });
 
-            if let ShellMode::Validator { data, .. } = &self.mode {
-                let protocol_key = &data.keys.protocol_keypair;
+            let validator_data = match &self.mode {
+                ShellMode::Validator { data, .. } => data,
+                _ => unreachable!("only validators receive this method call"),
+            };
 
-                let vset_upd = vset_upd.map(|ext| {
-                    // TODO: sign validator set update with secp key instead
-                    ext.sign(protocol_key)
-                });
+            let protocol_key = &validator_data.keys.protocol_keypair;
 
-                let eth_evs = eth_evs.sign(protocol_key);
+            let vset_upd = vset_upd.map(|ext| {
+                // TODO: sign validator set update with secp key instead
+                ext.sign(protocol_key)
+            });
 
-                let vote_extension = VoteExtension {
-                    ethereum_events: eth_evs,
-                    validator_set_update: vset_upd,
-                }
-                .try_to_vec()
-                .unwrap();
+            let eth_evs = eth_evs.sign(protocol_key);
 
-                response::ExtendVote { vote_extension }
-            } else {
-                Default::default()
+            let vote_extension = VoteExtension {
+                ethereum_events: eth_evs,
+                validator_set_update: vset_upd,
             }
+            .try_to_vec()
+            .unwrap();
+
+            response::ExtendVote { vote_extension }
         }
 
         /// This checks that the vote extension:
