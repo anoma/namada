@@ -105,7 +105,7 @@ sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", b
 sysinfo = {version = "=0.21.1", default-features = false}
 tar = "0.4.37"
 # temporarily using fork work-around
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["secp256k1"]}
 tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["http-client", "websocket-client"]}
