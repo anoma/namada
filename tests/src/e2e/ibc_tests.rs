@@ -772,9 +772,10 @@ fn transfer_back(
         "{}/{}/{}",
         port_channel_id_b.port_id, port_channel_id_b.channel_id, xan
     );
-    let token_hash = ibc_token_hash(&denom_raw);
+    let hash = calc_hash(&denom_raw);
+    let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
     let token = Some(Coin {
-        denom: format!("{}/{}", MULTITOKEN_STORAGE_KEY, token_hash),
+        denom: format!("{}/{}", MULTITOKEN_STORAGE_KEY, ibc_token),
         amount: "50000".to_string(),
     });
     let msg = MsgTransfer {
