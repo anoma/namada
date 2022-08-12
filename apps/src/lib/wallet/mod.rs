@@ -119,11 +119,8 @@ impl Wallet {
     pub fn gen_validator_keys(
         &mut self,
         protocol_pk: Option<common::PublicKey>,
+        scheme: SchemeType,
     ) -> Result<ValidatorKeys, FindKeyError> {
-        let scheme = match protocol_pk.as_ref().unwrap() {
-            common::PublicKey::Ed25519(_) => SchemeType::Ed25519,
-            common::PublicKey::Secp256k1(_) => SchemeType::Secp256k1,
-        };
         let protocol_keypair = protocol_pk.map(|pk| {
             self.find_key_by_pkh(&PublicKeyHash::from(&pk))
                 .ok()
