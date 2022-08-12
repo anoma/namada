@@ -208,7 +208,8 @@ pub async fn submit_init_validator(
             println!("Generating consensus key...");
             ctx.wallet
                 .gen_key(
-                    scheme,
+                    // Note that TM only allows ed25519 for consensus key
+                    SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
                     unsafe_dont_encrypt,
                 )
