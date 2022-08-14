@@ -1,8 +1,8 @@
 //! The common storage read trait is implemented in the storage, client RPC, tx
 //! and VPs (both native and WASM).
 
-mod error;
 pub mod collections;
+mod error;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
