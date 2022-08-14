@@ -1,5 +1,7 @@
 //! E2E test helpers
 
+mod wasms;
+
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
