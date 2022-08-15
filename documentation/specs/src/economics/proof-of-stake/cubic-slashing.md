@@ -31,4 +31,16 @@ calculateSlashRate slashes =
 
 Validator can later submit a transaction to unjail themselves after a configurable period. When the transaction is applied and accepted, the validator updates its state to "candidate" and is added back to the validator set starting at the epoch at pipeline offset (active or inactive, depending on its voting power).
 
-At present, funds slashed are sent to the governance treasury. In the future we could potentially reward the slash discoverer with part of the slash, for which some sort of commit-reveal mechanism will be required to prevent front-running.
+At present, funds slashed are sent to the governance treasury. 
+
+## Slashes
+
+Slashes should lead to punishment for delegators who were contributing voting power to the validator at the height of the infraction, _as if_ the delegations were iterated over and slashed individually.
+
+This can be implemented as a negative inflation rate for a particular block.
+
+Instant redelegation is not supported. Redelegations must wait the unbonding period.
+
+<!--## State management
+
+Each $entry_{v,i}$ can be reference-counted by the number of delegations created during that epoch which might need to reference it. As soon as the number of delegations drops to zero, the entry can be deleted.-->

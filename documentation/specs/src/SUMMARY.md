@@ -2,12 +2,9 @@
 
 - [Introduction](./introduction.md)
 - [Base ledger](./base-ledger.md)
-    - [Consensus](./base-ledger/consensus.md)
+    - [Core Concepts](./base-ledger/core-concepts.md)
     - [Execution](./base-ledger/execution.md)
     - [Governance](./base-ledger/governance.md)
-    - [Default account](./base-ledger/default-account.md)
-    - [Multisignature account](./base-ledger/multisignature.md)
-    - [Fungible token](./base-ledger/fungible-token.md)
 - [Multi-asset shielded pool](./masp.md)
     - [Ledger integration](./masp/ledger-integration.md)
     - [Asset type](./masp/asset-type.md)
