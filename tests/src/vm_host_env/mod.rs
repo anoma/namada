@@ -148,9 +148,11 @@ mod tests {
         tx_host_env::init();
 
         let empty_key = storage::Key::parse("empty").unwrap();
-        let mut iter = tx::ctx().iter_prefix(&empty_key).unwrap();
+        let mut iter =
+            namada_tx_prelude::iter_prefix_bytes(tx::ctx(), &empty_key)
+                .unwrap();
         assert!(
-            tx::ctx().iter_next(&mut iter).unwrap().is_none(),
+            iter.next().is_none(),
             "Trying to iter a prefix that doesn't have any matching keys \
              should yield an empty iterator."
         );
@@ -167,15 +169,12 @@ mod tests {
         });
 
         // Then try to iterate over their prefix
-        let iter = tx::ctx().iter_prefix(&prefix).unwrap();
-        let iter = itertools::unfold(iter, |iter| {
-            if let Ok(Some((key, value))) = tx::ctx().iter_next(iter) {
-                let decoded_value = i32::try_from_slice(&value[..]).unwrap();
-                return Some((key, decoded_value));
-            }
-            None
+        let iter = namada_tx_prelude::iter_prefix(tx::ctx(), &prefix)
+            .unwrap()
+            .map(|item| item.unwrap());
+        let expected = (0..10).map(|i| {
+            (storage::Key::parse(format!("{}/{}", prefix, i)).unwrap(), i)
         });
-        let expected = (0..10).map(|i| (format!("{}/{}", prefix, i), i));
         itertools::assert_equal(iter.sorted(), expected.sorted());
     }
 
@@ -380,29 +379,25 @@ mod tests {
             tx::ctx().write(&new_key, 11_i32).unwrap();
         });
 
-        let iter_pre = vp::CTX.iter_prefix(&prefix).unwrap();
-        let iter_pre = itertools::unfold(iter_pre, |iter| {
-            if let Ok(Some((key, value))) = vp::CTX.iter_pre_next(iter) {
-                if let Ok(decoded_value) = i32::try_from_slice(&value[..]) {
-                    return Some((key, decoded_value));
-                }
-            }
-            None
+        let ctx_pre = vp::CTX.pre();
+        let iter_pre = namada_vp_prelude::iter_prefix(&ctx_pre, &prefix)
+            .unwrap()
+            .map(|item| item.unwrap());
+        let expected_pre = (0..10).map(|i| {
+            (storage::Key::parse(format!("{}/{}", prefix, i)).unwrap(), i)
         });
-        let expected_pre = (0..10).map(|i| (format!("{}/{}", prefix, i), i));
         itertools::assert_equal(iter_pre.sorted(), expected_pre.sorted());
 
-        let iter_post = vp::CTX.iter_prefix(&prefix).unwrap();
-        let iter_post = itertools::unfold(iter_post, |iter| {
-            if let Ok(Some((key, value))) = vp::CTX.iter_post_next(iter) {
-                let decoded_value = i32::try_from_slice(&value[..]).unwrap();
-                return Some((key, decoded_value));
-            }
-            None
-        });
+        let ctx_post = vp::CTX.post();
+        let iter_post = namada_vp_prelude::iter_prefix(&ctx_post, &prefix)
+            .unwrap()
+            .map(|item| item.unwrap());
         let expected_post = (0..10).map(|i| {
             let val = if i == 5 { 100 } else { i };
-            (format!("{}/{}", prefix, i), val)
+            (
+                storage::Key::parse(format!("{}/{}", prefix, i)).unwrap(),
+                val,
+            )
         });
         itertools::assert_equal(iter_post.sorted(), expected_post.sorted());
     }
