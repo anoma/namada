@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::super::Result;
-use crate::ledger::storage_api::{StorageRead, StorageWrite};
+use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::storage;
 
 /// Subkey pointing to the length of the LazyVec
@@ -23,7 +23,7 @@ impl<T> LazyVec<T>
 where
     T: BorshSerialize + BorshDeserialize,
 {
-    /// new
+    /// Create or use an existing vector with the given storage `key`.
     pub fn new(key: storage::Key) -> Self {
         Self {
             key,
@@ -31,78 +31,105 @@ where
         }
     }
 
-    /// push
-    pub fn push(
-        &self,
-        val: T,
-        storage_read: &impl StorageRead,
-        storage_write: &mut impl StorageWrite,
-    ) -> Result<()> {
-        let len = self.read_len(storage_read)?;
-
-        let sub_index = len.unwrap_or(0);
-        let len = sub_index + 1;
-
-        let data_key = self.get_data_key(sub_index);
-
-        storage_write.write(&data_key, val)?;
-        storage_write.write(&self.get_len_key(), len)?;
-
-        Ok(())
+    /// Appends an element to the back of a collection.
+    pub fn push<S>(&self, storage: &mut S, val: T) -> Result<()>
+    where
+        S: StorageWrite + StorageRead,
+    {
+        let len = self.len(storage)?;
+        let data_key = self.get_data_key(len);
+        storage.write(&data_key, val)?;
+        storage.write(&self.get_len_key(), len + 1)
     }
 
-    /// pop
-    pub fn pop(
-        &self,
-        storage_read: &impl StorageRead,
-        storage_write: &mut impl StorageWrite,
-    ) -> Result<Option<T>> {
-        let len = self.read_len(storage_read)?;
-        match len {
-            Some(0) | None => Ok(None),
-            Some(len) => {
-                let sub_index = len - 1;
-                let data_key = self.get_data_key(sub_index);
-                if len == 1 {
-                    storage_write.delete(&self.get_len_key())?;
-                } else {
-                    storage_write.write(&self.get_len_key(), sub_index)?;
-                }
-                let popped_val = storage_read.read(&data_key)?;
-                storage_write.delete(&data_key)?;
-                Ok(popped_val)
+    /// Removes the last element from a vector and returns it, or `Ok(None)` if
+    /// it is empty.
+
+    /// Note that an empty vector is completely removed from storage.
+    pub fn pop<S>(&self, storage: &mut S) -> Result<Option<T>>
+    where
+        S: StorageWrite + StorageRead,
+    {
+        let len = self.len(storage)?;
+        if len == 0 {
+            Ok(None)
+        } else {
+            let index = len - 1;
+            let data_key = self.get_data_key(index);
+            if len == 1 {
+                storage.delete(&self.get_len_key())?;
+            } else {
+                storage.write(&self.get_len_key(), index)?;
             }
+            let popped_val = storage.read(&data_key)?;
+            storage.delete(&data_key)?;
+            Ok(popped_val)
         }
     }
 
-    /// get the length subkey
-    fn get_len_key(&self) -> storage::Key {
-        self.key.push(&LEN_SUBKEY.to_owned()).unwrap()
-    }
-
-    /// read the length of the LazyVec
-    pub fn read_len(
-        &self,
-        storage_read: &impl StorageRead,
-    ) -> Result<Option<u64>> {
-        storage_read.read(&self.get_len_key())
-    }
-
-    /// get the data subkey
-    fn get_data_key(&self, sub_index: u64) -> storage::Key {
-        self.key
-            .push(&DATA_SUBKEY.to_owned())
-            .unwrap()
-            .push(&sub_index.to_string())
-            .unwrap()
-    }
-
-    /// get the data held at a specific index within the data subkey
+    /// Read an element at the index or `Ok(None)` if out of bounds.
     pub fn get(
         &self,
-        sub_index: u64,
-        storage_read: &impl StorageRead,
+        storage: &impl StorageRead,
+        index: u64,
     ) -> Result<Option<T>> {
-        storage_read.read(&self.get_data_key(sub_index))
+        storage.read(&self.get_data_key(index))
+    }
+
+    /// Reads the number of elements in the vector.
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self, storage: &impl StorageRead) -> Result<u64> {
+        let len = storage.read(&self.get_len_key())?;
+        Ok(len.unwrap_or_default())
+    }
+
+    /// Returns `true` if the vector contains no elements.
+    pub fn is_empty(&self, storage: &impl StorageRead) -> Result<bool> {
+        Ok(self.len(storage)? == 0)
+    }
+
+    /// An iterator visiting all elements. The iterator element type is
+    /// `Result<T>`, because iterator's call to `next` may fail with e.g. out of
+    /// gas or data decoding error.
+    ///
+    /// Note that this function shouldn't be used in transactions and VPs code
+    /// on unbounded sets to avoid gas usage increasing with the length of the
+    /// set.
+    pub fn iter<'a>(
+        &self,
+        storage: &'a impl StorageRead,
+    ) -> Result<impl Iterator<Item = Result<T>> + 'a> {
+        let iter = storage.iter_prefix(&self.get_data_prefix())?;
+        let iter = itertools::unfold(iter, |iter| {
+            match storage.iter_next(iter) {
+                Ok(Some((_key, value))) => {
+                    match T::try_from_slice(&value[..]) {
+                        Ok(decoded_value) => Some(Ok(decoded_value)),
+                        Err(err) => Some(Err(storage_api::Error::new(err))),
+                    }
+                }
+                Ok(None) => None,
+                Err(err) => {
+                    // Propagate errors into Iterator's Item
+                    Some(Err(err))
+                }
+            }
+        });
+        Ok(iter)
+    }
+
+    /// Get the prefix of set's elements storage
+    fn get_data_prefix(&self) -> storage::Key {
+        self.key.push(&DATA_SUBKEY.to_owned()).unwrap()
+    }
+
+    /// Get the sub-key of vector's elements storage
+    fn get_data_key(&self, index: u64) -> storage::Key {
+        self.get_data_prefix().push(&index.to_string()).unwrap()
+    }
+
+    /// Get the sub-key of vector's length storage
+    fn get_len_key(&self) -> storage::Key {
+        self.key.push(&LEN_SUBKEY.to_owned()).unwrap()
     }
 }

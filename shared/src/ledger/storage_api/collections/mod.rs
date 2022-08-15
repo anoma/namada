@@ -7,6 +7,7 @@
 //!
 //! CONTINUE TO UPDATE THE ABOVE
 
+mod hasher;
 pub mod lazy_map;
 pub mod lazy_set;
 pub mod lazy_vec;

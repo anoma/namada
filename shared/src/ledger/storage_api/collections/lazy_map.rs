@@ -1,106 +1,170 @@
 //! Lazy map
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::super::Result;
-use crate::ledger::storage_api::{StorageRead, StorageWrite};
+use super::hasher::hash_for_storage_key;
+use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::storage;
 
 /// Subkey corresponding to the data elements of the LazyMap
 pub const DATA_SUBKEY: &str = "data";
 
 /// LazyMap ! fill in !
-pub struct LazyMap<H, T> {
+pub struct LazyMap<K, V> {
     key: storage::Key,
-    phantom_h: PhantomData<H>,
-    phantom_t: PhantomData<T>,
+    phantom_h: PhantomData<K>,
+    phantom_t: PhantomData<V>,
 }
 
-impl<H, T> LazyMap<H, T>
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+struct KeyVal<K, V> {
+    key: K,
+    val: V,
+}
+
+impl<K, V> LazyMap<K, V>
 where
-    H: BorshDeserialize + BorshSerialize + Hash,
-    T: BorshDeserialize + BorshSerialize,
+    K: BorshDeserialize + BorshSerialize,
+    V: BorshDeserialize + BorshSerialize,
 {
-    /// insert
-    pub fn insert(
-        &self,
-        elem_key: &H,
-        elem_val: T,
-        storage_write: &mut impl StorageWrite,
-    ) -> Result<()> {
-        // TODO: Check to see if map element exists already ??
-
-        let data_key = self.get_data_key(elem_key);
-        storage_write.write(&data_key, (elem_key, elem_val))?;
-
-        Ok(())
+    /// Create or use an existing map with the given storage `key`.
+    pub fn new(key: storage::Key) -> Self {
+        Self {
+            key,
+            phantom_h: PhantomData,
+            phantom_t: PhantomData,
+        }
     }
 
-    /// remove
-    pub fn remove(
+    /// Inserts a key-value pair into the map.
+    ///
+    /// If the map did not have this key present, `None` is returned.
+    /// If the map did have this key present, the value is updated, and the old
+    /// value is returned. Unlike in `std::collection::HashMap`, the key is also
+    /// updated; this matters for types that can be `==` without being
+    /// identical.
+    pub fn insert<S>(
         &self,
-        elem_key: &H,
-        storage_write: &mut impl StorageWrite,
-    ) -> Result<()> {
-        let data_key = self.get_data_key(elem_key);
-        storage_write.delete(&data_key)?;
+        storage: &mut S,
+        key: K,
+        val: V,
+    ) -> Result<Option<V>>
+    where
+        S: StorageWrite + StorageRead,
+    {
+        let previous = self.get(storage, &key)?;
 
-        Ok(())
+        let data_key = self.get_data_key(&key);
+        Self::write_key_val(storage, &data_key, key, val)?;
+
+        Ok(previous)
     }
 
-    /// get value
+    /// Removes a key from the map, returning the value at the key if the key
+    /// was previously in the map.
+    pub fn remove<S>(&self, storage: &mut S, key: &K) -> Result<Option<V>>
+    where
+        S: StorageWrite + StorageRead,
+    {
+        let value = self.get(storage, key)?;
+
+        let data_key = self.get_data_key(key);
+        storage.delete(&data_key)?;
+
+        Ok(value)
+    }
+
+    /// Returns the value corresponding to the key, if any.
     pub fn get(
         &self,
-        elem_key: &H,
-        storage_read: &mut impl StorageRead,
-    ) -> Result<Option<T>> {
-        // check if elem_key exists in the first place?
-
-        let data_key = self.get_data_key(elem_key);
-        let res: Option<(H, T)> = storage_read.read(&data_key)?;
-        match res {
-            Some(pair) => Ok(Some(pair.1)),
-            None => Ok(None),
-        }
+        storage: &impl StorageRead,
+        key: &K,
+    ) -> Result<Option<V>> {
+        let res = self.get_key_val(storage, key)?;
+        Ok(res.map(|elem| elem.1))
     }
 
-    /// get the element key by its hash
-    pub fn get_elem_key_by_hash(
+    /// Returns the key-value corresponding to the key, if any.
+    pub fn get_key_val(
         &self,
-        elem_key_hash: &str,
-        storage_read: &mut impl StorageRead,
-    ) -> Result<Option<H>> {
-        let data_key = self
-            .key
-            .push(&DATA_SUBKEY.to_owned())
-            .unwrap()
-            .push(&elem_key_hash.to_string())
-            .unwrap();
-        let res: Option<(H, T)> = storage_read.read(&data_key)?;
-        match res {
-            Some(pair) => Ok(Some(pair.0)),
-            None => Ok(None),
-        }
+        storage: &impl StorageRead,
+        key: &K,
+    ) -> Result<Option<(K, V)>> {
+        let data_key = self.get_data_key(key);
+        Self::read_key_val(storage, &data_key)
     }
 
-    /// hash
-    fn hash(&self, elem_key: &H) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        elem_key.hash(&mut hasher);
-        hasher.finish()
+    /// Returns the key-value corresponding to the given hash of a key, if any.
+    pub fn get_key_val_by_hash(
+        &self,
+        storage: &impl StorageRead,
+        key_hash: &str,
+    ) -> Result<Option<(K, V)>> {
+        let data_key =
+            self.get_data_prefix().push(&key_hash.to_string()).unwrap();
+        Self::read_key_val(storage, &data_key)
     }
 
-    /// get the data subkey
-    fn get_data_key(&self, elem_key: &H) -> storage::Key {
-        let hash_str = self.hash(elem_key).to_string();
-        self.key
-            .push(&DATA_SUBKEY.to_owned())
-            .unwrap()
-            .push(&hash_str)
-            .unwrap()
+    /// An iterator visiting all key-value elements. The iterator element type
+    /// is `Result<(K, V)>`, because iterator's call to `next` may fail with
+    /// e.g. out of gas or data decoding error.
+    ///
+    /// Note that this function shouldn't be used in transactions and VPs code
+    /// on unbounded sets to avoid gas usage increasing with the length of the
+    /// map.
+    pub fn iter<'a>(
+        &self,
+        storage: &'a impl StorageRead,
+    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a> {
+        let iter = storage.iter_prefix(&self.get_data_prefix())?;
+        let iter = itertools::unfold(iter, |iter| {
+            match storage.iter_next(iter) {
+                Ok(Some((_key, value))) => {
+                    match KeyVal::<K, V>::try_from_slice(&value[..]) {
+                        Ok(KeyVal { key, val }) => Some(Ok((key, val))),
+                        Err(err) => Some(Err(storage_api::Error::new(err))),
+                    }
+                }
+                Ok(None) => None,
+                Err(err) => {
+                    // Propagate errors into Iterator's Item
+                    Some(Err(err))
+                }
+            }
+        });
+        Ok(iter)
+    }
+
+    /// Reads a key-value from storage
+    fn read_key_val(
+        storage: &impl StorageRead,
+        storage_key: &storage::Key,
+    ) -> Result<Option<(K, V)>> {
+        let res = storage.read(storage_key)?;
+        Ok(res.map(|KeyVal { key, val }| (key, val)))
+    }
+
+    /// Write a key-value into storage
+    fn write_key_val(
+        storage: &mut impl StorageWrite,
+        storage_key: &storage::Key,
+        key: K,
+        val: V,
+    ) -> Result<()> {
+        storage.write(storage_key, KeyVal { key, val })
+    }
+
+    /// Get the prefix of set's elements storage
+    fn get_data_prefix(&self) -> storage::Key {
+        self.key.push(&DATA_SUBKEY.to_owned()).unwrap()
+    }
+
+    /// Get the sub-key of a given element
+    fn get_data_key(&self, key: &K) -> storage::Key {
+        let hash_str = hash_for_storage_key(key);
+        self.get_data_prefix().push(&hash_str).unwrap()
     }
 }
