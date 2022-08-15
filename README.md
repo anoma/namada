@@ -21,7 +21,6 @@ interaction with the protocol.
 ## 📓 Docs
 
 - user docs: built from [docs mdBook](./documentation/docs/)
-- dev docs: built from [dev mdBook](./documentation/dev/)
 - specifications: built from [specs mdBook](./documentation/specs/)
 
 ## Warning
@@ -38,10 +37,10 @@ make install
 
 After installation, the main `anoma` executable will be available on path.
 
-To find how to use it, check out the [User Guide section of the docs](https://docs.anoma.net/user-guide/).
+To find how to use it, check out the [User Guide section of the docs](https://docs.namada.net/user-guide/index.html).
 
 For more detailed instructions and more install options, see the [Install
-section](https://docs.anoma.net/user-guide/install.html) of the User
+section](https://docs.namada.net/user-guide/install.html) of the User
 Guide.
 
 ## ⚙️ Development
