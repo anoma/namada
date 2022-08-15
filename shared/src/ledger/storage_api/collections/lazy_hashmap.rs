@@ -1,27 +1,34 @@
 //! Lazy hash map
 
-use std::fmt::Display;
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::super::Result;
+use super::hasher::hash_for_storage_key;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::storage;
 
 /// Subkey corresponding to the data elements of the LazyMap
 pub const DATA_SUBKEY: &str = "data";
 
-/// LazyMap ! fill in !
-pub struct LazyMap<K, V> {
+/// LazyHashmap ! fill in !
+pub struct LazyHashMap<K, V> {
     key: storage::Key,
     phantom_k: PhantomData<K>,
     phantom_v: PhantomData<V>,
 }
 
+/// Struct to hold a key-value pair
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+struct KeyVal<K, V> {
+    key: K,
+    val: V,
+}
+
 impl<K, V> LazyMap<K, V>
 where
-    K: BorshDeserialize + BorshSerialize + Display,
+    K: BorshDeserialize + BorshSerialize,
     V: BorshDeserialize + BorshSerialize,
 {
     /// Create or use an existing map with the given storage `key`.
@@ -34,9 +41,6 @@ where
     }
 
     /// Inserts a key-value pair into the map.
-    ///
-    /// The full storage key identifies the key in the pair, while the value is
-    /// held within the storage key.
     ///
     /// If the map did not have this key present, `None` is returned.
     /// If the map did have this key present, the value is updated, and the old
@@ -55,7 +59,7 @@ where
         let previous = self.get(storage, &key)?;
 
         let data_key = self.get_data_key(&key);
-        Self::write_key_val(storage, &data_key, val)?;
+        Self::write_key_val(storage, &data_key, key, val)?;
 
         Ok(previous)
     }
@@ -80,7 +84,28 @@ where
         storage: &impl StorageRead,
         key: &K,
     ) -> Result<Option<V>> {
+        let res = self.get_key_val(storage, key)?;
+        Ok(res.map(|elem| elem.1))
+    }
+
+    /// Returns the key-value corresponding to the key, if any.
+    pub fn get_key_val(
+        &self,
+        storage: &impl StorageRead,
+        key: &K,
+    ) -> Result<Option<(K, V)>> {
         let data_key = self.get_data_key(key);
+        Self::read_key_val(storage, &data_key)
+    }
+
+    /// Returns the key-value corresponding to the given hash of a key, if any.
+    pub fn get_key_val_by_hash(
+        &self,
+        storage: &impl StorageRead,
+        key_hash: &str,
+    ) -> Result<Option<(K, V)>> {
+        let data_key =
+            self.get_data_prefix().push(&key_hash.to_string()).unwrap();
         Self::read_key_val(storage, &data_key)
     }
 
@@ -94,13 +119,13 @@ where
     pub fn iter<'a>(
         &self,
         storage: &'a impl StorageRead,
-    ) -> Result<impl Iterator<Item = Result<V>> + 'a> {
+    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a> {
         let iter = storage.iter_prefix(&self.get_data_prefix())?;
         let iter = itertools::unfold(iter, |iter| {
             match storage.iter_next(iter) {
                 Ok(Some((_key, value))) => {
-                    match V::try_from_slice(&value[..]) {
-                        Ok(decoded_value) => Some(Ok(decoded_value)),
+                    match KeyVal::<K, V>::try_from_slice(&value[..]) {
+                        Ok(KeyVal { key, val }) => Some(Ok((key, val))),
                         Err(err) => Some(Err(storage_api::Error::new(err))),
                     }
                 }
@@ -114,22 +139,23 @@ where
         Ok(iter)
     }
 
-    /// Reads a value from storage
+    /// Reads a key-value from storage
     fn read_key_val(
         storage: &impl StorageRead,
         storage_key: &storage::Key,
-    ) -> Result<Option<V>> {
+    ) -> Result<Option<(K, V)>> {
         let res = storage.read(storage_key)?;
-        Ok(res)
+        Ok(res.map(|KeyVal { key, val }| (key, val)))
     }
 
-    /// Write a value into storage
+    /// Write a key-value into storage
     fn write_key_val(
         storage: &mut impl StorageWrite,
         storage_key: &storage::Key,
+        key: K,
         val: V,
     ) -> Result<()> {
-        storage.write(storage_key, val)
+        storage.write(storage_key, KeyVal { key, val })
     }
 
     /// Get the prefix of set's elements storage
@@ -139,6 +165,7 @@ where
 
     /// Get the sub-key of a given element
     fn get_data_key(&self, key: &K) -> storage::Key {
-        self.get_data_prefix().push(&key.to_string()).unwrap()
+        let hash_str = hash_for_storage_key(key);
+        self.get_data_prefix().push(&hash_str).unwrap()
     }
 }
