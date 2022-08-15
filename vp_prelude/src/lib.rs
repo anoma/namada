@@ -298,20 +298,6 @@ impl VpEnv for Ctx {
 impl StorageRead<'_> for CtxPreStorageRead<'_> {
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
 
-    fn read<T: BorshDeserialize>(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<T>, storage_api::Error> {
-        let bytes = self.read_bytes(key)?;
-        match bytes {
-            Some(bytes) => match T::try_from_slice(&bytes[..]) {
-                Ok(val) => Ok(Some(val)),
-                Err(err) => Err(storage_api::Error::new(err)),
-            },
-            None => Ok(None),
-        }
-    }
-
     fn read_bytes(
         &self,
         key: &storage::Key,
@@ -374,20 +360,6 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
 
 impl StorageRead<'_> for CtxPostStorageRead<'_> {
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
-
-    fn read<T: BorshDeserialize>(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<T>, storage_api::Error> {
-        let bytes = self.read_bytes(key)?;
-        match bytes {
-            Some(bytes) => match T::try_from_slice(&bytes[..]) {
-                Ok(val) => Ok(Some(val)),
-                Err(err) => Err(storage_api::Error::new(err)),
-            },
-            None => Ok(None),
-        }
-    }
 
     fn read_bytes(
         &self,
