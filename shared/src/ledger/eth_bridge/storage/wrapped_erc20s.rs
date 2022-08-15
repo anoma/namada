@@ -73,20 +73,20 @@ mod test {
 
     #[test]
     fn test_prefix() {
-        assert!(matches!(
+        assert_matches!(
             &prefix().segments[..],
             [
                 DbKeySeg::AddressSeg(multitoken_addr),
                 DbKeySeg::StringSeg(multitoken_path),
             ] if multitoken_addr == &ADDRESS &&
             multitoken_path == PREFIX_KEY_SEGMENT
-        ))
+        )
     }
 
     #[test]
     fn test_keys_from_eth_address() {
         let keys: Keys = (&DAI_ERC20_ETH_ADDRESS).into();
-        assert!(matches!(
+        assert_matches!(
             &keys.prefix.segments[..],
             [
                 DbKeySeg::AddressSeg(multitoken_addr),
@@ -95,7 +95,7 @@ mod test {
             ] if multitoken_addr == &ADDRESS &&
             multitoken_path == PREFIX_KEY_SEGMENT &&
             token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase()
-        ))
+        )
     }
 
     #[test]
@@ -103,7 +103,7 @@ mod test {
         let keys: Keys = (&DAI_ERC20_ETH_ADDRESS).into();
         let key =
             keys.balance(&Address::from_str(ARBITRARY_OWNER_ADDRESS).unwrap());
-        assert!(matches!(
+        assert_matches!(
             &key.segments[..],
             [
                 DbKeySeg::AddressSeg(multitoken_addr),
@@ -116,7 +116,7 @@ mod test {
             token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase() &&
             balance_key_seg == BALANCE_KEY_SEGMENT &&
             owner_addr == &Address::decode(ARBITRARY_OWNER_ADDRESS).unwrap()
-        ))
+        )
     }
 
     #[test]
@@ -134,7 +134,7 @@ mod test {
     fn test_keys_supply() {
         let keys: Keys = (&DAI_ERC20_ETH_ADDRESS).into();
         let key = keys.supply();
-        assert!(matches!(
+        assert_matches!(
             &key.segments[..],
             [
                 DbKeySeg::AddressSeg(multitoken_addr),
@@ -145,7 +145,7 @@ mod test {
             multitoken_path == PREFIX_KEY_SEGMENT &&
             token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase() &&
             supply_key_seg == SUPPLY_KEY_SEGMENT
-        ))
+        )
     }
 
     #[test]

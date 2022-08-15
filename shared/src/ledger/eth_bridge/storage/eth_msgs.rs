@@ -113,10 +113,10 @@ mod test {
 
     #[test]
     fn test_prefix() {
-        assert!(matches!(&prefix().segments[..], [
+        assert_matches!(&prefix().segments[..], [
                 DbKeySeg::AddressSeg(ADDRESS),
                 DbKeySeg::StringSeg(s),
-            ] if s == PREFIX_KEY_SEGMENT))
+            ] if s == PREFIX_KEY_SEGMENT)
     }
 
     #[test]
