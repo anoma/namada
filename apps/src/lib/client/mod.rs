@@ -6,3 +6,4 @@ mod tendermint_websocket_client;
 mod tm_jsonrpc_client;
 pub mod tx;
 pub mod utils;
+pub mod types;

@@ -1571,6 +1571,7 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::ArgMatches;
+    use crate::client::types::{ParsedTxArgs, ParsedTxTransferArgs};
     use crate::config;
     use crate::config::TendermintMode;
 
@@ -1808,6 +1809,18 @@ pub mod args {
         pub token: WalletAddress,
         /// Transferred token amount
         pub amount: token::Amount,
+    }
+
+    impl TxTransfer {
+        pub fn parse_from_context(&self, ctx: &mut Context) -> ParsedTxTransferArgs {
+            ParsedTxTransferArgs {
+                tx: self.tx.parse_from_context(ctx),
+                source: ctx.get_cached(&self.source),
+                target: ctx.get(&self.target),
+                token: ctx.get(&self.token),
+                amount: self.amount,
+            }
+        }
     }
 
     impl Args for TxTransfer {
@@ -2855,6 +2868,24 @@ pub mod args {
         pub signing_key: Option<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
         pub signer: Option<WalletAddress>,
+    }
+
+    impl Tx {
+        pub fn parse_from_context(&self, ctx: &mut Context) -> ParsedTxArgs {
+            ParsedTxArgs{
+                dry_run: self.dry_run,
+                force: self.force,
+                broadcast_only: self.broadcast_only,
+                ledger_address: self.ledger_address.clone(),
+                initialized_account_alias: self.initialized_account_alias.clone(),
+                fee_amount: self.fee_amount,
+                fee_token: ctx.get(&self.fee_token),
+                gas_limit: self.gas_limit.clone(),
+                signing_key: self.signing_key.as_ref().map(|sk| ctx.get_cached(&sk)),
+                signer: self.signer.as_ref().map(|signer| ctx.get(&signer)),
+                
+            }
+        }
     }
 
     impl Args for Tx {
