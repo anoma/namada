@@ -329,7 +329,7 @@ mod tests {
 
             let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(None)));
+            assert_matches!(result, Ok(None));
         }
         {
             let keys_changed = BTreeSet::from_iter(vec![
@@ -340,7 +340,7 @@ mod tests {
 
             let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(None)));
+            assert_matches!(result, Ok(None));
         }
     }
 
@@ -352,7 +352,7 @@ mod tests {
 
             let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(None)));
+            assert_matches!(result, Ok(None));
         }
 
         {
@@ -366,7 +366,7 @@ mod tests {
 
             let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(None)));
+            assert_matches!(result, Ok(None));
         }
 
         {
@@ -383,7 +383,7 @@ mod tests {
 
             let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(None)));
+            assert_matches!(result, Ok(None));
         }
     }
 
@@ -409,7 +409,7 @@ mod tests {
 
             let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(None)));
+            assert_matches!(result, Ok(None));
         }
     }
 
@@ -428,7 +428,7 @@ mod tests {
 
             let result = extract_valid_keys_changed(&keys_changed);
 
-            assert!(matches!(result, Ok(None)));
+            assert_matches!(result, Ok(None));
         }
     }
 }
