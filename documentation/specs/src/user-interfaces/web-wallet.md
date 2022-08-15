@@ -142,7 +142,7 @@ User can:
 [Wireframe 2](https://www.figma.com/file/aiWZpaXjPLW6fDjE7dpFaU/Projects-2021?node-id=6496%3A14405)
 User can:
 view 1:
-* enter the details (TBD) of the proposal
+* enter the details of the proposal
 * see a summary of the proposal
 * submit the proposal
 
