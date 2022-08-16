@@ -424,12 +424,13 @@ where
     pub fn write(
         &mut self,
         key: &Key,
-        value: impl AsRef<[u8]> + Clone,
+        value: impl AsRef<[u8]>,
     ) -> Result<(u64, i64)> {
         tracing::debug!("storage write key {}", key,);
-        self.block.tree.update(key, value.clone())?;
+        let value = value.as_ref();
+        self.block.tree.update(key, &value)?;
 
-        let len = value.as_ref().len();
+        let len = value.len();
         let gas = key.len() + len;
         let size_diff =
             self.db.write_subspace_val(self.last_height, key, value)?;
