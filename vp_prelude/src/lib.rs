@@ -299,7 +299,7 @@ impl VpEnv for Ctx {
     }
 }
 
-impl StorageRead for CtxPreStorageRead<'_> {
+impl StorageRead<'_> for CtxPreStorageRead<'_> {
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
 
     fn read<T: BorshDeserialize>(
@@ -376,7 +376,7 @@ impl StorageRead for CtxPreStorageRead<'_> {
     }
 }
 
-impl StorageRead for CtxPostStorageRead<'_> {
+impl StorageRead<'_> for CtxPostStorageRead<'_> {
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
 
     fn read<T: BorshDeserialize>(
