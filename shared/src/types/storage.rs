@@ -27,6 +27,8 @@ pub enum Error {
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
+    #[error("Error parsing key segment {0}")]
+    ParseKeySeg(String),
 }
 
 /// Result for functions that may fail
@@ -274,6 +276,11 @@ impl Key {
         self.len() == 0
     }
 
+    /// Returns the last segment of the key, or `None` if it is empty.
+    pub fn last(&self) -> Option<&DbKeySeg> {
+        self.segments.last()
+    }
+
     /// Returns a key of the validity predicate of the given address
     /// Only this function can push "?" segment for validity predicate
     pub fn validity_predicate(addr: &Address) -> Self {
@@ -317,8 +324,11 @@ impl Key {
                     .split_off(2)
                     .join(&KEY_SEGMENT_SEPARATOR.to_string()),
             )
-            .map_err(|e| Error::Temporary {
-                error: format!("Cannot parse key segments {}: {}", db_key, e),
+            .map_err(|e| {
+                Error::ParseKeySeg(format!(
+                    "Cannot parse key segments {}: {}",
+                    db_key, e
+                ))
             })?,
         };
         Ok(key)
@@ -446,8 +456,11 @@ impl KeySeg for String {
 
 impl KeySeg for BlockHeight {
     fn parse(string: String) -> Result<Self> {
-        let h = string.parse::<u64>().map_err(|e| Error::Temporary {
-            error: format!("Unexpected height value {}, {}", string, e),
+        let h = string.parse::<u64>().map_err(|e| {
+            Error::ParseKeySeg(format!(
+                "Unexpected height value {}, {}",
+                string, e
+            ))
         })?;
         Ok(BlockHeight(h))
     }
@@ -480,6 +493,42 @@ impl KeySeg for Address {
         DbKeySeg::AddressSeg(self.clone())
     }
 }
+
+/// Implement [`KeySeg`] for a type via its [`Display`] and
+/// [`std::str::FromStr`] implementation.
+macro_rules! impl_key_seg {
+    ($type:ty) => {
+        impl KeySeg for $type {
+            fn parse(string: String) -> Result<Self> {
+                std::str::FromStr::from_str(&string).map_err(|err| {
+                    Error::ParseKeySeg(format!(
+                        "Failed parsing {} with {}",
+                        string, err
+                    ))
+                })
+            }
+
+            fn raw(&self) -> String {
+                self.to_string()
+            }
+
+            fn to_db_key(&self) -> DbKeySeg {
+                DbKeySeg::StringSeg(self.to_string())
+            }
+        }
+    };
+}
+
+impl_key_seg!(i8);
+impl_key_seg!(i16);
+impl_key_seg!(i32);
+impl_key_seg!(i64);
+impl_key_seg!(i128);
+impl_key_seg!(u8);
+impl_key_seg!(u16);
+impl_key_seg!(u32);
+impl_key_seg!(u64);
+impl_key_seg!(u128);
 
 /// Epoch identifier. Epochs are identified by consecutive numbers.
 #[derive(
