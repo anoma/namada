@@ -69,7 +69,7 @@ where
         val: V,
     ) -> Result<Option<V>>
     where
-        S: StorageWrite + StorageRead,
+        S: StorageWrite + for<'iter> StorageRead<'iter>,
     {
         let previous = self.get(storage, &key)?;
 
@@ -83,7 +83,7 @@ where
     /// was previously in the map.
     pub fn remove<S>(&self, storage: &mut S, key: &K) -> Result<Option<V>>
     where
-        S: StorageWrite + StorageRead,
+        S: StorageWrite + for<'iter> StorageRead<'iter>,
     {
         let value = self.get(storage, key)?;
 
@@ -94,31 +94,32 @@ where
     }
 
     /// Returns the value corresponding to the key, if any.
-    pub fn get(
-        &self,
-        storage: &impl StorageRead,
-        key: &K,
-    ) -> Result<Option<V>> {
+    pub fn get<S>(&self, storage: &S, key: &K) -> Result<Option<V>>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
         let res = self.get_key_val(storage, key)?;
         Ok(res.map(|(_key, val)| val))
     }
 
     /// Returns the key-value corresponding to the key, if any.
-    pub fn get_key_val(
-        &self,
-        storage: &impl StorageRead,
-        key: &K,
-    ) -> Result<Option<(K, V)>> {
+    pub fn get_key_val<S>(&self, storage: &S, key: &K) -> Result<Option<(K, V)>>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
         let data_key = self.get_data_key(key);
         Self::read_key_val(storage, &data_key)
     }
 
     /// Returns the key-value corresponding to the given hash of a key, if any.
-    pub fn get_key_val_by_hash(
+    pub fn get_key_val_by_hash<S>(
         &self,
-        storage: &impl StorageRead,
+        storage: &S,
         key_hash: &str,
-    ) -> Result<Option<(K, V)>> {
+    ) -> Result<Option<(K, V)>>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
         let data_key =
             self.get_data_prefix().push(&key_hash.to_string()).unwrap();
         Self::read_key_val(storage, &data_key)
@@ -131,10 +132,10 @@ where
     /// Note that this function shouldn't be used in transactions and VPs code
     /// on unbounded sets to avoid gas usage increasing with the length of the
     /// map.
-    pub fn iter<'a>(
+    pub fn iter<'iter, S>(
         &self,
-        storage: &'a impl StorageRead,
-    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a> {
+        storage: &'iter impl StorageRead<'iter>,
+    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'iter> {
         let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
         Ok(iter.map(|key_val_res| {
             let (_key, val) = key_val_res?;
@@ -144,10 +145,13 @@ where
     }
 
     /// Reads a key-value from storage
-    fn read_key_val(
-        storage: &impl StorageRead,
+    fn read_key_val<S>(
+        storage: &S,
         storage_key: &storage::Key,
-    ) -> Result<Option<(K, V)>> {
+    ) -> Result<Option<(K, V)>>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
         let res = storage.read(storage_key)?;
         Ok(res.map(|KeyVal { key, val }| (key, val)))
     }

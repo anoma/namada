@@ -44,7 +44,7 @@ where
     /// `Ok(true)` is returned, `Ok(false)` otherwise.
     pub fn insert<S>(&self, storage: &mut S, val: &T) -> Result<bool>
     where
-        S: StorageWrite + StorageRead,
+        S: StorageWrite + for<'iter> StorageRead<'iter>,
     {
         if self.contains(storage, val)? {
             Ok(false)
@@ -61,7 +61,7 @@ where
     /// the set.
     pub fn remove<S>(&self, storage: &mut S, val: &T) -> Result<bool>
     where
-        S: StorageWrite + StorageRead,
+        S: StorageWrite + for<'iter> StorageRead<'iter>,
     {
         let data_key = self.get_data_key(val);
         let value: Option<()> = storage.read(&data_key)?;
@@ -70,17 +70,19 @@ where
     }
 
     /// Returns whether the set contains a value.
-    pub fn contains(
-        &self,
-        storage: &impl StorageRead,
-        val: &T,
-    ) -> Result<bool> {
+    pub fn contains<S>(&self, storage: &S, val: &T) -> Result<bool>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
         let value: Option<()> = storage.read(&self.get_data_key(val))?;
         Ok(value.is_some())
     }
 
     /// Returns whether the set contains no elements.
-    pub fn is_empty(&self, storage: &impl StorageRead) -> Result<bool> {
+    pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
         let mut iter =
             storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
         Ok(iter.next().is_none())
@@ -93,10 +95,10 @@ where
     /// Note that this function shouldn't be used in transactions and VPs code
     /// on unbounded sets to avoid gas usage increasing with the length of the
     /// set.
-    pub fn iter<'a>(
+    pub fn iter<'iter>(
         &self,
-        storage: &'a impl StorageRead,
-    ) -> Result<impl Iterator<Item = Result<T>> + 'a> {
+        storage: &'iter impl StorageRead<'iter>,
+    ) -> Result<impl Iterator<Item = Result<T>> + 'iter> {
         let iter =
             storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
         Ok(iter.map(|key_val_res| {
