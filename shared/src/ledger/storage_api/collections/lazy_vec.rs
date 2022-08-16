@@ -1,4 +1,4 @@
-//! Lazy vec
+//! Lazy dynamically-sized vector.
 
 use std::marker::PhantomData;
 
@@ -13,7 +13,12 @@ pub const LEN_SUBKEY: &str = "len";
 /// Subkey corresponding to the data elements of the LazyVec
 pub const DATA_SUBKEY: &str = "data";
 
-/// LazyVec ! fill in !
+/// Lazy dynamically-sized vector.
+///
+/// This can be used as an alternative to `std::collections::Vec`. In the lazy
+/// vector, the elements do not reside in memory but are instead read and
+/// written to storage sub-keys of the storage `key` used to construct the
+/// vector.
 pub struct LazyVec<T> {
     key: storage::Key,
     phantom: PhantomData<T>,
@@ -21,7 +26,7 @@ pub struct LazyVec<T> {
 
 impl<T> LazyVec<T>
 where
-    T: BorshSerialize + BorshDeserialize,
+    T: BorshSerialize + BorshDeserialize + 'static,
 {
     /// Create or use an existing vector with the given storage `key`.
     pub fn new(key: storage::Key) -> Self {
@@ -44,7 +49,7 @@ where
 
     /// Removes the last element from a vector and returns it, or `Ok(None)` if
     /// it is empty.
-
+    ///
     /// Note that an empty vector is completely removed from storage.
     pub fn pop<S>(&self, storage: &mut S) -> Result<Option<T>>
     where
@@ -99,23 +104,11 @@ where
         &self,
         storage: &'a impl StorageRead,
     ) -> Result<impl Iterator<Item = Result<T>> + 'a> {
-        let iter = storage.iter_prefix(&self.get_data_prefix())?;
-        let iter = itertools::unfold(iter, |iter| {
-            match storage.iter_next(iter) {
-                Ok(Some((_key, value))) => {
-                    match T::try_from_slice(&value[..]) {
-                        Ok(decoded_value) => Some(Ok(decoded_value)),
-                        Err(err) => Some(Err(storage_api::Error::new(err))),
-                    }
-                }
-                Ok(None) => None,
-                Err(err) => {
-                    // Propagate errors into Iterator's Item
-                    Some(Err(err))
-                }
-            }
-        });
-        Ok(iter)
+        let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
+        Ok(iter.map(|key_val_res| {
+            let (_key, val) = key_val_res?;
+            Ok(val)
+        }))
     }
 
     /// Get the prefix of set's elements storage

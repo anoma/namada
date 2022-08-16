@@ -1,36 +1,41 @@
-//! Lazy set.
+//! Lazy hash set.
 
 use std::marker::PhantomData;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+
 use super::super::Result;
-use super::ReadError;
-use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
-use crate::types::storage::{self, KeySeg};
+use super::hasher::hash_for_storage_key;
+use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
+use crate::types::storage;
 
 /// Subkey corresponding to the data elements of the LazySet
 pub const DATA_SUBKEY: &str = "data";
 
-/// Lazy set.
+/// Lazy hash set.
 ///
 /// This can be used as an alternative to `std::collections::HashSet` and
 /// `BTreeSet`. In the lazy set, the elements do not reside in memory but are
-/// instead read and written to storage sub-keys of the storage `key` used to
+/// instead read and written to storage sub-keys of the storage `key` given to
 /// construct the set.
 ///
-/// In the [`LazySet`], the type of value `T` can be anything that implements
-/// [`storage::KeySeg`] and this trait is used to turn the values into key
-/// segments.
+/// In the [`LazyHashSet`], the type of value `T` can be anything that
+/// [`BorshSerialize`] and [`BorshDeserialize`] and a hex string of sha256 hash
+/// over the borsh encoded values are used as storage key segments.
 ///
-/// This is different from [`super::LazyHashSet`], which hashes borsh encoded
-/// values.
-pub struct LazySet<T> {
+/// This is different from [`super::LazySet`], which uses [`storage::KeySeg`]
+/// trait.
+///
+/// Additionally, [`LazyHashSet`] also writes the unhashed values into the
+/// storage.
+pub struct LazyHashSet<T> {
     key: storage::Key,
     phantom: PhantomData<T>,
 }
 
-impl<T> LazySet<T>
+impl<T> LazyHashSet<T>
 where
-    T: storage::KeySeg,
+    T: BorshSerialize + BorshDeserialize + 'static,
 {
     /// Create or use an existing set with the given storage `key`.
     pub fn new(key: storage::Key) -> Self {
@@ -50,9 +55,7 @@ where
             Ok(false)
         } else {
             let data_key = self.get_data_key(val);
-            // The actual value is written into the key, so the value written to
-            // the storage is empty (unit)
-            storage.write(&data_key, ())?;
+            storage.write(&data_key, &val)?;
             Ok(true)
         }
     }
@@ -64,7 +67,7 @@ where
         S: StorageWrite + StorageRead,
     {
         let data_key = self.get_data_key(val);
-        let value: Option<()> = storage.read(&data_key)?;
+        let value: Option<T> = storage.read(&data_key)?;
         storage.delete(&data_key)?;
         Ok(value.is_some())
     }
@@ -75,15 +78,14 @@ where
         storage: &impl StorageRead,
         val: &T,
     ) -> Result<bool> {
-        let value: Option<()> = storage.read(&self.get_data_key(val))?;
+        let value: Option<T> = storage.read(&self.get_data_key(val))?;
         Ok(value.is_some())
     }
 
     /// Returns whether the set contains no elements.
     pub fn is_empty(&self, storage: &impl StorageRead) -> Result<bool> {
-        let mut iter =
-            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
-        Ok(iter.next().is_none())
+        let mut iter = storage.iter_prefix(&self.get_data_prefix())?;
+        Ok(storage.iter_next(&mut iter)?.is_none())
     }
 
     /// An iterator visiting all elements. The iterator element type is
@@ -97,15 +99,10 @@ where
         &self,
         storage: &'a impl StorageRead,
     ) -> Result<impl Iterator<Item = Result<T>> + 'a> {
-        let iter =
-            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
+        let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
         Ok(iter.map(|key_val_res| {
-            let (key, _val) = key_val_res?;
-            let last_key_seg = key
-                .last()
-                .ok_or(ReadError::UnexpectedlyEmptyStorageKey)
-                .into_storage_result()?;
-            T::parse(last_key_seg.raw()).into_storage_result()
+            let (_key, val) = key_val_res?;
+            Ok(val)
         }))
     }
 
@@ -116,7 +113,7 @@ where
 
     /// Get the sub-key of a given element
     fn get_data_key(&self, val: &T) -> storage::Key {
-        let key_str = val.to_db_key();
-        self.get_data_prefix().push(&key_str).unwrap()
+        let hash_str = hash_for_storage_key(val);
+        self.get_data_prefix().push(&hash_str).unwrap()
     }
 }
