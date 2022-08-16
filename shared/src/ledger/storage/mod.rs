@@ -459,7 +459,7 @@ where
         // Note that this method is the same as `StorageWrite::delete`,
         // but with gas and storage bytes len diff accounting
         let mut deleted_bytes_len = 0;
-        if Self::has_key(&self, key)?.0 {
+        if self.has_key(key)?.0 {
             self.block.tree.delete(key)?;
             deleted_bytes_len =
                 self.db.delete_subspace_val(self.last_height, key)?;
