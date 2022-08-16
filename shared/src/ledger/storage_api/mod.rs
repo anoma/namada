@@ -8,8 +8,14 @@ pub use error::{CustomError, Error, Result, ResultExt};
 
 use crate::types::storage::{self, BlockHash, BlockHeight, Epoch};
 
+// TODO: once GATs are stabilized, we should be able to remove the `'iter`
+// lifetime param that is currently the only way to make the prefix iterator
+// typecheck in the `<D as DBIter<'iter>>::PrefixIter` associated type used in
+// `impl StorageRead for Storage` (shared/src/ledger/storage/mod.rs).
+//
+// See <https://github.com/rust-lang/rfcs/blob/master/text/1598-generic_associated_types.md>
 /// Common storage read interface
-pub trait StorageRead {
+pub trait StorageRead<'iter> {
     /// Storage read prefix iterator
     type PrefixIter;
 
@@ -28,7 +34,13 @@ pub trait StorageRead {
 
     /// Storage prefix iterator. It will try to get an iterator from the
     /// storage.
-    fn iter_prefix(&self, prefix: &storage::Key) -> Result<Self::PrefixIter>;
+    ///
+    /// For a more user-friendly iterator API, use [`fn@iter_prefix`] or
+    /// [`fn@iter_prefix_bytes`] instead.
+    fn iter_prefix(
+        &'iter self,
+        prefix: &storage::Key,
+    ) -> Result<Self::PrefixIter>;
 
     /// Storage prefix iterator for. It will try to read from the storage.
     fn iter_next(

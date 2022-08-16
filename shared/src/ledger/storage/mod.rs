@@ -685,10 +685,7 @@ where
     }
 }
 
-// The `'iter` lifetime is needed for the associated type `PrefixIter`.
-// Note that the `D: DBIter<'iter>` bound uses another higher-rank lifetime
-// (see https://doc.rust-lang.org/nomicon/hrtb.html).
-impl<'iter, D, H> StorageRead for &'iter Storage<D, H>
+impl<'iter, D, H> StorageRead<'iter> for Storage<D, H>
 where
     D: DB + for<'iter_> DBIter<'iter_>,
     H: StorageHasher,
@@ -721,7 +718,7 @@ where
     }
 
     fn iter_prefix(
-        &self,
+        &'iter self,
         prefix: &crate::types::storage::Key,
     ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
         Ok(self.db.iter_prefix(prefix))

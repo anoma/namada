@@ -150,7 +150,7 @@ where
     }
 }
 
-impl<'f, 'a, DB, H, CA> StorageRead for CtxPreStorageRead<'f, 'a, DB, H, CA>
+impl<'f, 'a, DB, H, CA> StorageRead<'f> for CtxPreStorageRead<'f, 'a, DB, H, CA>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -210,7 +210,8 @@ where
     }
 }
 
-impl<'f, 'a, DB, H, CA> StorageRead for CtxPostStorageRead<'f, 'a, DB, H, CA>
+impl<'f, 'a, DB, H, CA> StorageRead<'f>
+    for CtxPostStorageRead<'f, 'a, DB, H, CA>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,

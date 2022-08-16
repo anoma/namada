@@ -95,7 +95,7 @@ pub type TxResult = EnvResult<()>;
 #[derive(Debug)]
 pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 
-impl StorageRead for Ctx {
+impl StorageRead<'_> for Ctx {
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
 
     fn read<T: BorshDeserialize>(
@@ -225,7 +225,7 @@ impl StorageWrite for Ctx {
     }
 }
 
-impl TxEnv for Ctx {
+impl TxEnv<'_> for Ctx {
     type Error = Error;
 
     fn get_block_time(&self) -> Result<time::Rfc3339String, Error> {

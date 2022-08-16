@@ -10,7 +10,7 @@ use crate::types::storage;
 use crate::types::time::Rfc3339String;
 
 /// Transaction host functions
-pub trait TxEnv: StorageRead + StorageWrite {
+pub trait TxEnv<'iter>: StorageRead<'iter> + StorageWrite {
     /// Host env functions possible errors
     type Error;
 
