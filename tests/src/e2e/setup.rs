@@ -503,9 +503,10 @@ impl AnomaCmd {
     /// Wrapper over the inner `PtySession`'s functions with custom error
     /// reporting.
     pub fn exp_string(&mut self, needle: &str) -> Result<String> {
-        let found = self.session.expect_eager(needle).map_err(|e| {
-            eyre!("{}\nCommand: {}\n Needle: {}", e, self, needle)
-        })?;
+        let found = self
+            .session
+            .expect(needle)
+            .map_err(|e| eyre!(format!("{}\n Needle: {}", e, needle)))?;
         if found.is_empty() {
             Err(eyre!(
                 "Expected needle not found\nCommand: {}\n Needle: {}",
@@ -528,8 +529,8 @@ impl AnomaCmd {
     pub fn exp_regex(&mut self, regex: &str) -> Result<(String, String)> {
         let found = self
             .session
-            .expect_eager(expectrl::Regex(regex))
-            .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))?;
+            .expect(expectrl::Regex(regex))
+            .map_err(|e| eyre!(format!("{}", e)))?;
         if found.is_empty() {
             Err(eyre!(
                 "Expected regex not found: {}\nCommand: {}",
@@ -553,10 +554,7 @@ impl AnomaCmd {
     /// reporting.
     #[allow(dead_code)]
     pub fn exp_eof(&mut self) -> Result<String> {
-        let found = self
-            .session
-            .expect_eager(Eof)
-            .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))?;
+        let found = self.session.expect(Eof).map_err(|e| eyre!("{}", e))?;
         if found.is_empty() {
             Err(eyre!("Expected EOF\nCommand: {}", self))
         } else {
