@@ -1,18 +1,30 @@
-//! Lazy hash map
+//! Lazy map.
 
-use std::fmt::Display;
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::super::Result;
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
-use crate::types::storage;
+use super::ReadError;
+use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
+use crate::types::storage::{self, KeySeg};
 
 /// Subkey corresponding to the data elements of the LazyMap
 pub const DATA_SUBKEY: &str = "data";
 
-/// LazyMap ! fill in !
+/// Lazy map.
+///
+/// This can be used as an alternative to `std::collections::HashMap` and
+/// `BTreeMap`. In the lazy map, the elements do not reside in memory but are
+/// instead read and written to storage sub-keys of the storage `key` used to
+/// construct the map.
+///
+/// In the [`LazyMap`], the type of key `K` can be anything that implements
+/// [`storage::KeySeg`] and this trait is used to turn the keys into key
+/// segments.
+///
+/// This is different from [`super::LazyHashMap`], which hashes borsh encoded
+/// key.
 pub struct LazyMap<K, V> {
     key: storage::Key,
     phantom_k: PhantomData<K>,
@@ -21,8 +33,8 @@ pub struct LazyMap<K, V> {
 
 impl<K, V> LazyMap<K, V>
 where
-    K: BorshDeserialize + BorshSerialize + Display,
-    V: BorshDeserialize + BorshSerialize,
+    K: storage::KeySeg,
+    V: BorshDeserialize + BorshSerialize + 'static,
 {
     /// Create or use an existing map with the given storage `key`.
     pub fn new(key: storage::Key) -> Self {
@@ -94,24 +106,17 @@ where
     pub fn iter<'a>(
         &self,
         storage: &'a impl StorageRead,
-    ) -> Result<impl Iterator<Item = Result<V>> + 'a> {
-        let iter = storage.iter_prefix(&self.get_data_prefix())?;
-        let iter = itertools::unfold(iter, |iter| {
-            match storage.iter_next(iter) {
-                Ok(Some((_key, value))) => {
-                    match V::try_from_slice(&value[..]) {
-                        Ok(decoded_value) => Some(Ok(decoded_value)),
-                        Err(err) => Some(Err(storage_api::Error::new(err))),
-                    }
-                }
-                Ok(None) => None,
-                Err(err) => {
-                    // Propagate errors into Iterator's Item
-                    Some(Err(err))
-                }
-            }
-        });
-        Ok(iter)
+    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a> {
+        let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
+        Ok(iter.map(|key_val_res| {
+            let (key, val) = key_val_res?;
+            let last_key_seg = key
+                .last()
+                .ok_or(ReadError::UnexpectedlyEmptyStorageKey)
+                .into_storage_result()?;
+            let key = K::parse(last_key_seg.raw()).into_storage_result()?;
+            Ok((key, val))
+        }))
     }
 
     /// Reads a value from storage
@@ -139,6 +144,7 @@ where
 
     /// Get the sub-key of a given element
     fn get_data_key(&self, key: &K) -> storage::Key {
-        self.get_data_prefix().push(&key.to_string()).unwrap()
+        let key_str = key.to_db_key();
+        self.get_data_prefix().push(&key_str).unwrap()
     }
 }

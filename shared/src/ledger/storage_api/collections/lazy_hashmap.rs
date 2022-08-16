@@ -1,4 +1,4 @@
-//! Lazy hash map
+//! Lazy hash map.
 
 use std::marker::PhantomData;
 
@@ -12,7 +12,22 @@ use crate::types::storage;
 /// Subkey corresponding to the data elements of the LazyMap
 pub const DATA_SUBKEY: &str = "data";
 
-/// LazyHashmap ! fill in !
+/// Lazy hash map.
+///
+/// This can be used as an alternative to `std::collections::HashMap` and
+/// `BTreeMap`. In the lazy map, the elements do not reside in memory but are
+/// instead read and written to storage sub-keys of the storage `key` given to
+/// construct the map.
+///
+/// In the [`LazyHashMap`], the type of key `K` can be anything that
+/// [`BorshSerialize`] and [`BorshDeserialize`] and a hex string of sha256 hash
+/// over the borsh encoded keys are used as storage key segments.
+///
+/// This is different from [`super::LazyMap`], which uses [`storage::KeySeg`]
+/// trait.
+///
+/// Additionally, [`LazyHashMap`] also writes the unhashed values into the
+/// storage together with the values (using an internal `KeyVal` type).
 pub struct LazyHashMap<K, V> {
     key: storage::Key,
     phantom_k: PhantomData<K>,
@@ -26,10 +41,10 @@ struct KeyVal<K, V> {
     val: V,
 }
 
-impl<K, V> LazyMap<K, V>
+impl<K, V> LazyHashMap<K, V>
 where
-    K: BorshDeserialize + BorshSerialize,
-    V: BorshDeserialize + BorshSerialize,
+    K: BorshDeserialize + BorshSerialize + 'static,
+    V: BorshDeserialize + BorshSerialize + 'static,
 {
     /// Create or use an existing map with the given storage `key`.
     pub fn new(key: storage::Key) -> Self {
@@ -85,7 +100,7 @@ where
         key: &K,
     ) -> Result<Option<V>> {
         let res = self.get_key_val(storage, key)?;
-        Ok(res.map(|elem| elem.1))
+        Ok(res.map(|(_key, val)| val))
     }
 
     /// Returns the key-value corresponding to the key, if any.
@@ -120,23 +135,12 @@ where
         &self,
         storage: &'a impl StorageRead,
     ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'a> {
-        let iter = storage.iter_prefix(&self.get_data_prefix())?;
-        let iter = itertools::unfold(iter, |iter| {
-            match storage.iter_next(iter) {
-                Ok(Some((_key, value))) => {
-                    match KeyVal::<K, V>::try_from_slice(&value[..]) {
-                        Ok(KeyVal { key, val }) => Some(Ok((key, val))),
-                        Err(err) => Some(Err(storage_api::Error::new(err))),
-                    }
-                }
-                Ok(None) => None,
-                Err(err) => {
-                    // Propagate errors into Iterator's Item
-                    Some(Err(err))
-                }
-            }
-        });
-        Ok(iter)
+        let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
+        Ok(iter.map(|key_val_res| {
+            let (_key, val) = key_val_res?;
+            let KeyVal { key, val } = val;
+            Ok((key, val))
+        }))
     }
 
     /// Reads a key-value from storage
