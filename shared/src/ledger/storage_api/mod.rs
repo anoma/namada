@@ -8,13 +8,26 @@ pub use error::{CustomError, Error, Result, ResultExt};
 
 use crate::types::storage::{self, BlockHash, BlockHeight, Epoch};
 
-// TODO: once GATs are stabilized, we should be able to remove the `'iter`
-// lifetime param that is currently the only way to make the prefix iterator
-// typecheck in the `<D as DBIter<'iter>>::PrefixIter` associated type used in
-// `impl StorageRead for Storage` (shared/src/ledger/storage/mod.rs).
-//
-// See <https://github.com/rust-lang/rfcs/blob/master/text/1598-generic_associated_types.md>
 /// Common storage read interface
+///
+/// If you're using this trait and having compiler complaining about needing an
+/// explicit lifetime parameter, simply use trait bounds with the following
+/// syntax:
+///
+/// ```rust,ignore
+/// where
+///     S: for<'iter> StorageRead<'iter>
+/// ```
+///
+/// If you want to know why this is needed, see the to-do task below. The
+/// syntax for this relies on higher-rank lifetimes, see e.g.
+/// <https://doc.rust-lang.org/nomicon/hrtb.html>.
+///
+/// TODO: once GATs are stabilized, we should be able to remove the `'iter`
+/// lifetime param that is currently the only way to make the prefix iterator
+/// typecheck in the `<D as DBIter<'iter>>::PrefixIter` associated type used in
+/// `impl StorageRead for Storage` (shared/src/ledger/storage/mod.rs).
+/// See <https://github.com/rust-lang/rfcs/blob/master/text/1598-generic_associated_types.md>
 pub trait StorageRead<'iter> {
     /// Storage read prefix iterator
     type PrefixIter;
