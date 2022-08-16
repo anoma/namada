@@ -42,14 +42,14 @@ where
 
     /// Adds a value to the set. If the set did not have this value present,
     /// `Ok(true)` is returned, `Ok(false)` otherwise.
-    pub fn insert<S>(&self, storage: &mut S, val: &T) -> Result<bool>
+    pub fn insert<S>(&self, storage: &mut S, val: T) -> Result<bool>
     where
         S: StorageWrite + for<'iter> StorageRead<'iter>,
     {
-        if self.contains(storage, val)? {
+        if self.contains(storage, &val)? {
             Ok(false)
         } else {
-            let data_key = self.get_data_key(val);
+            let data_key = self.get_data_key(&val);
             // The actual value is written into the key, so the value written to
             // the storage is empty (unit)
             storage.write(&data_key, ())?;
@@ -74,11 +74,29 @@ where
     where
         S: for<'iter> StorageRead<'iter>,
     {
-        let value: Option<()> = storage.read(&self.get_data_key(val))?;
-        Ok(value.is_some())
+        storage.has_key(&self.get_data_key(val))
+    }
+
+    /// Reads the number of elements in the set.
+    ///
+    /// Note that this function shouldn't be used in transactions and VPs code
+    /// on unbounded sets to avoid gas usage increasing with the length of the
+    /// set.
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len<S>(&self, storage: &S) -> Result<u64>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
+        let iter =
+            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
+        iter.count().try_into().into_storage_result()
     }
 
     /// Returns whether the set contains no elements.
+    ///
+    /// Note that this function shouldn't be used in transactions and VPs code
+    /// on unbounded sets to avoid gas usage increasing with the length of the
+    /// set.
     pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
     where
         S: for<'iter> StorageRead<'iter>,
@@ -120,5 +138,49 @@ where
     fn get_data_key(&self, val: &T) -> storage::Key {
         let key_str = val.to_db_key();
         self.get_data_prefix().push(&key_str).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::ledger::storage::testing::TestStorage;
+
+    #[test]
+    fn test_lazy_set_basics() -> storage_api::Result<()> {
+        let mut storage = TestStorage::default();
+
+        let key = storage::Key::parse("test").unwrap();
+        let lazy_set = LazySet::<i64>::new(key);
+
+        // The set should be empty at first
+        assert!(lazy_set.is_empty(&storage)?);
+        assert!(lazy_set.len(&storage)? == 0);
+        assert!(!lazy_set.contains(&storage, &0)?);
+        assert!(lazy_set.is_empty(&storage)?);
+        assert!(lazy_set.iter(&storage)?.next().is_none());
+        assert!(!lazy_set.remove(&mut storage, &0)?);
+        assert!(!lazy_set.remove(&mut storage, &1)?);
+
+        // Insert a new value and check that it's added
+        let val = 1337;
+        lazy_set.insert(&mut storage, val)?;
+        assert!(!lazy_set.is_empty(&storage)?);
+        assert!(lazy_set.len(&storage)? == 1);
+        assert_eq!(lazy_set.iter(&storage)?.next().unwrap()?, val.clone());
+        assert!(!lazy_set.contains(&storage, &0)?);
+        assert!(lazy_set.contains(&storage, &val)?);
+
+        // Remove the last value and check that the set is empty again
+        let is_removed = lazy_set.remove(&mut storage, &val)?;
+        assert!(is_removed);
+        assert!(lazy_set.is_empty(&storage)?);
+        assert!(lazy_set.len(&storage)? == 0);
+        assert!(!lazy_set.contains(&storage, &0)?);
+        assert!(lazy_set.is_empty(&storage)?);
+        assert!(!lazy_set.remove(&mut storage, &0)?);
+        assert!(!lazy_set.remove(&mut storage, &1)?);
+
+        Ok(())
     }
 }
