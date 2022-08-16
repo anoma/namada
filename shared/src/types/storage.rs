@@ -278,6 +278,11 @@ impl Key {
         self.len() == 0
     }
 
+    /// Returns the last segment of the key, or `None` if it is empty.
+    pub fn last(&self) -> Option<&DbKeySeg> {
+        self.segments.last()
+    }
+
     /// Returns a key of the validity predicate of the given address
     /// Only this function can push "?" segment for validity predicate
     pub fn validity_predicate(addr: &Address) -> Self {
@@ -321,8 +326,11 @@ impl Key {
                     .split_off(2)
                     .join(&KEY_SEGMENT_SEPARATOR.to_string()),
             )
-            .map_err(|e| Error::Temporary {
-                error: format!("Cannot parse key segments {}: {}", db_key, e),
+            .map_err(|e| {
+                Error::ParseKeySeg(format!(
+                    "Cannot parse key segments {}: {}",
+                    db_key, e
+                ))
             })?,
         };
         Ok(key)
@@ -450,7 +458,12 @@ impl KeySeg for String {
 
 impl KeySeg for BlockHeight {
     fn parse(string: String) -> Result<Self> {
-        let h: u64 = KeySeg::parse(string)?;
+        let h = string.parse::<u64>().map_err(|e| {
+            Error::ParseKeySeg(format!(
+                "Unexpected height value {}, {}",
+                string, e
+            ))
+        })?;
         Ok(BlockHeight(h))
     }
 
