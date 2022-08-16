@@ -52,6 +52,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// A representation of the conversion state
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct ConversionState {
+    /// The merkle root from the previous epoch
+    pub prev_root: Node,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<Node>,
     /// Map assets to their latest conversion and position in Merkle tree
@@ -811,6 +813,11 @@ where
             .par_chunks(notes_per_thread_rounded)
             .map(FrozenCommitmentTree::new)
             .collect();
+        
+        // Keep the merkle root from the old tree for transactions constructed
+        // close to the epoch boundary
+        self.conversion_state.prev_root = self.conversion_state.tree.root();
+
         // Convert conversion vector into tree so that Merkle paths can be
         // obtained
         self.conversion_state.tree = FrozenCommitmentTree::merge(&tree_parts);
