@@ -60,9 +60,10 @@ use tendermint_rpc::{Client, HttpClient};
 use crate::client::types::ParsedTxTransferArgs;
 
 use super::rpc;
+use super::types::ShieldedTransferContext;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
-use crate::client::rpc::{query_conversion, query_epoch, query_storage_value};
+use crate::client::rpc::{query_conversion, query_storage_value};
 use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{Error, TxBroadcastData, TxResponse};
 use crate::client::tendermint_websocket_client::{
@@ -1278,18 +1279,19 @@ fn convert_amount(
 /// transactions balanced, but it is understood that transparent account changes
 /// are effected only by the amounts and signatures specified by the containing
 /// Transfer object.
-async fn gen_shielded_transfer(
-    ctx: &mut Context,
+async fn gen_shielded_transfer<C>(
+    ctx: &mut C,
     args: &ParsedTxTransferArgs,
     shielded_gas: bool,
-) -> Result<Option<(Transaction, TransactionMetadata)>, builder::Error> {
+) -> Result<Option<(Transaction, TransactionMetadata)>, builder::Error>
+
+where C: ShieldedTransferContext
+
+{
     let spending_key = args.source.spending_key().map(|x| x.into());
     let payment_address = args.target.payment_address();
     // Determine epoch in which to submit potential shielded transaction
-    let epoch = query_epoch(args::Query {
-        ledger_address: args.tx.ledger_address.clone(),
-    })
-    .await;
+    let epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
     // Context required for storing which notes are in the source's possesion
     let consensus_branch_id = BranchId::Sapling;
     let amt: u64 = args.amount.into();
@@ -1315,7 +1317,6 @@ async fn gen_shielded_transfer(
         let required_amt = if shielded_gas { amount + fee } else { amount };
         // Locate unspent notes that can help us meet the transaction amount
         let (_, unspent_notes, used_convs) = ctx
-            .shielded
             .collect_unspent_notes(
                 args.tx.ledger_address.clone(),
                 &to_viewing_key(&sk).vk,

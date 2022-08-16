@@ -2881,8 +2881,8 @@ pub mod args {
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit.clone(),
-                signing_key: self.signing_key.as_ref().map(|sk| ctx.get_cached(&sk)),
-                signer: self.signer.as_ref().map(|signer| ctx.get(&signer)),
+                signing_key: self.signing_key.as_ref().map(|sk| ctx.get_cached(sk)),
+                signer: self.signer.as_ref().map(|signer| ctx.get(signer)),
                 
             }
         }
