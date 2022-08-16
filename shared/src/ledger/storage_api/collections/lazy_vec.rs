@@ -126,3 +126,46 @@ where
         self.key.push(&LEN_SUBKEY.to_owned()).unwrap()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::ledger::storage::testing::TestStorage;
+
+    #[test]
+    fn test_lazy_vec_basics() {
+        let mut storage = TestStorage::default();
+
+        let key = storage::Key::parse("test").unwrap();
+        let lazy_vec = LazyVec::<u32>::new(key);
+
+        // The vec should be empty at first
+        assert!(lazy_vec.is_empty(&&storage).unwrap());
+        assert!(lazy_vec.len(&&storage).unwrap() == 0);
+        assert!(lazy_vec.iter(&&storage).unwrap().next().is_none());
+        assert!(lazy_vec.pop(&mut &mut storage).unwrap().is_none());
+        assert!(lazy_vec.get(&&storage, 0).unwrap().is_none());
+        assert!(lazy_vec.get(&&storage, 1).unwrap().is_none());
+
+        // Push a new value and check that it's added
+        lazy_vec.push(&mut &mut storage, 15_u32).unwrap();
+        assert!(!lazy_vec.is_empty(&&storage).unwrap());
+        assert!(lazy_vec.len(&&storage).unwrap() == 1);
+        assert_eq!(
+            lazy_vec.iter(&&storage).unwrap().next().unwrap().unwrap(),
+            15_u32
+        );
+        assert_eq!(lazy_vec.get(&&storage, 0).unwrap().unwrap(), 15_u32);
+        assert!(lazy_vec.get(&&storage, 1).unwrap().is_none());
+
+        // Pop the last value and check that the vec is empty again
+        let popped = lazy_vec.pop(&mut &mut storage).unwrap().unwrap();
+        assert_eq!(popped, 15_u32);
+        assert!(lazy_vec.is_empty(&&storage).unwrap());
+        assert!(lazy_vec.len(&&storage).unwrap() == 0);
+        assert!(lazy_vec.iter(&&storage).unwrap().next().is_none());
+        assert!(lazy_vec.pop(&mut &mut storage).unwrap().is_none());
+        assert!(lazy_vec.get(&&storage, 0).unwrap().is_none());
+        assert!(lazy_vec.get(&&storage, 1).unwrap().is_none());
+    }
+}

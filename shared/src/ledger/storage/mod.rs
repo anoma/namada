@@ -440,7 +440,7 @@ where
     /// difference
     pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
         let mut deleted_bytes_len = 0;
-        if self.has_key(key)?.0 {
+        if Self::has_key(&self, key)?.0 {
             self.block.tree.delete(key)?;
             deleted_bytes_len =
                 self.db.delete_subspace_val(self.last_height, key)?;
@@ -758,7 +758,119 @@ where
     }
 }
 
+impl<'iter, D, H> StorageRead for &'iter mut Storage<D, H>
+where
+    D: DB + for<'iter_> DBIter<'iter_>,
+    H: StorageHasher,
+{
+    type PrefixIter = <D as DBIter<'iter>>::PrefixIter;
+
+    fn read<T: borsh::BorshDeserialize>(
+        &self,
+        key: &crate::types::storage::Key,
+    ) -> std::result::Result<Option<T>, storage_api::Error> {
+        self.read_bytes(key)
+            .map(|maybe_value| {
+                maybe_value.and_then(|t| T::try_from_slice(&t[..]).ok())
+            })
+            .into_storage_result()
+    }
+
+    fn read_bytes(
+        &self,
+        key: &crate::types::storage::Key,
+    ) -> std::result::Result<Option<Vec<u8>>, storage_api::Error> {
+        self.db.read_subspace_val(key).into_storage_result()
+    }
+
+    fn has_key(
+        &self,
+        key: &crate::types::storage::Key,
+    ) -> std::result::Result<bool, storage_api::Error> {
+        self.block.tree.has_key(key).into_storage_result()
+    }
+
+    fn iter_prefix(
+        &self,
+        prefix: &crate::types::storage::Key,
+    ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
+        todo!(
+            "Unlike in the immutable ref, this doesn't compile, because \
+             autoref's lifetime is different from `'iter` :'("
+        )
+        // Ok(self.db.iter_prefix(prefix))
+    }
+
+    fn iter_next(
+        &self,
+        iter: &mut Self::PrefixIter,
+    ) -> std::result::Result<Option<(String, Vec<u8>)>, storage_api::Error>
+    {
+        Ok(iter.next().map(|(key, val, _gas)| (key, val)))
+    }
+
+    fn get_chain_id(&self) -> std::result::Result<String, storage_api::Error> {
+        Ok(self.chain_id.to_string())
+    }
+
+    fn get_block_height(
+        &self,
+    ) -> std::result::Result<BlockHeight, storage_api::Error> {
+        Ok(self.block.height)
+    }
+
+    fn get_block_hash(
+        &self,
+    ) -> std::result::Result<BlockHash, storage_api::Error> {
+        Ok(self.block.hash.clone())
+    }
+
+    fn get_block_epoch(
+        &self,
+    ) -> std::result::Result<Epoch, storage_api::Error> {
+        Ok(self.block.epoch)
+    }
+}
+
 impl<D, H> StorageWrite for Storage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn write<T: borsh::BorshSerialize>(
+        &mut self,
+        key: &crate::types::storage::Key,
+        val: T,
+    ) -> storage_api::Result<()> {
+        let val = val.try_to_vec().unwrap();
+        self.write_bytes(key, val)
+    }
+
+    fn write_bytes(
+        &mut self,
+        key: &crate::types::storage::Key,
+        val: impl AsRef<[u8]>,
+    ) -> storage_api::Result<()> {
+        let _ = self
+            .db
+            .write_subspace_val(self.block.height, key, val)
+            .into_storage_result()?;
+        Ok(())
+    }
+
+    fn delete(
+        &mut self,
+        key: &crate::types::storage::Key,
+    ) -> storage_api::Result<()> {
+        let _ = self
+            .db
+            .delete_subspace_val(self.block.height, key)
+            .into_storage_result()?;
+        Ok(())
+    }
+}
+
+impl<D, H> StorageWrite for &mut Storage<D, H>
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
