@@ -15,6 +15,7 @@ is provided in order to facilitate safe and private user interaction with the pr
 ### How does Namada relate to Anoma?
 
 Namada is _two things_:
+
 - The first major release _version_ of the Anoma protocol.
 - The first _fractal instance_ launched as part of the Anoma network.
 
@@ -57,3 +58,7 @@ The Namada specification documents are organised into five sub-sections:
 - [Interoperability](./interoperability.md)
 - [Economics](./economics.md)
 - [User interfaces](./user-interfaces.md)
+
+This book is written using [mdBook](https://rust-lang.github.io/mdBook/), the source can be found in the [Namada repository](https://github.com/anoma/namada/tree/main/documentation/specs).
+
+[Contributions](https://github.com/anoma/namada/blob/main/CONTRIBUTING.md) to the contents and the structure of this book should be made via pull requests.
