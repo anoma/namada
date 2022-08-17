@@ -1,6 +1,6 @@
 # Overview
 
-At a high level, Anoma is composed of two main components: the distributed ledger and the intent gossip / matchmaking system. While they are designed to complement each other, they can be operated separately.
+At a high level, Namada is composed of two main components: the distributed ledger and the intent gossip / matchmaking system. While they are designed to complement each other, they can be operated separately.
 
 ## The ledger
 

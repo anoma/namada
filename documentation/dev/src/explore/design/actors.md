@@ -1,10 +1,10 @@
 # Actors and Incentives
 
-Anoma consists of various actors fulfilling various roles in the network. They are all incentivized to act for the good of the network. The native Anoma token `XAN` is used to settle transaction fees and pay for the incentives in Anoma.
+Namada consists of various actors fulfilling various roles in the network. They are all incentivized to act for the good of the network. The native Namada token `XAN` is used to settle transaction fees and pay for the incentives in Namada.
 
 ## Fees associated with a transaction
 
-Users of Anoma can
+Users of Namada can
 
 - transfer private assets they hold to other users and
 - barter assets with other users.
@@ -20,7 +20,7 @@ Each transaction may be associated with the following fees, paid in `XAN`:
 
 | Actor | Responsibilities  | Incentives  | Bond in escrow  | May also be  |
 |---|---|---|---|---|
-| User | Make offers or send transactions | Features of Anoma | X | Anyone |
+| User | Make offers or send transactions | Features of Namada | X | Anyone |
 | Signer  | Generate key shards  | portions of init_f, exe_f  | ✓  | Validator  |
 | Validator  | Validate  | portions of init_f, exe_f  |✓   |  Signer |
 | Submitter  | Submit orders & pay init_f  | successful orders get init_f back plus bonus  | X  |   |

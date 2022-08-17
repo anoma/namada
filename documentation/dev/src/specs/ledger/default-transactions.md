@@ -1,12 +1,12 @@
 # Default transactions
 
-The Anoma client comes with a set of pre-built transactions. Note that the Anoma ledger is agnostic about the format of the transactions beyond the format described in [ledger transaction section](../ledger.md#transactions).
+The Namada client comes with a set of pre-built transactions. Note that the Namada ledger is agnostic about the format of the transactions beyond the format described in [ledger transaction section](../ledger.md#transactions).
 
 The [default validity predicates](default-validity-predicates.md) can be used to initialize the network's genesis block. These expect the data in the storage to be encoded with [Borsh](../encoding.md#borsh-binary-encoding) and are fully compatible with the default transactions described below.
 
 ## Rust-to-WASM transactions
 
-The following transactions are pre-built from Rust code and can be used by clients interacting with the Anoma ledger.
+The following transactions are pre-built from Rust code and can be used by clients interacting with the Namada ledger.
 
 The pre-built WASM code's raw bytes should be attached to the transaction's `code` field. The transactions expect certain variables to be provided via the transaction's `data` field encoded with [Borsh](../encoding.md#borsh-binary-encoding).
 

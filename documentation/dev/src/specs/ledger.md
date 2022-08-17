@@ -26,7 +26,7 @@ The addresses are stored on-chain encoded with [bech32m](https://github.com/bitc
 
 The human-readable prefix (as specified for [bech32](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki#specification)) in the transparent address encoding is:
 
-- `"a"` for Anoma live network (80 characters in total)
+- `"a"` for Namada live network (80 characters in total)
 - `"atest"` for test networks (84 characters in total)
 
 ## Transactions

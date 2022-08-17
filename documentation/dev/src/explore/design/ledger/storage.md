@@ -53,6 +53,7 @@ It's very likely that different settings for immutable storage will be provided 
 We'd like to have easily reproducible benchmarks for the whole database integration that should be filled over time with pre-generated realistic data. This should enable us to tune and compare different hashing functions, backends, data structures, memory layouts, etc.
 
 ### Criteria
+
 - in-memory
   - writes (insert, update, delete)
     - possibly also concurrent writes, pending on the approach taken for concurrent transaction execution
@@ -71,25 +72,27 @@ The considered options for a DB backend are given in [Libraries & Tools / Databa
 
 A committed block is not immediately persisted on RocksDB. When the block is committed, a set of key-value pairs which compose the block is written to the memtable on RocksDB. For the efficient sequential write, a flush is executed to persist the data on the memtable to the disk as a file when the size of the memtable is getting big (the threshold is one of the tuning parameters).
 
-We can disable write-ahead log(WAL) which protects these data on the memtable from a crash by persisting the write logs to the disk. Disabling WAL helps reduce the write amplification. That's because WAL isn't required for Anoma because other nodes have the block. The blocks which have not been persisted to the disk by flush can be recovered even if an Anoma node crashes.
+We can disable write-ahead log(WAL) which protects these data on the memtable from a crash by persisting the write logs to the disk. Disabling WAL helps reduce the write amplification. That's because WAL isn't required for Namada because other nodes have the block. The blocks which have not been persisted to the disk by flush can be recovered even if an Namada node crashes.
 
 ## Implementation
 
 ### `storage` module
 
-This is the main interface for interacting with storage in Anoma.
+This is the main interface for interacting with storage in Namada.
 
 This module and its sub-modules should implement the in-memory storage (and/or a cache layer) with Merkle tree (however, the interface should be agnostic to the choice of vector commitment scheme or whether or not there even is one, we may want non-Merklised storage) and the persistent DB.
 
 The in-memory storage holds chain's metadata and current block's storage.
 
 Its public API should allow/provide:
+
 - get the Merkle root and Merkle tree proofs
 - read-only storage API for ledger's metadata to be accessible for transactions' code, VPs and the RPC
   - with public types of all the stored metadata
 - unless specified otherwise, read the state from the current block
 
-An API made visible only to the shell module (e.g. `pub ( in SimplePath )` - https://doc.rust-lang.org/reference/visibility-and-privacy.html) should allow the shell to:
+An API made visible only to the shell module (e.g. `pub ( in SimplePath )` - <https://doc.rust-lang.org/reference/visibility-and-privacy.html>) should allow the shell to:
+
 - load state from DB for latest persisted block or initialize a new storage if none found
 - begin a new block
 - within a block:
@@ -100,6 +103,7 @@ An API made visible only to the shell module (e.g. `pub ( in SimplePath )` - htt
 - commit the current block (persist to storage)
 
 ### `storage/merkle_tree` module
+
 It consists of one Sparse Merkle Tree (base tree) and multiple Sparse Merkle Trees (subtrees). The base tree stores the store type and the root of each subtree as a key-value pair. Each subtree has the hashed key-value pairs for each data.
 
 ```mermaid

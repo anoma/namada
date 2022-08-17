@@ -2,7 +2,7 @@
 
 The ledger provides an RPC interface for submitting transactions to the mempool, subscribing to their results and queries about the state of the ledger and its storage.
 
-The RPC interface is provided as [specified](https://github.com/tendermint/spec/tree/4566f1e3028278c5b3eca27b53254a48771b152b/spec/rpc) from Tendermint and most of the requests are routed to the Anoma ledger via ABCI.
+The RPC interface is provided as [specified](https://github.com/tendermint/spec/tree/4566f1e3028278c5b3eca27b53254a48771b152b/spec/rpc) from Tendermint and most of the requests are routed to the Namada ledger via ABCI.
 
 ## Transactions
 

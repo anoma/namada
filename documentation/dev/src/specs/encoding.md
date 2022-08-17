@@ -2,7 +2,7 @@
 
 ## The ledger
 
-Most of the data in Anoma are encoded with [Borsh](#borsh-binary-encoding), except for the outer layer of [transactions](#transactions) that are being passed via Tendermint and therefore are required to be encoded with protobuf.
+Most of the data in Namada are encoded with [Borsh](#borsh-binary-encoding), except for the outer layer of [transactions](#transactions) that are being passed via Tendermint and therefore are required to be encoded with protobuf.
 
 ### Borsh binary encoding
 

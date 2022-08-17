@@ -1,6 +1,6 @@
 # The ledger
 
-The ledger depends on [Tendermint node](https://github.com/tendermint/tendermint). Running the Anoma node will also initialize and run Tendermint node. Anoma communicates with Tendermint via the ABCI.
+The ledger depends on [Tendermint node](https://github.com/tendermint/tendermint). Running the Namada node will also initialize and run Tendermint node. Namada communicates with Tendermint via the ABCI.
 
 ## Overview
 
@@ -22,11 +22,13 @@ Configuration for threads usage can be changed via environment variables:
 We are using the Tendermint state-machine replication engine via ABCI. It provides many useful things, such as a BFT consensus protocol, P2P layer with peer exchange, block sync and mempool layer.
 
 Useful resources:
+
 - Tendermint ABCI <https://docs.tendermint.com/master/spec/abci/>
 - Tendermint RPC reference <https://docs.tendermint.com/master/rpc/>
 - Awesome collection <https://github.com/tendermint/awesome>
 
 Rust ABCI implementations:
+
 - <https://github.com/informalsystems/tendermint-rs>
   - the future update planned for this crate is to add async support
   - longer term the goal is to be able to [seamlessly switch from Go Tendermint
@@ -39,14 +41,14 @@ Rust ABCI implementations:
 
 ### ABCI Integration
 
-The ledger wraps the Tendermint node inside the Anoma node. The Tendermint node
-communicates with the Anoma shell via four layers as illustrated below.
+The ledger wraps the Tendermint node inside the Namada node. The Tendermint node
+communicates with the Namada shell via four layers as illustrated below.
 
 ```mermaid
 flowchart LR
     C[Client] --- R
-    subgraph Anoma Node
-    S((Anoma Shell))
+    subgraph Namada Node
+    S((Namada Shell))
     subgraph Tendermint ABCI
     R[RPC] === T{Tendermint}
     T --- TC[Consensus]
@@ -62,6 +64,7 @@ flowchart LR
 ```
 
 The *consensus* connection allows the shell to:
+
 - initialize genesis on start-up
 - begin a block
 - apply a transaction(s) in a block
@@ -74,6 +77,7 @@ the transaction is either new, when it has not been validated before, or to be
 re-checked when it has been validated at some previous level.
 
 The *query* connection is used for:
+
 - the Tendermint node asks the last known state from the shell to determine if it needs to replay any blocks
 - relay client queries for some state at a given path to the shell
 
