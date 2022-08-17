@@ -16,8 +16,9 @@ This section covers the minimum and recommended hardware requirements for engagi
 | RAM     | 16GB DDR4     |
 | Storage     | at least 60GB SSD (NVMe SSD is recommended. HDD will be enough for localnet only)    |
 
-There are different ways to install Namada: 
-- [From Source](#from-source) 
+There are different ways to install Namada:
+
+- [From Source](#from-source)
 - [From Binaries](#from-binaries)
 - [From Docker](#from-docker)
 
@@ -74,7 +75,7 @@ Let's install Tendermint.
 You can either follow the instructions on the [Tendermint guide](https://docs.tendermint.com/master/introduction/install.html) or download the `get_tendermint.sh` script from the [Namada repository](https://github.com/anoma/namada/blob/master/scripts/install/get_tendermint.sh) and execute it (will ask you for `root` access):
 
 ```shell
-curl -LO https://raw.githubusercontent.com/anoma/anoma/master/scripts/install/get_tendermint.sh
+curl -LO https://raw.githubusercontent.com/namada/anoma/main/scripts/install/get_tendermint.sh
 chmod +x get_tendermint.sh
 ./get_tendermint.sh
 ```
@@ -90,6 +91,7 @@ Finally, you should have GLIBC `v2.29` or higher.
 Now, that you have all dependencies installed you can download the latest binary release from our [releases page](https://github.com/anoma/namada/releases) by choosing the appropriate architecture.
 
 [fixme]: <> (update docker config as soon as Anoma is transferred fully to Namada)
+
 ## From Docker
 
 Go to [heliaxdev dockerhub account](https://hub.docker.com/r/heliaxdev/anoma) and pull the image.
