@@ -7,8 +7,9 @@ src = "src"
 title = "Namada Specifications"
 
 [output.html]
-edit-url-template = "https://github.com/anoma/namada/edit/master/documentation/spec/{path}"
+edit-url-template = "https://github.com/anoma/namada/edit/main/documentation/specs/{path}"
 git-repository-url = "https://github.com/anoma/namada"
+git-branch = "main"
 
 [output.html.search]
 expand = true
