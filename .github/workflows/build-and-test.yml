@@ -5,6 +5,8 @@ on:
     branches:
       - main
   pull_request:
+  # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
+  pull_request_target:
   workflow_dispatch:
 
 concurrency:
