@@ -1,4 +1,4 @@
-mod pos;
+pub mod pos;
 
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage::mockdb::MockDB;
