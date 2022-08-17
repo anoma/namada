@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - main
-  pull_request:
+  # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
+  pull_request_target:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 concurrency:
@@ -42,6 +44,13 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
