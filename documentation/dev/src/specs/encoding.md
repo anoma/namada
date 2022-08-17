@@ -41,7 +41,7 @@ Note that for the [default transactions](ledger/default-transactions.md), the `d
 ## Proto definitions
 
 ```
-{{#include ../../../proto/types.proto}}
+{{#include ../../../../proto/types.proto}}
 ```
 
 <!--- Align tables to the left -->

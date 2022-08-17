@@ -31,7 +31,7 @@ Add these to your settings.json to get rustfmt and clippy with the nightly versi
 ```json
 "rust-analyzer.checkOnSave.overrideCommand": [
     "cargo",
-    "+{{#include ../../../../rust-nightly-version}}",
+    "+{{#include ../../../../../rust-nightly-version}}",
     "clippy",
     "--workspace",
     "--message-format=json",
@@ -40,7 +40,7 @@ Add these to your settings.json to get rustfmt and clippy with the nightly versi
 "rust-analyzer.rustfmt.overrideCommand": [
     "rustup",
     "run",
-    "{{#include ../../../../rust-nightly-version}}",
+    "{{#include ../../../../../rust-nightly-version}}",
     "--",
     "rustfmt",
     "--edition",
