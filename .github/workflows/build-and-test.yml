@@ -4,9 +4,9 @@ on:
   push:
     branches:
       - main
-  pull_request:
   # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
   pull_request_target:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 concurrency:
@@ -37,6 +37,21 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # From https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target:
+        # "This event runs in the context of the base of the pull request, 
+        # rather than in the context of the merge commit, as the pull_request 
+        # event does."
+        # We set the ref to the head commit of the PR instead.
+        # For this, we have to make sure that we're not running CI on untrusted
+        # code (more info in the link above), so the repo MUST be configured
+        # to disallow that.
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
       - name: Duplicate checksums file
         run: cp wasm/checksums.json wasm/original-checksums.json
       - name: Build WASM
