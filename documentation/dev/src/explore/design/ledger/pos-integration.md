@@ -1,6 +1,6 @@
 # PoS integration
 
-The [PoS system](../pos.md) is integrated into Namada ledger at 3 different layers:
+The [PoS system](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html) is integrated into Namada ledger at 3 different layers:
 
 - base ledger that performs genesis initialization, validator set updates on new epoch and applies slashes when they are received from ABCI
 - an account with an internal address and a [native VP](vp.md#native-vps) that validates any changes applied by transactions to the PoS account state
@@ -8,7 +8,7 @@ The [PoS system](../pos.md) is integrated into Namada ledger at 3 different laye
 
 The `votes_per_token` PoS system parameter must be chosen to satisfy the [Tendermint requirement](https://github.com/tendermint/spec/blob/60395941214439339cc60040944c67893b5f8145/spec/abci/apps.md#validator-updates) of `MaxTotalVotingPower = MaxInt64 / 8`.
 
-All [the data relevant to the PoS system](../pos.md#storage) are stored under the PoS account's storage sub-space, with the following key schema (the PoS address prefix is omitted for clarity):
+All [the data relevant to the PoS system](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html#storage) are stored under the PoS account's storage sub-space, with the following key schema (the PoS address prefix is omitted for clarity):
 
 - `params` (required): the system parameters
 - for any validator, all the following fields are required:
@@ -45,7 +45,7 @@ All the fees that are charged in a transaction execution (DKG transaction wrappe
 
 ## Transactions
 
-The transactions are assumed to be applied in epoch `n`. Any transaction that modifies [epoched data](../pos.md#epoched-data) updates the structure as described in [epoched data storage](../pos.md#storage).
+The transactions are assumed to be applied in epoch `n`. Any transaction that modifies [epoched data](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html#epoched-data) updates the structure as described in [epoched data storage](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html#storage).
 
 For slashing tokens, we implement a [PoS slash pool account](vp.md#pos-slash-pool-vp). Slashed tokens should be credited to this account and, for now, no tokens can be be debited by anyone.
 
@@ -56,11 +56,11 @@ The validator transactions are assumed to be applied with an account address `va
 - `become_validator(consensus_key, staking_reward_address)`:
   - creates a record in `validator/{validator_address}/consensus_key` in epoch `n + pipeline_length`
   - creates a record in `validator/{validator_address}/staking_reward_address`
-  - sets `validator/{validator_address}/state` for to `pending` in the current epoch and `candidate` in epoch `n + pipeline_length`
+  - sets `validator/{validator_address}/state` to `candidate` in epoch `n + pipeline_length`
 - `deactivate`:
-  - sets `validator/{validator_address}/state` for to `inactive` in epoch `n + pipeline_length`
+  - sets `validator/{validator_address}/state` to `inactive` in epoch `n + pipeline_length`
 - `reactivate`:
-  - sets `validator/{validator_address}/state` for to `pending` in the current epoch and `candidate` in epoch `n + pipeline_length`
+  - sets `validator/{validator_address}/state` to `candidate` in epoch `n + pipeline_length`
 - `self_bond(amount)`:
   - let `bond = read(bond/{validator_address}/{validator_address}/delta)`
   - if `bond` exist, update it with the new bond amount in epoch `n + pipeline_length`
@@ -75,8 +75,8 @@ The validator transactions are assumed to be applied with an account address `va
   - if `bond` doesn't exist, panic
   - let `pre_unbond = read(unbond/{validator_address}/{validator_address}/delta)`
   - if `total(bond) - total(pre_unbond) < amount`, panic
-  - decrement the `bond` deltas starting from the rightmost value (a bond in a future-most epoch) until whole `amount` is decremented
-  - for each decremented `bond` value write a new `unbond` with the key set to the epoch of the source value
+  - decrement the `bond` deltas starting from the rightmost value (a bond in a future-most epoch at the unbonding offset) until whole `amount` is decremented
+  - for each decremented `bond` value write a new `unbond` in epoch `n + unbonding_length` with the start epoch set to the epoch of the source value and end epoch `n + unbonding_length`
   - decrement the `amount` from `validator/{validator_address}/total_deltas` in epoch `n + unbonding_length`
   - update the `validator/{validator_address}/voting_power` in epoch `n + unbonding_length`
   - update the `total_voting_power` in epoch `n + unbonding_length`
@@ -151,7 +151,7 @@ Evidence for byzantine behaviour is received from Tendermint ABCI on `BeginBlock
 
 In the following description, "pre-state" is the state prior to transaction execution and "post-state" is the state posterior to it.
 
-Any changes to PoS epoched data are checked to update the structure as described in [epoched data storage](../pos.md#storage).
+Any changes to PoS epoched data are checked to update the structure as described in [epoched data storage](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html#storage).
 
 Because some key changes are expected to relate to others, the VP also accumulates some values that are checked for validity after key specific logic:
 
@@ -199,15 +199,14 @@ The validity predicate triggers a validation logic based on the storage keys mod
     (None, Some(post)) => {
       // - check that all other required validator fields have been initialized
       // - check that the `post` state is set correctly:
-      //   - the state should be set to `pending` in the current epoch and `candidate` at pipeline offset
+      //   - the state should be set to `candidate` at pipeline offset
       // - insert into or update `new_validators` accumulator
     },
     (Some(pre), Some(post)) => {
       // - check that a validator has been correctly deactivated or reactivated
       // - the `state` should only be changed at `pipeline_length` offset
-      // - if the `state` becomes `inactive`, it must have been `pending` or `candidate`
-      // - if the `state` becomes `pending`, it must have been `inactive`
-      // - if the `state` becomes `candidate`, it must have been `pending` or `inactive`
+      // - if the `state` becomes `inactive`, it must have been `candidate`
+      // - if the `state` becomes `candidate`, it must have been `inactive`
     },
     _ => false,
   }

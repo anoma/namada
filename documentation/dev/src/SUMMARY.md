@@ -19,7 +19,6 @@
       - [PoS integration](./explore/design/ledger/pos-integration.md)
     - [Crypto primitives](./explore/design/crypto-primitives.md)
     - [Actors](./explore/design/actors.md)
-    - [Proof of Stake system](./explore/design/pos.md)
     - [Testnet setup](./explore/design/testnet-setup.md)
     - [Testnet launch procedure](./explore/design/testnet-launch-procedure/README.md)
   - [Libraries & Tools](./explore/libraries/README.md)
