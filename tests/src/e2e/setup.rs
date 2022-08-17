@@ -504,7 +504,7 @@ impl AnomaCmd {
     /// reporting.
     pub fn exp_string(&mut self, needle: &str) -> Result<String> {
         let found = self.session.expect_eager(needle).map_err(|e| {
-            eyre!("{}\nCommand: {}\n Needle: {}", e, self, needle)
+            eyre!("{}\nCommand: {}\n Needl: {}", e, self, needle)
         })?;
         if found.is_empty() {
             Err(eyre!(
