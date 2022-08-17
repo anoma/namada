@@ -126,6 +126,13 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -256,6 +263,13 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
