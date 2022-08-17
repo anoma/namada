@@ -40,15 +40,10 @@ pub enum TxRuntimeError {
     OutOfGas(gas::Error),
     #[error("Trying to modify storage for an address that doesn't exit {0}")]
     UnknownAddressStorageModification(Address),
-    #[error("Trying to update a validity predicate with an invalid WASM {0}")]
-    UpdateVpInvalid(WasmValidationError),
+    #[error("Trying to use a validity predicate with an invalid WASM {0}")]
+    InvalidVpCode(WasmValidationError),
     #[error("A validity predicate of an account cannot be deleted")]
     CannotDeleteVp,
-    #[error(
-        "Trying to initialize an account with an invalid validity predicate \
-         WASM {0}"
-    )]
-    InitAccountInvalidVpWasm(WasmValidationError),
     #[error("Storage modification error: {0}")]
     StorageModificationError(write_log::Error),
     #[error("Storage error: {0}")]
@@ -807,6 +802,9 @@ where
     tracing::debug!("tx_update {}, {:?}", key, value);
 
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
+    if key.is_validity_predicate().is_some() {
+        tx_validate_vp_code(env, &value)?;
+    }
 
     check_address_existence(env, &key)?;
 
@@ -1363,8 +1361,7 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
 
-    tx_add_gas(env, code.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
-    validate_untrusted_wasm(&code).map_err(TxRuntimeError::UpdateVpInvalid)?;
+    tx_validate_vp_code(env, &code)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
@@ -1393,9 +1390,7 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
 
-    tx_add_gas(env, code.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
-    validate_untrusted_wasm(&code)
-        .map_err(TxRuntimeError::InitAccountInvalidVpWasm)?;
+    tx_validate_vp_code(env, &code)?;
     #[cfg(feature = "wasm-runtime")]
     {
         let vp_wasm_cache = unsafe { env.ctx.vp_wasm_cache.get() };
@@ -1694,6 +1689,21 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tracing::info!("WASM Transaction log: {}", str);
     Ok(())
+}
+
+/// Validate a VP WASM code in a tx environment.
+fn tx_validate_vp_code<MEM, DB, H, CA>(
+    env: &TxEnv<MEM, DB, H, CA>,
+    code: &[u8],
+) -> TxResult<()>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    tx_add_gas(env, code.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
+    validate_untrusted_wasm(code).map_err(TxRuntimeError::InvalidVpCode)
 }
 
 /// Evaluate a validity predicate with the given input data.
