@@ -56,8 +56,8 @@ During internal and private testnets, checkout the latest testnet branch using `
 ```
 
 ```shell
-git clone https://github.com/anoma/anoma.git
-cd anoma 
+git clone https://github.com/anoma/namada.git
+cd namada 
 make install
 ```
 
