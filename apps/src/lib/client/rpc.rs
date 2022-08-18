@@ -12,6 +12,7 @@ use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::BorshDeserialize;
 use itertools::Itertools;
+use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::Votes;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
@@ -24,7 +25,8 @@ use namada::ledger::pos::{
 use namada::ledger::treasury::storage as treasury_storage;
 use namada::types::address::Address;
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalVote, TallyResult,
+    OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
+    VotePower,
 };
 use namada::types::key::*;
 use namada::types::storage::{Epoch, PrefixValue};
@@ -347,7 +349,14 @@ pub async fn query_proposal_result(
                                             if entry.file_name().eq(&"proposal")
                                             {
                                                 is_proposal_present = true
-                                            } else {
+                                            } else if entry
+                                                .file_name()
+                                                .to_string_lossy()
+                                                .starts_with("proposal-vote-")
+                                            {
+                                                // Folder may contain other
+                                                // files than just the proposal
+                                                // and the votes
                                                 files.insert(entry.path());
                                             }
                                         }
@@ -369,8 +378,8 @@ pub async fn query_proposal_result(
 
                         if !is_proposal_present {
                             eprintln!(
-                                "The folder must contain a the offline \
-                                 proposal in a file named proposal"
+                                "The folder must contain the offline proposal \
+                                 in a file named \"proposal\""
                             );
                             cli::safe_exit(1)
                         }
@@ -414,7 +423,10 @@ pub async fn query_proposal_result(
                     }
                 };
             } else {
-                eprintln!("Either id or offline should be used as arguments.");
+                eprintln!(
+                    "Either --proposal-id or --data-path should be provided \
+                     as arguments."
+                );
                 cli::safe_exit(1)
             }
         }
@@ -427,45 +439,8 @@ pub async fn query_protocol_parameters(
 ) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
 
-    println!("Goveranance parameters");
-    let key = gov_storage::get_max_proposal_code_size_key();
-    let max_proposal_code_size = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Max. proposal code size: {}",
-        "", max_proposal_code_size
-    );
-
-    let key = gov_storage::get_max_proposal_content_key();
-    let max_proposal_content = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Max. proposal content size: {}",
-        "", max_proposal_content
-    );
-
-    let key = gov_storage::get_min_proposal_fund_key();
-    let min_proposal_fund = query_storage_value::<Amount>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!("{:4}Min. proposal funds: {}", "", min_proposal_fund);
-
-    let key = gov_storage::get_min_proposal_grace_epoch_key();
-    let min_proposal_grace_epoch = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Min. proposal grace epoch: {}",
-        "", min_proposal_grace_epoch
-    );
-
-    let key = gov_storage::get_min_proposal_period_key();
-    let min_proposal_period = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!("{:4}Min. proposal period: {}", "", min_proposal_period);
+    let gov_parameters = get_governance_parameters(&client).await;
+    println!("Governance Parameters\n {:4}", gov_parameters);
 
     println!("Protocol parameters");
     let key = param_storage::get_epoch_storage_key();
@@ -1558,9 +1533,11 @@ pub async fn get_proposal_votes(
         query_storage_prefix::<ProposalVote>(client.clone(), vote_prefix_key)
             .await;
 
-    let mut yay_validators: HashMap<Address, Amount> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, Amount> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, Amount> = HashMap::new();
+    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
+    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
 
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
@@ -1587,9 +1564,45 @@ pub async fn get_proposal_votes(
                 .await;
                 if let Some(amount) = delegator_token_amount {
                     if vote.is_yay() {
-                        yay_delegators.insert(voter_address, amount);
+                        match yay_delegators.get_mut(&voter_address) {
+                            Some(map) => {
+                                map.insert(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                );
+                            }
+                            None => {
+                                let delegations_map: HashMap<
+                                    Address,
+                                    VotePower,
+                                > = HashMap::from([(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                )]);
+                                yay_delegators
+                                    .insert(voter_address, delegations_map);
+                            }
+                        }
                     } else {
-                        nay_delegators.insert(voter_address, amount);
+                        match nay_delegators.get_mut(&voter_address) {
+                            Some(map) => {
+                                map.insert(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                );
+                            }
+                            None => {
+                                let delegations_map: HashMap<
+                                    Address,
+                                    VotePower,
+                                > = HashMap::from([(
+                                    validator_address,
+                                    VotePower::from(amount),
+                                )]);
+                                nay_delegators
+                                    .insert(voter_address, delegations_map);
+                            }
+                        }
                     }
                 }
             }
@@ -1612,9 +1625,11 @@ pub async fn get_proposal_offline_votes(
 
     let proposal_hash = proposal.compute_hash();
 
-    let mut yay_validators: HashMap<Address, Amount> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, Amount> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, Amount> = HashMap::new();
+    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
+    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
 
     for path in files {
         let file = File::open(&path).expect("Proposal file must exist.");
@@ -1699,10 +1714,54 @@ pub async fn get_proposal_offline_votes(
                         delegated_amount += delta;
                     }
 
+                    let validator_address =
+                        pos::get_validator_address_from_bond(&key).expect(
+                            "Delegation key should contain validator address.",
+                        );
                     if proposal_vote.vote.is_yay() {
-                        yay_delegators.insert(validator, delegated_amount);
+                        match yay_delegators.get_mut(&proposal_vote.address) {
+                            Some(map) => {
+                                map.insert(
+                                    validator_address,
+                                    VotePower::from(delegated_amount),
+                                );
+                            }
+                            None => {
+                                let delegations_map: HashMap<
+                                    Address,
+                                    VotePower,
+                                > = HashMap::from([(
+                                    validator_address,
+                                    VotePower::from(delegated_amount),
+                                )]);
+                                yay_delegators.insert(
+                                    proposal_vote.address.clone(),
+                                    delegations_map,
+                                );
+                            }
+                        }
                     } else {
-                        nay_delegators.insert(validator, delegated_amount);
+                        match nay_delegators.get_mut(&proposal_vote.address) {
+                            Some(map) => {
+                                map.insert(
+                                    validator_address,
+                                    VotePower::from(delegated_amount),
+                                );
+                            }
+                            None => {
+                                let delegations_map: HashMap<
+                                    Address,
+                                    VotePower,
+                                > = HashMap::from([(
+                                    validator_address,
+                                    VotePower::from(delegated_amount),
+                                )]);
+                                nay_delegators.insert(
+                                    proposal_vote.address.clone(),
+                                    delegations_map,
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -1721,7 +1780,7 @@ pub async fn compute_tally(
     client: &HttpClient,
     epoch: Epoch,
     votes: Votes,
-) -> TallyResult {
+) -> ProposalResult {
     let validators = get_all_validators(client, epoch).await;
     let total_stacked_tokens =
         get_total_staked_tokes(client, epoch, &validators).await;
@@ -1732,29 +1791,43 @@ pub async fn compute_tally(
         nay_delegators,
     } = votes;
 
-    let mut total_yay_stacked_tokens = Amount::from(0);
+    let mut total_yay_stacked_tokens = VotePower::from(0_u64);
     for (_, amount) in yay_validators.clone().into_iter() {
         total_yay_stacked_tokens += amount;
     }
 
     // YAY: Add delegator amount whose validator didn't vote / voted nay
-    for (validator_address, amount) in yay_delegators.into_iter() {
-        if !yay_validators.contains_key(&validator_address) {
-            total_yay_stacked_tokens += amount;
+    for (_, vote_map) in yay_delegators.iter() {
+        for (validator_address, vote_power) in vote_map.iter() {
+            if !yay_validators.contains_key(validator_address) {
+                total_yay_stacked_tokens += vote_power;
+            }
         }
     }
 
     // NAY: Remove delegator amount whose validator validator vote yay
-    for (validator_address, amount) in nay_delegators.into_iter() {
-        if yay_validators.contains_key(&validator_address) {
-            total_yay_stacked_tokens -= amount;
+    for (_, vote_map) in nay_delegators.iter() {
+        for (validator_address, vote_power) in vote_map.iter() {
+            if yay_validators.contains_key(validator_address) {
+                total_yay_stacked_tokens -= vote_power;
+            }
         }
     }
 
-    if 3 * total_yay_stacked_tokens >= 2 * total_stacked_tokens {
-        TallyResult::Passed
+    if total_yay_stacked_tokens >= (total_stacked_tokens / 3) * 2 {
+        ProposalResult {
+            result: TallyResult::Passed,
+            total_voting_power: total_stacked_tokens,
+            total_yay_power: total_yay_stacked_tokens,
+            total_nay_power: 0,
+        }
     } else {
-        TallyResult::Rejected
+        ProposalResult {
+            result: TallyResult::Rejected,
+            total_voting_power: total_stacked_tokens,
+            total_yay_power: total_yay_stacked_tokens,
+            total_nay_power: 0,
+        }
     }
 }
 
@@ -1833,8 +1906,8 @@ pub async fn get_total_staked_tokes(
     client: &HttpClient,
     epoch: Epoch,
     validators: &[Address],
-) -> token::Amount {
-    let mut total = Amount::from(0);
+) -> VotePower {
+    let mut total = VotePower::from(0_u64);
 
     for validator in validators {
         total += get_validator_stake(client, epoch, validator).await;
@@ -1846,7 +1919,7 @@ async fn get_validator_stake(
     client: &HttpClient,
     epoch: Epoch,
     validator: &Address,
-) -> token::Amount {
+) -> VotePower {
     let total_voting_power_key = pos::validator_total_deltas_key(validator);
     let total_voting_power = query_storage_value::<pos::ValidatorTotalDeltas>(
         client,
@@ -1856,9 +1929,12 @@ async fn get_validator_stake(
     .expect("Total deltas should be defined");
     let epoched_total_voting_power = total_voting_power.get(epoch);
     if let Some(epoched_total_voting_power) = epoched_total_voting_power {
-        token::Amount::from_change(epoched_total_voting_power)
+        match VotePower::try_from(epoched_total_voting_power) {
+            Ok(voting_power) => voting_power,
+            Err(_) => VotePower::from(0_u64),
+        }
     } else {
-        token::Amount::from(0)
+        VotePower::from(0_u64)
     }
 }
 
@@ -1880,4 +1956,39 @@ pub async fn get_delegators_delegation(
         }
     }
     delegation_addresses
+}
+
+pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
+    let key = gov_storage::get_max_proposal_code_size_key();
+    let max_proposal_code_size = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_max_proposal_content_key();
+    let max_proposal_content_size = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_min_proposal_fund_key();
+    let min_proposal_fund = query_storage_value::<Amount>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_min_proposal_grace_epoch_key();
+    let min_proposal_grace_epochs = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_min_proposal_period_key();
+    let min_proposal_period = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    GovParams {
+        min_proposal_fund: u64::from(min_proposal_fund),
+        max_proposal_code_size,
+        min_proposal_period,
+        max_proposal_content_size,
+        min_proposal_grace_epochs,
+    }
 }

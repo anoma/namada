@@ -139,6 +139,12 @@ impl From<Amount> for u64 {
     }
 }
 
+impl From<Amount> for u128 {
+    fn from(amount: Amount) -> Self {
+        u128::from(amount.micro)
+    }
+}
+
 impl Add for Amount {
     type Output = Amount;
 

@@ -17,7 +17,6 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::nft::{self, Nft, NftToken};
 use namada::types::storage::Epoch;
-use namada::types::token::Amount;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -509,7 +508,65 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     let proposal: Proposal =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
 
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+
     let signer = WalletAddress::new(proposal.clone().author.to_string());
+    let goverance_parameters = rpc::get_governance_parameters(&client).await;
+    let current_epoch = rpc::query_epoch(args::Query {
+        ledger_address: args.tx.ledger_address.clone(),
+    })
+    .await;
+
+    if proposal.voting_start_epoch <= current_epoch
+        || proposal.voting_start_epoch.0
+            % goverance_parameters.min_proposal_period
+            != 0
+    {
+        println!("{}", proposal.voting_start_epoch <= current_epoch);
+        println!(
+            "{}",
+            proposal.voting_start_epoch.0
+                % goverance_parameters.min_proposal_period
+                == 0
+        );
+        eprintln!(
+            "Invalid proposal start epoch: {} must be greater than current \
+             epoch {} and a multiple of {}",
+            proposal.voting_start_epoch,
+            current_epoch,
+            goverance_parameters.min_proposal_period
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
+        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
+            < goverance_parameters.min_proposal_period
+        || proposal.voting_end_epoch.0 % 3 != 0
+    {
+        eprintln!(
+            "Invalid proposal end epoch: difference between proposal start \
+             and end epoch must be at least {} and end epoch must be a \
+             multiple of {}",
+            goverance_parameters.min_proposal_period,
+            goverance_parameters.min_proposal_period
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    } else if proposal.grace_epoch <= proposal.voting_end_epoch
+        || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
+            < goverance_parameters.min_proposal_grace_epochs
+    {
+        eprintln!(
+            "Invalid proposal grace epoch: difference between proposal grace \
+             and end epoch must be at least {}",
+            goverance_parameters.min_proposal_grace_epochs
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
 
     if args.offline {
         let signer = ctx.get(&signer);
@@ -521,11 +578,18 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         .await;
         let offline_proposal =
             OfflineProposal::new(proposal, signer, &signing_key);
-        let proposal_filename = "proposal".to_string();
+        let proposal_filename = args
+            .proposal_data
+            .parent()
+            .expect("No parent found")
+            .join("proposal");
         let out = File::create(&proposal_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_proposal) {
             Ok(_) => {
-                println!("Proposal created: {}.", proposal_filename);
+                println!(
+                    "Proposal created: {}.",
+                    proposal_filename.to_string_lossy()
+                );
             }
             Err(e) => {
                 eprintln!("Error while creating proposal file: {}.", e);
@@ -533,8 +597,6 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             }
         }
     } else {
-        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-
         let tx_data: Result<InitProposalData, _> = proposal.clone().try_into();
         let init_proposal_data = if let Ok(data) = tx_data {
             data
@@ -543,35 +605,22 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1)
         };
 
-        let min_proposal_funds_key = gov_storage::get_min_proposal_fund_key();
-        let min_proposal_funds: Amount =
-            rpc::query_storage_value(&client, &min_proposal_funds_key)
-                .await
-                .unwrap();
         let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
             .await
             .unwrap_or_default();
-        if balance < min_proposal_funds {
+        if balance < token::Amount::from(goverance_parameters.min_proposal_fund)
+        {
             eprintln!(
                 "Address {} doesn't have enough funds.",
                 &proposal.author
             );
             safe_exit(1);
         }
-        let min_proposal_funds_key = gov_storage::get_min_proposal_fund_key();
-        let min_proposal_funds: Amount =
-            rpc::query_storage_value(&client, &min_proposal_funds_key)
-                .await
-                .unwrap();
 
-        let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
-            .await
-            .unwrap_or_default();
-        if balance < min_proposal_funds {
-            eprintln!(
-                "Address {} doesn't have enough funds.",
-                &proposal.author
-            );
+        if init_proposal_data.content.len()
+            > goverance_parameters.max_proposal_content_size as usize
+        {
+            eprintln!("Proposal content size too big.",);
             safe_exit(1);
         }
 
@@ -625,12 +674,17 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             &signing_key,
         );
 
-        let proposal_vote_filename =
-            format!("proposal-vote-{}", &signer.to_string());
+        let proposal_vote_filename = proposal_file_path
+            .parent()
+            .expect("No parent found")
+            .join(format!("proposal-vote-{}", &signer.to_string()));
         let out = File::create(&proposal_vote_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_vote) {
             Ok(_) => {
-                println!("Proposal vote created: {}.", proposal_vote_filename);
+                println!(
+                    "Proposal vote created: {}.",
+                    proposal_vote_filename.to_string_lossy()
+                );
             }
             Err(e) => {
                 eprintln!("Error while creating proposal vote file: {}.", e);
@@ -639,6 +693,10 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         }
     } else {
         let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+        let current_epoch = rpc::query_epoch(args::Query {
+            ledger_address: args.tx.ledger_address.clone(),
+        })
+        .await;
 
         let voter_address = ctx.get(signer);
         let proposal_id = args.proposal_id.unwrap();
@@ -652,6 +710,17 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
 
         match proposal_start_epoch {
             Some(epoch) => {
+                if current_epoch < epoch {
+                    eprintln!(
+                        "Current epoch {} is not greater than proposal start \
+                         epoch {}",
+                        current_epoch, epoch
+                    );
+
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
                 let mut delegation_addresses = rpc::get_delegators_delegation(
                     &client,
                     &voter_address,
@@ -683,6 +752,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     .await;
                 }
 
+                println!("{:?}", delegation_addresses);
+
                 let tx_data = VoteProposalData {
                     id: proposal_id,
                     vote: args.vote,
@@ -699,7 +770,13 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 process_tx(ctx, &args.tx, tx, Some(signer)).await;
             }
             None => {
-                eprintln!("Proposal start epoch is not in the storage.")
+                eprintln!(
+                    "Proposal start epoch for proposal id {} is not definied.",
+                    proposal_id
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
             }
         }
     }
