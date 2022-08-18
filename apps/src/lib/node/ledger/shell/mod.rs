@@ -92,6 +92,8 @@ pub enum Error {
     Broadcaster(tokio::sync::mpsc::error::TryRecvError),
     #[error("Error executing proposal {0}: {1}")]
     BadProposal(u64, String),
+    #[error("Error reading wasm: {0}")]
+    ReadingWasm(#[from] eyre::Error),
 }
 
 impl From<Error> for TxResult {

@@ -137,7 +137,7 @@ impl Runner {
         // Prepare a client for intent gossiper node connection
         let (listener, dialer) = ClientListener::new_pair(intent_gossiper_addr);
 
-        let tx_code = wasm_loader::read_wasm(&wasm_dir, tx_code_path);
+        let tx_code = wasm_loader::read_wasm_or_exit(&wasm_dir, tx_code_path);
 
         (
             Self {

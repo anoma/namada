@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use eyre::{eyre, WrapErr};
 use futures::future::join_all;
 use hex;
 use serde::{Deserialize, Serialize};
@@ -260,67 +261,49 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
 pub fn read_wasm(
     wasm_directory: impl AsRef<Path>,
     file_path: impl AsRef<Path>,
-) -> Vec<u8> {
+) -> eyre::Result<Vec<u8>> {
     // load json with wasm hashes
     let checksums = Checksums::read_checksums(&wasm_directory);
 
     if let Some(os_name) = file_path.as_ref().file_name() {
         if let Some(name) = os_name.to_str() {
-            match checksums.0.get(name) {
+            let wasm_path = match checksums.0.get(name) {
                 Some(wasm_filename) => {
-                    let wasm_path = wasm_directory.as_ref().join(wasm_filename);
-                    match fs::read(&wasm_path) {
-                        Ok(bytes) => {
-                            return bytes;
-                        }
-                        Err(_) => {
-                            eprintln!(
-                                "File {} not found. ",
-                                wasm_path.to_string_lossy()
-                            );
-                            safe_exit(1);
-                        }
-                    }
+                    wasm_directory.as_ref().join(wasm_filename)
                 }
                 None => {
                     if !file_path.as_ref().is_absolute() {
-                        match fs::read(
-                            wasm_directory.as_ref().join(file_path.as_ref()),
-                        ) {
-                            Ok(bytes) => {
-                                return bytes;
-                            }
-                            Err(_) => {
-                                eprintln!(
-                                    "Could not read file {}. ",
-                                    file_path.as_ref().to_string_lossy()
-                                );
-                                safe_exit(1);
-                            }
-                        }
+                        wasm_directory.as_ref().join(file_path.as_ref())
                     } else {
-                        match fs::read(file_path.as_ref()) {
-                            Ok(bytes) => {
-                                return bytes;
-                            }
-                            Err(_) => {
-                                eprintln!(
-                                    "Could not read file {}. ",
-                                    file_path.as_ref().to_string_lossy()
-                                );
-                                safe_exit(1);
-                            }
-                        }
+                        file_path.as_ref().to_path_buf()
                     }
                 }
-            }
+            };
+            return fs::read(&wasm_path).wrap_err_with(|| {
+                format!(
+                    "Failed to read WASM from {}",
+                    &wasm_path.to_string_lossy()
+                )
+            });
         }
     }
-    eprintln!(
-        "File  {} does not exist.",
+    Err(eyre!(
+        "Could not read {}",
         file_path.as_ref().to_string_lossy()
-    );
-    safe_exit(1);
+    ))
+}
+
+pub fn read_wasm_or_exit(
+    wasm_directory: impl AsRef<Path>,
+    file_path: impl AsRef<Path>,
+) -> Vec<u8> {
+    match read_wasm(wasm_directory, file_path) {
+        Ok(wasm) => wasm,
+        Err(err) => {
+            eprintln!("Error reading wasm: {}", err);
+            safe_exit(1);
+        }
+    }
 }
 
 async fn download_wasm(url: String) -> Result<Vec<u8>, Error> {

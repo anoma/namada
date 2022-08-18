@@ -166,7 +166,7 @@ impl Context {
 
     /// Read the given WASM file from the WASM directory or an absolute path.
     pub fn read_wasm(&self, file_name: impl AsRef<Path>) -> Vec<u8> {
-        wasm_loader::read_wasm(self.wasm_dir(), file_name)
+        wasm_loader::read_wasm_or_exit(self.wasm_dir(), file_name)
     }
 }
 
