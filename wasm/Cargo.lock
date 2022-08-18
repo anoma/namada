@@ -2818,6 +2818,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
+name = "tx_template"
+version = "0.6.1"
+dependencies = [
+ "borsh",
+ "getrandom",
+ "namada_tests",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
 name = "typenum"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2891,6 +2902,17 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "vp_template"
+version = "0.6.1"
+dependencies = [
+ "borsh",
+ "getrandom",
+ "namada_tests",
+ "namada_vp_prelude",
+ "wee_alloc",
+]
 
 [[package]]
 name = "wait-timeout"

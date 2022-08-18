@@ -31,9 +31,9 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/wasm/{{ checksum "wasm/wasm_source/Cargo.lock" }}
+    cache_key: 1-54-0/wasm/{{ checksum "wasm/Cargo.lock" }}
     mount:
-    - wasm/wasm_source/target
+    - wasm/target
     region: eu-west-1
     restore: true
   environment:
@@ -83,10 +83,10 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   pull: never
   commands:
-  - rm -f  ./wasm/wasm_source/target/.rustc_info.json
-  - rm -rf ./wasm/wasm_source/target/debug
-  - find ./wasm/wasm_source/target/release -maxdepth 1 -type f -delete
-  - find ./wasm/wasm_source/target/wasm32-unknown-unknown -maxdepth 1 -type f -delete
+  - rm -f  ./wasm/target/.rustc_info.json
+  - rm -rf ./wasm/target/debug
+  - find ./wasm/target/release -maxdepth 1 -type f -delete
+  - find ./wasm/target/wasm32-unknown-unknown -maxdepth 1 -type f -delete
   depends_on:
   - test-wasm
   - check-wasm
@@ -101,9 +101,9 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/wasm/{{ checksum "wasm/wasm_source/Cargo.lock" }}
+    cache_key: 1-54-0/wasm/{{ checksum "wasm/Cargo.lock" }}
     mount:
-    - wasm/wasm_source/target
+    - wasm/target
     override: false
     region: eu-west-1
     rebuild: true
@@ -162,9 +162,9 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/wasm/{{ checksum "wasm/wasm_source/Cargo.lock" }}
+    cache_key: 1-54-0/wasm/{{ checksum "wasm/Cargo.lock" }}
     mount:
-    - wasm/wasm_source/target
+    - wasm/target
     region: eu-west-1
     restore: true
   environment:
@@ -228,10 +228,10 @@ steps:
   image: 965844283396.dkr.ecr.eu-west-1.amazonaws.com/wasm:latest
   pull: never
   commands:
-  - rm -f  ./wasm/wasm_source/target/.rustc_info.json
-  - rm -rf ./wasm/wasm_source/target/debug
-  - find ./wasm/wasm_source/target/release -maxdepth 1 -type f -delete
-  - find ./wasm/wasm_source/target/wasm32-unknown-unknown -maxdepth 1 -type f -delete
+  - rm -f  ./wasm/target/.rustc_info.json
+  - rm -rf ./wasm/target/debug
+  - find ./wasm/target/release -maxdepth 1 -type f -delete
+  - find ./wasm/target/wasm32-unknown-unknown -maxdepth 1 -type f -delete
   depends_on:
   - test-wasm
   - check-wasm
@@ -247,9 +247,9 @@ steps:
     archive_format: gzip
     backend: s3
     bucket: heliax-drone-cache-v2
-    cache_key: 1-54-0/wasm/{{ checksum "wasm/wasm_source/Cargo.lock" }}
+    cache_key: 1-54-0/wasm/{{ checksum "wasm/Cargo.lock" }}
     mount:
-    - wasm/wasm_source/target
+    - wasm/target
     override: false
     region: eu-west-1
     rebuild: true
@@ -1097,6 +1097,6 @@ clone:
   disable: true
 ---
 kind: signature
-hmac: 4c6a2d9c84b634a7417a897f5af3ac91c0f06230198e824160603b8931457c7c
+hmac: b58fe25806b89a82f4b5aa83e327bf9e5a6e1b861032f9048e65fa992970c7da
 
 ...
