@@ -1,21 +1,16 @@
 //! A tx for a PoS bond that stakes tokens via a self-bond or delegation.
 
-use namada_tx_prelude::proof_of_stake::bond_tokens;
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(tx_data: Vec<u8>) {
-    let signed = SignedTxData::try_from_slice(&tx_data[..]).unwrap();
-    let bond =
-        transaction::pos::Bond::try_from_slice(&signed.data.unwrap()[..])
-            .unwrap();
+fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
+    let signed = SignedTxData::try_from_slice(&tx_data[..])
+        .err_msg("failed to decode SignedTxData")?;
+    let data = signed.data.ok_or_err_msg("Missing data")?;
+    let bond = transaction::pos::Bond::try_from_slice(&data[..])
+        .err_msg("failed to decode Bond")?;
 
-    if let Err(err) =
-        bond_tokens(bond.source.as_ref(), &bond.validator, bond.amount)
-    {
-        debug_log!("Bond failed with: {}", err);
-        panic!()
-    }
+    ctx.bond_tokens(bond.source.as_ref(), &bond.validator, bond.amount)
 }
 
 #[cfg(test)]
@@ -61,7 +56,7 @@ mod tests {
             // A key to sign the transaction
             key in arb_common_keypair(),
             pos_params in arb_pos_params()) {
-            test_tx_bond_aux(initial_stake, bond, key, pos_params)
+            test_tx_bond_aux(initial_stake, bond, key, pos_params).unwrap()
         }
     }
 
@@ -70,7 +65,7 @@ mod tests {
         bond: transaction::pos::Bond,
         key: key::common::SecretKey,
         pos_params: PosParams,
-    ) {
+    ) -> TxResult {
         let staking_reward_address = address::testing::established_address_1();
         let consensus_key = key::testing::keypair_1().ref_to();
         let staking_reward_key = key::testing::keypair_2().ref_to();
@@ -106,22 +101,24 @@ mod tests {
             &staking_token_address(),
             &Address::Internal(InternalAddress::PoS),
         );
-        let pos_balance_pre: token::Amount =
-            read(&pos_balance_key.to_string()).expect("PoS must have balance");
+        let pos_balance_pre: token::Amount = ctx()
+            .read(&pos_balance_key)?
+            .expect("PoS must have balance");
         assert_eq!(pos_balance_pre, initial_stake);
-        let total_voting_powers_pre = PoS.read_total_voting_power();
-        let validator_sets_pre = PoS.read_validator_set();
+        let total_voting_powers_pre = ctx().read_total_voting_power()?;
+        let validator_sets_pre = ctx().read_validator_set()?;
         let validator_voting_powers_pre =
-            PoS.read_validator_voting_power(&bond.validator).unwrap();
+            ctx().read_validator_voting_power(&bond.validator)?.unwrap();
 
-        apply_tx(tx_data);
+        apply_tx(ctx(), tx_data)?;
 
         // Read the data after the tx is executed
 
         // The following storage keys should be updated:
 
         //     - `#{PoS}/validator/#{validator}/total_deltas`
-        let total_delta_post = PoS.read_validator_total_deltas(&bond.validator);
+        let total_delta_post =
+            ctx().read_validator_total_deltas(&bond.validator)?;
         for epoch in 0..pos_params.pipeline_len {
             assert_eq!(
                 total_delta_post.as_ref().unwrap().get(epoch),
@@ -144,7 +141,7 @@ mod tests {
 
         //     - `#{staking_token}/balance/#{PoS}`
         let pos_balance_post: token::Amount =
-            read(&pos_balance_key.to_string()).unwrap();
+            ctx().read(&pos_balance_key)?.unwrap();
         assert_eq!(pos_balance_pre + bond.amount, pos_balance_post);
 
         //     - `#{PoS}/bond/#{owner}/#{validator}`
@@ -156,7 +153,7 @@ mod tests {
             validator: bond.validator.clone(),
             source: bond_src,
         };
-        let bonds_post = PoS.read_bond(&bond_id).unwrap();
+        let bonds_post = ctx().read_bond(&bond_id)?.unwrap();
         match &bond.source {
             Some(_) => {
                 // This bond was a delegation
@@ -231,10 +228,10 @@ mod tests {
         //     - `#{PoS}/total_voting_power` (optional)
         //     - `#{PoS}/validator_set` (optional)
         //     - `#{PoS}/validator/#{validator}/voting_power` (optional)
-        let total_voting_powers_post = PoS.read_total_voting_power();
-        let validator_sets_post = PoS.read_validator_set();
+        let total_voting_powers_post = ctx().read_total_voting_power()?;
+        let validator_sets_post = ctx().read_validator_set()?;
         let validator_voting_powers_post =
-            PoS.read_validator_voting_power(&bond.validator).unwrap();
+            ctx().read_validator_voting_power(&bond.validator)?.unwrap();
 
         let voting_power_pre =
             VotingPower::from_tokens(initial_stake, &pos_params);
@@ -320,14 +317,15 @@ mod tests {
 
         // Use the tx_env to run PoS VP
         let tx_env = tx_host_env::take();
-        let vp_env = TestNativeVpEnv::new(tx_env);
-        let result = vp_env.validate_tx(PosVP::new, |_tx_data| {});
+        let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
+        let result = vp_env.validate_tx(PosVP::new);
         let result =
             result.expect("Validation of valid changes must not fail!");
         assert!(
             result,
             "PoS Validity predicate must accept this transaction"
         );
+        Ok(())
     }
 
     prop_compose! {
