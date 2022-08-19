@@ -125,7 +125,6 @@ winapi = "0.3.9"
 
 [dev-dependencies]
 namada = {path = "../shared", features = ["testing", "wasm-runtime"]}
-cargo-watch = "7.5.0"
 bit-set = "0.5.2"
 # A fork with state machime testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
