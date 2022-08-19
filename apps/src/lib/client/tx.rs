@@ -6,6 +6,7 @@ use std::env;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -27,7 +28,7 @@ use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::{Amount, OutPoint, TxOut};
-use masp_primitives::transaction::Transaction;
+use masp_primitives::transaction::{Transaction};
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
@@ -1302,6 +1303,10 @@ where C: ShieldedTransferContext
     // Convert transaction amount into MASP types
     let (asset_type, amount) =
         convert_amount(epoch, &args.token, args.amount);
+    
+    // Transactions with transparent input and shielded output
+    // may be affected if constructed close to epoch boundary
+    let mut epoch_sensitive: bool = false;
     // If there are shielded inputs
     if let Some(sk) = spending_key {
         // Transaction fees need to match the amount in the wrapper Transfer
@@ -1353,6 +1358,7 @@ where C: ShieldedTransferContext
         let hash =
             ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
         let script = TransparentAddress::PublicKey(hash.into()).script();
+        epoch_sensitive = true;
         builder.add_transparent_input(
             secp_sk,
             OutPoint::new([0u8; 32], 0),
@@ -1372,9 +1378,10 @@ where C: ShieldedTransferContext
             pa.into(),
             asset_type,
             amt,
-            memo,
+            memo.clone(),
         )?;
     } else {
+        epoch_sensitive = false;
         // Embed the transparent target address into the shielded transaction so
         // that it can be signed
         let target_enc = args.target
@@ -1402,7 +1409,35 @@ where C: ShieldedTransferContext
             .expect("unable to load MASP Parameters")
     };
     // Build and return the constructed transaction
-    builder.build(consensus_branch_id, &prover).map(Some)
+    let mut tx = builder.build(consensus_branch_id, &prover);
+    
+    if epoch_sensitive {
+        let new_epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
+        
+        // If epoch has changed, recalculate shielded outputs to match new epoch
+        if new_epoch != epoch {
+            // Hack: build new shielded transfer with updated outputs
+            let mut replay_builder = Builder::<TestNetwork, OsRng>::new(0u32);
+            let ovk_opt = spending_key.map(|x| x.expsk.ovk);
+            let (new_asset_type, _) = convert_amount(new_epoch, &args.token, args.amount);
+            replay_builder.add_sapling_output(
+                ovk_opt,
+                payment_address.unwrap().into(),
+                new_asset_type,
+                amt,
+                memo,
+            )?;
+
+            let (replay_tx, _) = replay_builder.build(consensus_branch_id, &prover)?;
+            tx = tx.map(|(t, tm)| {
+                let mut temp = t.deref().clone();
+                temp.shielded_outputs = replay_tx.shielded_outputs.clone();
+                (temp.freeze().unwrap(), tm)
+            });
+        }
+    }
+
+    tx.map(Some)
 }
 
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
