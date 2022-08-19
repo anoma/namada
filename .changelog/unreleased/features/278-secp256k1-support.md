@@ -1,0 +1,1 @@
+- Added secp256k1 support ([#278](https://github.com/anoma/anoma/pull/278))
