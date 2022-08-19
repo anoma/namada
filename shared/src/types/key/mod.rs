@@ -19,6 +19,7 @@ use crate::types::address;
 
 pub mod common;
 pub mod ed25519;
+pub mod secp256k1;
 
 const PK_STORAGE_KEY: &str = "public_key";
 const PROTOCOL_PK_STORAGE_KEY: &str = "protocol_public_key";
@@ -126,27 +127,42 @@ pub trait TryFromRef<T: ?Sized>: Sized {
 }
 
 /// Type capturing signature scheme IDs
-#[derive(PartialEq, Eq, Copy, Clone)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum SchemeType {
-    /// Type identifier for Ed25519-consensus
-    Ed25519Consensus,
+    /// Type identifier for Ed25519 scheme
+    Ed25519,
+    /// Type identifier for Secp256k1 scheme
+    Secp256k1,
     /// Type identifier for Common
     Common,
+}
+
+impl FromStr for SchemeType {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input.to_lowercase().as_str() {
+            "ed25519" => Ok(Self::Ed25519),
+            "secp256k1" => Ok(Self::Secp256k1),
+            "common" => Ok(Self::Common),
+            _ => Err(()),
+        }
+    }
 }
 
 /// Represents a signature
 
 pub trait Signature:
-    Hash + PartialOrd + Serialize + BorshSerialize + BorshDeserialize
+    Hash + PartialOrd + Serialize + BorshSerialize + BorshDeserialize + BorshSchema
 {
     /// The scheme type of this implementation
     const TYPE: SchemeType;
     /// Convert from one Signature type to another
-    fn try_from_sig<PK: Signature>(
-        pk: &PK,
+    fn try_from_sig<SIG: Signature>(
+        sig: &SIG,
     ) -> Result<Self, ParseSignatureError> {
-        if PK::TYPE == Self::TYPE {
-            let sig_arr = pk.try_to_vec().unwrap();
+        if SIG::TYPE == Self::TYPE {
+            let sig_arr = sig.try_to_vec().unwrap();
             let res = Self::try_from_slice(sig_arr.as_ref());
             res.map_err(ParseSignatureError::InvalidEncoding)
         } else {
@@ -154,8 +170,8 @@ pub trait Signature:
         }
     }
     /// Convert from self to another SecretKey type
-    fn try_to_sig<PK: Signature>(&self) -> Result<PK, ParseSignatureError> {
-        PK::try_from_sig(self)
+    fn try_to_sig<SIG: Signature>(&self) -> Result<SIG, ParseSignatureError> {
+        SIG::try_from_sig(self)
     }
 }
 
@@ -164,6 +180,7 @@ pub trait Signature:
 pub trait PublicKey:
     BorshSerialize
     + BorshDeserialize
+    + BorshSchema
     + Ord
     + Clone
     + Display
@@ -188,7 +205,7 @@ pub trait PublicKey:
             Err(ParsePublicKeyError::MismatchedScheme)
         }
     }
-    /// Convert from self to another SecretKey type
+    /// Convert from self to another PublicKey type
     fn try_to_pk<PK: PublicKey>(&self) -> Result<PK, ParsePublicKeyError> {
         PK::try_from_pk(self)
     }
@@ -199,6 +216,7 @@ pub trait PublicKey:
 pub trait SecretKey:
     BorshSerialize
     + BorshDeserialize
+    + BorshSchema
     + Display
     + Debug
     + RefTo<Self::PublicKey>
@@ -267,7 +285,8 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     ) -> Result<(), VerifySigError>;
 }
 
-/// Ed25519 public key hash
+/// Public key hash derived from `common::Key` borsh encoded bytes (hex string
+/// of the first 40 chars of sha256 hash)
 #[derive(
     Debug,
     Clone,
@@ -421,12 +440,29 @@ macro_rules! sigscheme_test {
                 println!("Public key: {}", public_key);
                 println!("Secret key: {}", secret_key);
             }
+
+            /// Sign a simple message and verify the signature.
+            #[test]
+            fn gen_sign_verify() {
+                use rand::prelude::ThreadRng;
+                use rand::thread_rng;
+
+                let mut rng: ThreadRng = thread_rng();
+                let sk = <$type>::generate(&mut rng);
+                let sig = <$type>::sign(&sk, b"hello");
+                assert!(
+                    <$type>::verify_signature_raw(&sk.ref_to(), b"hello", &sig)
+                        .is_ok()
+                );
+            }
         }
     };
 }
 
 #[cfg(test)]
 sigscheme_test! {ed25519_test, ed25519::SigScheme}
+#[cfg(test)]
+sigscheme_test! {secp256k1_test, secp256k1::SigScheme}
 
 #[cfg(test)]
 mod more_tests {
@@ -436,15 +472,32 @@ mod more_tests {
     fn zeroize_keypair_ed25519() {
         use rand::thread_rng;
 
-        let sk = ed25519::SecretKey(Box::new(
-            ed25519_consensus::SigningKey::new(thread_rng()),
-        ));
-        let len = sk.0.as_bytes().len();
-        let ptr = sk.0.as_bytes().as_ptr();
+        let sk = ed25519::SigScheme::generate(&mut thread_rng());
+        let sk_bytes = sk.0.as_bytes();
+        let len = sk_bytes.len();
+        let ptr = sk_bytes.as_ptr();
 
         drop(sk);
 
         assert_eq!(&[0u8; 32], unsafe {
+            core::slice::from_raw_parts(ptr, len)
+        });
+    }
+
+    #[test]
+    fn zeroize_keypair_secp256k1() {
+        use rand::thread_rng;
+
+        let mut sk = secp256k1::SigScheme::generate(&mut thread_rng());
+        let sk_scalar = sk.0.to_scalar_ref();
+        let len = sk_scalar.0.len();
+        let ptr = sk_scalar.0.as_ref().as_ptr();
+
+        let original_data = sk_scalar.0;
+
+        drop(sk);
+
+        assert_ne!(&original_data, unsafe {
             core::slice::from_raw_parts(ptr, len)
         });
     }
