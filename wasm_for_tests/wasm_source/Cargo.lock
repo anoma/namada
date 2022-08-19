@@ -39,9 +39,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.56"
+version = "1.0.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4361135be9122e0870de935d7c439aef945b9f9ddd4199a553b5270b49c82a27"
+checksum = "c91f1f46651137be86f3a2b9a8359f9ab421d04d941c62b5982e1ca21113adf9"
 
 [[package]]
 name = "ark-bls12-381"
@@ -2514,7 +2514,7 @@ checksum = "35391ea974fa5ee869cb094d5b437688fbf3d8127d64d1b9fed5822a1ed39b12"
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=yuji/prost-0.9#be4b2293558361df2f452c60a3e90c6b5e52e225"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=b03d8df11a6a0cfbd47a1a33cda5b73353bb715d#b03d8df11a6a0cfbd47a1a33cda5b73353bb715d"
 dependencies = [
  "borsh",
  "cfg-if 1.0.0",
