@@ -7,8 +7,11 @@ use namada_vp_prelude::address::masp;
 use namada_vp_prelude::*;
 
 /// Convert Anoma amount and token type to MASP equivalents
-fn convert_amount(token: &Address, val: token::Amount) -> (AssetType, Amount) {
-    let epoch = get_block_epoch();
+fn convert_amount(token: &Address, val: token::Amount, epoch: Option<storage::Epoch>) -> (AssetType, Amount) {
+    let epoch = match epoch {
+        Some(e) => e,
+        None => get_block_epoch(),
+    };
     // Timestamp the chosen token with the current epoch
     let token_bytes = (token, epoch.0)
         .try_to_vec()
@@ -46,16 +49,33 @@ fn validate_tx(
         let mut transparent_tx_pool = Amount::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.value_balance.clone();
-        // Note that the asset type is timestamped so shields/unshields
-        // where the shielded value has an incorrect timestamp
-        // are automatically rejected
-        let (_transp_asset, transp_amt) =
-            convert_amount(&transfer.token, transfer.amount);
+
+        // Handle shielding/transparent input
         if transfer.source != masp() {
+            // Note that the asset type is timestamped so shields
+            // where the shielded value has an incorrect timestamp
+            // are automatically rejected
+            let (_transp_asset, transp_amt) =
+                convert_amount(&transfer.token, transfer.amount, None);
+
             // Non-masp sources add to transparent tx pool
-            transparent_tx_pool += transp_amt.clone();
+            transparent_tx_pool += transp_amt;
         }
+
+        // Handle unshielding/transparent output
         if transfer.target != masp() {
+            // Timestamp is derived to allow unshields for older tokens
+            let e = shielded_tx.value_balance.components()
+            .next()
+            .map(|(atype, _)| { 
+                let v = atype.try_to_vec().unwrap();
+                storage::Epoch::try_from_slice(&v[v.len()-8..])
+            })
+            .map(|x| x.unwrap());
+
+            let (_transp_asset, transp_amt) =
+                convert_amount(&transfer.token, transfer.amount, e);
+
             // Non-masp destinations subtract from transparent tx pool
             transparent_tx_pool -= transp_amt;
         }
