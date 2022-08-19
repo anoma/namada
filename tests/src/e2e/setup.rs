@@ -16,7 +16,7 @@ use expectrl::process::unix::{PtyStream, UnixProcess};
 use expectrl::session::Session;
 use expectrl::stream::log::LoggedStream;
 use expectrl::{Eof, WaitStatus};
-use eyre::eyre;
+use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
@@ -851,11 +851,17 @@ pub fn copy_wasm_to_chain_dir<'a>(
             .join(chain_id.as_str())
             .join(config::DEFAULT_WASM_DIR);
         for file in &wasm_files {
-            std::fs::copy(
-                working_dir.join("wasm").join(&file),
-                target_wasm_dir.join(&file),
-            )
-            .unwrap();
+            let src = working_dir.join("wasm").join(&file);
+            let dst = target_wasm_dir.join(&file);
+            std::fs::copy(&src, &dst)
+                .wrap_err_with(|| {
+                    format!(
+                        "copying {} to {}",
+                        &src.to_string_lossy(),
+                        &dst.to_string_lossy(),
+                    )
+                })
+                .unwrap();
         }
     }
 }

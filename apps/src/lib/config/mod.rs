@@ -27,7 +27,7 @@ use crate::cli;
 
 /// Base directory contains global config and chain directories.
 pub const DEFAULT_BASE_DIR: &str = ".anoma";
-/// Default WASM dir. Note that WASM dirs are nested in chain dirs.
+/// Default WASM dir.
 pub const DEFAULT_WASM_DIR: &str = "wasm";
 /// The WASM checksums file contains the hashes of built WASMs. It is inside the
 /// WASM dir.
