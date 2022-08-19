@@ -256,7 +256,6 @@ mod tests {
     use super::*;
 
     /// Test the keccak hash of a validator set update
-    // TODO: fix this :|
     #[test]
     fn test_validator_set_update_keccak_hash() {
         // ```js
