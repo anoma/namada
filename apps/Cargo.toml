@@ -122,6 +122,7 @@ tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", features = ["env-filter"]}
 websocket = "0.26.2"
 winapi = "0.3.9"
+bimap = {version = "0.6.2", features = ["serde"]}
 
 [dev-dependencies]
 namada = {path = "../shared", features = ["testing", "wasm-runtime"]}
