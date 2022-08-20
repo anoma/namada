@@ -1812,7 +1812,10 @@ pub mod args {
     }
 
     impl TxTransfer {
-        pub fn parse_from_context(&self, ctx: &mut Context) -> ParsedTxTransferArgs {
+        pub fn parse_from_context(
+            &self,
+            ctx: &mut Context,
+        ) -> ParsedTxTransferArgs {
             ParsedTxTransferArgs {
                 tx: self.tx.parse_from_context(ctx),
                 source: ctx.get_cached(&self.source),
@@ -2871,19 +2874,23 @@ pub mod args {
     }
 
     impl Tx {
-        pub fn parse_from_context(&self, ctx: &mut Context) -> ParsedTxArgs {
-            ParsedTxArgs{
+        pub fn parse_from_context(&self,ctx: &mut Context) -> ParsedTxArgs {
+            ParsedTxArgs {
                 dry_run: self.dry_run,
                 force: self.force,
                 broadcast_only: self.broadcast_only,
                 ledger_address: self.ledger_address.clone(),
-                initialized_account_alias: self.initialized_account_alias.clone(),
+                initialized_account_alias: self
+                    .initialized_account_alias
+                    .clone(),
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit.clone(),
-                signing_key: self.signing_key.as_ref().map(|sk| ctx.get_cached(sk)),
+                signing_key: self
+                    .signing_key
+                    .as_ref()
+                    .map(|sk| ctx.get_cached(sk)),
                 signer: self.signer.as_ref().map(|signer| ctx.get(signer)),
-                
             }
         }
     }

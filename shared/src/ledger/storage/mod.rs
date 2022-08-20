@@ -813,7 +813,7 @@ where
             .par_chunks(notes_per_thread_rounded)
             .map(FrozenCommitmentTree::new)
             .collect();
-        
+
         // Keep the merkle root from the old tree for transactions constructed
         // close to the epoch boundary
         self.conversion_state.prev_root = self.conversion_state.tree.root();

@@ -1,17 +1,18 @@
-use namada::types::transaction::GasLimit;
 use async_trait::async_trait;
-use tendermint_config::net::Address as TendermintAddress;
-use namada::types::address::Address;
-use namada::types::{ key, token };
-use namada::types::storage::Epoch;
-use namada::types::masp::{TransferSource, TransferTarget};
+use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
-use masp_primitives::merkle_tree::MerklePath;
-use crate::client::tx::Conversions;
-use crate::cli::{Context, args};
+use namada::types::address::Address;
+use namada::types::masp::{TransferSource, TransferTarget};
+use namada::types::storage::Epoch;
+use namada::types::transaction::GasLimit;
+use namada::types::{key, token};
+use tendermint_config::net::Address as TendermintAddress;
+
 use super::rpc;
+use crate::cli::{args, Context};
+use crate::client::tx::Conversions;
 
 #[derive(Clone, Debug)]
 pub struct ParsedTxArgs {
@@ -82,12 +83,12 @@ impl ShieldedTransferContext for Context {
         Vec<(Diversifier, Note, MerklePath<Node>)>,
         Conversions,
     ) {
-        self.shielded.collect_unspent_notes(ledger_address, vk, target, target_epoch).await
+        self.shielded
+            .collect_unspent_notes(ledger_address, vk, target, target_epoch)
+            .await
     }
 
     async fn query_epoch(&self, ledger_address: TendermintAddress) -> Epoch {
-        rpc::query_epoch(args::Query {
-            ledger_address,
-        }).await
+        rpc::query_epoch(args::Query { ledger_address }).await
     }
 }

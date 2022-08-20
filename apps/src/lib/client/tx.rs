@@ -28,7 +28,7 @@ use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::{Amount, OutPoint, TxOut};
-use masp_primitives::transaction::{Transaction};
+use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
@@ -58,7 +58,6 @@ use tendermint_config::net::Address as TendermintAddress;
 use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use tendermint_rpc::query::{EventType, Query};
 use tendermint_rpc::{Client, HttpClient};
-use crate::client::types::ParsedTxTransferArgs;
 
 use super::rpc;
 use super::types::ShieldedTransferContext;
@@ -71,6 +70,7 @@ use crate::client::tendermint_websocket_client::{
     Error as WsError, TendermintWebsocketClient, WebSocketAddress,
 };
 use crate::client::tm_jsonrpc_client::{fetch_event, JsonRpcAddress};
+use crate::client::types::ParsedTxTransferArgs;
 use crate::node::ledger::tendermint_node;
 
 const ACCEPTED_QUERY_KEY: &str = "accepted.hash";
@@ -1285,9 +1285,8 @@ async fn gen_shielded_transfer<C>(
     args: &ParsedTxTransferArgs,
     shielded_gas: bool,
 ) -> Result<Option<(Transaction, TransactionMetadata)>, builder::Error>
-
-where C: ShieldedTransferContext
-
+where
+    C: ShieldedTransferContext,
 {
     let spending_key = args.source.spending_key().map(|x| x.into());
     let payment_address = args.target.payment_address();
@@ -1301,9 +1300,8 @@ where C: ShieldedTransferContext
     // Now we build up the transaction within this object
     let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
     // Convert transaction amount into MASP types
-    let (asset_type, amount) =
-        convert_amount(epoch, &args.token, args.amount);
-    
+    let (asset_type, amount) = convert_amount(epoch, &args.token, args.amount);
+
     // Transactions with transparent input and shielded output
     // may be affected if constructed close to epoch boundary
     let mut epoch_sensitive: bool = false;
@@ -1311,11 +1309,8 @@ where C: ShieldedTransferContext
     if let Some(sk) = spending_key {
         // Transaction fees need to match the amount in the wrapper Transfer
         // when MASP source is used
-        let (_, fee) = convert_amount(
-            epoch,
-            &args.tx.fee_token,
-            args.tx.fee_amount,
-        );
+        let (_, fee) = 
+            convert_amount(epoch, &args.tx.fee_token, args.tx.fee_amount);
         builder.set_fee(fee.clone())?;
         // If the gas is coming from the shielded pool, then our shielded inputs
         // must also cover the gas fee
@@ -1384,7 +1379,8 @@ where C: ShieldedTransferContext
         epoch_sensitive = false;
         // Embed the transparent target address into the shielded transaction so
         // that it can be signed
-        let target_enc = args.target
+        let target_enc = args
+            .target
             .address()
             .expect("target address should be transparent")
             .try_to_vec()
@@ -1410,16 +1406,17 @@ where C: ShieldedTransferContext
     };
     // Build and return the constructed transaction
     let mut tx = builder.build(consensus_branch_id, &prover);
-    
+
     if epoch_sensitive {
         let new_epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
-        
+
         // If epoch has changed, recalculate shielded outputs to match new epoch
         if new_epoch != epoch {
             // Hack: build new shielded transfer with updated outputs
             let mut replay_builder = Builder::<TestNetwork, OsRng>::new(0u32);
             let ovk_opt = spending_key.map(|x| x.expsk.ovk);
-            let (new_asset_type, _) = convert_amount(new_epoch, &args.token, args.amount);
+            let (new_asset_type, _) =
+                convert_amount(new_epoch, &args.token, args.amount);
             replay_builder.add_sapling_output(
                 ovk_opt,
                 payment_address.unwrap().into(),
@@ -1428,7 +1425,8 @@ where C: ShieldedTransferContext
                 memo,
             )?;
 
-            let (replay_tx, _) = replay_builder.build(consensus_branch_id, &prover)?;
+            let (replay_tx, _) =
+                replay_builder.build(consensus_branch_id, &prover)?;
             tx = tx.map(|(t, tm)| {
                 let mut temp = t.deref().clone();
                 temp.shielded_outputs = replay_tx.shielded_outputs.clone();
@@ -1464,9 +1462,13 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     }
     // Check that the token address exists on chain
     let token_exists =
-        rpc::known_address(&parsed_args.token, args.tx.ledger_address.clone()).await;
+        rpc::known_address(&parsed_args.token, args.tx.ledger_address.clone())
+            .await;
     if !token_exists {
-        eprintln!("The token address {} doesn't exist on chain.", parsed_args.token);
+        eprintln!(
+            "The token address {} doesn't exist on chain.",
+            parsed_args.token
+        );
         if !args.tx.force {
             safe_exit(1)
         }
@@ -1510,7 +1512,11 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         if source == masp_addr && target == masp_addr {
             (TxSigningKey::SecretKey(masp_tx_key()), 0.into(), btc())
         } else if source == masp_addr {
-            (TxSigningKey::SecretKey(masp_tx_key()), args.amount, parsed_args.token.clone())
+            (
+                TxSigningKey::SecretKey(masp_tx_key()),
+                args.amount,
+                parsed_args.token.clone(),
+            )
         } else {
             (
                 TxSigningKey::WalletAddress(args.source.to_address()),
@@ -1539,27 +1545,30 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         shielded: {
             let spending_key = parsed_args.source.spending_key();
             let payment_address = parsed_args.target.payment_address();
-            // No shielded components are needed when neither source nor destination
-            // are shielded
+            // No shielded components are needed when neither source nor
+            // destination are shielded
             if spending_key.is_none() && payment_address.is_none() {
                 None
             } else {
-                // We want to fund our transaction solely from supplied spending key
+                // We want to fund our transaction solely from supplied spending
+                // key
                 let spending_key = spending_key.map(|x| x.into());
                 let spending_keys: Vec<_> = spending_key.into_iter().collect();
-                // Load the current shielded context given the spending key we possess
+                // Load the current shielded context given the spending key we
+                // possess
                 let _ = ctx.shielded.load();
                 ctx.shielded
                     .fetch(&args.tx.ledger_address, &spending_keys, &[])
                     .await;
-                // Save the update state so that future fetches can be short-circuited
+                // Save the update state so that future fetches can be
+                // short-circuited
                 let _ = ctx.shielded.save();
                 gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
-                .await
-                .unwrap()
-                .map(|x| x.0)
+                    .await
+                    .unwrap()
+                    .map(|x| x.0)
             }
-        }
+        },
     };
     tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer
