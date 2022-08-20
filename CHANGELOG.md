@@ -1,5 +1,52 @@
 # CHANGELOG
 
+## v0.7.1
+
+Namada 0.7.1 is a patch release of the Namada software, continuing the
+version numbering sequence previously used in the Anoma repository.
+There are few important user-facing changes, but this is the first
+tagged release in the Namada repository.
+
+### CI
+
+- New CI using Github Actions
+  ([#222](https://github.com/anoma/namada/pull/222))
+
+### DOCS
+
+- Added OpenAPI spec ([#322](https://github.com/anoma/namada/pull/322))
+- Applied various fixes and updates to the PoS system spec and integration spec
+  ([#1070](https://github.com/anoma/anoma/pull/1070))
+- Fixes libraries doc typos and correct comment on the clap crate
+  ([#1143](https://github.com/anoma/anoma/pull/1143))
+
+### FEATURES
+
+- Added secp256k1 support ([#278](https://github.com/anoma/anoma/pull/278))
+
+### IMPROVEMENTS
+
+- Zeroize secret keys from memory
+  ([#277](https://github.com/anoma/namada/pull/277))
+- Better logging for end-to-end tests, and logs are
+  stored to disk in the test's temporary working directory
+  ([#1202](https://github.com/anoma/anoma/pull/1202))
+- Hidden the stdout of Tendermint process by default. To include
+  it in the node's output, run with `ANOMA_TM_STDOUT=true`
+  ([#1239](https://github.com/anoma/anoma/pull/1239))
+
+### MISCELLANEOUS
+
+- Make some .gitignore patterns relative to repo root
+  ([#1158](https://github.com/anoma/anoma/pull/1158))
+
+### TESTING
+
+- E2E: Consume unread output before checking exit status.
+  ([#247](https://github.com/anoma/namada/pull/247))
+- Switch back from a fork to a newly released version of expectrl
+  ([#1142](https://github.com/anoma/anoma/pull/1142))
+
 ## v0.6.1
 
 Anoma 0.6.1 is a patch release updating the Rust toolchain and various

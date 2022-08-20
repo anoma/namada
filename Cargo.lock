@@ -4023,7 +4023,7 @@ dependencies = [
 
 [[package]]
 name = "namada"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -4080,7 +4080,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4165,7 +4165,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "itertools 0.10.3",
@@ -4176,7 +4176,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "quote",
  "syn",
@@ -4184,7 +4184,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "proptest",
@@ -4193,7 +4193,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "assert_cmd",
  "borsh",
@@ -4227,7 +4227,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "namada_vm_env",
  "sha2 0.10.2",
@@ -4235,7 +4235,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "hex",
@@ -4245,7 +4245,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "namada_vm_env",
  "sha2 0.10.2",

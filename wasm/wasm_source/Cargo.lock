@@ -1516,7 +1516,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "ark-bls12-381",
  "ark-serialize",
@@ -1565,7 +1565,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "quote",
  "syn",
@@ -1573,7 +1573,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "proptest",
@@ -1582,7 +1582,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -1600,7 +1600,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "namada_vm_env",
  "sha2 0.10.2",
@@ -1608,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "hex",
@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "namada_vm_env",
  "sha2 0.10.2",
@@ -1626,7 +1626,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "getrandom",
