@@ -1414,14 +1414,7 @@ where
                 Ok(values) => {
                     let decode = |PrefixValue { key, value }: PrefixValue| {
                         match T::try_from_slice(&value[..]) {
-                            Err(err) => {
-                                eprintln!(
-                                    "Skipping a value for key {}. Error in \
-                                     decoding: {}",
-                                    key, err
-                                );
-                                None
-                            }
+                            Err(_) => None,
                             Ok(value) => Some((key, value)),
                         }
                     };
