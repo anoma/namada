@@ -16,7 +16,7 @@ use namada::types::governance::{
 };
 use namada::types::key::*;
 use namada::types::nft::{self, Nft, NftToken};
-use namada::types::storage::Epoch;
+use namada::types::storage::{Epoch, Key};
 use namada::types::token::Amount;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -392,7 +392,17 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         }
     }
     // Check source balance
-    let balance_key = token::balance_key(&token, &source);
+    let (sub_prefix, balance_key) = match args.sub_prefix {
+        Some(sub_prefix) => {
+            let sub_prefix = Key::parse(sub_prefix).unwrap();
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
+            (
+                Some(sub_prefix),
+                token::multitoken_balance_key(&prefix, &source),
+            )
+        }
+        None => (None, token::balance_key(&token, &source)),
+    };
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
@@ -424,6 +434,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         source,
         target,
         token,
+        sub_prefix,
         amount: args.amount,
     };
     tracing::debug!("Transfer data {:?}", transfer);
