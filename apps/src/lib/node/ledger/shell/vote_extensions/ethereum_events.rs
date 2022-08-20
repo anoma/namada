@@ -404,7 +404,7 @@ mod test_vote_extensions {
     /// should pass even if the epoch changed resulting in a
     /// change to the validator set.
     #[test]
-    fn test_validate_vote_extensions() {
+    fn test_validate_eth_events_vexts() {
         let (mut shell, _, _) = setup();
         let signing_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
