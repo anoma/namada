@@ -12,7 +12,7 @@ use namada_apps::cli::{args, cmds, Context};
 use namada_apps::wallet::DecryptionError;
 
 pub fn main() -> Result<()> {
-    let (cmd, ctx) = cli::anoma_wallet_cli();
+    let (cmd, ctx) = cli::anoma_wallet_cli()?;
     match cmd {
         cmds::AnomaWallet::Key(sub) => match sub {
             cmds::WalletKey::Gen(cmds::KeyGen(args)) => {

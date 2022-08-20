@@ -6,7 +6,7 @@ use namada_apps::cli::cmds::*;
 use namada_apps::client::{gossip, rpc, tx, utils};
 
 pub async fn main() -> Result<()> {
-    match cli::anoma_client_cli() {
+    match cli::anoma_client_cli()? {
         cli::AnomaClient::WithContext(cmd_box) => {
             let (cmd, ctx) = *cmd_box;
             use AnomaClientWithContext as Sub;
