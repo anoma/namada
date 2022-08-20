@@ -221,6 +221,9 @@ mod test_vote_extensions {
     use std::default::Default;
 
     use borsh::BorshSerialize;
+    use namada::ledger::pos;
+    use namada::ledger::pos::namada_proof_of_stake::PosBase;
+    use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, Epoch};
     use namada::types::vote_extensions::{
         ethereum_events, validator_set_update, VoteExtension,
@@ -228,7 +231,9 @@ mod test_vote_extensions {
     use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
     use tower_abci::request;
 
+    use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
     const FIRST_HEIGHT_WITH_VEXTS: BlockHeight = BlockHeight(1);
@@ -319,5 +324,71 @@ mod test_vote_extensions {
             shell.verify_vote_extension(req).status,
             i32::from(VerifyStatus::Reject)
         );
+    }
+
+    /// Test the validation of a validator set update emitted for
+    /// some epoch `E`. The test should pass even if the epoch
+    /// changed to some epoch `E': E' > E`, resulting in a
+    /// change to the validator set.
+    #[test]
+    fn test_validate_valset_upd_vexts() {
+        let (mut shell, _, _) = test_utils::setup();
+        shell.storage.last_height = FIRST_HEIGHT_WITH_VEXTS;
+        let protocol_key =
+            shell.mode.get_protocol_key().expect("Test failed").clone();
+        let validator_addr = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+        let vote_ext = validator_set_update::Vext {
+            // TODO: get voting powers from storage, associated with eth
+            // addrs
+            voting_powers: std::collections::HashMap::new(),
+            validator_addr,
+            epoch: Epoch(1),
+        }
+        .sign(&protocol_key);
+
+        // validators from the current epoch sign over validator
+        // set of the next epoch
+        assert_eq!(shell.storage.get_current_epoch().0.0, 0);
+
+        // remove all validators of the next epoch
+        let mut current_validators = shell.storage.read_validator_set();
+        current_validators.data.insert(
+            1,
+            Some(pos::types::ValidatorSet {
+                active: Default::default(),
+                inactive: Default::default(),
+            }),
+        );
+        shell.storage.write_validator_set(&current_validators);
+        // we advance forward to the next epoch
+        let mut req = FinalizeBlock::default();
+        req.header.time = namada::types::time::DateTimeUtc::now();
+        shell.storage.last_height = BlockHeight(11);
+        shell.finalize_block(req).expect("Test failed");
+        shell.commit();
+        assert_eq!(shell.storage.get_current_epoch().0.0, 1);
+        assert!(
+            shell
+                .storage
+                .get_validator_from_protocol_pk(&protocol_key.ref_to(), None)
+                .is_err()
+        );
+        let prev_epoch = shell.storage.get_current_epoch().0 - 1;
+        assert!(
+            shell
+                .shell
+                .storage
+                .get_validator_from_protocol_pk(
+                    &protocol_key.ref_to(),
+                    Some(prev_epoch)
+                )
+                .is_ok()
+        );
+
+        assert!(shell.validate_valset_upd_vext(vote_ext, prev_epoch + 1));
     }
 }
