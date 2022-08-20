@@ -26,17 +26,20 @@ use super::{
     validator_total_deltas_key, validator_voting_power_key, BondId, Bonds,
     Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
 };
+use crate::impl_pos_read_only;
 use crate::ledger::governance::vp::is_proposal_accepted;
-use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
+use crate::ledger::native_vp::{
+    self, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
+};
 use crate::ledger::pos::{
     is_validator_address_raw_hash_key, is_validator_consensus_key_key,
     is_validator_state_key,
 };
-use crate::ledger::storage::types::decode;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage_api::{self, StorageRead};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
-use crate::types::{key, token};
+use crate::types::token;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -44,6 +47,8 @@ use crate::vm::WasmCacheAccess;
 pub enum Error {
     #[error("Native VP error: {0}")]
     NativeVpError(native_vp::Error),
+    #[error("Storage error: {0}")]
+    StorageApi(storage_api::Error),
 }
 
 /// PoS functions result
@@ -118,7 +123,8 @@ where
 
         let addr = Address::Internal(Self::ADDR);
         let mut changes: Vec<DataUpdate<_, _, _, _>> = vec![];
-        let current_epoch = self.ctx.get_block_epoch()?;
+        let current_epoch = self.ctx.pre().get_block_epoch()?;
+
         for key in keys_changed {
             if is_params_key(key) {
                 let proposal_id = u64::try_from_slice(tx_data).ok();
@@ -127,18 +133,18 @@ where
                     _ => return Ok(false),
                 }
             } else if is_validator_set_key(key) {
-                let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     ValidatorSets::try_from_slice(&bytes[..]).ok()
                 });
-                let post = self.ctx.read_bytes_post(key)?.and_then(|bytes| {
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
                     ValidatorSets::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(ValidatorSet(Data { pre, post }));
             } else if let Some(validator) = is_validator_state_key(key) {
-                let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     ValidatorStates::try_from_slice(&bytes[..]).ok()
                 });
-                let post = self.ctx.read_bytes_post(key)?.and_then(|bytes| {
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
                     ValidatorStates::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(Validator {
@@ -148,24 +154,24 @@ where
             } else if let Some(validator) =
                 is_validator_staking_reward_address_key(key)
             {
-                let pre = self
-                    .ctx
-                    .read_bytes_pre(key)?
-                    .and_then(|bytes| Address::try_from_slice(&bytes[..]).ok());
-                let post = self
-                    .ctx
-                    .read_bytes_post(key)?
-                    .and_then(|bytes| Address::try_from_slice(&bytes[..]).ok());
+                let pre =
+                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                        Address::try_from_slice(&bytes[..]).ok()
+                    });
+                let post =
+                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                        Address::try_from_slice(&bytes[..]).ok()
+                    });
                 changes.push(Validator {
                     address: validator.clone(),
                     update: StakingRewardAddress(Data { pre, post }),
                 });
             } else if let Some(validator) = is_validator_consensus_key_key(key)
             {
-                let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     ValidatorConsensusKeys::try_from_slice(&bytes[..]).ok()
                 });
-                let post = self.ctx.read_bytes_post(key)?.and_then(|bytes| {
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
                     ValidatorConsensusKeys::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(Validator {
@@ -173,10 +179,10 @@ where
                     update: ConsensusKey(Data { pre, post }),
                 });
             } else if let Some(validator) = is_validator_total_deltas_key(key) {
-                let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     ValidatorTotalDeltas::try_from_slice(&bytes[..]).ok()
                 });
-                let post = self.ctx.read_bytes_post(key)?.and_then(|bytes| {
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
                     ValidatorTotalDeltas::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(Validator {
@@ -184,10 +190,10 @@ where
                     update: TotalDeltas(Data { pre, post }),
                 });
             } else if let Some(validator) = is_validator_voting_power_key(key) {
-                let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     ValidatorVotingPowers::try_from_slice(&bytes[..]).ok()
                 });
-                let post = self.ctx.read_bytes_post(key)?.and_then(|bytes| {
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
                     ValidatorVotingPowers::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(Validator {
@@ -197,14 +203,14 @@ where
             } else if let Some(raw_hash) =
                 is_validator_address_raw_hash_key(key)
             {
-                let pre = self
-                    .ctx
-                    .read_bytes_pre(key)?
-                    .and_then(|bytes| Address::try_from_slice(&bytes[..]).ok());
-                let post = self
-                    .ctx
-                    .read_bytes_post(key)?
-                    .and_then(|bytes| Address::try_from_slice(&bytes[..]).ok());
+                let pre =
+                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                        Address::try_from_slice(&bytes[..]).ok()
+                    });
+                let post =
+                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                        Address::try_from_slice(&bytes[..]).ok()
+                    });
                 // Find the raw hashes of the addresses
                 let pre = pre.map(|pre| {
                     let raw_hash =
@@ -226,26 +232,27 @@ where
                 if owner != &addr {
                     continue;
                 }
-                let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     token::Amount::try_from_slice(&bytes[..]).ok()
                 });
-                let post = self.ctx.read_bytes_post(key)?.and_then(|bytes| {
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
                     token::Amount::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(Balance(Data { pre, post }));
             } else if let Some(bond_id) = is_bond_key(key) {
-                let pre = self
-                    .ctx
-                    .read_bytes_pre(key)?
-                    .and_then(|bytes| Bonds::try_from_slice(&bytes[..]).ok());
-                let post = self
-                    .ctx
-                    .read_bytes_post(key)?
-                    .and_then(|bytes| Bonds::try_from_slice(&bytes[..]).ok());
+                let pre =
+                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                        Bonds::try_from_slice(&bytes[..]).ok()
+                    });
+                let post =
+                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                        Bonds::try_from_slice(&bytes[..]).ok()
+                    });
                 // For bonds, we need to look-up slashes
                 let slashes = self
                     .ctx
-                    .read_bytes_pre(&validator_slashes_key(&bond_id.validator))?
+                    .pre()
+                    .read_bytes(&validator_slashes_key(&bond_id.validator))?
                     .and_then(|bytes| Slashes::try_from_slice(&bytes[..]).ok())
                     .unwrap_or_default();
                 changes.push(Bond {
@@ -254,20 +261,19 @@ where
                     slashes,
                 });
             } else if let Some(unbond_id) = is_unbond_key(key) {
-                let pre = self
-                    .ctx
-                    .read_bytes_pre(key)?
-                    .and_then(|bytes| Unbonds::try_from_slice(&bytes[..]).ok());
-                let post = self
-                    .ctx
-                    .read_bytes_post(key)?
-                    .and_then(|bytes| Unbonds::try_from_slice(&bytes[..]).ok());
+                let pre =
+                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                        Unbonds::try_from_slice(&bytes[..]).ok()
+                    });
+                let post =
+                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                        Unbonds::try_from_slice(&bytes[..]).ok()
+                    });
                 // For unbonds, we need to look-up slashes
                 let slashes = self
                     .ctx
-                    .read_bytes_pre(&validator_slashes_key(
-                        &unbond_id.validator,
-                    ))?
+                    .pre()
+                    .read_bytes(&validator_slashes_key(&unbond_id.validator))?
                     .and_then(|bytes| Slashes::try_from_slice(&bytes[..]).ok())
                     .unwrap_or_default();
                 changes.push(Unbond {
@@ -276,10 +282,10 @@ where
                     slashes,
                 });
             } else if is_total_voting_power_key(key) {
-                let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     TotalVotingPowers::try_from_slice(&bytes[..]).ok()
                 });
-                let post = self.ctx.read_bytes_post(key)?.and_then(|bytes| {
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
                     TotalVotingPowers::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(TotalVotingPower(Data { pre, post }));
@@ -293,7 +299,7 @@ where
             }
         }
 
-        let params = self.read_pos_params()?;
+        let params = self.ctx.pre().read_pos_params()?;
         let errors = validate(&params, changes, current_epoch);
         Ok(if errors.is_empty() {
             true
@@ -307,118 +313,32 @@ where
     }
 }
 
-impl<D, H, CA> PosReadOnly for PosVP<'_, D, H, CA>
-where
-    D: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: 'static + WasmCacheAccess,
-{
-    type Address = Address;
+impl_pos_read_only! {
     type Error = native_vp::Error;
-    type PublicKey = key::common::PublicKey;
-    type TokenAmount = token::Amount;
-    type TokenChange = token::Change;
+    impl<'f, 'a, DB, H, CA> PosReadOnly for CtxPreStorageRead<'f, 'a, DB, H, CA>
+        where
+            DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
+            H: StorageHasher +'static,
+            CA: WasmCacheAccess +'static
+}
 
-    const POS_ADDRESS: Self::Address = super::ADDRESS;
-
-    fn staking_token_address() -> Self::Address {
-        super::staking_token_address()
-    }
-
-    fn read_pos_params(&self) -> std::result::Result<PosParams, Self::Error> {
-        let value = self.ctx.read_bytes_pre(&params_key())?.unwrap();
-        Ok(decode(value).unwrap())
-    }
-
-    fn read_validator_staking_reward_address(
-        &self,
-        key: &Self::Address,
-    ) -> std::result::Result<Option<Self::Address>, Self::Error> {
-        let value = self
-            .ctx
-            .read_bytes_pre(&validator_staking_reward_address_key(key))?;
-        Ok(value.map(|value| decode(value).unwrap()))
-    }
-
-    fn read_validator_consensus_key(
-        &self,
-        key: &Self::Address,
-    ) -> std::result::Result<Option<ValidatorConsensusKeys>, Self::Error> {
-        let value =
-            self.ctx.read_bytes_pre(&validator_consensus_key_key(key))?;
-        Ok(value.map(|value| decode(value).unwrap()))
-    }
-
-    fn read_validator_state(
-        &self,
-        key: &Self::Address,
-    ) -> std::result::Result<Option<ValidatorStates>, Self::Error> {
-        let value = self.ctx.read_bytes_pre(&validator_state_key(key))?;
-        Ok(value.map(|value| decode(value).unwrap()))
-    }
-
-    fn read_validator_total_deltas(
-        &self,
-        key: &Self::Address,
-    ) -> std::result::Result<Option<ValidatorTotalDeltas>, Self::Error> {
-        let value =
-            self.ctx.read_bytes_pre(&validator_total_deltas_key(key))?;
-        Ok(value.map(|value| decode(value).unwrap()))
-    }
-
-    fn read_validator_voting_power(
-        &self,
-        key: &Self::Address,
-    ) -> std::result::Result<Option<ValidatorVotingPowers>, Self::Error> {
-        let value =
-            self.ctx.read_bytes_pre(&validator_voting_power_key(key))?;
-        Ok(value.map(|value| decode(value).unwrap()))
-    }
-
-    fn read_validator_slashes(
-        &self,
-        key: &Self::Address,
-    ) -> std::result::Result<Vec<types::Slash>, Self::Error> {
-        let value = self.ctx.read_bytes_pre(&validator_slashes_key(key))?;
-        Ok(value
-            .map(|value| decode(value).unwrap())
-            .unwrap_or_default())
-    }
-
-    fn read_bond(
-        &self,
-        key: &BondId,
-    ) -> std::result::Result<Option<Bonds>, Self::Error> {
-        let value = self.ctx.read_bytes_pre(&bond_key(key))?;
-        Ok(value.map(|value| decode(value).unwrap()))
-    }
-
-    fn read_unbond(
-        &self,
-        key: &BondId,
-    ) -> std::result::Result<Option<Unbonds>, Self::Error> {
-        let value = self.ctx.read_bytes_pre(&unbond_key(key))?;
-        Ok(value.map(|value| decode(value).unwrap()))
-    }
-
-    fn read_validator_set(
-        &self,
-    ) -> std::result::Result<ValidatorSets, Self::Error> {
-        let value = self.ctx.read_bytes_pre(&validator_set_key())?.unwrap();
-        Ok(decode(value).unwrap())
-    }
-
-    fn read_total_voting_power(
-        &self,
-    ) -> std::result::Result<TotalVotingPowers, Self::Error> {
-        let value =
-            self.ctx.read_bytes_pre(&total_voting_power_key())?.unwrap();
-        Ok(decode(value).unwrap())
-    }
+impl_pos_read_only! {
+    type Error = native_vp::Error;
+    impl<'f, 'a, DB, H, CA> PosReadOnly for CtxPostStorageRead<'f, 'a, DB, H, CA>
+        where
+            DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
+            H: StorageHasher +'static,
+            CA: WasmCacheAccess +'static
 }
 
 impl From<native_vp::Error> for Error {
     fn from(err: native_vp::Error) -> Self {
         Self::NativeVpError(err)
+    }
+}
+
+impl From<storage_api::Error> for Error {
+    fn from(err: storage_api::Error) -> Self {
+        Self::StorageApi(err)
     }
 }
