@@ -28,8 +28,8 @@ pub fn main() -> Result<()> {
             cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
                 key_and_address_gen(ctx, args)
             }
-            cmds::WalletAddress::Find(cmds::AddressFind(args)) => {
-                address_find(ctx, args)
+            cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
+                address_or_alias_find(ctx, args)
             }
             cmds::WalletAddress::List(cmds::AddressList) => address_list(ctx),
             cmds::WalletAddress::Add(cmds::AddressAdd(args)) => {
@@ -191,17 +191,36 @@ fn address_list(ctx: Context) {
     }
 }
 
-/// Find address by its alias.
-fn address_find(ctx: Context, args: args::AddressFind) {
+/// Find address (alias) by its alias (address).
+fn address_or_alias_find(ctx: Context, args: args::AddressOrAliasFind) {
     let wallet = ctx.wallet;
-    if let Some(address) = wallet.find_address(&args.alias) {
-        println!("Found address {}", address.to_pretty_string());
-    } else {
-        println!(
-            "No address with alias {} found. Use the command `address list` \
-             to see all the known addresses.",
-            args.alias.to_lowercase()
+    if args.address.is_some() && args.alias.is_some() {
+        panic!(
+            "This should not be happening: clap should emit its own error \
+             message."
         );
+    } else if args.alias.is_some() {
+        if let Some(address) =
+            wallet.find_address(&args.alias.as_ref().unwrap())
+        {
+            println!("Found address {}", address.to_pretty_string());
+        } else {
+            println!(
+                "No address with alias {} found. Use the command `address \
+                 list` to see all the known addresses.",
+                args.alias.unwrap().to_lowercase()
+            );
+        }
+    } else if args.address.is_some() {
+        if let Some(alias) = wallet.find_alias(args.address.as_ref().unwrap()) {
+            println!("Found alias {}", alias);
+        } else {
+            println!(
+                "No alias with address {} found. Use the command `address \
+                 list` to see all the known addresses.",
+                args.address.unwrap()
+            );
+        }
     }
 }
 

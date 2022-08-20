@@ -9,7 +9,7 @@
 pub mod context;
 mod utils;
 
-use clap::{crate_authors, AppSettings, ArgMatches};
+use clap::{crate_authors, AppSettings, ArgGroup, ArgMatches};
 use color_eyre::eyre::Result;
 pub use utils::safe_exit;
 use utils::*;
@@ -481,7 +481,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
         Gen(AddressGen),
-        Find(AddressFind),
+        Find(AddressOrAliasFind),
         List(AddressList),
         Add(AddressAdd),
     }
@@ -507,7 +507,7 @@ pub mod cmds {
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(AddressGen::def())
-                .subcommand(AddressFind::def())
+                .subcommand(AddressOrAliasFind::def())
                 .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
         }
@@ -539,21 +539,23 @@ pub mod cmds {
 
     /// Find an address by its alias
     #[derive(Clone, Debug)]
-    pub struct AddressFind(pub args::AddressFind);
+    pub struct AddressOrAliasFind(pub args::AddressOrAliasFind);
 
-    impl SubCmd for AddressFind {
+    impl SubCmd for AddressOrAliasFind {
         const CMD: &'static str = "find";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| AddressFind(args::AddressFind::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                AddressOrAliasFind(args::AddressOrAliasFind::parse(matches))
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Find an address by its alias.")
-                .add_args::<args::AddressFind>()
+                .about(
+                    "Find an address by its alias or an alias by its address.",
+                )
+                .add_args::<args::AddressOrAliasFind>()
         }
     }
 
@@ -1403,7 +1405,7 @@ pub mod args {
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
-    use super::ArgMatches;
+    use super::{ArgGroup, ArgMatches};
     use crate::config;
     use crate::config::TendermintMode;
 
@@ -1480,6 +1482,7 @@ pub mod args {
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
+    const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
     const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
@@ -2893,14 +2896,16 @@ pub mod args {
 
     /// Wallet address lookup arguments
     #[derive(Clone, Debug)]
-    pub struct AddressFind {
-        pub alias: String,
+    pub struct AddressOrAliasFind {
+        pub alias: Option<String>,
+        pub address: Option<Address>,
     }
 
-    impl Args for AddressFind {
+    impl Args for AddressOrAliasFind {
         fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
-            Self { alias }
+            let alias = ALIAS_OPT.parse(matches);
+            let address = RAW_ADDRESS_OPT.parse(matches);
+            Self { alias, address }
         }
 
         fn def(app: App) -> App {
@@ -2908,6 +2913,16 @@ pub mod args {
                 ALIAS_OPT
                     .def()
                     .about("An alias associated with the address."),
+            )
+            .arg(
+                RAW_ADDRESS_OPT
+                    .def()
+                    .about("The bech32m encoded address string."),
+            )
+            .group(
+                ArgGroup::new("find_flags")
+                    .args(&[ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
+                    .required(true),
             )
         }
     }
