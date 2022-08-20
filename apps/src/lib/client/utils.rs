@@ -53,6 +53,7 @@ pub async fn join_network(
         chain_id,
         genesis_validator,
         pre_genesis_path,
+        dont_prefetch_wasm,
     }: args::JoinNetwork,
 ) {
     use tokio::fs;
@@ -336,8 +337,29 @@ pub async fn join_network(
         .await
         .unwrap();
     }
+    if !dont_prefetch_wasm {
+        fetch_wasms_aux(&base_dir, &chain_id).await;
+    }
 
     println!("Successfully configured for chain ID {}", chain_id);
+}
+
+pub async fn fetch_wasms(
+    global_args: args::Global,
+    args::FetchWasms { chain_id }: args::FetchWasms,
+) {
+    fetch_wasms_aux(&global_args.base_dir, &chain_id).await;
+}
+
+pub async fn fetch_wasms_aux(base_dir: &Path, chain_id: &ChainId) {
+    println!("Fetching wasms for chain ID {}...", chain_id);
+    let wasm_dir = {
+        let mut path = base_dir.to_owned();
+        path.push(chain_id.as_str());
+        path.push("wasm");
+        path
+    };
+    wasm_loader::pre_fetch_wasm(&wasm_dir).await;
 }
 
 /// Length of a Tendermint Node ID in bytes

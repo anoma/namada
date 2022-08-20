@@ -1262,6 +1262,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
+        FetchWasms(FetchWasms),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
     }
@@ -1273,11 +1274,15 @@ pub mod cmds {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let join_network =
                     SubCmd::parse(matches).map(Self::JoinNetwork);
+                let fetch_wasms = SubCmd::parse(matches).map(Self::FetchWasms);
                 let init_network =
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
-                join_network.or(init_network).or(init_genesis)
+                join_network
+                    .or(fetch_wasms)
+                    .or(init_network)
+                    .or(init_genesis)
             })
         }
 
@@ -1285,6 +1290,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Utilities.")
                 .subcommand(JoinNetwork::def())
+                .subcommand(FetchWasms::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -1307,6 +1313,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Configure Anoma to join an existing network.")
                 .add_args::<args::JoinNetwork>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FetchWasms(pub args::FetchWasms);
+
+    impl SubCmd for FetchWasms {
+        const CMD: &'static str = "fetch-wasms";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::FetchWasms::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Ensure pre-built wasms are present")
+                .add_args::<args::FetchWasms>()
         }
     }
 
@@ -1415,6 +1440,7 @@ pub mod args {
     const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("fee-token", DefaultFn(|| "XAN".into()));
     const FORCE: ArgFlag = flag("force");
+    const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_LIMIT: ArgDefault<token::Amount> =
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
@@ -2918,6 +2944,7 @@ pub mod args {
         pub chain_id: ChainId,
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
+        pub dont_prefetch_wasm: bool,
     }
 
     impl Args for JoinNetwork {
@@ -2925,10 +2952,12 @@ pub mod args {
             let chain_id = CHAIN_ID.parse(matches);
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
+            let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
+                dont_prefetch_wasm,
             }
         }
 
@@ -2936,6 +2965,25 @@ pub mod args {
             app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
                 .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
+            .arg(DONT_PREFETCH_WASM.def().about(
+                "Do not pre-fetch WASM.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FetchWasms {
+        pub chain_id: ChainId,
+    }
+
+    impl Args for FetchWasms {
+        fn parse(matches: &ArgMatches) -> Self {
+            let chain_id = CHAIN_ID.parse(matches);
+            Self { chain_id }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository, in which case it should have pre-built wasms available for download."))
         }
     }
 
