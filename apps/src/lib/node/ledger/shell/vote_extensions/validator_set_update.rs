@@ -229,6 +229,7 @@ mod test_vote_extensions {
     use tower_abci::request;
 
     use crate::node::ledger::shell::test_utils;
+    use crate::wallet;
 
     const FIRST_HEIGHT_WITH_VEXTS: BlockHeight = BlockHeight(1);
 
@@ -264,6 +265,47 @@ mod test_vote_extensions {
             .sign(protocol_key),
         );
 
+        let req = request::VerifyVoteExtension {
+            vote_extension: VoteExtension {
+                ethereum_events,
+                validator_set_update,
+            }
+            .try_to_vec()
+            .expect("Test failed"),
+            ..Default::default()
+        };
+        assert_eq!(
+            shell.verify_vote_extension(req).status,
+            i32::from(VerifyStatus::Reject)
+        );
+    }
+
+    /// Test that validator set update vote extensions signed by
+    /// a non-validator are rejected
+    #[test]
+    fn test_valset_upd_must_be_signed_by_validator() {
+        let (mut shell, _, _) = test_utils::setup();
+        shell.storage.last_height = FIRST_HEIGHT_WITH_VEXTS;
+        let (protocol_key, validator_addr) = {
+            let bertha_key = wallet::defaults::bertha_keypair();
+            let bertha_addr = wallet::defaults::bertha_address();
+            (bertha_key, bertha_addr)
+        };
+        let ethereum_events = ethereum_events::Vext::empty(
+            FIRST_HEIGHT_WITH_VEXTS,
+            validator_addr.clone(),
+        )
+        .sign(&protocol_key);
+        let validator_set_update = Some(
+            validator_set_update::Vext {
+                // TODO: get voting powers from storage, associated with eth
+                // addrs
+                voting_powers: std::collections::HashMap::new(),
+                validator_addr,
+                epoch: Epoch(1),
+            }
+            .sign(&protocol_key),
+        );
         let req = request::VerifyVoteExtension {
             vote_extension: VoteExtension {
                 ethereum_events,
