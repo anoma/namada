@@ -1726,6 +1726,7 @@ fn test_genesis_validators() -> Result<()> {
             chain_id.as_str(),
             "--pre-genesis-path",
             pre_genesis_path.as_ref(),
+            "--dont-prefetch-wasm",
         ],
         Some(5)
     )?;
@@ -1743,6 +1744,7 @@ fn test_genesis_validators() -> Result<()> {
             chain_id.as_str(),
             "--pre-genesis-path",
             pre_genesis_path.as_ref(),
+            "--dont-prefetch-wasm",
         ],
         Some(5)
     )?;

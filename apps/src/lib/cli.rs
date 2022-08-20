@@ -1440,6 +1440,7 @@ pub mod args {
     const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("fee-token", DefaultFn(|| "XAN".into()));
     const FORCE: ArgFlag = flag("force");
+    const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_LIMIT: ArgDefault<token::Amount> =
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
@@ -2927,6 +2928,7 @@ pub mod args {
         pub chain_id: ChainId,
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
+        pub dont_prefetch_wasm: bool,
     }
 
     impl Args for JoinNetwork {
@@ -2934,10 +2936,12 @@ pub mod args {
             let chain_id = CHAIN_ID.parse(matches);
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
+            let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
+                dont_prefetch_wasm,
             }
         }
 
@@ -2945,6 +2949,9 @@ pub mod args {
             app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
                 .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
+            .arg(DONT_PREFETCH_WASM.def().about(
+                "Do not pre-fetch WASM.",
+            ))
         }
     }
 

@@ -53,6 +53,7 @@ pub async fn join_network(
         chain_id,
         genesis_validator,
         pre_genesis_path,
+        dont_prefetch_wasm,
     }: args::JoinNetwork,
 ) {
     use tokio::fs;
@@ -343,7 +344,9 @@ pub async fn join_network(
         .await
         .unwrap();
     }
-    fetch_wasms_aux(&base_dir, &chain_id).await;
+    if !dont_prefetch_wasm {
+        fetch_wasms_aux(&base_dir, &chain_id).await;
+    }
 
     println!("Successfully configured for chain ID {}", chain_id);
 }
