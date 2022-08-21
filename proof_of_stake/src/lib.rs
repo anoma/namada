@@ -605,6 +605,17 @@ pub trait PosBase {
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total voting power of all validators (active and inactive).
     fn read_total_voting_power(&self) -> TotalVotingPowers;
+    /// Read PoS validator's Eth bridge governance key
+    fn read_validator_eth_cold_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<Self::PublicKey>;
+
+    /// Read PoS validator's Eth validator set update signing key
+    fn read_validator_eth_hot_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<Self::PublicKey>;
 
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
@@ -666,7 +677,7 @@ pub trait PosBase {
     );
     /// Write PoS validator's Eth validator set update signing key
     fn write_validator_eth_hot_key(
-        &self,
+        &mut self,
         address: &Self::Address,
         value: &ValidatorEthKey<Self::PublicKey>,
     );
