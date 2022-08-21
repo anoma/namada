@@ -7,6 +7,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use thiserror::Error;
 
 use self::storage as parameter_storage;
+use super::gas::READ_GAS_CONST;
 use super::governance::vp::is_proposal_accepted;
 use super::storage::types::{decode, encode};
 use super::storage::{types, Storage};
@@ -56,6 +57,9 @@ where
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
+        //TODO add gas
+        let used_gas = READ_GAS_CONST;
+        self.ctx.add_gas(used_gas)?;
         let result = keys_changed.iter().all(|key| {
             let key_type: KeyType = key.into();
             match key_type {
