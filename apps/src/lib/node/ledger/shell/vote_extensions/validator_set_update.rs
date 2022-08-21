@@ -157,7 +157,15 @@ where
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
         let total_voting_power = {
-            let prev_valset_epoch = self.storage.get_current_epoch().0 - 1;
+            let current_valset_epoch = self.storage.get_current_epoch().0;
+            if current_valset_epoch == Epoch(0) {
+                tracing::error!(
+                    epoch = ?current_valset_epoch,
+                    "Cannot compress validator set update vote extensions at the given epoch"
+                );
+                return None;
+            }
+            let prev_valset_epoch = current_valset_epoch - 1;
             u64::from(
                 self.storage.get_total_voting_power(Some(prev_valset_epoch)),
             )
