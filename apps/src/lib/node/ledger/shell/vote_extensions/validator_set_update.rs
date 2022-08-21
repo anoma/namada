@@ -406,4 +406,18 @@ mod test_vote_extensions {
 
         assert!(shell.validate_valset_upd_vext(vote_ext, prev_epoch + 1));
     }
+
+    /// Test if a [`validator_set_update::Vext`] with an incorrect signature
+    /// is rejected
+    #[test]
+    fn test_reject_bad_signatures() {
+        // TODO
+    }
+
+    /// Test if a [`validator_set_update::Vext`] is signed with a secp key
+    /// that belongs to an active validator of some previous epoch
+    #[test]
+    fn test_secp_key_belongs_to_active_validator() {
+        // TODO
+    }
 }
