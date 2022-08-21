@@ -282,6 +282,7 @@ mod test_vote_extensions {
                 // invalid epoch, should have been: current epoch + 1
                 epoch: Epoch(2),
             }
+            // TODO: sign with secp key
             .sign(protocol_key),
         );
 
@@ -409,9 +410,51 @@ mod test_vote_extensions {
 
     /// Test if a [`validator_set_update::Vext`] with an incorrect signature
     /// is rejected
+    // TODO:
+    // - sign with secp key
+    // - add validator voting powers from storage
     #[test]
     fn test_reject_bad_signatures() {
-        // TODO
+        let (mut shell, _, _) = test_utils::setup();
+        shell.storage.last_height = FIRST_HEIGHT_WITH_VEXTS;
+        let validator_addr =
+            shell.mode.get_validator_address().unwrap().clone();
+
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+
+        let ethereum_events = ethereum_events::Vext::empty(
+            FIRST_HEIGHT_WITH_VEXTS,
+            validator_addr.clone(),
+        )
+        .sign(protocol_key);
+
+        let validator_set_update = {
+            let mut ext = validator_set_update::Vext {
+                // TODO: get voting powers from storage, associated with eth
+                // addrs
+                voting_powers: std::collections::HashMap::new(),
+                validator_addr,
+                epoch: Epoch(1),
+            }
+            // TODO: sign with secp key
+            .sign(protocol_key);
+            ext.sig = test_utils::invalidate_signature(ext.sig);
+            Some(ext)
+        };
+
+        let req = request::VerifyVoteExtension {
+            vote_extension: VoteExtension {
+                ethereum_events,
+                validator_set_update,
+            }
+            .try_to_vec()
+            .expect("Test failed"),
+            ..Default::default()
+        };
+        assert_eq!(
+            shell.verify_vote_extension(req).status,
+            i32::from(VerifyStatus::Reject)
+        );
     }
 
     /// Test if a [`validator_set_update::Vext`] is signed with a secp key
