@@ -34,7 +34,7 @@
 //! the modifications of its predecessor transition).
 //!
 //! The PoS storage modifications are modelled using
-//! [`testing::PosStorageChange`].
+//! `testing::PosStorageChange`.
 //!
 //! - Bond: Requires a validator account in the state (the `#{validator}`
 //!   segments in the keys below). Some of the storage change are optional,
@@ -50,7 +50,7 @@
 //! - Unbond: Requires a bond in the state (the `#{owner}` and `#{validator}`
 //!   segments in the keys below must be the owner and a validator of an
 //!   existing bond). The bond's total amount must be greater or equal to the
-//!   amount that' being unbonded. Some of the storage changes are optional,
+//!   amount that is being unbonded. Some of the storage changes are optional,
 //!   which depends on whether the unbonding decreases voting power of the
 //!   validator.
 //!     - `#{PoS}/bond/#{owner}/#{validator}`
@@ -99,15 +99,54 @@
 //! - add arb invalid storage changes
 //! - add slashes
 
+use namada::ledger::pos::namada_proof_of_stake::PosBase;
+use namada::types::storage::Epoch;
+use namada_vm_env::proof_of_stake::{
+    staking_token_address, GenesisValidator, PosParams,
+};
+
+use crate::tx::tx_host_env;
+
+/// initialize proof-of-stake genesis with the given list of validators and
+/// parameters.
+pub fn init_pos(
+    genesis_validators: &[GenesisValidator],
+    params: &PosParams,
+    start_epoch: Epoch,
+) {
+    tx_host_env::init();
+
+    tx_host_env::with(|tx_env| {
+        // Ensure that all the used
+        // addresses exist
+        tx_env.spawn_accounts([&staking_token_address()]);
+        for validator in genesis_validators {
+            tx_env.spawn_accounts([
+                &validator.address,
+                &validator.staking_reward_address,
+            ]);
+        }
+        tx_env.storage.block.epoch = start_epoch;
+        // Initialize PoS storage
+        tx_env
+            .storage
+            .init_genesis(
+                params,
+                genesis_validators.iter(),
+                u64::from(start_epoch),
+            )
+            .unwrap();
+    });
+}
+
 #[cfg(test)]
 mod tests {
 
-    use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosParams;
     use namada::types::storage::Epoch;
     use namada::types::token;
     use namada_vm_env::proof_of_stake::parameters::testing::arb_pos_params;
-    use namada_vm_env::proof_of_stake::{staking_token_address, PosVP};
+    use namada_vm_env::proof_of_stake::PosVP;
     use namada_vm_env::tx_prelude::Address;
     use proptest::prelude::*;
     use proptest::prop_state_machine;
@@ -119,8 +158,9 @@ mod tests {
         arb_invalid_pos_action, arb_valid_pos_action, InvalidPosAction,
         ValidPosAction,
     };
+    use super::*;
     use crate::native_vp::TestNativeVpEnv;
-    use crate::tx::{tx_host_env, TestTxEnv};
+    use crate::tx::tx_host_env;
 
     prop_state_machine! {
         #![proptest_config(Config {
@@ -189,28 +229,8 @@ mod tests {
         ) -> Self::ConcreteState {
             println!();
             println!("New test case");
-
             // Initialize the transaction env
-            let mut tx_env = TestTxEnv::default();
-
-            // Set the epoch
-            let storage = &mut tx_env.storage;
-            storage.block.epoch = initial_state.epoch;
-
-            // Initialize PoS storage
-            storage
-                .init_genesis(
-                    &initial_state.params,
-                    [].into_iter(),
-                    initial_state.epoch,
-                )
-                .unwrap();
-
-            // Make sure that the staking token account exist
-            tx_env.spawn_accounts([staking_token_address()]);
-
-            // Use the `tx_env` for host env calls
-            tx_host_env::set(tx_env);
+            init_pos(&[], &initial_state.params, initial_state.epoch);
 
             // The "genesis" block state
             for change in initial_state.committed_valid_actions {
@@ -596,11 +616,14 @@ pub mod testing {
     #[derivative(Debug)]
 
     pub enum PosStorageChange {
-        /// Ensure that the account exists when initialing a valid new
+        /// Ensure that the account exists when initializing a valid new
         /// validator or delegation from a new owner
         SpawnAccount {
             address: Address,
         },
+        /// Add tokens included in a new bond at given offset. Bonded tokens
+        /// are added at pipeline offset and unbonded tokens are added as
+        /// negative values at unbonding offset.
         Bond {
             owner: Address,
             validator: Address,
@@ -1131,9 +1154,10 @@ pub mod testing {
                     let amount: u64 = delta.try_into().unwrap();
                     let amount: token::Amount = amount.into();
                     let mut value = Bond {
-                        deltas: HashMap::default(),
+                        pos_deltas: HashMap::default(),
+                        neg_deltas: Default::default(),
                     };
-                    value.deltas.insert(
+                    value.pos_deltas.insert(
                         (current_epoch + offset.value(params)).into(),
                         amount,
                     );
@@ -1158,34 +1182,27 @@ pub mod testing {
                             );
                             bonds
                         }
-                        None => Bonds::init(value, current_epoch, params),
+                        None => Bonds::init_at_offset(
+                            value,
+                            current_epoch,
+                            offset,
+                            params,
+                        ),
                     }
                 } else {
                     let mut bonds = bonds.unwrap_or_else(|| {
                         Bonds::init(Default::default(), current_epoch, params)
                     });
                     let to_unbond: u64 = (-delta).try_into().unwrap();
-                    let mut to_unbond: token::Amount = to_unbond.into();
-                    let to_unbond = &mut to_unbond;
-                    bonds.rev_update_while(
-                        |bonds, _epoch| {
-                            bonds.deltas.retain(|_epoch_start, bond_delta| {
-                                if *to_unbond == 0.into() {
-                                    return true;
-                                }
-                                if to_unbond > bond_delta {
-                                    *to_unbond -= *bond_delta;
-                                    *bond_delta = 0.into();
-                                } else {
-                                    *bond_delta -= *to_unbond;
-                                    *to_unbond = 0.into();
-                                }
-                                // Remove bonds with no tokens left
-                                *bond_delta != 0.into()
-                            });
-                            *to_unbond != 0.into()
+                    let to_unbond: token::Amount = to_unbond.into();
+
+                    bonds.add_at_offset(
+                        Bond {
+                            pos_deltas: Default::default(),
+                            neg_deltas: to_unbond,
                         },
                         current_epoch,
+                        offset,
                         params,
                     );
                     bonds
@@ -1217,7 +1234,7 @@ pub mod testing {
                     && bond_epoch >= bonds.last_update().into()
                 {
                     if let Some(bond) = bonds.get_delta_at_epoch(bond_epoch) {
-                        for (start_epoch, delta) in &bond.deltas {
+                        for (start_epoch, delta) in &bond.pos_deltas {
                             if delta >= &to_unbond {
                                 value.deltas.insert(
                                     (
@@ -1592,7 +1609,7 @@ pub mod testing {
 
         // any u64 but `0`
         let arb_delta =
-            prop_oneof![(-(u64::MAX as i128)..0), (1..=u64::MAX as i128),];
+            prop_oneof![(-(u32::MAX as i128)..0), (1..=u32::MAX as i128),];
 
         prop_oneof![
             (
