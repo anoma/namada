@@ -1,4 +1,4 @@
-//! Implementation of the [`PrepareProposal`] ABCI++ method for the Shell
+//! Implementation of the `PrepareProposal` ABCI++ method for the Shell
 
 #[cfg(not(feature = "ABCI"))]
 mod prepare_block {
@@ -172,7 +172,8 @@ mod prepare_block {
 
         /// Compresses a set of signed Ethereum events into a single
         /// [`ethereum_events::VextDigest`], whilst filtering invalid
-        /// [`Signed<ethereum_events::Vext>`] instances in the process
+        /// [`namada::proto::Signed<ethereum_events::Vext>`] instances in the
+        /// process
         // TODO: rename this as `compress_vote_extensions`, and return
         // a `VoteExtensionDigest`, which will contain both digests of
         // ethereum events and validator set update vote extensions
