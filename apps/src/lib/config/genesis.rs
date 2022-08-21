@@ -165,6 +165,10 @@ pub mod genesis_config {
     pub struct ValidatorConfig {
         // Public key for consensus. (default: generate)
         pub consensus_public_key: Option<HexString>,
+        // Public key (cold) for eth governance. (default: generate)
+        pub eth_cold_key: Option<HexString>,
+        // Public key (hot) for eth bridge. (default: generate)
+        pub eth_hot_key: Option<HexString>,
         // Public key for validator account. (default: generate)
         pub account_public_key: Option<HexString>,
         // Public key for staking reward account. (default: generate)
@@ -315,6 +319,18 @@ pub mod genesis_config {
                     .to_public_key()
                     .unwrap(),
                 staking_reward_key: config
+                    .staking_reward_public_key
+                    .as_ref()
+                    .unwrap()
+                    .to_public_key()
+                    .unwrap(),
+                eth_cold_key: config
+                    .staking_reward_public_key
+                    .as_ref()
+                    .unwrap()
+                    .to_public_key()
+                    .unwrap(),
+                eth_hot_key: config
                     .staking_reward_public_key
                     .as_ref()
                     .unwrap()
@@ -752,8 +768,27 @@ pub fn genesis() -> Genesis {
         24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 77, 162, 243, 125, 240, 206,
     ])
     .unwrap();
+
+    // TODO: should these bytes be different from the ed above? Should I
+    // generate them from somewhere? For now I'm just randomly
+    // adjusting some bytes, assuming that is fine.
+    let secp_eth_cold_keypair = secp256k1::SecretKey::try_from_slice(&[
+        64, 198, 87, 204, 44, 94, 234, 228, 217, 72, 245, 27, 40, 2, 151, 174,
+        24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 65, 162, 243, 125, 240, 206,
+    ])
+    .unwrap();
+    let secp_eth_hot_keypair = secp256k1::SecretKey::try_from_slice(&[
+        58, 198, 87, 204, 44, 94, 122, 228, 217, 72, 245, 27, 40, 2, 151, 174,
+        24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 77, 162, 243, 125, 240, 206,
+    ])
+    .unwrap();
+
     let staking_reward_keypair =
         common::SecretKey::try_from_sk(&ed_staking_reward_keypair).unwrap();
+    let eth_cold_keypair =
+        common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
+    let eth_hot_keypair =
+        common::SecretKey::try_from_sk(&secp_eth_hot_keypair).unwrap();
     let address = wallet::defaults::validator_address();
     let staking_reward_address = Address::decode("atest1v4ehgw36xcersvee8qerxd35x9prsw2xg5erxv6pxfpygd2x89z5xsf5xvmnysejgv6rwd2rnj2avt").unwrap();
     let (protocol_keypair, dkg_keypair) = wallet::defaults::validator_keys();
@@ -764,6 +799,8 @@ pub fn genesis() -> Genesis {
             tokens: token::Amount::whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
             staking_reward_key: staking_reward_keypair.ref_to(),
+            eth_cold_key: eth_cold_keypair.ref_to(),
+            eth_hot_key: eth_hot_keypair.ref_to(),
         },
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),
