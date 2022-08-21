@@ -62,6 +62,8 @@ pub fn init_validator(
     InitValidator {
         account_key,
         consensus_key,
+        eth_cold_key,
+        eth_hot_key,
         rewards_account_key,
         protocol_key,
         dkg_key,
@@ -84,10 +86,14 @@ pub fn init_validator(
     let pk_key = key::pk_key(&rewards_address);
     tx::write(&pk_key.to_string(), &rewards_account_key);
 
+    let eth_cold_key = key::common::PublicKey::Secp256k1(eth_cold_key);
+    let eth_hot_key = key::common::PublicKey::Secp256k1(eth_hot_key);
     PoS.become_validator(
         &validator_address,
         &rewards_address,
         &consensus_key,
+        &eth_cold_key,
+        &eth_hot_key,
         current_epoch,
     )?;
     Ok((validator_address, rewards_address))
@@ -166,6 +172,20 @@ impl namada_proof_of_stake::PosReadOnly for PoS {
 
     fn read_total_voting_power(&self) -> TotalVotingPowers {
         tx::read(total_voting_power_key().to_string()).unwrap()
+    }
+
+    fn read_validator_eth_cold_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<Self::PublicKey> {
+        tx::read(validator_eth_cold_key_key(key).to_string())
+    }
+
+    fn read_validator_eth_hot_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<Self::PublicKey> {
+        tx::read(validator_eth_hot_key_key(key).to_string())
     }
 }
 
@@ -257,5 +277,21 @@ impl namada_proof_of_stake::PosActions for PoS {
         dest: &Self::Address,
     ) {
         crate::token::tx::transfer(src, dest, token, amount)
+    }
+
+    fn write_validator_eth_cold_key(
+        &mut self,
+        address: &Self::Address,
+        value: types::ValidatorEthKey<Self::PublicKey>,
+    ) {
+        tx::write(validator_eth_cold_key_key(address).to_string(), &value)
+    }
+
+    fn write_validator_eth_hot_key(
+        &self,
+        address: &Self::Address,
+        value: types::ValidatorEthKey<Self::PublicKey>,
+    ) {
+        tx::write(validator_eth_hot_key_key(address).to_string(), &value)
     }
 }
