@@ -1089,6 +1089,12 @@ pub fn init_genesis_validator(
                 consensus_public_key: Some(HexString(
                     pre_genesis.consensus_key.ref_to().to_string(),
                 )),
+                eth_cold_key: Some(HexString(
+                    pre_genesis.eth_cold_key.ref_to().to_string(),
+                )),
+                eth_hot_key: Some(HexString(
+                    pre_genesis.eth_hot_key.ref_to().to_string(),
+                )),
                 account_public_key: Some(HexString(
                     pre_genesis.account_key.ref_to().to_string(),
                 )),
