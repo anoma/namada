@@ -7,7 +7,7 @@ use tendermint_proto::abci::{
     ExecTxResult, RequestProcessProposal, ResponseProcessProposal,
 };
 
-use super::queries::QueriesExt;
+use super::queries::{QueriesExt, SendValsetUpd};
 use super::*;
 
 impl<D, H> Shell<D, H>
@@ -246,6 +246,21 @@ where
                                 .into(),
                         }
                     }
+                }
+                ProtocolTxType::ValidatorSetUpdate(_digest) => {
+                    if !self.storage.can_send_validator_set_update(
+                        SendValsetUpd::AtPrevHeight(self.storage.last_height),
+                    ) {
+                        return TxResult {
+                            code: ErrorCodes::InvalidVoteExtension.into(),
+                            info: "Process proposal rejected a validator set \
+                                   update vote extension issued at an invalid \
+                                   block height"
+                                .into(),
+                        };
+                    }
+
+                    todo!()
                 }
                 _ => TxResult {
                     code: ErrorCodes::InvalidTx.into(),
