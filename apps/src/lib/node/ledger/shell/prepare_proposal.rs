@@ -100,16 +100,17 @@ mod prepare_block {
                 .compress_ethereum_events(eth_events)
                 .expect(NOT_ENOUGH_VOTING_POWER_MSG);
 
-            let validator_set_update = self
-                .storage
-                .can_send_validator_set_update(SendValsetUpd::AtPrevHeight(
-                    self.storage.last_height,
-                ))
-                .then(|| ())
-                .map(|()| {
-                    self.compress_valset_updates(valset_upds)
-                        .expect(NOT_ENOUGH_VOTING_POWER_MSG)
-                });
+            let validator_set_update =
+                if self.storage.can_send_validator_set_update(
+                    SendValsetUpd::AtPrevHeight(self.storage.last_height),
+                ) {
+                    Some(
+                        self.compress_valset_updates(valset_upds)
+                            .expect(NOT_ENOUGH_VOTING_POWER_MSG),
+                    )
+                } else {
+                    None
+                };
 
             let protocol_key = self
                 .mode
