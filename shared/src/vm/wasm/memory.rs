@@ -18,6 +18,8 @@ use wasmer_vm::{
 use crate::vm::memory::VmMemory;
 use crate::vm::types::VpInput;
 
+use crate::ledger::gas::{WRITE_GAS_PER_BYTE, READ_GAS_PER_BYTE, READ_GAS_CONST, WRITE_GAS_CONST};
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
@@ -254,13 +256,13 @@ impl VmMemory for WasmMemory {
     fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)> {
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
         let bytes = read_memory_bytes(memory, offset, len)?;
-        let gas = bytes.len();
+        let gas = READ_GAS_PER_BYTE * (bytes.len() as u64) + READ_GAS_CONST;
         Ok((bytes, gas as _))
     }
 
     /// Write bytes into memory at the given offset and return the gas cost
     fn write_bytes(&self, offset: u64, bytes: impl AsRef<[u8]>) -> Result<u64> {
-        let gas = bytes.as_ref().len();
+        let gas = WRITE_GAS_PER_BYTE * (bytes.as_ref().len() as u64) + WRITE_GAS_CONST;
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
         write_memory_bytes(memory, offset, bytes)?;
         Ok(gas as _)

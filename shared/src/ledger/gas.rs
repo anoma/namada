@@ -20,6 +20,10 @@ pub enum Error {
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const BASE_TRANSACTION_FEE: u64 = 2;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
+pub const WRITE_GAS_PER_BYTE: u64 = 2;
+pub const READ_GAS_PER_BYTE: u64 = 1;
+pub const READ_GAS_CONST : u64 = 1;
+pub const WRITE_GAS_CONST : u64 = 2;
 
 /// The maximum value should be less or equal to i64::MAX
 /// to avoid the gas overflow when sending this to ABCI
