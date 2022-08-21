@@ -160,6 +160,7 @@ pub mod genesis_config {
         pub validator: HashMap<String, ValidatorConfig>,
     }
 
+    // TODO add eth keys here
     #[derive(Clone, Default, Debug, Deserialize, Serialize)]
     pub struct ValidatorConfig {
         // Public key for consensus. (default: generate)
@@ -298,6 +299,7 @@ pub mod genesis_config {
         let reward_vp_config = wasm.get(reward_vp_name).unwrap();
 
         Validator {
+            // TODO add eth keys here
             pos_data: GenesisValidator {
                 address: Address::decode(&config.address.as_ref().unwrap())
                     .unwrap(),
