@@ -1,5 +1,6 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
+
 use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::voting_power::FractionalVotingPower;
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
@@ -9,6 +10,16 @@ use tendermint_proto::abci::{
 
 use super::queries::{QueriesExt, SendValsetUpd};
 use super::*;
+
+/// Contains stateful data about the number of vote extension
+/// digests found as protocol transactions in a proposed block.
+#[derive(Default)]
+struct DigestCounters {
+    /// The number of Ethereum events vote extensions found thus far.
+    eth_ev_digest_num: usize,
+    /// The number of validator set update vote extensions found thus far.
+    valset_upd_digest_num: usize,
+}
 
 impl<D, H> Shell<D, H>
 where
@@ -40,7 +51,7 @@ where
             "Received block proposal",
         );
         // the number of vote extension digests included in the block proposal
-        let mut eth_ev_digest_num = 0;
+        let mut counters = DigestCounters::default();
         let tx_results: Vec<ExecTxResult> = req
             .txs
             .iter()
@@ -56,14 +67,28 @@ where
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
-        let invalid_num_of_eth_ev_digests = eth_ev_digest_num != 1;
+        let invalid_num_of_eth_ev_digests =
+            self.check_eth_events_num(&counters);
         if invalid_num_of_eth_ev_digests {
             tracing::warn!(
                 proposer = ?hex::encode(&req.proposer_address),
                 height = req.height,
                 hash = ?hex::encode(&req.hash),
-                eth_ev_digest_num,
+                eth_ev_digest_num = counters.eth_ev_digest_num,
                 "Found invalid number of Ethereum events vote extension digests, proposed block \
+                 will be rejected"
+            );
+        }
+
+        let invalid_num_of_valset_upd_digests =
+            self.check_valset_upd_num(&counters);
+        if invalid_num_of_valset_upd_digests {
+            tracing::warn!(
+                proposer = ?hex::encode(&req.proposer_address),
+                height = req.height,
+                hash = ?hex::encode(&req.hash),
+                valset_upd_digest_num = counters.valset_upd_digest_num,
+                "Found invalid number of validator set update vote extension digests, proposed block \
                  will be rejected"
             );
         }
@@ -87,7 +112,11 @@ where
             );
         }
 
-        let status = if invalid_num_of_eth_ev_digests || invalid_txs {
+        let will_reject_proposal = invalid_num_of_eth_ev_digests
+            || invalid_num_of_valset_upd_digests
+            || invalid_txs;
+
+        let status = if will_reject_proposal {
             ProposalStatus::Reject
         } else {
             ProposalStatus::Accept
@@ -144,7 +173,7 @@ where
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
-        eth_ev_digest_num: &mut usize,
+        counters: &mut DigestCounters,
     ) -> TxResult {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
             |err| {
@@ -188,7 +217,7 @@ where
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthereumEvents(digest) => {
-                    *eth_ev_digest_num += 1;
+                    counters.eth_ev_digest_num += 1;
 
                     let extensions =
                         digest.decompress(self.storage.last_height);
@@ -338,6 +367,24 @@ where
         _req: shim::request::RevertProposal,
     ) -> shim::response::RevertProposal {
         Default::default()
+    }
+
+    /// Checks if we have found the correct number of Ethereum events
+    /// vote extensions in [`DigestCounters`].
+    fn check_eth_events_num(&self, c: &DigestCounters) -> bool {
+        c.eth_ev_digest_num == 1
+    }
+
+    /// Checks if we have found the correct number of validator set update
+    /// vote extensions in [`DigestCounters`].
+    fn check_valset_upd_num(&self, c: &DigestCounters) -> bool {
+        if self.storage.can_send_validator_set_update(
+            SendValsetUpd::AtPrevHeight(self.storage.last_height),
+        ) {
+            c.valset_upd_digest_num == 1
+        } else {
+            true
+        }
     }
 }
 
