@@ -1,0 +1,8 @@
+allow-branch               = ["main", "maint-*"]
+consolidate-commits        = true
+disable-push               = true
+disable-publish            = true
+disable-tag                = true
+no-dev-version             = true
+pre-release-commit-message = "fixup! Namada {{version}}"
+shared-version             = true
