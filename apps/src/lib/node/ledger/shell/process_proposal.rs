@@ -44,27 +44,27 @@ where
             "Received block proposal",
         );
         // the number of vote extension digests included in the block proposal
-        let mut vote_ext_digest_num = 0;
+        let mut eth_ev_digest_num = 0;
         let tx_results: Vec<ExecTxResult> = req
             .txs
             .iter()
             .map(|tx_bytes| {
                 ExecTxResult::from(
-                    self.process_single_tx(tx_bytes, &mut vote_ext_digest_num),
+                    self.process_single_tx(tx_bytes, &mut eth_ev_digest_num),
                 )
             })
             .collect();
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
-        let too_many_vext_digests = vote_ext_digest_num > 1;
-        if too_many_vext_digests {
+        let invalid_num_of_eth_ev_digests = eth_ev_digest_num != 1;
+        if invalid_num_of_eth_ev_digests {
             tracing::warn!(
                 proposer = ?hex::encode(&req.proposer_address),
                 height = req.height,
                 hash = ?hex::encode(&req.hash),
-                vote_ext_digest_num,
-                "Found too many vote extension transactions, proposed block \
+                eth_ev_digest_num,
+                "Found invalid number of Ethereum events vote extension digests, proposed block \
                  will be rejected"
             );
         }
@@ -88,7 +88,7 @@ where
             );
         }
 
-        let status = if too_many_vext_digests || invalid_txs {
+        let status = if invalid_num_of_eth_ev_digests || invalid_txs {
             ProposalStatus::Reject
         } else {
             ProposalStatus::Accept
