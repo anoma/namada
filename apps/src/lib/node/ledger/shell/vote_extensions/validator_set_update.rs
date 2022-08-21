@@ -58,6 +58,13 @@ where
         (VotingPower, validator_set_update::SignedVext),
         VoteExtensionError,
     > {
+        if new_epoch.0 == 0 {
+            tracing::error!(
+                "We should always be signing over validator set updates with \
+                 the next epoch"
+            );
+            return Err(VoteExtensionError::UnexpectedSequenceNumber);
+        }
         if ext.data.epoch != new_epoch {
             let ext_epoch = ext.data.epoch;
             tracing::error!(
