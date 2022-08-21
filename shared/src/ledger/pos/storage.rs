@@ -22,6 +22,8 @@ const VALIDATOR_ADDRESS_RAW_HASH: &str = "address_raw_hash";
 const VALIDATOR_STAKING_REWARD_ADDRESS_STORAGE_KEY: &str =
     "staking_reward_address";
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
+const VALIDATOR_ETH_COLD_KEY_STORAGE_KEY: &str = "eth_cold_key";
+const VALIDATOR_ETH_HOT_KEY_STORAGE_KEY: &str = "eth_hot_key";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
 const VALIDATOR_TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const VALIDATOR_VOTING_POWER_STORAGE_KEY: &str = "voting_power";
@@ -135,6 +137,56 @@ pub fn is_validator_consensus_key_key(key: &Key) -> Option<&Address> {
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
             && key == VALIDATOR_CONSENSUS_KEY_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Storage key for validator's eth cold key.
+pub fn validator_eth_cold_key_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_ETH_COLD_KEY_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's eth cold key?
+pub fn is_validator_eth_cold_key_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_ETH_COLD_KEY_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Storage key for validator's eth hot key.
+pub fn validator_eth_hot_key_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_ETH_HOT_KEY_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's eth hot key?
+pub fn is_validator_eth_hot_key_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_ETH_HOT_KEY_STORAGE_KEY =>
         {
             Some(validator)
         }
@@ -450,6 +502,23 @@ where
         decode(value.unwrap()).unwrap()
     }
 
+    fn read_validator_eth_cold_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<Self::PublicKey> {
+        let (value, _gas) =
+            self.read(&validator_eth_cold_key_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap())
+    }
+
+    fn read_validator_eth_hot_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<Self::PublicKey> {
+        let (value, _gas) = self.read(&validator_eth_hot_key_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap())
+    }
+
     fn write_pos_params(&mut self, params: &PosParams) {
         self.write(&params_key(), encode(params)).unwrap();
     }
@@ -526,6 +595,24 @@ where
 
     fn write_total_voting_power(&mut self, value: &TotalVotingPowers) {
         self.write(&total_voting_power_key(), encode(value))
+            .unwrap();
+    }
+
+    fn write_validator_eth_cold_key(
+        &mut self,
+        address: &Self::Address,
+        value: &types::ValidatorEthKey<Self::PublicKey>,
+    ) {
+        self.write(&validator_eth_cold_key_key(address), encode(value))
+            .unwrap();
+    }
+
+    fn write_validator_eth_hot_key(
+        &mut self,
+        address: &Self::Address,
+        value: &types::ValidatorEthKey<Self::PublicKey>,
+    ) {
+        self.write(&validator_eth_hot_key_key(address), encode(value))
             .unwrap();
     }
 

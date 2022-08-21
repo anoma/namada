@@ -21,10 +21,11 @@ use super::{
     is_validator_staking_reward_address_key, is_validator_total_deltas_key,
     is_validator_voting_power_key, params_key, staking_token_address,
     total_voting_power_key, unbond_key, validator_consensus_key_key,
-    validator_set_key, validator_slashes_key,
-    validator_staking_reward_address_key, validator_state_key,
-    validator_total_deltas_key, validator_voting_power_key, BondId, Bonds,
-    Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
+    validator_eth_cold_key_key, validator_eth_hot_key_key, validator_set_key,
+    validator_slashes_key, validator_staking_reward_address_key,
+    validator_state_key, validator_total_deltas_key,
+    validator_voting_power_key, BondId, Bonds, Unbonds, ValidatorConsensusKeys,
+    ValidatorSets, ValidatorTotalDeltas,
 };
 use crate::ledger::governance::vp::is_proposal_accepted;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
@@ -414,6 +415,23 @@ where
             .unwrap()
             .unwrap();
         decode(value).unwrap()
+    }
+
+    fn read_validator_eth_cold_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<Self::PublicKey> {
+        let value =
+            self.ctx.read_pre(&validator_eth_cold_key_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap())
+    }
+
+    fn read_validator_eth_hot_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<Self::PublicKey> {
+        let value = self.ctx.read_pre(&validator_eth_hot_key_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap())
     }
 }
 
