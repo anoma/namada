@@ -1482,6 +1482,9 @@ pub mod args {
         arg_opt("account-key");
     const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
         arg_opt("consensus-key");
+    const VALIDATOR_ETH_COLD_KEY: ArgOpt<WalletKeypair> =
+        arg_opt("eth-cold-key");
+    const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> = arg_opt("eth-hot-key");
     const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
     const VALUE: ArgOpt<String> = arg_opt("value");
     const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
@@ -1700,6 +1703,8 @@ pub mod args {
         pub scheme: SchemeType,
         pub account_key: Option<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
+        pub eth_cold_key: Option<WalletKeypair>,
+        pub eth_hot_key: Option<WalletKeypair>,
         pub rewards_account_key: Option<WalletPublicKey>,
         pub protocol_key: Option<WalletPublicKey>,
         pub validator_vp_code_path: Option<PathBuf>,
@@ -1714,6 +1719,8 @@ pub mod args {
             let scheme = SCHEME.parse(matches);
             let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
+            let eth_cold_key = VALIDATOR_ETH_COLD_KEY.parse(matches);
+            let eth_hot_key = VALIDATOR_ETH_HOT_KEY.parse(matches);
             let rewards_account_key = REWARDS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
@@ -1725,6 +1732,8 @@ pub mod args {
                 scheme,
                 account_key,
                 consensus_key,
+                eth_cold_key,
+                eth_hot_key,
                 rewards_account_key,
                 protocol_key,
                 validator_vp_code_path,
@@ -1748,7 +1757,18 @@ pub mod args {
                 ))
                 .arg(VALIDATOR_CONSENSUS_KEY.def().about(
                     "A consensus key for the validator account. A new one \
-                     will be generated if none given.",
+                     will be generated if none given. Note that this must be \
+                     ed25519.",
+                ))
+                .arg(VALIDATOR_ETH_COLD_KEY.def().about(
+                    "An Eth cold key for the validator account. A new one \
+                     will be generated if none given. Note that this must be \
+                     secp256k1.",
+                ))
+                .arg(VALIDATOR_ETH_COLD_KEY.def().about(
+                    "An Eth cold key for the validator account. A new one \
+                     will be generated if none given. Note that this must be \
+                     secp256k1.",
                 ))
                 .arg(REWARDS_KEY.def().about(
                     "A public key for the staking reward account. A new one \
