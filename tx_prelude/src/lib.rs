@@ -110,17 +110,6 @@ pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 impl StorageRead<'_> for Ctx {
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
 
-    fn read<T: BorshDeserialize>(
-        &self,
-        key: &namada::types::storage::Key,
-    ) -> Result<Option<T>, storage_api::Error> {
-        let key = key.to_string();
-        let read_result =
-            unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
-        Ok(read_from_buffer(read_result, anoma_tx_result_buffer)
-            .and_then(|t| T::try_from_slice(&t[..]).ok()))
-    }
-
     fn read_bytes(
         &self,
         key: &namada::types::storage::Key,
@@ -201,15 +190,6 @@ impl StorageRead<'_> for Ctx {
 }
 
 impl StorageWrite for Ctx {
-    fn write<T: BorshSerialize>(
-        &mut self,
-        key: &namada::types::storage::Key,
-        val: T,
-    ) -> storage_api::Result<()> {
-        let buf = val.try_to_vec().unwrap();
-        self.write_bytes(key, buf)
-    }
-
     fn write_bytes(
         &mut self,
         key: &namada::types::storage::Key,
