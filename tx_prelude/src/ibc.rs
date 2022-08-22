@@ -1,7 +1,7 @@
 //! IBC lower-level functions for transactions.
 
 pub use namada::ledger::ibc::handler::{Error, IbcActions, Result};
-use namada::ledger::storage_api::StorageRead;
+use namada::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::ledger::tx_env::TxEnv;
 use namada::types::address::Address;
 pub use namada::types::ibc::IbcEvent;
