@@ -398,6 +398,7 @@ where
             let pos_params = self.storage.read_pos_params();
             let current_epoch = self.storage.block.epoch;
             for evidence in byzantine_validators {
+                tracing::info!("Processing evidence {evidence:?}.");
                 let evidence_height = match u64::try_from(evidence.height) {
                     Ok(height) => height,
                     Err(err) => {
@@ -455,19 +456,7 @@ where
                     }
                 };
                 let validator_raw_hash = match evidence.validator {
-                    Some(validator) => {
-                        match String::from_utf8(validator.address) {
-                            Ok(raw_hash) => raw_hash,
-                            Err(err) => {
-                                tracing::error!(
-                                    "Evidence failed to decode validator \
-                                     address from utf-8 with {}",
-                                    err
-                                );
-                                continue;
-                            }
-                        }
-                    }
+                    Some(validator) => tm_raw_hash_to_string(validator.address),
                     None => {
                         tracing::error!(
                             "Evidence without a validator {:#?}",
@@ -491,9 +480,9 @@ where
                 };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {}",
-                    evidence_epoch,
-                    slash_type,
                     validator,
+                    slash_type,
+                    evidence_epoch,
                     evidence_height
                 );
                 if let Err(err) = self.storage.slash(

@@ -162,8 +162,9 @@ impl namada_proof_of_stake::PosActions for Ctx {
     fn write_validator_address_raw_hash(
         &mut self,
         address: &Self::Address,
+        consensus_key: &Self::PublicKey,
     ) -> Result<(), Self::Error> {
-        let raw_hash = address.raw_hash().unwrap().to_owned();
+        let raw_hash = key::tm_consensus_key_raw_hash(consensus_key);
         self.write(&validator_address_raw_hash_key(raw_hash), address)
             .into_env_result()
     }

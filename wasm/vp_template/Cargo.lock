@@ -1576,6 +1576,7 @@ name = "namada_proof_of_stake"
 version = "0.7.0"
 dependencies = [
  "borsh",
+ "derivative",
  "proptest",
  "thiserror",
 ]

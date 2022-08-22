@@ -4,14 +4,15 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_proof_of_stake::types::PublicKeyTmRawHash;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ed25519, secp256k1, ParsePublicKeyError, ParseSecretKeyError,
-    ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
-    VerifySigError,
+    ed25519, secp256k1, tm_consensus_key_raw_hash, ParsePublicKeyError,
+    ParseSecretKeyError, ParseSignatureError, RefTo, SchemeType,
+    SigScheme as SigSchemeTrait, VerifySigError,
 };
 
 /// Public key
@@ -316,5 +317,11 @@ impl super::SigScheme for SigScheme {
             }
             _ => Err(VerifySigError::MismatchedScheme),
         }
+    }
+}
+
+impl PublicKeyTmRawHash for PublicKey {
+    fn tm_raw_hash(&self) -> String {
+        tm_consensus_key_raw_hash(self)
     }
 }
