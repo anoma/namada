@@ -215,17 +215,6 @@ where
                     .ctx
                     .read_post(key)?
                     .and_then(|bytes| Address::try_from_slice(&bytes[..]).ok());
-                // Find the raw hashes of the addresses
-                let pre = pre.map(|pre| {
-                    let raw_hash =
-                        pre.raw_hash().map(String::from).unwrap_or_default();
-                    (pre, raw_hash)
-                });
-                let post = post.map(|post| {
-                    let raw_hash =
-                        post.raw_hash().map(String::from).unwrap_or_default();
-                    (post, raw_hash)
-                });
                 changes.push(ValidatorAddressRawHash {
                     raw_hash: raw_hash.to_string(),
                     data: Data { pre, post },

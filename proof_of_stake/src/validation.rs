@@ -8,21 +8,22 @@ use std::hash::Hash;
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use derivative::Derivative;
 use thiserror::Error;
 
 use crate::btree_set::BTreeSetShims;
 use crate::epoched::DynEpochOffset;
 use crate::parameters::PosParams;
 use crate::types::{
-    BondId, Bonds, Epoch, Slashes, TotalVotingPowers, Unbonds,
-    ValidatorConsensusKeys, ValidatorSets, ValidatorState, ValidatorStates,
-    ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
-    WeightedValidator,
+    BondId, Bonds, Epoch, PublicKeyTmRawHash, Slashes, TotalVotingPowers,
+    Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorState,
+    ValidatorStates, ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower,
+    VotingPowerDelta, WeightedValidator,
 };
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum Error<Address, TokenChange>
+pub enum Error<Address, TokenChange, PublicKey>
 where
     Address: Display
         + Debug
@@ -36,6 +37,7 @@ where
         + BorshSchema
         + BorshDeserialize,
     TokenChange: Debug + Display,
+    PublicKey: Debug,
 {
     #[error("Unexpectedly missing state value for validator {0}")]
     ValidatorStateIsRequired(Address),
@@ -158,7 +160,7 @@ where
     #[error("Invalid address raw hash update")]
     InvalidRawHashUpdate,
     #[error("Invalid new validator {0}, some fields are missing: {1:?}.")]
-    InvalidNewValidator(Address, NewValidator),
+    InvalidNewValidator(Address, NewValidator<PublicKey>),
     #[error("New validator {0} has not been added to the validator set.")]
     NewValidatorMissingInValidatorSet(Address),
     #[error("Validator set has not been updated for new validators.")]
@@ -241,8 +243,8 @@ where
     ValidatorAddressRawHash {
         /// Raw hash value
         raw_hash: String,
-        /// The address and raw hash derived from it
-        data: Data<(Address, String)>,
+        /// The validator's address
+        data: Data<Address>,
     },
 }
 
@@ -291,14 +293,16 @@ where
 
 /// A new validator account initialized in a transaction, which is used to check
 /// that all the validator's required fields have been written.
-#[derive(Clone, Debug, Default)]
-pub struct NewValidator {
+#[derive(Clone, Debug, Derivative)]
+// https://mcarton.github.io/rust-derivative/latest/Default.html#custom-bound
+#[derivative(Default(bound = ""))]
+pub struct NewValidator<PublicKey> {
     has_state: bool,
-    has_consensus_key: bool,
+    has_consensus_key: Option<PublicKey>,
     has_total_deltas: bool,
     has_voting_power: bool,
     has_staking_reward_address: bool,
-    has_address_raw_hash: bool,
+    has_address_raw_hash: Option<String>,
     voting_power: VotingPower,
 }
 
@@ -309,7 +313,7 @@ pub fn validate<Address, TokenAmount, TokenChange, PublicKey>(
     params: &PosParams,
     changes: Vec<DataUpdate<Address, TokenAmount, TokenChange, PublicKey>>,
     current_epoch: impl Into<Epoch>,
-) -> Vec<Error<Address, TokenChange>>
+) -> Vec<Error<Address, TokenChange, PublicKey>>
 where
     Address: Display
         + Debug
@@ -362,7 +366,8 @@ where
         + BorshDeserialize
         + BorshSerialize
         + BorshSchema
-        + PartialEq,
+        + PartialEq
+        + PublicKeyTmRawHash,
 {
     let current_epoch = current_epoch.into();
     use DataUpdate::*;
@@ -408,7 +413,8 @@ where
         VotingPowerDelta,
     > = HashMap::default();
 
-    let mut new_validators: HashMap<Address, NewValidator> = HashMap::default();
+    let mut new_validators: HashMap<Address, NewValidator<PublicKey>> =
+        HashMap::default();
 
     for change in changes {
         match change {
@@ -493,16 +499,19 @@ where
                         }
                         // The value must be known at pipeline epoch
                         match post.get(pipeline_epoch) {
-                            Some(_) => {}
+                            Some(consensus_key) => {
+                                let validator = new_validators
+                                    .entry(address.clone())
+                                    .or_default();
+                                validator.has_consensus_key =
+                                    Some(consensus_key.clone());
+                            }
                             _ => errors.push(
                                 Error::MissingNewValidatorConsensusKey(
                                     pipeline_epoch.into(),
                                 ),
                             ),
                         }
-                        let validator =
-                            new_validators.entry(address.clone()).or_default();
-                        validator.has_consensus_key = true;
                     }
                     (Some(pre), Some(post)) => {
                         if post.last_update() != current_epoch {
@@ -1231,16 +1240,10 @@ where
             },
             ValidatorAddressRawHash { raw_hash, data } => {
                 match (data.pre, data.post) {
-                    (None, Some((address, expected_raw_hash))) => {
-                        if raw_hash != expected_raw_hash {
-                            errors.push(Error::InvalidAddressRawHash(
-                                raw_hash,
-                                expected_raw_hash,
-                            ))
-                        }
+                    (None, Some(address)) => {
                         let validator =
                             new_validators.entry(address.clone()).or_default();
-                        validator.has_address_raw_hash = true;
+                        validator.has_address_raw_hash = Some(raw_hash);
                     }
                     (pre, post) if pre != post => {
                         errors.push(Error::InvalidRawHashUpdate)
@@ -1641,16 +1644,29 @@ where
                     } = &new_validator;
                     // The new validator must have set all the required fields
                     if !(*has_state
-                        && *has_consensus_key
                         && *has_total_deltas
                         && *has_voting_power
-                        && *has_staking_reward_address
-                        && *has_address_raw_hash)
+                        && *has_staking_reward_address)
                     {
                         errors.push(Error::InvalidNewValidator(
                             address.clone(),
                             new_validator.clone(),
                         ))
+                    }
+                    match (has_address_raw_hash, has_consensus_key) {
+                        (Some(raw_hash), Some(consensus_key)) => {
+                            let expected_raw_hash = consensus_key.tm_raw_hash();
+                            if raw_hash != &expected_raw_hash {
+                                errors.push(Error::InvalidAddressRawHash(
+                                    raw_hash.clone(),
+                                    expected_raw_hash,
+                                ))
+                            }
+                        }
+                        _ => errors.push(Error::InvalidNewValidator(
+                            address.clone(),
+                            new_validator.clone(),
+                        )),
                     }
                     let weighted_validator = WeightedValidator {
                         voting_power: *voting_power,

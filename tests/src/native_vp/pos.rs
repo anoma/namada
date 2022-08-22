@@ -104,6 +104,7 @@ mod tests {
 
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosParams;
+    use namada::types::key::common::PublicKey;
     use namada::types::storage::Epoch;
     use namada::types::token;
     use namada_vm_env::proof_of_stake::parameters::testing::arb_pos_params;
@@ -163,6 +164,7 @@ mod tests {
     }
 
     /// State machine transitions
+    #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
     enum Transition {
         /// Commit all the tx changes already applied in the tx env
@@ -379,8 +381,12 @@ mod tests {
                 Transition::CommitTx => true,
                 Transition::NextEpoch => true,
                 Transition::Valid(action) => match action {
-                    ValidPosAction::InitValidator(address) => {
+                    ValidPosAction::InitValidator {
+                        address,
+                        consensus_key,
+                    } => {
                         !state.is_validator(address)
+                            && !state.is_used_key(consensus_key)
                     }
                     ValidPosAction::Bond {
                         amount: _,
@@ -457,7 +463,19 @@ mod tests {
         /// Find if the given address is a validator
         fn is_validator(&self, addr: &Address) -> bool {
             self.all_valid_actions().iter().any(|action| match action {
-                ValidPosAction::InitValidator(validator) => validator == addr,
+                ValidPosAction::InitValidator { address, .. } => {
+                    address == addr
+                }
+                _ => false,
+            })
+        }
+
+        /// Find if the given consensus key is already used by any validators
+        fn is_used_key(&self, given_consensus_key: &PublicKey) -> bool {
+            self.all_valid_actions().iter().any(|action| match action {
+                ValidPosAction::InitValidator { consensus_key, .. } => {
+                    consensus_key == given_consensus_key
+                }
                 _ => false,
             })
         }
@@ -568,7 +586,10 @@ pub mod testing {
 
     #[derive(Clone, Debug)]
     pub enum ValidPosAction {
-        InitValidator(Address),
+        InitValidator {
+            address: Address,
+            consensus_key: PublicKey,
+        },
         Bond {
             amount: token::Amount,
             owner: Address,
@@ -666,13 +687,21 @@ pub mod testing {
         let validators: Vec<Address> = valid_actions
             .iter()
             .filter_map(|action| match action {
-                ValidPosAction::InitValidator(addr) => Some(addr.clone()),
+                ValidPosAction::InitValidator { address, .. } => {
+                    Some(address.clone())
+                }
                 _ => None,
             })
             .collect();
-        let init_validator = address::testing::arb_established_address()
-            .prop_map(|addr| {
-                ValidPosAction::InitValidator(Address::Established(addr))
+        let init_validator = (
+            address::testing::arb_established_address(),
+            key::testing::arb_common_keypair(),
+        )
+            .prop_map(|(addr, consensus_key)| {
+                ValidPosAction::InitValidator {
+                    address: Address::Established(addr),
+                    consensus_key: consensus_key.ref_to(),
+                }
             });
 
         if validators.is_empty() {
@@ -816,45 +845,47 @@ pub mod testing {
             use namada_vm_env::tx_prelude::PosRead;
 
             match self {
-                ValidPosAction::InitValidator(addr) => {
+                ValidPosAction::InitValidator {
+                    address,
+                    consensus_key,
+                } => {
                     let offset = DynEpochOffset::PipelineLen;
-                    let consensus_key = key::testing::keypair_1().ref_to();
                     vec![
                         PosStorageChange::SpawnAccount {
-                            address: addr.clone(),
+                            address: address.clone(),
                         },
                         PosStorageChange::ValidatorAddressRawHash {
-                            address: addr.clone(),
+                            address: address.clone(),
                             consensus_key: consensus_key.clone(),
                         },
                         PosStorageChange::ValidatorSet {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             token_delta: 0,
                             offset,
                         },
                         PosStorageChange::ValidatorConsensusKey {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             pk: consensus_key,
                         },
                         PosStorageChange::ValidatorStakingRewardsAddress {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             address: address::testing::established_address_1(),
                         },
                         PosStorageChange::ValidatorState {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             state: ValidatorState::Pending,
                         },
                         PosStorageChange::ValidatorState {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             state: ValidatorState::Candidate,
                         },
                         PosStorageChange::ValidatorTotalDeltas {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             delta: 0,
                             offset,
                         },
                         PosStorageChange::ValidatorVotingPower {
-                            validator: addr,
+                            validator: address,
                             vp_delta: 0,
                             offset: Either::Left(offset),
                         },
@@ -1577,7 +1608,9 @@ pub mod testing {
         let validators: Vec<Address> = valid_actions
             .iter()
             .filter_map(|action| match action {
-                ValidPosAction::InitValidator(addr) => Some(addr.clone()),
+                ValidPosAction::InitValidator { address, .. } => {
+                    Some(address.clone())
+                }
                 _ => None,
             })
             .collect();
