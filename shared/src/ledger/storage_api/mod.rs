@@ -108,3 +108,69 @@ pub trait StorageWrite {
     /// Delete a value at the given key from storage.
     fn delete(&mut self, key: &storage::Key) -> Result<()>;
 }
+
+/// Iterate items matching the given prefix.
+pub fn iter_prefix_bytes<'a>(
+    storage: &'a impl StorageRead<'a>,
+    prefix: &crate::types::storage::Key,
+) -> Result<impl Iterator<Item = Result<(storage::Key, Vec<u8>)>> + 'a> {
+    let iter = storage.iter_prefix(prefix)?;
+    let iter = itertools::unfold(iter, |iter| {
+        match storage.iter_next(iter) {
+            Ok(Some((key, val))) => {
+                let key = match storage::Key::parse(key).into_storage_result() {
+                    Ok(key) => key,
+                    Err(err) => {
+                        // Propagate key encoding errors into Iterator's Item
+                        return Some(Err(err));
+                    }
+                };
+                Some(Ok((key, val)))
+            }
+            Ok(None) => None,
+            Err(err) => {
+                // Propagate `iter_next` errors into Iterator's Item
+                Some(Err(err))
+            }
+        }
+    });
+    Ok(iter)
+}
+
+/// Iterate Borsh encoded items matching the given prefix.
+pub fn iter_prefix<'a, T>(
+    storage: &'a impl StorageRead<'a>,
+    prefix: &crate::types::storage::Key,
+) -> Result<impl Iterator<Item = Result<(storage::Key, T)>> + 'a>
+where
+    T: BorshDeserialize,
+{
+    let iter = storage.iter_prefix(prefix)?;
+    let iter = itertools::unfold(iter, |iter| {
+        match storage.iter_next(iter) {
+            Ok(Some((key, val))) => {
+                let key = match storage::Key::parse(key).into_storage_result() {
+                    Ok(key) => key,
+                    Err(err) => {
+                        // Propagate key encoding errors into Iterator's Item
+                        return Some(Err(err));
+                    }
+                };
+                let val = match T::try_from_slice(&val).into_storage_result() {
+                    Ok(val) => val,
+                    Err(err) => {
+                        // Propagate val encoding errors into Iterator's Item
+                        return Some(Err(err));
+                    }
+                };
+                Some(Ok((key, val)))
+            }
+            Ok(None) => None,
+            Err(err) => {
+                // Propagate `iter_next` errors into Iterator's Item
+                Some(Err(err))
+            }
+        }
+    });
+    Ok(iter)
+}

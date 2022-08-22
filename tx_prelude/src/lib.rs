@@ -23,7 +23,9 @@ pub use namada::ledger::governance::storage as gov_storage;
 pub use namada::ledger::parameters::storage as parameters_storage;
 pub use namada::ledger::storage::types::encode;
 use namada::ledger::storage_api;
-pub use namada::ledger::storage_api::{StorageRead, StorageWrite};
+pub use namada::ledger::storage_api::{
+    iter_prefix, iter_prefix_bytes, StorageRead, StorageWrite,
+};
 pub use namada::ledger::treasury::storage as treasury_storage;
 pub use namada::ledger::tx_env::TxEnv;
 pub use namada::proto::{Signed, SignedTxData};
