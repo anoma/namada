@@ -131,8 +131,7 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
         }
         (None, Some(owner)) => {
             let owner = ctx.get(&owner);
-            let mut found_any = false;
-            for (token, currency_code) in tokens {
+            for (token, _) in tokens {
                 let prefix = token.to_db_key().into();
                 let balances = query_storage_prefix::<token::Amount>(
                     client.clone(),
@@ -140,41 +139,8 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
                 )
                 .await;
                 if let Some(balances) = balances {
-                    let stdout = io::stdout();
-                    let mut w = stdout.lock();
-                    for (key, balance) in balances {
-                        match token::is_any_multitoken_balance_key(&key) {
-                            Some((sub_prefix, o)) if *o == owner => {
-                                writeln!(
-                                    w,
-                                    "{} with {}: {}",
-                                    currency_code, sub_prefix, balance
-                                )
-                                .unwrap();
-                                found_any = true;
-                            }
-                            Some(_) => {}
-                            None => {
-                                if let Some(o) =
-                                    token::is_any_token_balance_key(&key)
-                                {
-                                    if *o == owner {
-                                        writeln!(
-                                            w,
-                                            "{}: {}",
-                                            currency_code, balance
-                                        )
-                                        .unwrap();
-                                        found_any = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    print_balances(balances, &token, Some(&owner));
                 }
-            }
-            if !found_any {
-                println!("No balance found for {}", owner);
             }
         }
         (Some(token), None) => {
@@ -182,85 +148,73 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
             let prefix = token.to_db_key().into();
             let balances =
                 query_storage_prefix::<token::Amount>(client, prefix).await;
-            match balances {
-                Some(balances) => {
-                    let currency_code = tokens
-                        .get(&token)
-                        .map(|c| Cow::Borrowed(*c))
-                        .unwrap_or_else(|| Cow::Owned(token.to_string()));
-                    let stdout = io::stdout();
-                    let mut w = stdout.lock();
-                    writeln!(w, "Token {}", currency_code).unwrap();
-                    for (key, balance) in balances {
-                        match token::is_any_multitoken_balance_key(&key) {
-                            Some((sub_prefix, owner)) => {
-                                writeln!(
-                                    w,
-                                    " with {}:  {}, owned by {}",
-                                    sub_prefix, balance, owner
-                                )
-                                .unwrap();
-                            }
-                            None => {
-                                if let Some(owner) =
-                                    token::is_any_token_balance_key(&key)
-                                {
-                                    writeln!(
-                                        w,
-                                        ":  {}, owned by {}",
-                                        balance, owner
-                                    )
-                                    .unwrap();
-                                }
-                            }
-                        }
-                    }
-                }
-                None => {
-                    println!("No balances for token {}", token.encode())
-                }
+            if let Some(balances) = balances {
+                print_balances(balances, &token, None);
             }
         }
         (None, None) => {
-            let stdout = io::stdout();
-            let mut w = stdout.lock();
-            for (token, currency_code) in tokens {
+            for (token, _) in tokens {
                 let key = token::balance_prefix(&token);
                 let balances =
                     query_storage_prefix::<token::Amount>(client.clone(), key)
                         .await;
-                match balances {
-                    Some(balances) => {
-                        writeln!(w, "Token {}", currency_code).unwrap();
-                        for (key, balance) in balances {
-                            match token::is_any_multitoken_balance_key(&key) {
-                                Some((sub_prefix, owner)) => {
-                                    writeln!(
-                                        w,
-                                        " with {}:  {}, owned by {}",
-                                        sub_prefix, balance, owner
-                                    )
-                                    .unwrap();
-                                }
-                                None => {
-                                    if let Some(owner) =
-                                        token::is_any_token_balance_key(&key)
-                                    {
-                                        writeln!(
-                                            w,
-                                            ":  {}, owned by {}",
-                                            balance, owner
-                                        )
-                                        .unwrap()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    None => {
-                        println!("No balances for token {}", token.encode())
-                    }
+                if let Some(balances) = balances {
+                    print_balances(balances, &token, None);
                 }
+            }
+        }
+    }
+}
+
+fn print_balances(
+    balances: impl Iterator<Item = (storage::Key, token::Amount)>,
+    token: &Address,
+    target: Option<&Address>,
+) {
+    let stdout = io::stdout();
+    let mut w = stdout.lock();
+
+    // Token
+    let tokens = address::tokens();
+    let currency_code = tokens
+        .get(token)
+        .map(|c| Cow::Borrowed(*c))
+        .unwrap_or_else(|| Cow::Owned(token.to_string()));
+    writeln!(w, "Token {}", currency_code).unwrap();
+
+    let print_num = balances
+        .filter_map(
+            |(key, balance)| match token::is_any_multitoken_balance_key(&key) {
+                Some((sub_prefix, owner)) => Some((
+                    owner.clone(),
+                    format!(
+                        "with {}: {}, owned by {}",
+                        sub_prefix, balance, owner
+                    ),
+                )),
+                None => token::is_any_token_balance_key(&key).map(|owner| {
+                    (
+                        owner.clone(),
+                        format!(": {}, owned by {}", balance, owner),
+                    )
+                }),
+            },
+        )
+        .filter_map(|(o, s)| match target {
+            Some(t) if o == *t => Some(s),
+            Some(_) => None,
+            None => Some(s),
+        })
+        .map(|s| {
+            writeln!(w, "{}", s).unwrap();
+        })
+        .count();
+
+    if print_num == 0 {
+        match target {
+            Some(t) => writeln!(w, "No balances owned by {}", t).unwrap(),
+            None => {
+                writeln!(w, "No balances for token {}", currency_code).unwrap()
             }
         }
     }
