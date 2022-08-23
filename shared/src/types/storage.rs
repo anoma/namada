@@ -210,6 +210,13 @@ pub struct Key {
     pub segments: Vec<DbKeySeg>,
 }
 
+/// A [`Key`] made of borrowed key segments [`DbKeySeg`].
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct KeyRef<'a> {
+    /// Reference of key segments
+    pub segments: &'a [DbKeySeg],
+}
+
 impl From<DbKeySeg> for Key {
     fn from(seg: DbKeySeg) -> Self {
         Self {
@@ -281,6 +288,13 @@ impl Key {
     /// Returns the last segment of the key, or `None` if it is empty.
     pub fn last(&self) -> Option<&DbKeySeg> {
         self.segments.last()
+    }
+
+    /// Returns the prefix before the last segment and last segment of the key,
+    /// or `None` if it is empty.
+    pub fn split_last(&self) -> Option<(KeyRef<'_>, &DbKeySeg)> {
+        let (last, prefix) = self.segments.split_last()?;
+        Some((KeyRef { segments: prefix }, last))
     }
 
     /// Returns a key of the validity predicate of the given address
@@ -369,6 +383,20 @@ impl Display for Key {
             .collect::<Vec<String>>()
             .join(&KEY_SEGMENT_SEPARATOR.to_string());
         f.write_str(&key)
+    }
+}
+
+impl KeyRef<'_> {
+    /// Check if [`KeyRef`] is equal to a [`Key`].
+    pub fn eq_owned(&self, other: &Key) -> bool {
+        self.segments == other.segments
+    }
+
+    /// Returns the prefix before the last segment and last segment of the key,
+    /// or `None` if it is empty.
+    pub fn split_last(&self) -> Option<(KeyRef<'_>, &DbKeySeg)> {
+        let (last, prefix) = self.segments.split_last()?;
+        Some((KeyRef { segments: prefix }, last))
     }
 }
 

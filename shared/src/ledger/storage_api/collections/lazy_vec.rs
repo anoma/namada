@@ -1,17 +1,26 @@
 //! Lazy dynamically-sized vector.
 
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use derivative::Derivative;
+use thiserror::Error;
 
 use super::super::Result;
+use crate::ledger::storage_api::validation::{self, Data};
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
+use crate::ledger::vp_env::VpEnv;
 use crate::types::storage;
 
 /// Subkey pointing to the length of the LazyVec
 pub const LEN_SUBKEY: &str = "len";
 /// Subkey corresponding to the data elements of the LazyVec
 pub const DATA_SUBKEY: &str = "data";
+
+/// Using `u64` for vector's indices
+pub type Index = u64;
 
 /// Lazy dynamically-sized vector.
 ///
@@ -22,6 +31,69 @@ pub const DATA_SUBKEY: &str = "data";
 pub struct LazyVec<T> {
     key: storage::Key,
     phantom: PhantomData<T>,
+}
+
+/// Possible sub-keys of a [`LazyVec`]
+pub enum SubKey {
+    /// Length sub-key
+    Len,
+    /// Data sub-key, further sub-keyed by its index
+    Data(Index),
+}
+
+/// Possible sub-keys of a [`LazyVec`], together with their [`validation::Data`]
+/// that contains prior and posterior state.
+#[derive(Debug)]
+pub enum SubKeyWithData<T> {
+    /// Length sub-key
+    Len(Data<Index>),
+    /// Data sub-key, further sub-keyed by its index
+    Data(Index, Data<T>),
+}
+
+/// Possible actions that can modify a [`LazyVec`]. This roughly corresponds to
+/// the methods that have `StorageWrite` access.
+pub enum Action<T> {
+    /// Push a value `T` into a [`LazyVec<T>`]
+    Push(T),
+    /// Pop a value `T` from a [`LazyVec<T>`]
+    Pop(T),
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ValidationError {
+    #[error("Incorrect difference in LazyVec's length")]
+    InvalidLenDiff,
+    #[error("An empty LazyVec must be deleted from storage")]
+    EmptyVecShouldBeDeleted,
+    #[error("Push at a wrong index. Got {got}, expected {expected}.")]
+    UnexpectedPushIndex { got: Index, expected: Index },
+    #[error("Pop at a wrong index. Got {got}, expected {expected}.")]
+    UnexpectedPopIndex { got: Index, expected: Index },
+    #[error(
+        "Update (combination of pop and push) at a wrong index. Got {got}, \
+         expected {expected}."
+    )]
+    UnexpectedUpdateIndex { got: Index, expected: Index },
+    #[error("An index has overflown its representation: {0}")]
+    IndexOverflow(<usize as TryInto<Index>>::Error),
+    #[error("Unexpected underflow in `{0} - {0}`")]
+    UnexpectedUnderflow(Index, Index),
+}
+
+/// [`LazyVec`] validation result
+pub type ValidationResult<T> = std::result::Result<T, ValidationError>;
+
+/// [`LazyVec`] validation builder from storage changes. The changes can be
+/// accumulated with `LazyVec::validate()` and then turned into a list
+/// of valid actions on the vector with `ValidationBuilder::build()`.
+#[derive(Debug, Derivative)]
+// https://mcarton.github.io/rust-derivative/latest/Default.html#custom-bound
+#[derivative(Default(bound = ""))]
+pub struct ValidationBuilder<T> {
+    /// The accumulator of found changes under the vector
+    pub changes: Vec<SubKeyWithData<T>>,
 }
 
 impl<T> LazyVec<T>
@@ -73,7 +145,7 @@ where
     }
 
     /// Read an element at the index or `Ok(None)` if out of bounds.
-    pub fn get<S>(&self, storage: &S, index: u64) -> Result<Option<T>>
+    pub fn get<S>(&self, storage: &S, index: Index) -> Result<Option<T>>
     where
         S: for<'iter> StorageRead<'iter>,
     {
@@ -116,19 +188,251 @@ where
         }))
     }
 
+    /// Check if the given storage key is a LazyVec sub-key and if so return
+    /// which one
+    pub fn is_sub_key(&self, key: &storage::Key) -> Option<SubKey> {
+        if let Some((prefix, storage::DbKeySeg::StringSeg(last))) =
+            key.split_last()
+        {
+            if let Ok(index) = Index::from_str(last) {
+                if let Some((prefix, storage::DbKeySeg::StringSeg(snd_last))) =
+                    prefix.split_last()
+                {
+                    if snd_last == DATA_SUBKEY && prefix.eq_owned(&self.key) {
+                        return Some(SubKey::Data(index));
+                    }
+                }
+            } else if last == LEN_SUBKEY && prefix.eq_owned(&self.key) {
+                return Some(SubKey::Len);
+            }
+        }
+        None
+    }
+
+    /// Accumulate storage changes inside a [`ValidationBuilder`]
+    pub fn validate<ENV>(
+        &self,
+        builder: &mut Option<ValidationBuilder<T>>,
+        env: &ENV,
+        key_changed: storage::Key,
+    ) -> std::result::Result<(), ENV::Error>
+    where
+        ENV: VpEnv,
+    {
+        if let Some(sub) = self.is_sub_key(&key_changed) {
+            let change = match sub {
+                SubKey::Len => {
+                    let data = validation::read_data(env, &key_changed)?;
+                    data.map(SubKeyWithData::Len)
+                }
+                SubKey::Data(index) => {
+                    let data = validation::read_data(env, &key_changed)?;
+                    data.map(|data| SubKeyWithData::Data(index, data))
+                }
+            };
+            if let Some(change) = change {
+                let builder =
+                    builder.get_or_insert(ValidationBuilder::default());
+                builder.changes.push(change)
+            }
+        }
+        Ok(())
+    }
+
     /// Get the prefix of set's elements storage
     fn get_data_prefix(&self) -> storage::Key {
         self.key.push(&DATA_SUBKEY.to_owned()).unwrap()
     }
 
     /// Get the sub-key of vector's elements storage
-    fn get_data_key(&self, index: u64) -> storage::Key {
+    fn get_data_key(&self, index: Index) -> storage::Key {
         self.get_data_prefix().push(&index.to_string()).unwrap()
     }
 
     /// Get the sub-key of vector's length storage
     fn get_len_key(&self) -> storage::Key {
         self.key.push(&LEN_SUBKEY.to_owned()).unwrap()
+    }
+}
+
+impl<T> ValidationBuilder<T> {
+    /// Validate storage changes and if valid, build from them a list of
+    /// actions.
+    ///
+    /// The validation rules for a [`LazyVec`] are:
+    ///   - A difference in the vector's length must correspond to the
+    ///     difference in how many elements where pushed versus how many
+    ///     elements were popped.
+    ///   - An empty vector must be deleted from storage
+    ///   - In addition, we check that indices of any changes are within an
+    ///     expected range (i.e. the vectors indices should always be
+    ///     monotonically increasing from zero)
+    pub fn build(self) -> ValidationResult<Vec<Action<T>>> {
+        let mut actions = vec![];
+
+        // We need to accumlate some values for what's changed
+        let mut post_gt_pre = false;
+        let mut len_diff: u64 = 0;
+        let mut len_pre: u64 = 0;
+        let mut added = BTreeSet::<Index>::default();
+        let mut updated = BTreeSet::<Index>::default();
+        let mut deleted = BTreeSet::<Index>::default();
+
+        for change in self.changes {
+            match change {
+                SubKeyWithData::Len(data) => match data {
+                    Data::Add { post } => {
+                        if post == 0 {
+                            return Err(
+                                ValidationError::EmptyVecShouldBeDeleted,
+                            );
+                        }
+                        post_gt_pre = true;
+                        len_diff = post;
+                    }
+                    Data::Update { pre, post } => {
+                        if post == 0 {
+                            return Err(
+                                ValidationError::EmptyVecShouldBeDeleted,
+                            );
+                        }
+                        if post > pre {
+                            post_gt_pre = true;
+                            len_diff = post - pre;
+                        } else {
+                            len_diff = pre - post;
+                        }
+                        len_pre = pre;
+                    }
+                    Data::Delete { pre } => {
+                        len_diff = pre;
+                        len_pre = pre;
+                    }
+                },
+                SubKeyWithData::Data(index, data) => match data {
+                    Data::Add { post } => {
+                        actions.push(Action::Push(post));
+                        added.insert(index);
+                    }
+                    Data::Update { pre, post } => {
+                        actions.push(Action::Pop(pre));
+                        actions.push(Action::Push(post));
+                        updated.insert(index);
+                    }
+                    Data::Delete { pre } => {
+                        actions.push(Action::Pop(pre));
+                        deleted.insert(index);
+                    }
+                },
+            }
+        }
+        let added_len: u64 = deleted
+            .len()
+            .try_into()
+            .map_err(ValidationError::IndexOverflow)?;
+        let deleted_len: u64 = deleted
+            .len()
+            .try_into()
+            .map_err(ValidationError::IndexOverflow)?;
+
+        if len_diff != 0
+            && !(if post_gt_pre {
+                deleted_len + len_diff == added_len
+            } else {
+                added_len + len_diff == deleted_len
+            })
+        {
+            return Err(ValidationError::InvalidLenDiff);
+        }
+
+        let mut last_added = Option::None;
+        // Iterate additions in increasing order of indices
+        for index in added {
+            if let Some(last_added) = last_added {
+                // Following additions should be at monotonically increasing
+                // indices
+                let expected = last_added + 1;
+                if expected != index {
+                    return Err(ValidationError::UnexpectedPushIndex {
+                        got: index,
+                        expected,
+                    });
+                }
+            } else if index != len_pre {
+                // The first addition must be at the pre length value.
+                // If something is deleted and a new value is added
+                // in its place, it will go through `Data::Update`
+                // instead.
+                return Err(ValidationError::UnexpectedPushIndex {
+                    got: index,
+                    expected: len_pre,
+                });
+            }
+            last_added = Some(index);
+        }
+
+        let mut last_deleted = Option::None;
+        // Also iterate deletions in increasing order of indices
+        for index in deleted {
+            if let Some(last_added) = last_deleted {
+                // Following deletions should be at monotonically increasing
+                // indices
+                let expected = last_added + 1;
+                if expected != index {
+                    return Err(ValidationError::UnexpectedPopIndex {
+                        got: index,
+                        expected,
+                    });
+                }
+            }
+            last_deleted = Some(index);
+        }
+        if let Some(index) = last_deleted {
+            if len_pre > 0 {
+                let expected = len_pre - 1;
+                if index != expected {
+                    // The last deletion must be at the pre length value minus 1
+                    return Err(ValidationError::UnexpectedPopIndex {
+                        got: index,
+                        expected: len_pre,
+                    });
+                }
+            }
+        }
+
+        // And finally iterate updates in increasing order of indices
+        let mut last_updated = Option::None;
+        for index in updated {
+            if let Some(last_updated) = last_updated {
+                // Following additions should be at monotonically increasing
+                // indices
+                let expected = last_updated + 1;
+                if expected != index {
+                    return Err(ValidationError::UnexpectedUpdateIndex {
+                        got: index,
+                        expected,
+                    });
+                }
+            }
+            last_updated = Some(index);
+        }
+        if let Some(index) = last_updated {
+            let expected = len_pre.checked_sub(deleted_len).ok_or(
+                ValidationError::UnexpectedUnderflow(len_pre, deleted_len),
+            )?;
+            if index != expected {
+                // The last update must be at the pre length value minus
+                // deleted_len.
+                // If something is added and then deleted in a
+                // single tx, it will never be visible here.
+                return Err(ValidationError::UnexpectedUpdateIndex {
+                    got: index,
+                    expected: len_pre,
+                });
+            }
+        }
+
+        Ok(actions)
     }
 }
 
