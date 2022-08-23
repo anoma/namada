@@ -105,6 +105,12 @@ impl From<Hash> for BlockHash {
     }
 }
 
+impl From<u64> for BlockHeight {
+    fn from(height: u64) -> Self {
+        BlockHeight(height)
+    }
+}
+
 impl TryFrom<i64> for BlockHeight {
     type Error = String;
 
