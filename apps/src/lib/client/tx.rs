@@ -1430,6 +1430,7 @@ where
             tx = tx.map(|(t, tm)| {
                 let mut temp = t.deref().clone();
                 temp.shielded_outputs = replay_tx.shielded_outputs.clone();
+                temp.value_balance = temp.value_balance.reject(asset_type) - Amount::from_pair(new_asset_type, amt).unwrap();
                 (temp.freeze().unwrap(), tm)
             });
         }
