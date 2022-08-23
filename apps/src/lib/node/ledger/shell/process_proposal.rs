@@ -59,6 +59,7 @@ where
         // a proposal from some round's leader.
         let invalid_num_of_eth_ev_digests = eth_ev_digest_num != 1;
         if invalid_num_of_eth_ev_digests {
+            println!("Invalid num of eth ev digests");
             tracing::warn!(
                 proposer = ?hex::encode(&req.proposer_address),
                 height = req.height,
@@ -80,6 +81,7 @@ where
             !error.is_recoverable()
         });
         if invalid_txs {
+            println!("Invalid txs");
             tracing::warn!(
                 proposer = ?hex::encode(&req.proposer_address),
                 height = req.height,
@@ -431,7 +433,31 @@ mod test_process_proposal {
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestShell,
     };
+    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::wallet;
+
+    fn get_empty_eth_ev_digest(shell: &TestShell) -> TxBytes {
+        let protocol_key = shell
+            .mode
+            .get_protocol_key()
+            .expect("Test failed");
+        let addr = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+        let ext = ethereum_events::Vext::empty(BlockHeight(1), addr.clone()).sign(protocol_key);
+        ethereum_events::VextDigest {
+            signatures: {
+                let mut s = HashMap::new();
+                s.insert(addr, ext.sig);
+                s
+            },
+            events: vec![],
+        }
+        .sign(protocol_key)
+        .to_bytes()
+    }
 
     /// Test that if a proposal contains more than one
     /// `ethereum_events::VextDigest`, we reject it.
