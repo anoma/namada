@@ -344,19 +344,16 @@ fn multitoken_balance_owner(key: &Key) -> Option<(Key, &Address)> {
         // token, balance, owner
         return None;
     }
-    match key.get_at(len - 2) {
-        Some(DbKeySeg::StringSeg(balance))
-            if balance == BALANCE_STORAGE_KEY =>
-        {
-            match key.segments.last() {
-                Some(DbKeySeg::AddressSeg(owner)) => {
-                    let sub_prefix = Key {
-                        segments: key.segments[1..(len - 2)].to_vec(),
-                    };
-                    Some((sub_prefix, owner))
-                }
-                _ => None,
-            }
+    match &key.segments[..] {
+        [
+            ..,
+            DbKeySeg::StringSeg(balance),
+            DbKeySeg::AddressSeg(owner),
+        ] if balance == BALANCE_STORAGE_KEY => {
+            let sub_prefix = Key {
+                segments: key.segments[1..(len - 2)].to_vec(),
+            };
+            Some((sub_prefix, owner))
         }
         _ => None,
     }
