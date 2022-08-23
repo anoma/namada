@@ -238,17 +238,61 @@ mod prepare_block {
         use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
         use crate::wallet;
 
+        fn get_local_last_commit(
+            shell: &TestShell,
+        ) -> Option<ExtendedCommitInfo> {
+            let evts = {
+                let validator_addr = shell
+                    .mode
+                    .get_validator_address()
+                    .expect("Test failed")
+                    .to_owned();
+
+                let curr_height = shell.storage.last_height + 1;
+
+                let ext =
+                    ethereum_events::Vext::empty(curr_height, validator_addr);
+
+                let protocol_key = match &shell.mode {
+                    ShellMode::Validator { data, .. } => {
+                        &data.keys.protocol_keypair
+                    }
+                    _ => panic!("Test failed"),
+                };
+
+                ext.sign(protocol_key)
+            };
+
+            let vote_extension = VoteExtension {
+                ethereum_events: evts,
+                validator_set_update: None,
+            }
+            .try_to_vec()
+            .expect("Test failed");
+
+            let vote = ExtendedVoteInfo {
+                vote_extension,
+                ..Default::default()
+            };
+
+            Some(ExtendedCommitInfo {
+                votes: vec![vote],
+                ..Default::default()
+            })
+        }
+
         /// Test that if a tx from the mempool is not a
         /// WrapperTx type, it is not included in the
         /// proposed block.
         #[test]
         fn test_prepare_proposal_rejects_non_wrapper_tx() {
-            let (mut shell, _, _) = TestShell::new();
+            let (mut shell, _, _) = test_utils::setup_at_height(3u64);
             let tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some("transaction_data".as_bytes().to_owned()),
             );
             let req = RequestPrepareProposal {
+                local_last_commit: get_local_last_commit(&shell),
                 txs: vec![tx.to_bytes()],
                 max_tx_bytes: 0,
                 ..Default::default()
@@ -610,7 +654,7 @@ mod prepare_block {
         /// we simply exclude it from the proposal
         #[test]
         fn test_error_in_processing_tx() {
-            let (mut shell, _, _) = TestShell::new();
+            let (mut shell, _, _) = test_utils::setup_at_height(3u64);
             let keypair = gen_keypair();
             let tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
@@ -637,6 +681,7 @@ mod prepare_block {
             )
             .to_bytes();
             let req = RequestPrepareProposal {
+                local_last_commit: get_local_last_commit(&shell),
                 txs: vec![wrapper.clone()],
                 max_tx_bytes: 0,
                 ..Default::default()
@@ -652,7 +697,7 @@ mod prepare_block {
         /// corresponding wrappers
         #[test]
         fn test_decrypted_txs_in_correct_order() {
-            let (mut shell, _, _) = TestShell::new();
+            let (mut shell, _, _) = test_utils::setup_at_height(3u64);
             let keypair = gen_keypair();
             let mut expected_wrapper = vec![];
             let mut expected_decrypted = vec![];
@@ -660,6 +705,7 @@ mod prepare_block {
             let mut req = RequestPrepareProposal {
                 txs: vec![],
                 max_tx_bytes: 0,
+                local_last_commit: get_local_last_commit(&shell),
                 ..Default::default()
             };
             // create a request with two new wrappers from mempool and
