@@ -358,7 +358,7 @@ mod test_vote_extensions {
     /// Test that Ethereum events signed by a non-validator are rejected
     #[test]
     fn test_eth_events_must_be_signed_by_validator() {
-        let (shell, _, _) = setup();
+        let (shell, _, _) = setup_at_height(3u64);
         let signing_key = gen_keypair();
         let address = shell
             .mode
@@ -405,7 +405,7 @@ mod test_vote_extensions {
     /// change to the validator set.
     #[test]
     fn test_validate_eth_events_vexts() {
-        let (mut shell, _, _) = setup();
+        let (mut shell, _, _) = setup_at_height(3u64);
         let signing_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let address = shell
@@ -472,7 +472,7 @@ mod test_vote_extensions {
     /// block it was included on in a vote extension is rejected
     #[test]
     fn reject_incorrect_block_number() {
-        let (shell, _, _) = setup();
+        let (shell, _, _) = setup_at_height(3u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
         let ethereum_events = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
