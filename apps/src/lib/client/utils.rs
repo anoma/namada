@@ -288,7 +288,6 @@ pub async fn join_network(
         // Write consensus key to tendermint home
         tendermint_node::write_validator_key(
             &tm_home_dir,
-            &address,
             &*pre_genesis_wallet.consensus_key,
         );
 
@@ -516,11 +515,7 @@ pub fn init_network(
                 wallet.gen_key(Some(alias), unsafe_dont_encrypt);
 
             // Write consensus key for Tendermint
-            tendermint_node::write_validator_key(
-                &tm_home_dir,
-                &address,
-                &keypair,
-            );
+            tendermint_node::write_validator_key(&tm_home_dir, &keypair);
 
             keypair.ref_to()
         });
@@ -861,6 +856,7 @@ pub fn init_network(
                 consensus_timeout_commit;
             config.ledger.tendermint.p2p_allow_duplicate_ip =
                 allow_duplicate_ip;
+            config.ledger.tendermint.p2p_addr_book_strict = !localhost;
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
             let first_port = SocketAddr::from_str(&net_address).unwrap().port();
@@ -1134,7 +1130,8 @@ fn network_configs_url_prefix(chain_id: &ChainId) -> String {
     })
 }
 
-fn write_tendermint_node_key(
+/// Write the node key into tendermint config dir.
+pub fn write_tendermint_node_key(
     tm_home_dir: &Path,
     node_sk: ed25519::SecretKey,
 ) -> ed25519::PublicKey {

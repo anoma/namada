@@ -331,15 +331,11 @@ pub async fn submit_init_validator(
             };
         // add validator address and keys to the wallet
         ctx.wallet
-            .add_validator_data(validator_address.clone(), validator_keys);
+            .add_validator_data(validator_address, validator_keys);
         ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 
         let tendermint_home = ctx.config.ledger.tendermint_dir();
-        tendermint_node::write_validator_key(
-            &tendermint_home,
-            &validator_address,
-            &consensus_key,
-        );
+        tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
         tendermint_node::write_validator_state(tendermint_home);
 
         println!();

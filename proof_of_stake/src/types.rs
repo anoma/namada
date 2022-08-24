@@ -357,6 +357,12 @@ pub enum SlashType {
 )]
 pub struct BasisPoints(u64);
 
+/// Derive Tendermint raw hash from the public key
+pub trait PublicKeyTmRawHash {
+    /// Derive Tendermint raw hash from the public key
+    fn tm_raw_hash(&self) -> String;
+}
+
 impl VotingPower {
     /// Convert token amount into a voting power.
     pub fn from_tokens(tokens: impl Into<u64>, params: &PosParams) -> Self {
