@@ -237,6 +237,7 @@ where
 mod test_vote_extensions {
     use std::convert::TryInto;
 
+    use assert_matches::assert_matches;
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
@@ -251,6 +252,7 @@ mod test_vote_extensions {
 
     use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils::*;
+    use crate::node::ledger::shell::vote_extensions::VoteExtensionError;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     /// Test that we successfully receive ethereum events
@@ -374,7 +376,7 @@ mod test_vote_extensions {
                     receiver: EthAddress([2; 20]),
                 }],
             }],
-            block_height: shell.storage.last_height + 1,
+            block_height: shell.storage.get_current_decision_height(),
             validator_addr: address.clone(),
         }
         .sign(&signing_key);
@@ -413,7 +415,7 @@ mod test_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        let signed_height = shell.storage.last_height + 1;
+        let signed_height = shell.storage.get_current_decision_height();
         let vote_ext = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
@@ -503,5 +505,35 @@ mod test_vote_extensions {
             shell.verify_vote_extension(req).status,
             i32::from(VerifyStatus::Reject)
         );
+    }
+
+    /// Test if we reject Ethereum events vote extensions
+    /// issued at genesis
+    #[test]
+    fn test_reject_genesis_vexts() {
+        let (shell, _, _) = setup();
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .to_owned();
+        let eth_evts = ethereum_events::Vext::empty(0u64.into(), address)
+            .sign(shell.mode.get_protocol_key().expect("Test failed"));
+        let req = request::VerifyVoteExtension {
+            vote_extension: VoteExtension {
+                validator_set_update: None,
+                ethereum_events: eth_evts.clone(),
+            }
+            .try_to_vec()
+            .expect("Test failed"),
+            ..Default::default()
+        };
+        assert_eq!(
+            shell.verify_vote_extension(req).status,
+            i32::from(VerifyStatus::Reject)
+        );
+        let result = shell
+            .validate_eth_events_vext_and_get_it_back(eth_evts, 0u64.into());
+        assert_matches!(result, Err(VoteExtensionError::IssuedAtGenesis));
     }
 }
