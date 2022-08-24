@@ -5,18 +5,18 @@ use std::hash::Hash;
 use namada::types::key::*;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
-#[cfg(not(feature = "ABCI"))]
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::abci;
-#[cfg(not(feature = "ABCI"))]
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
-#[cfg(not(feature = "ABCI"))]
+#[cfg(feature = "abcipp")]
 use tendermint_proto::google::protobuf;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::crypto::PublicKey as TendermintPublicKey;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::google::protobuf;
+#[cfg(not(feature = "abcipp"))]
+use tendermint_proto::google::protobuf;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::crypto::PublicKey as TendermintPublicKey;
 
 use super::queries::QueriesExt;
 use super::*;

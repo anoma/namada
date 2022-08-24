@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-# Make a release archive from built Anoma binaries and dylib(s)
+# Make a release archive from built Namada binaries and dylib(s)
 
 set -e
 
 VERSION="$(git describe --dirty --broken)"
 PLATFORM="$(uname -s)-$(uname -m)"
-PACKAGE_NAME="anoma-${VERSION}-${PLATFORM}"
-BIN="anoma anomac anoman anomaw"
+PACKAGE_NAME="namada-${VERSION}-${PLATFORM}"
+BIN="namada namadac namadan namadaw"
 
 mkdir -p ${PACKAGE_NAME} && \
 cd target/release && \

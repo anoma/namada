@@ -6,25 +6,24 @@ use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
 use namada::types::ethereum_events::EthereumEvent;
-#[cfg(feature = "ABCI")]
 use namada::types::hash::Hash;
-#[cfg(feature = "ABCI")]
+#[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
-#[cfg(feature = "ABCI")]
+#[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::RequestBeginBlock;
+use tendermint_proto::abci::RequestBeginBlock;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tower::Service;
-#[cfg(not(feature = "ABCI"))]
+#[cfg(not(feature = "abcipp"))]
 use tower_abci::{BoxError, Request as Req, Response as Resp};
-#[cfg(feature = "ABCI")]
-use tower_abci_old::{BoxError, Request as Req, Response as Resp};
+#[cfg(feature = "abcipp")]
+use tower_abci_abcipp::{BoxError, Request as Req, Response as Resp};
 
 use super::super::Shell;
+#[cfg(not(feature = "abcipp"))]
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
-#[cfg(not(feature = "ABCI"))]
-use super::abcipp_shim_types::shim::response::TxResult;
+#[cfg(feature = "abcipp")]
+use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
 
@@ -34,7 +33,7 @@ use crate::config;
 #[derive(Debug)]
 pub struct AbcippShim {
     service: Shell,
-    #[cfg(feature = "ABCI")]
+    #[cfg(not(feature = "abcipp"))]
     begin_block_request: Option<RequestBeginBlock>,
     processed_txs: Vec<ProcessedTx>,
     shell_recv: std::sync::mpsc::Receiver<(
@@ -69,7 +68,7 @@ impl AbcippShim {
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,
                 ),
-                #[cfg(feature = "ABCI")]
+                #[cfg(not(feature = "abcipp"))]
                 begin_block_request: None,
                 processed_txs: vec![],
                 shell_recv,
@@ -78,7 +77,7 @@ impl AbcippShim {
         )
     }
 
-    #[cfg(feature = "ABCI")]
+    #[cfg(not(feature = "abcipp"))]
     /// Get the hash of the txs in the block
     pub fn get_hash(&self) -> Hash {
         let bytes: Vec<u8> = self
@@ -94,7 +93,6 @@ impl AbcippShim {
     pub fn run(mut self) {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
-                #[cfg(not(feature = "ABCI"))]
                 Req::ProcessProposal(proposal) => {
                     let txs = proposal.txs.clone();
                     self.service
@@ -102,21 +100,22 @@ impl AbcippShim {
                         .map_err(Error::from)
                         .and_then(|res| match res {
                             Response::ProcessProposal(resp) => {
+                                let response =
+                                    Ok(Resp::ProcessProposal((&resp).into()));
                                 for (result, tx) in resp
                                     .tx_results
-                                    .iter()
-                                    .map(TxResult::from)
+                                    .into_iter()
                                     .zip(txs.into_iter())
                                 {
                                     self.processed_txs
                                         .push(ProcessedTx { tx, result });
                                 }
-                                Ok(Resp::ProcessProposal(resp))
+                                response
                             }
                             _ => unreachable!(),
                         })
                 }
-                #[cfg(not(feature = "ABCI"))]
+                #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
                     let mut txs = vec![];
                     std::mem::swap(&mut txs, &mut self.processed_txs);
@@ -132,28 +131,15 @@ impl AbcippShim {
                             _ => Err(Error::ConvertResp(res)),
                         })
                 }
-                #[cfg(feature = "ABCI")]
+                #[cfg(not(feature = "abcipp"))]
                 Req::BeginBlock(block) => {
                     // we save this data to be forwarded to finalize later
                     self.begin_block_request = Some(block);
                     Ok(Resp::BeginBlock(Default::default()))
                 }
-                #[cfg(feature = "ABCI")]
-                Req::DeliverTx(deliver_tx) => {
-                    // We call [`process_single_tx`] to report back the validity
-                    // of the tx to tendermint.
-                    self.service
-                        .call(Request::DeliverTx(deliver_tx))
-                        .map_err(Error::from)
-                        .and_then(|res| match res {
-                            Response::DeliverTx(resp) => {
-                                self.processed_txs.push(resp);
-                                Ok(Resp::DeliverTx(Default::default()))
-                            }
-                            _ => unreachable!(),
-                        })
-                }
-                #[cfg(feature = "ABCI")]
+                #[cfg(not(feature = "abcipp"))]
+                Req::DeliverTx(_) => Ok(Resp::DeliverTx(Default::default())),
+                #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
                     let mut txs = vec![];
                     std::mem::swap(&mut txs, &mut self.processed_txs);

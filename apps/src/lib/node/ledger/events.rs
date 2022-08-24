@@ -7,10 +7,7 @@ use borsh::BorshSerialize;
 use namada::ledger::governance::utils::ProposalEvent;
 use namada::types::ibc::IbcEvent;
 use namada::types::transaction::{hash_tx, TxType};
-#[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci::EventAttribute;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::EventAttribute;
 use thiserror::Error;
 
 /// Indicates if an event is emitted do to
@@ -43,24 +40,10 @@ pub enum EventType {
     Proposal,
 }
 
-#[cfg(not(feature = "ABCI"))]
 impl Display for EventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EventType::Accepted => write!(f, "accepted"),
-            EventType::Applied => write!(f, "applied"),
-            EventType::Ibc(t) => write!(f, "{}", t),
-            EventType::Proposal => write!(f, "proposal"),
-        }?;
-        Ok(())
-    }
-}
-
-#[cfg(feature = "ABCI")]
-impl Display for EventType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            EventType::Accepted => write!(f, "applied"),
             EventType::Applied => write!(f, "applied"),
             EventType::Ibc(t) => write!(f, "{}", t),
             EventType::Proposal => write!(f, "proposal"),
@@ -80,16 +63,12 @@ impl Event {
                     level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = if !cfg!(feature = "ABCI") {
-                    hash_tx(
-                        &wrapper
-                            .try_to_vec()
-                            .expect("Serializing wrapper should not fail"),
-                    )
-                    .to_string()
-                } else {
-                    wrapper.tx_hash.to_string()
-                };
+                event["hash"] = hash_tx(
+                    &wrapper
+                        .try_to_vec()
+                        .expect("Serializing wrapper should not fail"),
+                )
+                .to_string();
                 event
             }
             TxType::Decrypted(decrypted) => {
@@ -170,8 +149,8 @@ impl From<ProposalEvent> for Event {
     }
 }
 
-#[cfg(not(feature = "ABCI"))]
 /// Convert our custom event into the necessary tendermint proto type
+#[cfg(feature = "abcipp")]
 impl From<Event> for tendermint_proto::abci::Event {
     fn from(event: Event) -> Self {
         Self {
@@ -189,9 +168,9 @@ impl From<Event> for tendermint_proto::abci::Event {
     }
 }
 
-#[cfg(feature = "ABCI")]
 /// Convert our custom event into the necessary tendermint proto type
-impl From<Event> for tendermint_proto_abci::abci::Event {
+#[cfg(not(feature = "abcipp"))]
+impl From<Event> for tendermint_proto::abci::Event {
     fn from(event: Event) -> Self {
         Self {
             r#type: event.event_type.to_string(),

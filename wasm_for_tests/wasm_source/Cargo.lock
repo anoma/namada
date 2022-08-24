@@ -1163,7 +1163,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.12.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=murisi/jsfix#7d7570f2db008fc8476e4f0cacfc48d281139aa5"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus#2a421c237ff221206d45556de9c0c096e148faba"
 dependencies = [
  "bytes",
  "derive_more",
@@ -1190,7 +1190,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.16.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=murisi/jsfix#7d7570f2db008fc8476e4f0cacfc48d281139aa5"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus#2a421c237ff221206d45556de9c0c096e148faba"
 dependencies = [
  "bytes",
  "prost",
@@ -2634,7 +2634,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=murisi/jsfix#d2615b9c8133c61b70d28ce7a34b51cbe623f1a4"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2662,7 +2662,7 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=murisi/jsfix#d2615b9c8133c61b70d28ce7a34b51cbe623f1a4"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
 dependencies = [
  "flex-error",
  "serde",
@@ -2675,7 +2675,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=murisi/jsfix#d2615b9c8133c61b70d28ce7a34b51cbe623f1a4"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -2688,7 +2688,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=murisi/jsfix#d2615b9c8133c61b70d28ce7a34b51cbe623f1a4"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
 dependencies = [
  "bytes",
  "flex-error",
@@ -2705,7 +2705,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=murisi/jsfix#d2615b9c8133c61b70d28ce7a34b51cbe623f1a4"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
 dependencies = [
  "bytes",
  "flex-error",
@@ -2729,7 +2729,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=murisi/jsfix#d2615b9c8133c61b70d28ce7a34b51cbe623f1a4"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",

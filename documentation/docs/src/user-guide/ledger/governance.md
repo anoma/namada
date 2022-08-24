@@ -14,7 +14,7 @@ There are two different mechanism to create a proposal:
 Assuming you have an account with at least 500 NAM token (in this example we are going to use `my-new-acc`), lets get the corresponding address
 
 ```shell
-anoma wallet address find --alias `my-new-acc`
+namada wallet address find --alias `my-new-acc`
 ```
 
 Now, we need to create a json file `proposal.json` holding the content of our proposal. Copy the below text into a json file.
@@ -51,19 +51,19 @@ You should change the value of:
 As soon as your `proposal.json` file is ready, you can submit the proposal with (making sure to be in the same directory as the `proposal.json` file):
 
 ```shell
-anoma client init-proposal --data-path proposal.json 
+namada client init-proposal --data-path proposal.json 
 ```
 
 The transaction should have been accepted. You can query all the proposals with:
 
 ```shell
-anoma client query-proposal
+namada client query-proposal
 ```
 
 or a single proposal with
 
 ```shell
-anoma client query-proposal --proposal-id 0
+namada client query-proposal --proposal-id 0
 ```
 
 where `0` is the proposal id.
@@ -73,7 +73,7 @@ where `0` is the proposal id.
 Only validators and delegators can vote. Assuming you have a validator or a delegator account (in this example we are going to use `validator`), you can send a vote with the following command:
 
 ```shell
-anoma client vote-proposal \
+namada client vote-proposal \
     --proposal-id 0 \
     --vote yay \
     --signer validator
@@ -86,25 +86,25 @@ where `--vote` can be either `yay` or `nay`.
 As soon as the ledger reaches epoch definied in the json as `voting_end_epoch`, you can no longer vote. The code definied in `proposal_code` json field will be executed at the beginning of `grace_epoch` epoch. You can use the following commands to check the status of a proposal:
 
 ```shell
-anoma client query-proposal --proposal-id 0
+namada client query-proposal --proposal-id 0
 ```
 
 or to just check the result:
 
 ```shell
-anoma client query-proposal-result --proposal-id 0
+namada client query-proposal-result --proposal-id 0
 ```
 
 ## Off-chain proposals
 
-If for any reason issuing an on-chain proposal is not adequate to your needs, you still have the option to create an off-chain proposal. 
+If for any reason issuing an on-chain proposal is not adequate to your needs, you still have the option to create an off-chain proposal.
 
 ### Create proposal
 
 Create the same json file as in the on-chain proposal and use the following command:
 
 ```shell
-anoma client init-proposal \
+namada client init-proposal \
     --data-path proposal.json \
     --offline
 ```
@@ -116,7 +116,7 @@ This command will create a `proposal` file same directory where the command was 
 To vote an offline proposal use the following command:
 
 ```shell
-anoma client vote-proposal --data-path proposal \
+namada client vote-proposal --data-path proposal \
     --vote yay \
     --signer validator \
     --offline
@@ -136,7 +136,7 @@ All those files will have to be in a folder (lets call it `offline-proposal`).
 Now you can use the following command:
 
 ```shell
-anoma client query-proposal-result \
+namada client query-proposal-result \
     --offline \
     --data-path `offline-proposal`
 ```

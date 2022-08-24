@@ -52,11 +52,7 @@ fn run_ledger() -> Result<()> {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
         ledger.exp_string("Anoma ledger node started")?;
-        if !cfg!(feature = "ABCI") {
-            ledger.exp_string("This node is a fullnode")?;
-        } else {
-            ledger.exp_string("This node is not a validator")?;
-        }
+        ledger.exp_string("This node is a fullnode")?;
     }
 
     Ok(())
@@ -66,8 +62,6 @@ fn run_ledger() -> Result<()> {
 /// 1. Run 2 genesis validator ledger nodes and 1 non-validator node
 /// 2. Submit a valid token transfer tx
 /// 3. Check that all the nodes processed the tx with the same result
-/// TODO: run this test for ABCI-plus-plus once https://github.com/tendermint/tendermint/issues/8840 is fixed
-#[cfg(not(feature = "ABCI-plus-plus"))]
 #[test]
 fn test_node_connectivity() -> Result<()> {
     // Setup 2 genesis validator nodes
@@ -87,11 +81,11 @@ fn test_node_connectivity() -> Result<()> {
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        non_validator.exp_string("This node is a fullnode")?;
-    } else {
-        non_validator.exp_string("This node is not a validator")?;
-    }
+    non_validator.exp_string("This node is a fullnode")?;
+
+    let bg_validator_0 = validator_0.background();
+    let bg_validator_1 = validator_1.background();
+    let bg_non_validator = non_validator.background();
 
     // 2. Submit a valid token transfer tx
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -119,6 +113,10 @@ fn test_node_connectivity() -> Result<()> {
     client.assert_success();
 
     // 3. Check that all the nodes processed the tx with the same result
+    let mut validator_0 = bg_validator_0.foreground();
+    let mut validator_1 = bg_validator_1.foreground();
+    let mut non_validator = bg_non_validator.foreground();
+
     let expected_result = "all VPs accepted transaction";
     validator_0.exp_string(expected_result)?;
     validator_1.exp_string(expected_result)?;
@@ -244,12 +242,6 @@ fn ledger_txs_and_queries() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
-
     let _bg_ledger = ledger.background();
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
@@ -348,9 +340,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
 
             if !dry_run {
-                if !cfg!(feature = "ABCI") {
-                    client.exp_string("Transaction accepted")?;
-                }
+                client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
             }
             client.exp_string("Transaction is valid.")?;
@@ -423,11 +413,6 @@ fn invalid_transactions() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
@@ -435,7 +420,7 @@ fn invalid_transactions() -> Result<()> {
 
     // 2. Submit a an invalid transaction (trying to mint tokens should fail
     // in the token's VP)
-    let tx_data_path = test.base_dir.path().join("tx.data");
+    let tx_data_path = test.test_dir.path().join("tx.data");
     let transfer = token::Transfer {
         source: find_address(&test, DAEWON)?,
         target: find_address(&test, ALBERT)?,
@@ -470,10 +455,8 @@ fn invalid_transactions() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, tx_args, Some(60))?;
-    if !cfg!(feature = "ABCI") {
-        client.exp_string("Transaction accepted")?;
-    }
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction accepted")?;
     client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is invalid")?;
     client.exp_string(r#""code": "1"#)?;
@@ -530,9 +513,7 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    if !cfg!(feature = "ABCI") {
-        client.exp_string("Transaction accepted")?;
-    }
+    client.exp_string("Transaction accepted")?;
     client.exp_string("Transaction applied")?;
 
     client.exp_string("Error trying to apply a transaction")?;
@@ -583,11 +564,6 @@ fn pos_bonds() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -781,11 +757,6 @@ fn pos_init_validator() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -948,11 +919,6 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
@@ -993,9 +959,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
                 let mut args = (*tx_args).clone();
                 args.push(&*validator_one_rpc);
                 let mut client = run!(*test, Bin::Client, args, Some(40))?;
-                if !cfg!(feature = "ABCI") {
-                    client.exp_string("Transaction accepted")?;
-                }
+                client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
                 client.exp_string("Transaction is valid.")?;
                 client.assert_success();
@@ -1043,11 +1007,6 @@ fn proposal_submission() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1076,7 +1035,7 @@ fn proposal_submission() -> Result<()> {
 
     // 2. Submit valid proposal
     let valid_proposal_json_path =
-        test.base_dir.path().join("valid_proposal.json");
+        test.test_dir.path().join("valid_proposal.json");
     let proposal_code = wasm_abs_path(TX_PROPOSAL_CODE);
 
     let albert = find_address(&test, ALBERT)?;
@@ -1166,7 +1125,7 @@ fn proposal_submission() -> Result<()> {
     // 6. Submit an invalid proposal
     // proposal is invalid due to voting_end_epoch - voting_start_epoch < 3
     let invalid_proposal_json_path =
-        test.base_dir.path().join("invalid_proposal.json");
+        test.test_dir.path().join("invalid_proposal.json");
     let albert = find_address(&test, ALBERT)?;
     let invalid_proposal_json = json!(
         {
@@ -1395,11 +1354,6 @@ fn proposal_offline() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1428,7 +1382,7 @@ fn proposal_offline() -> Result<()> {
 
     // 2. Create an offline proposal
     let valid_proposal_json_path =
-        test.base_dir.path().join("valid_proposal.json");
+        test.test_dir.path().join("valid_proposal.json");
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json = json!(
         {
@@ -1552,8 +1506,6 @@ fn generate_proposal_json(
 /// 3. Setup and start the 2 genesis validator nodes and a non-validator node
 /// 4. Submit a valid token transfer tx from one validator to the other
 /// 5. Check that all the nodes processed the tx with the same result
-/// TODO: run this test for ABCI-plus-plus once https://github.com/tendermint/tendermint/issues/8840 is fixed
-#[cfg(not(feature = "ABCI-plus-plus"))]
 #[test]
 fn test_genesis_validators() -> Result<()> {
     use std::collections::HashMap;
@@ -1565,7 +1517,6 @@ fn test_genesis_validators() -> Result<()> {
         self, ValidatorPreGenesisConfig,
     };
     use namada_apps::config::Config;
-    use tempfile::tempdir;
 
     // This test is not using the `setup::network`, because we're setting up
     // custom genesis validators
@@ -1576,7 +1527,7 @@ fn test_genesis_validators() -> Result<()> {
     });
 
     let working_dir = setup::working_dir();
-    let base_dir = tempdir().unwrap();
+    let test_dir = setup::TestDir::new();
     let checksums_path = working_dir
         .join("wasm/checksums.json")
         .to_string_lossy()
@@ -1587,23 +1538,13 @@ fn test_genesis_validators() -> Result<()> {
     let net_address_port_0 = net_address_0.port();
     // Find the first port (ledger P2P) that should be used for a validator at
     // the given index
-    let get_first_port = |ix: u8| {
-        net_address_port_0
-            + 6 * (ix as u16 + 1)
-            + if cfg!(feature = "ABCI") {
-                0
-            } else {
-                // The ABCI++ ports at `26670 + ABCI_PLUS_PLUS_PORT_OFFSET`,
-                // see `network`
-                setup::ABCI_PLUS_PLUS_PORT_OFFSET
-            }
-    };
+    let get_first_port = |ix: u8| net_address_port_0 + 6 * (ix as u16 + 1);
 
     // 1. Setup 2 genesis validators
     let validator_0_alias = "validator-0";
     let validator_1_alias = "validator-1";
 
-    let init_genesis_validator_0 = setup::run_cmd(
+    let mut init_genesis_validator_0 = setup::run_cmd(
         Bin::Client,
         [
             "utils",
@@ -1616,14 +1557,14 @@ fn test_genesis_validators() -> Result<()> {
         ],
         Some(5),
         &working_dir,
-        &base_dir,
+        &test_dir,
         "validator",
         format!("{}:{}", std::file!(), std::line!()),
     )?;
     init_genesis_validator_0.assert_success();
     let validator_0_pre_genesis_dir =
         namada_apps::client::utils::validator_pre_genesis_dir(
-            base_dir.path(),
+            test_dir.path(),
             validator_0_alias,
         );
     let config = std::fs::read_to_string(
@@ -1639,7 +1580,7 @@ fn test_genesis_validators() -> Result<()> {
         .remove(validator_0_alias)
         .unwrap();
 
-    let init_genesis_validator_1 = setup::run_cmd(
+    let mut init_genesis_validator_1 = setup::run_cmd(
         Bin::Client,
         [
             "utils",
@@ -1652,14 +1593,14 @@ fn test_genesis_validators() -> Result<()> {
         ],
         Some(5),
         &working_dir,
-        &base_dir,
+        &test_dir,
         "validator",
         format!("{}:{}", std::file!(), std::line!()),
     )?;
     init_genesis_validator_1.assert_success();
     let validator_1_pre_genesis_dir =
         namada_apps::client::utils::validator_pre_genesis_dir(
-            base_dir.path(),
+            test_dir.path(),
             validator_1_alias,
         );
     let config = std::fs::read_to_string(
@@ -1705,11 +1646,11 @@ fn test_genesis_validators() -> Result<()> {
             update_validator_config(1, validator_1_config),
         ),
     ]);
-    let genesis_file = base_dir.path().join("e2e-test-genesis-src.toml");
+    let genesis_file = test_dir.path().join("e2e-test-genesis-src.toml");
     genesis_config::write_genesis_config(&genesis, &genesis_file);
     let genesis_path = genesis_file.to_string_lossy();
 
-    let archive_dir = base_dir.path().to_string_lossy().to_string();
+    let archive_dir = test_dir.path().to_string_lossy().to_string();
     let args = vec![
         "utils",
         "init-network",
@@ -1730,7 +1671,7 @@ fn test_genesis_validators() -> Result<()> {
         args,
         Some(5),
         &working_dir,
-        &base_dir,
+        &test_dir,
         "validator",
         format!("{}:{}", std::file!(), std::line!()),
     )?;
@@ -1747,7 +1688,7 @@ fn test_genesis_validators() -> Result<()> {
     };
     let test = setup::Test {
         working_dir: working_dir.clone(),
-        base_dir,
+        test_dir,
         net,
         genesis,
     };
@@ -1810,13 +1751,7 @@ fn test_genesis_validators() -> Result<()> {
     // We have to update the ports in the configs again, because the ones from
     // `join-network` use the defaults
     let update_config = |ix: u8, mut config: Config| {
-        let first_port = net_address_port_0
-            + 6 * (ix as u16 + 1)
-            + if cfg!(feature = "ABCI") {
-                0
-            } else {
-                setup::ABCI_PLUS_PLUS_PORT_OFFSET
-            };
+        let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
         config.ledger.tendermint.p2p_address.set_port(first_port);
         config
             .ledger
@@ -1844,7 +1779,7 @@ fn test_genesis_validators() -> Result<()> {
         .unwrap();
 
     // Copy WASMs to each node's chain dir
-    let chain_dir = test.base_dir.path().join(chain_id.as_str());
+    let chain_dir = test.test_dir.path().join(chain_id.as_str());
     setup::copy_wasm_to_chain_dir(
         &working_dir,
         &chain_dir,
@@ -1866,11 +1801,11 @@ fn test_genesis_validators() -> Result<()> {
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        non_validator.exp_string("This node is a fullnode")?;
-    } else {
-        non_validator.exp_string("This node is not a validator")?;
-    }
+    non_validator.exp_string("This node is a fullnode")?;
+
+    let bg_validator_0 = validator_0.background();
+    let bg_validator_1 = validator_1.background();
+    let bg_non_validator = non_validator.background();
 
     // 4. Submit a valid token transfer tx
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1899,6 +1834,10 @@ fn test_genesis_validators() -> Result<()> {
     client.assert_success();
 
     // 3. Check that all the nodes processed the tx with the same result
+    let mut validator_0 = bg_validator_0.foreground();
+    let mut validator_1 = bg_validator_1.foreground();
+    let mut non_validator = bg_non_validator.foreground();
+
     let expected_result = "all VPs accepted transaction";
     validator_0.exp_string(expected_result)?;
     validator_1.exp_string(expected_result)?;

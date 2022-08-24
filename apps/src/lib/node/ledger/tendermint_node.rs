@@ -1,4 +1,6 @@
+use std::env;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
@@ -7,28 +9,18 @@ use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
-#[cfg(not(feature = "ABCI"))]
 use tendermint::Genesis;
-#[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_config::Error as TendermintError;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_config::TendermintConfig;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::Error as TendermintError;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::TendermintConfig;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::Genesis;
+use tendermint_config::{Error as TendermintError, TendermintConfig};
 use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 use crate::config;
+
+/// Env. var to output Tendermint log to stdout
+pub const ENV_VAR_TM_STDOUT: &str = "ANOMA_TM_STDOUT";
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -92,19 +84,11 @@ pub async fn run(
     };
 
     // init and run a tendermint node child process
-    let output = if !cfg!(feature = "ABCI") {
-        Command::new(&tendermint_path)
-            .args(&["init", &mode, "--home", &home_dir_string])
-            .output()
-            .await
-            .map_err(Error::Init)?
-    } else {
-        Command::new(&tendermint_path)
-            .args(&["init", "--home", &home_dir_string])
-            .output()
-            .await
-            .map_err(Error::Init)?
-    };
+    let output = Command::new(&tendermint_path)
+        .args(&["init", &mode, "--home", &home_dir_string])
+        .output()
+        .await
+        .map_err(Error::Init)?;
     if !output.status.success() {
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
@@ -130,44 +114,36 @@ pub async fn run(
             .await;
         }
     }
-    #[cfg(not(feature = "ABCI"))]
-    {
-        write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
-    }
-    #[cfg(feature = "ABCI")]
-    {
-        write_tm_genesis(&home_dir, chain_id, genesis_time).await;
-    }
+    #[cfg(feature = "abcipp")]
+    write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
+    #[cfg(not(feature = "abcipp"))]
+    write_tm_genesis(&home_dir, chain_id, genesis_time).await;
 
     update_tendermint_config(&home_dir, config).await?;
 
-    let mut tendermint_node = if !cfg!(feature = "ABCI") {
-        Command::new(&tendermint_path)
-            .args(&[
-                "start",
-                "--mode",
-                &mode,
-                "--proxy-app",
-                &ledger_address,
-                "--home",
-                &home_dir_string,
-            ])
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(Error::StartUp)?
-    } else {
-        Command::new(&tendermint_path)
-            .args(&[
-                "start",
-                "--proxy_app",
-                &ledger_address,
-                "--home",
-                &home_dir_string,
-            ])
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(Error::StartUp)?
+    let mut tendermint_node = Command::new(&tendermint_path);
+    tendermint_node.args(&[
+        "start",
+        "--mode",
+        &mode,
+        "--proxy-app",
+        &ledger_address,
+        "--home",
+        &home_dir_string,
+    ]);
+
+    let log_stdout = match env::var(ENV_VAR_TM_STDOUT) {
+        Ok(val) => val.to_ascii_lowercase().trim() == "true",
+        _ => false,
     };
+    if !log_stdout {
+        tendermint_node.stdout(Stdio::null());
+    }
+
+    let mut tendermint_node = tendermint_node
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(Error::StartUp)?;
     tracing::info!("Tendermint node started");
 
     tokio::select! {
@@ -207,22 +183,10 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     let tendermint_path = from_env_or_default()?;
     let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
     // reset all the Tendermint state, if any
-    #[cfg(not(feature = "ABCI"))]
     std::process::Command::new(tendermint_path)
         .args(&[
             "reset",
             "unsafe-all",
-            // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
-            // "--log-level=\"*debug\"",
-            "--home",
-            &tendermint_dir,
-        ])
-        .output()
-        .expect("Failed to reset tendermint node's data");
-    #[cfg(feature = "ABCI")]
-    std::process::Command::new(tendermint_path)
-        .args(&[
-            "unsafe-reset-all",
             // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
             // "--log-level=\"*debug\"",
             "--home",
@@ -349,19 +313,10 @@ async fn update_tendermint_config(
     config.p2p.persistent_peers = tendermint_config.p2p_persistent_peers;
     config.p2p.pex = tendermint_config.p2p_pex;
     config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
-    #[cfg(feature = "ABCI")]
-    {
-        config.p2p.addr_book_strict = tendermint_config.p2p_addr_book_strict;
-    }
 
     // In "dev", only produce blocks when there are txs or when the AppHash
     // changes
     config.consensus.create_empty_blocks = true; // !cfg!(feature = "dev");
-    #[cfg(feature = "ABCI")]
-    {
-        config.consensus.timeout_commit =
-            tendermint_config.consensus_timeout_commit;
-    }
 
     // We set this to true as we don't want any invalid tx be re-applied. This
     // also implies that it's not possible for an invalid tx to become valid
@@ -384,7 +339,6 @@ async fn update_tendermint_config(
         tendermint_config.instrumentation_namespace;
 
     // setup the events log
-    #[cfg(not(feature = "ABCI"))]
     {
         // keep events for one minute
         config.rpc.event_log_window_size =
@@ -410,7 +364,7 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    #[cfg(not(feature = "ABCI"))] config: &config::Tendermint,
+    #[cfg(feature = "abcipp")] config: &config::Tendermint,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
@@ -431,10 +385,10 @@ async fn write_tm_genesis(
     genesis.genesis_time = genesis_time
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
-    #[cfg(not(feature = "ABCI"))]
+    #[cfg(feature = "abcipp")]
     {
         genesis.consensus_params.timeout.commit =
-            config.consensus_timeout_commit.into()
+            config.consensus_timeout_commit.into();
     }
 
     let mut file = OpenOptions::new()

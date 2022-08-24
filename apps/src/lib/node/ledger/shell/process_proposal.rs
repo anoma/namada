@@ -2,17 +2,18 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::voting_power::FractionalVotingPower;
-#[cfg(not(feature = "ABCI"))]
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::abci::{
-    ExecTxResult, RequestProcessProposal, ResponseProcessProposal,
-};
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::RequestDeliverTx;
+#[cfg(not(feature = "abcipp"))]
+use tendermint_proto::abci::RequestProcessProposal;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci::response_process_proposal::ProposalStatus;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci::{ExecTxResult, RequestProcessProposal};
 
 use super::queries::QueriesExt;
 use super::*;
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
 impl<D, H> Shell<D, H>
 where
@@ -31,11 +32,11 @@ where
     /// but we only reject the entire block if the order of the
     /// included txs violates the order decided upon in the previous
     /// block.
-    #[cfg(not(feature = "ABCI"))]
     pub fn process_proposal(
-        &mut self,
+        &self,
         req: RequestProcessProposal,
-    ) -> ResponseProcessProposal {
+    ) -> ProcessProposal {
+        let mut tx_queue_iter = self.storage.tx_queue.iter();
         tracing::info!(
             proposer = ?hex::encode(&req.proposer_address),
             height = req.height,
@@ -45,12 +46,14 @@ where
         );
         // the number of vote extension digests included in the block proposal
         let mut vote_ext_digest_num = 0;
-        let tx_results: Vec<ExecTxResult> = req
+        let tx_results: Vec<_> = req
             .txs
             .iter()
             .map(|tx_bytes| {
-                ExecTxResult::from(
-                    self.process_single_tx(tx_bytes, &mut vote_ext_digest_num),
+                self.process_single_tx(
+                    tx_bytes,
+                    &mut tx_queue_iter,
+                    &mut vote_ext_digest_num,
                 )
             })
             .collect();
@@ -93,17 +96,10 @@ where
         } else {
             ProposalStatus::Accept
         };
-        tracing::info!(
-            proposer = ?hex::encode(&req.proposer_address),
-            height = req.height,
-            hash = ?hex::encode(&req.hash),
-            ?status,
-            "Processed block proposal",
-        );
-        ResponseProcessProposal {
+
+        ProcessProposal {
             status: status as i32,
             tx_results,
-            ..Default::default()
         }
     }
 
@@ -127,9 +123,10 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    pub(crate) fn process_single_tx(
-        &mut self,
+    pub(crate) fn process_single_tx<'a>(
+        &self,
         tx_bytes: &[u8],
+        tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
         vote_ext_digest_num: &mut usize,
     ) -> TxResult {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
@@ -173,7 +170,7 @@ where
                     .into(),
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                ProtocolTxType::EthereumEvents(digest) => {
+                ProtocolTxType::EthEventsDigest(digest) => {
                     *vote_ext_digest_num += 1;
 
                     let extensions =
@@ -239,7 +236,7 @@ where
                     info: "Unsupported protocol transaction type".into(),
                 },
             },
-            TxType::Decrypted(tx) => match self.next_wrapper() {
+            TxType::Decrypted(tx) => match tx_queue_iter.next() {
                 Some(wrapper) => {
                     if wrapper.tx_hash != tx.hash_commitment() {
                         TxResult {
@@ -305,90 +302,6 @@ where
         }
     }
 
-    /// If we are not using ABCI++, we check the wrapper,
-    /// decode it, and check the decoded payload all at once
-    #[cfg(feature = "ABCI")]
-    pub fn process_and_decode_proposal(
-        &mut self,
-        req: RequestDeliverTx,
-    ) -> shim::request::ProcessedTx {
-        // check the wrapper tx
-        let req_tx = match Tx::try_from(req.tx.as_ref()) {
-            Ok(tx) => tx,
-            Err(_) => {
-                return shim::request::ProcessedTx {
-                    result: TxResult {
-                        code: ErrorCodes::InvalidTx.into(),
-                        info: "The submitted transaction was not \
-                               deserializable"
-                            .into(),
-                    },
-                    // this ensures that emitted events are of the correct type
-                    tx: req.tx,
-                };
-            }
-        };
-        match process_tx(req_tx.clone()) {
-            Ok(TxType::Wrapper(_)) => {}
-            Ok(TxType::Protocol(_)) => {
-                let result = self.process_single_tx(&req.tx, &mut 0usize);
-                return shim::request::ProcessedTx { tx: req.tx, result };
-            }
-            Ok(_) => {
-                return shim::request::ProcessedTx {
-                    result: TxResult {
-                        code: ErrorCodes::InvalidTx.into(),
-                        info: "Transaction rejected: Non-encrypted \
-                               transactions are not supported"
-                            .into(),
-                    },
-                    // this ensures that emitted events are of the correct type
-                    tx: req.tx,
-                };
-            }
-            Err(_) => {
-                // This will be caught later
-            }
-        }
-
-        let wrapper_resp = self.process_single_tx(&req.tx, &mut 0usize);
-        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-
-        if wrapper_resp.code == 0 {
-            // if the wrapper passed, decode it
-            if let Ok(TxType::Wrapper(wrapper)) = process_tx(req_tx) {
-                let decoded = Tx::from(match wrapper.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted(tx),
-                    _ => DecryptedTx::Undecryptable(wrapper.clone()),
-                })
-                .to_bytes();
-                // we are not checking that txs are out of order
-                self.storage.tx_queue.push(wrapper);
-                // check the decoded tx
-                let decoded_resp =
-                    self.process_single_tx(&decoded, &mut 0usize);
-                // this ensures that the tx queue is empty even if an error
-                // happened in [`process_proposal`].
-                self.storage.tx_queue.pop();
-                shim::request::ProcessedTx {
-                    // this ensures that emitted events are of the correct type
-                    tx: decoded,
-                    result: decoded_resp,
-                }
-            } else {
-                // This was checked above
-                unreachable!()
-            }
-        } else {
-            shim::request::ProcessedTx {
-                // this ensures that emitted events are of the correct type
-                tx: req.tx,
-                result: wrapper_resp,
-            }
-        }
-    }
-
-    #[cfg(not(feature = "ABCI"))]
     pub fn revert_proposal(
         &mut self,
         _req: shim::request::RevertProposal,
@@ -419,18 +332,11 @@ mod test_process_proposal {
     };
     #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::abci::RequestInitChain;
-    #[cfg(not(feature = "ABCI"))]
     use tendermint_proto::google::protobuf::Timestamp;
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::abci::RequestInitChain;
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::google::protobuf::Timestamp;
 
     use super::*;
-    #[cfg(not(feature = "ABCI"))]
-    use crate::node::ledger::shell::test_utils::TestError;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, ProcessProposal, TestShell,
+        self, gen_keypair, ProcessProposal, TestError, TestShell,
     };
     use crate::wallet;
 
@@ -463,7 +369,7 @@ mod test_process_proposal {
                 events: vec![],
             }
         };
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+        let tx = ProtocolTxType::EthEventsDigest(vote_extension_digest)
             .sign(&protocol_key)
             .to_bytes();
         #[allow(clippy::redundant_clone)]
@@ -481,7 +387,7 @@ mod test_process_proposal {
         vote_extension_digest: ethereum_events::VextDigest,
         protocol_key: common::SecretKey,
     ) {
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+        let tx = ProtocolTxType::EthEventsDigest(vote_extension_digest)
             .sign(&protocol_key)
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
@@ -684,11 +590,6 @@ mod test_process_proposal {
             response.result.info,
             String::from("Wrapper transactions must be signed")
         );
-        #[cfg(feature = "ABCI")]
-        {
-            assert_eq!(response.tx, tx);
-            assert!(shell.shell.storage.tx_queue.is_empty())
-        }
     }
 
     /// Test that a wrapper tx with invalid signature is rejected
@@ -771,11 +672,6 @@ mod test_process_proposal {
             response.result.info,
             expected_error
         );
-        #[cfg(feature = "ABCI")]
-        {
-            assert_eq!(response.tx, new_tx.to_bytes());
-            assert!(shell.shell.storage.tx_queue.is_empty())
-        }
     }
 
     /// Test that if the account submitting the tx is not known and the fee is
@@ -819,11 +715,6 @@ mod test_process_proposal {
             "The address given does not have sufficient balance to pay fee"
                 .to_string(),
         );
-        #[cfg(feature = "ABCI")]
-        {
-            assert_eq!(response.tx, wrapper.to_bytes());
-            assert!(shell.shell.storage.tx_queue.is_empty())
-        }
     }
 
     /// Test that if the account submitting the tx does
@@ -880,14 +771,8 @@ mod test_process_proposal {
                 "The address given does not have sufficient balance to pay fee"
             )
         );
-        #[cfg(feature = "ABCI")]
-        {
-            assert_eq!(response.tx, wrapper.to_bytes());
-            assert!(shell.shell.storage.tx_queue.is_empty())
-        }
     }
 
-    #[cfg(not(feature = "ABCI"))]
     /// Test that if the expected order of decrypted txs is
     /// validated, [`process_proposal`] rejects it
     #[test]
@@ -953,7 +838,6 @@ mod test_process_proposal {
         );
     }
 
-    #[cfg(not(feature = "ABCI"))]
     /// Test that a tx incorrectly labelled as undecryptable
     /// is rejected by [`process_proposal`]
     #[test]
@@ -1037,15 +921,11 @@ mod test_process_proposal {
         );
         wrapper.tx_hash = Hash([0; 32]);
 
-        let tx = if !cfg!(feature = "ABCI") {
-            shell.enqueue_tx(wrapper.clone());
-            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-                #[allow(clippy::redundant_clone)]
-                wrapper.clone(),
-            )))
-        } else {
-            wrapper.sign(&keypair).expect("Test failed")
-        };
+        shell.enqueue_tx(wrapper.clone());
+        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+            #[allow(clippy::redundant_clone)]
+            wrapper.clone(),
+        )));
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -1060,23 +940,6 @@ mod test_process_proposal {
             panic!("Test failed")
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
-        #[cfg(feature = "ABCI")]
-        {
-            match process_tx(
-                Tx::try_from(response.tx.as_ref()).expect("Test failed"),
-            )
-            .expect("Test failed")
-            {
-                TxType::Decrypted(DecryptedTx::Undecryptable(inner)) => {
-                    assert_eq!(
-                        hash_tx(inner.try_to_vec().unwrap().as_ref()),
-                        hash_tx(wrapper.try_to_vec().unwrap().as_ref())
-                    );
-                    assert!(shell.shell.storage.tx_queue.is_empty())
-                }
-                _ => panic!("Test failed"),
-            }
-        }
     }
 
     /// Test that if a wrapper tx contains garbage bytes
@@ -1110,15 +973,11 @@ mod test_process_proposal {
             tx_hash: hash_tx(&tx),
         };
 
-        let signed = if !cfg!(feature = "ABCI") {
-            shell.enqueue_tx(wrapper.clone());
-            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-                #[allow(clippy::redundant_clone)]
-                wrapper.clone(),
-            )))
-        } else {
-            wrapper.sign(&keypair).expect("Test failed")
-        };
+        shell.enqueue_tx(wrapper.clone());
+        let signed = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+            #[allow(clippy::redundant_clone)]
+            wrapper.clone(),
+        )));
         let request = ProcessProposal {
             txs: vec![signed.to_bytes()],
         };
@@ -1132,26 +991,8 @@ mod test_process_proposal {
             panic!("Test failed")
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
-        #[cfg(feature = "ABCI")]
-        {
-            match process_tx(
-                Tx::try_from(response.tx.as_ref()).expect("Test failed"),
-            )
-            .expect("Test failed")
-            {
-                TxType::Decrypted(DecryptedTx::Undecryptable(inner)) => {
-                    assert_eq!(
-                        hash_tx(inner.try_to_vec().unwrap().as_ref()),
-                        hash_tx(wrapper.try_to_vec().unwrap().as_ref())
-                    );
-                    assert!(shell.shell.storage.tx_queue.is_empty());
-                }
-                _ => panic!("Test failed"),
-            }
-        }
     }
 
-    #[cfg(not(feature = "ABCI"))]
     /// Test that if more decrypted txs are submitted to
     /// [`process_proposal`] than expected, they are rejected
     #[test]
@@ -1216,9 +1057,5 @@ mod test_process_proposal {
                  supported"
             ),
         );
-        #[cfg(feature = "ABCI")]
-        {
-            assert_eq!(response.tx, tx.to_bytes());
-        }
     }
 }

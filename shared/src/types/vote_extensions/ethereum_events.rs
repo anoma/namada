@@ -17,7 +17,9 @@ use crate::types::storage::BlockHeight;
 /// This struct will be created and signed over by each
 /// active validator, to be included as a vote extension at the end of a
 /// Tendermint PreCommit phase.
-#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct Vext {
     /// The block height for which this [`Vext`] was made.
     pub block_height: BlockHeight,

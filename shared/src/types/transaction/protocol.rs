@@ -32,7 +32,7 @@ mod protocol_txs {
     use serde_json;
 
     use super::*;
-    use crate::proto::Tx;
+    use crate::proto::{Signed, Tx};
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
     use crate::types::vote_extensions::{
@@ -79,8 +79,12 @@ mod protocol_txs {
         DKG(DkgMessage),
         /// Tx requesting a new DKG session keypair
         NewDkgKeypair(Tx),
-        /// Ethereum events contained in vote extensions
-        EthereumEvents(ethereum_events::VextDigest),
+        /// Ethereum events contained in vote extensions that
+        /// are compressed before being included on chain
+        EthEventsDigest(ethereum_events::VextDigest),
+        /// Ethereum events seen be validators
+        #[cfg(not(feature = "abcipp"))]
+        EthereumEvents(Signed<ethereum_events::Vext>),
         /// Validator set updates contained in vote extensions
         ValidatorSetUpdate(validator_set_update::VextDigest),
     }

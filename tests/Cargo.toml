@@ -8,24 +8,12 @@ resolver = "2"
 version = "0.7.0"
 
 [features]
-default = ["wasm-runtime", "ABCI"]
+default = ["wasm-runtime"]
 wasm-runtime = ["namada/wasm-runtime"]
 
-ABCI = [
-  "namada/ABCI",
-  "namada/ibc-mocks-abci",
-  "namada_vm_env/ABCI",
-]
-
-ABCI-plus-plus = [
-  "namada/ABCI-plus-plus",
-  "namada/ibc-mocks",
-  "namada_vm_env/ABCI-plus-plus",
-]
-
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["testing"]}
-namada_vm_env = {path = "../vm_env", default-features = false}
+namada = {path = "../shared", features = ["testing", "ibc-mocks"]}
+namada_vm_env = {path = "../vm_env"}
 chrono = "0.4.19"
 concat-idents = "1.1.2"
 prost = "0.9.0"
@@ -33,11 +21,6 @@ serde_json = {version = "1.0.65"}
 sha2 = "0.9.3"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tempfile = "3.2.0"
-# temporarily using fork work-around
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "murisi/jsfix", optional = true}
-tendermint-stable = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", branch = "murisi/jsfix", optional = true}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "murisi/jsfix", optional = true}
-tendermint-proto-abci = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", branch = "murisi/jsfix", optional = true}
 tracing = "0.1.30"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 derivative = "2.2.0"
@@ -49,7 +32,7 @@ borsh = "0.9.1"
 color-eyre = "0.5.11"
 # NOTE: enable "print" feature to see output from builds ran by e2e tests
 escargot = {version = "0.5.7"} # , features = ["print"]}
-expectrl = {git = "https://github.com/heliaxdev/expectrl.git", branch = "tomas/expect-eager-2"}
+expectrl = {version = "=0.5.2"}
 eyre = "0.6.5"
 file-serve = "0.2.0"
 fs_extra = "1.2.0"
@@ -59,6 +42,7 @@ libp2p = "0.38.0"
 pretty_assertions = "0.7.2"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
+rand = "0.8"
 toml = "0.5.9"
 
 # This is used to enable logging from tests
