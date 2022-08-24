@@ -22,7 +22,9 @@ use std::marker::PhantomData;
 pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::*;
 pub use namada::ledger::governance::storage as gov_storage;
-pub use namada::ledger::storage_api::{self, StorageRead};
+pub use namada::ledger::storage_api::{
+    self, iter_prefix, iter_prefix_bytes, StorageRead,
+};
 pub use namada::ledger::vp_env::VpEnv;
 pub use namada::ledger::{parameters, pos as proof_of_stake};
 pub use namada::proto::{Signed, SignedTxData};
@@ -334,7 +336,7 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
         prefix: &storage::Key,
     ) -> Result<Self::PrefixIter, storage_api::Error> {
         // Note that this is the same as `CtxPostStorageRead`
-        iter_prefix(prefix)
+        iter_prefix_impl(prefix)
     }
 
     fn iter_next(
@@ -411,7 +413,7 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
         prefix: &storage::Key,
     ) -> Result<Self::PrefixIter, storage_api::Error> {
         // Note that this is the same as `CtxPreStorageRead`
-        iter_prefix(prefix)
+        iter_prefix_impl(prefix)
     }
 
     fn iter_next(
@@ -442,7 +444,7 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
     }
 }
 
-fn iter_prefix(
+fn iter_prefix_impl(
     prefix: &storage::Key,
 ) -> Result<KeyValIterator<(String, Vec<u8>)>, storage_api::Error> {
     let prefix = prefix.to_string();
