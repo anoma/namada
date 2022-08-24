@@ -303,7 +303,6 @@ pub mod genesis_config {
         let reward_vp_config = wasm.get(reward_vp_name).unwrap();
 
         Validator {
-            // TODO add eth keys here
             pos_data: GenesisValidator {
                 address: Address::decode(&config.address.as_ref().unwrap())
                     .unwrap(),
@@ -769,17 +768,14 @@ pub fn genesis() -> Genesis {
     ])
     .unwrap();
 
-    // TODO: should these bytes be different from the ed above? Should I
-    // generate them from somewhere? For now I'm just randomly
-    // adjusting some bytes, assuming that is fine.
     let secp_eth_cold_keypair = secp256k1::SecretKey::try_from_slice(&[
-        64, 198, 87, 204, 44, 94, 234, 228, 217, 72, 245, 27, 40, 2, 151, 174,
-        24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 65, 162, 243, 125, 240, 206,
+        90, 83, 107, 155, 193, 251, 120, 27, 76, 1, 188, 8, 116, 121, 90, 99,
+        65, 17, 187, 6, 238, 141, 63, 188, 76, 38, 102, 7, 47, 185, 28, 52,
     ])
     .unwrap();
     let secp_eth_hot_keypair = secp256k1::SecretKey::try_from_slice(&[
-        58, 198, 87, 204, 44, 94, 122, 228, 217, 72, 245, 27, 40, 2, 151, 174,
-        24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 77, 162, 243, 125, 240, 206,
+        117, 93, 118, 129, 202, 67, 51, 62, 202, 196, 130, 244, 5, 44, 88, 200,
+        121, 169, 11, 227, 79, 223, 74, 88, 49, 132, 213, 59, 64, 20, 13, 82,
     ])
     .unwrap();
 
