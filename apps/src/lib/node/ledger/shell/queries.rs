@@ -559,3 +559,92 @@ pub enum SendValsetUpd {
     /// vote extension at any previous block height.
     AtPrevHeight(BlockHeight),
 }
+
+#[cfg(test)]
+mod test_queries {
+    use super::*;
+    use crate::node::ledger::shell::test_utils;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
+
+    /// Test if [`QueriesExt::can_send_validator_set_update`] behaves as
+    /// expected.
+    #[test]
+    fn test_can_send_validator_set_update() {
+        let (mut shell, _, _) = test_utils::setup_at_height(0u64);
+
+        let epoch_assertions = [
+            // (current block height, can send valset upd)
+            (1, true),
+            (2, false),
+            (3, false),
+            (4, false),
+            (5, false),
+            (6, false),
+            (7, false),
+            (8, false),
+            (9, false),
+            (10, false),
+            (11, false),
+            // we will change epoch here
+            (12, true),
+            (13, false),
+            (14, false),
+            (15, false),
+            (16, false),
+        ];
+
+        // test `SendValsetUpd::Now`
+        for (curr_block_height, can_send) in epoch_assertions.iter().copied() {
+            println!("Current height: {curr_block_height}");
+            assert_eq!(
+                shell
+                    .storage
+                    .can_send_validator_set_update(SendValsetUpd::Now),
+                can_send
+            );
+            shell.storage.last_height = curr_block_height.into();
+            if curr_block_height == 11u64 {
+                let validator_set = {
+                    let events_epoch = shell
+                        .storage
+                        .get_epoch_from_height(shell.storage.last_height)
+                        .expect("Test failed");
+
+                    let params = shell.storage.read_pos_params();
+                    let mut epochs = shell.storage.read_validator_set();
+                    let mut data =
+                        epochs.get(events_epoch).cloned().expect("Test failed");
+
+                    data.active = data
+                        .active
+                        .iter()
+                        .cloned()
+                        .map(|v| WeightedValidator {
+                            voting_power: VotingPower::from(0u64),
+                            ..v
+                        })
+                        .collect();
+
+                    epochs.set(data, events_epoch, &params);
+                    epochs
+                };
+                shell.storage.write_validator_set(&validator_set);
+
+                let mut req = FinalizeBlock::default();
+                req.header.time = namada::types::time::DateTimeUtc::now();
+                shell.finalize_block(req).expect("Test failed");
+                shell.commit();
+            }
+        }
+
+        // test `SendValsetUpd::AtPrevHeight`
+        for (curr_block_height, can_send) in epoch_assertions.iter().copied() {
+            assert_eq!(
+                shell.storage.can_send_validator_set_update(
+                    SendValsetUpd::AtPrevHeight(curr_block_height.into())
+                ),
+                can_send
+            );
+        }
+    }
+}
