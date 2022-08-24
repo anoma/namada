@@ -248,10 +248,10 @@ mod prepare_block {
                     .expect("Test failed")
                     .to_owned();
 
-                let curr_height = shell.storage.last_height + 1;
+                let prev_height = shell.storage.last_height;
 
                 let ext =
-                    ethereum_events::Vext::empty(curr_height, validator_addr);
+                    ethereum_events::Vext::empty(prev_height, validator_addr);
 
                 let protocol_key = match &shell.mode {
                     ShellMode::Validator { data, .. } => {
@@ -298,8 +298,9 @@ mod prepare_block {
                 ..Default::default()
             };
             assert_eq!(
-                shell.prepare_proposal(req).tx_records,
-                vec![record::remove(tx.to_bytes())]
+                // NOTE: we process mempool txs after protocol txs
+                shell.prepare_proposal(req).tx_records.remove(1),
+                record::remove(tx.to_bytes())
             );
         }
 
@@ -687,8 +688,9 @@ mod prepare_block {
                 ..Default::default()
             };
             assert_eq!(
-                shell.prepare_proposal(req).tx_records,
-                vec![record::remove(wrapper)]
+                // NOTE: we process mempool txs after protocol txs
+                shell.prepare_proposal(req).tx_records.remove(1),
+                record::remove(wrapper)
             );
         }
 
@@ -750,6 +752,8 @@ mod prepare_block {
                 .prepare_proposal(req)
                 .tx_records
                 .iter()
+                // NOTE: skip Ethereum events protocol tx
+                .skip(1)
                 .filter_map(
                     |TxRecord {
                          tx: tx_bytes,
