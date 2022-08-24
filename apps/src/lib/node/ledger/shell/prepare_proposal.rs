@@ -612,6 +612,13 @@ mod prepare_block {
             shell.finalize_block(req).expect("Test failed");
             shell.commit();
 
+            assert_eq!(
+                shell.storage.get_epoch_from_height(
+                    shell.storage.get_current_decision_height()
+                ),
+                Some(Epoch(1))
+            );
+
             // test prepare proposal
             let (protocol_key, _) = wallet::defaults::validator_keys();
             let validator_addr = wallet::defaults::validator_address();
