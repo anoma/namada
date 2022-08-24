@@ -23,7 +23,7 @@
 //! ## Pos Parameters
 //!
 //! Arbitrary valid PoS parameters are provided from its module via
-//! [`namada_vm_env::proof_of_stake::parameters::testing::arb_pos_params`].
+//! [`namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params`].
 //!
 //! ## Valid transitions
 //!
@@ -572,7 +572,7 @@ pub mod testing {
     use namada_tx_prelude::proof_of_stake::{
         staking_token_address, BondId, Bonds, PosParams, Unbonds,
     };
-    use namada_tx_prelude::Address;
+    use namada_tx_prelude::{Address, StorageRead};
     use proptest::prelude::*;
 
     use crate::tx::{self, tx_host_env};
