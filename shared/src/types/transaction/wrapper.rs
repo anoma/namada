@@ -171,6 +171,8 @@ pub mod wrapper_tx {
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
+        /// Transaction counter for replay protection
+        pub tx_counter: u64,
         /// the encrypted payload
         pub inner_tx: EncryptedTx,
         /// sha-2 hash of the inner transaction acting as a commitment
@@ -188,6 +190,7 @@ pub mod wrapper_tx {
             keypair: &common::SecretKey,
             epoch: Epoch,
             gas_limit: GasLimit,
+            tx_counter: u64,
             tx: Tx,
             encryption_key: EncryptionKey,
         ) -> WrapperTx {
@@ -197,6 +200,7 @@ pub mod wrapper_tx {
                 pk: keypair.ref_to(),
                 epoch,
                 gas_limit,
+                tx_counter,
                 inner_tx,
                 tx_hash: hash_tx(&tx.to_bytes()),
             }

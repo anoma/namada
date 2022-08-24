@@ -97,6 +97,19 @@ where
         }
     }
 
+    /// Helper function to get the transactions' counter of a specified address
+    pub fn get_tx_counter(self, source: &Address) -> std::result::Result<u64, String>  {
+        let height = self.storage.get_block_height().0;
+        let key = Key::from(source.to_db_key()).push("tx_counter").expect("Cannot obtain a storage key"); //FIXME: improve
+        let query_resp = self.read_storage_value(&key, height, false);
+
+        match query_resp.code {
+            0 => BorshDeserialize::try_from_slice(&query_resp.value).map_err(|_| format!("Unable to deserialize the transactions' counter of the given address {}", source)),
+            1 => Ok(0), // If key doesn't exist, default to 0
+            _ => Err(format!("Unable to read transactions' counter of the given address {}", source))
+        }
+    }
+
     /// Query to read a value from storage
     pub fn read_storage_value(
         &self,

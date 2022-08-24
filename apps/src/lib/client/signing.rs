@@ -129,6 +129,7 @@ pub async fn sign_wrapper(
             keypair,
             epoch,
             args.gas_limit.clone(),
+            args.tx_counter,
             tx,
             // TODO: Actually use the fetched encryption key
             Default::default(),

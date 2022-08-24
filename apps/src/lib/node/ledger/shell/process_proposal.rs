@@ -153,24 +153,33 @@ where
                             ),
                         }
                     } else {
-                        // check that the fee payer has sufficient balance
-                        let balance = self
-                            .get_balance(&tx.fee.token, &tx.fee_payer())
-                            .unwrap_or_default();
-
-                        if tx.fee.amount <= balance {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            }
-                        } else {
+                        // Check tx counter, replay-attack protection
+                        let tx_counter = self.get_tx_counter(&tx.fee_payer()).unwrap_or(u64::MAX);
+                        if tx.tx_counter < tx_counter {
                             TxResult {
                                 code: ErrorCodes::InvalidTx.into(),
-                                info: "The address given does not have \
-                                       sufficient balance to pay fee"
-                                    .into(),
+                                info: "The provided transaction counter is smaller than the expected one".into()
+                            }
+                        } else {
+                            // check that the fee payer has sufficient balance
+                            let balance = self
+                                .get_balance(&tx.fee.token, &tx.fee_payer())
+                                .unwrap_or_default();
+
+                            if tx.fee.amount <= balance {
+                                TxResult {
+                                    code: ErrorCodes::Ok.into(),
+                                    info: "Process proposal accepted this \
+                                        transaction"
+                                        .into(),
+                                }
+                            } else {
+                                TxResult {
+                                    code: ErrorCodes::InvalidTx.into(),
+                                    info: "The address given does not have \
+                                        sufficient balance to pay fee"
+                                        .into(),
+                                }
                             }
                         }
                     }
