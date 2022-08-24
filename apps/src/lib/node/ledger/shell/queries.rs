@@ -338,6 +338,9 @@ pub(crate) trait QueriesExt {
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
     fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch>;
+
+    /// Retrieves the [`BlockHeight`] that is currently being decided.
+    fn get_current_decision_height(&self) -> BlockHeight;
 }
 
 impl<D, H> QueriesExt for Storage<D, H>
@@ -537,6 +540,10 @@ where
 
     fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch> {
         self.block.pred_epochs.get_epoch(height)
+    }
+
+    fn get_current_decision_height(&self) -> BlockHeight {
+        self.last_height + 1
     }
 }
 
