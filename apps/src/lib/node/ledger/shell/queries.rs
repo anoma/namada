@@ -512,7 +512,7 @@ where
 
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
         let (check_prev_heights, height) = match can_send {
-            SendValsetUpd::Now => (false, self.last_height + 1),
+            SendValsetUpd::Now => (false, self.get_current_decision_height()),
             SendValsetUpd::AtPrevHeight(h) => (true, h),
         };
 
@@ -538,10 +538,12 @@ where
         check_prev_heights && first_epoch_heights.binary_search(&height).is_ok()
     }
 
+    #[inline]
     fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch> {
         self.block.pred_epochs.get_epoch(height)
     }
 
+    #[inline]
     fn get_current_decision_height(&self) -> BlockHeight {
         self.last_height + 1
     }
