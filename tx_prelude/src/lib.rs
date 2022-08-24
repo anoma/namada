@@ -23,7 +23,7 @@ pub use namada::ledger::governance::storage as gov_storage;
 pub use namada::ledger::parameters::storage as parameters_storage;
 pub use namada::ledger::storage::types::encode;
 use namada::ledger::storage_api;
-pub use namada::ledger::storage_api::StorageRead;
+pub use namada::ledger::storage_api::{StorageRead, StorageWrite};
 pub use namada::ledger::treasury::storage as treasury_storage;
 pub use namada::ledger::tx_env::TxEnv;
 pub use namada::proto::{Signed, SignedTxData};
@@ -95,7 +95,7 @@ pub type TxResult = EnvResult<()>;
 #[derive(Debug)]
 pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 
-impl StorageRead for Ctx {
+impl StorageRead<'_> for Ctx {
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
 
     fn read<T: BorshDeserialize>(
@@ -188,19 +188,7 @@ impl StorageRead for Ctx {
     }
 }
 
-impl TxEnv for Ctx {
-    type Error = Error;
-
-    fn get_block_time(&self) -> Result<time::Rfc3339String, Error> {
-        let read_result = unsafe { anoma_tx_get_block_time() };
-        let time_value = read_from_buffer(read_result, anoma_tx_result_buffer)
-            .expect("The block time should exist");
-        Ok(Rfc3339String(
-            String::try_from_slice(&time_value[..])
-                .expect("The conversion shouldn't fail"),
-        ))
-    }
-
+impl StorageWrite for Ctx {
     fn write<T: BorshSerialize>(
         &mut self,
         key: &namada::types::storage::Key,
@@ -227,6 +215,29 @@ impl TxEnv for Ctx {
         Ok(())
     }
 
+    fn delete(
+        &mut self,
+        key: &namada::types::storage::Key,
+    ) -> storage_api::Result<()> {
+        let key = key.to_string();
+        unsafe { anoma_tx_delete(key.as_ptr() as _, key.len() as _) };
+        Ok(())
+    }
+}
+
+impl TxEnv<'_> for Ctx {
+    type Error = Error;
+
+    fn get_block_time(&self) -> Result<time::Rfc3339String, Error> {
+        let read_result = unsafe { anoma_tx_get_block_time() };
+        let time_value = read_from_buffer(read_result, anoma_tx_result_buffer)
+            .expect("The block time should exist");
+        Ok(Rfc3339String(
+            String::try_from_slice(&time_value[..])
+                .expect("The conversion shouldn't fail"),
+        ))
+    }
+
     fn write_temp<T: BorshSerialize>(
         &mut self,
         key: &namada::types::storage::Key,
@@ -250,15 +261,6 @@ impl TxEnv for Ctx {
                 val.as_ref().len() as _,
             )
         };
-        Ok(())
-    }
-
-    fn delete(
-        &mut self,
-        key: &namada::types::storage::Key,
-    ) -> storage_api::Result<()> {
-        let key = key.to_string();
-        unsafe { anoma_tx_delete(key.as_ptr() as _, key.len() as _) };
         Ok(())
     }
 

@@ -12,7 +12,7 @@ use tendermint::merkle::proof::Proof;
 use thiserror::Error;
 
 use super::parameters::Parameters;
-use super::storage_api::{ResultExt, StorageRead};
+use super::storage_api::{ResultExt, StorageRead, StorageWrite};
 use super::{parameters, storage_api};
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::EpochDuration;
@@ -424,12 +424,15 @@ where
     pub fn write(
         &mut self,
         key: &Key,
-        value: impl AsRef<[u8]> + Clone,
+        value: impl AsRef<[u8]>,
     ) -> Result<(u64, i64)> {
+        // Note that this method is the same as `StorageWrite::write_bytes`,
+        // but with gas and storage bytes len diff accounting
         tracing::debug!("storage write key {}", key,);
-        self.block.tree.update(key, value.clone())?;
+        let value = value.as_ref();
+        self.block.tree.update(key, &value)?;
 
-        let len = value.as_ref().len();
+        let len = value.len();
         let gas = key.len() + len;
         let size_diff =
             self.db.write_subspace_val(self.last_height, key, value)?;
@@ -439,6 +442,8 @@ where
     /// Delete the specified subspace and returns the gas cost and the size
     /// difference
     pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
+        // Note that this method is the same as `StorageWrite::delete`,
+        // but with gas and storage bytes len diff accounting
         let mut deleted_bytes_len = 0;
         if self.has_key(key)?.0 {
             self.block.tree.delete(key)?;
@@ -685,10 +690,7 @@ where
     }
 }
 
-// The `'iter` lifetime is needed for the associated type `PrefixIter`.
-// Note that the `D: DBIter<'iter>` bound uses another higher-rank lifetime
-// (see https://doc.rust-lang.org/nomicon/hrtb.html).
-impl<'iter, D, H> StorageRead for &'iter Storage<D, H>
+impl<'iter, D, H> StorageRead<'iter> for Storage<D, H>
 where
     D: DB + for<'iter_> DBIter<'iter_>,
     H: StorageHasher,
@@ -721,7 +723,7 @@ where
     }
 
     fn iter_prefix(
-        &self,
+        &'iter self,
         prefix: &crate::types::storage::Key,
     ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
         Ok(self.db.iter_prefix(prefix))
@@ -755,6 +757,53 @@ where
         &self,
     ) -> std::result::Result<Epoch, storage_api::Error> {
         Ok(self.block.epoch)
+    }
+}
+
+impl<D, H> StorageWrite for Storage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn write<T: borsh::BorshSerialize>(
+        &mut self,
+        key: &crate::types::storage::Key,
+        val: T,
+    ) -> storage_api::Result<()> {
+        let val = val.try_to_vec().into_storage_result()?;
+        self.write_bytes(key, val)
+    }
+
+    fn write_bytes(
+        &mut self,
+        key: &crate::types::storage::Key,
+        val: impl AsRef<[u8]>,
+    ) -> storage_api::Result<()> {
+        // Note that this method is the same as `Storage::write`, but without
+        // gas and storage bytes len diff accounting, because it can only be
+        // used by the protocol that has a direct mutable access to storage
+        let val = val.as_ref();
+        self.block.tree.update(key, &val).into_storage_result()?;
+        let _ = self
+            .db
+            .write_subspace_val(self.block.height, key, val)
+            .into_storage_result()?;
+        Ok(())
+    }
+
+    fn delete(
+        &mut self,
+        key: &crate::types::storage::Key,
+    ) -> storage_api::Result<()> {
+        // Note that this method is the same as `Storage::delete`, but without
+        // gas and storage bytes len diff accounting, because it can only be
+        // used by the protocol that has a direct mutable access to storage
+        self.block.tree.delete(key).into_storage_result()?;
+        let _ = self
+            .db
+            .delete_subspace_val(self.block.height, key)
+            .into_storage_result()?;
+        Ok(())
     }
 }
 

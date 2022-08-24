@@ -3,13 +3,32 @@
 
 mod error;
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::{CustomError, Error, Result, ResultExt};
 
 use crate::types::storage::{self, BlockHash, BlockHeight, Epoch};
 
 /// Common storage read interface
-pub trait StorageRead {
+///
+/// If you're using this trait and having compiler complaining about needing an
+/// explicit lifetime parameter, simply use trait bounds with the following
+/// syntax:
+///
+/// ```rust,ignore
+/// where
+///     S: for<'iter> StorageRead<'iter>
+/// ```
+///
+/// If you want to know why this is needed, see the to-do task below. The
+/// syntax for this relies on higher-rank lifetimes, see e.g.
+/// <https://doc.rust-lang.org/nomicon/hrtb.html>.
+///
+/// TODO: once GATs are stabilized, we should be able to remove the `'iter`
+/// lifetime param that is currently the only way to make the prefix iterator
+/// typecheck in the `<D as DBIter<'iter>>::PrefixIter` associated type used in
+/// `impl StorageRead for Storage` (shared/src/ledger/storage/mod.rs).
+/// See <https://github.com/rust-lang/rfcs/blob/master/text/1598-generic_associated_types.md>
+pub trait StorageRead<'iter> {
     /// Storage read prefix iterator
     type PrefixIter;
 
@@ -28,7 +47,13 @@ pub trait StorageRead {
 
     /// Storage prefix iterator. It will try to get an iterator from the
     /// storage.
-    fn iter_prefix(&self, prefix: &storage::Key) -> Result<Self::PrefixIter>;
+    ///
+    /// For a more user-friendly iterator API, use [`fn@iter_prefix`] or
+    /// [`fn@iter_prefix_bytes`] instead.
+    fn iter_prefix(
+        &'iter self,
+        prefix: &storage::Key,
+    ) -> Result<Self::PrefixIter>;
 
     /// Storage prefix iterator for. It will try to read from the storage.
     fn iter_next(
@@ -50,4 +75,24 @@ pub trait StorageRead {
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch>;
+}
+
+/// Common storage write interface
+pub trait StorageWrite {
+    /// Write a value to be encoded with Borsh at the given key to storage.
+    fn write<T: BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<()>;
+
+    /// Write a value as bytes at the given key to storage.
+    fn write_bytes(
+        &mut self,
+        key: &storage::Key,
+        val: impl AsRef<[u8]>,
+    ) -> Result<()>;
+
+    /// Delete a value at the given key from storage.
+    fn delete(&mut self, key: &storage::Key) -> Result<()>;
 }
