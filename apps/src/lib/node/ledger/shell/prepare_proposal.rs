@@ -1,4 +1,4 @@
-//! Implementation of the [`PrepareProposal`] ABCI++ method for the Shell
+//! Implementation of the `PrepareProposal` ABCI++ method for the Shell
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -164,6 +164,7 @@ where
             })
             .collect()
     }
+
 
     /// Builds a batch of mempool transactions
     #[cfg(not(feature = "abcipp"))]
