@@ -78,10 +78,8 @@ mod extend_votes {
                 .expect(VALIDATOR_EXPECT_MSG)
                 .to_owned();
 
-            let curr_height = self.storage.last_height + 1;
-
             let ext = ethereum_events::Vext {
-                block_height: curr_height,
+                block_height: self.storage.get_current_decision_height(),
                 ethereum_events: self.new_ethereum_events(),
                 validator_addr,
             };
@@ -188,8 +186,7 @@ mod extend_votes {
             req: &request::VerifyVoteExtension,
             ext: Signed<ethereum_events::Vext>,
         ) -> bool {
-            let curr_height = self.storage.last_height + 1;
-            self.validate_eth_events_vext(ext, curr_height)
+            self.validate_eth_events_vext(ext, self.storage.get_current_decision_height())
                 .then(|| true)
                 .unwrap_or_else(|| {
                     tracing::warn!(
