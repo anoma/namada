@@ -1,25 +1,22 @@
 //! A tx for a PoS unbond that removes staked tokens from a self-bond or a
 //! delegation to be withdrawn in or after unbonding epoch.
 
-use namada_tx_prelude::proof_of_stake::withdraw_tokens;
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(tx_data: Vec<u8>) {
-    let signed = SignedTxData::try_from_slice(&tx_data[..]).unwrap();
-    let withdraw =
-        transaction::pos::Withdraw::try_from_slice(&signed.data.unwrap()[..])
-            .unwrap();
+fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
+    let signed = SignedTxData::try_from_slice(&tx_data[..])
+        .wrap_err("failed to decode SignedTxData")?;
+    let data = signed.data.ok_or_err_msg("Missing data")?;
+    let withdraw = transaction::pos::Withdraw::try_from_slice(&data[..])
+        .wrap_err("failed to decode Withdraw")?;
 
-    match withdraw_tokens(withdraw.source.as_ref(), &withdraw.validator) {
-        Ok(slashed) => {
-            debug_log!("Withdrawal slashed for {}", slashed);
-        }
-        Err(err) => {
-            debug_log!("Withdrawal failed with: {}", err);
-            panic!()
-        }
+    let slashed =
+        ctx.withdraw_tokens(withdraw.source.as_ref(), &withdraw.validator)?;
+    if slashed != token::Amount::default() {
+        debug_log!("Withdrawal slashed for {}", slashed);
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -63,7 +60,7 @@ mod tests {
         key in arb_common_keypair(),
         pos_params in arb_pos_params()) {
             test_tx_withdraw_aux(initial_stake, unbonded_amount, withdraw, key,
-                pos_params)
+                pos_params).unwrap()
         }
     }
 
@@ -73,7 +70,7 @@ mod tests {
         withdraw: transaction::pos::Withdraw,
         key: key::common::SecretKey,
         pos_params: PosParams,
-    ) {
+    ) -> TxResult {
         let is_delegation = matches!(
             &withdraw.source, Some(source) if *source != withdraw.validator);
         let staking_reward_address = address::testing::established_address_1();
@@ -117,21 +114,19 @@ mod tests {
         if is_delegation {
             // Initialize the delegation - unlike genesis validator's self-bond,
             // this happens at pipeline offset
-            namada_tx_prelude::proof_of_stake::bond_tokens(
+            ctx().bond_tokens(
                 withdraw.source.as_ref(),
                 &withdraw.validator,
                 initial_stake,
-            )
-            .unwrap();
+            )?;
         }
 
         // Unbond the `unbonded_amount` at the starting epoch 0
-        namada_tx_prelude::proof_of_stake::unbond_tokens(
+        ctx().unbond_tokens(
             withdraw.source.as_ref(),
             &withdraw.validator,
             unbonded_amount,
-        )
-        .unwrap();
+        )?;
 
         tx_host_env::commit_tx_and_block();
 
@@ -158,8 +153,9 @@ mod tests {
             &staking_token_address(),
             &Address::Internal(InternalAddress::PoS),
         );
-        let pos_balance_pre: token::Amount =
-            read(&pos_balance_key.to_string()).expect("PoS must have balance");
+        let pos_balance_pre: token::Amount = ctx()
+            .read(&pos_balance_key)?
+            .expect("PoS must have balance");
         assert_eq!(pos_balance_pre, initial_stake);
         let unbond_src = withdraw
             .source
@@ -169,35 +165,37 @@ mod tests {
             validator: withdraw.validator,
             source: unbond_src,
         };
-        let unbonds_pre = PoS.read_unbond(&unbond_id).unwrap();
+        let unbonds_pre = ctx().read_unbond(&unbond_id)?.unwrap();
         assert_eq!(
             unbonds_pre.get(pos_params.unbonding_len).unwrap().sum(),
             unbonded_amount
         );
 
-        apply_tx(tx_data);
+        apply_tx(ctx(), tx_data)?;
 
         // Read the data after the tx is executed
-        let unbonds_post = PoS.read_unbond(&unbond_id);
+        let unbonds_post = ctx().read_unbond(&unbond_id)?;
         assert!(
             unbonds_post.is_none(),
             "Because we're withdraw the full unbonded amount, there should be \
              no unbonds left"
         );
-        let pos_balance_post: token::Amount =
-            read(&pos_balance_key.to_string()).expect("PoS must have balance");
+        let pos_balance_post: token::Amount = ctx()
+            .read(&pos_balance_key)?
+            .expect("PoS must have balance");
         assert_eq!(pos_balance_pre - pos_balance_post, unbonded_amount);
 
         // Use the tx_env to run PoS VP
         let tx_env = tx_host_env::take();
-        let vp_env = TestNativeVpEnv::new(tx_env);
-        let result = vp_env.validate_tx(PosVP::new, |_tx_data| {});
+        let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
+        let result = vp_env.validate_tx(PosVP::new);
         let result =
             result.expect("Validation of valid changes must not fail!");
         assert!(
             result,
             "PoS Validity predicate must accept this transaction"
         );
+        Ok(())
     }
 
     fn arb_initial_stake_and_unbonded_amount()
