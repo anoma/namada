@@ -47,8 +47,7 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
 use tendermint_proto::abci::{
-    Misbehavior as Evidence, MisbehaviorType as EvidenceType,
-    RequestPrepareProposal, ValidatorUpdate,
+    Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
 use tendermint_proto::crypto::public_key;
 use tendermint_proto::types::ConsensusParams;

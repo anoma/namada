@@ -1,11 +1,22 @@
 //! Implementation of the `PrepareProposal` ABCI++ method for the Shell
 
+use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::proto::Tx;
+use namada::types::storage::BlockHeight;
+use namada::types::transaction::tx_types::TxType;
+use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
+use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
-use tendermint_proto::abci::{ExtendedCommitInfo, TxRecord};
+use tendermint_proto::abci::{
+    ExtendedCommitInfo, RequestPrepareProposal, TxRecord,
+};
 
-use super::super::vote_extensions::{iter_protocol_txs, split_vote_extensions};
 use super::super::*;
 use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
+use crate::node::ledger::shell::vote_extensions::{
+    iter_protocol_txs, split_vote_extensions,
+};
+use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
 impl<D, H> Shell<D, H>
@@ -205,16 +216,18 @@ pub(super) mod record {
 mod test_prepare_proposal {
     use std::collections::HashSet;
 
+    use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos::namada_proof_of_stake::types::{
         VotingPower, WeightedValidator,
     };
+    use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::proto::{Signed, SignedTxData};
     use namada::types::address::xan;
     use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::common;
+    use namada::types::key::{common, RefTo};
     use namada::types::storage::{BlockHeight, Epoch};
     use namada::types::transaction::protocol::ProtocolTxType;
-    use namada::types::transaction::{Fee, TxType};
+    use namada::types::transaction::{Fee, TxType, WrapperTx};
     use namada::types::vote_extensions::ethereum_events::{
         self, MultiSignedEthEvent,
     };

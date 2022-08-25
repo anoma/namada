@@ -28,9 +28,10 @@ where
     /// included txs violates the order decided upon in the previous
     /// block.
     pub fn process_proposal(
-        &mut self,
+        &self,
         req: RequestProcessProposal,
     ) -> ResponseProcessProposal {
+        let mut tx_queue_iter = self.storage.tx_queue.iter();
         tracing::info!(
             proposer = ?hex::encode(&req.proposer_address),
             height = req.height,
@@ -44,9 +45,12 @@ where
             .txs
             .iter()
             .map(|tx_bytes| {
-                ExecTxResult::from(
-                    self.process_single_tx(tx_bytes, &mut eth_ev_digest_num),
+                self.process_single_tx(
+                    tx_bytes,
+                    &mut tx_queue_iter,
+                    &mut eth_ev_digest_num,
                 )
+                .into()
             })
             .collect();
 
@@ -102,6 +106,20 @@ where
         }
     }
 
+    /// Check all the given txs.
+    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<ExecTxResult> {
+        let mut tx_queue_iter = self.storage.tx_queue.iter();
+        txs.iter()
+            .map(|tx_bytes| {
+                ExecTxResult::from(self.process_single_tx(
+                    tx_bytes,
+                    &mut tx_queue_iter,
+                    &mut 0,
+                ))
+            })
+            .collect()
+    }
+
     /// Checks if the Tx can be deserialized from bytes. Checks the fees and
     /// signatures of the fee payer for a transaction if it is a wrapper tx.
     ///
@@ -122,10 +140,11 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    pub(crate) fn process_single_tx(
-        &mut self,
+    pub(crate) fn process_single_tx<'a>(
+        &self,
         tx_bytes: &[u8],
-        vote_ext_digest_num: &mut usize,
+        tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
+        eth_ev_digest_num: &mut usize,
     ) -> TxResult {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
             |err| {
@@ -169,7 +188,7 @@ where
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthereumEvents(digest) => {
-                    *vote_ext_digest_num += 1;
+                    *eth_ev_digest_num += 1;
 
                     let extensions =
                         digest.decompress(self.storage.last_height);
@@ -233,7 +252,7 @@ where
                     info: "Unsupported protocol transaction type".into(),
                 },
             },
-            TxType::Decrypted(tx) => match self.next_wrapper() {
+            TxType::Decrypted(tx) => match tx_queue_iter.next() {
                 Some(wrapper) => {
                     if wrapper.tx_hash != tx.hash_commitment() {
                         TxResult {
