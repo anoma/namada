@@ -165,7 +165,6 @@ where
             .collect()
     }
 
-
     /// Compresses a set of signed Ethereum events into a single
     /// [`ethereum_events::VextDigest`], whilst filtering invalid
     /// [`Signed<ethereum_events::Vext>`] instances in the process
