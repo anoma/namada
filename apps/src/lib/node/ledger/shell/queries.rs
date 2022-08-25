@@ -574,6 +574,8 @@ mod test_queries {
     fn test_can_send_validator_set_update() {
         let (mut shell, _, _) = test_utils::setup_at_height(0u64);
 
+        const CHANGE_EPOCH_HEIGHT: u64 = 15;
+
         let epoch_assertions = [
             // (current epoch, current block height, can send valset upd)
             (0, 1, true),
@@ -590,7 +592,7 @@ mod test_queries {
             (0, 12, false),
             (0, 13, false),
             (0, 14, false),
-            (0, 15, false),
+            (0, CHANGE_EPOCH_HEIGHT, false),
             // we will change epoch here
             (1, 16, true),
             (1, 17, false),
@@ -604,8 +606,6 @@ mod test_queries {
             epoch_assertions.iter().copied()
         {
             shell.storage.last_height = BlockHeight(curr_block_height - 1);
-            println!("Epochs heights: {:?}", shell.storage.block.pred_epochs.first_block_heights());
-            println!("Current height: {curr_block_height}");
             assert_eq!(
                 curr_block_height,
                 shell.storage.get_current_decision_height().0
@@ -622,7 +622,7 @@ mod test_queries {
                     .can_send_validator_set_update(SendValsetUpd::Now),
                 can_send
             );
-            if curr_block_height == 15u64 {
+            if curr_block_height == CHANGE_EPOCH_HEIGHT {
                 let mut req = FinalizeBlock::default();
                 req.header.time = namada::types::time::DateTimeUtc::now();
                 shell.finalize_block(req).expect("Test failed");
@@ -631,8 +631,15 @@ mod test_queries {
         }
 
         // test `SendValsetUpd::AtPrevHeight`
-        for (_, curr_block_height, can_send) in epoch_assertions.iter().copied()
+        for (curr_epoch, curr_block_height, can_send) in
+            epoch_assertions.iter().copied()
         {
+            assert_eq!(
+                shell
+                    .storage
+                    .get_epoch_from_height(curr_block_height.into()),
+                Some(Epoch(curr_epoch))
+            );
             assert_eq!(
                 shell.storage.can_send_validator_set_update(
                     SendValsetUpd::AtPrevHeight(curr_block_height.into())
