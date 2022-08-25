@@ -11,11 +11,11 @@ This guide is aimed at people interested in running a validator node and assumes
 
 ## Install Namada
 
-See [the install guide](user-guide/install.md) for details on installing the Namada binaries. Commands in this guide will assume you have the Namada binaries (`anoma`, `anoman`, `anomaw`, `anomac`) on your path.
+See [the install guide](user-guide/install.md) for details on installing the Namada binaries. Commands in this guide will assume you have the Namada binaries (`namada`, `namadan`, `namadaw`, `namadac`) on your path.
 
 ## Joining a network
 
-See [the testnets page](testnets) for details of how to join a testnet. The rest of this guide will assume you have joined a testnet chain using the `anomac utils join-network` command.
+See [the testnets page](testnets) for details of how to join a testnet. The rest of this guide will assume you have joined a testnet chain using the `namadac utils join-network` command.
 
 ## Run a ledger node
 
@@ -26,7 +26,7 @@ tmux
 
 # inside the tmux/or not
 
-anoma ledger
+namada ledger
 
 # can detach the tmux (Ctrl-B then D)
 ```
@@ -39,9 +39,9 @@ Generate a local key on disk
 
 ```shell
 # first, we make a keypair and the implicit account associated with it
-# anomaw address gen instead of key gen. Preferred because they both make a keypair but the former stores the implicit address for it too 
+# namadaw address gen instead of key gen. Preferred because they both make a keypair but the former stores the implicit address for it too 
 
-anomaw address gen \
+namadaw address gen \
   --alias example-implicit
 
 ➜ Enter encryption password: 
@@ -53,7 +53,7 @@ Successfully added a key and an address with alias: "example-implicit"
 To initialize an account operator on chain under the alias "example-established":
 
 ```shell
-anomac init-account \
+namadac init-account \
   --source example-implicit \
   --public-key example-implicit \
   --alias example-established
@@ -79,7 +79,7 @@ The transaction initialized 1 new account
 Let's transfer ourselves 1000 NAM from the faucet with the same alias using:
 
 ```shell
-anomac transfer \
+namadac transfer \
   --source faucet \
   --target example-established \
   --token NAM \
@@ -104,7 +104,7 @@ Transaction applied with result: {
 To get the balance of your account "example-established":
 
 ```shell
-anomac balance \
+namadac balance \
   --owner example-established
 ```
 
@@ -113,7 +113,7 @@ anomac balance \
 Initialize a validator account under any alias - in this example, "example-validator":
 
 ```shell
-anomac init-validator \
+namadac init-validator \
   --alias example-validator \
   --source example-established
 
@@ -148,7 +148,7 @@ The validator's addresses and keys were stored in the wallet:
 The ledger node has been setup to use this validator's address and consensus key.
 ```
 
-Once the `init-validator` transaction is applied in the block and the on-chain generated validator's address is stored in your wallet, you MUST restart the `anoma ledger` node to start the node as a validator that you've just created.
+Once the `init-validator` transaction is applied in the block and the on-chain generated validator's address is stored in your wallet, you MUST restart the `namada ledger` node to start the node as a validator that you've just created.
 
 When you restart the node, you might notice log message "This node is not a validator" from Tendermint. This is expected, because your validator doesn't yet have any stake in the [PoS system](./user-guide/ledger/pos.md).
 
@@ -157,7 +157,7 @@ We will now add some stake to your validator account.
 Transfer 1000 NAM to your validator account ("example-validator"):
 
 ```shell
-anomac transfer \
+namadac transfer \
   --source example-established \
   --target example-validator \
   --token NAM \
@@ -181,7 +181,7 @@ Transaction applied with result: {
 Bond the 1000 NAM to "example-validator" using:
 
 ```shell
-anomac bond \
+namadac bond \
   --validator example-validator \
   --amount 1000
 
@@ -203,7 +203,7 @@ Transaction applied with result: {
 Check your bond:
 
 ```shell
-anomac bonds \
+namadac bonds \
   --validator example-validator
 
 ➜ Jan 06 22:30:42.798  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
@@ -216,7 +216,7 @@ Bonds total: 1000
 Check the voting power - this will be 0 until the active-from epoch is reached (in this case `22395`):
 
 ```shell
-anomac voting-power \
+namadac voting-power \
   --validator example-validator
 
 ➜ Jan 06 22:31:24.908  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0

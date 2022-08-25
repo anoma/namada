@@ -4,19 +4,11 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_vp_prelude"
 resolver = "2"
-version = "0.7.0"
+version = "0.7.1"
 
 [features]
-default = ["ABCI"]
-
-ABCI = [
-  "namada_vm_env/ABCI",
-]
-
-ABCI-plus-plus = [
-  "namada_vm_env/ABCI-plus-plus",
-]
+default = []
 
 [dependencies]
-namada_vm_env = {path = "../vm_env", default-features = false}
+namada_vm_env = {path = "../vm_env"}
 sha2 = "0.10.1"

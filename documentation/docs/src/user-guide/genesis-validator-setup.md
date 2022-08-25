@@ -15,7 +15,7 @@ You must also provide a static `{IP:port}` to the `--net-address` argument of yo
 
 ```shell
 export ALIAS="1337-validator"
-anoma client utils init-genesis-validator \
+namada client utils init-genesis-validator \
     --alias $ALIAS \
     --net-address 1.2.3.4:26656
 ```
@@ -35,17 +35,17 @@ Note that the wallet containing your private keys will also be written into this
 Once the network is finalized, a new chain ID will be created and released on [anoma-network-config/releases](https://github.com/heliaxdev/anoma-network-config/releases) (a custom configs URL can be used instead with `ANOMA_NETWORK_CONFIGS_SERVER` env var). You can use it to setup your genesis validator node for the `--chain-id` argument in the command below.
 
 ```shell
-anoma client utils join-network \
+namada client utils join-network \
     --chain-id $CHAIN_ID \
     --genesis-validator $ALIAS
 ```
 
-This command will use your pre-genesis wallet for the given chain and take care of setting up Anoma with Tendermint.
+This command will use your pre-genesis wallet for the given chain and take care of setting up Namada with Tendermint.
 
-If you run this command in the same directory that you ran `anoma client utils init-genesis-validator`, it should find the pre-genesis wallet for you, otherwise you can pass the path to the pre-genesis directory using `--pre-genesis-path`. e.g.
+If you run this command in the same directory that you ran `namada client utils init-genesis-validator`, it should find the pre-genesis wallet for you, otherwise you can pass the path to the pre-genesis directory using `--pre-genesis-path`. e.g.
 
 ```shell
-anoma client utils join-network \
+namada client utils join-network \
     --chain-id $CHAIN_ID \
     --pre-genesis-path workspace/.anoma/pre-genesis/$ALIAS
 ```
@@ -53,7 +53,7 @@ anoma client utils join-network \
 Once setup, you can start the ledger as usual with e.g.:
 
 ```shell
-anoma ledger
+namada ledger
 ```
 
 ## Required keys

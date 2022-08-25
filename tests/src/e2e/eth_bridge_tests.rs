@@ -41,7 +41,7 @@ fn everything() {
     anoman_ledger.exp_string("Committed block hash").unwrap();
     let _bg_ledger = anoman_ledger.background();
 
-    let tx_data_path = test.base_dir.path().join("queue_storage_key.txt");
+    let tx_data_path = test.test_dir.path().join("queue_storage_key.txt");
     std::fs::write(&tx_data_path, &storage_key("queue")[..]).unwrap();
 
     let tx_code_path = wasm_abs_path(TX_WRITE_STORAGE_KEY_WASM);
@@ -76,9 +76,7 @@ fn everything() {
         .unwrap();
 
         if !dry_run {
-            if !cfg!(feature = "ABCI") {
-                anomac_tx.exp_string("Transaction accepted").unwrap();
-            }
+            anomac_tx.exp_string("Transaction accepted").unwrap();
             anomac_tx.exp_string("Transaction applied").unwrap();
         }
         // TODO: we should check here explicitly with the ledger via a
