@@ -504,7 +504,7 @@ where
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
         let (check_prev_heights, height) = match can_send {
             SendValsetUpd::Now => (false, self.get_current_decision_height()),
-            SendValsetUpd::AtPrevHeight(h) => (true, h),
+            SendValsetUpd::AtFixedHeight(h) => (true, h),
         };
 
         // handle genesis block corner case
@@ -549,8 +549,8 @@ pub enum SendValsetUpd {
     /// vote extension at the current block height.
     Now,
     /// Check if it is possible to send a validator set update
-    /// vote extension at any previous block height.
-    AtPrevHeight(BlockHeight),
+    /// vote extension at any given block height.
+    AtFixedHeight(BlockHeight),
 }
 
 #[cfg(test)]
@@ -632,7 +632,7 @@ mod test_queries {
             }
         }
 
-        // test `SendValsetUpd::AtPrevHeight`
+        // test `SendValsetUpd::AtFixedHeight`
         for (curr_epoch, curr_block_height, can_send) in
             epoch_assertions.iter().copied()
         {
@@ -642,7 +642,7 @@ mod test_queries {
             );
             assert_eq!(
                 shell.storage.can_send_validator_set_update(
-                    SendValsetUpd::AtPrevHeight(curr_block_height.into())
+                    SendValsetUpd::AtFixedHeight(curr_block_height.into())
                 ),
                 can_send
             );
