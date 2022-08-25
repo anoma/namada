@@ -114,7 +114,10 @@ pub async fn run(
             .await;
         }
     }
+    #[cfg(feature = "abcipp")]
     write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
+    #[cfg(not(feature = "abcipp"))]
+    write_tm_genesis(&home_dir, chain_id, genesis_time).await;
 
     update_tendermint_config(&home_dir, config).await?;
 
@@ -377,7 +380,7 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    config: &config::Tendermint,
+    #[cfg(feature = "abcipp")] config: &config::Tendermint,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
@@ -398,8 +401,11 @@ async fn write_tm_genesis(
     genesis.genesis_time = genesis_time
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
-    genesis.consensus_params.timeout.commit =
-        config.consensus_timeout_commit.into();
+    #[cfg(feature = "abcipp")]
+    {
+        genesis.consensus_params.timeout.commit =
+            config.consensus_timeout_commit.into();
+    }
 
     let mut file = OpenOptions::new()
         .write(true)

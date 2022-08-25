@@ -11,7 +11,13 @@ use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
 use namada::types::storage::{BlockHash, Epoch, Header};
 use namada::types::transaction::protocol::ProtocolTxType;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci::Misbehavior as Evidence;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::crypto::PublicKey as TendermintPublicKey;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::abci::Misbehavior as Evidence;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 
 use super::queries::QueriesExt;
@@ -316,7 +322,7 @@ where
                     continue;
                 }
                 TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::EthereumEvents(ref digest) => {
+                    ProtocolTxType::EthEventsDigest(ref digest) => {
                         for event in
                             digest.events.iter().map(|signed| &signed.event)
                         {
@@ -502,6 +508,7 @@ where
         let evidence_params = self
             .storage
             .get_evidence_params(&epoch_duration, &pos_params);
+
         response.consensus_param_updates = Some(ConsensusParams {
             evidence: Some(evidence_params),
             ..response.consensus_param_updates.take().unwrap_or_default()
@@ -872,7 +879,7 @@ mod test_finalize_block {
             events: vec![signed],
         };
         let processed_tx = ProcessedTx {
-            tx: ProtocolTxType::EthereumEvents(digest)
+            tx: ProtocolTxType::EthEventsDigest(digest)
                 .sign(&protocol_key)
                 .to_bytes(),
             result: TxResult {

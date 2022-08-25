@@ -150,6 +150,7 @@ impl From<ProposalEvent> for Event {
 }
 
 /// Convert our custom event into the necessary tendermint proto type
+#[cfg(feature = "abcipp")]
 impl From<Event> for tendermint_proto::abci::Event {
     fn from(event: Event) -> Self {
         Self {
@@ -160,6 +161,25 @@ impl From<Event> for tendermint_proto::abci::Event {
                 .map(|(key, value)| EventAttribute {
                     key,
                     value,
+                    index: true,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Convert our custom event into the necessary tendermint proto type
+#[cfg(not(feature = "abcipp"))]
+impl From<Event> for tendermint_proto::abci::Event {
+    fn from(event: Event) -> Self {
+        Self {
+            r#type: event.event_type.to_string(),
+            attributes: event
+                .attributes
+                .into_iter()
+                .map(|(key, value)| EventAttribute {
+                    key: key.into_bytes(),
+                    value: value.into_bytes(),
                     index: true,
                 })
                 .collect(),

@@ -211,7 +211,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     match tx {
-        ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
+        ProtocolTxType::EthEventsDigest(ethereum_events::VextDigest {
             events,
             ..
         }) => {

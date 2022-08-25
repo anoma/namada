@@ -1,13 +1,15 @@
 #[cfg(not(feature = "ABCI"))]
 mod extend_votes {
-    use borsh::BorshDeserialize;
+
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::proto::Signed;
-    use namada::types::vote_extensions::ethereum_events;
-    use tendermint_proto::abci::ExtendedVoteInfo;
+    use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+    #[cfg(feature = "abcipp")]
+    use tendermint_proto_abcipp::abci::ExtendedVoteInfo;
 
     use super::super::queries::QueriesExt;
     use super::super::*;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
     /// The error yielded from validating faulty vote extensions in the shell
     #[derive(Error, Debug)]
@@ -15,6 +17,7 @@ mod extend_votes {
         #[error("The vote extension was issued at block height 0.")]
         IssuedAtGenesis,
         #[error("The vote extension has an unexpected block height.")]
+        #[cfg(feature = "abcipp")]
         UnexpectedBlockHeight,
         #[error(
             "The vote extension contains duplicate or non-sorted Ethereum \
@@ -36,10 +39,26 @@ mod extend_votes {
         H: StorageHasher + Sync + 'static,
     {
         /// INVARIANT: This method must be stateless.
+        #[cfg(feature = "abcipp")]
         pub fn extend_vote(
             &mut self,
             _req: request::ExtendVote,
         ) -> response::ExtendVote {
+            self.mode
+                .get_protocol_key()
+                .map(|signing_key| response::ExtendVote {
+                    vote_extension: self
+                        .craft_extension()
+                        .try_to_vec()
+                        .unwrap(),
+                })
+                .unwrap_or_default()
+        }
+
+        /// Creates the data to be added to a vote extension.
+        ///
+        /// INVARIANT: This method must be stateless.
+        pub fn craft_extension(&mut self) -> Signed<ethereum_events::Vext> {
             let validator_addr = self
                 .mode
                 .get_validator_address()
@@ -52,10 +71,8 @@ mod extend_votes {
             };
             self.mode
                 .get_protocol_key()
-                .map(|signing_key| response::ExtendVote {
-                    vote_extension: ext.sign(signing_key).try_to_vec().unwrap(),
-                })
-                .unwrap_or_default()
+                .map(|signing_key| ext.sign(signing_key))
+                .expect("only validators should receive this method call")
         }
 
         /// This checks that the vote extension:
@@ -64,6 +81,7 @@ mod extend_votes {
         /// * The block height signed over is correct (replay protection)
         ///
         /// INVARIANT: This method must be stateless.
+        #[cfg(feature = "abcipp")]
         pub fn verify_vote_extension(
             &self,
             req: request::VerifyVoteExtension,
@@ -76,10 +94,9 @@ mod extend_votes {
                 &req.vote_extension[..],
             ) {
                 response::VerifyVoteExtension {
-                    status: if self.validate_eth_events_vext(
-                        signed,
-                        self.storage.last_height + 1,
-                    ) {
+                    status: if self
+                        .validate_vext(signed, self.storage.last_height + 1)
+                    {
                         VerifyStatus::Accept.into()
                     } else {
                         tracing::warn!(
@@ -104,7 +121,7 @@ mod extend_votes {
             }
         }
 
-        /// Validates an Ethereum events vote extension issued at the provided
+        /// Validates a vote extension issued at the provided
         /// block height
         ///
         /// Checks that at epoch of the provided height:
@@ -114,20 +131,21 @@ mod extend_votes {
         ///    extension
         ///  * There are no duplicate Ethereum events in this vote extension,
         ///    and the events are sorted in ascending order
+        #[cfg(feature = "abcipp")]
         #[inline]
-        pub fn validate_eth_events_vext(
+        pub fn validate_vext(
             &self,
             ext: Signed<ethereum_events::Vext>,
             last_height: BlockHeight,
         ) -> bool {
-            self.validate_eth_events_vext_and_get_it_back(ext, last_height)
+            self.validate_vexts_and_get_it_back(ext, last_height)
                 .is_ok()
         }
 
-        /// This method behaves exactly like [`Self::validate_eth_events_vext`],
+        /// This method behaves exactly like [`Self::validate_vext`],
         /// with the added bonus of returning the vote extension back, if it
         /// is valid.
-        pub fn validate_eth_events_vext_and_get_it_back(
+        pub fn validate_vexts_and_get_it_back(
             &self,
             ext: Signed<ethereum_events::Vext>,
             last_height: BlockHeight,
@@ -135,6 +153,7 @@ mod extend_votes {
             (VotingPower, Signed<ethereum_events::Vext>),
             VoteExtensionError,
         > {
+            #[cfg(feature = "abcipp")]
             if ext.data.block_height != last_height {
                 let ext_height = ext.data.block_height;
                 tracing::error!(
@@ -165,7 +184,11 @@ mod extend_votes {
                 return Err(VoteExtensionError::HaveDupesOrNonSorted);
             }
             // get the public key associated with this validator
-            let epoch = self.storage.block.pred_epochs.get_epoch(last_height);
+            let epoch = self
+                .storage
+                .block
+                .pred_epochs
+                .get_epoch(ext.data.block_height);
             let (voting_power, pk) = self
                 .storage
                 .get_validator_from_address(validator, epoch)
@@ -212,18 +235,18 @@ mod extend_votes {
         // TODO: the `vote_extensions` iterator should be over `VoteExtension`
         // instances, I guess? to be determined in the next PR
         #[inline]
-        pub fn validate_vote_extension_list(
-            &self,
+        pub fn validate_vote_extension_list<'a>(
+            &'a self,
             vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
-            + 'static,
+            + 'a,
         ) -> impl Iterator<
             Item = std::result::Result<
                 (VotingPower, Signed<ethereum_events::Vext>),
                 VoteExtensionError,
             >,
-        > + '_ {
+        > + 'a {
             vote_extensions.into_iter().map(|vote_extension| {
-                self.validate_eth_events_vext_and_get_it_back(
+                self.validate_vexts_and_get_it_back(
                     vote_extension,
                     self.storage.last_height,
                 )
@@ -235,11 +258,11 @@ mod extend_votes {
         // TODO: the `vote_extensions` iterator should be over `VoteExtension`
         // instances, I guess? to be determined in the next PR
         #[inline]
-        pub fn filter_invalid_vote_extensions(
-            &self,
+        pub fn filter_invalid_vote_extensions<'a>(
+            &'a self,
             vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
-            + 'static,
-        ) -> impl Iterator<Item = (VotingPower, Signed<ethereum_events::Vext>)> + '_
+            + 'a,
+        ) -> impl Iterator<Item = (VotingPower, Signed<ethereum_events::Vext>)> + 'a
         {
             self.validate_vote_extension_list(vote_extensions)
                 .filter_map(|ext| ext.ok())
@@ -252,6 +275,7 @@ mod extend_votes {
     // TODO: we need to return an iterator over instances of `VoteExtension`,
     // which contain both the ethereum events vote extensions and validator
     // set update vote extensions
+    #[cfg(feature = "abcipp")]
     pub fn deserialize_vote_extensions(
         vote_extensions: Vec<ExtendedVoteInfo>,
     ) -> impl Iterator<Item = Signed<ethereum_events::Vext>> + 'static {
@@ -272,13 +296,40 @@ mod extend_votes {
         })
     }
 
+    /// Given a `Vec` of [`TxBytes`], return an iterator over the
+    /// ones we could deserialize to [`Signed<ethereum_events::Vext>`]
+    /// instances.
+    // TODO: we need to return an iterator over instances of `VoteExtension`,
+    // which contain both the ethereum events vote extensions and validator
+    // set update vote extensions
+    #[cfg(not(feature = "abcipp"))]
+    pub fn deserialize_vote_extensions(
+        txs: &[TxBytes],
+    ) -> impl Iterator<Item = Signed<ethereum_events::Vext>> + '_ {
+        txs.iter().filter_map(|tx| {
+            if let Ok(tx) = Tx::try_from(tx.as_slice()) {
+                match process_tx(tx).ok()? {
+                    TxType::Protocol(ProtocolTx {
+                        tx: ProtocolTxType::EthereumEvents(signed),
+                        ..
+                    }) => Some(signed),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        })
+    }
+
     #[cfg(test)]
     mod test_vote_extensions {
         use std::convert::TryInto;
 
+        #[cfg(feature = "abcipp")]
         use borsh::{BorshDeserialize, BorshSerialize};
         use namada::ledger::pos;
         use namada::ledger::pos::namada_proof_of_stake::PosBase;
+        #[cfg(feature = "abcipp")]
         use namada::proto::Signed;
         use namada::types::ethereum_events::{
             EthAddress, EthereumEvent, TransferToEthereum,
@@ -286,8 +337,10 @@ mod extend_votes {
         use namada::types::key::*;
         use namada::types::storage::{BlockHeight, Epoch};
         use namada::types::vote_extensions::ethereum_events;
-        use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
-        use tower_abci::request;
+        #[cfg(feature = "abcipp")]
+        use tendermint_proto_abcipp::abci::response_verify_vote_extension::VerifyStatus;
+        #[cfg(feature = "abcipp")]
+        use tower_abci_abcipp::request;
 
         use crate::node::ledger::shell::queries::QueriesExt;
         use crate::node::ledger::shell::test_utils::*;
@@ -343,6 +396,7 @@ mod extend_votes {
 
         /// Test that ethereum events are added to vote extensions.
         /// Check that vote extensions pass verification.
+        #[cfg(feature = "abcipp")]
         #[test]
         fn test_eth_events_vote_extension() {
             let (mut shell, _, oracle) = setup();
@@ -417,11 +471,13 @@ mod extend_votes {
                     }],
                 }],
                 block_height: shell.storage.last_height + 1,
+                #[cfg(feature = "abcipp")]
                 validator_addr: address.clone(),
+                #[cfg(not(feature = "abcipp"))]
+                validator_addr: address,
             }
-            .sign(&signing_key)
-            .try_to_vec()
-            .expect("Test failed");
+            .sign(&signing_key);
+            #[cfg(feature = "abcipp")]
             let req = request::VerifyVoteExtension {
                 hash: vec![],
                 validator_address: address
@@ -429,13 +485,22 @@ mod extend_votes {
                     .expect("Test failed")
                     .as_bytes()
                     .to_vec(),
-                height: 0,
-                vote_extension: vote_ext,
+                height: shell.storage.last_height + 1,
+                vote_extension: vote_ext.try_to_vec().expect("Test failed"),
             };
+            #[cfg(feature = "abcipp")]
             assert_eq!(
                 shell.verify_vote_extension(req).status,
                 i32::from(VerifyStatus::Reject)
             );
+            assert!(
+                shell
+                    .validate_vexts_and_get_it_back(
+                        vote_ext,
+                        shell.storage.last_height + 1
+                    )
+                    .is_err()
+            )
         }
 
         /// Test that validation of Ethereum events cast during the
@@ -504,7 +569,11 @@ mod extend_votes {
                     .is_ok()
             );
 
-            assert!(shell.validate_eth_events_vext(vote_ext, signed_height));
+            assert!(
+                shell
+                    .validate_vexts_and_get_it_back(vote_ext, signed_height)
+                    .is_ok()
+            );
         }
 
         /// Test that an [`ethereum_events::Vext`] that incorrectly labels what
@@ -523,22 +592,33 @@ mod extend_votes {
                     }],
                 }],
                 block_height: shell.storage.last_height,
+                #[cfg(feature = "abcipp")]
                 validator_addr: address.clone(),
+                #[cfg(not(feature = "abcipp"))]
+                validator_addr: address,
             }
-            .sign(shell.mode.get_protocol_key().expect("Test failed"))
-            .try_to_vec()
-            .expect("Test failed");
+            .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
+            #[cfg(feature = "abcipp")]
             let req = request::VerifyVoteExtension {
                 hash: vec![],
                 validator_address: address.try_to_vec().expect("Test failed"),
                 height: 0,
-                vote_extension: vote_ext,
+                vote_extension: vote_ext.try_to_vec().expect("Test failed"),
             };
+            #[cfg(feature = "abcipp")]
             assert_eq!(
                 shell.verify_vote_extension(req).status,
                 i32::from(VerifyStatus::Reject)
             );
+            assert!(
+                shell
+                    .validate_vexts_and_get_it_back(
+                        vote_ext,
+                        shell.storage.last_height
+                    )
+                    .is_ok()
+            )
         }
     }
 }

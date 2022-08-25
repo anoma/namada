@@ -2,12 +2,16 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use namada::proto::Signed;
 use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::vote_extensions::ethereum_events::{
     self, MultiSignedEthEvent,
 };
 use namada::types::voting_power::FractionalVotingPower;
-use tendermint_proto::abci::{ExtendedCommitInfo, ExtendedVoteInfo, TxRecord};
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci::{
+    ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
+};
 
 use super::queries::QueriesExt;
 use super::vote_extensions::deserialize_vote_extensions;
@@ -40,7 +44,19 @@ where
             // TODO: add some info logging
 
             // add ethereum events as protocol txs
-            let mut txs = self.build_vote_extensions_txs(req.local_last_commit);
+            #[cfg(feature = "abcipp")]
+            let vexts = deserialize_vote_extensions(
+                req.local_last_commit
+                    .map(|ext| ext.votes)
+                    .unwrap_or_default(),
+            );
+            #[cfg(not(feature = "abcipp"))]
+            let vexts = deserialize_vote_extensions(&req.txs);
+
+            let mut txs = self.build_vote_extensions_txs(vexts);
+            #[cfg(feature = "abcipp")]
+            let mut txs: Vec<TxRecord> =
+                txs.into_iter().map(|tx| record::add).collect();
 
             // add mempool txs
             let mut mempool_txs = self.build_mempool_txs(req.txs);
@@ -48,6 +64,10 @@ where
 
             // decrypt the wrapper txs included in the previous block
             let mut decrypted_txs = self.build_decrypted_txs();
+            #[cfg(feature = "abcipp")]
+            let mut decrypted_txs: Vec<TxRecord> =
+                decrypted_txs.into_iter().map(|tx| record::add).collect();
+
             txs.append(&mut decrypted_txs);
 
             txs
@@ -60,9 +80,18 @@ where
             tx_records = txs.len(),
             "Proposing block"
         );
-        response::PrepareProposal {
-            tx_records: txs,
-            ..Default::default()
+
+        #[cfg(feature = "abcipp")]
+        {
+            response::PrepareProposal {
+                tx_records: txs,
+                ..Default::default()
+            }
+        }
+
+        #[cfg(not(feature = "abcipp"))]
+        {
+            response::PrepareProposal { txs }
         }
     }
 
@@ -72,18 +101,15 @@ where
     // after validator set updates are implemented
     fn build_vote_extensions_txs(
         &mut self,
-        local_last_commit: Option<ExtendedCommitInfo>,
-    ) -> Vec<TxRecord> {
+        vote_extensions: impl Iterator<Item = Signed<ethereum_events::Vext>>,
+    ) -> Vec<TxBytes> {
         let protocol_key = self
             .mode
             .get_protocol_key()
             .expect("Validators should always have a protocol key");
 
         let vote_extension_digest =
-            local_last_commit.and_then(|local_last_commit| {
-                let votes = local_last_commit.votes;
-                self.compress_ethereum_events(votes)
-            });
+            self.compress_ethereum_events(vote_extensions);
         let vote_extension_digest =
             match (vote_extension_digest, self.storage.last_height) {
                 // handle genesis block
@@ -110,17 +136,17 @@ where
                 ),
             };
 
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+        let tx = ProtocolTxType::EthEventsDigest(vote_extension_digest)
             .sign(protocol_key)
             .to_bytes();
-        let tx_record = record::add(tx);
 
         // TODO: include here a validator set update tx,
         // if we are at the end of an epoch
-        vec![tx_record]
+        vec![tx]
     }
 
     /// Builds a batch of mempool transactions
+    #[cfg(feature = "abcipp")]
     fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxRecord> {
         // filter in half of the new txs from Tendermint, only keeping
         // wrappers
@@ -139,6 +165,27 @@ where
             .collect()
     }
 
+
+    /// Builds a batch of mempool transactions
+    #[cfg(not(feature = "abcipp"))]
+    fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxBytes> {
+        // filter in half of the new txs from Tendermint, only keeping
+        // wrappers
+        let number_of_new_txs = 1 + txs.len() / 2;
+        txs.into_iter()
+            .take(number_of_new_txs)
+            .filter_map(|tx_bytes| {
+                if let Ok(Ok(TxType::Wrapper(_))) =
+                    Tx::try_from(tx_bytes.as_slice()).map(process_tx)
+                {
+                    Some(tx_bytes)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     /// Builds a batch of DKG decrypted transactions
     // TODO: we won't have frontrunning protection until V2 of the Anoma
     // protocol; Namada runs V1, therefore this method is
@@ -147,7 +194,7 @@ where
     // sources:
     // - https://specs.anoma.net/main/releases/v2.html
     // - https://github.com/anoma/ferveo
-    fn build_decrypted_txs(&mut self) -> Vec<TxRecord> {
+    fn build_decrypted_txs(&mut self) -> Vec<TxBytes> {
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
@@ -161,10 +208,8 @@ where
                 })
                 .to_bytes()
             })
-            .map(record::add)
             .collect()
     }
-
 
     /// Compresses a set of signed Ethereum events into a single
     /// [`ethereum_events::VextDigest`], whilst filtering invalid
@@ -174,7 +219,7 @@ where
     // ethereum events and validator set update vote extensions
     fn compress_ethereum_events(
         &self,
-        vote_extensions: Vec<ExtendedVoteInfo>,
+        vote_extensions: impl Iterator<Item = Signed<ethereum_events::Vext>>,
     ) -> Option<ethereum_events::VextDigest> {
         let events_epoch = self
             .storage
@@ -192,10 +237,8 @@ where
             u64::from(self.storage.get_total_voting_power(Some(events_epoch)));
         let mut voting_power = FractionalVotingPower::default();
 
-        let deserialized = deserialize_vote_extensions(vote_extensions);
-
         for (validator_voting_power, vote_extension) in
-            self.filter_invalid_vote_extensions(deserialized)
+            self.filter_invalid_vote_extensions(vote_extensions)
         {
             let validator_addr = vote_extension.data.validator_addr;
 
@@ -232,6 +275,7 @@ where
             }
         }
 
+        #[cfg(feature = "abcipp")]
         if voting_power <= FractionalVotingPower::TWO_THIRDS {
             tracing::error!(
                 "Tendermint has decided on a block including Ethereum events \
@@ -251,8 +295,9 @@ where
 
 /// Functions for creating the appropriate TxRecord given the
 /// numeric code
+#[cfg(feature = "abcipp")]
 pub(super) mod record {
-    use tendermint_proto::abci::tx_record::TxAction;
+    use tendermint_proto_abcipp::abci::tx_record::TxAction;
 
     use super::*;
 
@@ -289,6 +334,7 @@ pub(super) mod record {
 mod test_prepare_proposal {
     use std::collections::HashSet;
 
+    #[cfg(feature = "abcipp")]
     use namada::ledger::pos::namada_proof_of_stake::types::{
         VotingPower, WeightedValidator,
     };
@@ -300,15 +346,18 @@ mod test_prepare_proposal {
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType};
     use namada::types::vote_extensions::ethereum_events;
-    use tendermint_proto::abci::tx_record::TxAction;
+    #[cfg(feature = "abcipp")]
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
+    #[cfg(feature = "abcipp")]
+    use tendermint_proto_abcipp::abci::tx_record::TxAction;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };
+    #[cfg(feature = "abcipp")]
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
@@ -327,14 +376,18 @@ mod test_prepare_proposal {
             max_tx_bytes: 0,
             ..Default::default()
         };
+        #[cfg(feature = "abcipp")]
         assert_eq!(
             shell.prepare_proposal(req).tx_records,
             vec![record::remove(tx.to_bytes())]
         );
+        #[cfg(not(feature = "abcipp"))]
+        assert_eq!(shell.prepare_proposal(req).txs, vec![tx.to_bytes()]);
     }
 
     /// Serialize a [`Signed<ethereum_events::Vext>`] to an
     /// [`ExtendedVoteInfo`]
+    #[cfg(feature = "abcipp")]
     fn vote_extension_serialize(
         vext: Signed<ethereum_events::Vext>,
     ) -> ExtendedVoteInfo {
@@ -344,13 +397,22 @@ mod test_prepare_proposal {
         }
     }
 
+    /// Serialize a [`Signed<ethereum_events::Vext>`] to an
+    /// [`ExtendedVoteInfo`]
+    #[cfg(not(feature = "abcipp"))]
+    fn vote_extension_serialize(
+        vext: Signed<ethereum_events::Vext>,
+    ) -> TxBytes {
+        vext.try_to_vec().expect("Test failed")
+    }
+
     /// Check if we are filtering out an invalid vote extension `vext`
     fn check_eth_events_filtering(
         shell: &mut TestShell,
         vext: Signed<ethereum_events::Vext>,
     ) {
-        let votes =
-            deserialize_vote_extensions(vec![vote_extension_serialize(vext)]);
+        let vexts = vec![vote_extension_serialize(vext)];
+        let votes = deserialize_vote_extensions(&vexts[..]);
         let filtered_votes: Vec<_> =
             shell.filter_invalid_vote_extensions(votes).collect();
 
@@ -481,7 +543,7 @@ mod test_prepare_proposal {
 
         let maybe_digest = {
             let votes = vec![vote_extension_serialize(signed_vote_extension)];
-            shell.compress_ethereum_events(votes)
+            shell.compress_ethereum_events(deserialize_vote_extensions(&votes))
         };
 
         // we should be filtering out the vote extension with
@@ -522,7 +584,7 @@ mod test_prepare_proposal {
 
         vote_extension_digest
 
-        // let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+        // let tx = ProtocolTxType::EthEventsDigest(vote_extension_digest)
         //    .sign(&protocol_key)
         //    .to_bytes();
         // super::record::add(tx)
@@ -530,6 +592,7 @@ mod test_prepare_proposal {
 
     /// Test if Ethereum events validation and inclusion in a block
     /// behaves as expected, considering honest validators.
+    #[cfg(feature = "abcipp")]
     #[test]
     fn test_prepare_proposal_vext_normal_op() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
@@ -556,20 +619,21 @@ mod test_prepare_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        let vote = ExtendedVoteInfo {
-            vote_extension: signed_vote_extension.try_to_vec().unwrap(),
-            ..Default::default()
-        };
 
-        let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-            local_last_commit: Some(ExtendedCommitInfo {
-                votes: vec![vote],
-                ..Default::default()
-            }),
-            ..Default::default()
-        });
         let rsp_digest = {
+            let vote = ExtendedVoteInfo {
+                vote_extension: signed_vote_extension.try_to_vec().unwrap(),
+                ..Default::default()
+            };
+            let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
+                local_last_commit: Some(ExtendedCommitInfo {
+                    votes: vec![vote],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            });
             assert_eq!(rsp.tx_records.len(), 1);
+
             let tx_record = rsp.tx_records.pop().unwrap();
 
             assert_eq!(tx_record.action(), TxAction::Added);
@@ -587,7 +651,82 @@ mod test_prepare_proposal {
             };
 
             match protocol_tx {
-                ProtocolTxType::EthereumEvents(digest) => digest,
+                ProtocolTxType::EthEventsDigest(digest) => digest,
+                _ => panic!("Test failed"),
+            }
+        };
+
+        let digest = manually_assemble_digest(
+            &protocol_key,
+            signed_vote_extension,
+            LAST_HEIGHT,
+        );
+
+        assert_eq!(rsp_digest, digest);
+
+        // NOTE: this comparison will not work because of timestamps
+        // assert_eq!(rsp.tx_records, vec![digest]);
+    }
+
+    /// Test if Ethereum events validation and inclusion in a block
+    /// behaves as expected, considering honest validators.
+    #[cfg(not(feature = "abcipp"))]
+    #[test]
+    fn test_prepare_proposal_vext_normal_op() {
+        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        let (mut shell, _, _) = test_utils::setup();
+
+        // artificially change the block height
+        shell.storage.last_height = LAST_HEIGHT;
+
+        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let validator_addr = wallet::defaults::validator_address();
+
+        let ethereum_event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let signed_vote_extension = {
+            let ext = ethereum_events::Vext {
+                validator_addr,
+                block_height: LAST_HEIGHT,
+                ethereum_events: vec![ethereum_event],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+            ext
+        };
+
+        let rsp_digest = {
+            let tx =
+                ProtocolTxType::EthereumEvents(signed_vote_extension.clone())
+                    .sign(&protocol_key)
+                    .try_to_vec()
+                    .expect("Test failed");
+            let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
+                txs: vec![tx],
+                ..Default::default()
+            });
+            assert_eq!(rsp.txs.len(), 1);
+
+            let tx_bytes = rsp.txs.pop().unwrap();
+
+            let got = Tx::try_from(&tx_bytes[..]).unwrap();
+
+            let got_signed_tx =
+                SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
+            let protocol_tx =
+                TxType::try_from_slice(&got_signed_tx.data.unwrap()[..])
+                    .unwrap();
+
+            let protocol_tx = match protocol_tx {
+                TxType::Protocol(protocol_tx) => protocol_tx.tx,
+                _ => panic!("Test failed"),
+            };
+
+            match protocol_tx {
+                ProtocolTxType::EthEventsDigest(digest) => digest,
                 _ => panic!("Test failed"),
             }
         };
@@ -606,6 +745,7 @@ mod test_prepare_proposal {
 
     /// Test if Ethereum events validation and inclusion in a block
     /// behaves as expected, considering <= 2/3 voting power.
+    #[cfg(feature = "abcipp")]
     #[test]
     #[should_panic(expected = "Honest Namada validators")]
     fn test_prepare_proposal_vext_insufficient_voting_power() {
@@ -721,10 +861,13 @@ mod test_prepare_proposal {
             max_tx_bytes: 0,
             ..Default::default()
         };
+        #[cfg(feature = "abcipp")]
         assert_eq!(
             shell.prepare_proposal(req).tx_records,
             vec![record::remove(wrapper)]
         );
+        #[cfg(not(feature = "abcipp"))]
+        assert_eq!(shell.prepare_proposal(req).txs, vec![wrapper]);
     }
 
     /// Test that the decrypted txs are included
@@ -775,32 +918,40 @@ mod test_prepare_proposal {
             .iter()
             .map(|tx| tx.data.clone().expect("Test failed"))
             .collect();
-
-        let received: Vec<Vec<u8>> = shell
-            .prepare_proposal(req)
-            .tx_records
-            .iter()
-            .filter_map(
-                |TxRecord {
-                     tx: tx_bytes,
-                     action,
-                 }| {
-                    if *action == (TxAction::Unmodified as i32)
-                        || *action == (TxAction::Added as i32)
-                    {
-                        Some(
-                            Tx::try_from(tx_bytes.as_slice())
-                                .expect("Test failed")
-                                .data
-                                .expect("Test failed"),
-                        )
-                    } else {
-                        None
-                    }
-                },
-            )
-            .collect();
-        // check that the order of the txs is correct
-        assert_eq!(received, expected_txs);
+        #[cfg(feature = "abcipp")]
+        {
+            let received: Vec<Vec<u8>> = shell
+                .prepare_proposal(req)
+                .tx_records
+                .iter()
+                .filter_map(
+                    |TxRecord {
+                         tx: tx_bytes,
+                         action,
+                     }| {
+                        if *action == (TxAction::Unmodified as i32)
+                            || *action == (TxAction::Added as i32)
+                        {
+                            Some(
+                                Tx::try_from(tx_bytes.as_slice())
+                                    .expect("Test failed")
+                                    .data
+                                    .expect("Test failed"),
+                            )
+                        } else {
+                            None
+                        }
+                    },
+                )
+                .collect();
+            // check that the order of the txs is correct
+            assert_eq!(received, expected_txs);
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let received: Vec<Vec<u8>> = shell.prepare_proposal(req).txs;
+            // check that the order of the txs is correct
+            assert_eq!(received, expected_txs);
+        }
     }
 }

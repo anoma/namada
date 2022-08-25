@@ -12,6 +12,12 @@ const PROTO_SRC: &str = "./proto";
 const RUSTFMT_TOOLCHAIN_SRC: &str = "../rust-nightly-version";
 
 fn main() {
+    #[cfg(all(feature = "abcipp", feature = "abciplus"))]
+    compile_error!(
+        "Feature flags `abciplus` and `abcipp` may not be used at the same \
+         time"
+    );
+
     // Discover the repository version, if it exists
     println!("cargo:rerun-if-changed=../.git");
     let describe_opts = DescribeOptions::new();

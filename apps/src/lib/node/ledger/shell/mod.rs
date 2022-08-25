@@ -36,22 +36,35 @@ use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
+use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
+use namada::types::vote_extensions::ethereum_events;
 use namada::types::{address, token};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
+#[cfg(not(feature = "abcipp"))]
+use tendermint_proto::abci::ConsensusParams;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType,
     RequestPrepareProposal, ValidatorUpdate,
 };
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::crypto::public_key;
-use tendermint_proto::types::ConsensusParams;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci::{
+    Misbehavior as Evidence, MisbehaviorType as EvidenceType,
+    RequestPrepareProposal, ValidatorUpdate,
+};
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::crypto::public_key;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::types::ConsensusParams;
 use thiserror::Error;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tower_abci::{request, response};
@@ -265,6 +278,19 @@ impl ShellMode {
                 ..
             } => Some(protocol_keypair),
             _ => None,
+        }
+    }
+
+    /// If this node is a validator, broadcast a tx
+    /// to the mempool using the broadcaster subprocess
+    pub fn broadcast(&self, data: Vec<u8>) {
+        if let Self::Validator {
+            broadcast_sender, ..
+        } = self
+        {
+            broadcast_sender
+                .send(data)
+                .expect("The broadcaster should be running for a validator");
         }
     }
 }
@@ -624,6 +650,26 @@ where
             self.storage.last_height,
         );
         response.data = root.0;
+
+        #[cfg(not(feature = "abcipp"))]
+        if let Some(ext) = if let ShellMode::Validator { .. } = &self.mode {
+            let ext = self.craft_extension();
+            let ext = self
+                .mode
+                .get_protocol_key()
+                .map(|protocol_key| {
+                    ProtocolTxType::EthereumEvents(ext)
+                        .sign(protocol_key)
+                        .to_bytes()
+                })
+                .expect("This was already checked");
+            Some(ext)
+        } else {
+            None
+        } {
+            self.mode.broadcast(ext)
+        }
+
         response
     }
 
@@ -875,10 +921,10 @@ mod test_utils {
             });
             let results = resp
                 .tx_results
-                .iter()
+                .into_iter()
                 .zip(req.txs.into_iter())
                 .map(|(res, tx_bytes)| ProcessedTx {
-                    result: res.into(),
+                    result: res,
                     tx: tx_bytes,
                 })
                 .collect();

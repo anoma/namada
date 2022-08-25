@@ -2,13 +2,18 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::voting_power::FractionalVotingPower;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use tendermint_proto::abci::{
-    ExecTxResult, RequestProcessProposal, ResponseProcessProposal,
-};
+#[cfg(not(feature = "abcipp"))]
+use tendermint_proto::abci::RequestProcessProposal;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci::response_process_proposal::ProposalStatus;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci::{ExecTxResult, RequestProcessProposal};
 
 use super::queries::QueriesExt;
 use super::*;
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
 impl<D, H> Shell<D, H>
 where
@@ -30,7 +35,7 @@ where
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,
-    ) -> ResponseProcessProposal {
+    ) -> ProcessProposal {
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         tracing::info!(
             proposer = ?hex::encode(&req.proposer_address),
@@ -41,7 +46,7 @@ where
         );
         // the number of vote extension digests included in the block proposal
         let mut vote_ext_digest_num = 0;
-        let tx_results: Vec<ExecTxResult> = req
+        let tx_results: Vec<_> = req
             .txs
             .iter()
             .map(|tx_bytes| {
@@ -50,7 +55,6 @@ where
                     &mut tx_queue_iter,
                     &mut vote_ext_digest_num,
                 )
-                .into()
             })
             .collect();
 
@@ -92,32 +96,11 @@ where
         } else {
             ProposalStatus::Accept
         };
-        tracing::info!(
-            proposer = ?hex::encode(&req.proposer_address),
-            height = req.height,
-            hash = ?hex::encode(&req.hash),
-            ?status,
-            "Processed block proposal",
-        );
-        ResponseProcessProposal {
+
+        ProcessProposal {
             status: status as i32,
             tx_results,
-            ..Default::default()
         }
-    }
-
-    /// Check all the given txs.
-    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<ExecTxResult> {
-        let mut tx_queue_iter = self.storage.tx_queue.iter();
-        txs.iter()
-            .map(|tx_bytes| {
-                ExecTxResult::from(self.process_single_tx(
-                    tx_bytes,
-                    &mut tx_queue_iter,
-                    &mut 0,
-                ))
-            })
-            .collect()
     }
 
     /// Checks if the Tx can be deserialized from bytes. Checks the fees and
@@ -187,7 +170,7 @@ where
                     .into(),
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                ProtocolTxType::EthereumEvents(digest) => {
+                ProtocolTxType::EthEventsDigest(digest) => {
                     *vote_ext_digest_num += 1;
 
                     let extensions =
@@ -386,7 +369,7 @@ mod test_process_proposal {
                 events: vec![],
             }
         };
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+        let tx = ProtocolTxType::EthEventsDigest(vote_extension_digest)
             .sign(&protocol_key)
             .to_bytes();
         #[allow(clippy::redundant_clone)]
@@ -404,7 +387,7 @@ mod test_process_proposal {
         vote_extension_digest: ethereum_events::VextDigest,
         protocol_key: common::SecretKey,
     ) {
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+        let tx = ProtocolTxType::EthEventsDigest(vote_extension_digest)
             .sign(&protocol_key)
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };

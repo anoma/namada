@@ -19,7 +19,7 @@ pub struct VoteExtension {
 ///
 /// From a [`VoteExtensionDigest`] we yield two signed
 /// [`crate::types::transaction::protocol::ProtocolTxType`] transactions:
-///   - A `ProtocolTxType::EthereumEvents` tx, and
+///   - A `ProtocolTxType::EthEventsDigest` tx, and
 ///   - A `ProtocolTxType::ValidatorSetUpdate` tx
 pub struct VoteExtensionDigest {
     /// The digest of Ethereum events vote extension signatures.

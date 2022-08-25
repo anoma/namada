@@ -20,9 +20,18 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci::CheckTxType;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::abci::CheckTxType;
 use tokio::sync::mpsc::unbounded_channel;
+#[cfg(feature = "abcipp")]
+use tower_abci_abcipp::ServiceBuilder;
+#[cfg(not(feature = "abcipp"))]
 use tower::ServiceBuilder;
+#[cfg(feature = "abcipp")]
+use tower_abci_abcipp::{response, split, Server};
+#[cfg(not(feature = "abcipp"))]
 use tower_abci::{response, split, Server};
 
 use self::shims::abcipp_shim::AbciService;
@@ -108,9 +117,11 @@ impl Shell {
             Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
+            #[cfg(feature = "abcipp")]
             Request::ExtendVote(_req) => {
                 Ok(Response::ExtendVote(self.extend_vote(_req)))
             }
+            #[cfg(feature = "abcipp")]
             Request::VerifyVoteExtension(_req) => {
                 tracing::debug!("Request VerifyVoteExtension");
                 Ok(Response::VerifyVoteExtension(
