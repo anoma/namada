@@ -183,9 +183,9 @@ where
 
                     let mut voting_power = FractionalVotingPower::default();
                     let total_power = {
-                        let epoch = self.storage.get_epoch_from_height(
-                            BlockHeight(self.storage.last_height.0),
-                        );
+                        let epoch = self
+                            .storage
+                            .get_epoch(BlockHeight(self.storage.last_height.0));
                         u64::from(self.storage.get_total_voting_power(epoch))
                     };
 

@@ -581,10 +581,8 @@ mod prepare_block {
             // artificially change the voting power of the default validator to
             // zero, change the block height, and commit a dummy block,
             // to move to a new epoch
-            let events_epoch = shell
-                .storage
-                .get_epoch_from_height(FIRST_HEIGHT)
-                .expect("Test failed");
+            let events_epoch =
+                shell.storage.get_epoch(FIRST_HEIGHT).expect("Test failed");
             let validator_set = {
                 let params = shell.storage.read_pos_params();
                 let mut epochs = shell.storage.read_validator_set();
@@ -613,9 +611,9 @@ mod prepare_block {
             shell.commit();
 
             assert_eq!(
-                shell.storage.get_epoch_from_height(
-                    shell.storage.get_current_decision_height()
-                ),
+                shell
+                    .storage
+                    .get_epoch(shell.storage.get_current_decision_height()),
                 Some(Epoch(1))
             );
 

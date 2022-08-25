@@ -81,7 +81,7 @@ where
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }
         // get the public key associated with this validator
-        let epoch = self.storage.get_epoch_from_height(last_height);
+        let epoch = self.storage.get_epoch(last_height);
         let (voting_power, pk) = self
             .storage
             .get_validator_from_address(validator, epoch)
@@ -164,10 +164,8 @@ where
         &self,
         vote_extensions: Vec<Signed<ethereum_events::Vext>>,
     ) -> Option<ethereum_events::VextDigest> {
-        let events_epoch = self
-            .storage
-            .get_epoch_from_height(self.storage.last_height)
-            .expect(
+        let events_epoch =
+            self.storage.get_epoch(self.storage.last_height).expect(
                 "The epoch of the last block height should always be known",
             );
 

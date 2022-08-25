@@ -337,7 +337,7 @@ pub(crate) trait QueriesExt {
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
-    fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch>;
+    fn get_epoch(&self, height: BlockHeight) -> Option<Epoch>;
 
     /// Retrieves the [`BlockHeight`] that is currently being decided.
     fn get_current_decision_height(&self) -> BlockHeight;
@@ -541,7 +541,7 @@ where
     }
 
     #[inline]
-    fn get_epoch_from_height(&self, height: BlockHeight) -> Option<Epoch> {
+    fn get_epoch(&self, height: BlockHeight) -> Option<Epoch> {
         self.block.pred_epochs.get_epoch(height)
     }
 
@@ -611,9 +611,7 @@ mod test_queries {
                 shell.storage.get_current_decision_height().0
             );
             assert_eq!(
-                shell
-                    .storage
-                    .get_epoch_from_height(curr_block_height.into()),
+                shell.storage.get_epoch(curr_block_height.into()),
                 Some(Epoch(curr_epoch))
             );
             assert_eq!(
@@ -635,9 +633,7 @@ mod test_queries {
             epoch_assertions.iter().copied()
         {
             assert_eq!(
-                shell
-                    .storage
-                    .get_epoch_from_height(curr_block_height.into()),
+                shell.storage.get_epoch(curr_block_height.into()),
                 Some(Epoch(curr_epoch))
             );
             assert_eq!(
