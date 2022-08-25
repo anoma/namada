@@ -47,7 +47,7 @@ pub mod mock_oracle {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "eth-fullnode"))]
 pub mod mock_web3_client {
     use std::cell::RefCell;
     use std::fmt::Debug;

@@ -1,4 +1,4 @@
-//! Implementation of the [`PrepareProposal`] ABCI++ method for the Shell
+//! Implementation of the `PrepareProposal` ABCI++ method for the Shell
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -164,6 +164,7 @@ where
             .map(record::add)
             .collect()
     }
+
 
     /// Compresses a set of signed Ethereum events into a single
     /// [`ethereum_events::VextDigest`], whilst filtering invalid

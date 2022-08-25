@@ -1,4 +1,4 @@
-#[cfg(any(test, feature = "eth-fullnode"))]
+#[cfg(feature = "eth-fullnode")]
 pub mod signatures {
     pub const TRANSFER_TO_NAMADA_SIG: &str =
         "TransferToNamada(uint256,address[],string[],uint256[],uint32)";
