@@ -14,7 +14,7 @@ use super::*;
 /// Contains stateful data about the number of vote extension
 /// digests found as protocol transactions in a proposed block.
 #[derive(Default)]
-struct DigestCounters {
+pub(crate) struct DigestCounters {
     /// The number of Ethereum events vote extensions found thus far.
     eth_ev_digest_num: usize,
     /// The number of validator set update vote extensions found thus far.
@@ -59,7 +59,7 @@ where
                 self.process_single_tx(
                     tx_bytes,
                     &mut tx_queue_iter,
-                    &mut eth_ev_digest_num,
+                    &mut counters,
                 )
                 .into()
             })
@@ -143,7 +143,7 @@ where
                 ExecTxResult::from(self.process_single_tx(
                     tx_bytes,
                     &mut tx_queue_iter,
-                    &mut 0,
+                    &mut Default::default(),
                 ))
             })
             .collect()

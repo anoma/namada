@@ -107,7 +107,7 @@ where
 
         let validator_set_update =
             if self.storage.can_send_validator_set_update(
-                SendValsetUpd::AtPrevHeight(self.storage.last_height),
+                SendValsetUpd::AtFixedHeight(self.storage.last_height),
             ) {
                 Some(
                     self.compress_valset_updates(valset_upds)
