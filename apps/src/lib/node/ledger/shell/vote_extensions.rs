@@ -263,7 +263,7 @@ mod extend_votes {
                 .map(ProtocolTxType::ValidatorSetUpdate),
         ]
         .into_iter()
-        .flat_map(|tx| tx)
+        .flatten()
     }
 
     /// Deserializes `vote_extensions` as [`VoteExtension`] instances, filtering
