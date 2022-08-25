@@ -1,16 +1,21 @@
 //! E2E test helpers
 
+use std::path::Path;
+use std::process::Command;
 use std::str::FromStr;
+use std::{env, time};
 
 use color_eyre::eyre::Result;
+use color_eyre::owo_colors::OwoColorize;
+use escargot::CargoBuild;
 use eyre::eyre;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada_apps::config::{Config, TendermintMode};
 
-use super::setup::Test;
-use crate::e2e::setup::{Bin, Who};
+use super::setup::{Test, ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES};
+use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::run;
 
 /// Find the address of an account by its alias from the wallet
@@ -19,10 +24,14 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
         test,
         Bin::Wallet,
         &["address", "find", "--alias", alias.as_ref()],
-        Some(1)
+        Some(10)
     )?;
-    let (unread, matched) = find.exp_regex("Found address .*\n")?;
-    let address_str = matched.trim().rsplit_once(' ').unwrap().1;
+    let (unread, matched) = find.exp_regex("Found address .*")?;
+    let address_str = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
     let address = Address::from_str(address_str).map_err(|e| {
         eyre!(format!(
             "Address: {} parsed from {}, Error: {}\n\nOutput: {}",
@@ -73,12 +82,20 @@ pub fn find_keypair(
             alias.as_ref(),
             "--unsafe-show-secret"
         ],
-        Some(1)
+        Some(10)
     )?;
-    let (_unread, matched) = find.exp_regex("Public key: .*\n")?;
-    let pk = matched.trim().rsplit_once(' ').unwrap().1;
-    let (unread, matched) = find.exp_regex("Secret key: .*\n")?;
-    let sk = matched.trim().rsplit_once(' ').unwrap().1;
+    let (_unread, matched) = find.exp_regex("Public key: .*")?;
+    let pk = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
+    let (unread, matched) = find.exp_regex("Secret key: .*")?;
+    let sk = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
     let key = format!("{}{}", sk, pk);
     common::SecretKey::from_str(&key).map_err(|e| {
         eyre!(format!(
@@ -104,10 +121,14 @@ pub fn find_voting_power(
             "--ledger-address",
             ledger_address
         ],
-        Some(1)
+        Some(10)
     )?;
-    let (unread, matched) = find.exp_regex("voting power: .*\n")?;
-    let voting_power_str = matched.trim().rsplit_once(' ').unwrap().1;
+    let (unread, matched) = find.exp_regex("voting power: .*")?;
+    let voting_power_str = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
     u64::from_str(voting_power_str).map_err(|e| {
         eyre!(format!(
             "Voting power: {} parsed from {}, Error: {}\n\nOutput: {}",
@@ -122,10 +143,14 @@ pub fn get_epoch(test: &Test, ledger_address: &str) -> Result<Epoch> {
         test,
         Bin::Client,
         &["epoch", "--ledger-address", ledger_address],
-        Some(5)
+        Some(10)
     )?;
-    let (unread, matched) = find.exp_regex("Last committed epoch: .*\n")?;
-    let epoch_str = matched.trim().rsplit_once(' ').unwrap().1;
+    let (unread, matched) = find.exp_regex("Last committed epoch: .*")?;
+    let epoch_str = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
     let epoch = u64::from_str(epoch_str).map_err(|e| {
         eyre!(format!(
             "Epoch: {} parsed from {}, Error: {}\n\nOutput: {}",
@@ -133,4 +158,71 @@ pub fn get_epoch(test: &Test, ledger_address: &str) -> Result<Epoch> {
         ))
     })?;
     Ok(Epoch(epoch))
+}
+
+pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
+    let use_prebuilt_binaries = match env::var(ENV_VAR_USE_PREBUILT_BINARIES) {
+        Ok(var) => var.to_ascii_lowercase() != "false",
+        Err(_) => false,
+    };
+
+    // Allow to run in debug
+    let run_debug = match env::var(ENV_VAR_DEBUG) {
+        Ok(val) => val.to_ascii_lowercase() != "false",
+        _ => false,
+    };
+
+    if !use_prebuilt_binaries {
+        let build_cmd = CargoBuild::new()
+            .package(APPS_PACKAGE)
+            .manifest_path(manifest_path)
+            // Explicitly disable dev, in case it's enabled when a test is
+            // invoked
+            .env("ANOMA_DEV", "false")
+            .bin(bin_name);
+
+        let build_cmd = if run_debug {
+            build_cmd
+        } else {
+            // Use the same build settings as `make build-release`
+            build_cmd.release()
+        };
+
+        let now = time::Instant::now();
+        // ideally we would print the compile command here, but escargot doesn't
+        // implement Display or Debug for CargoBuild
+        println!(
+            "\n{}: {}",
+            "`cargo build` starting".underline().bright_blue(),
+            bin_name
+        );
+
+        let command = build_cmd.run().unwrap();
+        println!(
+            "\n{}: {}ms",
+            "`cargo build` finished after".underline().bright_blue(),
+            now.elapsed().as_millis()
+        );
+
+        command.command()
+    } else {
+        let dir = if run_debug {
+            format!("target/debug/{}", bin_name)
+        } else {
+            format!("target/release/{}", bin_name)
+        };
+        println!(
+            "\n{}: {}",
+            "Running prebuilt binaries from".underline().green(),
+            dir
+        );
+        std::process::Command::new(dir)
+    }
+}
+
+fn strip_trailing_newline(input: &str) -> &str {
+    input
+        .strip_suffix("\r\n")
+        .or_else(|| input.strip_suffix('\n'))
+        .unwrap_or(input)
 }

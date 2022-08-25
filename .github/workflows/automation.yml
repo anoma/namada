@@ -1,0 +1,45 @@
+name: Automation Tasks
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  GIT_LFS_SKIP_SMUDGE: 1
+
+jobs:
+  tasks:
+    if: ${{ github.event.issue.pull_request }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        command: [publish-wasm.py, update-wasm.py]
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          aws-region: eu-west-1
+      - uses: xt0rted/pull-request-comment-branch@v1
+        id: comment-branch
+      - uses: actions/checkout@v3
+        if: success()
+        with:
+          ref: ${{ steps.comment-branch.outputs.head_ref }}
+      - name: Run task
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_READ_ORG_TOKEN: ${{ secrets.GT_READ_ORG }}
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          pip3 install ghapi >/dev/null 2>&1
+          python3 .github/workflows/scripts/${{ matrix.command }}

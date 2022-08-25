@@ -101,11 +101,12 @@ impl Wallet {
     /// key.
     pub fn gen_key(
         &mut self,
+        scheme: SchemeType,
         alias: Option<String>,
         unsafe_dont_encrypt: bool,
     ) -> (String, Rc<common::SecretKey>) {
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-        let (alias, key) = self.store.gen_key(alias, password);
+        let (alias, key) = self.store.gen_key(scheme, alias, password);
         // Cache the newly added key
         self.decrypted_key_cache.insert(alias.clone(), key.clone());
         (alias.into(), key)
@@ -118,6 +119,7 @@ impl Wallet {
     pub fn gen_validator_keys(
         &mut self,
         protocol_pk: Option<common::PublicKey>,
+        scheme: SchemeType,
     ) -> Result<ValidatorKeys, FindKeyError> {
         let protocol_keypair = protocol_pk.map(|pk| {
             self.find_key_by_pkh(&PublicKeyHash::from(&pk))
@@ -134,6 +136,7 @@ impl Wallet {
             Some(Err(err)) => Err(err),
             other => Ok(Store::gen_validator_keys(
                 other.map(|res| res.unwrap().as_ref().clone()),
+                scheme,
             )),
         }
     }

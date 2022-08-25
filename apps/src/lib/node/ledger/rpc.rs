@@ -5,10 +5,7 @@ use std::str::FromStr;
 
 use namada::types::address::Address;
 use namada::types::storage;
-#[cfg(not(feature = "ABCI"))]
 use tendermint::abci::Path as AbciPath;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::abci::Path as AbciPath;
 use thiserror::Error;
 
 /// RPC query path

@@ -6,23 +6,13 @@ license = "GPL-3.0"
 name = "namada_encoding_spec"
 readme = "../README.md"
 resolver = "2"
-version = "0.7.0"
+version = "0.7.1"
 
 [features]
-default = ["ABCI"]
-
-ABCI = [
-  "namada/ABCI",
-  "namada/ibc-vp-abci",
-]
-
-ABCI-plus-plus = [
-  "namada/ABCI-plus-plus",
-  "namada/ibc-vp",
-]
+default = []
 
 [dependencies]
-namada = {path = "../shared", default-features = false}
+namada = {path = "../shared"}
 borsh = "0.9.0"
 itertools = "0.10.3"
 lazy_static = "1.4.0"
