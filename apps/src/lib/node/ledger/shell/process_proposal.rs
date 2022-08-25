@@ -68,7 +68,7 @@ where
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
         let invalid_num_of_eth_ev_digests =
-            self.check_eth_events_num(&counters);
+            !self.has_proper_eth_events_num(&counters);
         if invalid_num_of_eth_ev_digests {
             tracing::warn!(
                 proposer = ?hex::encode(&req.proposer_address),
@@ -81,7 +81,7 @@ where
         }
 
         let invalid_num_of_valset_upd_digests =
-            self.check_valset_upd_num(&counters);
+            !self.has_proper_valset_upd_num(&counters);
         if invalid_num_of_valset_upd_digests {
             tracing::warn!(
                 proposer = ?hex::encode(&req.proposer_address),
@@ -371,13 +371,13 @@ where
 
     /// Checks if we have found the correct number of Ethereum events
     /// vote extensions in [`DigestCounters`].
-    fn check_eth_events_num(&self, c: &DigestCounters) -> bool {
+    fn has_proper_eth_events_num(&self, c: &DigestCounters) -> bool {
         c.eth_ev_digest_num == 1
     }
 
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
-    fn check_valset_upd_num(&self, c: &DigestCounters) -> bool {
+    fn has_proper_valset_upd_num(&self, c: &DigestCounters) -> bool {
         if self.storage.can_send_validator_set_update(
             SendValsetUpd::AtPrevHeight(self.storage.last_height),
         ) {
