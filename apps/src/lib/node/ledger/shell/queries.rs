@@ -521,11 +521,12 @@ where
             return true;
         }
 
-        let first_epoch_heights = self.block.pred_epochs.first_block_heights();
+        let fst_heights_of_each_epoch =
+            self.block.pred_epochs.first_block_heights();
 
         // tentatively check if the last stored height
         // is the one we are looking for
-        if first_epoch_heights
+        if fst_heights_of_each_epoch
             .last()
             .map(|&h| h == height)
             .unwrap_or(false)
@@ -533,9 +534,10 @@ where
             return true;
         }
 
-        // the values in `first_epoch_heights` are stored in ascending
-        // order, so we can just do a binary search over them
-        check_prev_heights && first_epoch_heights.binary_search(&height).is_ok()
+        // the values in `fst_block_heights_of_each_epoch` are stored in
+        // ascending order, so we can just do a binary search over them
+        check_prev_heights
+            && fst_heights_of_each_epoch.binary_search(&height).is_ok()
     }
 
     #[inline]
@@ -573,63 +575,54 @@ mod test_queries {
         let (mut shell, _, _) = test_utils::setup_at_height(0u64);
 
         let epoch_assertions = [
-            // (current block height, can send valset upd)
-            (1, true),
-            (2, false),
-            (3, false),
-            (4, false),
-            (5, false),
-            (6, false),
-            (7, false),
-            (8, false),
-            (9, false),
-            (10, false),
-            (11, false),
+            // (current epoch, current block height, can send valset upd)
+            (0, 1, true),
+            (0, 2, false),
+            (0, 3, false),
+            (0, 4, false),
+            (0, 5, false),
+            (0, 6, false),
+            (0, 7, false),
+            (0, 8, false),
+            (0, 9, false),
+            (0, 10, false),
+            (0, 11, false),
+            (0, 12, false),
+            (0, 13, false),
+            (0, 14, false),
+            (0, 15, false),
             // we will change epoch here
-            (12, true),
-            (13, false),
-            (14, false),
-            (15, false),
-            (16, false),
+            (1, 16, true),
+            (1, 17, false),
+            (1, 18, false),
+            (1, 19, false),
+            (1, 20, false),
         ];
 
         // test `SendValsetUpd::Now`
-        for (curr_block_height, can_send) in epoch_assertions.iter().copied() {
+        for (curr_epoch, curr_block_height, can_send) in
+            epoch_assertions.iter().copied()
+        {
+            shell.storage.last_height = BlockHeight(curr_block_height - 1);
+            println!("Epochs heights: {:?}", shell.storage.block.pred_epochs.first_block_heights());
             println!("Current height: {curr_block_height}");
+            assert_eq!(
+                curr_block_height,
+                shell.storage.get_current_decision_height().0
+            );
+            assert_eq!(
+                shell
+                    .storage
+                    .get_epoch_from_height(curr_block_height.into()),
+                Some(Epoch(curr_epoch))
+            );
             assert_eq!(
                 shell
                     .storage
                     .can_send_validator_set_update(SendValsetUpd::Now),
                 can_send
             );
-            shell.storage.last_height = curr_block_height.into();
-            if curr_block_height == 11u64 {
-                let validator_set = {
-                    let events_epoch = shell
-                        .storage
-                        .get_epoch_from_height(shell.storage.last_height)
-                        .expect("Test failed");
-
-                    let params = shell.storage.read_pos_params();
-                    let mut epochs = shell.storage.read_validator_set();
-                    let mut data =
-                        epochs.get(events_epoch).cloned().expect("Test failed");
-
-                    data.active = data
-                        .active
-                        .iter()
-                        .cloned()
-                        .map(|v| WeightedValidator {
-                            voting_power: VotingPower::from(0u64),
-                            ..v
-                        })
-                        .collect();
-
-                    epochs.set(data, events_epoch, &params);
-                    epochs
-                };
-                shell.storage.write_validator_set(&validator_set);
-
+            if curr_block_height == 15u64 {
                 let mut req = FinalizeBlock::default();
                 req.header.time = namada::types::time::DateTimeUtc::now();
                 shell.finalize_block(req).expect("Test failed");
@@ -638,7 +631,8 @@ mod test_queries {
         }
 
         // test `SendValsetUpd::AtPrevHeight`
-        for (curr_block_height, can_send) in epoch_assertions.iter().copied() {
+        for (_, curr_block_height, can_send) in epoch_assertions.iter().copied()
+        {
             assert_eq!(
                 shell.storage.can_send_validator_set_update(
                     SendValsetUpd::AtPrevHeight(curr_block_height.into())
