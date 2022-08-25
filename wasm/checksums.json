@@ -12,8 +12,8 @@
     "tx_update_vp.wasm": "tx_update_vp.a304b3c70361cde5fda458ba5637d6825eb002198e73990a1c74351113b83d43.wasm",
     "tx_vote_proposal.wasm": "tx_vote_proposal.8f306e1d1bcc9ca7f47a39108554fc847d4ac6df7a8d87a6effdffeae6adc4c4.wasm",
     "tx_withdraw.wasm": "tx_withdraw.c288861e842f0b1ac6fbb95b14b33c8819ac587bbd5b483f2cdd0ea184206c65.wasm",
-    "vp_nft.wasm": "vp_nft.557883861270a0a5e42802ce4bfbbc28f9f0dfa3b76520ffdd319b69a4f2f34c.wasm",
-    "vp_testnet_faucet.wasm": "vp_testnet_faucet.1fb8c53e7c164d141661743f3cdfaf30d30e6e16abd2f8814c0d8829a2e36e8a.wasm",
-    "vp_token.wasm": "vp_token.b130ca28e8029f5ad7a33bf3d4fbb9a3b08a29484feba34b988e902c4ce9c966.wasm",
-    "vp_user.wasm": "vp_user.2c45ba3e0b442210d4dd953679c774cc15f8773c5c25bda7f2ad60eaaff2d0a9.wasm"
+    "vp_nft.wasm": "vp_nft.379f0a9fdbc9611ba9afc8b03ea17eb1e7c63992be3c2ecd5dd506a0ec3809f3.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.9d28df0e4eea55c98ac05638cfc6211aaf8e1a4b9489f7057634c66d39835c36.wasm",
+    "vp_token.wasm": "vp_token.6506aea021bb6de9186e96fa0d9ea2ad35bcb66777d6ecf890a66cfe36a74f23.wasm",
+    "vp_user.wasm": "vp_user.77a0d0d406e300b2d5b9bc1c13bc50f233b6923d369db939ac82c8e10b64543c.wasm"
 }
