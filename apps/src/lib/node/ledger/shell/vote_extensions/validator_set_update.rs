@@ -30,7 +30,6 @@ where
     ///  * The voting powers are normalized to 2^32, and sorted in descending
     ///    order
     #[inline]
-    #[allow(dead_code)]
     pub fn validate_valset_upd_vext(
         &self,
         ext: validator_set_update::SignedVext,
@@ -43,7 +42,6 @@ where
     /// This method behaves exactly like [`Self::validate_valset_upd_vext`],
     /// with the added bonus of returning the vote extension back, if it
     /// is valid.
-    #[allow(dead_code)]
     // TODO:
     // - verify if the voting powers in the vote extension are the same
     // as the ones in storage. we can't do this yet, because we need to map
@@ -105,7 +103,6 @@ where
     /// valid validator set update vote extensions, or the reason why these
     /// are invalid, in the form of a [`VoteExtensionError`].
     #[inline]
-    #[allow(dead_code)]
     pub fn validate_valset_upd_vext_list(
         &self,
         vote_extensions: impl IntoIterator<Item = validator_set_update::SignedVext>
@@ -136,7 +133,6 @@ where
     /// Takes a list of signed validator set update vote extensions,
     /// and filters out invalid instances.
     #[inline]
-    #[allow(dead_code)]
     pub fn filter_invalid_valset_upd_vexts(
         &self,
         vote_extensions: impl IntoIterator<Item = validator_set_update::SignedVext>
@@ -151,7 +147,6 @@ where
     /// single [`validator_set_update::VextDigest`], whilst filtering
     /// invalid [`validator_set_update::SignedVext`] instances in the
     /// process.
-    #[allow(dead_code)]
     pub fn compress_valset_updates(
         &self,
         vote_extensions: Vec<validator_set_update::SignedVext>,
