@@ -24,10 +24,10 @@ where
     /// Checks that:
     ///  * The signing validator was active at the preceding epoch
     ///  * The validator correctly signed the extension
-    ///  * The validator signed over the new epoch inside of the extension
+    ///  * The validator signed over the block height inside of the extension
     ///  * The voting powers in the vote extension correspond to the voting
     ///    powers of the validators of the new epoch
-    ///  * The voting powers are normalized to 2^32, and sorted in descending
+    ///  * The voting powers are normalized to `2^32`, and sorted in descending
     ///    order
     #[inline]
     pub fn validate_valset_upd_vext(
