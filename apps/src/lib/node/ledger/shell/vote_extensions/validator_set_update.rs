@@ -220,7 +220,6 @@ mod test_vote_extensions {
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::types::key::RefTo;
-    use namada::types::storage::BlockHeight;
     use namada::types::vote_extensions::{
         ethereum_events, validator_set_update, VoteExtension,
     };
@@ -232,8 +231,6 @@ mod test_vote_extensions {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
-    const FIRST_HEIGHT_WITH_VEXTS: BlockHeight = BlockHeight(1);
-
     /// Test if a [`validator_set_update::Vext`] that incorrectly labels what
     /// block height it was included on in a vote extension is rejected
     // TODO:
@@ -241,15 +238,14 @@ mod test_vote_extensions {
     // - add validator voting powers from storage
     #[test]
     fn test_reject_incorrect_block_height() {
-        let (mut shell, _, _) =
-            test_utils::setup_at_height(FIRST_HEIGHT_WITH_VEXTS);
+        let (shell, _, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
 
         let ethereum_events = ethereum_events::Vext::empty(
-            FIRST_HEIGHT_WITH_VEXTS,
+            shell.storage.get_current_decision_height(),
             validator_addr.clone(),
         )
         .sign(protocol_key);
@@ -260,8 +256,8 @@ mod test_vote_extensions {
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
                 validator_addr,
-                // invalid height, should have been: `FIRST_HEIGHT_WITH_VEXTS`
-                block_height: FIRST_HEIGHT_WITH_VEXTS + 1,
+                // invalid height
+                block_height: shell.storage.get_current_decision_height() + 1,
             }
             // TODO: sign with secp key
             .sign(protocol_key),
@@ -286,15 +282,14 @@ mod test_vote_extensions {
     /// a non-validator are rejected
     #[test]
     fn test_valset_upd_must_be_signed_by_validator() {
-        let (mut shell, _, _) =
-            test_utils::setup_at_height(FIRST_HEIGHT_WITH_VEXTS);
+        let (shell, _, _) = test_utils::setup();
         let (protocol_key, validator_addr) = {
             let bertha_key = wallet::defaults::bertha_keypair();
             let bertha_addr = wallet::defaults::bertha_address();
             (bertha_key, bertha_addr)
         };
         let ethereum_events = ethereum_events::Vext::empty(
-            FIRST_HEIGHT_WITH_VEXTS,
+            shell.storage.get_current_decision_height(),
             validator_addr.clone(),
         )
         .sign(&protocol_key);
@@ -303,7 +298,7 @@ mod test_vote_extensions {
                 // TODO: get voting powers from storage, associated with eth
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
-                block_height: FIRST_HEIGHT_WITH_VEXTS,
+                block_height: shell.storage.get_current_decision_height(),
                 validator_addr,
             }
             .sign(&protocol_key),
@@ -329,8 +324,7 @@ mod test_vote_extensions {
     /// change to the validator set.
     #[test]
     fn test_validate_valset_upd_vexts() {
-        let (mut shell, _, _) =
-            test_utils::setup_at_height(FIRST_HEIGHT_WITH_VEXTS);
+        let (mut shell, _, _) = test_utils::setup();
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let validator_addr = shell
@@ -338,11 +332,12 @@ mod test_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
+        let signed_height = shell.storage.get_current_decision_height();
         let vote_ext = validator_set_update::Vext {
             // TODO: get voting powers from storage, associated with eth
             // addrs
             voting_powers: std::collections::HashMap::new(),
-            block_height: FIRST_HEIGHT_WITH_VEXTS,
+            block_height: signed_height,
             validator_addr,
         }
         .sign(&protocol_key);
@@ -364,7 +359,8 @@ mod test_vote_extensions {
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
         req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.storage.last_height = BlockHeight(11);
+        shell.storage.last_height =
+            shell.storage.get_current_decision_height() + 11;
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
         assert_eq!(shell.storage.get_current_epoch().0.0, 1);
@@ -386,7 +382,7 @@ mod test_vote_extensions {
                 .is_ok()
         );
 
-        assert!(shell.validate_valset_upd_vext(vote_ext, prev_epoch + 1));
+        assert!(shell.validate_valset_upd_vext(vote_ext, signed_height));
     }
 
     /// Test if a [`validator_set_update::Vext`] with an incorrect signature
@@ -396,15 +392,14 @@ mod test_vote_extensions {
     // - add validator voting powers from storage
     #[test]
     fn test_reject_bad_signatures() {
-        let (mut shell, _, _) =
-            test_utils::setup_at_height(FIRST_HEIGHT_WITH_VEXTS);
+        let (shell, _, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
 
         let ethereum_events = ethereum_events::Vext::empty(
-            FIRST_HEIGHT_WITH_VEXTS,
+            shell.storage.get_current_decision_height(),
             validator_addr.clone(),
         )
         .sign(protocol_key);
@@ -414,7 +409,7 @@ mod test_vote_extensions {
                 // TODO: get voting powers from storage, associated with eth
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
-                block_height: FIRST_HEIGHT_WITH_VEXTS,
+                block_height: shell.storage.get_current_decision_height(),
                 validator_addr,
             }
             // TODO: sign with secp key

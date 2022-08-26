@@ -117,7 +117,9 @@ mod extend_votes {
                         // TODO: we need a way to map ethereum addresses to
                         // namada validator addresses
                         voting_powers: std::collections::HashMap::new(),
-                        epoch: next_epoch,
+                        block_height: self
+                            .storage
+                            .get_current_decision_height(),
                     };
 
                     let protocol_key = match &self.mode {
@@ -210,7 +212,7 @@ mod extend_votes {
                     .and_then(|ext| {
                         // we have a valset update vext when we're expecting one, cool,
                         // let's validate it
-                        self.validate_valset_upd_vext(ext, self.storage.get_current_epoch().0.next())
+                        self.validate_valset_upd_vext(ext, self.storage.get_current_decision_height())
                             .then(|| true)
                     })
                     .unwrap_or_else(|| {
