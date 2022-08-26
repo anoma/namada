@@ -7,11 +7,8 @@ use namada_vp_prelude::address::masp;
 use namada_vp_prelude::*;
 
 /// Convert Anoma amount and token type to MASP equivalents
-fn convert_amount(token: &Address, val: token::Amount, epoch: Option<storage::Epoch>) -> (AssetType, Amount) {
-    let epoch = match epoch {
-        Some(e) => e,
-        None => get_block_epoch(),
-    };
+fn convert_amount(token: &Address, val: token::Amount) -> (AssetType, Amount) {
+    let epoch = get_block_epoch();
     // Timestamp the chosen token with the current epoch
     let token_bytes = (token, epoch.0)
         .try_to_vec()
@@ -56,7 +53,7 @@ fn validate_tx(
             // where the shielded value has an incorrect timestamp
             // are automatically rejected
             let (_transp_asset, transp_amt) =
-                convert_amount(&transfer.token, transfer.amount, None);
+                convert_amount(&transfer.token, transfer.amount);
 
             // Non-masp sources add to transparent tx pool
             transparent_tx_pool += transp_amt;
@@ -65,16 +62,13 @@ fn validate_tx(
         // Handle unshielding/transparent output
         if transfer.target != masp() {
             // Timestamp is derived to allow unshields for older tokens
-            let e = shielded_tx.value_balance.components()
-            .next()
-            .map(|(atype, _)| { 
-                let v = atype.try_to_vec().unwrap();
-                storage::Epoch::try_from_slice(&v[v.len()-8..])
-            })
-            .map(|x| x.unwrap());
+            let atype = shielded_tx.value_balance.components()
+                .next()
+                .unwrap()
+                .0;
 
-            let (_transp_asset, transp_amt) =
-                convert_amount(&transfer.token, transfer.amount, e);
+            let transp_amt = Amount::from_nonnegative(*atype, u64::from(transfer.amount))
+                .expect("invalid value or asset type for amount");
 
             // Non-masp destinations subtract from transparent tx pool
             transparent_tx_pool -= transp_amt;
