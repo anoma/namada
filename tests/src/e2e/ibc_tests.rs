@@ -130,7 +130,7 @@ fn run_ledger_ibc() -> Result<()> {
         &conn_id_b,
     )?;
 
-    // Transfer from the normal account on Chain A to Chain B
+    // Transfer 100000 from the normal account on Chain A to Chain B
     transfer_token(
         &test_a,
         &test_b,
@@ -140,7 +140,12 @@ fn run_ledger_ibc() -> Result<()> {
     )?;
     check_balances(&port_channel_id_a, &port_channel_id_b, &test_a, &test_b)?;
 
-    // Transfer back from the origin-specific account on Chain B to Chain A
+    // Transfer 50000 received over IBC on Chain B
+    transfer_received_token(&port_channel_id_b, &test_b)?;
+    check_balances_after_non_ibc(&port_channel_id_b, &test_b)?;
+
+    // Transfer 50000 back from the origin-specific account on Chain B to Chain
+    // A
     transfer_back(
         &test_a,
         &test_b,
@@ -755,6 +760,51 @@ fn transfer_token(
     Ok(())
 }
 
+fn transfer_received_token(
+    port_channel_id: &PortChannelId,
+    test: &Test,
+) -> Result<()> {
+    let xan = find_address(test, XAN)?;
+    // token received via the port and channel
+    let denom = format!(
+        "{}/{}/{}",
+        port_channel_id.port_id, port_channel_id.channel_id, xan
+    );
+    let sub_prefix = ibc_token_prefix(denom)
+        .unwrap()
+        .sub_key()
+        .unwrap()
+        .to_string();
+
+    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let tx_args = [
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        XAN,
+        "--sub-prefix",
+        &sub_prefix,
+        "--amount",
+        "50000",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+        "--ledger-address",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    Ok(())
+}
+
 /// Give the token back after transfer_token
 fn transfer_back(
     test_a: &Test,
@@ -1256,6 +1306,58 @@ fn check_balances(
     Ok(())
 }
 
+/// Check balances after non IBC transfer
+fn check_balances_after_non_ibc(
+    port_channel_id: &PortChannelId,
+    test: &Test,
+) -> Result<()> {
+    // Check the balance on Chain B
+    let token = find_address(test, XAN)?;
+    let denom = format!(
+        "{}/{}/{}",
+        port_channel_id.port_id, port_channel_id.channel_id, token
+    );
+    let key_prefix = ibc_token_prefix(denom)?;
+    let sub_prefix = key_prefix.sub_key().unwrap().to_string();
+
+    // Check the source
+    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let query_args = vec![
+        "balance",
+        "--owner",
+        BERTHA,
+        "--token",
+        XAN,
+        "--sub-prefix",
+        &sub_prefix,
+        "--ledger-address",
+        &rpc,
+    ];
+    let expected = format!("XAN with {}: 50000", sub_prefix);
+    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
+
+    // Check the traget
+    let query_args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        XAN,
+        "--sub-prefix",
+        &sub_prefix,
+        "--ledger-address",
+        &rpc,
+    ];
+    let expected = format!("XAN with {}: 50000", sub_prefix);
+    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
+
+    Ok(())
+}
+
 /// Check balances after IBC transfer back
 fn check_balances_after_back(
     src_port_channel_id: &PortChannelId,
@@ -1308,7 +1410,7 @@ fn check_balances_after_back(
         "--ledger-address",
         &rpc_b,
     ];
-    let expected = format!("XAN with {}: 50000", sub_prefix);
+    let expected = format!("XAN with {}: 0", sub_prefix);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
