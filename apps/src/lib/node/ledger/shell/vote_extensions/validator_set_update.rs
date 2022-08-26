@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
-use namada::types::storage::Epoch;
+use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::validator_set_update;
 use namada::types::voting_power::FractionalVotingPower;
 
@@ -33,9 +33,9 @@ where
     pub fn validate_valset_upd_vext(
         &self,
         ext: validator_set_update::SignedVext,
-        new_epoch: Epoch,
+        last_height: BlockHeight,
     ) -> bool {
-        self.validate_valset_upd_vext_and_get_it_back(ext, new_epoch)
+        self.validate_valset_upd_vext_and_get_it_back(ext, last_height)
             .is_ok()
     }
 
@@ -51,25 +51,23 @@ where
     pub fn validate_valset_upd_vext_and_get_it_back(
         &self,
         ext: validator_set_update::SignedVext,
-        new_epoch: Epoch,
+        last_height: BlockHeight,
     ) -> std::result::Result<
         (VotingPower, validator_set_update::SignedVext),
         VoteExtensionError,
     > {
-        if new_epoch.0 == 0 {
+        if ext.data.block_height != last_height {
+            let ext_height = ext.data.block_height;
             tracing::error!(
-                "We should always be signing over validator set updates with \
-                 the next epoch"
+                "Validator set update vote extension issued for a block \
+                 height {ext_height} different from the expected height \
+                 {last_height}"
             );
             return Err(VoteExtensionError::UnexpectedSequenceNumber);
         }
-        if ext.data.epoch != new_epoch {
-            let ext_epoch = ext.data.epoch;
-            tracing::error!(
-                "Validator set update vote extension issued for an epoch \
-                 {ext_epoch} different from the expected epoch {new_epoch}"
-            );
-            return Err(VoteExtensionError::UnexpectedSequenceNumber);
+        if last_height.0 == 0 {
+            tracing::error!("Dropping vote extension issued at genesis");
+            return Err(VoteExtensionError::IssuedAtGenesis);
         }
         // get the public key associated with this validator
         let validator = &ext.data.validator_addr;
@@ -116,16 +114,7 @@ where
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_valset_upd_vext_and_get_it_back(
                 vote_extension,
-                // NOTE: make sure we do not change epochs between
-                // extending votes and deciding on the validator
-                // set update through consensus. otherwise, this
-                // is going to fail.
-                //
-                // as an alternative to using epochs, we can use
-                // block heights as a nonce, that way we can
-                // always retrieve the proper epoch from the
-                // block height
-                self.storage.get_current_epoch().0.next(),
+                self.storage.last_height,
             )
         })
     }
@@ -152,18 +141,13 @@ where
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
         let total_voting_power = {
-            let current_valset_epoch = self.storage.get_current_epoch().0;
-            if current_valset_epoch == Epoch(0) {
-                tracing::error!(
-                    epoch = ?current_valset_epoch,
-                    "Cannot compress validator set update vote extensions at the given epoch"
+            let last_height_epoch =
+                self.storage.get_epoch(self.storage.last_height).expect(
+                    "The epoch of the last block height should always be known",
                 );
-                return None;
-            }
-            let prev_valset_epoch = current_valset_epoch - 1;
-            u64::from(
-                self.storage.get_total_voting_power(Some(prev_valset_epoch)),
-            )
+            self.storage
+                .get_total_voting_power(Some(last_height_epoch))
+                .into()
         };
         let mut voting_power = FractionalVotingPower::default();
 
