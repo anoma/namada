@@ -565,8 +565,6 @@ mod test_queries {
     fn test_can_send_validator_set_update() {
         let (mut shell, _, _) = test_utils::setup_at_height(0u64);
 
-        const CHANGE_EPOCH_HEIGHT: u64 = 15;
-
         let epoch_assertions = [
             // (current epoch, current block height, can send valset upd)
             (0, 1, true),
@@ -580,21 +578,30 @@ mod test_queries {
             (0, 9, false),
             (0, 10, false),
             (0, 11, false),
-            (0, 12, false),
-            (0, 13, false),
-            (0, 14, false),
-            (0, CHANGE_EPOCH_HEIGHT, false),
             // we will change epoch here
-            (1, 16, true),
+            (1, 12, true),
+            (1, 13, false),
+            (1, 14, false),
+            (1, 15, false),
+            (1, 16, false),
             (1, 17, false),
             (1, 18, false),
             (1, 19, false),
             (1, 20, false),
+            (1, 21, false),
+            (1, 22, false),
+            (1, 23, false),
+            (1, 24, false),
+            // we will change epoch here
+            (2, 25, true),
+            (2, 26, false),
+            (2, 27, false),
+            (2, 28, false),
         ];
 
         // test `SendValsetUpd::Now`
-        for (curr_epoch, curr_block_height, can_send) in
-            epoch_assertions.iter().copied()
+        for (idx, (curr_epoch, curr_block_height, can_send)) in
+            epoch_assertions.iter().copied().enumerate()
         {
             shell.storage.last_height = BlockHeight(curr_block_height - 1);
             assert_eq!(
@@ -611,11 +618,17 @@ mod test_queries {
                     .can_send_validator_set_update(SendValsetUpd::Now),
                 can_send
             );
-            if curr_block_height == CHANGE_EPOCH_HEIGHT {
+            if epoch_assertions
+                .get(idx + 1)
+                .map(|&(_, _, change_epoch)| change_epoch)
+                .unwrap_or(false)
+            {
+                let time = namada::types::time::DateTimeUtc::now();
                 let mut req = FinalizeBlock::default();
-                req.header.time = namada::types::time::DateTimeUtc::now();
+                req.header.time = time;
                 shell.finalize_block(req).expect("Test failed");
                 shell.commit();
+                shell.storage.next_epoch_min_start_time = time;
             }
         }
 
