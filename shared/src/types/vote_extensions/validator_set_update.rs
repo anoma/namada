@@ -279,7 +279,7 @@ mod tests {
         //
         // const output = abiEncoder.encode(
         //     ['string', 'address[]', 'uint256[]', 'uint256'],
-        //     ['bridge', [], [], 0],
+        //     ['bridge', [], [], 1],
         // );
         //
         // const hash = keccak256(output).toString('hex');
@@ -287,10 +287,14 @@ mod tests {
         // console.log(hash);
         // ```
         const EXPECTED: &str =
-            "36bcf52e7ae929b6df7489d012c8ca63eddb35c1b0baf10f46cac81f6728e0a6";
+            "694d9bc27d5da7444e5742b13394b2c8a7e73b43d6acd52b6e23b26b612f7c86";
 
-        let KeccakHash(got) =
-            compute_hash(Epoch(0), BRIDGE_CONTRACT_NAMESPACE, vec![], vec![]);
+        let KeccakHash(got) = compute_hash(
+            1u64.into(),
+            BRIDGE_CONTRACT_NAMESPACE,
+            vec![],
+            vec![],
+        );
 
         assert_eq!(&hex::encode(got), EXPECTED);
     }
