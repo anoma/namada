@@ -290,21 +290,17 @@ where
 
                     counters.valset_upd_digest_num += 1;
 
-                    // NOTE: make sure we do not change epochs between
-                    // extending votes and deciding on the validator
-                    // set update through consensus. otherwise, vext
-                    // validation is going to fail, and we essentially
-                    // halt the chain...
-                    let next_epoch = self.storage.get_current_epoch().0.next();
-
-                    let extensions = digest.decompress(next_epoch);
+                    let extensions =
+                        digest.decompress(self.storage.last_height);
                     let valid_extensions =
                         self.validate_valset_upd_vext_list(extensions);
 
                     let mut voting_power = FractionalVotingPower::default();
                     let total_power = self
                         .storage
-                        .get_total_voting_power(Some(next_epoch - 1))
+                        .get_total_voting_power(
+                            self.storage.get_epoch(self.storage.last_height),
+                        )
                         .into();
 
                     if valid_extensions.into_iter().all(|maybe_ext| {

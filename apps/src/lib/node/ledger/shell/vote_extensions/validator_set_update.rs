@@ -71,10 +71,12 @@ where
         }
         // get the public key associated with this validator
         let validator = &ext.data.validator_addr;
-        let prev_epoch = Some(Epoch(new_epoch.0 - 1));
+        let last_height_epoch = self.storage.get_epoch(last_height).expect(
+            "The epoch of the last block height should always be known",
+        );
         let (voting_power, pk) = self
             .storage
-            .get_validator_from_address(validator, prev_epoch)
+            .get_validator_from_address(validator, Some(last_height_epoch))
             .map_err(|err| {
                 tracing::error!(
                     ?err,
@@ -218,7 +220,7 @@ mod test_vote_extensions {
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::types::key::RefTo;
-    use namada::types::storage::{BlockHeight, Epoch};
+    use namada::types::storage::BlockHeight;
     use namada::types::vote_extensions::{
         ethereum_events, validator_set_update, VoteExtension,
     };
@@ -233,14 +235,14 @@ mod test_vote_extensions {
     const FIRST_HEIGHT_WITH_VEXTS: BlockHeight = BlockHeight(1);
 
     /// Test if a [`validator_set_update::Vext`] that incorrectly labels what
-    /// epoch it was included on in a vote extension is rejected
+    /// block height it was included on in a vote extension is rejected
     // TODO:
     // - sign with secp key
     // - add validator voting powers from storage
     #[test]
-    fn test_reject_incorrect_epoch() {
-        let (mut shell, _, _) = test_utils::setup();
-        shell.storage.last_height = FIRST_HEIGHT_WITH_VEXTS;
+    fn test_reject_incorrect_block_height() {
+        let (mut shell, _, _) =
+            test_utils::setup_at_height(FIRST_HEIGHT_WITH_VEXTS);
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 
@@ -258,8 +260,8 @@ mod test_vote_extensions {
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
                 validator_addr,
-                // invalid epoch, should have been: current epoch + 1
-                epoch: Epoch(2),
+                // invalid height, should have been: `FIRST_HEIGHT_WITH_VEXTS`
+                block_height: FIRST_HEIGHT_WITH_VEXTS + 1,
             }
             // TODO: sign with secp key
             .sign(protocol_key),
@@ -284,8 +286,8 @@ mod test_vote_extensions {
     /// a non-validator are rejected
     #[test]
     fn test_valset_upd_must_be_signed_by_validator() {
-        let (mut shell, _, _) = test_utils::setup();
-        shell.storage.last_height = FIRST_HEIGHT_WITH_VEXTS;
+        let (mut shell, _, _) =
+            test_utils::setup_at_height(FIRST_HEIGHT_WITH_VEXTS);
         let (protocol_key, validator_addr) = {
             let bertha_key = wallet::defaults::bertha_keypair();
             let bertha_addr = wallet::defaults::bertha_address();
@@ -301,8 +303,8 @@ mod test_vote_extensions {
                 // TODO: get voting powers from storage, associated with eth
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
+                block_height: FIRST_HEIGHT_WITH_VEXTS,
                 validator_addr,
-                epoch: Epoch(1),
             }
             .sign(&protocol_key),
         );
@@ -327,8 +329,8 @@ mod test_vote_extensions {
     /// change to the validator set.
     #[test]
     fn test_validate_valset_upd_vexts() {
-        let (mut shell, _, _) = test_utils::setup();
-        shell.storage.last_height = FIRST_HEIGHT_WITH_VEXTS;
+        let (mut shell, _, _) =
+            test_utils::setup_at_height(FIRST_HEIGHT_WITH_VEXTS);
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let validator_addr = shell
@@ -340,8 +342,8 @@ mod test_vote_extensions {
             // TODO: get voting powers from storage, associated with eth
             // addrs
             voting_powers: std::collections::HashMap::new(),
+            block_height: FIRST_HEIGHT_WITH_VEXTS,
             validator_addr,
-            epoch: Epoch(1),
         }
         .sign(&protocol_key);
 
@@ -394,8 +396,8 @@ mod test_vote_extensions {
     // - add validator voting powers from storage
     #[test]
     fn test_reject_bad_signatures() {
-        let (mut shell, _, _) = test_utils::setup();
-        shell.storage.last_height = FIRST_HEIGHT_WITH_VEXTS;
+        let (mut shell, _, _) =
+            test_utils::setup_at_height(FIRST_HEIGHT_WITH_VEXTS);
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 
@@ -412,8 +414,8 @@ mod test_vote_extensions {
                 // TODO: get voting powers from storage, associated with eth
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
+                block_height: FIRST_HEIGHT_WITH_VEXTS,
                 validator_addr,
-                epoch: Epoch(1),
             }
             // TODO: sign with secp key
             .sign(protocol_key);

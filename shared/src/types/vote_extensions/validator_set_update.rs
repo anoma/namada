@@ -89,12 +89,16 @@ pub struct Vext {
     /// The value of the Namada [`BlockHeight`] at the creation of this
     /// [`Vext`].
     ///
+    /// An important invariant is that this [`BlockHeight`] will always
+    /// correspond to an epoch before the new validator set is installed.
+    ///
     /// Since this is a monotonically growing sequence number,
     /// it is signed together with the rest of the data to
     /// prevent replay attacks on validator set updates.
     ///
     /// Additionally, we can use this [`BlockHeight`] value to query the
-    /// appropriate validator set to verify signatures with.
+    /// epoch with the appropriate validator set to verify signatures with
+    /// (i.e. the previous validator set).
     pub block_height: BlockHeight,
 }
 
