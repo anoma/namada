@@ -103,16 +103,12 @@ pub struct Vext {
 }
 
 impl Vext {
-    /// Ensures `sk` is a Secp256k1 key, then creates a new signed [`Vext`].
+    /// Creates a new signed [`Vext`].
     ///
     /// For more information, read the docs of [`SignedVext::new`].
     #[inline]
-    pub fn sign(&self, sk: &common::SecretKey) -> Option<SignedVext> {
-        use common::SecretKey::*;
-        match sk {
-            Secp256k1(_) => Some(SignedVext::new(sk, self.clone())),
-            _ => None,
-        }
+    pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
+        SignedVext::new(sk, self.clone())
     }
 }
 
