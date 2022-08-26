@@ -16,7 +16,7 @@ use crate::types::address::Address;
 use crate::types::ethereum_events::{EthAddress, KeccakHash};
 use crate::types::key::common::{self, Signature};
 use crate::types::storage::BlockHeight;
-#[allow(dead_code)]
+#[allow(unused_imports)]
 use crate::types::storage::Epoch;
 
 // the namespace strings plugged into validator set hashes
