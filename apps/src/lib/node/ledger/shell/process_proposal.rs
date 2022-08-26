@@ -1,6 +1,7 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
+use namada::ledger::pos::types::VotingPower;
 use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::voting_power::FractionalVotingPower;
 use tendermint_proto::abci::response_process_proposal::ProposalStatus;
@@ -149,6 +150,59 @@ where
             .collect()
     }
 
+    /// Validates a list of vote extensions, included in PrepareProposal.
+    ///
+    /// If a vote extension is [`Some`], then it was validated properly,
+    /// and the voting power of the validator who signed it is considered
+    /// in the sum of the total voting power of all received vote extensions.
+    fn validate_vexts_in_proposal<I>(&self, mut vote_extensions: I) -> TxResult
+    where
+        I: Iterator<Item = Option<VotingPower>>,
+    {
+        let mut voting_power = FractionalVotingPower::default();
+        let total_power = {
+            let epoch = self.storage.get_epoch(self.storage.last_height);
+            u64::from(self.storage.get_total_voting_power(epoch))
+        };
+
+        if vote_extensions.all(|maybe_ext| {
+            maybe_ext
+                .map(|power| {
+                    voting_power += FractionalVotingPower::new(
+                        u64::from(power),
+                        total_power,
+                    )
+                    .expect(
+                        "The voting power we obtain from storage should \
+                         always be valid",
+                    );
+                })
+                .is_some()
+        }) {
+            if voting_power > FractionalVotingPower::TWO_THIRDS {
+                TxResult {
+                    code: ErrorCodes::Ok.into(),
+                    info: "Process proposal accepted this transaction".into(),
+                }
+            } else {
+                TxResult {
+                    code: ErrorCodes::InvalidVoteExtension.into(),
+                    info: "Process proposal rejected this proposal because \
+                           the backing stake of the vote extensions published \
+                           in the proposal was insufficient"
+                        .into(),
+                }
+            }
+        } else {
+            TxResult {
+                code: ErrorCodes::InvalidVoteExtension.into(),
+                info: "Process proposal rejected this proposal because at \
+                       least one of the vote extensions included was invalid."
+                    .into(),
+            }
+        }
+    }
+
     /// Checks if the Tx can be deserialized from bytes. Checks the fees and
     /// signatures of the fee payer for a transaction if it is a wrapper tx.
     ///
@@ -222,58 +276,11 @@ where
                     let extensions =
                         digest.decompress(self.storage.last_height);
                     let valid_extensions =
-                        self.validate_eth_events_vext_list(extensions);
+                        self.validate_eth_events_vext_list(extensions).map(
+                            |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
+                        );
 
-                    let mut voting_power = FractionalVotingPower::default();
-                    let total_power = {
-                        let epoch =
-                            self.storage.get_epoch(self.storage.last_height);
-                        u64::from(self.storage.get_total_voting_power(epoch))
-                    };
-
-                    if valid_extensions.into_iter().all(|maybe_ext| {
-                        maybe_ext
-                            .map(|(power, _)| {
-                                voting_power += FractionalVotingPower::new(
-                                    u64::from(power),
-                                    total_power,
-                                )
-                                .expect(
-                                    "The voting power we obtain from storage \
-                                     should always be valid",
-                                );
-                            })
-                            .is_ok()
-                    }) {
-                        if voting_power > FractionalVotingPower::TWO_THIRDS {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            }
-                        } else {
-                            TxResult {
-                                code: ErrorCodes::InvalidVoteExtension.into(),
-                                info: "Process proposal rejected this \
-                                       proposal because the backing stake of \
-                                       the vote extensions published in the \
-                                       proposal was insufficient"
-                                    .into(),
-                            }
-                        }
-                    } else {
-                        // TODO: maybe return a summary of the reasons for
-                        // dropping a vote extension. we have access to the
-                        // motives in `valid_extensions`
-                        TxResult {
-                            code: ErrorCodes::InvalidVoteExtension.into(),
-                            info: "Process proposal rejected this proposal \
-                                   because at least one of the vote \
-                                   extensions included was invalid."
-                                .into(),
-                        }
-                    }
+                    self.validate_vexts_in_proposal(valid_extensions)
                 }
                 ProtocolTxType::ValidatorSetUpdate(digest) => {
                     if !self.storage.can_send_validator_set_update(
@@ -293,59 +300,11 @@ where
                     let extensions =
                         digest.decompress(self.storage.last_height);
                     let valid_extensions =
-                        self.validate_valset_upd_vext_list(extensions);
+                        self.validate_valset_upd_vext_list(extensions).map(
+                            |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
+                        );
 
-                    let mut voting_power = FractionalVotingPower::default();
-                    let total_power = self
-                        .storage
-                        .get_total_voting_power(
-                            self.storage.get_epoch(self.storage.last_height),
-                        )
-                        .into();
-
-                    if valid_extensions.into_iter().all(|maybe_ext| {
-                        maybe_ext
-                            .map(|(power, _)| {
-                                voting_power += FractionalVotingPower::new(
-                                    u64::from(power),
-                                    total_power,
-                                )
-                                .expect(
-                                    "The voting power we obtain from storage \
-                                     should always be valid",
-                                );
-                            })
-                            .is_ok()
-                    }) {
-                        if voting_power > FractionalVotingPower::TWO_THIRDS {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            }
-                        } else {
-                            TxResult {
-                                code: ErrorCodes::InvalidVoteExtension.into(),
-                                info: "Process proposal rejected this \
-                                       proposal because the backing stake of \
-                                       the vote extensions published in the \
-                                       proposal was insufficient"
-                                    .into(),
-                            }
-                        }
-                    } else {
-                        // TODO: maybe return a summary of the reasons for
-                        // dropping a vote extension. we have access to the
-                        // motives in `filtered_extensions`
-                        TxResult {
-                            code: ErrorCodes::InvalidVoteExtension.into(),
-                            info: "Process proposal rejected this proposal \
-                                   because at least one of the vote \
-                                   extensions included was invalid."
-                                .into(),
-                        }
-                    }
+                    self.validate_vexts_in_proposal(valid_extensions)
                 }
                 _ => TxResult {
                     code: ErrorCodes::InvalidTx.into(),
