@@ -1153,7 +1153,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.12.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus#2a421c237ff221206d45556de9c0c096e148faba"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus#c3bdd9100094ad80e259617184e813a7c2e2db76"
 dependencies = [
  "bytes",
  "derive_more",
@@ -1180,7 +1180,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.16.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus#2a421c237ff221206d45556de9c0c096e148faba"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus#c3bdd9100094ad80e259617184e813a7c2e2db76"
 dependencies = [
  "bytes",
  "prost",

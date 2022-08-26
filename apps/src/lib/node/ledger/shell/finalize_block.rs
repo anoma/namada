@@ -11,14 +11,14 @@ use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
 use namada::types::storage::{BlockHash, Epoch, Header};
 use namada::types::transaction::protocol::ProtocolTxType;
-#[cfg(feature = "abcipp")]
-use tendermint_proto_abcipp::abci::Misbehavior as Evidence;
-#[cfg(feature = "abcipp")]
-use tendermint_proto_abcipp::crypto::PublicKey as TendermintPublicKey;
 #[cfg(not(feature = "abcipp"))]
 use tendermint_proto::abci::Misbehavior as Evidence;
 #[cfg(not(feature = "abcipp"))]
 use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci::Misbehavior as Evidence;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::crypto::PublicKey as TendermintPublicKey;
 
 use super::queries::QueriesExt;
 use super::*;

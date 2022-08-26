@@ -142,7 +142,6 @@ impl ValidatorWallet {
     /// Generate a new [`Validator`] with required pre-genesis keys. Will prompt
     /// for password when `!unsafe_dont_encrypt`.
     fn gen(scheme: SchemeType, unsafe_dont_encrypt: bool) -> Self {
-
         let password = wallet::read_and_confirm_pwd(unsafe_dont_encrypt);
         let (account_key, account_sk) = gen_key_to_store(scheme, &password);
         let (consensus_key, consensus_sk) = gen_key_to_store(
