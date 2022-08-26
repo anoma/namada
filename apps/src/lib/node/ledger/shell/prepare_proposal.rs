@@ -136,7 +136,7 @@ where
                      panic here."
                 ),
                 #[cfg(not(feature = "abcipp"))]
-                _ => return vec![]
+                _ => return vec![],
             };
 
         let tx = ProtocolTxType::EthEventsDigest(vote_extension_digest)
@@ -247,6 +247,7 @@ where
             self.filter_invalid_vote_extensions(vote_extensions)
         {
             let validator_addr = vote_extension.data.validator_addr;
+            let block_height = vote_extension.data.block_height;
 
             // update voting power
             let validator_voting_power = u64::from(validator_voting_power);
@@ -263,15 +264,28 @@ where
             for ev in vote_extension.data.ethereum_events {
                 let signers =
                     event_observers.entry(ev).or_insert_with(HashSet::new);
-
+                #[cfg(feature = "abcipp")]
                 signers.insert(validator_addr.clone());
+                #[cfg(not(feature = "abcipp"))]
+                signers.insert((validator_addr.clone(), block_height));
             }
 
             // register the signature of `validator_addr`
             let addr = validator_addr.clone();
             let sig = vote_extension.sig;
 
+            #[cfg(feature = "abcipp")]
             if let Some(sig) = signatures.insert(addr, sig) {
+                tracing::warn!(
+                    ?sig,
+                    ?validator_addr,
+                    "Overwrote old signature from validator while \
+                     constructing ethereum_events::VextDigest"
+                );
+            }
+
+            #[cfg(not(feature = "abcipp"))]
+            if let Some(sig) = signatures.insert((addr, block_height), sig) {
                 tracing::warn!(
                     ?sig,
                     ?validator_addr,
@@ -301,8 +315,8 @@ where
 
         #[cfg(not(feature = "abcipp"))]
         {
-            if events.len() > 0 {
-                Some(ethereum_events::VextDigest{ events, signatures })
+            if !events.is_empty() {
+                Some(ethereum_events::VextDigest { events, signatures })
             } else {
                 None
             }
@@ -370,7 +384,9 @@ mod test_prepare_proposal {
     use tendermint_proto_abcipp::abci::tx_record::TxAction;
 
     use super::*;
-    use crate::node::ledger::shell::test_utils::{self, gen_keypair, TestShell, setup};
+    use crate::node::ledger::shell::test_utils::{
+        self, gen_keypair, setup, TestShell,
+    };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
@@ -415,7 +431,7 @@ mod test_prepare_proposal {
     #[cfg(not(feature = "abcipp"))]
     fn vote_extension_serialize(
         vext: Signed<ethereum_events::Vext>,
-        signing_key: &common::SecretKey
+        signing_key: &common::SecretKey,
     ) -> TxBytes {
         ProtocolTxType::EthereumEvents(vext)
             .sign(signing_key)
@@ -433,23 +449,36 @@ mod test_prepare_proposal {
             event: ext.data.ethereum_events[0].clone(),
             signers: {
                 let mut s = HashSet::new();
+                #[cfg(feature = "abcipp")]
                 s.insert(ext.data.validator_addr.clone());
+                #[cfg(not(feature = "abcipp"))]
+                s.insert((ext.data.validator_addr.clone(), last_height));
+
                 s
             },
         }];
         let signatures = {
             let mut s = HashMap::new();
+            #[cfg(feature = "abcipp")]
             s.insert(ext.data.validator_addr.clone(), ext.sig.clone());
+            #[cfg(not(feature = "abcipp"))]
+            s.insert(
+                (ext.data.validator_addr.clone(), last_height),
+                ext.sig.clone(),
+            );
             s
         };
 
         let vote_extension_digest =
             ethereum_events::VextDigest { events, signatures };
 
+        #[cfg(feature = "abcipp")]
         assert_eq!(
             vec![ext],
             vote_extension_digest.clone().decompress(last_height)
         );
+        #[cfg(not(feature = "abcipp"))]
+        assert_eq!(vec![ext], vote_extension_digest.clone().decompress());
 
         vote_extension_digest
 
@@ -464,13 +493,12 @@ mod test_prepare_proposal {
         shell: &mut TestShell,
         vext: Signed<ethereum_events::Vext>,
     ) {
-
         #[cfg(feature = "abcipp")]
         let vexts = vec![vote_extension_serialize(vext)];
         #[cfg(not(feature = "abcipp"))]
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         #[cfg(not(feature = "abcipp"))]
-        let vexts = vec![vote_extension_serialize(vext, &protocol_key)];
+        let vexts = vec![vote_extension_serialize(vext, protocol_key)];
 
         let votes = deserialize_vote_extensions(&vexts[..]);
         let filtered_votes: Vec<_> =
@@ -545,13 +573,20 @@ mod test_prepare_proposal {
 
         #[cfg(not(feature = "abcipp"))]
         {
-            let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
-            let vexts = vec![vote_extension_serialize(signed_vote_extension.clone(), &protocol_key)];
+            let protocol_key =
+                shell.mode.get_protocol_key().expect("Test failed");
+            let vexts = vec![vote_extension_serialize(
+                signed_vote_extension.clone(),
+                protocol_key,
+            )];
 
             let votes = deserialize_vote_extensions(&vexts[..]);
             let filtered_votes: Vec<_> =
                 shell.filter_invalid_vote_extensions(votes).collect();
-            assert_eq!(filtered_votes, vec![(200.into(), signed_vote_extension)])
+            assert_eq!(
+                filtered_votes,
+                vec![(200.into(), signed_vote_extension)]
+            )
         }
     }
 
@@ -620,7 +655,10 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             let votes = vec![vote_extension_serialize(signed_vote_extension)];
             #[cfg(not(feature = "abcipp"))]
-            let votes = vec![vote_extension_serialize(signed_vote_extension, &protocol_key)];
+            let votes = vec![vote_extension_serialize(
+                signed_vote_extension,
+                &protocol_key,
+            )];
             shell.compress_ethereum_events(deserialize_vote_extensions(&votes))
         };
 
@@ -786,7 +824,10 @@ mod test_prepare_proposal {
     /// If the abci++ feature is active, this means panicking. If
     /// not, this should proceed as normal
     #[test]
-    #[cfg_attr(feature = "abcipp", should_panic(expected = "Honest Namada validators"))]
+    #[cfg_attr(
+        feature = "abcipp",
+        should_panic(expected = "Honest Namada validators")
+    )]
     fn test_prepare_proposal_vext_insufficient_voting_power() {
         const FIRST_HEIGHT: BlockHeight = BlockHeight(0);
         const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
@@ -872,9 +913,10 @@ mod test_prepare_proposal {
 
         #[cfg(not(feature = "abcipp"))]
         {
-            let vote = ProtocolTxType::EthereumEvents(signed_vote_extension.clone())
-                .sign(&protocol_key)
-                .to_bytes();
+            let vote =
+                ProtocolTxType::EthereumEvents(signed_vote_extension.clone())
+                    .sign(&protocol_key)
+                    .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
                 txs: vec![vote],
                 ..Default::default()
@@ -893,7 +935,7 @@ mod test_prepare_proposal {
                 _ => panic!("Test failed"),
             };
 
-            let digest =match protocol_tx {
+            let digest = match protocol_tx {
                 ProtocolTxType::EthEventsDigest(digest) => digest,
                 _ => panic!("Test failed"),
             };
@@ -903,6 +945,7 @@ mod test_prepare_proposal {
                 signed_vote_extension,
                 LAST_HEIGHT,
             );
+
             assert_eq!(expected, digest);
         }
     }
@@ -938,6 +981,7 @@ mod test_prepare_proposal {
             ),
         )
         .to_bytes();
+        #[allow(clippy::redundant_clone)]
         let req = RequestPrepareProposal {
             txs: vec![wrapper.clone()],
             max_tx_bytes: 0,
@@ -1031,14 +1075,16 @@ mod test_prepare_proposal {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            let received: Vec<Vec<u8>> = shell.prepare_proposal(req)
+            let received: Vec<Vec<u8>> = shell
+                .prepare_proposal(req)
                 .txs
                 .into_iter()
-                .map(|tx_bytes| Tx::try_from(tx_bytes.as_slice())
-                    .expect("Test failed")
-                    .data
-                    .expect("Test failed")
-                )
+                .map(|tx_bytes| {
+                    Tx::try_from(tx_bytes.as_slice())
+                        .expect("Test failed")
+                        .data
+                        .expect("Test failed")
+                })
                 .collect();
             // check that the order of the txs is correct
             assert_eq!(received, expected_txs);

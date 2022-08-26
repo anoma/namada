@@ -871,11 +871,22 @@ mod test_finalize_block {
         .sig;
         let signed = MultiSignedEthEvent {
             event,
+            #[cfg(feature = "abcipp")]
             signers: HashSet::from([address.clone()]),
+            #[cfg(not(feature = "abcipp"))]
+            signers: HashSet::from([(
+                address.clone(),
+                shell.storage.last_height,
+            )]),
         };
 
         let digest = ethereum_events::VextDigest {
+            #[cfg(feature = "abcipp")]
             signatures: vec![(address, signature)].into_iter().collect(),
+            #[cfg(not(feature = "abcipp"))]
+            signatures: vec![((address, shell.storage.last_height), signature)]
+                .into_iter()
+                .collect(),
             events: vec![signed],
         };
         let processed_tx = ProcessedTx {

@@ -172,9 +172,11 @@ where
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthEventsDigest(digest) => {
                     *vote_ext_digest_num += 1;
-
+                    #[cfg(feature = "abcipp")]
                     let extensions =
                         digest.decompress(self.storage.last_height);
+                    #[cfg(not(feature = "abcipp"))]
+                    let extensions = digest.decompress();
                     let valid_extensions =
                         self.validate_vote_extension_list(extensions);
 
@@ -363,7 +365,13 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(validator_addr, signed_vote_extension.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert(
+                        (validator_addr, LAST_HEIGHT),
+                        signed_vote_extension.sig,
+                    );
                     s
                 },
                 events: vec![],
@@ -439,14 +447,20 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = HashSet::new();
+                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, LAST_HEIGHT));
                         s
                     },
                 }],
@@ -483,20 +497,41 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), PRED_LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = HashSet::new();
+                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, PRED_LAST_HEIGHT));
                         s
                     },
                 }],
             }
         };
+        #[cfg(feature = "abcipp")]
         check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let tx = ProtocolTxType::EthEventsDigest(vote_extension_digest)
+                .sign(&protocol_key)
+                .to_bytes();
+            let request = ProcessProposal { txs: vec![tx] };
+            if let Ok(mut resp) = shell.process_proposal(request) {
+                assert_eq!(resp.len(), 1);
+                let processed = resp.remove(0);
+                assert_eq!(processed.result.code, ErrorCodes::Ok as u32);
+            } else {
+                panic!("Test failed");
+            }
+        }
     }
 
     /// Test that if a proposal contains Ethereum events with
@@ -529,14 +564,20 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = HashSet::new();
+                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, LAST_HEIGHT));
                         s
                     },
                 }],

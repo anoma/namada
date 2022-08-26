@@ -509,7 +509,7 @@ mod extend_votes {
         /// change to the validator set.
         #[test]
         fn test_validate_vote_extensions() {
-            let (mut shell, _, _) = setup();
+            let (mut shell, _recv, _) = setup();
             let signing_key =
                 shell.mode.get_protocol_key().expect("Test failed").clone();
             let address = shell
@@ -580,6 +580,52 @@ mod extend_votes {
         /// block it was included on in a vote extension is rejected
         #[test]
         fn reject_incorrect_block_number() {
+            let (mut shell, _, _) = setup();
+            let address = shell.mode.get_validator_address().unwrap().clone();
+            shell.storage.last_height = BlockHeight(3);
+            let vote_ext = ethereum_events::Vext {
+                ethereum_events: vec![EthereumEvent::TransfersToEthereum {
+                    nonce: 1.into(),
+                    transfers: vec![TransferToEthereum {
+                        amount: 100.into(),
+                        asset: EthAddress([1; 20]),
+                        receiver: EthAddress([2; 20]),
+                    }],
+                }],
+                block_height: BlockHeight(1),
+                #[cfg(feature = "abcipp")]
+                validator_addr: address.clone(),
+                #[cfg(not(feature = "abcipp"))]
+                validator_addr: address,
+            }
+            .sign(shell.mode.get_protocol_key().expect("Test failed"));
+
+            #[cfg(feature = "abcipp")]
+            let req = request::VerifyVoteExtension {
+                hash: vec![],
+                validator_address: address.try_to_vec().expect("Test failed"),
+                height: 0,
+                vote_extension: vote_ext.try_to_vec().expect("Test failed"),
+            };
+            #[cfg(feature = "abcipp")]
+            assert_eq!(
+                shell.verify_vote_extension(req).status,
+                i32::from(VerifyStatus::Reject)
+            );
+            assert!(
+                shell
+                    .validate_vexts_and_get_it_back(
+                        vote_ext,
+                        shell.storage.last_height
+                    )
+                    .is_ok()
+            )
+        }
+
+        /// Test that an [`ethereum_events::Vext`] arriving at
+        /// genesis is rejected
+        #[test]
+        fn reject_at_genesis() {
             let (shell, _, _) = setup();
             let address = shell.mode.get_validator_address().unwrap().clone();
             let vote_ext = ethereum_events::Vext {
@@ -617,7 +663,7 @@ mod extend_votes {
                         vote_ext,
                         shell.storage.last_height
                     )
-                    .is_ok()
+                    .is_err()
             )
         }
     }
