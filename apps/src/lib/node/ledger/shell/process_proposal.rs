@@ -284,7 +284,7 @@ where
                 }
                 ProtocolTxType::ValidatorSetUpdate(digest) => {
                     if !self.storage.can_send_validator_set_update(
-                        SendValsetUpd::AtFixedHeight(self.storage.last_height),
+                        SendValsetUpd::AtPrevHeight,
                     ) {
                         return TxResult {
                             code: ErrorCodes::InvalidVoteExtension.into(),
@@ -393,9 +393,10 @@ where
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
     fn has_proper_valset_upd_num(&self, c: &DigestCounters) -> bool {
-        if self.storage.can_send_validator_set_update(
-            SendValsetUpd::AtFixedHeight(self.storage.last_height),
-        ) {
+        if self
+            .storage
+            .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
+        {
             c.valset_upd_digest_num == 1
         } else {
             true
