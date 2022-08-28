@@ -1,4 +1,6 @@
-//! General inflation system
+//! General inflation system that will be used to process rewards for proof-of-stake, providing liquity to shielded asset pools, and public goods funding.
+//! 
+//! TODO: possibly change f64 types to BasisPoints
 
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::BasisPoints;
@@ -72,4 +74,6 @@ impl RewardsController {
             };
         reward_rate
     }
+
+    // TODO: provide way to get the new gain factors to store for use in following epoch.
 }
