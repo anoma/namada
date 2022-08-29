@@ -247,6 +247,7 @@ where
 
         if new_epoch {
             self.update_epoch(&mut response);
+            self.apply_inflation();
         }
 
         // Read the block proposer of the previously committed block in storage
