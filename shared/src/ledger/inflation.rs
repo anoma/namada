@@ -70,7 +70,9 @@ impl RewardsController {
         let reward_rate =
             match self.last_reward_rate + control_val > self.max_reward_rate {
                 true => self.max_reward_rate,
-                false => match self.last_reward_rate + control_val > Decimal::new(0, 0) {
+                false => match self.last_reward_rate + control_val
+                    > Decimal::new(0, 0)
+                {
                     true => self.last_reward_rate + control_val,
                     false => Decimal::new(0, 0),
                 },
@@ -78,14 +80,25 @@ impl RewardsController {
         reward_rate
     }
 
-    // TODO: provide way to get the new gain factors to store for use in following epoch.
+    // TODO: provide way to get the new gain factors to store for use in
+    // following epoch.
+}
 
-/// Function that allows the protocol to mint some number of tokens of a desired type to a destination address
-/// TODO: think of error cases that must be handled.
-pub fn mint_tokens<S>(storage: &mut S, target: &Address, token: &Address, amount: token::Amount) -> storage_api::Result<()>
-where S: StorageWrite + for<'iter> StorageRead<'iter> {
+/// Function that allows the protocol to mint some number of tokens of a desired
+/// type to a destination address TODO: think of error cases that must be
+/// handled.
+pub fn mint_tokens<S>(
+    storage: &mut S,
+    target: &Address,
+    token: &Address,
+    amount: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: StorageWrite + for<'iter> StorageRead<'iter>,
+{
     let dest_key = token::balance_key(token, target);
-    let mut dest_bal: token::Amount = storage.read(&dest_key)?.unwrap_or_default();
+    let mut dest_bal: token::Amount =
+        storage.read(&dest_key)?.unwrap_or_default();
     dest_bal.receive(&amount);
     storage.write(&dest_key, dest_bal)?;
 
