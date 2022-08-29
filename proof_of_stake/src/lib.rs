@@ -15,6 +15,7 @@
 pub mod btree_set;
 pub mod epoched;
 pub mod parameters;
+pub mod rewards;
 pub mod storage;
 pub mod types;
 pub mod validation;
@@ -43,8 +44,10 @@ use types::{
 };
 
 use crate::btree_set::BTreeSetShims;
+use crate::rewards::PosRewardsCalculator;
 use crate::types::{
-    decimal_mult_i128, decimal_mult_u64, Bond, BondId, WeightedValidator,
+    decimal_mult_i128, decimal_mult_u64, Bond, BondId, VoteInfo,
+    WeightedValidator,
 };
 
 /// Address of the PoS account implemented as a native VP
@@ -629,10 +632,9 @@ pub trait PosBase {
     ) -> Option<ValidatorConsensusKeys>;
     /// Read PoS validator's state.
     fn read_validator_state(&self, key: &Address) -> Option<ValidatorStates>;
-    /// Read PoS validator's total deltas of their bonds (validator self-bonds
+    /// Read PoS validator's deltas (validator self-bonds
     /// and delegations).
     fn read_validator_deltas(&self, key: &Address) -> Option<ValidatorDeltas>;
-
     /// Read PoS slashes applied to a validator.
     fn read_validator_slashes(&self, key: &Address) -> Slashes;
     /// Read PoS validator's commission rate
@@ -881,6 +883,94 @@ pub trait PosBase {
         active_validators.chain(inactive_validators).for_each(f)
     }
 
+    /// Distribute the PoS inflation rewards by updating the validator rewards
+    /// products.
+    fn distribute_rewards(
+        &mut self,
+        current_epoch: impl Into<Epoch>,
+        inflation_amount: token::Amount,
+        proposer_address: &Address,
+        votes: &Vec<VoteInfo>,
+    ) -> Result<(), Error> {
+        let current_epoch: Epoch = current_epoch.into();
+        let validator_set = self.read_validator_set();
+        let validators = validator_set.get(current_epoch).unwrap();
+        let pos_params = self.read_pos_params();
+
+        // TODO: should we add this value to storage??
+        let total_active_stake = validators.active.iter().fold(
+            0_u64,
+            |sum,
+             WeightedValidator {
+                 voting_power,
+                 address: _,
+             }| { sum + u64::from(*voting_power) },
+        );
+
+        let mut signer_set: HashSet<Address> = HashSet::new();
+        let mut total_signing_stake: u64 = 0;
+
+        for vote in votes.iter() {
+            if !vote.signed_last_block {
+                continue;
+            }
+            let tm_raw_hash_string =
+                hex::encode_upper(vote.validator_address.clone());
+            let native_address = self
+                .read_validator_address_raw_hash(tm_raw_hash_string)
+                .expect(
+                    "Unable to read native address of validator from \
+                     tendermint raw hash",
+                );
+            signer_set.insert(native_address);
+            total_signing_stake += u64::from(vote.validator_vp);
+        }
+
+        let new_tokens: Decimal = Into::<u64>::into(inflation_amount).into();
+        let active_val_stake: Decimal = u64::from(total_active_stake).into();
+        let signing_stake: Decimal = u64::from(total_signing_stake).into();
+
+        let mut rewards_calculator = PosRewardsCalculator::new(
+            pos_params.block_proposer_reward,
+            pos_params.block_vote_reward,
+            total_signing_stake,
+            total_active_stake,
+        );
+
+        rewards_calculator.set_reward_coeffs().unwrap();
+
+        // iterate thru the validators, figure out if each is proposer or signer
+        for validator in validators.active.iter() {
+            let mut rewards: Decimal = Decimal::new(0, 0);
+            let stake: Decimal = u64::from(validator.voting_power).into();
+
+            // Proposer reward
+            if validator.address == *proposer_address {
+                let coeff = rewards_calculator.get_proposer_coeff().unwrap();
+                rewards += coeff * new_tokens;
+            }
+
+            // Signer reward
+            if signer_set.contains(&validator.address) {
+                let coeff = rewards_calculator.get_signer_coeff().unwrap();
+                let signing_frac: Decimal = stake / signing_stake;
+                rewards += coeff * new_tokens * signing_frac;
+            }
+
+            // Active validator reward
+            let active_val_coeff =
+                rewards_calculator.get_active_val_coeff().unwrap();
+            let active_val_frac = stake / active_val_stake;
+            rewards += active_val_coeff * new_tokens * active_val_frac;
+
+            // TODO: update the rewards products and then update
+            // relevant values in storage (validator_deltas, total_deltas, etc)
+            // - see PoS specs update PR 283
+        }
+
+        Ok(())
+    }
+
     /// Apply a slash to a byzantine validator for the given evidence.
     fn slash(
         &mut self,
@@ -1064,6 +1154,7 @@ fn init_genesis<'a>(
     let mut active: BTreeSet<WeightedValidator> = BTreeSet::default();
     let mut total_bonded_delta = token::Change::default();
     let mut total_bonded_balance = token::Amount::default();
+    let mut total_balance = token::Amount::default();
     for GenesisValidator {
         address, tokens, ..
     } in validators.clone()
@@ -1078,6 +1169,7 @@ fn init_genesis<'a>(
             address: address.clone(),
         });
     }
+    total_balance += total_bonded_balance;
     // Pop the smallest validators from the active set until its size is under
     // the limit and insert them into the inactive set
     let mut inactive: BTreeSet<WeightedValidator> = BTreeSet::default();

@@ -24,6 +24,7 @@ derivative = "2.2.0"
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 rust_decimal = { version = "1.26.1", features = ["borsh"] }
 rust_decimal_macros = "1.26.1"
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 thiserror = "1.0.30"
 tracing = "0.1.30"
 

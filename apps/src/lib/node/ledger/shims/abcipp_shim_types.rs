@@ -195,6 +195,8 @@ pub mod shim {
 
         #[cfg(not(feature = "abcipp"))]
         use namada::tendermint_proto::abci::RequestBeginBlock;
+        use namada::types::address::Address;
+        use namada::ledger::pos::types::VoteInfo;
         use namada::types::hash::Hash;
         use namada::types::storage::{BlockHash, Header};
         use namada::types::time::DateTimeUtc;
@@ -221,6 +223,8 @@ pub mod shim {
             pub header: Header,
             pub byzantine_validators: Vec<Evidence>,
             pub txs: Vec<ProcessedTx>,
+            pub proposer_address: Vec<u8>,
+            pub votes: Vec<VoteInfo>,
         }
 
         #[cfg(feature = "abcipp")]
@@ -238,6 +242,16 @@ pub mod shim {
                     },
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
+                    proposer_address: req.proposer_address,
+                    votes: req
+                        .decided_last_commit
+                        .unwrap()
+                        .votes
+                        .iter()
+                        .map(|tm_vote_info| {
+                            VoteInfo::from(tm_vote_info.clone())
+                        })
+                        .collect(),
                 }
             }
         }
