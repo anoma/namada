@@ -6,7 +6,8 @@ use super::super::handler::{
     self, make_send_packet_event, make_timeout_event, packet_from_message,
 };
 use super::super::storage::{
-    port_channel_sequence_id, Error as IbcStorageError,
+    ibc_denom_key, port_channel_sequence_id, token_hash_from_denom,
+    Error as IbcStorageError,
 };
 use super::{Ibc, StateChange};
 use crate::ibc::core::ics02_client::height::Height;
@@ -33,7 +34,9 @@ use crate::ibc::core::ics24_host::identifier::{
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ibc::proofs::Proofs;
 use crate::ledger::storage::{self, StorageHasher};
-use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
+use crate::types::ibc::data::{
+    Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
+};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 
@@ -64,6 +67,8 @@ pub enum Error {
     IbcEvent(String),
     #[error("IBC proof error: {0}")]
     Proof(String),
+    #[error("IBC denom error: {0}")]
+    Denom(String),
 }
 
 /// IBC packet functions result
@@ -99,11 +104,12 @@ where
                 let channel = self
                     .channel_end(&(commitment_key.0.clone(), commitment_key.1))
                     .map_err(|e| Error::InvalidChannel(e.to_string()))?;
-                let packet = packet_from_message(
+                let mut packet = packet_from_message(
                     &msg,
                     commitment_key.2,
                     channel.counterparty(),
                 );
+                self.update_denom(&mut packet)?;
                 let commitment = self
                     .get_packet_commitment(&commitment_key)
                     .map_err(|_| {
@@ -693,6 +699,39 @@ where
         } else {
             Ok(())
         }
+    }
+
+    fn update_denom(&self, packet: &mut Packet) -> Result<()> {
+        if let Ok(mut data) =
+            serde_json::from_slice::<FungibleTokenPacketData>(&packet.data)
+        {
+            if let Some(token_hash) = token_hash_from_denom(&data.denom)
+                .map_err(|e| {
+                    Error::Denom(format!("Invalid denom: error {}", e))
+                })?
+            {
+                let denom_key = ibc_denom_key(&token_hash);
+                let denom_bytes = match self.ctx.read_pre(&denom_key) {
+                    Ok(Some(v)) => v,
+                    _ => {
+                        return Err(Error::Denom(format!(
+                            "No original denom: denom_key {}",
+                            denom_key
+                        )));
+                    }
+                };
+                let denom = std::str::from_utf8(&denom_bytes).map_err(|e| {
+                    Error::Denom(format!(
+                        "Decoding the denom failed: denom_key {}, error {}",
+                        denom_key, e
+                    ))
+                })?;
+                data.denom = denom.to_string();
+                packet.data = serde_json::to_vec(&data)
+                    .expect("encoding the packet data shouldn't fail");
+            }
+        }
+        Ok(())
     }
 }
 

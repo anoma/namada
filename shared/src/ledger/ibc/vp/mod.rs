@@ -3,6 +3,7 @@
 mod channel;
 mod client;
 mod connection;
+mod denom;
 mod packet;
 mod port;
 mod sequence;
@@ -46,6 +47,8 @@ pub enum Error {
     PacketError(packet::Error),
     #[error("Sequence validation error: {0}")]
     SequenceError(sequence::Error),
+    #[error("Denom validation error: {0}")]
+    DenomError(denom::Error),
     #[error("IBC event error: {0}")]
     IbcEvent(String),
     #[error("Decoding transaction data error: {0}")]
@@ -141,6 +144,7 @@ where
                     }
                     IbcPrefix::Ack => self.validate_ack(key)?,
                     IbcPrefix::Event => {}
+                    IbcPrefix::Denom => self.validate_denom(tx_data)?,
                     IbcPrefix::Unknown => {
                         return Err(Error::KeyError(format!(
                             "Invalid IBC-related key: {}",
@@ -285,6 +289,12 @@ impl From<packet::Error> for Error {
 impl From<sequence::Error> for Error {
     fn from(err: sequence::Error) -> Self {
         Self::SequenceError(err)
+    }
+}
+
+impl From<denom::Error> for Error {
+    fn from(err: denom::Error) -> Self {
+        Self::DenomError(err)
     }
 }
 
