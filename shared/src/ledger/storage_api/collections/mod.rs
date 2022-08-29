@@ -22,9 +22,24 @@ pub use lazy_map::LazyMap;
 pub use lazy_set::LazySet;
 pub use lazy_vec::LazyVec;
 
+use crate::types::storage;
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum ReadError {
     #[error("A storage key was unexpectedly empty")]
     UnexpectedlyEmptyStorageKey,
+}
+
+/// A lazy collection of storage values is a handler with some storage prefix
+/// that is given to its `fn new()`. The values are typically nested under this
+/// prefix and they can be changed individually (e.g. without reading in the
+/// whole collection) and their changes directly indicated to the validity
+/// predicates, which do not need to iterate the whole collection pre/post to
+/// find diffs.
+///
+/// An empty collection must be deleted from storage.
+pub trait LazyCollection {
+    /// Create or use an existing vector with the given storage `key`.
+    fn new(key: storage::Key) -> Self;
 }

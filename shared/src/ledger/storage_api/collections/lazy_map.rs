@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::super::Result;
-use super::ReadError;
+use super::{LazyCollection, ReadError};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::types::storage::{self, KeySeg};
 
@@ -31,20 +31,65 @@ pub struct LazyMap<K, V> {
     phantom_v: PhantomData<V>,
 }
 
-impl<K, V> LazyMap<K, V>
+impl<K, V> LazyCollection for LazyMap<K, V>
 where
     K: storage::KeySeg,
-    V: BorshDeserialize + BorshSerialize + 'static,
 {
     /// Create or use an existing map with the given storage `key`.
-    pub fn new(key: storage::Key) -> Self {
+    fn new(key: storage::Key) -> Self {
         Self {
             key,
             phantom_k: PhantomData,
             phantom_v: PhantomData,
         }
     }
+}
 
+// Generic `LazyMap` methods that require no bounds on values `V`
+impl<K, V> LazyMap<K, V>
+where
+    K: storage::KeySeg,
+{
+    /// Returns whether the set contains a value.
+    pub fn contains<S>(&self, storage: &S, key: &K) -> Result<bool>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
+        storage.has_key(&self.get_data_key(key))
+    }
+
+    /// Get the prefix of set's elements storage
+    fn get_data_prefix(&self) -> storage::Key {
+        self.key.push(&DATA_SUBKEY.to_owned()).unwrap()
+    }
+
+    /// Get the sub-key of a given element
+    fn get_data_key(&self, key: &K) -> storage::Key {
+        let key_str = key.to_db_key();
+        self.get_data_prefix().push(&key_str).unwrap()
+    }
+}
+
+// `LazyMap` methods with nested `LazyCollection`s `V`
+impl<K, V> LazyMap<K, V>
+where
+    K: storage::KeySeg,
+    V: LazyCollection,
+{
+    /// Get a nested collection at given key `key`. If there is no nested
+    /// collection at the given key, a new empty one will be provided. The
+    /// nested collection may be manipulated through its methods.
+    pub fn at(&self, key: &K) -> V {
+        V::new(self.get_data_key(key))
+    }
+}
+
+// `LazyMap` methods with borsh encoded values `V`
+impl<K, V> LazyMap<K, V>
+where
+    K: storage::KeySeg,
+    V: BorshDeserialize + BorshSerialize + 'static,
+{
     /// Inserts a key-value pair into the map.
     ///
     /// The full storage key identifies the key in the pair, while the value is
@@ -93,14 +138,6 @@ where
     {
         let data_key = self.get_data_key(key);
         Self::read_key_val(storage, &data_key)
-    }
-
-    /// Returns whether the set contains a value.
-    pub fn contains<S>(&self, storage: &S, key: &K) -> Result<bool>
-    where
-        S: for<'iter> StorageRead<'iter>,
-    {
-        storage.has_key(&self.get_data_key(key))
     }
 
     /// Reads the number of elements in the map.
@@ -174,17 +211,6 @@ where
         val: V,
     ) -> Result<()> {
         storage.write(storage_key, val)
-    }
-
-    /// Get the prefix of set's elements storage
-    fn get_data_prefix(&self) -> storage::Key {
-        self.key.push(&DATA_SUBKEY.to_owned()).unwrap()
-    }
-
-    /// Get the sub-key of a given element
-    fn get_data_key(&self, key: &K) -> storage::Key {
-        let key_str = key.to_db_key();
-        self.get_data_prefix().push(&key_str).unwrap()
     }
 }
 

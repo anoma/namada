@@ -6,6 +6,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::super::Result;
 use super::hasher::hash_for_storage_key;
+use super::LazyCollection;
 use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::types::storage;
 
@@ -33,18 +34,20 @@ pub struct LazyHashSet<T> {
     phantom: PhantomData<T>,
 }
 
-impl<T> LazyHashSet<T>
-where
-    T: BorshSerialize + BorshDeserialize + 'static,
-{
+impl<T> LazyCollection for LazyHashSet<T> {
     /// Create or use an existing set with the given storage `key`.
-    pub fn new(key: storage::Key) -> Self {
+    fn new(key: storage::Key) -> Self {
         Self {
             key,
             phantom: PhantomData,
         }
     }
+}
 
+impl<T> LazyHashSet<T>
+where
+    T: BorshSerialize + BorshDeserialize + 'static,
+{
     /// Adds a value to the set. If the set did not have this value present,
     /// `Ok(true)` is returned, `Ok(false)` otherwise.
     pub fn insert<S>(&self, storage: &mut S, val: T) -> Result<bool>

@@ -3,7 +3,7 @@
 use std::marker::PhantomData;
 
 use super::super::Result;
-use super::ReadError;
+use super::{LazyCollection, ReadError};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::types::storage::{self, KeySeg};
 
@@ -28,18 +28,20 @@ pub struct LazySet<T> {
     phantom: PhantomData<T>,
 }
 
-impl<T> LazySet<T>
-where
-    T: storage::KeySeg,
-{
+impl<T> LazyCollection for LazySet<T> {
     /// Create or use an existing set with the given storage `key`.
-    pub fn new(key: storage::Key) -> Self {
+    fn new(key: storage::Key) -> Self {
         Self {
             key,
             phantom: PhantomData,
         }
     }
+}
 
+impl<T> LazySet<T>
+where
+    T: storage::KeySeg,
+{
     /// Adds a value to the set. If the set did not have this value present,
     /// `Ok(true)` is returned, `Ok(false)` otherwise.
     pub fn insert<S>(&self, storage: &mut S, val: T) -> Result<bool>

@@ -6,6 +6,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::super::Result;
 use super::hasher::hash_for_storage_key;
+use super::LazyCollection;
 use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::types::storage;
 
@@ -41,20 +42,22 @@ struct KeyVal<K, V> {
     val: V,
 }
 
-impl<K, V> LazyHashMap<K, V>
-where
-    K: BorshDeserialize + BorshSerialize + 'static,
-    V: BorshDeserialize + BorshSerialize + 'static,
-{
+impl<K, V> LazyCollection for LazyHashMap<K, V> {
     /// Create or use an existing map with the given storage `key`.
-    pub fn new(key: storage::Key) -> Self {
+    fn new(key: storage::Key) -> Self {
         Self {
             key,
             phantom_k: PhantomData,
             phantom_v: PhantomData,
         }
     }
+}
 
+impl<K, V> LazyHashMap<K, V>
+where
+    K: BorshDeserialize + BorshSerialize + 'static,
+    V: BorshDeserialize + BorshSerialize + 'static,
+{
     /// Inserts a key-value pair into the map.
     ///
     /// If the map did not have this key present, `None` is returned.

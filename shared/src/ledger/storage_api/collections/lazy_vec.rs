@@ -9,6 +9,7 @@ use derivative::Derivative;
 use thiserror::Error;
 
 use super::super::Result;
+use super::LazyCollection;
 use crate::ledger::storage_api::validation::{self, Data};
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::ledger::vp_env::VpEnv;
@@ -96,18 +97,57 @@ pub struct ValidationBuilder<T> {
     pub changes: Vec<SubKeyWithData<T>>,
 }
 
-impl<T> LazyVec<T>
-where
-    T: BorshSerialize + BorshDeserialize + 'static,
-{
+impl<T> LazyCollection for LazyVec<T> {
     /// Create or use an existing vector with the given storage `key`.
-    pub fn new(key: storage::Key) -> Self {
+    fn new(key: storage::Key) -> Self {
         Self {
             key,
             phantom: PhantomData,
         }
     }
+}
 
+// Generic `LazyVec` methods that require no bounds on values `T`
+impl<T> LazyVec<T> {
+    /// Reads the number of elements in the vector.
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len<S>(&self, storage: &S) -> Result<u64>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
+        let len = storage.read(&self.get_len_key())?;
+        Ok(len.unwrap_or_default())
+    }
+
+    /// Returns `true` if the vector contains no elements.
+    pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
+        Ok(self.len(storage)? == 0)
+    }
+
+    /// Get the prefix of set's elements storage
+    fn get_data_prefix(&self) -> storage::Key {
+        self.key.push(&DATA_SUBKEY.to_owned()).unwrap()
+    }
+
+    /// Get the sub-key of vector's elements storage
+    fn get_data_key(&self, index: Index) -> storage::Key {
+        self.get_data_prefix().push(&index.to_string()).unwrap()
+    }
+
+    /// Get the sub-key of vector's length storage
+    fn get_len_key(&self) -> storage::Key {
+        self.key.push(&LEN_SUBKEY.to_owned()).unwrap()
+    }
+}
+
+// `LazyVec` methods with borsh encoded values `T`
+impl<T> LazyVec<T>
+where
+    T: BorshSerialize + BorshDeserialize + 'static,
+{
     /// Appends an element to the back of a collection.
     pub fn push<S>(&self, storage: &mut S, val: T) -> Result<()>
     where
@@ -150,24 +190,6 @@ where
         S: for<'iter> StorageRead<'iter>,
     {
         storage.read(&self.get_data_key(index))
-    }
-
-    /// Reads the number of elements in the vector.
-    #[allow(clippy::len_without_is_empty)]
-    pub fn len<S>(&self, storage: &S) -> Result<u64>
-    where
-        S: for<'iter> StorageRead<'iter>,
-    {
-        let len = storage.read(&self.get_len_key())?;
-        Ok(len.unwrap_or_default())
-    }
-
-    /// Returns `true` if the vector contains no elements.
-    pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
-    where
-        S: for<'iter> StorageRead<'iter>,
-    {
-        Ok(self.len(storage)? == 0)
     }
 
     /// An iterator visiting all elements. The iterator element type is
@@ -237,21 +259,6 @@ where
             }
         }
         Ok(())
-    }
-
-    /// Get the prefix of set's elements storage
-    fn get_data_prefix(&self) -> storage::Key {
-        self.key.push(&DATA_SUBKEY.to_owned()).unwrap()
-    }
-
-    /// Get the sub-key of vector's elements storage
-    fn get_data_key(&self, index: Index) -> storage::Key {
-        self.get_data_prefix().push(&index.to_string()).unwrap()
-    }
-
-    /// Get the sub-key of vector's length storage
-    fn get_len_key(&self) -> storage::Key {
-        self.key.push(&LEN_SUBKEY.to_owned()).unwrap()
     }
 }
 
