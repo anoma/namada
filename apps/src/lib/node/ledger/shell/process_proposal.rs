@@ -56,7 +56,8 @@ where
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
-        let invalid_num_of_eth_ev_digests = eth_ev_digest_num != 1;
+        let invalid_num_of_eth_ev_digests =
+            self.storage.last_height.0 > 0 && eth_ev_digest_num != 1;
         if invalid_num_of_eth_ev_digests {
             tracing::warn!(
                 proposer = ?hex::encode(&req.proposer_address),
