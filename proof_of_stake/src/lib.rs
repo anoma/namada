@@ -15,6 +15,7 @@
 pub mod btree_set;
 pub mod epoched;
 pub mod parameters;
+pub mod rewards;
 pub mod types;
 pub mod validation;
 
@@ -31,7 +32,7 @@ use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
 use parameters::PosParams;
-use rust_decimal::Decimal;
+use rust_decimal::prelude::{Decimal, ToPrimitive};
 use thiserror::Error;
 use types::{
     ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
@@ -41,6 +42,7 @@ use types::{
 };
 
 use crate::btree_set::BTreeSetShims;
+use crate::rewards::PosRewardsCalculator;
 use crate::types::{
     decimal_mult_i128, decimal_mult_u64, Bond, BondId, WeightedValidator,
 };
