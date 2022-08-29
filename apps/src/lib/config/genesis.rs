@@ -255,6 +255,9 @@ pub mod genesis_config {
         // Reward for voting on a block.
         // XXX: u64 doesn't work with toml-rs!
         pub block_vote_reward: u64,
+        // Maximum staking APY
+        // XXX: u64 doesn't work with toml-rs!
+        pub max_staking_rewards_rate: u64,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote (in basis points).
         // XXX: u64 doesn't work with toml-rs!
@@ -552,6 +555,9 @@ pub mod genesis_config {
             ),
             block_proposer_reward: config.pos_params.block_proposer_reward,
             block_vote_reward: config.pos_params.block_vote_reward,
+            max_staking_rewards_rate: BasisPoints::new(
+                config.pos_params.max_staking_rewards_rate,
+            ),
             duplicate_vote_slash_rate: BasisPoints::new(
                 config.pos_params.duplicate_vote_slash_rate,
             ),
