@@ -383,6 +383,10 @@ where
         super::staking_token_address()
     }
 
+    fn read_pos_address(&self) -> Self::Address {
+        Self::POS_ADDRESS
+    }
+
     fn read_pos_params(&self) -> PosParams {
         let (value, _gas) = self.read(&params_key()).unwrap();
         decode(value.unwrap()).unwrap()

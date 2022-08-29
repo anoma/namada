@@ -655,6 +655,8 @@ pub trait PosBase {
     /// TODO: this should be `const`, but in the ledger `address::nam` is not a
     /// `const fn`
     fn staking_token_address() -> Self::Address;
+    /// Get address of the PoS account
+    fn read_pos_address(&self) -> Self::Address;
     /// Address of the slash pool, into which slashed tokens are transferred.
     const POS_SLASH_POOL_ADDRESS: Self::Address;
 
