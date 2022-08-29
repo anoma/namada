@@ -14,14 +14,14 @@ pub fn is_parameter_key(key: &Key) -> bool {
 
 /// Returns if the key is a protocol parameter key.
 pub fn is_protocol_parameter_key(key: &Key) -> bool {
-    is_epoch_storage_key(key)
+    is_epoch_duration_storage_key(key)
         || is_max_expected_time_per_block_key(key)
         || is_tx_whitelist_key(key)
         || is_vp_whitelist_key(key)
 }
 
 /// Returns if the key is an epoch storage key.
-pub fn is_epoch_storage_key(key: &Key) -> bool {
+pub fn is_epoch_duration_storage_key(key: &Key) -> bool {
     matches!(&key.segments[..], [
         DbKeySeg::AddressSeg(addr),
         DbKeySeg::StringSeg(epoch_duration),
@@ -53,7 +53,7 @@ pub fn is_vp_whitelist_key(key: &Key) -> bool {
 }
 
 /// Storage key used for epoch parameter.
-pub fn get_epoch_storage_key() -> Key {
+pub fn get_epoch_duration_storage_key() -> Key {
     Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
