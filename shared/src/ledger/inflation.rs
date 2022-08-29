@@ -76,4 +76,16 @@ impl RewardsController {
     }
 
     // TODO: provide way to get the new gain factors to store for use in following epoch.
+
+/// Function that allows the protocol to mint some number of tokens of a desired type to a destination address
+/// TODO: think of error cases that must be handled.
+pub fn mint_tokens<S>(storage: &mut S, target: &Address, token: &Address, amount: token::Amount) -> storage_api::Result<()>
+where S: StorageWrite + for<'iter> StorageRead<'iter> {
+    let dest_key = token::balance_key(token, target);
+    let mut dest_bal: token::Amount = storage.read(&dest_key)?.unwrap_or_default();
+    dest_bal.receive(&amount);
+    storage.write(&dest_key, dest_bal)?;
+
+    // TODO: update total supply somewhere (perhaps in the storage)
+    Ok(())
 }
