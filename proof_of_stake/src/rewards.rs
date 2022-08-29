@@ -2,12 +2,18 @@
 
 use crate::types::{BasisPoints, VotingPower};
 use rust_decimal::Decimal;
+use thiserror::Error;
 
 /// Errors during rewards calculation
+#[derive(Debug, Error)]
 pub enum RewardsError {
     /// number of votes is less than the threshold of 2/3
+    #[error(
+        "Insufficient votes, needed at least 2/3 of the total bonded stake"
+    )]
     InsufficentVotes,
     /// rewards coefficients are not set
+    #[error("Rewards coefficients are not properly set.")]
     CoeffsNotSet,
 }
 
