@@ -122,6 +122,8 @@ pub struct Parameters {
     pub vp_whitelist: Vec<String>,
     /// Whitelisted tx hashes
     pub tx_whitelist: Vec<String>,
+    // TODO: add more parameters here?
+    // PoS: p_gain, d_gain, staked_ratio_last_epoch, reward_rate_last_epoch
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -317,6 +319,7 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
+    // read max expected block time
     let max_expected_time_per_block_key =
         storage::get_max_expected_time_per_block_key();
     let (value, gas_time) = storage

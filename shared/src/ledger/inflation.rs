@@ -1,5 +1,3 @@
-//! General inflation system that will be used to process rewards for proof-of-stake, providing liquity to shielded asset pools, and public goods funding.
-//! 
 //! General inflation system that will be used to process rewards for
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
@@ -14,8 +12,11 @@ use crate::types::token;
 
 /// The domains of inflation
 pub enum RewardsType {
+    /// Proof-of-stake rewards
     Staking,
+    /// Rewards for locking tokens in the multi-asset shielded pool
     Masp,
+    /// Rewards for public goods funding (PGF)
     PubGoodsFunding,
 }
 
