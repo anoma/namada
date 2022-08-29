@@ -153,7 +153,7 @@ impl Parameters {
         H: ledger_storage::StorageHasher,
     {
         // write epoch parameters
-        let epoch_key = storage::get_epoch_storage_key();
+        let epoch_key = storage::get_epoch_duration_storage_key();
         let epoch_value = encode(&self.epoch_duration);
         storage.write(&epoch_key, epoch_value).expect(
             "Epoch parameters must be initialized in the genesis block",
@@ -242,7 +242,7 @@ where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: ledger_storage::StorageHasher,
 {
-    let key = storage::get_epoch_storage_key();
+    let key = storage::get_epoch_duration_storage_key();
     update(storage, value, key)
 }
 
@@ -268,7 +268,7 @@ where
 }
 
 /// Read the the epoch duration parameter from store
-pub fn read_epoch_parameter<DB, H>(
+pub fn read_epoch_duration_parameter<DB, H>(
     storage: &Storage<DB, H>,
 ) -> std::result::Result<(EpochDuration, u64), ReadError>
 where
@@ -276,7 +276,7 @@ where
     H: ledger_storage::StorageHasher,
 {
     // read epoch
-    let epoch_key = storage::get_epoch_storage_key();
+    let epoch_key = storage::get_epoch_duration_storage_key();
     let (value, gas) =
         storage.read(&epoch_key).map_err(ReadError::StorageError)?;
     let epoch_duration: EpochDuration =
@@ -295,8 +295,8 @@ where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: ledger_storage::StorageHasher,
 {
-    // read epoch
-    let (epoch_duration, gas_epoch) = read_epoch_parameter(storage)
+    // read epoch duration
+    let (epoch_duration, gas_epoch) = read_epoch_duration_parameter(storage)
         .expect("Couldn't read epoch duration parameters");
 
     // read vp whitelist

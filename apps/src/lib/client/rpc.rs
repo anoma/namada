@@ -501,7 +501,7 @@ pub async fn query_protocol_parameters(
     println!("Governance Parameters\n {:4}", gov_parameters);
 
     println!("Protocol parameters");
-    let key = param_storage::get_epoch_storage_key();
+    let key = param_storage::get_epoch_duration_storage_key();
     let epoch_duration = query_storage_value::<EpochDuration>(&client, &key)
         .await
         .expect("Parameter should be definied.");
