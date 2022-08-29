@@ -1,8 +1,9 @@
 //! PoS rewards
 
-use crate::types::{BasisPoints, VotingPower};
 use rust_decimal::Decimal;
 use thiserror::Error;
+
+use crate::types::VotingPower;
 
 /// Errors during rewards calculation
 #[derive(Debug, Error)]
@@ -62,9 +63,11 @@ impl PosRewardsCalculator {
 
         // Logic for determining the coefficients (WIP WIP WIP)
         let proposer_coeff: Decimal = (self.proposer_param
-            * (u64::from(self.signing_stake) - votes_needed)).into();
+            * (u64::from(self.signing_stake) - votes_needed))
+            .into();
         let signer_coeff: Decimal = self.signer_param.into();
-        let active_val_coeff = Decimal::new(1,0) - proposer_coeff - signer_coeff;
+        let active_val_coeff =
+            Decimal::new(1, 0) - proposer_coeff - signer_coeff;
 
         self.pos_rewards = Some(PosRewards {
             proposer_coeff,

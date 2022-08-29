@@ -1,10 +1,16 @@
 //! General inflation system that will be used to process rewards for proof-of-stake, providing liquity to shielded asset pools, and public goods funding.
 //! 
+//! General inflation system that will be used to process rewards for
+//! proof-of-stake, providing liquity to shielded asset pools, and public goods
+//! funding.
+//!
 //! TODO: possibly change f64 types to BasisPoints
 
-use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::types::BasisPoints;
 use rust_decimal::prelude::Decimal;
+
+use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
+use crate::types::address::Address;
+use crate::types::token;
 
 /// The domains of inflation
 pub enum RewardsType {
