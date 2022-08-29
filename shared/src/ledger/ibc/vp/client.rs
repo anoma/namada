@@ -13,26 +13,34 @@ use super::super::storage::{
     client_update_height_key, client_update_timestamp_key, consensus_height,
     consensus_state_key, consensus_state_prefix,
 };
+#[cfg(feature = "abcipp")]
+use ibc_abcipp as ibc_shim;
+#[cfg(not(feature = "abcipp"))]
+use ibc as ibc_shim;
+
 use super::{Ibc, StateChange};
-use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-use crate::ibc::core::ics02_client::client_consensus::{
+use ibc_shim::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
+use ibc_shim::core::ics02_client::client_consensus::{
     AnyConsensusState, ConsensusState,
 };
-use crate::ibc::core::ics02_client::client_def::{AnyClient, ClientDef};
-use crate::ibc::core::ics02_client::client_state::AnyClientState;
-use crate::ibc::core::ics02_client::client_type::ClientType;
-use crate::ibc::core::ics02_client::context::ClientReader;
-use crate::ibc::core::ics02_client::error::Error as Ics02Error;
-use crate::ibc::core::ics02_client::height::Height;
-use crate::ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
-use crate::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
-use crate::ibc::core::ics02_client::msgs::ClientMsg;
-use crate::ibc::core::ics04_channel::context::ChannelReader;
-use crate::ibc::core::ics23_commitment::commitment::CommitmentRoot;
-use crate::ibc::core::ics24_host::identifier::ClientId;
-use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
+use ibc_shim::core::ics02_client::client_def::{AnyClient, ClientDef};
+use ibc_shim::core::ics02_client::client_state::AnyClientState;
+use ibc_shim::core::ics02_client::client_type::ClientType;
+use ibc_shim::core::ics02_client::context::ClientReader;
+use ibc_shim::core::ics02_client::error::Error as Ics02Error;
+use ibc_shim::core::ics02_client::height::Height;
+use ibc_shim::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
+use ibc_shim::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
+use ibc_shim::core::ics02_client::msgs::ClientMsg;
+use ibc_shim::core::ics04_channel::context::ChannelReader;
+use ibc_shim::core::ics23_commitment::commitment::CommitmentRoot;
+use ibc_shim::core::ics24_host::identifier::ClientId;
+use ibc_shim::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ledger::storage::{self, StorageHasher};
-use crate::tendermint_proto::Protobuf;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::Protobuf;
+#[cfg(not(feature = "abcipp"))]
+use tendermint_proto::Protobuf;
 use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
 use crate::types::storage::{BlockHeight, Key};
 use crate::vm::WasmCacheAccess;

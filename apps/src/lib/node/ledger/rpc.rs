@@ -5,6 +5,9 @@ use std::str::FromStr;
 
 use namada::types::address::Address;
 use namada::types::storage;
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::abci::Path as AbciPath;
+#[cfg(not(feature = "abcipp"))]
 use tendermint::abci::Path as AbciPath;
 use thiserror::Error;
 

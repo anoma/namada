@@ -6,34 +6,45 @@ use prost::Message;
 use prost_types::Any;
 use thiserror::Error;
 
-use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-use crate::ibc::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
-use crate::ibc::core::ics02_client::msgs::misbehavior::MsgSubmitAnyMisbehaviour;
-use crate::ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
-use crate::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
-use crate::ibc::core::ics02_client::msgs::ClientMsg;
-use crate::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
-use crate::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
-use crate::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-use crate::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
-use crate::ibc::core::ics03_connection::msgs::ConnectionMsg;
-use crate::ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
-use crate::ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
-use crate::ibc::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
-use crate::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
-use crate::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
-use crate::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
-use crate::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-use crate::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
-use crate::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
-use crate::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
-use crate::ibc::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
-use crate::ibc::core::ics04_channel::packet::Receipt;
-use crate::ibc::core::ics26_routing::error::Error as Ics26Error;
-use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
-use crate::ibc::downcast;
-use crate::ibc_proto::ibc::core::channel::v1::acknowledgement::Response;
-use crate::ibc_proto::ibc::core::channel::v1::Acknowledgement;
+#[cfg(feature = "abcipp")]
+use ibc_abcipp as ibc_shim;
+#[cfg(not(feature = "abcipp"))]
+use ibc as ibc_shim;
+
+use ibc_shim::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use ibc_shim::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
+use ibc_shim::core::ics02_client::msgs::misbehavior::MsgSubmitAnyMisbehaviour;
+use ibc_shim::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
+use ibc_shim::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
+use ibc_shim::core::ics02_client::msgs::ClientMsg;
+use ibc_shim::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
+use ibc_shim::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
+use ibc_shim::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
+use ibc_shim::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
+use ibc_shim::core::ics03_connection::msgs::ConnectionMsg;
+use ibc_shim::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
+use ibc_shim::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
+use ibc_shim::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
+use ibc_shim::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
+use ibc_shim::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
+use ibc_shim::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
+use ibc_shim::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
+use ibc_shim::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
+use ibc_shim::core::ics04_channel::msgs::timeout::MsgTimeout;
+use ibc_shim::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
+use ibc_shim::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
+use ibc_shim::core::ics04_channel::packet::Receipt;
+use ibc_shim::core::ics26_routing::error::Error as Ics26Error;
+use ibc_shim::core::ics26_routing::msgs::Ics26Envelope;
+use ibc_shim::downcast;
+#[cfg(feature = "abcipp")]
+use ibc_proto_abcipp::ibc::core::channel::v1::acknowledgement::Response;
+#[cfg(not(feature = "abcipp"))]
+use ibc_proto::ibc::core::channel::v1::acknowledgement::Response;
+#[cfg(feature = "abcipp")]
+use ibc_proto_abcipp::ibc::core::channel::v1::Acknowledgement;
+#[cfg(not(feature = "abcipp"))]
+use ibc_proto::ibc::core::channel::v1::Acknowledgement;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]

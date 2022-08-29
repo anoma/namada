@@ -6,10 +6,19 @@ use std::ops::{Add, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::google::protobuf;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::google::protobuf;
 
-use crate::tendermint::time::Time;
-use crate::tendermint::Error as TendermintError;
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::time::Time;
+#[cfg(not(feature = "abcipp"))]
+use tendermint::time::Time;
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::Error as TendermintError;
+#[cfg(not(feature = "abcipp"))]
+use tendermint::Error as TendermintError;
 
 /// Check if the given `duration` has passed since the given `start.
 pub fn duration_passed(

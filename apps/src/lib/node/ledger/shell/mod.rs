@@ -67,6 +67,9 @@ use tendermint_proto_abcipp::crypto::public_key;
 use tendermint_proto_abcipp::types::ConsensusParams;
 use thiserror::Error;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+#[cfg(feature = "abcipp")]
+use tower_abci_abcipp::{request, response};
+#[cfg(not(feature = "abcipp"))]
 use tower_abci::{request, response};
 
 use super::protocol::ShellParams;
@@ -782,7 +785,13 @@ mod test_utils {
     use namada::types::storage::{BlockHash, Epoch, Header};
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
+    #[cfg(feature = "abcipp")]
+    use tendermint_proto_abcipp::abci::{RequestInitChain, RequestProcessProposal};
+    #[cfg(not(feature = "abcipp"))]
     use tendermint_proto::abci::{RequestInitChain, RequestProcessProposal};
+    #[cfg(feature = "abcipp")]
+    use tendermint_proto_abcipp::google::protobuf::Timestamp;
+    #[cfg(not(feature = "abcipp"))]
     use tendermint_proto::google::protobuf::Timestamp;
     use tokio::sync::mpsc::UnboundedReceiver;
 

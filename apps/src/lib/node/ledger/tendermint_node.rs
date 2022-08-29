@@ -9,8 +9,17 @@ use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::Genesis;
+#[cfg(not(feature = "abcipp"))]
 use tendermint::Genesis;
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::net::Address as TendermintAddress;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::net::Address as TendermintAddress;
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::{Error as TendermintError, TendermintConfig};
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::{Error as TendermintError, TendermintConfig};
 use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};

@@ -56,7 +56,7 @@ where
             let mut txs = self.build_vote_extensions_txs(vexts);
             #[cfg(feature = "abcipp")]
             let mut txs: Vec<TxRecord> =
-                txs.into_iter().map(|tx| record::add).collect();
+                txs.into_iter().map(record::add).collect();
 
             // add mempool txs
             let mut mempool_txs = self.build_mempool_txs(req.txs);
@@ -66,7 +66,7 @@ where
             let mut decrypted_txs = self.build_decrypted_txs();
             #[cfg(feature = "abcipp")]
             let mut decrypted_txs: Vec<TxRecord> =
-                decrypted_txs.into_iter().map(|tx| record::add).collect();
+                decrypted_txs.into_iter().map(record::add).collect();
 
             txs.append(&mut decrypted_txs);
 
@@ -377,7 +377,7 @@ mod test_prepare_proposal {
     use namada::types::transaction::{Fee, TxType};
     use namada::types::vote_extensions::ethereum_events;
     #[cfg(feature = "abcipp")]
-    use tendermint_proto::abci::{
+    use tendermint_proto_abcipp::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
     #[cfg(feature = "abcipp")]
@@ -500,7 +500,7 @@ mod test_prepare_proposal {
         #[cfg(not(feature = "abcipp"))]
         let vexts = vec![vote_extension_serialize(vext, protocol_key)];
 
-        let votes = deserialize_vote_extensions(&vexts[..]);
+        let votes = deserialize_vote_extensions(vexts);
         let filtered_votes: Vec<_> =
             shell.filter_invalid_vote_extensions(votes).collect();
 
@@ -659,7 +659,7 @@ mod test_prepare_proposal {
                 signed_vote_extension,
                 &protocol_key,
             )];
-            shell.compress_ethereum_events(deserialize_vote_extensions(&votes))
+            shell.compress_ethereum_events(deserialize_vote_extensions(votes))
         };
 
         // we should be filtering out the vote extension with

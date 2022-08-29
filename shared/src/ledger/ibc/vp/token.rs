@@ -6,10 +6,15 @@ use std::str::FromStr;
 use borsh::BorshDeserialize;
 use thiserror::Error;
 
-use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-use crate::ibc::core::ics04_channel::msgs::PacketMsg;
-use crate::ibc::core::ics04_channel::packet::Packet;
-use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
+#[cfg(feature = "abcipp")]
+use ibc_abcipp as ibc_shim;
+#[cfg(not(feature = "abcipp"))]
+use ibc as ibc_shim;
+
+use ibc_shim::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use ibc_shim::core::ics04_channel::msgs::PacketMsg;
+use ibc_shim::core::ics04_channel::packet::Packet;
+use ibc_shim::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::proto::SignedTxData;

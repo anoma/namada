@@ -14,6 +14,10 @@ pub enum Error {
     Address(String),
     #[error("Error in sending JSON RPC request to Tendermint")]
     Send,
+    #[cfg(feature = "abcipp")]
+    #[error("Received an error response from Tendermint: {0:?}")]
+    Rpc(tendermint_rpc_abcipp::response_error::ResponseError),
+    #[cfg(not(feature = "abcipp"))]
     #[error("Received an error response from Tendermint: {0:?}")]
     Rpc(tendermint_rpc::response_error::ResponseError),
     #[error("Received malformed JSON response from Tendermint")]
@@ -135,6 +139,9 @@ mod params {
 
     use serde::ser::SerializeTuple;
     use serde::{Deserialize, Serializer};
+    #[cfg(feature = "abcipp")]
+    use tendermint_rpc_abcipp::query::Query;
+    #[cfg(not(feature = "abcipp"))]
     use tendermint_rpc::query::Query;
 
     use super::*;
@@ -310,6 +317,9 @@ mod params {
 
     #[cfg(test)]
     mod test_rpc_types {
+        #[cfg(feature = "abcipp")]
+        use tendermint_rpc_abcipp::query::EventType;
+        #[cfg(not(feature = "abcipp"))]
         use tendermint_rpc::query::EventType;
 
         use super::*;

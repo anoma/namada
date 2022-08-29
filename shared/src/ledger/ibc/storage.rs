@@ -4,18 +4,23 @@ use std::str::FromStr;
 
 use thiserror::Error;
 
-use crate::ibc::core::ics02_client::height::Height;
-use crate::ibc::core::ics04_channel::packet::Sequence;
-use crate::ibc::core::ics05_port::capabilities::Capability;
-use crate::ibc::core::ics24_host::identifier::{
+#[cfg(feature = "abcipp")]
+use ibc_abcipp as ibc_shim;
+#[cfg(not(feature = "abcipp"))]
+use ibc as ibc_shim;
+
+use ibc_shim::core::ics02_client::height::Height;
+use ibc_shim::core::ics04_channel::packet::Sequence;
+use ibc_shim::core::ics05_port::capabilities::Capability;
+use ibc_shim::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
-use crate::ibc::core::ics24_host::path::{
+use ibc_shim::core::ics24_host::path::{
     AcksPath, ChannelEndsPath, ClientConsensusStatePath, ClientStatePath,
     ClientTypePath, CommitmentsPath, ConnectionsPath, PortsPath, ReceiptsPath,
     SeqAcksPath, SeqRecvsPath, SeqSendsPath,
 };
-use crate::ibc::core::ics24_host::Path;
+use ibc_shim::core::ics24_host::Path;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 

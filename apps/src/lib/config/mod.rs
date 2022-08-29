@@ -19,7 +19,13 @@ use namada::types::chain::ChainId;
 use namada::types::time::Rfc3339String;
 use regex::Regex;
 use serde::{de, Deserialize, Serialize};
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::Timeout;
+#[cfg(not(feature = "abcipp"))]
 use tendermint::Timeout;
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::net::Address as TendermintAddress;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::net::Address as TendermintAddress;
 use thiserror::Error;
 

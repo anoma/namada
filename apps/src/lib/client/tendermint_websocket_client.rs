@@ -6,7 +6,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::net::Address;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::net::Address;
+#[cfg(feature = "abcipp")]
+use tendermint_rpc_abcipp::{
+    Client, Error as RpcError, Request, Response, SimpleRequest,
+};
+#[cfg(not(feature = "abcipp"))]
 use tendermint_rpc::{
     Client, Error as RpcError, Request, Response, SimpleRequest,
 };
@@ -49,8 +57,17 @@ mod rpc_types {
     use std::str::FromStr;
 
     use serde::{de, Deserialize, Serialize, Serializer};
+    #[cfg(feature = "abcipp")]
+    use tendermint_rpc_abcipp::method::Method;
+    #[cfg(not(feature = "abcipp"))]
     use tendermint_rpc::method::Method;
+    #[cfg(feature = "abcipp")]
+    use tendermint_rpc_abcipp::query::{EventType, Query};
+    #[cfg(not(feature = "abcipp"))]
     use tendermint_rpc::query::{EventType, Query};
+    #[cfg(feature = "abcipp")]
+    use tendermint_rpc_abcipp::{request, response};
+    #[cfg(not(feature = "abcipp"))]
     use tendermint_rpc::{request, response};
 
     use super::Json;

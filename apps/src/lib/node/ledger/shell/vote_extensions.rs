@@ -2,7 +2,9 @@ use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::proto::Signed;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 #[cfg(feature = "abcipp")]
-use tendermint_proto_abcipp::abci::ExtendedVoteInfo;
+use tendermint_proto_abcipp::abci::{
+    ExtendedVoteInfo, response_verify_vote_extension::VerifyStatus
+};
 
 use super::queries::QueriesExt;
 use super::*;
@@ -40,12 +42,13 @@ where
         &mut self,
         _req: request::ExtendVote,
     ) -> response::ExtendVote {
-        self.mode
-            .get_protocol_key()
-            .map(|signing_key| response::ExtendVote {
+        if let ShellMode::Validator{..} = self.mode {
+            response::ExtendVote {
                 vote_extension: self.craft_extension().try_to_vec().unwrap(),
-            })
-            .unwrap_or_default()
+            }
+        } else {
+            Default::default()
+        }
     }
 
     /// Creates the data to be added to a vote extension.
@@ -474,7 +477,7 @@ mod test_vote_extensions {
                 .expect("Test failed")
                 .as_bytes()
                 .to_vec(),
-            height: shell.storage.last_height + 1,
+            height: (shell.storage.last_height.0 + 1) as i64,
             vote_extension: vote_ext.try_to_vec().expect("Test failed"),
         };
         #[cfg(feature = "abcipp")]

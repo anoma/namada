@@ -6,72 +6,83 @@ use prost::Message;
 use sha2::Digest;
 use thiserror::Error;
 
-use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-use crate::ibc::core::ics02_client::client_consensus::{
+#[cfg(feature = "abcipp")]
+use ibc_abcipp as ibc_shim;
+#[cfg(not(feature = "abcipp"))]
+use ibc as ibc_shim;
+
+use ibc_shim::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use ibc_shim::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
+use ibc_shim::core::ics02_client::client_consensus::{
     AnyConsensusState, ConsensusState,
 };
-use crate::ibc::core::ics02_client::client_state::{
+use ibc_shim::core::ics02_client::client_state::{
     AnyClientState, ClientState,
 };
-use crate::ibc::core::ics02_client::client_type::ClientType;
-use crate::ibc::core::ics02_client::events::{
+use ibc_shim::core::ics02_client::client_type::ClientType;
+use ibc_shim::core::ics02_client::events::{
     Attributes as ClientAttributes, CreateClient, UpdateClient, UpgradeClient,
 };
-use crate::ibc::core::ics02_client::header::{AnyHeader, Header};
-use crate::ibc::core::ics02_client::height::Height;
-use crate::ibc::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
-use crate::ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
-use crate::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
-use crate::ibc::core::ics02_client::msgs::ClientMsg;
-use crate::ibc::core::ics03_connection::connection::{
+use ibc_shim::core::ics02_client::header::{AnyHeader, Header};
+use ibc_shim::core::ics02_client::height::Height;
+use ibc_shim::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
+use ibc_shim::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
+use ibc_shim::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
+use ibc_shim::core::ics02_client::msgs::ClientMsg;
+use ibc_shim::core::ics03_connection::connection::{
     ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
 };
-use crate::ibc::core::ics03_connection::events::{
+use ibc_shim::core::ics03_connection::events::{
     Attributes as ConnectionAttributes, OpenAck as ConnOpenAck,
     OpenConfirm as ConnOpenConfirm, OpenInit as ConnOpenInit,
     OpenTry as ConnOpenTry,
 };
-use crate::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
-use crate::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
-use crate::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-use crate::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
-use crate::ibc::core::ics03_connection::msgs::ConnectionMsg;
-use crate::ibc::core::ics04_channel::channel::{
+use ibc_shim::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
+use ibc_shim::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
+use ibc_shim::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
+use ibc_shim::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
+use ibc_shim::core::ics03_connection::msgs::ConnectionMsg;
+use ibc_shim::core::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
-use crate::ibc::core::ics04_channel::events::{
+use ibc_shim::core::ics04_channel::events::{
     AcknowledgePacket, Attributes as ChannelAttributes,
     CloseConfirm as ChanCloseConfirm, CloseInit as ChanCloseInit,
     OpenAck as ChanOpenAck, OpenConfirm as ChanOpenConfirm,
     OpenInit as ChanOpenInit, OpenTry as ChanOpenTry, SendPacket,
     TimeoutPacket, WriteAcknowledgement,
 };
-use crate::ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
-use crate::ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
-use crate::ibc::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
-use crate::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
-use crate::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
-use crate::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
-use crate::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-use crate::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
-use crate::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
-use crate::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
-use crate::ibc::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
-use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
-use crate::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
-use crate::ibc::core::ics24_host::error::ValidationError as Ics24Error;
-use crate::ibc::core::ics24_host::identifier::{
+use ibc_shim::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
+use ibc_shim::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
+use ibc_shim::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
+use ibc_shim::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
+use ibc_shim::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
+use ibc_shim::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
+use ibc_shim::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
+use ibc_shim::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
+use ibc_shim::core::ics04_channel::msgs::timeout::MsgTimeout;
+use ibc_shim::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
+use ibc_shim::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
+use ibc_shim::core::ics04_channel::packet::{Packet, Sequence};
+use ibc_shim::core::ics23_commitment::commitment::CommitmentPrefix;
+use ibc_shim::core::ics24_host::error::ValidationError as Ics24Error;
+use ibc_shim::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
-use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
-use crate::ibc::events::IbcEvent;
+use ibc_shim::core::ics26_routing::msgs::Ics26Envelope;
+use ibc_shim::events::IbcEvent;
 #[cfg(any(feature = "ibc-mocks-abci", feature = "ibc-mocks"))]
-use crate::ibc::mock::client_state::{MockClientState, MockConsensusState};
-use crate::ibc::timestamp::Timestamp;
+use ibc_shim::mock::client_state::{MockClientState, MockConsensusState};
+use ibc_shim::timestamp::Timestamp;
 use crate::ledger::ibc::storage;
-use crate::tendermint::Time;
-use crate::tendermint_proto::{Error as ProtoError, Protobuf};
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::Time;
+#[cfg(not(feature = "abcipp"))]
+use tendermint::Time;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::{Error as ProtoError, Protobuf};
+#[cfg(not(feature = "abcipp"))]
+use tendermint_proto::{Error as ProtoError, Protobuf};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::ibc::data::{
     Error as IbcDataError, FungibleTokenPacketData, IbcMessage, PacketAck,

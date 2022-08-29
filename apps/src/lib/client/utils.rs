@@ -18,7 +18,13 @@ use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::node::Id as TendermintNodeId;
+#[cfg(not(feature = "abcipp"))]
 use tendermint::node::Id as TendermintNodeId;
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::net::Address as TendermintAddress;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::net::Address as TendermintAddress;
 
 use crate::cli::context::ENV_VAR_WASM_DIR;

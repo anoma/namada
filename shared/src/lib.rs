@@ -6,6 +6,9 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
+#[cfg(feature = "abcipp")]
+pub use {ibc_abcipp, ibc_proto_abcipp, tendermint_abcipp, tendermint_proto_abcipp};
+#[cfg(feature = "abcipp")]
 pub use {ibc, ibc_proto, tendermint, tendermint_proto};
 
 pub mod bytes;

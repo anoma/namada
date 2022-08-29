@@ -50,7 +50,7 @@ impl Vext {
 }
 
 /// Aggregates an Ethereum event with the corresponding
-// validators who saw this event.
+/// validators who saw this event.
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
@@ -95,7 +95,7 @@ impl VextDigest {
 
         for (validator, sig) in signatures.into_iter() {
             #[cfg(feature = "abcipp")]
-            let mut ext = Vext::empty(validator, last_height);
+            let mut ext = Vext::empty(last_height, validator.clone());
             #[cfg(not(feature = "abcipp"))]
             let mut ext = Vext::empty(validator.1, validator.0.clone());
 

@@ -15,8 +15,14 @@ use thiserror::Error;
 pub use token::{Error as IbcTokenError, IbcToken};
 
 use super::storage::{client_id, ibc_prefix, is_client_counter_key, IbcPrefix};
-use crate::ibc::core::ics02_client::context::ClientReader;
-use crate::ibc::events::IbcEvent;
+#[cfg(feature = "abcipp")]
+use ibc_abcipp::core::ics02_client::context::ClientReader;
+#[cfg(not(feature = "abcipp"))]
+use ibc::core::ics02_client::context::ClientReader;
+#[cfg(feature = "abcipp")]
+use ibc_abcipp::events::IbcEvent;
+#[cfg(not(feature = "abcipp"))]
+use ibc::events::IbcEvent;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::proto::SignedTxData;
@@ -291,7 +297,10 @@ impl From<sequence::Error> for Error {
 /// A dummy header used for testing
 #[cfg(any(feature = "test", feature = "testing"))]
 pub fn get_dummy_header() -> crate::types::storage::Header {
-    use crate::tendermint::time::Time as TmTime;
+    #[cfg(feature = "abcipp")]
+    use tendermint_abcipp::time::Time as TmTime;
+    #[cfg(not(feature = "abcipp"))]
+    use tendermint::time::Time as TmTime;
     crate::types::storage::Header {
         hash: crate::types::hash::Hash([0; 32]),
         time: TmTime::now().try_into().unwrap(),

@@ -11,24 +11,31 @@ use super::super::storage::{
     connection_counter_key, connection_id, connection_key,
     is_connection_counter_key, Error as IbcStorageError,
 };
+#[cfg(feature = "abcipp")]
+use ibc_abcipp as ibc_shim;
+#[cfg(not(feature = "abcipp"))]
+use ibc as ibc_shim;
 use super::{Ibc, StateChange};
-use crate::ibc::core::ics02_client::client_consensus::AnyConsensusState;
-use crate::ibc::core::ics02_client::client_state::AnyClientState;
-use crate::ibc::core::ics02_client::context::ClientReader;
-use crate::ibc::core::ics02_client::height::Height;
-use crate::ibc::core::ics03_connection::connection::{
+use ibc_shim::core::ics02_client::client_consensus::AnyConsensusState;
+use ibc_shim::core::ics02_client::client_state::AnyClientState;
+use ibc_shim::core::ics02_client::context::ClientReader;
+use ibc_shim::core::ics02_client::height::Height;
+use ibc_shim::core::ics03_connection::connection::{
     ConnectionEnd, Counterparty, State,
 };
-use crate::ibc::core::ics03_connection::context::ConnectionReader;
-use crate::ibc::core::ics03_connection::error::Error as Ics03Error;
-use crate::ibc::core::ics03_connection::handler::verify::verify_proofs;
-use crate::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
-use crate::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
-use crate::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
-use crate::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
-use crate::ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
+use ibc_shim::core::ics03_connection::context::ConnectionReader;
+use ibc_shim::core::ics03_connection::error::Error as Ics03Error;
+use ibc_shim::core::ics03_connection::handler::verify::verify_proofs;
+use ibc_shim::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
+use ibc_shim::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
+use ibc_shim::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
+use ibc_shim::core::ics23_commitment::commitment::CommitmentPrefix;
+use ibc_shim::core::ics24_host::identifier::{ClientId, ConnectionId};
 use crate::ledger::storage::{self, StorageHasher};
-use crate::tendermint_proto::Protobuf;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::Protobuf;
+#[cfg(not(feature = "abcipp"))]
+use tendermint_proto::Protobuf;
 use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
 use crate::types::storage::{BlockHeight, Epoch, Key};
 use crate::vm::WasmCacheAccess;

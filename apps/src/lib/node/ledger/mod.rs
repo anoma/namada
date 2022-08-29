@@ -20,19 +20,16 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
-#[cfg(not(feature = "abcipp"))]
-use tendermint_proto::abci::CheckTxType;
 #[cfg(feature = "abcipp")]
 use tendermint_proto_abcipp::abci::CheckTxType;
+#[cfg(not(feature = "abcipp"))]
+use tendermint_proto::abci::CheckTxType;
 use tokio::sync::mpsc::unbounded_channel;
-#[cfg(not(feature = "abcipp"))]
 use tower::ServiceBuilder;
-#[cfg(not(feature = "abcipp"))]
-use tower_abci::{response, split, Server};
-#[cfg(feature = "abcipp")]
-use tower_abci_abcipp::ServiceBuilder;
 #[cfg(feature = "abcipp")]
 use tower_abci_abcipp::{response, split, Server};
+#[cfg(not(feature = "abcipp"))]
+use tower_abci::{response, split, Server};
 
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;

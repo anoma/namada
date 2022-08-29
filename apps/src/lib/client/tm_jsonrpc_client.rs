@@ -4,7 +4,13 @@ use std::ops::{Deref, DerefMut};
 
 use curl::easy::{Easy2, Handler, WriteError};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::net::Address as TendermintAddress;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::net::Address as TendermintAddress;
+#[cfg(feature = "abcipp")]
+use tendermint_rpc_abcipp::query::Query;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_rpc::query::Query;
 
 use crate::client::tendermint_rpc_types::{
@@ -71,6 +77,10 @@ pub struct Response {
     id: u8,
     /// Results of request (if successful)
     result: Option<EventReply>,
+    #[cfg(feature = "abcipp")]
+    /// Error message if unsuccessful
+    error: Option<tendermint_rpc_abcipp::response_error::ResponseError>,
+    #[cfg(not(feature = "abcipp"))]
     /// Error message if unsuccessful
     error: Option<tendermint_rpc::response_error::ResponseError>,
 }

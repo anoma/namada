@@ -17,39 +17,51 @@ use super::super::storage::{
     next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
     port_channel_id, receipt_key, Error as IbcStorageError,
 };
+
+#[cfg(feature = "abcipp")]
+use ibc_abcipp as ibc_shim;
+#[cfg(not(feature = "abcipp"))]
+use ibc as ibc_shim;
+
 use super::{Ibc, StateChange};
-use crate::ibc::core::ics02_client::client_consensus::AnyConsensusState;
-use crate::ibc::core::ics02_client::client_state::AnyClientState;
-use crate::ibc::core::ics02_client::context::ClientReader;
-use crate::ibc::core::ics02_client::height::Height;
-use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
-use crate::ibc::core::ics03_connection::context::ConnectionReader;
-use crate::ibc::core::ics03_connection::error::Error as Ics03Error;
-use crate::ibc::core::ics04_channel::channel::{
+use ibc_shim::core::ics02_client::client_consensus::AnyConsensusState;
+use ibc_shim::core::ics02_client::client_state::AnyClientState;
+use ibc_shim::core::ics02_client::context::ClientReader;
+use ibc_shim::core::ics02_client::height::Height;
+use ibc_shim::core::ics03_connection::connection::ConnectionEnd;
+use ibc_shim::core::ics03_connection::context::ConnectionReader;
+use ibc_shim::core::ics03_connection::error::Error as Ics03Error;
+use ibc_shim::core::ics04_channel::channel::{
     ChannelEnd, Counterparty, State,
 };
-use crate::ibc::core::ics04_channel::context::ChannelReader;
-use crate::ibc::core::ics04_channel::error::Error as Ics04Error;
-use crate::ibc::core::ics04_channel::handler::verify::verify_channel_proofs;
-use crate::ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
-use crate::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
-use crate::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
-use crate::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-use crate::ibc::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
-use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
-use crate::ibc::core::ics05_port::capabilities::Capability;
-use crate::ibc::core::ics05_port::context::PortReader;
-use crate::ibc::core::ics24_host::identifier::{
+use ibc_shim::core::ics04_channel::context::ChannelReader;
+use ibc_shim::core::ics04_channel::error::Error as Ics04Error;
+use ibc_shim::core::ics04_channel::handler::verify::verify_channel_proofs;
+use ibc_shim::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
+use ibc_shim::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
+use ibc_shim::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
+use ibc_shim::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
+use ibc_shim::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
+use ibc_shim::core::ics04_channel::packet::{Receipt, Sequence};
+use ibc_shim::core::ics05_port::capabilities::Capability;
+use ibc_shim::core::ics05_port::context::PortReader;
+use ibc_shim::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
-use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
-use crate::ibc::proofs::Proofs;
-use crate::ibc::timestamp::Timestamp;
+use ibc_shim::core::ics26_routing::msgs::Ics26Envelope;
+use ibc_shim::proofs::Proofs;
+use ibc_shim::timestamp::Timestamp;
 use crate::ledger::native_vp::Error as NativeVpError;
 use crate::ledger::parameters;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::tendermint::Time;
-use crate::tendermint_proto::Protobuf;
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::Time;
+#[cfg(not(feature = "abcipp"))]
+use tendermint::Time;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::Protobuf;
+#[cfg(not(feature = "abcipp"))]
+use tendermint_proto::Protobuf;
 use crate::types::ibc::data::{
     Error as IbcDataError, IbcMessage, PacketAck, PacketReceipt,
 };

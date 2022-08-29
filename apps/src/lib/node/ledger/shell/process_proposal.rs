@@ -332,8 +332,13 @@ mod test_process_proposal {
     use namada::types::vote_extensions::ethereum_events::{
         self, MultiSignedEthEvent,
     };
-    #[cfg(not(feature = "ABCI"))]
+    #[cfg(feature = "abcipp")]
+    use tendermint_proto_abcipp::abci::RequestInitChain;
+    #[cfg(not(feature = "abcipp"))]
     use tendermint_proto::abci::RequestInitChain;
+    #[cfg(feature = "abcipp")]
+    use tendermint_proto_abcipp::google::protobuf::Timestamp;
+    #[cfg(not(feature = "abcipp"))]
     use tendermint_proto::google::protobuf::Timestamp;
 
     use super::*;

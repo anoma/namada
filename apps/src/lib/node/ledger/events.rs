@@ -7,6 +7,9 @@ use borsh::BorshSerialize;
 use namada::ledger::governance::utils::ProposalEvent;
 use namada::types::ibc::IbcEvent;
 use namada::types::transaction::{hash_tx, TxType};
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::abci::EventAttribute;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::abci::EventAttribute;
 use thiserror::Error;
 
@@ -151,7 +154,7 @@ impl From<ProposalEvent> for Event {
 
 /// Convert our custom event into the necessary tendermint proto type
 #[cfg(feature = "abcipp")]
-impl From<Event> for tendermint_proto::abci::Event {
+impl From<Event> for tendermint_proto_abcipp::abci::Event {
     fn from(event: Event) -> Self {
         Self {
             r#type: event.event_type.to_string(),

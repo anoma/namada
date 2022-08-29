@@ -6,7 +6,13 @@ use std::ops::Deref;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::abci::transaction;
+#[cfg(not(feature = "abcipp"))]
 use tendermint::abci::transaction;
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::Hash as TmHash;
+#[cfg(not(feature = "abcipp"))]
 use tendermint::Hash as TmHash;
 use thiserror::Error;
 

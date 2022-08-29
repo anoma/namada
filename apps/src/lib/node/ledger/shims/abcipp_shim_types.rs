@@ -5,18 +5,6 @@ use tower_abci_abcipp::{Request, Response};
 
 pub mod shim {
     use std::convert::TryFrom;
-
-    #[cfg(not(feature = "abcipp"))]
-    use tendermint_proto::abci::{
-        RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
-        RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
-        RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
-        RequestProcessProposal, RequestQuery, ResponseApplySnapshotChunk,
-        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseEndBlock,
-        ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
-        ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
-        ResponsePrepareProposal, ResponseQuery,
-    };
     #[cfg(feature = "abcipp")]
     use tendermint_proto_abcipp::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
@@ -30,6 +18,18 @@ pub mod shim {
         ResponsePrepareProposal, ResponseProcessProposal, ResponseQuery,
         ResponseVerifyVoteExtension,
     };
+    #[cfg(not(feature = "abcipp"))]
+    use tendermint_proto::abci::{
+        RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
+        RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
+        RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
+        RequestProcessProposal, RequestQuery, ResponseApplySnapshotChunk,
+        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseEndBlock,
+        ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
+        ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
+        ResponsePrepareProposal, ResponseQuery,
+    };
+
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
@@ -280,6 +280,7 @@ pub mod shim {
         #[cfg(feature = "abcipp")]
         use tendermint_proto_abcipp::types::ConsensusParams;
 
+        use super::*;
         use crate::node::ledger::events::Event;
         #[cfg(feature = "abcipp")]
         use crate::node::ledger::events::EventLevel;
@@ -330,6 +331,7 @@ pub mod shim {
                         .iter()
                         .map(|res| ExecTxResult::from(res.clone()))
                         .collect(),
+                    ..Default::default()
                 }
             }
         }

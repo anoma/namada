@@ -4,6 +4,9 @@ use std::io::Write;
 use borsh::BorshSerialize;
 use namada::proto::Signed;
 use namada::types::intent::{Exchange, FungibleTokenIntent};
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::net::Address as TendermintAddress;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::net::Address as TendermintAddress;
 
 use super::signing;

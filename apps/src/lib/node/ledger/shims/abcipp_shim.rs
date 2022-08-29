@@ -11,13 +11,14 @@ use namada::types::hash::Hash;
 use namada::types::storage::BlockHash;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::abci::RequestBeginBlock;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tower::Service;
-#[cfg(not(feature = "abcipp"))]
-use tower_abci::{BoxError, Request as Req, Response as Resp};
 #[cfg(feature = "abcipp")]
 use tower_abci_abcipp::{BoxError, Request as Req, Response as Resp};
+#[cfg(not(feature = "abcipp"))]
+use tower_abci::{BoxError, Request as Req, Response as Resp};
 
 use super::super::Shell;
 #[cfg(not(feature = "abcipp"))]

@@ -7,12 +7,18 @@ use super::super::storage::{
     capability, capability_index_key, capability_key, is_capability_index_key,
     port_id, port_key, Error as IbcStorageError,
 };
+
+#[cfg(feature = "abcipp")]
+use ibc_abcipp as ibc_shim;
+#[cfg(not(feature = "abcipp"))]
+use ibc as ibc_shim;
+
 use super::{Ibc, StateChange};
-use crate::ibc::core::ics04_channel::context::ChannelReader;
-use crate::ibc::core::ics05_port::capabilities::{Capability, CapabilityName};
-use crate::ibc::core::ics05_port::context::{CapabilityReader, PortReader};
-use crate::ibc::core::ics05_port::error::Error as Ics05Error;
-use crate::ibc::core::ics24_host::identifier::PortId;
+use ibc_shim::core::ics04_channel::context::ChannelReader;
+use ibc_shim::core::ics05_port::capabilities::{Capability, CapabilityName};
+use ibc_shim::core::ics05_port::context::{CapabilityReader, PortReader};
+use ibc_shim::core::ics05_port::error::Error as Ics05Error;
+use ibc_shim::core::ics24_host::identifier::PortId;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;

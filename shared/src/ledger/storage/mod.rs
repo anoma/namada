@@ -8,6 +8,9 @@ pub mod write_log;
 
 use core::fmt::Debug;
 
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::merkle::proof::Proof;
+#[cfg(not(feature = "abcipp"))]
 use tendermint::merkle::proof::Proof;
 use thiserror::Error;
 

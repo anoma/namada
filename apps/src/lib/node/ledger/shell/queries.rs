@@ -4,7 +4,6 @@ use std::cmp::max;
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
 use namada::ledger::parameters::EpochDuration;
-#[cfg(not(feature = "ABCI"))]
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
@@ -13,8 +12,17 @@ use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Epoch, Key, PrefixValue};
 use namada::types::token::{self, Amount};
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::crypto::{ProofOp, ProofOps};
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::crypto::{ProofOp, ProofOps};
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::google::protobuf;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::google::protobuf;
+#[cfg(feature = "abcipp")]
+use tendermint_proto_abcipp::types::EvidenceParams;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_proto::types::EvidenceParams;
 
 use super::*;

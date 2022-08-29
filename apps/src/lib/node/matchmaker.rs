@@ -14,7 +14,13 @@ use namada::types::intent::{IntentTransfers, MatchedExchanges};
 use namada::types::key::*;
 use namada::types::matchmaker::AddIntentResult;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::net;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::net;
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::net::Address as TendermintAddress;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::net::Address as TendermintAddress;
 
 use super::gossip::rpc::matchmakers::{

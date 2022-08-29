@@ -1372,7 +1372,13 @@ pub mod args {
     use namada::types::token;
     use namada::types::transaction::GasLimit;
     use serde::Deserialize;
+    #[cfg(feature = "abcipp")]
+    use tendermint_abcipp::Timeout;
+    #[cfg(not(feature = "abcipp"))]
     use tendermint::Timeout;
+    #[cfg(feature = "abcipp")]
+    use tendermint_config_abcipp::net::Address as TendermintAddress;
+    #[cfg(not(feature = "abcipp"))]
     use tendermint_config::net::Address as TendermintAddress;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};

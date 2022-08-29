@@ -16,6 +16,9 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::error::Error as SmtError;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::merkle::proof::{Proof, ProofOp};
+#[cfg(not(feature = "abcipp"))]
 use tendermint::merkle::proof::{Proof, ProofOp};
 use thiserror::Error;
 

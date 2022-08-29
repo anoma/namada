@@ -30,10 +30,27 @@ use namada::types::key::*;
 use namada::types::storage::{Epoch, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::abci::Code;
+#[cfg(not(feature = "abcipp"))]
 use tendermint::abci::Code;
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::net::Address as TendermintAddress;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::net::Address as TendermintAddress;
+#[cfg(feature = "abcipp")]
+use tendermint_rpc_abcipp::error::Error as TError;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_rpc::error::Error as TError;
+#[cfg(feature = "abcipp")]
+use tendermint_rpc_abcipp::query::Query;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_rpc::query::Query;
+#[cfg(feature = "abcipp")]
+use tendermint_rpc_abcipp::{
+    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
+};
+#[cfg(not(feature = "abcipp"))]
 use tendermint_rpc::{
     Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
 };

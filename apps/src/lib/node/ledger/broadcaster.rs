@@ -1,3 +1,6 @@
+#[cfg(feature = "abcipp")]
+use tendermint_rpc_abcipp::{Client, HttpClient};
+#[cfg(not(feature = "abcipp"))]
 use tendermint_rpc::{Client, HttpClient};
 use tokio::sync::mpsc::UnboundedReceiver;
 

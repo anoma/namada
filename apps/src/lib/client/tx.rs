@@ -25,9 +25,21 @@ use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, token};
 use namada::{ledger, vm};
+#[cfg(feature = "abcipp")]
+use tendermint_config_abcipp::net::Address as TendermintAddress;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_config::net::Address as TendermintAddress;
+#[cfg(feature = "abcipp")]
+use tendermint_rpc_abcipp::endpoint::broadcast::tx_sync::Response;
+#[cfg(not(feature = "abcipp"))]
 use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+#[cfg(feature = "abcipp")]
+use tendermint_rpc_abcipp::query::{EventType, Query};
+#[cfg(not(feature = "abcipp"))]
 use tendermint_rpc::query::{EventType, Query};
+#[cfg(feature = "abcipp")]
+use tendermint_rpc_abcipp::{Client, HttpClient};
+#[cfg(not(feature = "abcipp"))]
 use tendermint_rpc::{Client, HttpClient};
 
 use super::rpc;

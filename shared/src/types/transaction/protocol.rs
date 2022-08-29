@@ -32,7 +32,9 @@ mod protocol_txs {
     use serde_json;
 
     use super::*;
-    use crate::proto::{Signed, Tx};
+    use crate::proto::Tx;
+    #[cfg(not(feature = "abcipp"))]
+    use crate::proto::Signed;
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
     use crate::types::vote_extensions::{

@@ -5,8 +5,14 @@ use std::collections::HashMap;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use thiserror::Error;
 
-use crate::ibc::events::{Error as IbcEventError, IbcEvent as RawIbcEvent};
-use crate::tendermint::abci::Event as AbciEvent;
+#[cfg(feature = "abcipp")]
+use ibc_abcipp::events::{Error as IbcEventError, IbcEvent as RawIbcEvent};
+#[cfg(not(feature = "abcipp"))]
+use ibc::events::{Error as IbcEventError, IbcEvent as RawIbcEvent};
+#[cfg(feature = "abcipp")]
+use tendermint_abcipp::abci::Event as AbciEvent;
+#[cfg(not(feature = "abcipp"))]
+use tendermint::abci::Event as AbciEvent;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]

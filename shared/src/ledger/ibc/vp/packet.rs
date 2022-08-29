@@ -9,26 +9,32 @@ use super::super::storage::{
     port_channel_sequence_id, Error as IbcStorageError,
 };
 use super::{Ibc, StateChange};
-use crate::ibc::core::ics02_client::height::Height;
-use crate::ibc::core::ics04_channel::channel::{
+
+#[cfg(feature = "abcipp")]
+use ibc_abcipp as ibc_shim;
+#[cfg(not(feature = "abcipp"))]
+use ibc as ibc_shim;
+
+use ibc_shim::core::ics02_client::height::Height;
+use ibc_shim::core::ics04_channel::channel::{
     ChannelEnd, Counterparty, Order, State,
 };
-use crate::ibc::core::ics04_channel::context::ChannelReader;
-use crate::ibc::core::ics04_channel::error::Error as Ics04Error;
-use crate::ibc::core::ics04_channel::handler::verify::{
+use ibc_shim::core::ics04_channel::context::ChannelReader;
+use ibc_shim::core::ics04_channel::error::Error as Ics04Error;
+use ibc_shim::core::ics04_channel::handler::verify::{
     verify_channel_proofs, verify_next_sequence_recv,
     verify_packet_acknowledgement_proofs, verify_packet_receipt_absence,
     verify_packet_recv_proofs,
 };
-use crate::ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
-use crate::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
-use crate::ibc::core::ics04_channel::msgs::PacketMsg;
-use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
-use crate::ibc::core::ics24_host::identifier::{
+use ibc_shim::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
+use ibc_shim::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
+use ibc_shim::core::ics04_channel::msgs::PacketMsg;
+use ibc_shim::core::ics04_channel::packet::{Packet, Sequence};
+use ibc_shim::core::ics24_host::identifier::{
     ChannelId, ClientId, PortChannelId, PortId,
 };
-use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
-use crate::ibc::proofs::Proofs;
+use ibc_shim::core::ics26_routing::msgs::Ics26Envelope;
+use ibc_shim::proofs::Proofs;
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
 use crate::types::storage::Key;

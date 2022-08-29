@@ -55,6 +55,30 @@ clippy:
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
+clippy-abcipp:
+	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./apps/Cargo.toml \
+		--no-default-features \
+		--features "std testing abcipp eth-fullnode" && \
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./proof_of_stake/Cargo.toml \
+		--features "testing" && \
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./shared/Cargo.toml \
+		--no-default-features \
+		--features "testing wasm-runtime abcipp ibc-mocks" && \
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./tests/Cargo.toml \
+		--no-default-features \
+		--features "wasm-runtime abcipp namada_apps/abcipp namada_apps/eth-fullnode" && \
+	$(cargo) +$(nightly) clippy \
+		--all-targets \
+		--manifest-path ./vm_env/Cargo.toml \
+		--no-default-features \
+		--features "abcipp" && \
+	make -C $(wasms) clippy && \
+	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 

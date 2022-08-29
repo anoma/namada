@@ -10,7 +10,7 @@ use tendermint_proto::abci;
 #[cfg(not(feature = "abcipp"))]
 use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 #[cfg(feature = "abcipp")]
-use tendermint_proto::google::protobuf;
+use tendermint_proto_abcipp::google::protobuf;
 #[cfg(not(feature = "abcipp"))]
 use tendermint_proto::google::protobuf;
 #[cfg(feature = "abcipp")]
