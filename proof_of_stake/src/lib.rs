@@ -583,6 +583,8 @@ pub trait PosBase {
     /// TODO: this should be `const`, but in the ledger `address::xan` is not a
     /// `const fn`
     fn staking_token_address() -> Self::Address;
+    /// Get address of the PoS account
+    fn read_pos_address(&self) -> Self::Address;
     /// Address of the slash pool, into which slashed tokens are transferred.
     const POS_SLASH_POOL_ADDRESS: Self::Address;
 
@@ -675,7 +677,7 @@ pub trait PosBase {
     );
     /// Write PoS validator set (active and inactive).
     fn write_validator_set(&mut self, value: &ValidatorSets<Self::Address>);
-    /// Read PoS total voting power of all validators (active and inactive).
+    /// Write PoS total voting power of all validators (active and inactive).
     fn write_total_voting_power(&mut self, value: &TotalVotingPowers);
     /// Initialize staking reward account with the given public key.
     fn init_staking_reward_account(
