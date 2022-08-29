@@ -951,6 +951,95 @@ pub trait PosBase {
         active_validators.chain(inactive_validators).for_each(f)
     }
 
+    /// Distribute the PoS inflation rewards to all of the active validators.
+    /// WIP!
+    /// TODO: figure out if using Decimal type throughout is the right way to
+    /// go.
+    fn distribute_rewards(
+        &mut self,
+        params: &PosParams,
+        current_epoch: impl Into<Epoch>,
+        inflation_amount: u64,
+    ) -> Result<(), Error> {
+        let current_epoch: Epoch = current_epoch.into();
+        let validator_set = self.read_validator_set();
+        let validators = validator_set.get(current_epoch).unwrap();
+        let pos_params = self.read_pos_params();
+
+        // TODO: should we add this value to storage??
+        let total_active_stake = validators.active.iter().fold(
+            VotingPower::from(0),
+            |sum,
+             WeightedValidator {
+                 voting_power,
+                 address: _,
+             }| { sum + *voting_power },
+        );
+
+        // TODO: figure out how to actually get this value from tendermint
+        let total_signing_stake = total_active_stake.clone();
+
+        let new_tokens: Decimal = inflation_amount.into();
+        let active_val_stake: Decimal = u64::from(total_active_stake).into();
+        let signing_stake: Decimal = u64::from(total_signing_stake).into();
+
+        let mut rewards_calculator = PosRewardsCalculator::new(
+            pos_params.block_proposer_reward,
+            pos_params.block_vote_reward,
+            total_signing_stake,
+            total_active_stake,
+        );
+
+        rewards_calculator.set_reward_coeffs().unwrap();
+
+        // just here to prevent compile errors until I know how to determine
+        // these things
+        let is_proposer = true;
+        let is_signer = true;
+
+        // iterate thru the validators, figure out if each is proposer or signer
+        for validator in validators.active.iter() {
+            let mut rewards: Decimal = Decimal::new(0, 0);
+            let stake: Decimal = u64::from(validator.voting_power).into();
+
+            // TODO: ensure that the multiplication / division logic is
+            // correct + sound
+            //
+            // Proposer reward
+            if is_proposer {
+                let coeff = rewards_calculator.get_proposer_coeff().unwrap();
+                rewards += coeff * new_tokens;
+            }
+
+            // Signer reward
+            if is_signer {
+                let coeff = rewards_calculator.get_signer_coeff().unwrap();
+                let signing_frac: Decimal = stake / signing_stake;
+                rewards += coeff * new_tokens * signing_frac;
+            }
+
+            // Active validator reward
+            let active_val_coeff =
+                rewards_calculator.get_active_val_coeff().unwrap();
+            let active_val_frac = stake / active_val_stake;
+            rewards += active_val_coeff * new_tokens * active_val_frac;
+
+            // distribute the rewards to the validator address.
+            self.transfer(
+                &Self::staking_token_address(),
+                Self::TokenAmount::from(rewards.to_u64().unwrap()),
+                &Self::POS_ADDRESS,
+                &validator.address,
+            );
+
+            // TODO: do we need to perform any storage_writes in here? Where
+            // should the logic that distributes rewards to
+            // delegators exist?
+        }
+
+        Ok(())
+    }
+
     /// Apply a slash to a byzantine validator for the given evidence.
     fn slash(
         &mut self,
