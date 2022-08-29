@@ -1,14 +1,13 @@
 //! IBC functions for transactions.
 
 pub use namada::ledger::ibc::handler::IbcActions;
-use namada::types::address::Address;
 use namada::types::ibc::IbcEvent;
 use namada::types::storage::{BlockHeight, Key};
 use namada::types::time::Rfc3339String;
 use namada::types::token::Amount;
 
 use crate::imports::tx;
-use crate::token::tx::transfer;
+use crate::token::tx::transfer_with_keys;
 
 /// This struct integrates and gives access to lower-level IBC functions.
 pub struct Ibc;
@@ -30,14 +29,8 @@ impl IbcActions for Ibc {
         tx::emit_ibc_event(&event)
     }
 
-    fn transfer_token(
-        &self,
-        src: &Address,
-        dest: &Address,
-        token: &Address,
-        amount: Amount,
-    ) {
-        transfer(src, dest, token, None, amount)
+    fn transfer_token(&self, src: &Key, dest: &Key, amount: Amount) {
+        transfer_with_keys(src, dest, amount)
     }
 
     fn get_height(&self) -> BlockHeight {
