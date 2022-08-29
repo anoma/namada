@@ -1,6 +1,7 @@
 //! PoS rewards
 
 use crate::types::{BasisPoints, VotingPower};
+use rust_decimal::Decimal;
 
 /// Errors during rewards calculation
 pub enum RewardsError {
@@ -13,9 +14,9 @@ pub enum RewardsError {
 /// Three different ways to get PoS rewards
 #[derive(Debug, Copy, Clone)]
 pub struct PosRewards {
-    proposer_coeff: BasisPoints,
-    signer_coeff: BasisPoints,
-    active_val_coeff: BasisPoints,
+    proposer_coeff: Decimal,
+    signer_coeff: Decimal,
+    active_val_coeff: Decimal,
 }
 
 /// bing
@@ -54,15 +55,15 @@ impl PosRewardsCalculator {
         }
 
         // Logic for determining the coefficients (WIP WIP WIP)
-        let proposer_coeff =
-            self.proposer_param * (u64::from(self.signing_stake) - votes_needed);
-        let signer_coeff = self.signer_param;
-        let active_val_coeff = 1 - proposer_coeff - signer_coeff;
+        let proposer_coeff: Decimal = (self.proposer_param
+            * (u64::from(self.signing_stake) - votes_needed)).into();
+        let signer_coeff: Decimal = self.signer_param.into();
+        let active_val_coeff = Decimal::new(1,0) - proposer_coeff - signer_coeff;
 
         self.pos_rewards = Some(PosRewards {
-            proposer_coeff: BasisPoints::new(proposer_coeff),
-            signer_coeff: BasisPoints::new(signer_coeff),
-            active_val_coeff: BasisPoints::new(active_val_coeff),
+            proposer_coeff,
+            signer_coeff,
+            active_val_coeff,
         });
 
         Ok(())
@@ -83,7 +84,7 @@ impl PosRewardsCalculator {
     }
 
     /// proposer reward
-    pub fn get_proposer_coeff(&self) -> Result<BasisPoints, RewardsError> {
+    pub fn get_proposer_coeff(&self) -> Result<Decimal, RewardsError> {
         match self.pos_rewards {
             Some(rewards) => Ok(rewards.proposer_coeff),
             None => Err(RewardsError::CoeffsNotSet),
@@ -91,7 +92,7 @@ impl PosRewardsCalculator {
     }
 
     /// signer reward
-    pub fn get_signer_coeff(&self) -> Result<BasisPoints, RewardsError> {
+    pub fn get_signer_coeff(&self) -> Result<Decimal, RewardsError> {
         match self.pos_rewards {
             Some(rewards) => Ok(rewards.signer_coeff),
             None => Err(RewardsError::CoeffsNotSet),
@@ -99,7 +100,7 @@ impl PosRewardsCalculator {
     }
 
     /// active validator reward
-    pub fn get_active_val_coeff(&self) -> Result<BasisPoints, RewardsError> {
+    pub fn get_active_val_coeff(&self) -> Result<Decimal, RewardsError> {
         match self.pos_rewards {
             Some(rewards) => Ok(rewards.active_val_coeff),
             None => Err(RewardsError::CoeffsNotSet),

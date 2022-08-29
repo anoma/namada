@@ -3020,6 +3020,7 @@ dependencies = [
  "rlimit",
  "rocksdb",
  "rpassword",
+ "rust_decimal",
  "serde 1.0.145",
  "serde_bytes",
  "serde_json",
@@ -3079,6 +3080,7 @@ dependencies = [
  "borsh",
  "derivative",
  "proptest",
+ "rust_decimal",
  "thiserror",
 ]
 

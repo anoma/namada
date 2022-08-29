@@ -3,6 +3,7 @@
 use namada::types::storage::{BlockHash, Header};
 
 use super::governance::execute_governance_proposals;
+use rust_decimal::prelude::Decimal;
 use super::*;
 use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;

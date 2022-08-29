@@ -19,5 +19,7 @@ thiserror = "1.0.30"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 derivative = "2.2.0"
+rust_decimal = "1.14.3"
+
 
 [dev-dependencies]
