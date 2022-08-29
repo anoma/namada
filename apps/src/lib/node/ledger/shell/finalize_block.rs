@@ -2,10 +2,21 @@
 
 use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
-use namada::types::storage::{BlockHash, Header};
-
-use super::governance::execute_governance_proposals;
+use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::governance::utils::{
+    compute_tally, get_proposal_votes, ProposalEvent,
+};
+use namada::ledger::governance::vp::ADDRESS as gov_address;
+use namada::ledger::inflation;
+use namada::ledger::pos::staking_token_address;
+use namada::ledger::storage::types::encode;
+use namada::ledger::treasury::ADDRESS as treasury_address;
+use namada::types::address::{xan as m1t, Address};
+use namada::types::governance::TallyResult;
+use namada::types::storage::{BlockHash, Epoch, Header};
+use namada::types::token::Amount;
 use rust_decimal::prelude::Decimal;
+use super::governance::execute_governance_proposals;
 use super::*;
 use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
@@ -234,6 +245,7 @@ where
 
         if new_epoch {
             self.update_epoch(&mut response);
+            self.apply_inflation();
         }
 
         let _ = self
@@ -318,6 +330,81 @@ where
             let update = ValidatorUpdate { pub_key, power };
             response.validator_updates.push(update);
         });
+    }
+
+    /// apply inflation
+    fn apply_inflation(&mut self) {
+        // TODO:
+        // Get input values needed for the PD controller for PoS and MASP
+        // Run the PD controllers to calculate new rates
+        // Mint new tokens from rate per epoch and send to the PoS and MASP
+        // addresses
+        //
+        // MASP is included below just for some completeness.
+
+        // figure out how to get these and what types they should be
+        let epochs_per_yr: u64 = 365;
+        let total_tokens: u64 = 100000;
+
+        let pos_locked_supply: u64 = 1000;
+        let pos_locked_ratio_target = Decimal::new(5, 1);
+        let pos_locked_ratio_last = Decimal::new(5, 1);
+        let pos_max_reward_rate = Decimal::new(2, 1);
+        let pos_last_reward_rate = Decimal::new(12, 2);
+        let pos_p_gain = Decimal::new(1, 1);
+        let pos_d_gain = Decimal::new(1, 1);
+
+        let masp_locked_supply: u64 = 1000;
+        let masp_locked_ratio_target = Decimal::new(5, 1);
+        let masp_locked_ratio_last = Decimal::new(5, 1);
+        let masp_max_reward_rate = Decimal::new(2, 1);
+        let masp_last_reward_rate = Decimal::new(12, 2);
+        let masp_p_gain = Decimal::new(1, 1);
+        let masp_d_gain = Decimal::new(1, 1);
+
+        let pos_controller = inflation::RewardsController::new(
+            pos_locked_supply,
+            total_tokens,
+            pos_locked_ratio_target,
+            pos_locked_ratio_last,
+            pos_max_reward_rate,
+            pos_last_reward_rate,
+            pos_p_gain,
+            pos_d_gain,
+            epochs_per_yr,
+        );
+        let masp_controller = inflation::RewardsController::new(
+            masp_locked_supply,
+            total_tokens,
+            masp_locked_ratio_target,
+            masp_locked_ratio_last,
+            masp_max_reward_rate,
+            masp_last_reward_rate,
+            masp_p_gain,
+            masp_d_gain,
+            epochs_per_yr,
+        );
+
+        // TODO: get other params such as p_gain, d_gain and write the necessary
+        // params to storage somewhere
+
+        let new_pos_reward_rate = pos_controller.get_new_reward_rate();
+        let new_masp_reward_rate = pos_controller.get_new_reward_rate();
+
+        let total_tokens: Decimal = total_tokens.into();
+        let pos_address = self.storage.read_pos_address();
+
+        // PoS inflation
+        let pos_minted_tokens: Decimal = new_pos_reward_rate * total_tokens;
+        let pos_minted_tokens: Amount =
+            Amount::from(pos_minted_tokens.to_u64().unwrap());
+        inflation::mint_tokens(
+            &mut self.storage,
+            &pos_address,
+            &staking_token_address(),
+            pos_minted_tokens,
+        )
+        .unwrap();
     }
 }
 
