@@ -1,0 +1,199 @@
+openapi: 3.0.3
+info:
+  title: Anoma
+  description: Interacting with an Anoma blockchain via Tendermint RPC
+  version: 0.6.1
+servers:
+  - url: http://127.0.0.1:26657
+    description: Tendermint RPC endpoint for an Anoma ledger
+paths:
+  /:
+    post:
+      summary: Interact with the Anoma blockchain via Tendermint RPC
+      operationId: abci_query
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  description: Should be unique between requests
+                  type: integer
+                  example: 58392
+                method:
+                  description: The Tendermint RPC method being called which in this case should always be abci_query
+                  type: string
+                  enum:
+                    - "abci_query"
+                params:
+                  type: object
+                  required:
+                    - path
+                  properties:
+                    path:
+                      description: Path as will be recognized by the ledger
+                      oneOf:
+                        - type: string
+                          enum:
+                            - "epoch"
+                            - "dry_run_tx"
+                          description: >
+                            * `epoch` - Get the epoch of the last block (the height argument is not yet supported <https://github.com/anoma/namada/issues/172>)
+                            * `dry_run_tx` - Dry run a transaction
+                        - type: string
+                          description: Read a storage value with exact storage key
+                          pattern: r"^value\/.+$"
+                        - type: string
+                          description: Read a range of storage values with a matching key prefix
+                          pattern: r"^prefix\/.+$"
+                        - type: string
+                          description: Check if the given storage key exists
+                          pattern: r"^has_key\/.+$"
+                    data:
+                      description: Optional data to go along with the query (base64-encoded if necessary)
+                      type: string
+                      example: "abcd"
+                      default: ""
+                    height:
+                      description: Height as a base64 encoded integer (0 means latest)
+                      type: string
+                      example: "1"
+                      default: "0"
+                    prove:
+                      description: Include proofs of the transaction's inclusion in the block
+                      type: boolean
+                      example: true
+                      default: false
+            examples:
+              epoch_latest:
+                summary: Get the latest epoch
+                value:
+                  {
+                    "id": 2,
+                    "method": "abci_query",
+                    "params": { "path": "epoch" },
+                  }
+              epoch_at_height:
+                summary: Get the epoch at a given height
+                value:
+                  {
+                    "id": 2,
+                    "method": "abci_query",
+                    "params": { "path": "epoch", "height": 2 },
+                  }
+              get_account_public_key:
+                summary: Get the public key for an account which has been initialized with a validity predicate, with proof
+                value:
+                  {
+                    "id": 2,
+                    "method": "abci_query",
+                    "params":
+                      {
+                        "path": "value/#atest1v4ehgw36g4pyg3j9x3qnjd3cxgmyz3fk8qcrys3hxdp5xwfnx3zyxsj9xgunxsfjg5u5xvzyzrrqtn/public_key",
+                        "prove": true,
+                      },
+                  }
+      responses:
+        "200":
+          description: Response of the submitted query, which may have been successful or may have errored at the application level.
+          content:
+            application/json:
+              schema:
+                $ref: "https://docs.tendermint.com/v0.34/rpc/openapi.yaml#/components/schemas/ABCIQueryResponse"
+              examples:
+                epoch_latest:
+                  value:
+                    {
+                      "jsonrpc": "2.0",
+                      "id": 2,
+                      "result":
+                        {
+                          "response":
+                            {
+                              "code": 0,
+                              "log": "",
+                              "info": "",
+                              "index": "0",
+                              "key": null,
+                              "value": "lQAAAAAAAAA=",
+                              "proofOps": null,
+                              "height": "0",
+                              "codespace": "",
+                            },
+                        },
+                    }
+                get_account_public_key:
+                  value:
+                    {
+                      "jsonrpc": "2.0",
+                      "id": 2,
+                      "result":
+                        {
+                          "response":
+                            {
+                              "code": 0,
+                              "log": "",
+                              "info": "",
+                              "index": "0",
+                              "key": null,
+                              "value": "ABdruiwJLZ4w4Z/MoD+aW3fH4vkc9+QhGOCGmDr1oVz+",
+                              "proofOps":
+                                {
+                                  "ops":
+                                    [
+                                      {
+                                        "type": "ics23_CommitmentProof",
+                                        "key": "I2F0ZXN0MXY0ZWhndzM2ZzRweWczajl4M3FuamQzY3hnbXl6M2ZrOHFjcnlzM2h4ZHA1eHdmbngzenl4c2o5eGd1bnhzZmpnNXU1eHZ6eXpycnF0bi9wdWJsaWNfa2V5",
+                                        "data": "Cu0CCmAjYXRlc3QxdjRlaGd3MzZnNHB5ZzNqOXgzcW5qZDNjeGdteXozZms4cWNyeXMzaHhkcDV4d2ZueDN6eXhzajl4Z3VueHNmamc1dTV4dnp5enJycXRuL3B1YmxpY19rZXkSIQAXa7osCS2eMOGfzKA/mlt3x+L5HPfkIRjghpg69aFc/hooCAEQARgBKiAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACIkCAESIOQIgEOVb0Hv2eOTmYDks2uP4L4gs0RgmV2wUisInkbQIiQIARog04WfgQqfT2X9aD9qhA/fWy6LS6JjdmkpmUfkK9hoKOwiJAgBEiB+tFAPUElWCcCpAL4khjoihfs19F7tfdagbWWE44kCESIkCAEaIBtq2MVGbblK4zgD3h5vxQNKiCU+dmaHLQSpzWvBT3lwIiQIARogwl8LV3ECHOBxasQriaEAE/dgSZnKZ6vBm6Zm7vTED0Y=",
+                                      },
+                                      {
+                                        "type": "ics23_CommitmentProof",
+                                        "key": "I2F0ZXN0MXY0ZWhndzM2ZzRweWczajl4M3FuamQzY3hnbXl6M2ZrOHFjcnlzM2h4ZHA1eHdmbngzenl4c2o5eGd1bnhzZmpnNXU1eHZ6eXpycnF0bi9wdWJsaWNfa2V5",
+                                        "data": "CnkKB2FjY291bnQSIMMIWmruLiaYEqu6LGhBd6QS74N0WncwSIe+tIux4F+BGiYIARABKiAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACIkCAESIG3BkVXL0ICjUIY1bV7YSPruEfFZLIB2vlL7lpwQ3ycX",
+                                      },
+                                    ],
+                                },
+                              "height": "0",
+                              "codespace": "",
+                            },
+                        },
+                    }
+                invalid_storage_key:
+                  value:
+                    {
+                      "jsonrpc": "2.0",
+                      "id": 2,
+                      "result":
+                        {
+                          "response":
+                            {
+                              "code": 1,
+                              "log": "",
+                              "info": "RPC error: Invalid storage key: Error parsing address: Error decoding address from Bech32m: invalid length",
+                              "index": "0",
+                              "key": null,
+                              "value": null,
+                              "proofOps": null,
+                              "height": "0",
+                              "codespace": "",
+                            },
+                        },
+                    }
+        "500":
+          description: Tendermint-level error
+          content:
+            application/json:
+              schema:
+                $ref: "https://docs.tendermint.com/v0.34/rpc/openapi.yaml#/components/schemas/ErrorResponse"
+              example:
+                {
+                  "jsonrpc": "2.0",
+                  "error":
+                    {
+                      "code": -32700,
+                      "message": "Parse error. Invalid JSON",
+                      "data": "error unmarshaling request: invalid character 'd' after object key:value pair",
+                    },
+                }
