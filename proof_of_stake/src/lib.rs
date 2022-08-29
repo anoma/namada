@@ -21,7 +21,7 @@ pub mod validation;
 use core::fmt::Debug;
 use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
-use std::fmt::Display;
+use std::fmt::{Display, Error};
 use std::hash::Hash;
 use std::num::TryFromIntError;
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
