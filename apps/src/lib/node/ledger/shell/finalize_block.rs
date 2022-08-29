@@ -838,6 +838,39 @@ mod test_finalize_block {
         assert_eq!(counter, 2);
     }
 
+    /// Test that if a rejected protocol tx is applied and emits
+    /// the correct event
+    #[test]
+    fn test_rejected_protocol_tx() {
+        let (mut shell, _, _) = setup();
+        let protocol_key =
+            shell.mode.get_protocol_key().expect("Test failed").clone();
+
+        let tx = ProtocolTxType::EthEventsDigest(ethereum_events::VextDigest {
+            signatures: Default::default(),
+            events: vec![]
+        })
+        .sign(&protocol_key)
+        .to_bytes();
+
+        let req = FinalizeBlock {
+            txs: vec![ProcessedTx {
+                tx,
+                result:  TxResult {
+                    code: ErrorCodes::InvalidTx.into(),
+                    info: Default::default()
+                }
+            }],
+            ..Default::default()
+        };
+        let mut resp = shell.finalize_block(req).expect("Test failed");
+        assert_eq!(resp.len(), 1);
+        let event = resp.remove(0);
+        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        let code = event.attributes.get("code").expect("Test failed");
+        assert_eq!(code, &String::from(ErrorCodes::InvalidTx));
+    }
+
     /// Test that once a validator's vote for an Ethereum event lands
     /// on-chain, it dequeues from the list of events to vote on.
     #[test]
