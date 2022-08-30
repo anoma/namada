@@ -13,7 +13,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use crate::epoched::{
     Epoched, EpochedDelta, OffsetPipelineLen, OffsetUnbondingLen,
 };
-use crate::parameters::PosParams;
+use crate::parameters::{PosParams, TOKENS_PER_NAM};
 
 /// Epoched validator's consensus key.
 pub type ValidatorConsensusKeys<PublicKey> =
@@ -366,8 +366,8 @@ pub trait PublicKeyTmRawHash {
 impl VotingPower {
     /// Convert token amount into a voting power.
     pub fn from_tokens(tokens: impl Into<u64>, params: &PosParams) -> Self {
-        // The token amount is expected to be in micro units
-        let whole_tokens = tokens.into() / 1_000_000;
+        // The token amount is expected to be in nano units
+        let whole_tokens = tokens.into() / TOKENS_PER_NAM;
         Self(params.votes_per_token * whole_tokens)
     }
 }
@@ -394,8 +394,8 @@ impl VotingPowerDelta {
         change: impl Into<i128>,
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
-        // The token amount is expected to be in micro units
-        let whole_tokens = change.into() / 1_000_000;
+        // The token amount is expected to be in nano units
+        let whole_tokens = change.into() / i128::from(TOKENS_PER_NAM);
         let delta: i128 = params.votes_per_token * whole_tokens;
         let delta: i64 = TryFrom::try_from(delta)?;
         Ok(Self(delta))
@@ -406,8 +406,8 @@ impl VotingPowerDelta {
         tokens: impl Into<u64>,
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
-        // The token amount is expected to be in micro units
-        let whole_tokens = tokens.into() / 1_000_000;
+        // The token amount is expected to be in nano units
+        let whole_tokens = tokens.into() / TOKENS_PER_NAM;
         let delta: i64 =
             TryFrom::try_from(params.votes_per_token * whole_tokens)?;
         Ok(Self(delta))
