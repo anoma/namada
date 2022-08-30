@@ -14,10 +14,8 @@ pub fn prefix() -> Key {
         .expect("should always be able to construct this key")
 }
 
-#[allow(missing_docs)]
-pub const BALANCE_KEY_SEGMENT: &str = "balance";
-#[allow(missing_docs)]
-pub const SUPPLY_KEY_SEGMENT: &str = "supply";
+const BALANCE_KEY_SEGMENT: &str = "balance";
+const SUPPLY_KEY_SEGMENT: &str = "supply";
 
 /// Generator for the keys under which details of an ERC20 token are stored
 pub struct Keys {

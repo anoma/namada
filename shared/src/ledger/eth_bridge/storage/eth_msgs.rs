@@ -14,14 +14,10 @@ pub fn prefix() -> Key {
         .expect("should always be able to construct this key")
 }
 
-#[allow(missing_docs)]
-pub const BODY_KEY_SEGMENT: &str = "body";
-#[allow(missing_docs)]
-pub const SEEN_KEY_SEGMENT: &str = "seen";
-#[allow(missing_docs)]
-pub const SEEN_BY_KEY_SEGMENT: &str = "seen_by";
-#[allow(missing_docs)]
-pub const VOTING_POWER_KEY_SEGMENT: &str = "voting_power";
+const BODY_KEY_SEGMENT: &str = "body";
+const SEEN_KEY_SEGMENT: &str = "seen";
+const SEEN_BY_KEY_SEGMENT: &str = "seen_by";
+const VOTING_POWER_KEY_SEGMENT: &str = "voting_power";
 
 /// Generator for the keys under which details of an [`EthereumEvent`] is stored
 pub struct Keys {
