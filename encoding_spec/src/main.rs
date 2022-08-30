@@ -394,6 +394,7 @@ fn escape_fragment_anchor(string: impl AsRef<str>) -> String {
         .replace('<', "")
         .replace(',', "")
         .replace(' ', "-")
+        .replace(':', "")
         .to_ascii_lowercase()
 }
 
