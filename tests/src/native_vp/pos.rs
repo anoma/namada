@@ -937,12 +937,12 @@ pub mod testing {
                     let total_delta = validator_total_deltas
                         .get_at_offset(current_epoch, offset, params)
                         .unwrap_or_default();
-                    // We convert the tokens from micro units to whole tokens
-                    // with division by 10^6
+                    // We convert the tokens from nano units to whole tokens
+                    // with division by 10^9
                     let vp_before =
-                        params.votes_per_token * ((total_delta) / 1_000_000);
+                        params.votes_per_token * ((total_delta) / 1_000_000_000);
                     let vp_after = params.votes_per_token
-                        * ((total_delta + token_delta) / 1_000_000);
+                        * ((total_delta + token_delta) / 1_000_000_000);
                     // voting power delta
                     let vp_delta = vp_after - vp_before;
 
@@ -1001,12 +1001,12 @@ pub mod testing {
                         let total_delta = validator_total_deltas
                             .get(epoch)
                             .unwrap_or_default();
-                        // We convert the tokens from micro units to whole
-                        // tokens with division by 10^6
+                        // We convert the tokens from nano units to whole
+                        // tokens with division by 10^9
                         let vp_before = params.votes_per_token
-                            * ((total_delta) / 1_000_000);
+                            * ((total_delta) / 1_000_000_000);
                         let vp_after = params.votes_per_token
-                            * ((total_delta + token_delta) / 1_000_000);
+                            * ((total_delta + token_delta) / 1_000_000_000);
                         // voting power delta
                         let vp_delta_at_unbonding =
                             vp_after - vp_before - vp_delta - total_vp_delta;
@@ -1077,12 +1077,12 @@ pub mod testing {
                     let total_delta_cur = validator_total_deltas_cur
                         .get_at_offset(current_epoch, offset, params)
                         .unwrap_or_default();
-                    // We convert the tokens from micro units to whole tokens
-                    // with division by 10^6
+                    // We convert the tokens from nano units to whole tokens
+                    // with division by 10^9
                     let vp_before = params.votes_per_token
-                        * ((total_delta_cur) / 1_000_000);
+                        * ((total_delta_cur) / 1_000_000_000);
                     let vp_after = params.votes_per_token
-                        * ((total_delta_cur + token_delta) / 1_000_000);
+                        * ((total_delta_cur + token_delta) / 1_0000_000_000);
                     // voting power delta
                     let vp_delta = vp_after - vp_before;
 
