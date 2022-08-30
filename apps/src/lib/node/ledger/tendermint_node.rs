@@ -9,15 +9,15 @@ use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
-use tendermint::Genesis;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_config::{Error as TendermintError, TendermintConfig};
 use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 use crate::config;
+use crate::facade::tendermint::Genesis;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_config::{Error as TendermintError, TendermintConfig};
 
 /// Env. var to output Tendermint log to stdout
 pub const ENV_VAR_TM_STDOUT: &str = "ANOMA_TM_STDOUT";
@@ -114,7 +114,10 @@ pub async fn run(
             .await;
         }
     }
+    #[cfg(feature = "abcipp")]
     write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
+    #[cfg(not(feature = "abcipp"))]
+    write_tm_genesis(&home_dir, chain_id, genesis_time).await;
 
     update_tendermint_config(&home_dir, config).await?;
 
@@ -377,7 +380,7 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    config: &config::Tendermint,
+    #[cfg(feature = "abcipp")] config: &config::Tendermint,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
@@ -398,8 +401,11 @@ async fn write_tm_genesis(
     genesis.genesis_time = genesis_time
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
-    genesis.consensus_params.timeout.commit =
-        config.consensus_timeout_commit.into();
+    #[cfg(feature = "abcipp")]
+    {
+        genesis.consensus_params.timeout.commit =
+            config.consensus_timeout_commit.into();
+    }
 
     let mut file = OpenOptions::new()
         .write(true)
