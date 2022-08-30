@@ -40,7 +40,7 @@ where
             "Received block proposal",
         );
         // the number of vote extension digests included in the block proposal
-        let mut vote_ext_digest_num = 0;
+        let mut eth_ev_digest_num = 0;
         let tx_results: Vec<ExecTxResult> = req
             .txs
             .iter()
@@ -48,7 +48,7 @@ where
                 self.process_single_tx(
                     tx_bytes,
                     &mut tx_queue_iter,
-                    &mut vote_ext_digest_num,
+                    &mut eth_ev_digest_num,
                 )
                 .into()
             })
@@ -56,14 +56,15 @@ where
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
-        let too_many_vext_digests = vote_ext_digest_num > 1;
-        if too_many_vext_digests {
+        let invalid_num_of_eth_ev_digests =
+            self.storage.last_height.0 > 0 && eth_ev_digest_num != 1;
+        if invalid_num_of_eth_ev_digests {
             tracing::warn!(
                 proposer = ?hex::encode(&req.proposer_address),
                 height = req.height,
                 hash = ?hex::encode(&req.hash),
-                vote_ext_digest_num,
-                "Found too many vote extension transactions, proposed block \
+                eth_ev_digest_num,
+                "Found invalid number of Ethereum events vote extension digests, proposed block \
                  will be rejected"
             );
         }
@@ -87,7 +88,7 @@ where
             );
         }
 
-        let status = if too_many_vext_digests || invalid_txs {
+        let status = if invalid_num_of_eth_ev_digests || invalid_txs {
             ProposalStatus::Reject
         } else {
             ProposalStatus::Accept
@@ -144,7 +145,7 @@ where
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
-        vote_ext_digest_num: &mut usize,
+        eth_ev_digest_num: &mut usize,
     ) -> TxResult {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
             |err| {
@@ -188,19 +189,18 @@ where
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthereumEvents(digest) => {
-                    *vote_ext_digest_num += 1;
+                    *eth_ev_digest_num += 1;
 
                     let extensions =
                         digest.decompress(self.storage.last_height);
                     let valid_extensions =
-                        self.validate_vote_extension_list(extensions);
+                        self.validate_eth_events_vext_list(extensions);
 
                     let mut voting_power = FractionalVotingPower::default();
                     let total_power = {
-                        let epoch =
-                            self.storage.block.pred_epochs.get_epoch(
-                                BlockHeight(self.storage.last_height.0),
-                            );
+                        let epoch = self
+                            .storage
+                            .get_epoch(BlockHeight(self.storage.last_height.0));
                         u64::from(self.storage.get_total_voting_power(epoch))
                     };
 
@@ -347,15 +347,37 @@ mod test_process_proposal {
     use namada::types::vote_extensions::ethereum_events::{
         self, MultiSignedEthEvent,
     };
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_proto::abci::RequestInitChain;
-    use tendermint_proto::google::protobuf::Timestamp;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError, TestShell,
     };
+    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::wallet;
+
+    fn get_empty_eth_ev_digest(shell: &TestShell) -> TxBytes {
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let addr = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+        let ext = ethereum_events::Vext::empty(
+            shell.storage.last_height,
+            addr.clone(),
+        )
+        .sign(protocol_key);
+        ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
+            signatures: {
+                let mut s = HashMap::new();
+                s.insert(addr, ext.sig);
+                s
+            },
+            events: vec![],
+        })
+        .sign(protocol_key)
+        .to_bytes()
+    }
 
     /// Test that if a proposal contains more than one
     /// `ethereum_events::VextDigest`, we reject it.
@@ -566,7 +588,7 @@ mod test_process_proposal {
     /// by [`process_proposal`].
     #[test]
     fn test_unsigned_wrapper_rejected() {
-        let (mut shell, _, _) = TestShell::new();
+        let (mut shell, _, _) = test_utils::setup_at_height(1u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -590,10 +612,10 @@ mod test_process_proposal {
         .to_bytes();
         #[allow(clippy::redundant_clone)]
         let request = ProcessProposal {
-            txs: vec![tx.clone()],
+            txs: vec![tx.clone(), get_empty_eth_ev_digest(&shell)],
         };
 
-        let response = if let [resp] = shell
+        let response = if let [resp, _] = shell
             .process_proposal(request)
             .expect("Test failed")
             .as_slice()
@@ -612,7 +634,7 @@ mod test_process_proposal {
     /// Test that a wrapper tx with invalid signature is rejected
     #[test]
     fn test_wrapper_bad_signature_rejected() {
-        let (mut shell, _, _) = TestShell::new();
+        let (mut shell, _, _) = test_utils::setup_at_height(1u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -670,9 +692,9 @@ mod test_process_proposal {
             panic!("Test failed");
         };
         let request = ProcessProposal {
-            txs: vec![new_tx.to_bytes()],
+            txs: vec![new_tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
         };
-        let response = if let [response] = shell
+        let response = if let [response, _] = shell
             .process_proposal(request)
             .expect("Test failed")
             .as_slice()
@@ -695,8 +717,8 @@ mod test_process_proposal {
     /// non-zero, [`process_proposal`] rejects that tx
     #[test]
     fn test_wrapper_unknown_address() {
-        let (mut shell, _, _) = TestShell::new();
-        let keypair = crate::wallet::defaults::keys().remove(0).1;
+        let (mut shell, _, _) = test_utils::setup_at_height(1u64);
+        let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
@@ -715,9 +737,9 @@ mod test_process_proposal {
         .sign(&keypair)
         .expect("Test failed");
         let request = ProcessProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
         };
-        let response = if let [resp] = shell
+        let response = if let [resp, _] = shell
             .process_proposal(request)
             .expect("Test failed")
             .as_slice()
@@ -739,15 +761,7 @@ mod test_process_proposal {
     /// [`process_proposal`] rejects that tx
     #[test]
     fn test_wrapper_insufficient_balance_address() {
-        let (mut shell, _, _) = TestShell::new();
-        shell.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
+        let (mut shell, _, _) = test_utils::setup_at_height(1u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -769,10 +783,10 @@ mod test_process_proposal {
         .expect("Test failed");
 
         let request = ProcessProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
         };
 
-        let response = if let [resp] = shell
+        let response = if let [resp, _] = shell
             .process_proposal(request)
             .expect("Test failed")
             .as_slice()
@@ -794,7 +808,7 @@ mod test_process_proposal {
     /// validated, [`process_proposal`] rejects it
     #[test]
     fn test_decrypted_txs_out_of_order() {
-        let (mut shell, _, _) = TestShell::new();
+        let (mut shell, _, _) = test_utils::setup_at_height(1u64);
         let keypair = gen_keypair();
         let mut txs = vec![];
         for i in 0..3 {
@@ -817,9 +831,9 @@ mod test_process_proposal {
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
         }
         let req_1 = ProcessProposal {
-            txs: vec![txs[0].to_bytes()],
+            txs: vec![txs[0].to_bytes(), get_empty_eth_ev_digest(&shell)],
         };
-        let response_1 = if let [resp] = shell
+        let response_1 = if let [resp, _] = shell
             .process_proposal(req_1)
             .expect("Test failed")
             .as_slice()
@@ -831,13 +845,13 @@ mod test_process_proposal {
         assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
 
         let req_2 = ProcessProposal {
-            txs: vec![txs[2].to_bytes()],
+            txs: vec![txs[2].to_bytes(), get_empty_eth_ev_digest(&shell)],
         };
 
         let response_2 = if let Err(TestError::RejectProposal(resp)) =
             shell.process_proposal(req_2)
         {
-            if let [resp] = resp.as_slice() {
+            if let [resp, _] = resp.as_slice() {
                 resp.clone()
             } else {
                 panic!("Test failed")
@@ -859,7 +873,7 @@ mod test_process_proposal {
     /// is rejected by [`process_proposal`]
     #[test]
     fn test_incorrectly_labelled_as_undecryptable() {
-        let (mut shell, _, _) = TestShell::new();
+        let (mut shell, _, _) = test_utils::setup_at_height(1u64);
         let keypair = gen_keypair();
 
         let tx = Tx::new(
@@ -883,10 +897,10 @@ mod test_process_proposal {
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
 
         let request = ProcessProposal {
-            txs: vec![tx.to_bytes()],
+            txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
         };
 
-        let response = if let [resp] = shell
+        let response = if let [resp, _] = shell
             .process_proposal(request)
             .expect("Test failed")
             .as_slice()
@@ -910,15 +924,7 @@ mod test_process_proposal {
     /// undecryptable but still accepted
     #[test]
     fn test_invalid_hash_commitment() {
-        let (mut shell, _, _) = TestShell::new();
-        shell.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
+        let (mut shell, _, _) = test_utils::setup_at_height(1u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -945,9 +951,9 @@ mod test_process_proposal {
         )));
 
         let request = ProcessProposal {
-            txs: vec![tx.to_bytes()],
+            txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
         };
-        let response = if let [resp] = shell
+        let response = if let [resp, _] = shell
             .process_proposal(request)
             .expect("Test failed")
             .as_slice()
@@ -964,15 +970,7 @@ mod test_process_proposal {
     /// marked undecryptable and the errors handled correctly
     #[test]
     fn test_undecryptable() {
-        let (mut shell, _, _) = TestShell::new();
-        shell.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
+        let (mut shell, _, _) = test_utils::setup_at_height(1u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
         let pubkey = EncryptionKey::default();
         // not valid tx bytes
@@ -996,9 +994,9 @@ mod test_process_proposal {
             wrapper.clone(),
         )));
         let request = ProcessProposal {
-            txs: vec![signed.to_bytes()],
+            txs: vec![signed.to_bytes(), get_empty_eth_ev_digest(&shell)],
         };
-        let response = if let [resp] = shell
+        let response = if let [resp, _] = shell
             .process_proposal(request)
             .expect("Test failed")
             .as_slice()
@@ -1047,7 +1045,7 @@ mod test_process_proposal {
     /// Process Proposal should reject a RawTx, but not panic
     #[test]
     fn test_raw_tx_rejected() {
-        let (mut shell, _, _) = TestShell::new();
+        let (mut shell, _, _) = test_utils::setup_at_height(1u64);
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1055,9 +1053,9 @@ mod test_process_proposal {
         );
         let tx = Tx::from(TxType::Raw(tx));
         let request = ProcessProposal {
-            txs: vec![tx.to_bytes()],
+            txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
         };
-        let response = if let [resp] = shell
+        let response = if let [resp, _] = shell
             .process_proposal(request)
             .expect("Test failed")
             .as_slice()

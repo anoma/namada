@@ -311,6 +311,26 @@ pub(crate) trait QueriesExt {
         tm_address: &[u8],
         epoch: Option<Epoch>,
     ) -> std::result::Result<Address, Error>;
+
+    /// Determines if it is possible to send a validator set update vote
+    /// extension at the provided [`BlockHeight`].
+    ///
+    /// This is done by checking if we are at the first block of a new epoch,
+    /// or if we are at block height 1 of the first epoch.
+    ///
+    /// The genesis block will not have vote extensions,
+    /// therefore it is a special case, which we account for
+    /// by checking if the block height is 1. Otherwise,
+    /// validator set update votes will always extend
+    /// Tendermint's PreCommit phase of the first block of
+    /// an epoch.
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
+
+    /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
+    fn get_epoch(&self, height: BlockHeight) -> Option<Epoch>;
+
+    /// Retrieves the [`BlockHeight`] that is currently being decided.
+    fn get_current_decision_height(&self) -> BlockHeight;
 }
 
 impl<D, H> QueriesExt for Storage<D, H>
@@ -394,7 +414,6 @@ where
         }
     }
 
-    #[allow(dead_code)]
     fn get_validator_from_protocol_pk(
         &self,
         pk: &key::common::PublicKey,
@@ -464,7 +483,6 @@ where
             .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))
     }
 
-    #[allow(dead_code)]
     fn get_validator_from_tm_address(
         &self,
         tm_address: &[u8],
@@ -480,5 +498,164 @@ where
                     epoch,
                 )
             })
+    }
+
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
+        let (check_prev_heights, height) = match can_send {
+            SendValsetUpd::Now => (false, self.get_current_decision_height()),
+            SendValsetUpd::AtPrevHeight(h) => (true, h),
+        };
+
+        // handle genesis block corner case
+        if height == BlockHeight(1) {
+            return true;
+        }
+
+        let fst_heights_of_each_epoch =
+            self.block.pred_epochs.first_block_heights();
+
+        // tentatively check if the last stored height
+        // is the one we are looking for
+        if fst_heights_of_each_epoch
+            .last()
+            .map(|&h| h == height)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+
+        // the values in `fst_block_heights_of_each_epoch` are stored in
+        // ascending order, so we can just do a binary search over them
+        check_prev_heights
+            && fst_heights_of_each_epoch.binary_search(&height).is_ok()
+    }
+
+    #[inline]
+    fn get_epoch(&self, height: BlockHeight) -> Option<Epoch> {
+        self.block.pred_epochs.get_epoch(height)
+    }
+
+    #[inline]
+    fn get_current_decision_height(&self) -> BlockHeight {
+        self.last_height + 1
+    }
+}
+
+/// This enum is used as a parameter to
+/// [`QueriesExt::can_send_validator_set_update`].
+pub enum SendValsetUpd {
+    /// Check if it is possible to send a validator set update
+    /// vote extension at the current block height.
+    Now,
+    /// Check if it is possible to send a validator set update
+    /// vote extension at any previous block height.
+    AtPrevHeight(BlockHeight),
+}
+
+#[cfg(test)]
+mod test_queries {
+    use super::*;
+    use crate::node::ledger::shell::test_utils;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
+
+    macro_rules! test_can_send_validator_set_update {
+        (epoch_assertions: $epoch_assertions:expr $(,)?) => {
+            /// Test if [`QueriesExt::can_send_validator_set_update`] behaves as
+            /// expected.
+            #[test]
+            fn test_can_send_validator_set_update() {
+                let (mut shell, _, _) = test_utils::setup_at_height(0u64);
+
+                let epoch_assertions = $epoch_assertions;
+
+                // test `SendValsetUpd::Now`
+                for (idx, (curr_epoch, curr_block_height, can_send)) in
+                    epoch_assertions.iter().copied().enumerate()
+                {
+                    shell.storage.last_height =
+                        BlockHeight(curr_block_height - 1);
+                    assert_eq!(
+                        curr_block_height,
+                        shell.storage.get_current_decision_height().0
+                    );
+                    assert_eq!(
+                        shell.storage.get_epoch(curr_block_height.into()),
+                        Some(Epoch(curr_epoch))
+                    );
+                    assert_eq!(
+                        shell
+                            .storage
+                            .can_send_validator_set_update(SendValsetUpd::Now),
+                        can_send
+                    );
+                    if epoch_assertions
+                        .get(idx + 1)
+                        .map(|&(_, _, change_epoch)| change_epoch)
+                        .unwrap_or(false)
+                    {
+                        let time = namada::types::time::DateTimeUtc::now();
+                        let mut req = FinalizeBlock::default();
+                        req.header.time = time;
+                        shell.finalize_block(req).expect("Test failed");
+                        shell.commit();
+                        shell.storage.next_epoch_min_start_time = time;
+                    }
+                }
+
+                // test `SendValsetUpd::AtPrevHeight`
+                for (curr_epoch, curr_block_height, can_send) in
+                    epoch_assertions.iter().copied()
+                {
+                    assert_eq!(
+                        shell.storage.get_epoch(curr_block_height.into()),
+                        Some(Epoch(curr_epoch))
+                    );
+                    assert_eq!(
+                        shell.storage.can_send_validator_set_update(
+                            SendValsetUpd::AtPrevHeight(
+                                curr_block_height.into()
+                            )
+                        ),
+                        can_send
+                    );
+                }
+            }
+        };
+    }
+
+    test_can_send_validator_set_update! {
+        epoch_assertions: [
+            // (current epoch, current block height, can send valset upd)
+            (0, 1, true),
+            (0, 2, false),
+            (0, 3, false),
+            (0, 4, false),
+            (0, 5, false),
+            (0, 6, false),
+            (0, 7, false),
+            (0, 8, false),
+            (0, 9, false),
+            (0, 10, false),
+            (0, 11, false),
+            // we will change epoch here
+            (1, 12, true),
+            (1, 13, false),
+            (1, 14, false),
+            (1, 15, false),
+            (1, 16, false),
+            (1, 17, false),
+            (1, 18, false),
+            (1, 19, false),
+            (1, 20, false),
+            (1, 21, false),
+            (1, 22, false),
+            (1, 23, false),
+            (1, 24, false),
+            // we will change epoch here
+            (2, 25, true),
+            (2, 26, false),
+            (2, 27, false),
+            (2, 28, false),
+        ],
     }
 }

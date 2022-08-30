@@ -1,17 +1,22 @@
 //! Implementation of the `PrepareProposal` ABCI++ method for the Shell
 
-use std::collections::{BTreeMap, HashMap, HashSet};
-
-use namada::types::transaction::protocol::ProtocolTxType;
-use namada::types::vote_extensions::ethereum_events::{
-    self, MultiSignedEthEvent,
+use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::proto::Tx;
+use namada::types::storage::BlockHeight;
+use namada::types::transaction::tx_types::TxType;
+use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
+use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
+use namada::types::vote_extensions::VoteExtensionDigest;
+use tendermint_proto::abci::{
+    ExtendedCommitInfo, RequestPrepareProposal, TxRecord,
 };
-use namada::types::voting_power::FractionalVotingPower;
-use tendermint_proto::abci::{ExtendedCommitInfo, ExtendedVoteInfo, TxRecord};
 
-use super::queries::QueriesExt;
-use super::vote_extensions::deserialize_vote_extensions;
-use super::*;
+use super::super::*;
+use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
+use crate::node::ledger::shell::vote_extensions::{
+    iter_protocol_txs, split_vote_extensions,
+};
+use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
 impl<D, H> Shell<D, H>
@@ -37,9 +42,9 @@ where
         // proposal is accepted
         self.gas_meter.reset();
         let txs = if let ShellMode::Validator { .. } = self.mode {
-            // TODO: add some info logging
+            // TODO: add some info logging?
 
-            // add ethereum events as protocol txs
+            // add ethereum events and validator set updates as protocol txs
             let mut txs = self.build_vote_extensions_txs(req.local_last_commit);
 
             // add mempool txs
@@ -67,57 +72,62 @@ where
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
-    /// events
-    // TODO: add `and, optionally, a validator set update` to the docstring,
-    // after validator set updates are implemented
+    /// events and, optionally, a validator set update
     fn build_vote_extensions_txs(
         &mut self,
         local_last_commit: Option<ExtendedCommitInfo>,
     ) -> Vec<TxRecord> {
-        let protocol_key = self
-            .mode
-            .get_protocol_key()
-            .expect("Validators should always have a protocol key");
+        // genesis block should not contain vote extensions
+        if self.storage.last_height == BlockHeight(0) {
+            return vec![];
+        }
 
-        let vote_extension_digest =
-            local_last_commit.and_then(|local_last_commit| {
-                let votes = local_last_commit.votes;
-                self.compress_ethereum_events(votes)
-            });
-        let vote_extension_digest =
-            match (vote_extension_digest, self.storage.last_height) {
-                // handle genesis block
-                (None, BlockHeight(0)) => return vec![],
-                (Some(_), BlockHeight(0)) => {
-                    unreachable!(
-                        "We already handle this scenario in \
-                         validate_eth_events_vext."
-                    )
-                }
-                // handle block heights > 0
-                (Some(digest), _) => digest,
-                _ => unreachable!(
+        let (eth_events, valset_upds) = split_vote_extensions(
+            local_last_commit
+                .expect(
                     "Honest Namada validators will always sign \
                      ethereum_events::Vext instances, even if no Ethereum \
                      events were observed at a given block height. In fact, a \
                      quorum of signed empty ethereum_events::Vext instances \
                      commits the fact no events were observed by a majority \
-                     of validators. Likewise, a Tendermint quorum should \
-                     never decide on a block including vote extensions \
-                     reflecting less than or equal to 2/3 of the total stake. \
-                     These scenarios are virtually impossible, so we will \
-                     panic here."
-                ),
+                     of validators. Therefore, for block heights greater than \
+                     zero, we should always have vote extensions.",
+                )
+                .votes,
+        );
+
+        const NOT_ENOUGH_VOTING_POWER_MSG: &str =
+            "A Tendermint quorum should never decide on a block including \
+             vote extensions reflecting less than or equal to 2/3 of the \
+             total stake.";
+
+        let ethereum_events = self
+            .compress_ethereum_events(eth_events)
+            .expect(NOT_ENOUGH_VOTING_POWER_MSG);
+
+        let validator_set_update =
+            if self.storage.can_send_validator_set_update(
+                SendValsetUpd::AtPrevHeight(self.storage.last_height),
+            ) {
+                Some(
+                    self.compress_valset_updates(valset_upds)
+                        .expect(NOT_ENOUGH_VOTING_POWER_MSG),
+                )
+            } else {
+                None
             };
 
-        let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-            .sign(protocol_key)
-            .to_bytes();
-        let tx_record = record::add(tx);
+        let protocol_key = self
+            .mode
+            .get_protocol_key()
+            .expect("Validators should always have a protocol key");
 
-        // TODO: include here a validator set update tx,
-        // if we are at the end of an epoch
-        vec![tx_record]
+        iter_protocol_txs(VoteExtensionDigest {
+            ethereum_events,
+            validator_set_update,
+        })
+        .map(|tx| record::add(tx.sign(protocol_key).to_bytes()))
+        .collect()
     }
 
     /// Builds a batch of mempool transactions
@@ -164,89 +174,6 @@ where
             .map(record::add)
             .collect()
     }
-
-
-    /// Compresses a set of signed Ethereum events into a single
-    /// [`ethereum_events::VextDigest`], whilst filtering invalid
-    /// [`Signed<ethereum_events::Vext>`] instances in the process
-    // TODO: rename this as `compress_vote_extensions`, and return
-    // a `VoteExtensionDigest`, which will contain both digests of
-    // ethereum events and validator set update vote extensions
-    fn compress_ethereum_events(
-        &self,
-        vote_extensions: Vec<ExtendedVoteInfo>,
-    ) -> Option<ethereum_events::VextDigest> {
-        let events_epoch = self
-            .storage
-            .block
-            .pred_epochs
-            .get_epoch(self.storage.last_height)
-            .expect(
-                "The epoch of the last block height should always be known",
-            );
-
-        let mut event_observers = BTreeMap::new();
-        let mut signatures = HashMap::new();
-
-        let total_voting_power =
-            u64::from(self.storage.get_total_voting_power(Some(events_epoch)));
-        let mut voting_power = FractionalVotingPower::default();
-
-        let deserialized = deserialize_vote_extensions(vote_extensions);
-
-        for (validator_voting_power, vote_extension) in
-            self.filter_invalid_vote_extensions(deserialized)
-        {
-            let validator_addr = vote_extension.data.validator_addr;
-
-            // update voting power
-            let validator_voting_power = u64::from(validator_voting_power);
-            voting_power += FractionalVotingPower::new(
-                validator_voting_power,
-                total_voting_power,
-            )
-            .expect(
-                "The voting power we obtain from storage should always be \
-                 valid",
-            );
-
-            // register all ethereum events seen by `validator_addr`
-            for ev in vote_extension.data.ethereum_events {
-                let signers =
-                    event_observers.entry(ev).or_insert_with(HashSet::new);
-
-                signers.insert(validator_addr.clone());
-            }
-
-            // register the signature of `validator_addr`
-            let addr = validator_addr.clone();
-            let sig = vote_extension.sig;
-
-            if let Some(sig) = signatures.insert(addr, sig) {
-                tracing::warn!(
-                    ?sig,
-                    ?validator_addr,
-                    "Overwrote old signature from validator while \
-                     constructing ethereum_events::VextDigest"
-                );
-            }
-        }
-
-        if voting_power <= FractionalVotingPower::TWO_THIRDS {
-            tracing::error!(
-                "Tendermint has decided on a block including Ethereum events \
-                 reflecting <= 2/3 of the total stake"
-            );
-            return None;
-        }
-
-        let events = event_observers
-            .into_iter()
-            .map(|(event, signers)| MultiSignedEthEvent { event, signers })
-            .collect();
-
-        Some(ethereum_events::VextDigest { events, signatures })
-    }
 }
 
 /// Functions for creating the appropriate TxRecord given the
@@ -284,64 +211,101 @@ pub(super) mod record {
 }
 
 #[cfg(test)]
-// TODO: write a test to check for unreachable code paths in
-// prepare proposals, when processing ethereum events
+// TODO: write tests for validator set update vote extensions in
+// prepare proposals
 mod test_prepare_proposal {
     use std::collections::HashSet;
 
+    use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos::namada_proof_of_stake::types::{
         VotingPower, WeightedValidator,
     };
+    use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::proto::{Signed, SignedTxData};
     use namada::types::address::xan;
     use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::common;
+    use namada::types::key::{common, RefTo};
     use namada::types::storage::{BlockHeight, Epoch};
     use namada::types::transaction::protocol::ProtocolTxType;
-    use namada::types::transaction::{Fee, TxType};
-    use namada::types::vote_extensions::ethereum_events;
+    use namada::types::transaction::{Fee, TxType, WrapperTx};
+    use namada::types::vote_extensions::ethereum_events::{
+        self, MultiSignedEthEvent,
+    };
+    use namada::types::vote_extensions::VoteExtension;
     use tendermint_proto::abci::tx_record::TxAction;
     use tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
 
     use super::*;
+    use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
+    fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
+        let evts = {
+            let validator_addr = shell
+                .mode
+                .get_validator_address()
+                .expect("Test failed")
+                .to_owned();
+
+            let prev_height = shell.storage.last_height;
+
+            let ext = ethereum_events::Vext::empty(prev_height, validator_addr);
+
+            let protocol_key = match &shell.mode {
+                ShellMode::Validator { data, .. } => {
+                    &data.keys.protocol_keypair
+                }
+                _ => panic!("Test failed"),
+            };
+
+            ext.sign(protocol_key)
+        };
+
+        let vote_extension = VoteExtension {
+            ethereum_events: evts,
+            validator_set_update: None,
+        }
+        .try_to_vec()
+        .expect("Test failed");
+
+        let vote = ExtendedVoteInfo {
+            vote_extension,
+            ..Default::default()
+        };
+
+        Some(ExtendedCommitInfo {
+            votes: vec![vote],
+            ..Default::default()
+        })
+    }
+
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
     /// proposed block.
     #[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
-        let (mut shell, _, _) = TestShell::new();
+        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
         );
         let req = RequestPrepareProposal {
+            local_last_commit: get_local_last_commit(&shell),
             txs: vec![tx.to_bytes()],
             max_tx_bytes: 0,
             ..Default::default()
         };
         assert_eq!(
-            shell.prepare_proposal(req).tx_records,
-            vec![record::remove(tx.to_bytes())]
+            // NOTE: we process mempool txs after protocol txs
+            shell.prepare_proposal(req).tx_records.remove(1),
+            record::remove(tx.to_bytes())
         );
-    }
-
-    /// Serialize a [`Signed<ethereum_events::Vext>`] to an
-    /// [`ExtendedVoteInfo`]
-    fn vote_extension_serialize(
-        vext: Signed<ethereum_events::Vext>,
-    ) -> ExtendedVoteInfo {
-        ExtendedVoteInfo {
-            vote_extension: vext.try_to_vec().unwrap(),
-            ..Default::default()
-        }
     }
 
     /// Check if we are filtering out an invalid vote extension `vext`
@@ -349,10 +313,8 @@ mod test_prepare_proposal {
         shell: &mut TestShell,
         vext: Signed<ethereum_events::Vext>,
     ) {
-        let votes =
-            deserialize_vote_extensions(vec![vote_extension_serialize(vext)]);
         let filtered_votes: Vec<_> =
-            shell.filter_invalid_vote_extensions(votes).collect();
+            shell.filter_invalid_eth_events_vexts(vec![vext]).collect();
 
         assert_eq!(filtered_votes, vec![]);
     }
@@ -479,10 +441,8 @@ mod test_prepare_proposal {
             ext
         };
 
-        let maybe_digest = {
-            let votes = vec![vote_extension_serialize(signed_vote_extension)];
-            shell.compress_ethereum_events(votes)
-        };
+        let maybe_digest =
+            shell.compress_ethereum_events(vec![signed_vote_extension]);
 
         // we should be filtering out the vote extension with
         // duped ethereum events; therefore, no valid vote
@@ -507,7 +467,7 @@ mod test_prepare_proposal {
             },
         }];
         let signatures = {
-            let mut s = HashMap::new();
+            let mut s = std::collections::HashMap::new();
             s.insert(ext.data.validator_addr.clone(), ext.sig.clone());
             s
         };
@@ -546,7 +506,7 @@ mod test_prepare_proposal {
             nonce: 1u64.into(),
             transfers: vec![],
         };
-        let signed_vote_extension = {
+        let ethereum_events = {
             let ext = ethereum_events::Vext {
                 validator_addr,
                 block_height: LAST_HEIGHT,
@@ -556,8 +516,12 @@ mod test_prepare_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
+        let vote_extension = VoteExtension {
+            ethereum_events,
+            validator_set_update: None,
+        };
         let vote = ExtendedVoteInfo {
-            vote_extension: signed_vote_extension.try_to_vec().unwrap(),
+            vote_extension: vote_extension.try_to_vec().unwrap(),
             ..Default::default()
         };
 
@@ -594,7 +558,7 @@ mod test_prepare_proposal {
 
         let digest = manually_assemble_digest(
             &protocol_key,
-            signed_vote_extension,
+            vote_extension.ethereum_events,
             LAST_HEIGHT,
         );
 
@@ -607,7 +571,7 @@ mod test_prepare_proposal {
     /// Test if Ethereum events validation and inclusion in a block
     /// behaves as expected, considering <= 2/3 voting power.
     #[test]
-    #[should_panic(expected = "Honest Namada validators")]
+    #[should_panic(expected = "A Tendermint quorum should never")]
     fn test_prepare_proposal_vext_insufficient_voting_power() {
         const FIRST_HEIGHT: BlockHeight = BlockHeight(0);
         const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
@@ -619,12 +583,8 @@ mod test_prepare_proposal {
         // artificially change the voting power of the default validator to
         // zero, change the block height, and commit a dummy block,
         // to move to a new epoch
-        let events_epoch = shell
-            .storage
-            .block
-            .pred_epochs
-            .get_epoch(FIRST_HEIGHT)
-            .expect("Test failed");
+        let events_epoch =
+            shell.storage.get_epoch(FIRST_HEIGHT).expect("Test failed");
         let validator_set = {
             let params = shell.storage.read_pos_params();
             let mut epochs = shell.storage.read_validator_set();
@@ -652,6 +612,13 @@ mod test_prepare_proposal {
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
 
+        assert_eq!(
+            shell
+                .storage
+                .get_epoch(shell.storage.get_current_decision_height()),
+            Some(Epoch(1))
+        );
+
         // test prepare proposal
         let (protocol_key, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
@@ -660,7 +627,7 @@ mod test_prepare_proposal {
             nonce: 1u64.into(),
             transfers: vec![],
         };
-        let signed_vote_extension = {
+        let ethereum_events = {
             let ext = ethereum_events::Vext {
                 validator_addr,
                 block_height: LAST_HEIGHT,
@@ -671,7 +638,12 @@ mod test_prepare_proposal {
             ext
         };
         let vote = ExtendedVoteInfo {
-            vote_extension: signed_vote_extension.try_to_vec().unwrap(),
+            vote_extension: VoteExtension {
+                ethereum_events,
+                validator_set_update: None,
+            }
+            .try_to_vec()
+            .unwrap(),
             ..Default::default()
         };
 
@@ -690,7 +662,7 @@ mod test_prepare_proposal {
     /// we simply exclude it from the proposal
     #[test]
     fn test_error_in_processing_tx() {
-        let (mut shell, _, _) = TestShell::new();
+        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -717,13 +689,15 @@ mod test_prepare_proposal {
         )
         .to_bytes();
         let req = RequestPrepareProposal {
+            local_last_commit: get_local_last_commit(&shell),
             txs: vec![wrapper.clone()],
             max_tx_bytes: 0,
             ..Default::default()
         };
         assert_eq!(
-            shell.prepare_proposal(req).tx_records,
-            vec![record::remove(wrapper)]
+            // NOTE: we process mempool txs after protocol txs
+            shell.prepare_proposal(req).tx_records.remove(1),
+            record::remove(wrapper)
         );
     }
 
@@ -732,7 +706,7 @@ mod test_prepare_proposal {
     /// corresponding wrappers
     #[test]
     fn test_decrypted_txs_in_correct_order() {
-        let (mut shell, _, _) = TestShell::new();
+        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let mut expected_wrapper = vec![];
         let mut expected_decrypted = vec![];
@@ -740,6 +714,7 @@ mod test_prepare_proposal {
         let mut req = RequestPrepareProposal {
             txs: vec![],
             max_tx_bytes: 0,
+            local_last_commit: get_local_last_commit(&shell),
             ..Default::default()
         };
         // create a request with two new wrappers from mempool and
@@ -780,6 +755,8 @@ mod test_prepare_proposal {
             .prepare_proposal(req)
             .tx_records
             .iter()
+            // NOTE: skip Ethereum events protocol tx
+            .skip(1)
             .filter_map(
                 |TxRecord {
                      tx: tx_bytes,

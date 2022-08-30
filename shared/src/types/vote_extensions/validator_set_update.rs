@@ -10,11 +10,12 @@ use encoding::{AbiEncode, Encode, Token};
 use ethabi::ethereum_types as ethereum;
 use num_rational::Ratio;
 
-use crate::ledger::pos::types::{Epoch, VotingPower};
+use crate::ledger::pos::types::VotingPower;
 use crate::proto::Signed;
 use crate::types::address::Address;
 use crate::types::ethereum_events::{EthAddress, KeccakHash};
 use crate::types::key::common::{self, Signature};
+use crate::types::storage::Epoch;
 
 // the namespace strings plugged into validator set hashes
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
@@ -22,7 +23,9 @@ const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
 
 /// Contains the digest of all signatures from a quorum of
 /// validators for a [`Vext`].
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct VextDigest {
     /// A mapping from a validator address to a [`Signature`].
     pub signatures: HashMap<Address, Signature>,
@@ -247,3 +250,35 @@ mod tag {
 
 #[doc(inline)]
 pub use tag::SerializeWithAbiEncode;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test the keccak hash of a validator set update
+    #[test]
+    fn test_validator_set_update_keccak_hash() {
+        // ```js
+        // const ethers = require('ethers');
+        // const keccak256 = require('keccak256')
+        //
+        // const abiEncoder = new ethers.utils.AbiCoder();
+        //
+        // const output = abiEncoder.encode(
+        //     ['string', 'address[]', 'uint256[]', 'uint256'],
+        //     ['bridge', [], [], 0],
+        // );
+        //
+        // const hash = keccak256(output).toString('hex');
+        //
+        // console.log(hash);
+        // ```
+        const EXPECTED: &str =
+            "36bcf52e7ae929b6df7489d012c8ca63eddb35c1b0baf10f46cac81f6728e0a6";
+
+        let KeccakHash(got) =
+            compute_hash(Epoch(0), BRIDGE_CONTRACT_NAMESPACE, vec![], vec![]);
+
+        assert_eq!(&hex::encode(got), EXPECTED);
+    }
+}

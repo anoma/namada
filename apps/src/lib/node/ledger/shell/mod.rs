@@ -856,7 +856,9 @@ mod test_utils {
         ///      by the shell.
         ///    - A sender that can send Ethereum events into the ledger, mocking
         ///      the Ethereum fullnode process
-        pub fn new() -> (
+        pub fn new_at_height<H: Into<BlockHeight>>(
+            height: H,
+        ) -> (
             Self,
             UnboundedReceiver<Vec<u8>>,
             UnboundedSender<EthereumEvent>,
@@ -867,25 +869,32 @@ mod test_utils {
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-            (
-                Self {
-                    shell: Shell::<MockDB, Sha256Hasher>::new(
-                        config::Ledger::new(
-                            base_dir,
-                            Default::default(),
-                            TendermintMode::Validator,
-                        ),
-                        top_level_directory().join("wasm"),
-                        sender,
-                        Some(eth_receiver),
-                        None,
-                        vp_wasm_compilation_cache,
-                        tx_wasm_compilation_cache,
-                    ),
-                },
-                receiver,
-                eth_sender,
-            )
+            let mut shell = Shell::<MockDB, Sha256Hasher>::new(
+                config::Ledger::new(
+                    base_dir,
+                    Default::default(),
+                    TendermintMode::Validator,
+                ),
+                top_level_directory().join("wasm"),
+                sender,
+                Some(eth_receiver),
+                None,
+                vp_wasm_compilation_cache,
+                tx_wasm_compilation_cache,
+            );
+            shell.storage.last_height = height.into();
+            (Self { shell }, receiver, eth_sender)
+        }
+
+        /// Same as [`TestShell::new_at_height`], but returns a shell at block
+        /// height 0.
+        #[inline]
+        pub fn new() -> (
+            Self,
+            UnboundedReceiver<Vec<u8>>,
+            UnboundedSender<EthereumEvent>,
+        ) {
+            Self::new_at_height(BlockHeight(1))
         }
 
         /// Forward a InitChain request and expect a success
@@ -944,12 +953,15 @@ mod test_utils {
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup() -> (
+    pub(super) fn setup_at_height<H: Into<BlockHeight>>(
+        height: H,
+    ) -> (
         TestShell,
         UnboundedReceiver<Vec<u8>>,
         UnboundedSender<EthereumEvent>,
     ) {
-        let (mut test, receiver, eth_receiver) = TestShell::new();
+        let (mut test, receiver, eth_receiver) =
+            TestShell::new_at_height(height);
         test.init_chain(RequestInitChain {
             time: Some(Timestamp {
                 seconds: 0,
@@ -959,6 +971,16 @@ mod test_utils {
             ..Default::default()
         });
         (test, receiver, eth_receiver)
+    }
+
+    /// Same as [`setup`], but returns a shell at block height 0.
+    #[inline]
+    pub(super) fn setup() -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        UnboundedSender<EthereumEvent>,
+    ) {
+        setup_at_height(BlockHeight(0))
     }
 
     /// This is just to be used in testing. It is not
