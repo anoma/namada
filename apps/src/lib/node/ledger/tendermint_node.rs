@@ -17,7 +17,9 @@ use tokio::process::Command;
 use crate::config;
 use crate::facade::tendermint::Genesis;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
-use crate::facade::tendermint_config::{Error as TendermintError, TendermintConfig};
+use crate::facade::tendermint_config::{
+    Error as TendermintError, TendermintConfig,
+};
 
 /// Env. var to output Tendermint log to stdout
 pub const ENV_VAR_TM_STDOUT: &str = "ANOMA_TM_STDOUT";

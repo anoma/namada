@@ -6,7 +6,6 @@ pub mod shim {
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
-    use crate::node::ledger::shell;
     use crate::facade::tendermint_proto::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
         RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
@@ -19,8 +18,10 @@ pub mod shim {
     };
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
-        RequestExtendVote, ResponseExtendVote, RequestVerifyVoteExtension, ResponseVerifyVoteExtension,
+        RequestExtendVote, RequestVerifyVoteExtension, ResponseExtendVote,
+        ResponseVerifyVoteExtension,
     };
+    use crate::node::ledger::shell;
 
     pub type TxBytes = Vec<u8>;
 

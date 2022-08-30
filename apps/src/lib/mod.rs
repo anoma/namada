@@ -22,15 +22,17 @@ pub use std;
 pub mod facade {
     //! Facade module to reason about `abcipp` feature flag logic.
 
-    #[cfg(feature = "abcipp")]
-    pub use {
-        tendermint_abcipp as tendermint, tendermint_config_abcipp as tendermint_config,
-        tendermint_proto_abcipp as tendermint_proto, tendermint_rpc_abcipp as tendermint_rpc,
-        tower_abci_abcipp as tower_abci,
-    };
     #[cfg(not(feature = "abcipp"))]
     pub use {
-        tendermint, tendermint_config, tendermint_proto,
-        tendermint_rpc, tower_abci,
+        tendermint, tendermint_config, tendermint_proto, tendermint_rpc,
+        tower_abci,
+    };
+    #[cfg(feature = "abcipp")]
+    pub use {
+        tendermint_abcipp as tendermint,
+        tendermint_config_abcipp as tendermint_config,
+        tendermint_proto_abcipp as tendermint_proto,
+        tendermint_rpc_abcipp as tendermint_rpc,
+        tower_abci_abcipp as tower_abci,
     };
 }

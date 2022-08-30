@@ -14,9 +14,9 @@ use namada::types::transaction::protocol::ProtocolTxType;
 
 use super::queries::QueriesExt;
 use super::*;
-use crate::node::ledger::events::EventType;
 use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+use crate::node::ledger::events::EventType;
 
 impl<D, H> Shell<D, H>
 where

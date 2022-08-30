@@ -14,10 +14,10 @@ use namada::types::storage::{Epoch, Key, PrefixValue};
 use namada::types::token::{self, Amount};
 
 use super::*;
-use crate::node::ledger::response;
+use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tendermint_proto::types::EvidenceParams;
-use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
+use crate::node::ledger::response;
 
 #[derive(Error, Debug)]
 pub enum Error {

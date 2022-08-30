@@ -51,6 +51,12 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use super::protocol::ShellParams;
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
+use crate::facade::tendermint_proto::abci::{
+    ConsensusParams, Misbehavior as Evidence, MisbehaviorType as EvidenceType,
+    RequestPrepareProposal, ValidatorUpdate,
+};
+use crate::facade::tendermint_proto::crypto::public_key;
+use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -58,13 +64,6 @@ use crate::node::ledger::{protocol, storage, tendermint_node};
 #[allow(unused_imports)]
 use crate::wallet::{ValidatorData, ValidatorKeys};
 use crate::{config, wallet};
-use crate::facade::tendermint_proto::abci::{
-    Misbehavior as Evidence, MisbehaviorType as EvidenceType,
-    RequestPrepareProposal, ValidatorUpdate,
-};
-use crate::facade::tendermint_proto::abci::ConsensusParams;
-use crate::facade::tendermint_proto::crypto::public_key;
-use crate::facade::tower_abci::{request, response};
 
 fn key_to_tendermint(
     pk: &common::PublicKey,
@@ -771,12 +770,14 @@ mod test_utils {
     use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::{
+        RequestInitChain, RequestProcessProposal,
+    };
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
-    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-    use crate::facade::tendermint_proto::abci::{RequestInitChain, RequestProcessProposal};
 
     #[derive(Error, Debug)]
     pub enum TestError {
