@@ -60,7 +60,7 @@ byteorder = "1.4.2"
 # https://github.com/clap-rs/clap/issues/1037
 clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default-features = false, features = ["std", "suggestions", "color", "cargo"]}
 color-eyre = "0.5.10"
-config = "0.11.0"
+config = "0.13.2"
 curl = "0.4.43"
 derivative = "2.2.0"
 directories = "4.0.1"
