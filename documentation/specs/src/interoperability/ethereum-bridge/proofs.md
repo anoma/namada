@@ -7,19 +7,9 @@ inclusion proofs of assert transfer messages understandable to the Ethereum
 smart contractions, as described in the section on 
 [batching](transfers_to_ethereum.md/#batching)
 
-A message for transferring value to Ethereum should be of the form
-```rust
-pub struct TransferToEthereum {
-    /// The type of token 
-    asset: EthereumAddress,
-    /// The recipient address
-    recipient: EthereumAddress,
-    /// The amount to be transferred
-    amount: Amount,
-    /// a nonce for replay protection
-    nonce: Nonce,
-}
-```
+A message for transferring value to Ethereum is a `TransferToNamada` 
+instance as described 
+[here](./transfers_to_ethereum.md/#bridge-pool-validity-predicate).
 
 Additionally, when the validator set changes, the smart contracts on
 Ethereum must be updated so that it can continue to recognize valid proofs.

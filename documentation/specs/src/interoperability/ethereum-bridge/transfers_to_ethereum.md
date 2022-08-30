@@ -80,6 +80,51 @@ transactions, introducing latency to the pool. A user wishing to relay will
 need to wait until a Merkle tree root is signed for a tree that
 includes all the transactions they wish to relay.
 
+### Bridge Pool validity predicate
+
+The Bridge Pool will have associated storage under the control of a native 
+validity predicate. The storage layout looks as follows.
+
+```
+# all values are Borsh-serialized
+/pending_transfers: Vec<PendingTransfer>
+/signed_root: Signed<MerkleRoot>
+```
+
+The pending transfers are instances of the following type:
+```rust
+pub struct TransferToEthereum {
+    /// The type of token 
+    asset: EthereumAddress,
+    /// The recipient address
+    recipient: EthereumAddress,
+    /// The amount to be transferred
+    amount: Amount,
+    /// a nonce for replay protection
+    nonce: Nonce,
+}
+
+pub struct PendingTransfer {
+    /// The message to send to Ethereum to 
+    /// complete the transfer
+    transfer: TransferToEthereum,
+    /// The amount of gas fees (in NAM)
+    /// paid by the user sending this transfer
+    gas_fee: Amount
+}
+```
+When a user submits initiates a transfer, their transaction should include wasm
+to append craft a `PendingTransfer` and append it to the pool in storage. 
+This will be validated by the Bridge Pool vp. 
+
+The signed Merkle root is only modifiable by validators. The Merkle tree 
+only consists of the `TransferToEthereum` messages as Ethereum does not need 
+information about the gas fees paid on Namada. 
+
+If vote extensions are not available, this signed root may lag behind the 
+list of pending transactions. However, it should be the eventually every 
+pending transaction is covered by the root or it times out.
+
 ## Replay Protection and timeouts
 
 It is important that nonces are used to prevent copies of the same
