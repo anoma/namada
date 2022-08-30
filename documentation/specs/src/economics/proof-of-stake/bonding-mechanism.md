@@ -8,6 +8,7 @@ An epoch is a range of blocks or time that is defined by the base ledger and mad
 
 Epoched data is data associated with a specific epoch that is set in advance.
 The data relevant to the PoS system in the ledger's state are epoched. Each data can be uniquely identified. These are:
+
 - [System parameters](#system-parameters). A single value for each epoch.
 - [Active validator set](#active-validator-set). A single value for each epoch.
 - Total voting power. A sum of all active and inactive validators' voting power. A single value for each epoch.
@@ -28,6 +29,7 @@ Additionally, any account may submit evidence for [a slashable misbehaviour](#sl
 A validator must have a public consensus key. Additionally, it may also specify optional metadata fields (TBA).
 
 A validator may be in one of the following states:
+
 - *inactive*:
   A validator is not being considered for block creation and cannot receive any new delegations.
 - *candidate*:
@@ -92,30 +94,33 @@ An "unbond" with epoch set to `n` may be withdrawn by the bond's source address 
 Note that unlike bonding and unbonding where token changes are delayed to some future epochs (pipeline or unbonding offset), the token withdrawal applies immediately. This because when the tokens are withdrawable, they are already "unlocked" from the PoS system and do not contribute to voting power.
 
 ### Staking rewards
+
 Until we have programmable validity predicates, rewards can use the mechanism outlined in the [F1 paper](https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf), but it should use the exponential model, so that withdrawing rewards more frequently provides no additional benefit (this is a design constraint we should follow in general, we don't want to accidentally encourage transaction spam). This should be written in a way that allows for a natural upgrade to a validator-customisable rewards model (defaulting to this one) if possible.
 
 To a validator who proposed a block, the system rewards tokens based on the `block_proposer_reward` [system parameter](#system-parameters) and each validator that voted on a block receives `block_vote_reward`.
 
 ### Slashing
 
-An important part of the security model of Namada is based on making attacking the system very expensive. To this end, the validator who has bonded stake will be slashed once an offence has been detected. 
+An important part of the security model of Namada is based on making attacking the system very expensive. To this end, the validator who has bonded stake will be slashed once an offense has been detected.
 
-These are the types of offences: 
-* Equivocation in consensus 
-    * voting: meaning that a validator has submitted two votes that are confliciting 
-    * block production: a block producer has created two different blocks for the same height
-* Invalidity: 
-    * block production: a block producer has produced invalid block
-    * voting: validators have voted on invalid block
-   
-Unavailability is not considered an offense, but a validator who hasn't voted will not receive rewards. 
+These are the types of offenses:
 
-Once an offence has been reported: 
+- Equivocation in consensus
+  - voting: meaning that a validator has submitted two votes that are conflicting
+  - block production: a block producer has created two different blocks for the same height
+- Invalidity:
+  - block production: a block producer has produced invalid block
+  - voting: validators have voted on invalid block
+
+Unavailability is not considered an offense, but a validator who hasn't voted will not receive rewards.
+
+Once an offense has been reported:
+
 1. Kicking out
 2. Slashing
-  - Individual: Once someone has reported an offence it is reviewed by validarors and if confirmed the offender is slashed. 
-  - [cubic slashing](./cubic-slashing.md): escalated slashing
 
+- Individual: Once someone has reported an offense it is reviewed by validators and if confirmed the offender is slashed.
+- [cubic slashing](./cubic-slashing.md): escalated slashing
 
 Instead of absolute values, validators' total bonded token amounts and bonds' and unbonds' token amounts are stored as their deltas (i.e. the change of quantity from a previous epoch) to allow distinguishing changes for different epoch, which is essential for determining whether tokens should be slashed. However, because slashes for a fault that occurred in epoch `n` may only be applied before the beginning of epoch `n + unbonding_length`, in epoch `m` we can sum all the deltas of total bonded token amounts and bonds and unbond with the same source and validator for epoch equal or less than `m - unboding_length` into a single total bonded token amount, single bond and single unbond record. This is to keep the total number of total bonded token amounts for a unique validator and bonds and unbonds for a unique pair of source and validator bound to a maximum number (equal to `unbonding_length`).
 
@@ -124,7 +129,6 @@ To disincentivize validators misbehaviour in the PoS system a validator may be s
 A valid evidence reduces the validator's total bonded token amount by the slash rate in and before the epoch in which the fault occurred. The validator's voting power must also be adjusted to the slashed total bonded token amount. Additionally, a slash is stored with the misbehaving validator's address and the relevant epoch in which the fault occurred. When an unbond is being withdrawn, we first look-up if any slash occurred within the range of epochs in which these were active and if so, reduce its token amount by the slash rate. Note that bonds and unbonds amounts are not slashed until their tokens are withdrawn.
 
 The invariant is that the sum of amounts that may be withdrawn from a misbehaving validator must always add up to the total bonded token amount.
-
 
 ## System parameters
 
@@ -148,6 +152,7 @@ type Validators = HashMap<Address, Validator>;
 ```
 
 Epoched data are stored in the following structure:
+
 ```rust,ignore
 struct Epoched<Data> {
   /// The epoch in which this data was last updated
@@ -202,6 +207,7 @@ To update a value in `Epoched` data with delta values in epoch `n` with value `d
 The invariants for updates in both cases are that `m - n >= 0` and `m - n <= pipeline_length`.
 
 For the active validator set, we store all the active and inactive validators separately with their respective voting power:
+
 ```rust,ignore
 type VotingPower = u64;
 
