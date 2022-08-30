@@ -352,15 +352,13 @@ impl Config {
             mode,
         ))
         .map_err(Error::ReadError)?;
-        let mut config = config::Config::default();
-        config
-            .merge(defaults)
-            .and_then(|c| c.merge(config::File::with_name(file_name)))
-            .and_then(|c| {
-                c.merge(
-                    config::Environment::with_prefix("anoma").separator("__"),
-                )
-            })
+        let config = config::Config::builder()
+            .add_source(defaults)
+            .add_source(config::File::with_name(file_name))
+            .add_source(
+                config::Environment::with_prefix("anoma").separator("__"),
+            )
+            .build()
             .map_err(Error::ReadError)?;
         config
             .try_deserialize()

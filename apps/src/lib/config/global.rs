@@ -45,9 +45,10 @@ impl GlobalConfig {
         if !file_path.exists() {
             return Err(Error::FileNotFound(file_name.to_string()));
         };
-        let mut config = config::Config::default();
-        config
-            .merge(config::File::with_name(file_name))
+
+        let config = config::Config::builder()
+            .add_source(config::File::with_name(file_name))
+            .build()
             .map_err(Error::ReadError)?;
         config
             .try_deserialize()
