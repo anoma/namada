@@ -7,26 +7,16 @@ use std::task::{Context, Poll};
 use futures::future::FutureExt;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::hash::Hash;
-#[cfg(not(feature = "abcipp"))]
-use namada::types::storage::BlockHash;
-#[cfg(not(feature = "abcipp"))]
-use namada::types::transaction::hash_tx;
-#[cfg(not(feature = "abcipp"))]
-use tendermint_proto::abci::RequestBeginBlock;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tower::Service;
-#[cfg(not(feature = "abcipp"))]
-use tower_abci::{BoxError, Request as Req, Response as Resp};
-#[cfg(feature = "abcipp")]
-use tower_abci_abcipp::{BoxError, Request as Req, Response as Resp};
 
 use super::super::Shell;
-#[cfg(not(feature = "abcipp"))]
-use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
-#[cfg(feature = "abcipp")]
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
+#[cfg(not(feature = "abcipp"))]
+use crate::facade::tendermint_proto::abci::RequestBeginBlock;
+use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -81,6 +71,7 @@ impl AbcippShim {
     #[cfg(not(feature = "abcipp"))]
     /// Get the hash of the txs in the block
     pub fn get_hash(&self) -> Hash {
+        use namada::types::transaction::hash_tx;
         let bytes: Vec<u8> = self
             .processed_txs
             .iter()
@@ -142,6 +133,7 @@ impl AbcippShim {
                 Req::DeliverTx(_) => Ok(Resp::DeliverTx(Default::default())),
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
+                    use namada::types::storage::BlockHash;
                     let mut txs = vec![];
                     std::mem::swap(&mut txs, &mut self.processed_txs);
                     let mut end_block_request: FinalizeBlock =

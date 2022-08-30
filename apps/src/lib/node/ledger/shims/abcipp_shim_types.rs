@@ -1,13 +1,13 @@
-#[cfg(not(feature = "abcipp"))]
-use tower_abci::{Request, Response};
-#[cfg(feature = "abcipp")]
-use tower_abci_abcipp::{Request, Response};
+use crate::facade::tower_abci::{Request, Response};
 
 pub mod shim {
     use std::convert::TryFrom;
 
-    #[cfg(not(feature = "abcipp"))]
-    use tendermint_proto::abci::{
+    use thiserror::Error;
+
+    use super::{Request as Req, Response as Resp};
+    use crate::node::ledger::shell;
+    use crate::facade::tendermint_proto::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
         RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
         RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
@@ -18,22 +18,9 @@ pub mod shim {
         ResponsePrepareProposal, ResponseQuery,
     };
     #[cfg(feature = "abcipp")]
-    use tendermint_proto_abcipp::abci::{
-        RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
-        RequestExtendVote, RequestFlush, RequestInfo, RequestInitChain,
-        RequestListSnapshots, RequestLoadSnapshotChunk, RequestOfferSnapshot,
-        RequestPrepareProposal, RequestProcessProposal, RequestQuery,
-        RequestVerifyVoteExtension, ResponseApplySnapshotChunk,
-        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseExtendVote,
-        ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
-        ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
-        ResponsePrepareProposal, ResponseProcessProposal, ResponseQuery,
-        ResponseVerifyVoteExtension,
+    use crate::facade::tendermint_proto::abci::{
+        RequestExtendVote, ResponseExtendVote, RequestVerifyVoteExtension, ResponseVerifyVoteExtension,
     };
-    use thiserror::Error;
-
-    use super::{Request as Req, Response as Resp};
-    use crate::node::ledger::shell;
 
     pub type TxBytes = Vec<u8>;
 
