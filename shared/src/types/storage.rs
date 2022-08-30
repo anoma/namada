@@ -105,6 +105,12 @@ impl From<Hash> for BlockHash {
     }
 }
 
+impl From<u64> for BlockHeight {
+    fn from(height: u64) -> Self {
+        BlockHeight(height)
+    }
+}
+
 impl TryFrom<i64> for BlockHeight {
     type Error = String;
 
@@ -676,6 +682,13 @@ impl Epochs {
             return Some(epoch);
         }
         None
+    }
+
+    /// Return all starting block heights for each successive Epoch.
+    ///
+    /// __INVARIANT:__ The returned values are sorted in ascending order.
+    pub fn first_block_heights(&self) -> &[BlockHeight] {
+        &self.first_block_heights
     }
 }
 
