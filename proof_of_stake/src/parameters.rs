@@ -40,8 +40,8 @@ impl Default for PosParams {
             max_validator_slots: 128,
             pipeline_len: 2,
             unbonding_len: 6,
-            // 1 voting power per 1000 tokens
-            votes_per_token: BasisPoints::new(10),
+            // 1 voting power per 100 fundamental tokens (10^7 / NAM or 0.01 / namnam)
+            votes_per_token: BasisPoints::new(100),
             block_proposer_reward: 100,
             block_vote_reward: 1,
             // slash 5%
