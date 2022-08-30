@@ -554,6 +554,7 @@ pub enum SendValsetUpd {
     AtPrevHeight,
     /// Check if it is possible to send a validator set update
     /// vote extension at any given block height.
+    #[allow(dead_code)]
     AtFixedHeight(BlockHeight),
 }
 
@@ -573,7 +574,7 @@ mod test_queries {
 
                 let epoch_assertions = $epoch_assertions;
 
-                // test `SendValsetUpd::Now`
+                // test `SendValsetUpd::Now`  and `SendValsetUpd::AtPrevHeight`
                 for (idx, (curr_epoch, curr_block_height, can_send)) in
                     epoch_assertions.iter().copied().enumerate()
                 {
@@ -593,6 +594,20 @@ mod test_queries {
                             .can_send_validator_set_update(SendValsetUpd::Now),
                         can_send
                     );
+                    if let Some((epoch, height, can_send)) =
+                        epoch_assertions.get(idx.wrapping_sub(1)).copied()
+                    {
+                        assert_eq!(
+                            shell.storage.get_epoch(height.into()),
+                            Some(Epoch(epoch))
+                        );
+                        assert_eq!(
+                            shell.storage.can_send_validator_set_update(
+                                SendValsetUpd::AtPrevHeight
+                            ),
+                            can_send
+                        );
+                    }
                     if epoch_assertions
                         .get(idx + 1)
                         .map(|&(_, _, change_epoch)| change_epoch)
@@ -607,7 +622,7 @@ mod test_queries {
                     }
                 }
 
-                // test `SendValsetUpd::AtPrevHeight`
+                // test `SendValsetUpd::AtFixedHeight`
                 for (curr_epoch, curr_block_height, can_send) in
                     epoch_assertions.iter().copied()
                 {
@@ -617,7 +632,7 @@ mod test_queries {
                     );
                     assert_eq!(
                         shell.storage.can_send_validator_set_update(
-                            SendValsetUpd::AtPrevHeight(
+                            SendValsetUpd::AtFixedHeight(
                                 curr_block_height.into()
                             )
                         ),
