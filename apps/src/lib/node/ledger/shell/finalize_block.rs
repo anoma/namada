@@ -11,12 +11,12 @@ use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
 use namada::types::storage::{BlockHash, Epoch, Header};
 use namada::types::transaction::protocol::ProtocolTxType;
-use tendermint_proto::abci::Misbehavior as Evidence;
-use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 
 use super::queries::QueriesExt;
 use super::*;
 use crate::node::ledger::events::EventType;
+use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
+use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 
 impl<D, H> Shell<D, H>
 where
@@ -316,7 +316,7 @@ where
                     continue;
                 }
                 TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::EthereumEvents(ref digest) => {
+                    ProtocolTxType::EthEventsDigest(ref digest) => {
                         for event in
                             digest.events.iter().map(|signed| &signed.event)
                         {
@@ -502,6 +502,7 @@ where
         let evidence_params = self
             .storage
             .get_evidence_params(&epoch_duration, &pos_params);
+
         response.consensus_param_updates = Some(ConsensusParams {
             evidence: Some(evidence_params),
             ..response.consensus_param_updates.take().unwrap_or_default()
@@ -831,6 +832,39 @@ mod test_finalize_block {
         assert_eq!(counter, 2);
     }
 
+    /// Test that if a rejected protocol tx is applied and emits
+    /// the correct event
+    #[test]
+    fn test_rejected_protocol_tx() {
+        let (mut shell, _, _) = setup();
+        let protocol_key =
+            shell.mode.get_protocol_key().expect("Test failed").clone();
+
+        let tx = ProtocolTxType::EthEventsDigest(ethereum_events::VextDigest {
+            signatures: Default::default(),
+            events: vec![],
+        })
+        .sign(&protocol_key)
+        .to_bytes();
+
+        let req = FinalizeBlock {
+            txs: vec![ProcessedTx {
+                tx,
+                result: TxResult {
+                    code: ErrorCodes::InvalidTx.into(),
+                    info: Default::default(),
+                },
+            }],
+            ..Default::default()
+        };
+        let mut resp = shell.finalize_block(req).expect("Test failed");
+        assert_eq!(resp.len(), 1);
+        let event = resp.remove(0);
+        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        let code = event.attributes.get("code").expect("Test failed");
+        assert_eq!(code, &String::from(ErrorCodes::InvalidTx));
+    }
+
     /// Test that once a validator's vote for an Ethereum event lands
     /// on-chain, it dequeues from the list of events to vote on.
     #[test]
@@ -864,15 +898,26 @@ mod test_finalize_block {
         .sig;
         let signed = MultiSignedEthEvent {
             event,
+            #[cfg(feature = "abcipp")]
             signers: HashSet::from([address.clone()]),
+            #[cfg(not(feature = "abcipp"))]
+            signers: HashSet::from([(
+                address.clone(),
+                shell.storage.last_height,
+            )]),
         };
 
         let digest = ethereum_events::VextDigest {
+            #[cfg(feature = "abcipp")]
             signatures: vec![(address, signature)].into_iter().collect(),
+            #[cfg(not(feature = "abcipp"))]
+            signatures: vec![((address, shell.storage.last_height), signature)]
+                .into_iter()
+                .collect(),
             events: vec![signed],
         };
         let processed_tx = ProcessedTx {
-            tx: ProtocolTxType::EthereumEvents(digest)
+            tx: ProtocolTxType::EthEventsDigest(digest)
                 .sign(&protocol_key)
                 .to_bytes(),
             result: TxResult {
