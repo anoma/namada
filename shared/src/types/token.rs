@@ -6,6 +6,7 @@ use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -37,7 +38,6 @@ pub struct Amount {
 pub const MAX_DECIMAL_PLACES: u32 = 6;
 /// Decimal scale of token [`Amount`] and [`Change`].
 pub const SCALE: u64 = 1_000_000;
-const SCALE_F64: f64 = SCALE as f64;
 
 /// A change in tokens amount
 pub type Change = i128;
@@ -109,21 +109,16 @@ impl<'de> serde::Deserialize<'de> for Amount {
     }
 }
 
-impl From<Amount> for f64 {
-    /// Warning: `f64` loses precision and it should not be used when exact
-    /// values are required.
+impl From<Amount> for Decimal {
     fn from(amount: Amount) -> Self {
-        amount.micro as f64 / SCALE_F64
+        Into::<Decimal>::into(amount.micro) / Into::<Decimal>::into(SCALE)
     }
 }
 
-impl From<f64> for Amount {
-    /// Warning: `f64` loses precision and it should not be used when exact
-    /// values are required.
-    fn from(micro: f64) -> Self {
-        Self {
-            micro: (micro * SCALE_F64).round() as u64,
-        }
+impl From<Decimal> for Amount {
+    fn from(micro: Decimal) -> Self {
+        let res = (micro * Into::<Decimal>::into(SCALE)).to_u64().unwrap();
+        Self { micro: res }
     }
 }
 
@@ -205,7 +200,7 @@ impl FromStr for Amount {
         match rust_decimal::Decimal::from_str(s) {
             Ok(decimal) => {
                 let scale = decimal.scale();
-                if scale > 6 {
+                if scale > MAX_DECIMAL_PLACES {
                     return Err(AmountParseError::ScaleTooLarge(scale));
                 }
                 let whole =
@@ -440,11 +435,11 @@ mod tests {
             /// The upper limit is set to `2^51`, because then the float is
             /// starting to lose precision.
             #[test]
-            fn test_token_amount_f64_conversion(raw_amount in 0..2_u64.pow(51)) {
+            fn test_token_amount_decimal_conversion(raw_amount in 0..2_u64.pow(51)) {
                 let amount = Amount::from(raw_amount);
-                // A round-trip conversion to and from f64 should be an identity
-                let float = f64::from(amount);
-                let identity = Amount::from(float);
+                // A round-trip conversion to and from Decimal should be an identity
+                let decimal = Decimal::from(amount);
+                let identity = Amount::from(decimal);
                 assert_eq!(amount, identity);
         }
     }

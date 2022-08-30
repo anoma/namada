@@ -594,6 +594,10 @@ pub mod testing {
 
     use crate::tx::{self, tx_host_env};
 
+    const TOKENS_PER_NAM: i128 =
+        namada::ledger::pos::namada_proof_of_stake::parameters::TOKENS_PER_NAM
+            as i128;
+
     #[derive(Clone, Debug, Default)]
     pub struct TestValidator {
         pub address: Option<Address>,
@@ -940,9 +944,9 @@ pub mod testing {
                     // We convert the tokens from micro units to whole tokens
                     // with division by 10^6
                     let vp_before =
-                        params.votes_per_token * ((total_delta) / 1_000_000);
+                        params.votes_per_token * (total_delta / TOKENS_PER_NAM);
                     let vp_after = params.votes_per_token
-                        * ((total_delta + token_delta) / 1_000_000);
+                        * ((total_delta + token_delta) / TOKENS_PER_NAM);
                     // voting power delta
                     let vp_delta = vp_after - vp_before;
 
@@ -1001,12 +1005,12 @@ pub mod testing {
                         let total_delta = validator_total_deltas
                             .get(epoch)
                             .unwrap_or_default();
-                        // We convert the tokens from micro units to whole
+                        // We convert the tokens from micro units to whole 
                         // tokens with division by 10^6
                         let vp_before = params.votes_per_token
-                            * ((total_delta) / 1_000_000);
+                            * (total_delta / TOKENS_PER_NAM);
                         let vp_after = params.votes_per_token
-                            * ((total_delta + token_delta) / 1_000_000);
+                            * ((total_delta + token_delta) / TOKENS_PER_NAM);
                         // voting power delta
                         let vp_delta_at_unbonding =
                             vp_after - vp_before - vp_delta - total_vp_delta;
@@ -1080,9 +1084,9 @@ pub mod testing {
                     // We convert the tokens from micro units to whole tokens
                     // with division by 10^6
                     let vp_before = params.votes_per_token
-                        * ((total_delta_cur) / 1_000_000);
+                        * (total_delta_cur / TOKENS_PER_NAM);
                     let vp_after = params.votes_per_token
-                        * ((total_delta_cur + token_delta) / 1_000_000);
+                        * ((total_delta_cur + token_delta) / TOKENS_PER_NAM);
                     // voting power delta
                     let vp_delta = vp_after - vp_before;
 
