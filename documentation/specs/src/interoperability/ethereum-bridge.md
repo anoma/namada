@@ -12,7 +12,9 @@ The Namada Ethereum bridge system consists of:
   [ICS20](https://docs.cosmos.network/v0.42/modules/ibc/) fungible token 
   transfers.
 * A set of Ethereum smart contracts.
-* A relayer for submitting transactions to Ethereum
+* An automated process to send validator set updates to the Ethereum smart 
+  contracts.
+* A relayer binary to aid in submitting transactions to Ethereum
 
 This basic bridge architecture should provide for almost-Namada consensus
 security for the bridge and free Ethereum state reads on Namada, plus
@@ -66,7 +68,7 @@ governance.
 
 `TransferToNamada` events may include a custom minimum number of 
 confirmations, that must be at least the protocol-specified minimum number of 
-confirmations.
+confirmations but is initially set to __100__.
 
 Validators must not vote to include events that have not met the required 
 number of confirmations. Voting on unconfirmed events is considered a 
@@ -88,112 +90,99 @@ keys involved are:
 `EthereumEvent`.
 
 Changes to this `/eth_msgs` storage subspace are only ever made by 
-nodes as part of the ledger code based on the aggregate of vote 
-extensions for the last Tendermint round. That is, changes to `/eth_msgs` happen 
-in block `n+1` in a deterministic manner based on the vote extensions of the 
-Tendermint round for block `n`. The `/eth_msgs` storage subspace will belong 
+nodes as part of the ledger code based on the aggregate of votes 
+by validators for specific events. That is, changes to 
+`/eth_msgs` happen 
+in block `n` in a deterministic manner based on the votes included in the 
+block proposal for block `n`. Depending on the underlying Tendermint
+version, these votes will either be included as vote extensions or as
+protocol transactions. 
+
+The `/eth_msgs` storage subspace will belong 
 to the `EthBridge` validity predicate. It should disallow any changes to 
 this storage from wasm transactions.
 
 ### Including events into storage
 
-For every Namada block proposal, the vote extension of a validator should include
-the events of the Ethereum blocks they have seen via their full node such that:
-1. The storage value `/eth_msgs/\$msg_hash/seen_by` does not include their
-   address.
-2. It's correctly formatted.
-3. It's reached the required number of confirmations on the Ethereum chain
+For every Namada block proposal, block proposer should include the votes for 
+events from other validators into their proposal. If the underlying Tendermint
+version supports vote extensions, consensus invariants guarantee that a 
+quorum of votes from the previous block height can be included. Otherwise, 
+validators can only submit votes by broadcasting protocol transactions, 
+which comes with less guarantees.
+
+The vote of a validator should include the events of the Ethereum blocks they
+have seen via their full node such that:
+1. It's correctly formatted.
+2. It's reached the required number of confirmations on the Ethereum chain
 
 Each event that a validator is voting to include must be individually signed by 
 them. If the validator is not voting to include any events, they must still
-provide a signed voted extension indicating this.
+provide a signed empty vector of events to indicate this.
 
-The vote extension data field will be a Borsh-serialization of something like the following.
+The votes will include be a Borsh-serialization of something like
+the following.
 ```rust
-pub struct VoteExtension(Vec<SignedEthEvent>);
-
-/// A struct used by validators to sign that they have seen a particular
-/// ethereum event. These are included in vote extensions
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
-pub struct SignedEthEvent {
+/// This struct will be created and signed over by each
+/// active validator, to be included as a vote extension at the end of a
+/// Tendermint PreCommit phase or as Protocol Tx.
+pub struct Vext {
+    /// The block height for which this [`Vext`] was made.
+    pub block_height: BlockHeight,
     /// The address of the signing validator
-    signer: Address,
-    /// The proportion of the total voting power held by the validator
-    power: FractionalVotingPower,
-    /// The event being signed and the block height at which
-    /// it was seen. We include the height as part of enforcing
-    /// that a block proposer submits vote extensions from
-    /// **the previous round only**
-    event: Signed<(EthereumEvent, BlockHeight)>,
+    pub validator_addr: Address,
+    /// The new ethereum events seen. These should be
+    /// deterministically ordered.
+    pub ethereum_events: Vec<EthereumEvent>,
 }
 ```
 
-These vote extensions will be given to the next block proposer who will
-aggregate those that it can verify and will inject a protocol transaction
-(the "vote extensions" transaction).
+These votes will be given to the next block proposer who will
+aggregate those that it can verify and will inject a signed protocol 
+transaction into their proposal.
 
-```rust
-pub struct MultiSigned<T: BorshSerialize + BorshDeserialize> {
-    /// Arbitrary data to be signed
-    pub data: T,
-    /// The signature of the data
-    pub sigs: Vec<common::Signature>,
-}
-
-pub struct MultiSignedEthEvent {
-    /// Address and voting power of the signing validators
-    pub signers: Vec<(Address, FractionalVotingPower)>,
-    /// Events as signed by validators
-    pub event: MultiSigned<(EthereumEvent, BlockHeight)>,
-}
-
-pub enum ProtocolTxType {
-    EthereumEvents(Vec<MultiSignedEthEvent>)
-}
-```
-
-This vote extensions transaction will be signed by the block proposer. 
 Validators will check this transaction and the validity of the new votes as 
 part of `ProcessProposal`, this includes checking:
 - signatures
 - that votes are really from active validators
 - the calculation of backed voting power
 
-It is also checked that each vote extension came from the previous round, 
-requiring validators to sign over the Namada block height with their vote
-extension. Furthermore, the vote extensions included by the block proposer
-should have at least 2 / 3 of the total voting power of the previous round 
-backing it. Otherwise the block proposer would not have passed the 
-`FinalizeBlock` phase of the last round. These checks are to prevent censorship 
-of events from validators by the block proposer.
+If vote extensions are supported, it is also checked that each vote extension 
+came from the previous round, requiring validators to sign over the Namada block
+height with their vote extension.
+
+Furthermore, the vote extensions included by 
+the block proposer should have at least 2 / 3 of the total voting power of the 
+previous round backing it. Otherwise the block proposer would not have passed the 
+`FinalizeBlock` phase of the last round.
+
+These checks are to prevent censorship 
+of events from validators by the block proposer. If vote extensions are not 
+enabled, unfortunately these checks cannot be made. 
 
 In `FinalizeBlock`, we derive a second transaction (the "state update" 
-transaction) from the vote extensions transaction that:
+transaction) from the vote aggregation that:
 - calculates the required changes to `/eth_msgs` storage and applies it
 - acts on any `/eth_msgs/\$msg_hash` where `seen` is going from `false` to `true`
   (e.g. appropriately minting wrapped Ethereum assets)
 
 This state update transaction will not be recorded on chain but will be 
-deterministically derived from the vote extensions transaction, which is 
-recorded on chain. All ledger nodes will derive and apply this transaction to 
-their own local blockchain state, whenever they receive a block with a vote 
-extensions transaction. This transaction cannot require a protocol signature 
-as even non-validator full nodes of Namada will be expected to do this.
+deterministically derived from the protocol transaction including the 
+aggregation of votes, which is recorded on chain.  All ledger nodes will 
+derive and apply the appropriate state changes to their own local 
+blockchain storage.
 
 The value of `/eth_msgs/\$msg_hash/seen` will also indicate if the event 
-has been acted on on the Namada side. The appropriate transfers of tokens to the
-given user will be included on chain free of charge and requires no
+has been acted upon on the Namada side. The appropriate transfers of tokens 
+to the given user will be included on chain free of charge and requires no
 additional actions from the end user.
 
 ## Namada Validity Predicates
 
-There will be three internal accounts with associated native validity predicates:
+There will be two internal accounts with associated native validity predicates:
 
-- `#EthSentinel` - whose validity predicate will verify the inclusion of events 
-from Ethereum. This validity predicate will control the `/eth_msgs` storage 
-subspace.
-- `#EthBridge` - the storage of which will contain ledgers of balances for 
-wrapped Ethereum assets (ERC20 tokens) structured in a 
+- `#EthBridge` - Controls the `/eth_msgs/` storage and ledgers of balances 
+  for  wrapped Ethereum assets (ERC20 tokens) structured in a 
 ["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy
 - `#EthBridgeEscrow` which will hold in escrow wrapped Namada tokens which have 
 been sent to Ethereum.
@@ -241,43 +230,136 @@ For 10 DAI i.e. ERC20([0x6b175474e89094c44da98b954eedeac495271d0f](https://ether
 Any wrapped Namada tokens being redeemed from Ethereum must have an equivalent amount of the native token held in escrow by `#EthBridgeEscrow`.
 The protocol transaction should simply make a transfer from `#EthBridgeEscrow` to the `receiver` for the appropriate amount and asset.
 
-### Transferring from Namada to Ethereum
+### Transferring assets from Namada to Ethereum
 
-To redeem wrapped Ethereum assets, a user should make a transaction to burn 
+Moving assets from Namada to Ethereum will not be automatic, as opposed the
+movement of value in the opposite direction. Instead, users must send an 
+appropriate transaction to Namada to initiate a transfer across the bridge 
+to Ethereum. Once this transaction is approved, a "proof" will be created 
+and posted on Namada.
+
+It is incumbent on the end user to  request an appropriate "proof" of the 
+transaction. This proof must be submitted to the appropriate Ethereum smart 
+contract by the user to redeem Ethereum assets / mint wrapped assets. This also 
+means all Ethereum gas costs are the responsibility of the end user.
+
+A relayer binary will be developed to aid users in accessing the proofs
+generated by Namada validators as well as posting this proof to Ethereum. It
+will also aid in batching transactions.
+
+#### Moving value to Ethereum
+
+To redeem wrapped Ethereum assets, a user should make a transaction to burn
 their wrapped tokens, which the `#EthBridge` validity predicate will accept.
 
-Once this burn is done, it is incumbent on the end user to
-request an appropriate "proof" of the transaction. This proof must be
-submitted to the appropriate Ethereum smart contract by the user to
-redeem their native Ethereum assets. This also means all Ethereum gas costs 
-are the responsibility of the end user.
+Mints of a wrapped Namada token on Ethereum (including NAM, Namada's native token)
+will be represented by a data type like:
+```rust
+struct MintWrappedNam {
+    /// The Namada address owning the token
+    owner: NamadaAddress,
+    /// The address on Ethereum receiving the wrapped tokens
+    receiver: EthereumAddress,
+    /// The address of the token to be wrapped 
+    token: NamadaAddress,
+    /// The number of wrapped Namada tokens to mint on Ethereum
+    amount: Amount,
+}
+```
 
-The proofs to be used will be custom bridge headers that are calculated
-deterministically from the block contents, including messages sent by Namada and
-possibly validator set updates. They will be designed for maximally
-efficient Ethereum decoding and verification.
+If a user wishes to mint a wrapped Namada token on Ethereum, they must 
+submit a transaction on Namada that:
+- stores `MintWrappedNam` on chain somewhere - TBD
+- sends the correct amount of Namada token to `#EthBridgeEscrow`
 
-For each block on Namada, validators must submit the corresponding bridge
-header signed with a special secp256k1 key as part of their vote extension.
-Validators must reject votes which do not contain correctly signed bridge
-headers. The finalized bridge header with aggregated signatures will appear in the
-next block as a protocol transaction. Aggregation of signatures is the
-responsibility of the next block proposer.
+#### Batching
 
-The bridge headers need only be produced when the proposed block contains
-requests to transfer value over the bridge to Ethereum. The exception is
-when validator sets change. Since the Ethereum smart contract should
-accept any header signed by bridge header signed by 2 / 3 of the staking
-validators, it needs up-to-date knowledge of:
+Ethereum gas fees make it prohibitively expensive in many cases to submit
+the proof for a single transaction over the bridge. Instead, it is typically
+more economical to submit proofs of many transactions in bulk. This batching
+is described in this section.
+
+A pool of transaction from Namada to Ethereum will be kept by Namada. Every
+transaction to Ethereum that Namada validators approve will be added to this
+pool. We call this the _Bridge Pool_.
+
+The Bridge Pool should be thought of as a sort of mempool. When users who
+wish to move assets to Ethereum submit their transactions, they will pay some
+additional amount of NAM (of their choosing) as a way of covering the gas
+costs on Ethereum. Namada validators will hold these fees in a Bridge Pool
+Escrow.
+
+When a batch of transactions from the Bridge Pool is submitted by a user to
+Ethereum, Namada validators will receive notifications via their full nodes.
+They will then pay out the fees for each submitted transaction to the user who
+relayed these transactions (still in NAM). These will be paid out from the
+Bridge Pool Escrow.
+
+The idea is that users will only relay transactions from the Bridge Pool
+that make economic sense. This prevents DoS attacks by underpaying fees as
+well as obviating the need for Ethereum gas price oracles. It also means
+that transfers to Ethereum are not ordered, preventing other attack vectors.
+
+The Bridge Pool will be organized as a Merkle tree. Every time it is updated,
+the root of tree must be signed by a quorum of validators. When a user
+wishes to construct a batch of transactions to relay to Ethereum, they
+include the signed tree root and inclusion proofs for the subset of the pool
+they are relaying. This can be easily verified by the Ethereum smart contracts.
+
+If vote extensions are available, these are used to collect the signatures
+over the Merkle tree root. If they are not, these must be submitted as protocol
+transactions, introducing latency to the pool. A user wishing to relay will
+need to wait until a Merkle tree root is signed for a tree that
+includes all the transactions they wish to relay.
+
+#### Replay Protection and timeouts
+
+It is important that nonces are used to prevent copies of the same
+transaction being submitted multiple times. Since we do not want to enforce
+an order on the transactions, these nonces should land in a range. As a
+consequence of this, it is possible that transactions in the Bridge Pool will
+time out. Transactions that timed out should revert the state changes on
+Namada including refunding the paid in fees.
+
+#### Proofs
+A proof for this bridge is a quorum of signatures by a valid validator set 
+attached to a message understandable to the Ethereum smart contracts. For 
+transferring value to Ethereum, a proof is a signed Merkle tree root and 
+inclusion proofs of assert transfer messages understandable to the Ethereum 
+smart contractions, as described in the section on batching.
+
+A message for transferring value to Ethereum should be of the form
+```rust
+pub struct TransferToEthereum {
+    /// The type of token 
+    asset: EthereumAddress,
+    /// The recipient address
+    recipient: EthereumAddress,
+    /// The amount to be transferred
+    amount: Amount,
+    /// a nonce for replay protection
+    nonce: Nonce,
+}
+```
+
+Additionally, when the validator set changes, the smart contracts on 
+Ethereum must be updated so that it can continue to recognize valid proofs.
+Since the Ethereum smart contract should  accept any header signed by bridge 
+header signed by 2 / 3 of the staking validators, it needs up-to-date 
+knowledge of:
 - The current validators' public keys
 - The current stake of each validator
 
 This means the at the end of every Namada epoch, a special transaction must be
-sent to the Ethereum contract detailing the new public keys and stake of the
-new validator set. This message must also be signed by at least 2 / 3 of the
-current validators as a "transfer of power". It is to be included in validators
-vote extensions as part of the bridge header. Signing an invalid validator
-transition set will be consider a slashable offense.
+sent to the Ethereum smart contracts detailing the new public keys and stake 
+of the new validator set. This message must also be signed by at least 2 / 3 
+of the current validators as a "transfer of power".
+
+If vote extensions are available, this signed data can be constructed 
+using them. Otherwise, validators must send protocol txs to be included on 
+the ledger. Once a quorum exist on chain, they can be aggregated into a 
+single message that can be relayed to Ethereum. Signing an 
+invalid  validator transition set will be considered a slashable offense.
 
 Due to asynchronicity concerns, this message should be submitted well in
 advance of the actual epoch change, perhaps even at the beginning of each
@@ -296,34 +378,6 @@ Signing incorrect headers is considered a slashable offense. Anyone witnessing
 an incorrect header that is signed may submit a complaint (a type of transaction)
 to initiate slashing of the validator who made the signature.
 
-#### Namada tokens
-
-Mints of a wrapped Namada token on Ethereum (including NAM, Namada's native token)
-will be represented by a data type like:
-
-```rust
-struct MintWrappedNam {
-    /// The Namada address owning the token
-    owner: NamadaAddress,
-    /// The address on Ethereum receiving the wrapped tokens
-    receiver: EthereumAddress,
-    /// The address of the token to be wrapped 
-    token: NamadaAddress,
-    /// The number of wrapped Namada tokens to mint on Ethereum
-    amount: Amount,
-}
-```
-
-If a user wishes to mint a wrapped Namada token on Ethereum, they must submit a transaction on Namada that:
-- stores `MintWrappedNam` on chain somewhere - TBD
-- sends the correct amount of Namada token to `#EthBridgeEscrow`
-
-Just as in redeeming Ethereum assets above, it is incumbent on the end user to
-request an appropriate proof of the transaction. This proof must be
-submitted to the appropriate Ethereum smart contract by the user.
-The corresponding amount of wrapped NAM tokens will be transferred to the
-`receiver` on Ethereum by the smart contract.
-
 ## Namada Bridge Relayers
 
 Validator changes must be turned into a message that can be communicated to
@@ -336,21 +390,23 @@ However, any user may choose to submit this transaction anyway.
 
 This necessitates a Namada node whose job it is to submit these transactions on
 Ethereum at the conclusion of each Namada epoch. This node is called the
-__Designated Relayer__. In theory, since this message is publicly available on the blockchain,
-anyone can submit this transaction, but only the Designated Relayer will be
-directly compensated by Namada.
+__Designated Relayer__. In theory, since this message is publicly available 
+on the blockchain, anyone can submit this transaction, but only the 
+Designated Relayer will be directly compensated by Namada.
 
 All Namada validators will have an option to serve as bridge relayer and
 the Namada ledger will include a process that does the relaying. Since all
 Namada validators are running Ethereum full nodes, they can monitor
 that the message was relayed correctly by the Designated Relayer.
 
-During the `FinalizeBlock` call in the ledger, if the epoch changes, a
-flag should be set alerting the next block proposer that they are the
-Designated Relayer for this epoch. If their message gets accepted by the
-Ethereum state inclusion onto Namada, new NAM tokens will be minted to reward
-them. The reward amount shall be a protocol parameter that can be changed
-via governance. It should be high enough to cover necessary gas fees.
+During the `FinalizeBlock` call in the ledger, if the transfer of power 
+message is placed on chain, a flag should be set alerting the next block  
+proposer that they are the Designated Relayer for this epoch. 
+
+If the Ethereum event spawned by relaying their  message gets accepted by the 
+Ethereum state inclusion onto Namada, new NAM tokens will be minted to 
+reward them. The reward amount shall be a protocol parameter that can be 
+changed via governance. It should be high enough to cover necessary gas fees.
 
 ## Ethereum Smart Contracts
 The set of Ethereum contracts should perform the following functions:
