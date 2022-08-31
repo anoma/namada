@@ -47,6 +47,12 @@ jobs:
             command: cd documentation/docs && mdbook build
             cache_subkey: docs
             cache_version: v1
+          - name: Build development dev
+            folder: documentation/docs
+            bucket: namada-dev-static-website
+            command: cd documentation/development && mdbook build
+            cache_subkey: dev
+            cache_version: v1
 
     env:
       CARGO_INCREMENTAL: 0
