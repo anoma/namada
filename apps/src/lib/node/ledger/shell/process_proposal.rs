@@ -54,7 +54,7 @@ where
         );
         // the number of vote extension digests included in the block proposal
         let mut counters = DigestCounters::default();
-        let tx_results: Vec<ExecTxResult> = req
+        let tx_results: Vec<_> = req
             .txs
             .iter()
             .map(|tx_bytes| {
@@ -63,7 +63,6 @@ where
                     &mut tx_queue_iter,
                     &mut counters,
                 )
-                .into()
             })
             .collect();
 
@@ -374,16 +373,19 @@ where
 
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
-    fn has_proper_valset_upd_num(&self, c: &DigestCounters) -> bool {
+    fn has_proper_valset_upd_num(&self, _c: &DigestCounters) -> bool {
+        #[cfg(feature = "abcipp")]
         if self
             .storage
             .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
         {
             // TODO: confirm if we need a height check here or not
-            self.storage.last_height.0 > 0 && c.valset_upd_digest_num == 1
+            self.storage.last_height.0 > 0 && _c.valset_upd_digest_num == 1
         } else {
             true
         }
+        #[cfg(not(feature = "abcipp"))]
+        true
     }
 }
 
@@ -409,7 +411,9 @@ mod test_process_proposal {
     };
 
     use super::*;
+    #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::RequestInitChain;
+    #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError, TestShell,
@@ -430,9 +434,16 @@ mod test_process_proposal {
         )
         .sign(protocol_key);
         ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
+            #[cfg(feature = "abcipp")]
             signatures: {
                 let mut s = HashMap::new();
                 s.insert(addr, ext.sig);
+                s
+            },
+            #[cfg(not(feature = "abcipp"))]
+            signatures: {
+                let mut s = HashMap::new();
+                s.insert((addr, shell.storage.last_height), ext.sig);
                 s
             },
             events: vec![],

@@ -1,11 +1,12 @@
 //! Extend Tendermint votes with Ethereum bridge logic.
 
-pub mod ethereum_events;
-pub mod validator_set_update;
+pub mod eth_events;
+pub mod val_set_update;
 
+#[cfg(feature = "abcipp")]
 use borsh::BorshDeserialize;
 use namada::proto::Signed;
-use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::vote_extensions::{
     ethereum_events, validator_set_update, VoteExtension, VoteExtensionDigest,
 };
@@ -117,7 +118,7 @@ where
                     // TODO: we need a way to map ethereum addresses to
                     // namada validator addresses
                     voting_powers: std::collections::HashMap::new(),
-                    epoch: next_epoch,
+                    block_height: self.storage.get_current_decision_height(),
                 };
 
                 let protocol_key = match &self.mode {

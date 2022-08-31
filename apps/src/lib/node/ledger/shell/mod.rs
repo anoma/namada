@@ -53,7 +53,7 @@ use super::rpc;
 use crate::config::{genesis, TendermintMode};
 use crate::facade::tendermint_proto::abci::{
     ConsensusParams, Misbehavior as Evidence, MisbehaviorType as EvidenceType,
-    RequestPrepareProposal, ValidatorUpdate,
+    ValidatorUpdate,
 };
 use crate::facade::tendermint_proto::crypto::public_key;
 use crate::facade::tower_abci::{request, response};

@@ -316,7 +316,7 @@ where
                     continue;
                 }
                 TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::EthEventsDigest(ref digest) => {
+                    ProtocolTxType::EthereumEvents(ref digest) => {
                         for event in
                             digest.events.iter().map(|signed| &signed.event)
                         {
@@ -840,7 +840,7 @@ mod test_finalize_block {
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
 
-        let tx = ProtocolTxType::EthEventsDigest(ethereum_events::VextDigest {
+        let tx = ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
             signatures: Default::default(),
             events: vec![],
         })
@@ -917,7 +917,7 @@ mod test_finalize_block {
             events: vec![signed],
         };
         let processed_tx = ProcessedTx {
-            tx: ProtocolTxType::EthEventsDigest(digest)
+            tx: ProtocolTxType::EthereumEvents(digest)
                 .sign(&protocol_key)
                 .to_bytes(),
             result: TxResult {

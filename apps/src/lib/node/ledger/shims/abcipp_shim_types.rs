@@ -268,6 +268,7 @@ pub mod shim {
         #[cfg(feature = "abcipp")]
         use tendermint_proto_abcipp::types::ConsensusParams;
 
+        #[cfg(feature = "abcipp")]
         use super::*;
         use crate::node::ledger::events::Event;
         #[cfg(feature = "abcipp")]

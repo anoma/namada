@@ -7,11 +7,12 @@ use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
-use tendermint_proto::abci::{
-    ExtendedCommitInfo, RequestPrepareProposal, TxRecord,
-};
 
 use super::super::*;
+use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+#[cfg(feature = "abcipp")]
+use crate::facade::tendermint_proto::abci::{ExtendedCommitInfo, TxRecord};
+#[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
 use crate::node::ledger::shell::vote_extensions::{
     iter_protocol_txs, split_vote_extensions,
@@ -118,23 +119,26 @@ where
         );
         #[cfg(not(feature = "abcipp"))]
         let (eth_events, valset_upds) = split_vote_extensions(txs);
-
+        #[cfg(feature = "abcipp")]
         const NOT_ENOUGH_VOTING_POWER_MSG: &str =
             "A Tendermint quorum should never decide on a block including \
              vote extensions reflecting less than or equal to 2/3 of the \
              total stake.";
 
-        let ethereum_events =
-            self.compress_ethereum_events(eth_events).expect({
-                #[cfg(feature = "abcipp")]
-                {
-                    NOT_ENOUGH_VOTING_POWER_MSG
-                }
+        let ethereum_events = self
+            .compress_ethereum_events(eth_events)
+            .unwrap_or_else(|| {
+                panic!("{}", {
+                    #[cfg(feature = "abcipp")]
+                    {
+                        NOT_ENOUGH_VOTING_POWER_MSG
+                    }
 
-                #[cfg(not(feature = "abcipp"))]
-                {
-                    "CONSENSUS FAILURE!!!!!"
-                }
+                    #[cfg(not(feature = "abcipp"))]
+                    {
+                        "CONSENSUS FAILURE!!!!!"
+                    }
+                })
             });
 
         #[cfg(feature = "abcipp")]
@@ -272,7 +276,7 @@ pub(super) mod record {
 // TODO: write tests for validator set update vote extensions in
 // prepare proposals
 mod test_prepare_proposal {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos::namada_proof_of_stake::types::{
@@ -445,8 +449,11 @@ mod test_prepare_proposal {
 
         #[cfg(not(feature = "abcipp"))]
         {
-            let filtered_votes: Vec<_> =
-                shell.filter_invalid_vote_extensions(votes).collect();
+            let filtered_votes: Vec<_> = shell
+                .filter_invalid_eth_events_vexts(vec![
+                    signed_vote_extension.clone(),
+                ])
+                .collect();
             assert_eq!(
                 filtered_votes,
                 vec![(get_validator_voting_power(), signed_vote_extension)]
@@ -909,7 +916,7 @@ mod test_prepare_proposal {
     /// corresponding wrappers
     #[test]
     fn test_decrypted_txs_in_correct_order() {
-        let (mut shell, _, _) = setup();
+        let (mut shell, _, _) = test_utils::setup();
         let keypair = gen_keypair();
         let mut expected_wrapper = vec![];
         let mut expected_decrypted = vec![];
