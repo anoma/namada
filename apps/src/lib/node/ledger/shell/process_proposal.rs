@@ -4,13 +4,14 @@
 use namada::ledger::pos::types::VotingPower;
 use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::voting_power::FractionalVotingPower;
-use tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use tendermint_proto::abci::{
-    ExecTxResult, RequestProcessProposal, ResponseProcessProposal,
-};
 
 use super::queries::{QueriesExt, SendValsetUpd};
 use super::*;
+use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
+use crate::facade::tendermint_proto::abci::RequestProcessProposal;
+#[cfg(feature = "abcipp")]
+use crate::facade::tendermint_proto_abcipp::abci::ExecTxResult;
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
 /// Contains stateful data about the number of vote extension
 /// digests found as protocol transactions in a proposed block.
@@ -42,7 +43,7 @@ where
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,
-    ) -> ResponseProcessProposal {
+    ) -> ProcessProposal {
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         tracing::info!(
             proposer = ?hex::encode(&req.proposer_address),
@@ -122,32 +123,11 @@ where
         } else {
             ProposalStatus::Accept
         };
-        tracing::info!(
-            proposer = ?hex::encode(&req.proposer_address),
-            height = req.height,
-            hash = ?hex::encode(&req.hash),
-            ?status,
-            "Processed block proposal",
-        );
-        ResponseProcessProposal {
+
+        ProcessProposal {
             status: status as i32,
             tx_results,
-            ..Default::default()
         }
-    }
-
-    /// Check all the given txs.
-    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<ExecTxResult> {
-        let mut tx_queue_iter = self.storage.tx_queue.iter();
-        txs.iter()
-            .map(|tx_bytes| {
-                ExecTxResult::from(self.process_single_tx(
-                    tx_bytes,
-                    &mut tx_queue_iter,
-                    &mut Default::default(),
-                ))
-            })
-            .collect()
     }
 
     /// Validates a list of vote extensions, included in PrepareProposal.
@@ -272,9 +252,11 @@ where
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthereumEvents(digest) => {
                     counters.eth_ev_digest_num += 1;
-
+                    #[cfg(feature = "abcipp")]
                     let extensions =
                         digest.decompress(self.storage.last_height);
+                    #[cfg(not(feature = "abcipp"))]
+                    let extensions = digest.decompress();
                     let valid_extensions =
                         self.validate_eth_events_vext_list(extensions).map(
                             |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
@@ -427,6 +409,8 @@ mod test_process_proposal {
     };
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::RequestInitChain;
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError, TestShell,
     };
@@ -480,7 +464,13 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(validator_addr, signed_vote_extension.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert(
+                        (validator_addr, LAST_HEIGHT),
+                        signed_vote_extension.sig,
+                    );
                     s
                 },
                 events: vec![],
@@ -556,14 +546,20 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = HashSet::new();
+                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, LAST_HEIGHT));
                         s
                     },
                 }],
@@ -600,20 +596,41 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), PRED_LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = HashSet::new();
+                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, PRED_LAST_HEIGHT));
                         s
                     },
                 }],
             }
         };
+        #[cfg(feature = "abcipp")]
         check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+                .sign(&protocol_key)
+                .to_bytes();
+            let request = ProcessProposal { txs: vec![tx] };
+            if let Ok(mut resp) = shell.process_proposal(request) {
+                assert_eq!(resp.len(), 1);
+                let processed = resp.remove(0);
+                assert_eq!(processed.result.code, ErrorCodes::Ok as u32);
+            } else {
+                panic!("Test failed");
+            }
+        }
     }
 
     /// Test that if a proposal contains Ethereum events with
@@ -646,14 +663,20 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = HashSet::new();
+                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, LAST_HEIGHT));
                         s
                     },
                 }],
