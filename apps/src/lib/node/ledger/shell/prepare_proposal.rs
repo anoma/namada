@@ -45,7 +45,13 @@ where
             // TODO: add some info logging?
 
             // add ethereum events and validator set updates as protocol txs
-            let mut txs = self.build_vote_extensions_txs(req.local_last_commit);
+            #[cfg(feature = "abcipp")]
+            let txs = self.build_vote_extensions_txs(req.local_last_commit);
+            #[cfg(not(feature = "abcipp"))]
+            let mut txs = self.build_vote_extensions_txs(&req.txs);
+            #[cfg(feature = "abcipp")]
+            let mut txs: Vec<TxRecord> =
+                txs.into_iter().map(record::add).collect();
 
             // add mempool txs
             let mut mempool_txs = self.build_mempool_txs(req.txs);
@@ -53,6 +59,9 @@ where
 
             // decrypt the wrapper txs included in the previous block
             let mut decrypted_txs = self.build_decrypted_txs();
+            #[cfg(feature = "abcipp")]
+            let mut decrypted_txs: Vec<TxRecord> =
+                decrypted_txs.into_iter().map(record::add).collect();
             txs.append(&mut decrypted_txs);
 
             txs
@@ -65,9 +74,17 @@ where
             tx_records = txs.len(),
             "Proposing block"
         );
-        response::PrepareProposal {
-            tx_records: txs,
-            ..Default::default()
+
+        #[cfg(feature = "abcipp")]
+        {
+            response::PrepareProposal {
+                tx_records: txs,
+                ..Default::default()
+            }
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            response::PrepareProposal { txs }
         }
     }
 
@@ -75,13 +92,15 @@ where
     /// events and, optionally, a validator set update
     fn build_vote_extensions_txs(
         &mut self,
-        local_last_commit: Option<ExtendedCommitInfo>,
-    ) -> Vec<TxRecord> {
+        #[cfg(feature = "abcipp")] local_last_commit: Option<ExtendedCommitInfo>,
+        #[cfg(not(feature = "abcipp"))] txs: &[TxBytes],
+    ) -> Vec<TxBytes> {
         // genesis block should not contain vote extensions
         if self.storage.last_height == BlockHeight(0) {
             return vec![];
         }
 
+        #[cfg(feature = "abcipp")]
         let (eth_events, valset_upds) = split_vote_extensions(
             local_last_commit
                 .expect(
@@ -95,6 +114,8 @@ where
                 )
                 .votes,
         );
+        #[cfg(not(feature = "abcipp"))]
+        let (eth_events, valset_upds) = split_vote_extensions(txs);
 
         const NOT_ENOUGH_VOTING_POWER_MSG: &str =
             "A Tendermint quorum should never decide on a block including \
@@ -105,6 +126,10 @@ where
             .compress_ethereum_events(eth_events)
             .expect(NOT_ENOUGH_VOTING_POWER_MSG);
 
+        // TODO: check that we can only send one validator set
+        // update vote extension per epoch
+        //
+        // add feature flag gating at this level
         let validator_set_update =
             if self.storage.can_send_validator_set_update(
                 SendValsetUpd::AtPrevHeight(self.storage.last_height),
@@ -126,11 +151,12 @@ where
             ethereum_events,
             validator_set_update,
         })
-        .map(|tx| record::add(tx.sign(protocol_key).to_bytes()))
+        .map(|tx| tx.sign(protocol_key).to_bytes())
         .collect()
     }
 
     /// Builds a batch of mempool transactions
+    #[cfg(feature = "abcipp")]
     fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxRecord> {
         // filter in half of the new txs from Tendermint, only keeping
         // wrappers
@@ -149,6 +175,26 @@ where
             .collect()
     }
 
+    /// Builds a batch of mempool transactions
+    #[cfg(not(feature = "abcipp"))]
+    fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxBytes> {
+        // filter in half of the new txs from Tendermint, only keeping
+        // wrappers
+        let number_of_new_txs = 1 + txs.len() / 2;
+        txs.into_iter()
+            .take(number_of_new_txs)
+            .filter_map(|tx_bytes| {
+                if let Ok(Ok(TxType::Wrapper(_))) =
+                    Tx::try_from(tx_bytes.as_slice()).map(process_tx)
+                {
+                    Some(tx_bytes)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     /// Builds a batch of DKG decrypted transactions
     // TODO: we won't have frontrunning protection until V2 of the Anoma
     // protocol; Namada runs V1, therefore this method is
@@ -157,7 +203,7 @@ where
     // sources:
     // - https://specs.anoma.net/main/releases/v2.html
     // - https://github.com/anoma/ferveo
-    fn build_decrypted_txs(&mut self) -> Vec<TxRecord> {
+    fn build_decrypted_txs(&mut self) -> Vec<TxBytes> {
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
@@ -171,17 +217,16 @@ where
                 })
                 .to_bytes()
             })
-            .map(record::add)
             .collect()
     }
 }
 
 /// Functions for creating the appropriate TxRecord given the
 /// numeric code
+#[cfg(feature = "abcipp")]
 pub(super) mod record {
-    use tendermint_proto::abci::tx_record::TxAction;
-
     use super::*;
+    use crate::facade::tendermint_proto::abci::tx_record::TxAction;
 
     /// Keep this transaction in the proposal
     pub fn keep(tx: TxBytes) -> TxRecord {
@@ -232,19 +277,21 @@ mod test_prepare_proposal {
         self, MultiSignedEthEvent,
     };
     use namada::types::vote_extensions::VoteExtension;
-    use tendermint_proto::abci::tx_record::TxAction;
-    use tendermint_proto::abci::{
-        ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
-    };
 
     use super::*;
+    use crate::wallet;
     use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
-    use crate::wallet;
+    #[cfg(feature = "abicpp")]
+    use crate::facade::tendermint_proto::abci::{
+        tx_record::TxAction,
+        ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
+    };
 
+    #[cfg(feature = "abicpp")]
     fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
         let evts = {
             let validator_addr = shell
@@ -296,16 +343,20 @@ mod test_prepare_proposal {
             Some("transaction_data".as_bytes().to_owned()),
         );
         let req = RequestPrepareProposal {
+            #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![tx.to_bytes()],
             max_tx_bytes: 0,
             ..Default::default()
         };
+        #[cfg(feature = "abcipp")]
         assert_eq!(
             // NOTE: we process mempool txs after protocol txs
             shell.prepare_proposal(req).tx_records.remove(1),
             record::remove(tx.to_bytes())
         );
+        #[cfg(not(feature = "abcipp"))]
+        assert!(shell.prepare_proposal(req).txs.is_empty());
     }
 
     /// Check if we are filtering out an invalid vote extension `vext`
@@ -318,6 +369,26 @@ mod test_prepare_proposal {
 
         assert_eq!(filtered_votes, vec![]);
     }
+/*
+    /// Check if we are filtering out an invalid vote extension `vext`
+    fn check_eth_events_filtering(
+        shell: &mut TestShell,
+        vext: Signed<ethereum_events::Vext>,
+    ) {
+        #[cfg(feature = "abcipp")]
+        let vexts = vec![vote_extension_serialize(vext)];
+        #[cfg(not(feature = "abcipp"))]
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        #[cfg(not(feature = "abcipp"))]
+        let vexts = vec![vote_extension_serialize(vext, protocol_key)];
+
+        let votes = deserialize_vote_extensions(vexts);
+        let filtered_votes: Vec<_> =
+            shell.filter_invalid_vote_extensions(votes).collect();
+
+        assert_eq!(filtered_votes, vec![]);
+    }
+*/
 
     /// Test if we are filtering out Ethereum events with bad
     /// signatures in a prepare proposal.
