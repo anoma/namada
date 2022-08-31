@@ -369,26 +369,6 @@ mod test_prepare_proposal {
 
         assert_eq!(filtered_votes, vec![]);
     }
-/*
-    /// Check if we are filtering out an invalid vote extension `vext`
-    fn check_eth_events_filtering(
-        shell: &mut TestShell,
-        vext: Signed<ethereum_events::Vext>,
-    ) {
-        #[cfg(feature = "abcipp")]
-        let vexts = vec![vote_extension_serialize(vext)];
-        #[cfg(not(feature = "abcipp"))]
-        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
-        #[cfg(not(feature = "abcipp"))]
-        let vexts = vec![vote_extension_serialize(vext, protocol_key)];
-
-        let votes = deserialize_vote_extensions(vexts);
-        let filtered_votes: Vec<_> =
-            shell.filter_invalid_vote_extensions(votes).collect();
-
-        assert_eq!(filtered_votes, vec![]);
-    }
-*/
 
     /// Test if we are filtering out Ethereum events with bad
     /// signatures in a prepare proposal.
