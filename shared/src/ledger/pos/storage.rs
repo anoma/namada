@@ -30,6 +30,7 @@ const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
 const TOTAL_VOTING_POWER_STORAGE_KEY: &str = "total_voting_power";
+const TOTAL_NAM_SUPPLY_STORAGE_KEY: &str = "total_nam_supply";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -348,6 +349,25 @@ pub fn is_total_voting_power_key(key: &Key) -> bool {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if addr == &ADDRESS && key == TOTAL_VOTING_POWER_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Storage key for total voting power.
+pub fn total_nam_supply_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&TOTAL_NAM_SUPPLY_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for total voting power?
+pub fn is_total_nam_supply_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
+            if addr == &ADDRESS && key == TOTAL_NAM_SUPPLY_STORAGE_KEY =>
         {
             true
         }
