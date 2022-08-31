@@ -15,21 +15,24 @@ use super::*;
 pub fn vp(
     ctx: &Ctx,
     token: &Address,
-    keys_changed: &BTreeSet<Key>,
+    keys_touched: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
 ) -> VpResult {
     let mut change: Change = 0;
-    for key in keys_changed.iter() {
-        let owner: Option<&Address> =
-            match token::is_multitoken_balance_key(token, key) {
-                Some((_, o)) => Some(o),
-                None => token::is_balance_key(token, key),
-            };
-        match owner {
+    for key in keys_touched.iter() {
+        match token::is_balance_key(token, key) {
             None => {
-                // Unknown changes to this address space are disallowed, but
-                // unknown changes anywhere else are permitted
-                if key.segments.get(0) == Some(&token.to_db_key()) {
+                if token::is_total_supply_key(key, token) {
+                    // check if total supply is changed, which it should never
+                    // be from a tx
+                    let total_pre: Amount = ctx.read_pre(key)?.unwrap();
+                    let total_post: Amount = ctx.read_post(key)?.unwrap();
+                    if total_pre != total_post {
+                        return reject();
+                    }
+                } else if key.segments.get(0) == Some(&token.to_db_key()) {
+                    // Unknown changes to this address space are disallowed, but
+                    // unknown changes anywhere else are permitted
                     return reject();
                 }
             }

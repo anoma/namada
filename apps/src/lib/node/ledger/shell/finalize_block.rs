@@ -14,7 +14,7 @@ use namada::ledger::treasury::ADDRESS as treasury_address;
 use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
 use namada::types::storage::{BlockHash, Epoch, Header};
-use namada::types::token::Amount;
+use namada::types::token::{total_supply_key, Amount};
 use rust_decimal::prelude::Decimal;
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -344,7 +344,10 @@ where
 
         // figure out how to get these and what types they should be
         let epochs_per_yr: u64 = 365;
-        let total_tokens: u64 = 100000;
+        let total_tokens = u64::from(total_tokens);
+        let total_tokens: Amount = self
+            .read_storage_key(&total_supply_key(&staking_token_address()))
+            .unwrap();
 
         let pos_locked_supply: u64 = 1000;
         let pos_locked_ratio_target = Decimal::new(5, 1);
@@ -405,6 +408,15 @@ where
             pos_minted_tokens,
         )
         .unwrap();
+        
+        self.storage
+            .write(
+                &total_supply_key(&staking_token_address()),
+                (total_tokens + pos_minted_tokens)
+                    .try_to_vec()
+                    .expect("encode initial total NAM balance"),
+            )
+            .expect("unable to set total NAM balance in storage");
     }
 }
 

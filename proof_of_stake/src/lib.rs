@@ -1355,6 +1355,7 @@ where
     let mut active: BTreeSet<WeightedValidator<Address>> = BTreeSet::default();
     let mut total_bonded_delta = TokenChange::default();
     let mut total_bonded_balance = TokenAmount::default();
+    let mut total_balance = TokenAmount::default();
     for GenesisValidator {
         address, tokens, ..
     } in validators.clone()
@@ -1369,6 +1370,7 @@ where
             address: address.clone(),
         });
     }
+    total_balance += total_bonded_balance;
     // Pop the smallest validators from the active set until its size is under
     // the limit and insert them into the inactive set
     let mut inactive: BTreeSet<WeightedValidator<Address>> =

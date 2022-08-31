@@ -234,6 +234,7 @@ impl From<Amount> for Change {
 
 /// Key segment for a balance key
 pub const BALANCE_STORAGE_KEY: &str = "balance";
+const TOTAL_SUPPLY_STORAGE_KEY: &str = "total_supply";
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
@@ -294,6 +295,25 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
             DbKeySeg::AddressSeg(owner),
         ] if key == BALANCE_STORAGE_KEY => Some(owner),
         _ => None,
+    }
+}
+
+/// Storage key for total supply of a token
+pub fn total_supply_key(token_address: &Address) -> Key {
+    Key::from(token_address.to_db_key())
+        .push(&TOTAL_SUPPLY_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for total supply of a specific token?
+pub fn is_total_supply_key(key: &Key, token_address: &Address) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
+            if addr == token_address && key == TOTAL_SUPPLY_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
     }
 }
 

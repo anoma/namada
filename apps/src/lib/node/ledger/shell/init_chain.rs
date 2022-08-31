@@ -2,8 +2,9 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use namada::ledger::pos::into_tm_voting_power;
+use namada::ledger::pos::{into_tm_voting_power, staking_token_address};
 use namada::types::key::*;
+use namada::types::token::total_supply_key;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
 
@@ -126,6 +127,8 @@ where
         }
 
         // Initialize genesis implicit
+        // TODO: verify if we can get the total initial token supply from simply
+        // looping over the set of implicit accounts
         for genesis::ImplicitAccount { public_key } in genesis.implicit_accounts
         {
             let address: address::Address = (&public_key).into();
@@ -136,6 +139,7 @@ where
         }
 
         // Initialize genesis token accounts
+        let mut total_balance = token::Amount::default();
         for genesis::TokenAccount {
             address,
             vp_code_path,
@@ -170,6 +174,9 @@ where
                 .unwrap();
 
             for (owner, amount) in balances {
+                if owner == staking_token_address() {
+                    total_balance += amount;
+                }
                 self.storage
                     .write(
                         &token::balance_key(&address, &owner),
@@ -251,7 +258,9 @@ where
                 .expect("Unable to set genesis user public DKG session key");
         }
 
-        // PoS system depends on epoch being initialized
+        // PoS system depends on epoch being initialized. Write the total
+        // genesis staking token balance to storage after
+        // initialization.
         let (current_epoch, _gas) = self.storage.get_current_epoch();
         pos::init_genesis_storage(
             &mut self.storage,
@@ -262,6 +271,15 @@ where
                 .map(|validator| &validator.pos_data),
             current_epoch,
         );
+        self.storage
+            .write(
+                &total_supply_key(&staking_token_address()),
+                total_balance
+                    .try_to_vec()
+                    .expect("encode initial total NAM balance"),
+            )
+            .expect("unable to set total NAM balance in storage");
+
         ibc::init_genesis_storage(&mut self.storage);
 
         // Set the initial validator set
