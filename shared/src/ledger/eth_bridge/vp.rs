@@ -9,9 +9,6 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 
-/// Internal address for the Ethereum bridge VP
-pub const ADDRESS: Address = Address::Internal(InternalAddress::EthBridge);
-
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, DB, H, CA>
 where
@@ -23,12 +20,10 @@ where
     pub ctx: Ctx<'ctx, DB, H, CA>,
 }
 
-#[allow(missing_docs)]
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("Internal error")]
-    Internal,
-}
+#[error(transparent)]
+/// Generic error that may be returned by the validity predicate
+pub struct Error(#[from] eyre::Error);
 
 impl<'a, DB, H, CA> NativeVp for EthBridge<'a, DB, H, CA>
 where
@@ -38,7 +33,7 @@ where
 {
     type Error = Error;
 
-    const ADDR: InternalAddress = InternalAddress::EthBridge;
+    const ADDR: InternalAddress = super::INTERNAL_ADDRESS;
 
     fn validate_tx(
         &self,
