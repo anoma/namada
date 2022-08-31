@@ -37,9 +37,10 @@ so that the smart contract knows how to verify the headers. In short, there
 is a pipelining mechanism in the smart contract.
 
 Such a message is not prompted by any user transaction and thus will have
-to be carried out by a _bridge relayer_. Once the transfer of power
-message is on chain, any time afterwards a Namada bridge process may take
-it to craft the appropriate message to the Ethereum smart contracts.
+to be carried out by a _bridge relayer_. Once the necessary data to 
+construct the transfer of power  message is on chain, any time afterwards a 
+Namada bridge process may take it to craft the appropriate header to the 
+Ethereum smart contracts.
 
 The details on bridge relayers are below in the corresponding section.
 
@@ -63,14 +64,14 @@ __bridge relayer__. In theory, since this message is publicly available
 on the blockchain, anyone can submit this transaction, but only the
 bridge relayer will be directly compensated by Namada.
 
+The bridge relayer will be chosen to be the proposer of the first block of the 
+new epoch. Anyone else may relay this message, but must pay for the fees out of
+their own pocket.
+
 All Namada validators will have an option to serve as bridge relayer and
 the Namada ledger will include a process that does the relaying. Since all
 Namada validators are running Ethereum full nodes, they can monitor
 that the message was relayed correctly by the bridge relayer.
-
-During the `FinalizeBlock` call in the ledger, if the transfer of power
-message is placed on chain, a flag should be set alerting the next block  
-proposer that they are the bridge relayer for this epoch.
 
 If the Ethereum event spawned by relaying their message gets accepted by the
 Ethereum state inclusion onto Namada, new NAM tokens will be minted to
