@@ -646,7 +646,7 @@ where
                     .mode
                     .get_protocol_key()
                     .map(|protocol_key| {
-                        ProtocolTxType::EthereumEvents(ext)
+                        ProtocolTxType::VoteExtension(ext)
                             .sign(protocol_key)
                             .to_bytes()
                     })
