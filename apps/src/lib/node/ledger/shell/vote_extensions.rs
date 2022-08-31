@@ -9,9 +9,10 @@ use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::vote_extensions::{
     ethereum_events, validator_set_update, VoteExtension, VoteExtensionDigest,
 };
-use tendermint_proto::abci::ExtendedVoteInfo;
 
 use super::*;
+#[cfg(feature = "abcipp")]
+use crate::facade::tendermint_proto::abci::ExtendedVoteInfo;
 use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -47,18 +48,26 @@ where
     H: StorageHasher + Sync + 'static,
 {
     /// INVARIANT: This method must be stateless.
+    #[cfg(feature = "abcipp")]
+    #[inline]
     pub fn extend_vote(
         &mut self,
         _req: request::ExtendVote,
     ) -> response::ExtendVote {
-        let vote_extension = VoteExtension {
+        response::ExtendVote {
+            vote_extension: self.craft_extension().try_to_vec().unwrap(),
+        }
+    }
+
+    /// Creates the data to be added to a vote extension.
+    ///
+    /// INVARIANT: This method must be stateless.
+    #[inline]
+    pub fn craft_extension(&mut self) -> VoteExtension {
+        VoteExtension {
             ethereum_events: self.extend_vote_with_ethereum_events(),
             validator_set_update: self.extend_vote_with_valset_update(),
         }
-        .try_to_vec()
-        .unwrap();
-
-        response::ExtendVote { vote_extension }
     }
 
     /// Extend PreCommit votes with [`ethereum_events::Vext`] instances.
@@ -136,6 +145,7 @@ where
     ///   (for replay protection).
     ///
     /// INVARIANT: This method must be stateless.
+    #[cfg(feature = "abcipp")]
     pub fn verify_vote_extension(
         &self,
         req: request::VerifyVoteExtension,
@@ -171,6 +181,7 @@ where
     }
 
     /// Check if [`ethereum_events::Vext`] instances are valid.
+    #[cfg(feature = "abcipp")]
     pub fn verify_ethereum_events(
         &self,
         req: &request::VerifyVoteExtension,
@@ -193,6 +204,7 @@ where
     }
 
     /// Check if [`validator_set_update::Vext`] instances are valid.
+    #[cfg(feature = "abcipp")]
     pub fn verify_valset_update(
         &self,
         req: &request::VerifyVoteExtension,
