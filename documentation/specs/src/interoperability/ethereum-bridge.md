@@ -2,8 +2,7 @@
 
 The Namada - Ethereum bridge exists to mint ERC20 tokens on Namada 
 which naturally can be redeemed on Ethereum at a later time. Furthermore, it 
-allows the minting of wrapped tokens on Ethereum backed by escrowed assets on 
-Namada.
+allows the minting of wrapped NAM (wNAM) tokens on Ethereum.
 
 The Namada Ethereum bridge system consists of:
 

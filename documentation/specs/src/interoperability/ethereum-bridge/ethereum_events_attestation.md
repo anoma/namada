@@ -77,7 +77,7 @@ events from other validators into their proposal. If the underlying Tendermint
 version supports vote extensions, consensus invariants guarantee that a
 quorum of votes from the previous block height can be included. Otherwise,
 validators can only submit votes by broadcasting protocol transactions,
-which comes with less guarantees.
+which comes with less guarantees (i.e. no consensus finality).
 
 The vote of a validator should include the events of the Ethereum blocks they
 have seen via their full node such that:
@@ -117,12 +117,13 @@ part of `ProcessProposal`, this includes checking:
 
 If vote extensions are supported, it is also checked that each vote extension
 came from the previous round, requiring validators to sign over the Namada block
-height with their vote extension.
+height with their vote extension. Signing over the block height also acts as 
+a replay protection mechanism.
 
-Furthermore, the vote extensions included by
-the block proposer should have at least 2 / 3 of the total voting power of the
-previous round backing it. Otherwise the block proposer would not have passed the
-`FinalizeBlock` phase of the last round.
+Furthermore, the vote extensions included by the block proposer should have 
+a quorum of the total voting power of the epoch of the block height behind 
+it. Otherwise the block proposer would not have passed the `FinalizeBlock` 
+phase of the last round of the last block.
 
 These checks are to prevent censorship
 of events from validators by the block proposer. If vote extensions are not
