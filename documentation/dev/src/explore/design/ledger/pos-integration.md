@@ -14,7 +14,8 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
 - for any validator, all the following fields are required:
   - `validator/{validator_address}/consensus_key`
   - `validator/{validator_address}/state`
-  - `validator/{validator_address}/total_deltas`: sum of self-bonds and delegations to this validator
+  - `validator/{validator_address}/total_deltas`: sum of self-bonds and delegations to this validator, may contain negative delta values when unbonding
+  - `validator/{validator_address}/total_unbonded`: sum of unbonded bonds from this validator, needed to determine the amount slashed in each epoch that it affects when a slash is applied
   - `validator/{validator_address}/voting_power`
   - `validator/{validator_address}/validator_rewards_product`: a multiplier of the `total_deltas` that yields the updated amount with staking rewards added to this validator
   - `validator/{validator_address}/delegation_rewards_product`: similar to `validator_rewards_product`, but with delegation commissions are subtracted

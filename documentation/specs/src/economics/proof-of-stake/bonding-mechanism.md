@@ -206,7 +206,7 @@ To update a value in `Epoched` data with delta values in epoch `n` with value `d
 
 The invariants for updates in both cases are that `m - n >= 0` and `m - n <= pipeline_length`.
 
-For the active validator set, we store all the active and inactive validators separately with their respective voting power:
+We store all the active and inactive validators in two separate sets, ordered by their voting power. Conceptually, this may look like this:
 
 ```rust,ignore
 type VotingPower = u64;
@@ -248,13 +248,14 @@ When any validator's voting power changes, we attempt to perform the following u
       1. if `power_delta < 0 && power_after < min_active.voting_power`, update the validator in `inactive` set with `voting_power = power_after`
       1. else, remove the validator from `inactive`, insert it into `active` and remove `min_active.address` from `active` and insert it into `inactive`
 
-Within each validator's address space, we store public consensus key, state, total bonded token amount and voting power calculated from the total bonded token amount (even though the voting power is stored in the `ValidatorSet`, we also need to have the `voting_power` here because we cannot look it up in the `ValidatorSet` without iterating the whole set):
+Within each validator's address space, we store public consensus key, state, total bonded token amount, total unbonded token amount (needed for applying of slashes) and voting power calculated from the total bonded token amount (even though the voting power is stored in the `ValidatorSet`, we also need to have the `voting_power` here because we cannot look it up in the `ValidatorSet` without iterating the whole set):
 
 ```rust,ignore
 struct Validator {
   consensus_key: Epoched<PublicKey>,
   state: Epoched<ValidatorState>,
   total_deltas: Epoched<token::Amount>,
+  total_unbonded: Epoched<token::Amount>,
   voting_power: Epoched<VotingPower>,
 }
 
