@@ -71,11 +71,11 @@ The validator transactions are assumed to be applied with an account address `va
   - let `pre_unbond = read(unbond/{validator_address}/{validator_address}/delta)`
   - if `total(bond) - total(pre_unbond) < amount`, panic
   - decrement the `bond` deltas starting from the rightmost value (a bond in a future-most epoch at the unbonding offset) until whole `amount` is decremented
-  - for each decremented `bond` value write a new `unbond` in epoch `n + unbonding_length` with the start epoch set to the epoch of the source value and end epoch `n + unbonding_length`
-  - decrement the `amount` from `validator/{validator_address}/total_deltas` in epoch `n + unbonding_length`
-  - update the `validator/{validator_address}/voting_power` in epoch `n + unbonding_length`
-  - update the `total_voting_power` in epoch `n + unbonding_length`
-  - update `validator_set` in epoch `n + unbonding_length`
+  - for each decremented `bond` value write a new `unbond` in epoch `n + pipeline_length + unbonding_length` with the start epoch set to the epoch of the source value and end epoch `n + pipeline_length + unbonding_length`
+  - decrement the `amount` from `validator/{validator_address}/total_deltas` in epoch `n + pipeline_length`
+  - update the `validator/{validator_address}/voting_power` in epoch `n + pipeline_length`
+  - update the `total_voting_power` in epoch `n + pipeline_length`
+  - update `validator_set` in epoch `n + pipeline_length`
 - `withdraw_unbonds`:
   - let `unbond = read(unbond/{validator_address}/{validator_address}/delta)`
   - if `unbond` doesn't exist, panic
@@ -225,7 +225,7 @@ The validity predicate triggers a validation logic based on the storage keys mod
     - add it to the `bond_delta` accumulator
 - `unbond/{unbond_source}/{unbond_validator}/deltas`:
   - for each difference between the post-state and pre-state values:
-    - if the difference is not in epoch `n` or `n + unboding_length`, panic
+    - if the difference is not in epoch `n` or `n + pipeline_length + unboding_length`, panic
     - find slashes for the `bond_validator`, if any, and apply them to the delta value
     - add it to the `unbond_delta` accumulator
 - `validator_set`:
