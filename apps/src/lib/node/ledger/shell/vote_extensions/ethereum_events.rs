@@ -126,16 +126,16 @@ where
     /// valid Ethereum events vote extensions, or the reason why these
     /// are invalid, in the form of a [`VoteExtensionError`].
     #[inline]
-    pub fn validate_eth_events_vext_list(
-        &self,
+    pub fn validate_eth_events_vext_list<'iter, 'this: 'iter>(
+        &'this self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
-        + 'static,
+        + 'iter,
     ) -> impl Iterator<
         Item = std::result::Result<
             (VotingPower, Signed<ethereum_events::Vext>),
             VoteExtensionError,
         >,
-    > + '_ {
+    > + 'this {
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_eth_events_vext_and_get_it_back(
                 vote_extension,
@@ -147,11 +147,11 @@ where
     /// Takes a list of signed Ethereum events vote extensions,
     /// and filters out invalid instances.
     #[inline]
-    pub fn filter_invalid_eth_events_vexts(
+    pub fn filter_invalid_eth_events_vexts<'iter, 'this: 'iter>(
         &self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
-        + 'static,
-    ) -> impl Iterator<Item = (VotingPower, Signed<ethereum_events::Vext>)> + '_
+        + 'iter,
+    ) -> impl Iterator<Item = (VotingPower, Signed<ethereum_events::Vext>)> + 'this
     {
         self.validate_eth_events_vext_list(vote_extensions)
             .filter_map(|ext| ext.ok())
@@ -160,7 +160,7 @@ where
     /// Compresses a set of signed Ethereum events into a single
     /// [`ethereum_events::VextDigest`], whilst filtering invalid
     /// [`Signed<ethereum_events::Vext>`] instances in the process.
-    pub fn compress_ethereum_events(
+    fn compress_ethereum_events(
         &self,
         vote_extensions: Vec<Signed<ethereum_events::Vext>>,
     ) -> Option<ethereum_events::VextDigest> {
@@ -168,6 +168,10 @@ where
             self.storage.get_epoch(self.storage.last_height).expect(
                 "The epoch of the last block height should always be known",
             );
+        #[cfg(not(feature = "abcipp"))]
+        if self.storage.last_height == BlockHeight(0) {
+            return None;
+        }
 
         let mut event_observers = BTreeMap::new();
         let mut signatures = HashMap::new();
@@ -180,6 +184,7 @@ where
             self.filter_invalid_eth_events_vexts(vote_extensions)
         {
             let validator_addr = vote_extension.data.validator_addr;
+            let block_height = vote_extension.data.block_height;
 
             // update voting power
             let validator_voting_power = u64::from(validator_voting_power);
@@ -196,15 +201,28 @@ where
             for ev in vote_extension.data.ethereum_events {
                 let signers =
                     event_observers.entry(ev).or_insert_with(HashSet::new);
-
+                #[cfg(feature = "abcipp")]
                 signers.insert(validator_addr.clone());
+                #[cfg(not(feature = "abcipp"))]
+                signers.insert((validator_addr.clone(), block_height));
             }
 
             // register the signature of `validator_addr`
             let addr = validator_addr.clone();
             let sig = vote_extension.sig;
 
+            #[cfg(feature = "abcipp")]
             if let Some(sig) = signatures.insert(addr, sig) {
+                tracing::warn!(
+                    ?sig,
+                    ?validator_addr,
+                    "Overwrote old signature from validator while \
+                     constructing ethereum_events::VextDigest"
+                );
+            }
+
+            #[cfg(not(feature = "abcipp"))]
+            if let Some(sig) = signatures.insert((addr, block_height), sig) {
                 tracing::warn!(
                     ?sig,
                     ?validator_addr,
@@ -214,6 +232,7 @@ where
             }
         }
 
+        #[cfg(feature = "abcipp")]
         if voting_power <= FractionalVotingPower::TWO_THIRDS {
             tracing::error!(
                 "Tendermint has decided on a block including Ethereum events \
@@ -222,7 +241,7 @@ where
             return None;
         }
 
-        let events = event_observers
+        let events: Vec<MultiSignedEthEvent> = event_observers
             .into_iter()
             .map(|(event, signers)| MultiSignedEthEvent { event, signers })
             .collect();

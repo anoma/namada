@@ -753,6 +753,7 @@ mod test_utils {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
+    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
     use namada::types::address::{xan, EstablishedAddressGen};
@@ -944,6 +945,12 @@ mod test_utils {
         pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
             self.shell.storage.tx_queue.push(wrapper);
         }
+    }
+
+    /// Get the only validator's voting power.
+    #[inline]
+    pub fn get_validator_voting_power() -> VotingPower {
+        200.into()
     }
 
     /// Start a new test shell and initialize it. Returns the shell paired with
