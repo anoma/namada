@@ -45,19 +45,18 @@ use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
-use tendermint_proto::abci::{
-    Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
-};
-use tendermint_proto::crypto::public_key;
-use tendermint_proto::types::ConsensusParams;
 use thiserror::Error;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tower_abci::{request, response};
 
 use super::protocol::ShellParams;
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
+use crate::facade::tendermint_proto::abci::{
+    ConsensusParams, Misbehavior as Evidence, MisbehaviorType as EvidenceType,
+    RequestPrepareProposal, ValidatorUpdate,
+};
+use crate::facade::tendermint_proto::crypto::public_key;
+use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -259,6 +258,19 @@ impl ShellMode {
                 ..
             } => Some(protocol_keypair),
             _ => None,
+        }
+    }
+
+    /// If this node is a validator, broadcast a tx
+    /// to the mempool using the broadcaster subprocess
+    pub fn broadcast(&self, data: Vec<u8>) {
+        if let Self::Validator {
+            broadcast_sender, ..
+        } = self
+        {
+            broadcast_sender
+                .send(data)
+                .expect("The broadcaster should be running for a validator");
         }
     }
 }
@@ -618,6 +630,26 @@ where
             self.storage.last_height,
         );
         response.data = root.0;
+
+        #[cfg(not(feature = "abcipp"))]
+        {
+            use namada::types::transaction::protocol::ProtocolTxType;
+
+            if let ShellMode::Validator { .. } = &self.mode {
+                let ext = self.craft_extension();
+                let ext = self
+                    .mode
+                    .get_protocol_key()
+                    .map(|protocol_key| {
+                        ProtocolTxType::VoteExtension(ext)
+                            .sign(protocol_key)
+                            .to_bytes()
+                    })
+                    .expect("Validators should have protocol keys");
+                self.mode.broadcast(ext);
+            }
+        }
+
         response
     }
 
@@ -730,11 +762,13 @@ mod test_utils {
     use namada::types::storage::{BlockHash, Epoch, Header};
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
-    use tendermint_proto::abci::{RequestInitChain, RequestProcessProposal};
-    use tendermint_proto::google::protobuf::Timestamp;
     use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::{
+        RequestInitChain, RequestProcessProposal,
+    };
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
@@ -878,10 +912,10 @@ mod test_utils {
             });
             let results = resp
                 .tx_results
-                .iter()
+                .into_iter()
                 .zip(req.txs.into_iter())
                 .map(|(res, tx_bytes)| ProcessedTx {
-                    result: res.into(),
+                    result: res,
                     tx: tx_bytes,
                 })
                 .collect();

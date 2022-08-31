@@ -20,14 +20,14 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
-use tendermint_proto::abci::CheckTxType;
 use tokio::sync::mpsc::unbounded_channel;
 use tower::ServiceBuilder;
-use tower_abci::{response, split, Server};
 
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
 use crate::config::TendermintMode;
+use crate::facade::tendermint_proto::abci::CheckTxType;
+use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
@@ -108,9 +108,11 @@ impl Shell {
             Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
+            #[cfg(feature = "abcipp")]
             Request::ExtendVote(_req) => {
                 Ok(Response::ExtendVote(self.extend_vote(_req)))
             }
+            #[cfg(feature = "abcipp")]
             Request::VerifyVoteExtension(_req) => {
                 tracing::debug!("Request VerifyVoteExtension");
                 Ok(Response::VerifyVoteExtension(

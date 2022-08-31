@@ -4,7 +4,6 @@ use std::cmp::max;
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
 use namada::ledger::parameters::EpochDuration;
-#[cfg(not(feature = "ABCI"))]
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
@@ -13,11 +12,11 @@ use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Epoch, Key, PrefixValue};
 use namada::types::token::{self, Amount};
-use tendermint_proto::crypto::{ProofOp, ProofOps};
-use tendermint_proto::google::protobuf;
-use tendermint_proto::types::EvidenceParams;
 
 use super::*;
+use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
+use crate::facade::tendermint_proto::google::protobuf;
+use crate::facade::tendermint_proto::types::EvidenceParams;
 use crate::node::ledger::response;
 
 #[derive(Error, Debug)]
