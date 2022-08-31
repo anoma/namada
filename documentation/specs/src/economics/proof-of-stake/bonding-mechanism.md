@@ -151,60 +151,66 @@ The validators' data are keyed by the their addresses, conceptually:
 type Validators = HashMap<Address, Validator>;
 ```
 
-Epoched data are stored in the following structure:
+Epoched data are stored in a structure, conceptually looking like this:
 
 ```rust,ignore
 struct Epoched<Data> {
   /// The epoch in which this data was last updated
   last_update: Epoch,
-  /// Dynamically sized vector in which the head is the data for epoch in which 
-  /// the `last_update` was performed and every consecutive array element is the
-  /// successor epoch of the predecessor array element. For system parameters, 
-  /// validator's consensus key and state, `LENGTH = pipeline_length + 1`. 
-  /// For all others, `LENGTH = unbonding_length + 1`.
-  data: Vec<Option<Data>>
+  /// How many epochs of historical data to keep, this is `0` in most cases
+  /// except for validator `total_deltas` and `total_unbonded`, in which 
+  /// historical data for up to `pipeline_length + unbonding_length - 1` is 
+  /// needed to be able to apply any slashes that may occur.
+  /// The value is not actually stored with the data, it's either constant 
+  /// value or resolved from PoS parameters on which it may depends.
+  past_epochs_to_store: u64,
+  /// An ordered map in which the head is the data for epoch in which 
+  /// the `last_update - past_epochs_to_store` was performed and every
+  /// consecutive epoch up to a required length. For system parameters, 
+  /// and all the epoched data 
+  /// `LENGTH = past_epochs_to_store + pipeline_length + 1`, 
+  /// with exception of unbonds, for which 
+  /// `LENGTH = past_epochs_to_store + pipeline_length + unbonding_length + 1`.
+  data: Map<Epoch, Option<Data>>
 }
 ```
 
-Note that not all epochs will have data set, only the ones in which some changes occurred.
+Note that not all epochs will have data set, only the ones in which some changes occurred. The only exception to this is validator sets, which are written on a new epoch from the latest state into the new epoch by the protocol. This so that a
+transaction never has to update the whole validator set when it hasn't changed yet in the current epoch, which would require a copy of the last epoch data and that copy would additionally have to be verified by the PoS validity predicate.
 
-To try to look-up a value for `Epoched` data with independent values in each epoch (such as the active validator set) in the current epoch `n`:
+To try to look-up a value for `Epoched` data with discrete values in each epoch (such as the active validator set) in the current epoch `n`:
 
-1. let `index = min(n - last_update, pipeline_length)`
-1. read the `data` field at `index`:
-   1. if there's a value at `index` return it
-   1. else if `index == 0`, return `None`
-   1. else decrement `index` and repeat this sub-step from 1.
+1. read the `data` field at epoch `n`:
+   1. if there's a value at `n` return it
+   1. else if `n == last_update - past_epochs_to_store`, return `None`
+   1. else decrement `n` and repeat this sub-step from 1.
 
 To look-up a value for `Epoched` data with delta values in the current epoch `n`:
 
-1. let `end = min(n - last_update, pipeline_length) + 1`
-1. sum all the values that are not `None` in the `0 .. end` range bounded inclusively below and exclusively above
+1. sum all the values that are not `None` in the `last_update - past_epochs_to_store .. n` epoch range bounded inclusively below and above
 
-To update a value in `Epoched` data with independent values in epoch `n` with value `new` for epoch `m`:
+To update a value in `Epoched` data with discrete values in epoch `n` with value `new` for epoch `m`:
 
-1. let `shift = min(n - last_update, pipeline_length)`
-1. if `shift == 0`:
-   1. `data[m - n] = new`
+1. let `epochs_to_clear = min(n - last_update, LENGTH)`
+1. if `epochs_to_clear == 0`:
+   1. `data[m] = new`
 1. else:
-   1. for `i in 0 .. shift` range bounded inclusively below and exclusively above, set `data[i] = None`
-   1. rotate `data` left by `shift`
-   1. set `data[m - n] = new`
+   1. for `i in last_update - past_epochs_to_store .. last_update - past_epochs_to_store + epochs_to_clear` range bounded inclusively below and exclusively above, set `data[i] = None`
+   1. set `data[m] = new`
    1. set `last_update` to the current epoch
 
 To update a value in `Epoched` data with delta values in epoch `n` with value `delta` for epoch `m`:
 
-1. let `shift = min(n - last_update, pipeline_length)`
-1. if `shift == 0`:
-   1. set `data[m - n] = data[m - n].map_or_else(delta, |last_delta| last_delta + delta)` (add the `delta` to the previous value, if any, otherwise use the `delta` as the value)
+1. let `epochs_to_sum = min(n - last_update, LENGTH)`
+1. if `epochs_to_sum == 0`:
+   1. set `data[m] = data[m].map_or_else(delta, |last_delta| last_delta + delta)` (add the `delta` to the previous value, if any, otherwise use the `delta` as the value)
 1. else:
-   1. let `sum` to be equal to the sum of all delta values in the `i in 0 .. shift` range bounded inclusively below and exclusively above and set `data[i] = None`
-   1. rotate `data` left by `shift`
-   1. set `data[0] = data[0].map_or_else(sum, |last_delta| last_delta + sum)`
-   1. set `data[m - n] = delta`
+   1. let `sum` to be equal to the sum of all delta values in the `last_update - past_epochs_to_store .. last_update - past_epochs_to_store + epochs_to_sum` range bounded inclusively below and exclusively above and set `data[i] = None`
+   1. set `data[n - past_epochs_to_store] = data[n - past_epochs_to_store].map_or_else(sum, |last_delta| last_delta + sum)` to add the sum to the last epoch that will be stored
+   1. set `data[m] = data[m].map_or_else(delta, |last_delta| last_delta + delta)` to add the new delta
    1. set `last_update` to the current epoch
 
-The invariants for updates in both cases are that `m - n >= 0` and `m - n <= pipeline_length`.
+The invariants for updates in both cases are that `m >= n` (epoched data cannot be updated in an epoch lower than the current epoch) and `m - n <= LENGTH - past_epochs_to_store` (epoched data can only be updated at the future-most epoch set by the `LENGTH - past_epochs_to_store` of the data).
 
 We store all the active and inactive validators in two separate sets, ordered by their voting power. Conceptually, this may look like this:
 
