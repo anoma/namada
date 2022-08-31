@@ -54,6 +54,12 @@ pub trait StorageRead<'iter> {
     /// Storage `has_key` in. It will try to read from the storage.
     fn has_key(&self, key: &storage::Key) -> Result<bool>;
 
+    /// Storage prefix iterator for. It will try to read from the storage.
+    fn iter_next(
+        &self,
+        iter: &mut Self::PrefixIter,
+    ) -> Result<Option<(String, Vec<u8>)>>;
+
     /// Storage prefix iterator. It will try to get an iterator from the
     /// storage.
     ///
@@ -63,12 +69,6 @@ pub trait StorageRead<'iter> {
         &'iter self,
         prefix: &storage::Key,
     ) -> Result<Self::PrefixIter>;
-
-    /// Storage prefix iterator for. It will try to read from the storage.
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>>;
 
     /// Getting the chain ID.
     fn get_chain_id(&self) -> Result<String>;
