@@ -11,7 +11,9 @@ use namada::types::vote_extensions::VoteExtensionDigest;
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::abci::{ExtendedCommitInfo, TxRecord};
+use crate::facade::tendermint_proto::abci::{
+    tx_record::TxAction, ExtendedCommitInfo, TxRecord,
+};
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
 use crate::node::ledger::shell::vote_extensions::{
@@ -243,7 +245,6 @@ where
 #[cfg(feature = "abcipp")]
 pub(super) mod record {
     use super::*;
-    use crate::facade::tendermint_proto::abci::tx_record::TxAction;
 
     /// Keep this transaction in the proposal
     pub fn keep(tx: TxBytes) -> TxRecord {
@@ -296,18 +297,18 @@ mod test_prepare_proposal {
     use namada::types::vote_extensions::VoteExtension;
 
     use super::*;
-    #[cfg(feature = "abicpp")]
+    #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
         tx_record::TxAction, ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
     use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, get_validator_voting_power, TestShell,
+        self, gen_keypair, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
-    #[cfg(feature = "abicpp")]
+    #[cfg(feature = "abcipp")]
     fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
         let evts = {
             let validator_addr = shell
@@ -456,7 +457,10 @@ mod test_prepare_proposal {
                 .collect();
             assert_eq!(
                 filtered_votes,
-                vec![(get_validator_voting_power(), signed_vote_extension)]
+                vec![(
+                    test_utils::get_validator_voting_power(),
+                    signed_vote_extension
+                )]
             )
         }
     }

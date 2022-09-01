@@ -255,24 +255,21 @@ pub mod shim {
 
     /// Custom types for response payloads
     pub mod response {
-        #[cfg(not(feature = "abcipp"))]
-        use tendermint_proto::abci::{
-            ConsensusParams, Event as TmEvent, ResponseProcessProposal,
-            ValidatorUpdate,
-        };
-        #[cfg(feature = "abcipp")]
-        use tendermint_proto_abcipp::abci::{
-            Event as TmEvent, ExecTxResult, ResponseFinalizeBlock,
-            ValidatorUpdate,
-        };
-        #[cfg(feature = "abcipp")]
-        use tendermint_proto_abcipp::types::ConsensusParams;
-
         #[cfg(feature = "abcipp")]
         use super::*;
+        use crate::facade::tendermint_proto::abci::{
+            Event as TmEvent, ExecTxResult, ResponseProcessProposal,
+            ValidatorUpdate,
+        };
+        #[cfg(feature = "abcipp")]
+        use crate::facade::tendermint_proto::{
+            abci::ResponseFinalizeBlock, types::ConsensusParams,
+        };
         use crate::node::ledger::events::Event;
         #[cfg(feature = "abcipp")]
         use crate::node::ledger::events::EventLevel;
+        #[cfg(not(feature = "abcipp"))]
+        use crate::tendermint_proto::abci::ConsensusParams;
 
         #[derive(Debug, Default)]
         pub struct VerifyHeader;

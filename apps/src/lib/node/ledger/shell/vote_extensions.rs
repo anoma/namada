@@ -151,6 +151,8 @@ where
         &self,
         req: request::VerifyVoteExtension,
     ) -> response::VerifyVoteExtension {
+        use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
+
         let ext = match VoteExtension::try_from_slice(&req.vote_extension[..]) {
             Ok(ext) => ext,
             Err(err) => {

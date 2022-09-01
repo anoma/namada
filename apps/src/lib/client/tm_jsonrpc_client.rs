@@ -72,7 +72,7 @@ pub struct Response {
     /// Results of request (if successful)
     result: Option<EventReply>,
     /// Error message if unsuccessful
-    error: Option<tendermint_rpc::response_error::ResponseError>,
+    error: Option<crate::facade::tendermint_rpc::response_error::ResponseError>,
 }
 
 impl Response {
