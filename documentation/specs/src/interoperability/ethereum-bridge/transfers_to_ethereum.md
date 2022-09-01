@@ -19,26 +19,9 @@ will also aid in batching transactions.
 
 To redeem wrapped Ethereum assets, a user should make a transaction to burn
 their wrapped tokens, which the `#EthBridge` validity predicate will accept.
-
-Mints of a wrapped Namada token on Ethereum (including NAM, Namada's native token)
-will be represented by a data type like:
-```rust
-struct MintWrappedNam {
-    /// The Namada address owning the token
-    owner: NamadaAddress,
-    /// The address on Ethereum receiving the wrapped tokens
-    receiver: EthereumAddress,
-    /// The address of the token to be wrapped 
-    token: NamadaAddress,
-    /// The number of wrapped Namada tokens to mint on Ethereum
-    amount: Amount,
-}
-```
-
-If a user wishes to mint a wrapped Namada token on Ethereum, they must
-submit a transaction on Namada that:
-- stores `MintWrappedNam` on chain somewhere - TBD
-- sends the correct amount of Namada token to `#EthBridgeEscrow`
+For sending NAM over the bridge, a user should send their NAM to 
+`#EthBridgeEscrow`. In both cases, it's important that the user also adds a
+`PendingTransfer` to the [Bridge Pool](#bridge-pool-validity-predicate).
 
 ## Batching
 
