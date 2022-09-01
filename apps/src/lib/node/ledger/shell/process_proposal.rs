@@ -8,9 +8,9 @@ use namada::types::voting_power::FractionalVotingPower;
 use super::queries::{QueriesExt, SendValsetUpd};
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 #[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto_abcipp::abci::ExecTxResult;
+use crate::facade::tendermint_proto::abci::ExecTxResult;
+use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
 /// Contains stateful data about the number of vote extension

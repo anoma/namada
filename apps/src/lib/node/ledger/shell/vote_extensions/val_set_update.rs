@@ -224,10 +224,10 @@ mod test_vote_extensions {
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::types::key::RefTo;
     #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::VoteExtension;
-    #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::ethereum_events;
     use namada::types::vote_extensions::validator_set_update;
+    #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::VoteExtension;
 
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;

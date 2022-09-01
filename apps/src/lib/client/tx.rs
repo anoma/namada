@@ -25,10 +25,6 @@ use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, token};
 use namada::{ledger, vm};
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
-use tendermint_rpc::query::{EventType, Query};
-use tendermint_rpc::{Client, HttpClient};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -39,6 +35,10 @@ use crate::client::tendermint_websocket_client::{
     Error as WsError, TendermintWebsocketClient, WebSocketAddress,
 };
 use crate::client::tm_jsonrpc_client::{fetch_event, JsonRpcAddress};
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+use crate::facade::tendermint_rpc::query::{EventType, Query};
+use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
 
 const ACCEPTED_QUERY_KEY: &str = "accepted.hash";
