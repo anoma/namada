@@ -570,13 +570,10 @@ mod test_prepare_proposal {
         let vote_extension_digest =
             ethereum_events::VextDigest { events, signatures };
 
-        #[cfg(feature = "abcipp")]
         assert_eq!(
             vec![ext],
             vote_extension_digest.clone().decompress(last_height)
         );
-        #[cfg(not(feature = "abcipp"))]
-        assert_eq!(vec![ext], vote_extension_digest.clone().decompress());
 
         vote_extension_digest
 

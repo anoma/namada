@@ -249,11 +249,8 @@ where
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthereumEvents(digest) => {
                     counters.eth_ev_digest_num += 1;
-                    #[cfg(feature = "abcipp")]
                     let extensions =
                         digest.decompress(self.storage.last_height);
-                    #[cfg(not(feature = "abcipp"))]
-                    let extensions = digest.decompress();
                     let valid_extensions =
                         self.validate_eth_events_vext_list(extensions).map(
                             |maybe_ext| maybe_ext.ok().map(|(power, _)| power),

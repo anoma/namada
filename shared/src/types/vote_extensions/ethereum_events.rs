@@ -85,10 +85,13 @@ pub struct VextDigest {
 
 impl VextDigest {
     /// Decompresses a set of signed [`Vext`] instances.
-    pub fn decompress(
-        self,
-        #[cfg(feature = "abcipp")] last_height: BlockHeight,
-    ) -> Vec<Signed<Vext>> {
+    pub fn decompress(self, last_height: BlockHeight) -> Vec<Signed<Vext>> {
+        #[cfg(not(feature = "abcipp"))]
+        {
+            #[allow(clippy::drop_copy)]
+            drop(last_height);
+        }
+
         let VextDigest { signatures, events } = self;
 
         let mut extensions = vec![];
@@ -258,14 +261,8 @@ mod tests {
 
         // finally, decompress the `VextDigest` back into a
         // `Vec<Signed<Vext>>`
-        #[cfg(feature = "abcipp")]
         let decompressed = digest
             .decompress(last_block_height)
-            .into_iter()
-            .collect::<Vec<Signed<Vext>>>();
-        #[cfg(not(feature = "abcipp"))]
-        let decompressed = digest
-            .decompress()
             .into_iter()
             .collect::<Vec<Signed<Vext>>>();
 
