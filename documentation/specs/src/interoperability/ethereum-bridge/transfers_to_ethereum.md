@@ -47,7 +47,7 @@ the proof for a single transaction over the bridge. Instead, it is typically
 more economical to submit proofs of many transactions in bulk. This batching
 is described in this section.
 
-A pool of transaction from Namada to Ethereum will be kept by Namada. Every
+A pool of transfers from Namada to Ethereum will be kept by Namada. Every
 transaction to Ethereum that Namada validators approve will be added to this
 pool. We call this the _Bridge Pool_.
 
