@@ -1,6 +1,7 @@
 # Bootstrapping the bridge
 
 ## Overview
+
 The Ethereum bridge is not enabled at the launch of a Namada chain. Instead, there is a governance parameter, `eth_bridge_proxy_address`, which is initialized to the zero Ethereum address (`"0x0000000000000000000000000000000000000000"`). An overview of the steps to enable the Ethereum bridge for a given Namada chain are:
 
 - A governance proposal should be held to agree on a block height `l` at which to launch the Ethereum bridge by means of a hard fork.
@@ -19,7 +20,7 @@ The governance proposal can be freeform and simply indicate what the value of `l
 
 ### Value for launch height `l`
 
-The active validator set at the launch height chosen for starting the Ethereum bridge will have the extra responsibility of restarting the chain if they consider the deployed smart contracts as valid. For this reason, the validator set at this height should ideally be known in advance of the governance proposal resolving, and a channel set up for offchain communication and co-ordination of the chain restart.
+The active validator set at the launch height chosen for starting the Ethereum bridge will have the extra responsibility of restarting the chain if they consider the deployed smart contracts as valid. For this reason, the validator set at this height must be known in advance of the governance proposal resolving, and a channel set up for offchain communication and co-ordination of the chain restart. In practise, this means the governance proposal to launch the chain should commit to doing so within an epoch of passing, so that the validator set is definitely known in advance.
 
 ### Deployer
 
@@ -53,10 +54,20 @@ In this example, all epochs are assumed to be `100` blocks long, and the active 
 }
 ```
 
-- The governance proposal passes at block `3300`
+- The governance proposal passes at block `3300` (the first block of epoch `33`)
 
-- Putative Ethereum bridge smart contracts are deployed, with the proxy contract located at `0x00000000000000000000000000000000DeaDBeef`
+- Validators for epoch `33` manually configure their nodes to halt after having finalized block `3399`, before that block is reached
 
-- At block height `3400`, the chain halts
+- The chain halts after having finalized block `3399` (the last block of epoch `33`)
 
-- The chain restarts with the governance parameter `eth_bridge_proxy_address` set to `0x00000000000000000000000000000000DeaDBeef`
+- Putative Ethereum bridge smart contracts are deployed at this point, with the proxy contract located at `0x00000000000000000000000000000000DeaDBeef`
+
+- Verification of the Ethereum bridge smart contracts take place
+
+- Validators coordinate to craft a new genesis file for the chain restart at `3400`, with the governance parameter `eth_bridge_proxy_address` set to `0x00000000000000000000000000000000DeaDBeef`
+
+- The chain restarts at `3400` (the first block of epoch `34`)
+
+- The first ever validator set update (for epoch `35`) becomes possible within a few blocks (e.g. by block `3410`)
+
+- A validator set update for epoch `35` is submitted to the Ethereum bridge smart contracts
