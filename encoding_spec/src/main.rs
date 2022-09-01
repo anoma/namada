@@ -32,7 +32,7 @@ use namada::types::{token, transaction};
 
 /// This generator will write output into this `docs` file.
 const OUTPUT_PATH: &str =
-    "documentation/docs/src/specs/encoding/generated-borsh-spec.md";
+    "documentation/dev/src/specs/encoding/generated-borsh-spec.md";
 
 lazy_static! {
     /// Borsh types may be used by declarations. These are displayed differently in the [`md_fmt_type`].
@@ -394,6 +394,7 @@ fn escape_fragment_anchor(string: impl AsRef<str>) -> String {
         .replace('<', "")
         .replace(',', "")
         .replace(' ', "-")
+        .replace(':', "")
         .to_ascii_lowercase()
 }
 
