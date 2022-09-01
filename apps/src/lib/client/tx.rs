@@ -1414,6 +1414,7 @@ where
         if new_epoch != epoch {
             // Hack: build new shielded transfer with updated outputs
             let mut replay_builder = Builder::<TestNetwork, OsRng>::new(0u32);
+            replay_builder.set_fee(Amount::zero())?;
             let ovk_opt = spending_key.map(|x| x.expsk.ovk);
             let (new_asset_type, _) =
                 convert_amount(new_epoch, &args.token, args.amount);
@@ -1423,6 +1424,25 @@ where
                 new_asset_type,
                 amt,
                 memo,
+            )?;
+
+            let secp_sk =
+                secp256k1::SecretKey::from_slice(&[0xcd; 32]).expect("secret key");
+            let secp_ctx = secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
+            let secp_pk =
+                secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
+                    .serialize();
+            let hash =
+                ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
+            let script = TransparentAddress::PublicKey(hash.into()).script();
+            replay_builder.add_transparent_input(
+                secp_sk,
+                OutPoint::new([0u8; 32], 0),
+                TxOut {
+                    asset_type: new_asset_type,
+                    value: amt,
+                    script_pubkey: script,
+                },
             )?;
 
             let (replay_tx, _) =
