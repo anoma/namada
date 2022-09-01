@@ -23,6 +23,7 @@ pub const DATA_SUBKEY: &str = "data";
 ///
 /// This is different from [`super::LazyHashSet`], which hashes borsh encoded
 /// values.
+#[derive(Debug)]
 pub struct LazySet<T> {
     key: storage::Key,
     phantom: PhantomData<T>,
@@ -79,6 +80,16 @@ where
         storage.has_key(&self.get_data_key(val))
     }
 
+    /// Returns whether the set contains no elements.
+    pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
+        let mut iter =
+            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
+        Ok(iter.next().is_none())
+    }
+
     /// Reads the number of elements in the set.
     ///
     /// Note that this function shouldn't be used in transactions and VPs code
@@ -92,20 +103,6 @@ where
         let iter =
             storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
         iter.count().try_into().into_storage_result()
-    }
-
-    /// Returns whether the set contains no elements.
-    ///
-    /// Note that this function shouldn't be used in transactions and VPs code
-    /// on unbounded sets to avoid gas usage increasing with the length of the
-    /// set.
-    pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
-    where
-        S: for<'iter> StorageRead<'iter>,
-    {
-        let mut iter =
-            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
-        Ok(iter.next().is_none())
     }
 
     /// An iterator visiting all elements. The iterator element type is

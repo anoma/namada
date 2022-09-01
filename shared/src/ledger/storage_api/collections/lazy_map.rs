@@ -6,6 +6,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::super::Result;
 use super::{LazyCollection, ReadError};
+use crate::ledger::storage_api::validation::Data;
 use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::types::storage::{self, KeySeg};
 
@@ -25,10 +26,48 @@ pub const DATA_SUBKEY: &str = "data";
 ///
 /// This is different from [`super::LazyHashMap`], which hashes borsh encoded
 /// key.
+#[derive(Debug)]
 pub struct LazyMap<K, V> {
     key: storage::Key,
     phantom_k: PhantomData<K>,
     phantom_v: PhantomData<V>,
+}
+
+/// Possible sub-keys of a [`LazyMap`]
+#[derive(Debug)]
+pub enum SubKey<K> {
+    /// Data sub-key, further sub-keyed by its literal map key
+    Data(K),
+}
+
+/// Possible sub-keys of a [`LazyMap`], together with their [`validation::Data`]
+/// that contains prior and posterior state.
+#[derive(Debug)]
+pub enum SubKeyWithData<K, V> {
+    /// Data sub-key, further sub-keyed by its literal map key
+    Data(K, Data<V>),
+}
+
+/// Possible actions that can modify a [`LazyMap`]. This roughly corresponds to
+/// the methods that have `StorageWrite` access.
+/// TODO: In a nested collection, `V` may be an action inside the nested
+/// collection.
+#[derive(Debug)]
+pub enum Action<K, V> {
+    /// Insert or update a value `V` at key `K` in a [`LazyMap<K, V>`].
+    Insert(K, V),
+    /// Remove a value `V` at key `K` from a [`LazyMap<K, V>`].
+    Remove(K, V),
+}
+
+/// TODO: In a nested collection, `V` may be an action inside the nested
+/// collection.
+#[derive(Debug)]
+pub enum Nested<K, V> {
+    /// Insert or update a value `V` at key `K` in a [`LazyMap<K, V>`].
+    Insert(K, V),
+    /// Remove a value `V` at key `K` from a [`LazyMap<K, V>`].
+    Remove(K, V),
 }
 
 impl<K, V> LazyCollection for LazyMap<K, V>
@@ -140,6 +179,16 @@ where
         Self::read_key_val(storage, &data_key)
     }
 
+    /// Returns whether the map contains no elements.
+    pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
+    where
+        S: for<'iter> StorageRead<'iter>,
+    {
+        let mut iter =
+            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
+        Ok(iter.next().is_none())
+    }
+
     /// Reads the number of elements in the map.
     ///
     /// Note that this function shouldn't be used in transactions and VPs code
@@ -153,20 +202,6 @@ where
         let iter =
             storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
         iter.count().try_into().into_storage_result()
-    }
-
-    /// Returns whether the map contains no elements.
-    ///
-    /// Note that this function shouldn't be used in transactions and VPs code
-    /// on unbounded maps to avoid gas usage increasing with the length of the
-    /// set.
-    pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
-    where
-        S: for<'iter> StorageRead<'iter>,
-    {
-        let mut iter =
-            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
-        Ok(iter.next().is_none())
     }
 
     /// An iterator visiting all key-value elements. The iterator element type

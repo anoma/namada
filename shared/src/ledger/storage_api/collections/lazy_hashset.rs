@@ -29,6 +29,7 @@ pub const DATA_SUBKEY: &str = "data";
 ///
 /// Additionally, [`LazyHashSet`] also writes the unhashed values into the
 /// storage.
+#[derive(Debug)]
 pub struct LazyHashSet<T> {
     key: storage::Key,
     phantom: PhantomData<T>,

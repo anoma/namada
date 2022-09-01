@@ -11,7 +11,7 @@ use thiserror::Error;
 use super::super::Result;
 use super::LazyCollection;
 use crate::ledger::storage_api::validation::{self, Data};
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
+use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::ledger::vp_env::VpEnv;
 use crate::types::storage;
 
@@ -29,12 +29,14 @@ pub type Index = u64;
 /// vector, the elements do not reside in memory but are instead read and
 /// written to storage sub-keys of the storage `key` used to construct the
 /// vector.
+#[derive(Debug)]
 pub struct LazyVec<T> {
     key: storage::Key,
     phantom: PhantomData<T>,
 }
 
 /// Possible sub-keys of a [`LazyVec`]
+#[derive(Debug)]
 pub enum SubKey {
     /// Length sub-key
     Len,
@@ -54,11 +56,21 @@ pub enum SubKeyWithData<T> {
 
 /// Possible actions that can modify a [`LazyVec`]. This roughly corresponds to
 /// the methods that have `StorageWrite` access.
+#[derive(Debug)]
 pub enum Action<T> {
     /// Push a value `T` into a [`LazyVec<T>`]
     Push(T),
     /// Pop a value `T` from a [`LazyVec<T>`]
     Pop(T),
+    /// Update a value `T` at index from pre to post state in a [`LazyVec<T>`]
+    Update {
+        /// index at which the value is updated
+        index: Index,
+        /// value before the update
+        pre: T,
+        /// value after the update
+        post: T,
+    },
 }
 
 #[allow(missing_docs)]
@@ -81,6 +93,15 @@ pub enum ValidationError {
     IndexOverflow(<usize as TryInto<Index>>::Error),
     #[error("Unexpected underflow in `{0} - {0}`")]
     UnexpectedUnderflow(Index, Index),
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum UpdateError {
+    #[error(
+        "Invalid index into a LazyVec. Got {index}, but the length is {len}"
+    )]
+    InvalidIndex { index: Index, len: u64 },
 }
 
 /// [`LazyVec`] validation result
@@ -184,6 +205,23 @@ where
         }
     }
 
+    /// Update an element at the given index.
+    ///
+    /// The index must be smaller than the length of the vector, otherwise this
+    /// will fail with `UpdateError::InvalidIndex`.
+    pub fn update<S>(&self, storage: &mut S, index: Index, val: T) -> Result<()>
+    where
+        S: StorageWrite + for<'iter> StorageRead<'iter>,
+    {
+        let len = self.len(storage)?;
+        if index >= len {
+            return Err(UpdateError::InvalidIndex { index, len })
+                .into_storage_result();
+        }
+        let data_key = self.get_data_key(index);
+        storage.write(&data_key, val)
+    }
+
     /// Read an element at the index or `Ok(None)` if out of bounds.
     pub fn get<S>(&self, storage: &S, index: Index) -> Result<Option<T>>
     where
@@ -231,24 +269,27 @@ where
         None
     }
 
-    /// Accumulate storage changes inside a [`ValidationBuilder`]
-    pub fn validate<ENV>(
+    /// Accumulate storage changes inside a [`ValidationBuilder`]. This is
+    /// typically done by the validity predicate while looping through the
+    /// changed keys. If the resulting `builder` is not `None`, one must
+    /// call `fn build()` on it to get the validation result.
+    pub fn accumulate<ENV>(
         &self,
-        builder: &mut Option<ValidationBuilder<T>>,
         env: &ENV,
-        key_changed: storage::Key,
+        builder: &mut Option<ValidationBuilder<T>>,
+        key_changed: &storage::Key,
     ) -> std::result::Result<(), ENV::Error>
     where
         ENV: VpEnv,
     {
-        if let Some(sub) = self.is_sub_key(&key_changed) {
+        if let Some(sub) = self.is_sub_key(key_changed) {
             let change = match sub {
                 SubKey::Len => {
-                    let data = validation::read_data(env, &key_changed)?;
+                    let data = validation::read_data(env, key_changed)?;
                     data.map(SubKeyWithData::Len)
                 }
                 SubKey::Data(index) => {
-                    let data = validation::read_data(env, &key_changed)?;
+                    let data = validation::read_data(env, key_changed)?;
                     data.map(|data| SubKeyWithData::Data(index, data))
                 }
             };
@@ -277,7 +318,7 @@ impl<T> ValidationBuilder<T> {
     pub fn build(self) -> ValidationResult<Vec<Action<T>>> {
         let mut actions = vec![];
 
-        // We need to accumlate some values for what's changed
+        // We need to accumulate some values for what's changed
         let mut post_gt_pre = false;
         let mut len_diff: u64 = 0;
         let mut len_pre: u64 = 0;
@@ -322,8 +363,7 @@ impl<T> ValidationBuilder<T> {
                         added.insert(index);
                     }
                     Data::Update { pre, post } => {
-                        actions.push(Action::Pop(pre));
-                        actions.push(Action::Push(post));
+                        actions.push(Action::Update { index, pre, post });
                         updated.insert(index);
                     }
                     Data::Delete { pre } => {
