@@ -166,14 +166,15 @@ where
         &self,
         vote_extensions: Vec<Signed<ethereum_events::Vext>>,
     ) -> Option<ethereum_events::VextDigest> {
-        let vexts_epoch =
-            self.storage.get_epoch(self.storage.last_height).expect(
-                "The epoch of the last block height should always be known",
-            );
         #[cfg(not(feature = "abcipp"))]
         if self.storage.last_height == BlockHeight(0) {
             return None;
         }
+
+        let vexts_epoch =
+            self.storage.get_epoch(self.storage.last_height).expect(
+                "The epoch of the last block height should always be known",
+            );
 
         let total_voting_power =
             u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
