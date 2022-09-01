@@ -107,6 +107,32 @@ test-e2e:
 		--test-threads=1 \
 		-Z unstable-options --report-time
 
+test-unit-abcipp:
+	$(cargo) test \
+		--manifest-path ./apps/Cargo.toml \
+		--no-default-features \
+		--features "testing std abcipp" \
+			-- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
+		--manifest-path \
+		./proof_of_stake/Cargo.toml \
+		--features "testing" \
+			-- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
+		--manifest-path ./shared/Cargo.toml \
+		--no-default-features \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" \
+			-- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
+		--manifest-path ./vm_env/Cargo.toml \
+		--no-default-features \
+		--features "abcipp" \
+			-- \
+			-Z unstable-options --report-time
+
 test-unit:
 	$(cargo) test \
 			-- \
@@ -191,4 +217,4 @@ test-miri:
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 
-.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker build-wasm-scripts clean-wasm-scripts dev-deps test-miri
+.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker build-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit test-unit-abcipp clippy-abcipp
