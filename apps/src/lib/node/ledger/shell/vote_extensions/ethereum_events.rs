@@ -164,17 +164,17 @@ where
         &self,
         vote_extensions: Vec<Signed<ethereum_events::Vext>>,
     ) -> Option<ethereum_events::VextDigest> {
-        let events_epoch =
+        let vexts_epoch =
             self.storage.get_epoch(self.storage.last_height).expect(
                 "The epoch of the last block height should always be known",
             );
 
+        let total_voting_power =
+            u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
+        let mut voting_power = FractionalVotingPower::default();
+
         let mut event_observers = BTreeMap::new();
         let mut signatures = HashMap::new();
-
-        let total_voting_power =
-            u64::from(self.storage.get_total_voting_power(Some(events_epoch)));
-        let mut voting_power = FractionalVotingPower::default();
 
         for (validator_voting_power, vote_extension) in
             self.filter_invalid_eth_events_vexts(vote_extensions)

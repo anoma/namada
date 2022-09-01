@@ -142,15 +142,13 @@ where
         &self,
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
-        let total_voting_power = {
-            let last_height_epoch =
-                self.storage.get_epoch(self.storage.last_height).expect(
-                    "The epoch of the last block height should always be known",
-                );
-            self.storage
-                .get_total_voting_power(Some(last_height_epoch))
-                .into()
-        };
+        let vexts_epoch =
+            self.storage.get_epoch(self.storage.last_height).expect(
+                "The epoch of the last block height should always be known",
+            );
+
+        let total_voting_power =
+            u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
         let mut voting_power = FractionalVotingPower::default();
 
         let mut voting_powers = None;
