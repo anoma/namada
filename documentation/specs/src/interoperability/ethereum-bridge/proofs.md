@@ -3,7 +3,7 @@
 A proof for the bridge is a quorum of signatures by a valid validator set. A 
 bridge header is a proof attached to a message understandable to the 
 Ethereum smart contracts. For transferring value to Ethereum, a proof is a 
-signed Merkle tree root and inclusion proofs of assert transfer messages 
+signed Merkle tree root and inclusion proofs of asset transfer messages 
 understandable to the Ethereum smart contracts, as described in the section on 
 [batching](transfers_to_ethereum.md/#batching)
 
