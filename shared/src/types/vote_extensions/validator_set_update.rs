@@ -29,8 +29,15 @@ const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct VextDigest {
+    #[cfg(feature = "abcipp")]
     /// A mapping from a validator address to a [`Signature`].
     pub signatures: HashMap<Address, Signature>,
+    #[cfg(not(feature = "abcipp"))]
+    /// A mapping from a validator address to a [`Signature`].
+    ///
+    /// The key includes the block height at which a validator
+    /// set was signed by a given validator.
+    pub signatures: HashMap<(Address, BlockHeight), Signature>,
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     pub voting_powers: VotingPowersMap,
@@ -39,6 +46,12 @@ pub struct VextDigest {
 impl VextDigest {
     /// Decompresses a set of signed [`Vext`] instances.
     pub fn decompress(self, block_height: BlockHeight) -> Vec<SignedVext> {
+        #[cfg(not(feature = "abcipp"))]
+        {
+            #[allow(clippy::drop_copy)]
+            drop(block_height);
+        }
+
         let VextDigest {
             signatures,
             voting_powers,
@@ -47,6 +60,8 @@ impl VextDigest {
         let mut extensions = vec![];
 
         for (validator_addr, signature) in signatures.into_iter() {
+            #[cfg(not(feature = "abcipp"))]
+            let (validator_addr, block_height) = validator_addr;
             let voting_powers = voting_powers.clone();
             let data = Vext {
                 validator_addr,

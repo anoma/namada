@@ -165,6 +165,8 @@ where
             }
 
             let validator_addr = vote_extension.data.validator_addr;
+            #[cfg(not(feature = "abcipp"))]
+            let block_height = vote_extension.data.block_height;
 
             // update voting power
             let validator_voting_power = u64::from(validator_voting_power);
@@ -181,7 +183,18 @@ where
             let addr = validator_addr.clone();
             let sig = vote_extension.sig;
 
+            #[cfg(feature = "abcipp")]
             if let Some(sig) = signatures.insert(addr, sig) {
+                tracing::warn!(
+                    ?sig,
+                    ?validator_addr,
+                    "Overwrote old signature from validator while \
+                     constructing validator_set_update::VextDigest"
+                );
+            }
+
+            #[cfg(not(feature = "abcipp"))]
+            if let Some(sig) = signatures.insert((addr, block_height), sig) {
                 tracing::warn!(
                     ?sig,
                     ?validator_addr,
@@ -191,6 +204,7 @@ where
             }
         }
 
+        #[cfg(feature = "abcipp")]
         if voting_power <= FractionalVotingPower::TWO_THIRDS {
             tracing::error!(
                 "Tendermint has decided on a block including validator set \
