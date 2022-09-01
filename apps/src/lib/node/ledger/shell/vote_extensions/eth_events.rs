@@ -530,7 +530,7 @@ mod test_vote_extensions {
                 validator_address: address.try_to_vec().expect("Test failed"),
                 height: 0,
                 vote_extension: VoteExtension {
-                    ethereum_events,
+                    ethereum_events: ethereum_events.clone(),
                     validator_set_update: None,
                 }
                 .try_to_vec()

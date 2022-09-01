@@ -252,12 +252,13 @@ mod test_vote_extensions {
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
 
+        #[allow(clippy::redundant_clone)]
         let validator_set_update = Some(
             validator_set_update::Vext {
                 // TODO: get voting powers from storage, associated with eth
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
-                validator_addr,
+                validator_addr: validator_addr.clone(),
                 // invalid height
                 block_height: shell.storage.get_current_decision_height() + 1,
             }
@@ -268,7 +269,7 @@ mod test_vote_extensions {
         {
             let ethereum_events = ethereum_events::Vext::empty(
                 shell.storage.get_current_decision_height(),
-                validator_addr.clone(),
+                validator_addr,
             )
             .sign(protocol_key);
             let req = request::VerifyVoteExtension {
@@ -306,13 +307,14 @@ mod test_vote_extensions {
             (bertha_key, bertha_addr)
         };
 
+        #[allow(clippy::redundant_clone)]
         let validator_set_update = Some(
             validator_set_update::Vext {
                 // TODO: get voting powers from storage, associated with eth
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
                 block_height: shell.storage.get_current_decision_height(),
-                validator_addr,
+                validator_addr: validator_addr.clone(),
             }
             .sign(&protocol_key),
         );
@@ -320,7 +322,7 @@ mod test_vote_extensions {
         {
             let ethereum_events = ethereum_events::Vext::empty(
                 shell.storage.get_current_decision_height(),
-                validator_addr.clone(),
+                validator_addr,
             )
             .sign(&protocol_key);
             let req = request::VerifyVoteExtension {
@@ -424,13 +426,14 @@ mod test_vote_extensions {
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
 
+        #[allow(clippy::redundant_clone)]
         let validator_set_update = {
             let mut ext = validator_set_update::Vext {
                 // TODO: get voting powers from storage, associated with eth
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
                 block_height: shell.storage.get_current_decision_height(),
-                validator_addr,
+                validator_addr: validator_addr.clone(),
             }
             // TODO: sign with secp key
             .sign(protocol_key);
@@ -441,13 +444,13 @@ mod test_vote_extensions {
         {
             let ethereum_events = ethereum_events::Vext::empty(
                 shell.storage.get_current_decision_height(),
-                validator_addr.clone(),
+                validator_addr,
             )
             .sign(protocol_key);
             let req = request::VerifyVoteExtension {
                 vote_extension: VoteExtension {
                     ethereum_events,
-                    validator_set_update,
+                    validator_set_update: validator_set_update.clone(),
                 }
                 .try_to_vec()
                 .expect("Test failed"),

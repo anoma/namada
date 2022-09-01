@@ -257,19 +257,19 @@ pub mod shim {
     pub mod response {
         #[cfg(feature = "abcipp")]
         use super::*;
+        #[cfg(not(feature = "abcipp"))]
+        use crate::facade::tendermint_proto::abci::ConsensusParams;
         use crate::facade::tendermint_proto::abci::{
-            Event as TmEvent, ExecTxResult, ResponseProcessProposal,
-            ValidatorUpdate,
+            Event as TmEvent, ResponseProcessProposal, ValidatorUpdate,
         };
         #[cfg(feature = "abcipp")]
         use crate::facade::tendermint_proto::{
-            abci::ResponseFinalizeBlock, types::ConsensusParams,
+            abci::{ExecTxResult, ResponseFinalizeBlock},
+            types::ConsensusParams,
         };
         use crate::node::ledger::events::Event;
         #[cfg(feature = "abcipp")]
         use crate::node::ledger::events::EventLevel;
-        #[cfg(not(feature = "abcipp"))]
-        use crate::tendermint_proto::abci::ConsensusParams;
 
         #[derive(Debug, Default)]
         pub struct VerifyHeader;
