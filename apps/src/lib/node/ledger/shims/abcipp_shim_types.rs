@@ -195,6 +195,7 @@ pub mod shim {
 
         #[cfg(not(feature = "abcipp"))]
         use namada::tendermint_proto::abci::RequestBeginBlock;
+        use namada::types::address::Address;
         use namada::types::hash::Hash;
         use namada::types::storage::{BlockHash, Header};
         use namada::types::time::DateTimeUtc;
@@ -216,11 +217,38 @@ pub mod shim {
             pub result: super::response::TxResult,
         }
 
+        // TODO: turn address into an Address from the Vec<u8> given by
+        // tendermint
+        pub struct Validator {
+            pub address: Vec<u8>,
+            pub voting_power: VotingPower,
+        }
+
+        pub struct VoteInfo {
+            pub validator: Validator,
+            pub signed_last_block: bool,
+        }
+
+        impl From<tendermint_proto::abci::VoteInfo> for VoteInfo {
+            fn from(info: tendermint_proto::abci::VoteInfo) -> VoteInfo {
+                let val_info = info.validator.clone().unwrap();
+                VoteInfo {
+                    validator: Validator {
+                        address: info.validator.unwrap().address,
+                        voting_power: VotingPower::from(val_info.power as u64),
+                    },
+                    signed_last_block: info.signed_last_block,
+                }
+            }
+        }
+
         pub struct FinalizeBlock {
             pub hash: BlockHash,
             pub header: Header,
             pub byzantine_validators: Vec<Evidence>,
             pub txs: Vec<ProcessedTx>,
+            pub proposer_address: Vec<u8>,
+            pub votes: Vec<VoteInfo>,
         }
 
         #[cfg(feature = "abcipp")]
@@ -238,6 +266,16 @@ pub mod shim {
                     },
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
+                    proposer_address: req.proposer_address,
+                    votes: req
+                        .decided_last_commit
+                        .unwrap()
+                        .votes
+                        .iter()
+                        .map(|tm_vote_info| {
+                            VoteInfo::from(tm_vote_info.clone())
+                        })
+                        .collect(),
                 }
             }
         }
