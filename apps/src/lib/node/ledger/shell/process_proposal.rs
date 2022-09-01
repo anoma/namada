@@ -8,8 +8,6 @@ use namada::types::voting_power::FractionalVotingPower;
 use super::queries::{QueriesExt, SendValsetUpd};
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
-#[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::abci::ExecTxResult;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
@@ -411,10 +409,6 @@ mod test_process_proposal {
     };
 
     use super::*;
-    #[cfg(feature = "abcipp")]
-    use crate::facade::tendermint_proto::abci::RequestInitChain;
-    #[cfg(feature = "abcipp")]
-    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError, TestShell,
     };

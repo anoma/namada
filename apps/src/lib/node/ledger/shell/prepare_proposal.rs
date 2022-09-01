@@ -61,10 +61,11 @@ where
             txs.append(&mut mempool_txs);
 
             // decrypt the wrapper txs included in the previous block
-            let mut decrypted_txs = self.build_decrypted_txs();
+            let decrypted_txs = self.build_decrypted_txs();
             #[cfg(feature = "abcipp")]
-            let mut decrypted_txs: Vec<TxRecord> =
+            let decrypted_txs: Vec<TxRecord> =
                 decrypted_txs.into_iter().map(record::add).collect();
+            let mut decrypted_txs = decrypted_txs;
             txs.append(&mut decrypted_txs);
 
             txs
@@ -812,6 +813,7 @@ mod test_prepare_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
+        #[allow(clippy::redundant_clone)]
         let vote_extension = VoteExtension {
             ethereum_events: signed_eth_ev_vote_extension.clone(),
             validator_set_update: None,

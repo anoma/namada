@@ -756,6 +756,7 @@ mod test_utils {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
+    #[cfg(not(feature = "abcipp"))]
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
@@ -952,6 +953,7 @@ mod test_utils {
 
     /// Get the only validator's voting power.
     #[inline]
+    #[cfg(not(feature = "abcipp"))]
     pub fn get_validator_voting_power() -> VotingPower {
         200.into()
     }

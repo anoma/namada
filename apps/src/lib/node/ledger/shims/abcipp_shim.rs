@@ -6,6 +6,7 @@ use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
 use namada::types::ethereum_events::EthereumEvent;
+#[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tower::Service;

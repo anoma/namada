@@ -6,13 +6,15 @@ pub mod shim {
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
+    #[cfg(not(feature = "abcipp"))]
+    use crate::facade::tendermint_proto::abci::ResponseEndBlock;
     use crate::facade::tendermint_proto::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
         RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
         RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
         RequestProcessProposal, RequestQuery, ResponseApplySnapshotChunk,
-        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseEndBlock,
-        ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
+        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseFlush,
+        ResponseInfo, ResponseInitChain, ResponseListSnapshots,
         ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
         ResponsePrepareProposal, ResponseQuery,
     };
@@ -255,8 +257,6 @@ pub mod shim {
 
     /// Custom types for response payloads
     pub mod response {
-        #[cfg(feature = "abcipp")]
-        use super::*;
         #[cfg(not(feature = "abcipp"))]
         use crate::facade::tendermint_proto::abci::ConsensusParams;
         use crate::facade::tendermint_proto::abci::{

@@ -6,7 +6,7 @@ pub mod val_set_update;
 #[cfg(feature = "abcipp")]
 use borsh::BorshDeserialize;
 use namada::proto::Signed;
-use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::vote_extensions::{
     ethereum_events, validator_set_update, VoteExtension, VoteExtensionDigest,
 };
@@ -15,6 +15,7 @@ use super::*;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedVoteInfo;
 use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
+#[cfg(not(feature = "abcipp"))]
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
 /// Message to be passed to `.expect()` calls in this module.
@@ -272,6 +273,8 @@ pub fn deserialize_vote_extensions(
 pub fn deserialize_vote_extensions(
     txs: &[TxBytes],
 ) -> impl Iterator<Item = VoteExtension> + '_ {
+    use namada::types::transaction::protocol::ProtocolTx;
+
     txs.iter().filter_map(|tx| {
         if let Ok(tx) = Tx::try_from(tx.as_slice()) {
             match process_tx(tx).ok()? {

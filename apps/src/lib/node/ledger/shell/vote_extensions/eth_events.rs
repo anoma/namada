@@ -186,6 +186,7 @@ where
             self.filter_invalid_eth_events_vexts(vote_extensions)
         {
             let validator_addr = vote_extension.data.validator_addr;
+            #[cfg(not(feature = "abcipp"))]
             let block_height = vote_extension.data.block_height;
 
             // update voting power
@@ -275,8 +276,6 @@ mod test_vote_extensions {
     use crate::facade::tower_abci::request;
     use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils::*;
-    #[cfg(feature = "abcipp")]
-    use crate::node::ledger::shell::vote_extensions::VoteExtensionError;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     /// Test that we successfully receive ethereum events
