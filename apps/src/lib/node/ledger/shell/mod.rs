@@ -788,6 +788,8 @@ mod test_utils {
                 },
                 byzantine_validators: vec![],
                 txs: vec![],
+                proposer_address: vec![],
+                votes: vec![],
             }
         }
     }

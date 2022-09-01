@@ -9,10 +9,12 @@ use namada::ledger::governance::utils::{
 use namada::ledger::governance::vp::ADDRESS as gov_address;
 use namada::ledger::inflation;
 use namada::ledger::pos::staking_token_address;
+use namada::ledger::pos::types::VoteInfo;
 use namada::ledger::storage::types::encode;
 use namada::ledger::treasury::ADDRESS as treasury_address;
 use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
+use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
 use rust_decimal::prelude::Decimal;
@@ -245,7 +247,7 @@ where
 
         if new_epoch {
             self.update_epoch(&mut response);
-            self.apply_inflation();
+            self.apply_inflation(&req.proposer_address, &req.votes);
         }
 
         let _ = self
@@ -333,7 +335,11 @@ where
     }
 
     /// apply inflation
-    fn apply_inflation(&mut self) {
+    fn apply_inflation(
+        &mut self,
+        proposer_address: &Vec<u8>,
+        votes: &Vec<VoteInfo>,
+    ) {
         // TODO:
         // Get input values needed for the PD controller for PoS and MASP
         // Run the PD controllers to calculate new rates
@@ -417,6 +423,24 @@ where
                     .expect("encode initial total NAM balance"),
             )
             .expect("unable to set total NAM balance in storage");
+
+        let (current_epoch, _gas) = self.storage.get_current_epoch();
+
+        // Get validator address from storage based on the consensus key hash
+        let tm_raw_hash_string = tm_raw_hash_to_string(proposer_address);
+        let native_proposer_address = self
+            .storage
+            .read_validator_address_raw_hash(tm_raw_hash_string)
+            .unwrap();
+
+        self.storage
+            .distribute_rewards(
+                current_epoch,
+                pos_minted_tokens,
+                &native_proposer_address,
+                votes,
+            )
+            .unwrap();
     }
 }
 
