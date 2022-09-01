@@ -876,7 +876,7 @@ mod test_prepare_proposal {
     /// we simply exclude it from the proposal
     #[test]
     fn test_error_in_processing_tx() {
-        let (mut shell, _, _) = TestShell::new();
+        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -904,14 +904,17 @@ mod test_prepare_proposal {
         .to_bytes();
         #[allow(clippy::redundant_clone)]
         let req = RequestPrepareProposal {
+            #[cfg(feature = "abcipp")]
+            local_last_commit: get_local_last_commit(&shell),
             txs: vec![wrapper.clone()],
             max_tx_bytes: 0,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
         assert_eq!(
-            shell.prepare_proposal(req).tx_records,
-            vec![record::remove(wrapper)]
+            // NOTE: we process mempool txs after protocol txs
+            shell.prepare_proposal(req).tx_records.remove(1),
+            record::remove(wrapper)
         );
         #[cfg(not(feature = "abcipp"))]
         assert!(shell.prepare_proposal(req).txs.is_empty());
