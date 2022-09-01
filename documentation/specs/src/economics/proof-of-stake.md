@@ -29,4 +29,4 @@ with the intent of carrying out attacks. Many PoS blockcains rely on the 1/3 Byz
 In blockchain systems we do not rely on altruistic behavior but rather economic
 security. We expect the validators to execute the protocol correctly. They get rewarded for doing so and punished otherwise. Each validator has some self-stake and some stake that is delegated to it by other token holders. The validator and delegators share the reward and risk of slashing impact with each other. 
 
-The total stake behind consensus should be taken into account when value is transferred via a transaction. The total value transferred cannot exceed 2/3 of the total stake. For example, if we have 1 billion tokens, we aim that 300 Million of these tokens is backing validators. This means that users should not transfer more than 200 million of this token within a block. 
+The total stake behind consensus should be taken into account when value is transferred via a transaction. For example, if we have 1 billion tokens, we aim that 300 Million of these tokens is backing validators. This means that users should not transfer more than 200 million of this token within a block. 
