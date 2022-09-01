@@ -14,8 +14,8 @@ In order to facilitate transferring assets from Ethereum to Namada, There
 
 If an ERC20 token is transferred to Namada, once the associated 
 `TransferToNamada` Ethereum event is included into Namada, validators mint 
-the  appropriate amount to the corresponding  multitoken balance key for 
-the receiver.
+the appropriate amount to the corresponding  multitoken balance key for 
+the receiver, or release the escrowed native Namada token.
 
 ```rust
 pub struct EthAddress(pub [u8; 20]);
