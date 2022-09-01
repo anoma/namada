@@ -42,9 +42,9 @@ pub struct TransferToNamada {
 For 10 DAI i.e. ERC20([0x6b175474e89094c44da98b954eedeac495271d0f](https://etherscan.io/token/0x6b175474e89094c44da98b954eedeac495271d0f)) to `atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt`
 ```
 #EthBridge
-    /erc20
+    /ERC20
         /0x6b175474e89094c44da98b954eedeac495271d0f
-            /balances
+            /balance
                 /atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt 
                 += 10
 ```
