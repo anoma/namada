@@ -221,7 +221,7 @@ where
                     // cool, let's validate it
                     self.validate_valset_upd_vext(
                         ext,
-                        self.storage.get_current_epoch().0.next(),
+                        self.storage.get_current_decision_height(),
                     )
                     .then(|| true)
                 })

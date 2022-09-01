@@ -159,7 +159,20 @@ where
                                     let mut cur_ops: Vec<ProofOp> = p
                                         .ops
                                         .into_iter()
-                                        .map(|op| op.into())
+                                        .map(|op| {
+                                            #[cfg(feature = "abcipp")]
+                                            {
+                                                ProofOp {
+                                                    r#type: op.field_type,
+                                                    key: op.key,
+                                                    data: op.data,
+                                                }
+                                            }
+                                            #[cfg(not(feature = "abcipp"))]
+                                            {
+                                                op.into()
+                                            }
+                                        })
                                         .collect();
                                     ops.append(&mut cur_ops);
                                 }
@@ -211,7 +224,25 @@ where
                         value.clone(),
                         height,
                     ) {
-                        Ok(proof) => Some(proof.into()),
+                        Ok(proof) => Some({
+                            #[cfg(feature = "abcipp")]
+                            {
+                                let ops = proof
+                                    .ops
+                                    .into_iter()
+                                    .map(|op| ProofOp {
+                                        r#type: op.field_type,
+                                        key: op.key,
+                                        data: op.data,
+                                    })
+                                    .collect();
+                                ProofOps { ops }
+                            }
+                            #[cfg(not(feature = "abcipp"))]
+                            {
+                                proof.into()
+                            }
+                        }),
                         Err(err) => {
                             return response::Query {
                                 code: 2,
@@ -232,7 +263,25 @@ where
             Ok((None, _gas)) => {
                 let proof_ops = if is_proven {
                     match self.storage.get_non_existence_proof(key, height) {
-                        Ok(proof) => Some(proof.into()),
+                        Ok(proof) => Some({
+                            #[cfg(feature = "abcipp")]
+                            {
+                                let ops = proof
+                                    .ops
+                                    .into_iter()
+                                    .map(|op| ProofOp {
+                                        r#type: op.field_type,
+                                        key: op.key,
+                                        data: op.data,
+                                    })
+                                    .collect();
+                                ProofOps { ops }
+                            }
+                            #[cfg(not(feature = "abcipp"))]
+                            {
+                                proof.into()
+                            }
+                        }),
                         Err(err) => {
                             return response::Query {
                                 code: 2,
