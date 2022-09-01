@@ -151,25 +151,17 @@ where
     /// single [`validator_set_update::VextDigest`], whilst filtering
     /// invalid [`validator_set_update::SignedVext`] instances in the
     /// process.
-    #[allow(dead_code)]
     pub fn compress_valset_updates(
         &self,
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
-        let total_voting_power = {
-            let current_valset_epoch = self.storage.get_current_epoch().0;
-            if current_valset_epoch == Epoch(0) {
-                tracing::error!(
-                    epoch = ?current_valset_epoch,
-                    "Cannot compress validator set update vote extensions at the given epoch"
-                );
-                return None;
-            }
-            let prev_valset_epoch = current_valset_epoch - 1;
-            u64::from(
-                self.storage.get_total_voting_power(Some(prev_valset_epoch)),
-            )
-        };
+        let vexts_epoch =
+            self.storage.get_epoch(self.storage.last_height).expect(
+                "The epoch of the last block height should always be known",
+            );
+
+        let total_voting_power =
+            u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
         let mut voting_power = FractionalVotingPower::default();
 
         let mut voting_powers = None;
