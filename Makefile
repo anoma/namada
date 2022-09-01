@@ -67,10 +67,6 @@ clippy-abcipp:
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
 		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" && \
-	$(cargo) +$(nightly) clippy --all-targets \
-		--manifest-path ./tests/Cargo.toml \
-		--no-default-features \
-		--features "wasm-runtime abcipp namada_apps/abcipp namada_apps/eth-fullnode" && \
 	$(cargo) +$(nightly) clippy \
 		--all-targets \
 		--manifest-path ./vm_env/Cargo.toml \
