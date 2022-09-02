@@ -22,7 +22,12 @@ knowledge of:
 This means that by the end of every Namada epoch, a special transaction must be
 sent to the Ethereum smart contracts detailing the new public keys and stake
 of the new validator set. This message must also be signed by at least 2 / 3
-of the current validators as a "transfer of power".
+of the current validators as a "transfer of power". 
+
+If vote extensions are available, a fully crafted transfer of power message 
+will be made available on-chain. Otherwise, this message must be crafted 
+offline by aggregating the protocol txs from validators in which the sign 
+over the new validator set.
 
 If vote extensions are available, this signed data can be constructed
 using them. Otherwise, validators must send protocol txs to be included on

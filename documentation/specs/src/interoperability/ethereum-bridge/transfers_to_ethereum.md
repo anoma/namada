@@ -3,10 +3,10 @@
 Moving assets from Namada to Ethereum will not be automatic, as opposed the
 movement of value in the opposite direction. Instead, users must send an
 appropriate transaction to Namada to initiate a transfer across the bridge
-to Ethereum. Once this transaction is approved, a "proof" will be created
-and posted on Namada.
+to Ethereum. Once this transaction is approved, a ["proof"](proofs.md), or 
+the parts necessary to create a proof, will be created and posted on Namada.
 
-It is incumbent on the end user to  request an appropriate ["proof"](proofs.md) 
+It is incumbent on the end user to  request an appropriate proof 
 of the transaction. This proof must be submitted to the appropriate Ethereum smart
 contract by the user to redeem Ethereum assets / mint wrapped assets. This also
 means all Ethereum gas costs are the responsibility of the end user.
@@ -42,7 +42,7 @@ submit a transaction on Namada that:
 
 ## Batching
 
-Ethereum gas fees make it prohibitively expensive in many cases to submit
+Ethereum gas fees make it prohibitively expensive to submit
 the proof for a single transaction over the bridge. Instead, it is typically
 more economical to submit proofs of many transactions in bulk. This batching
 is described in this section.
@@ -80,6 +80,12 @@ transactions, introducing latency to the pool. A user wishing to relay will
 need to wait until a Merkle tree root is signed for a tree that
 includes all the transactions they wish to relay.
 
+The Ethereum smart contracts won't keep track of this signed Merkle root. 
+Instead, part of the proof of correct batching is submitting a root to the 
+contracts that is signed by quorum of validators. Since the smart contracts 
+can trust such a signed root, it can then use the root to verify inclusion 
+proofs.
+
 ### Bridge Pool validity predicate
 
 The Bridge Pool will have associated storage under the control of a native 
@@ -95,27 +101,36 @@ The pending transfers are instances of the following type:
 ```rust
 pub struct TransferToEthereum {
     /// The type of token 
-    asset: EthereumAddress,
+    pub asset: EthAddress,
     /// The recipient address
-    recipient: EthereumAddress,
+    pub recipient: EthAddress,
     /// The amount to be transferred
-    amount: Amount,
+    pub amount: Amount,
     /// a nonce for replay protection
-    nonce: Nonce,
+    pub nonce: u64,
 }
 
 pub struct PendingTransfer {
     /// The message to send to Ethereum to 
     /// complete the transfer
-    transfer: TransferToEthereum,
+    pub transfer: TransferToEthereum,
+    /// The gas fees paid by the user sending
+    /// this transfer
+    pub gas_fee: GasFee,
+}
+
+pub struct GasFee {
     /// The amount of gas fees (in NAM)
     /// paid by the user sending this transfer
-    gas_fee: Amount
+    pub amount: Amount,
+    /// The address of the account paying the fees
+    pub payer: Address,
 }
 ```
 When a user submits initiates a transfer, their transaction should include wasm
-to append craft a `PendingTransfer` and append it to the pool in storage. 
-This will be validated by the Bridge Pool vp. 
+to craft a `PendingTransfer` and append it to the pool in storage as well as 
+send the relevant gas fees into the Bridge Pool's escrow.  This will be 
+validated by the Bridge Pool vp. 
 
 The signed Merkle root is only modifiable by validators. The Merkle tree 
 only consists of the `TransferToEthereum` messages as Ethereum does not need 

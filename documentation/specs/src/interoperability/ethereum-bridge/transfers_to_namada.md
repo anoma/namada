@@ -20,12 +20,6 @@ the receiver.
 ```rust
 pub struct EthAddress(pub [u8; 20]);
 
-/// Represents Ethereum assets on the Ethereum blockchain
-pub enum EthereumAsset {
-    /// An ERC20 token and the address of its contract
-    ERC20(EthAddress),
-}
-
 /// An event transferring some kind of value from Ethereum to Anoma
 pub struct TransferToNamada {
     /// Quantity of ether in the transfer
