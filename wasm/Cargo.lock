@@ -2559,6 +2559,7 @@ dependencies = [
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",
+ "tendermint-proto",
  "thiserror",
  "tracing",
 ]
