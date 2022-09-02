@@ -28,7 +28,7 @@ pub(super) trait Reader {
             None => return Ok(None),
         };
         let deserialized = T::try_from_slice(&bytes)
-            .wrap_err_with(|| format!("couldn't deserialize"))?;
+            .wrap_err_with(|| "couldn't deserialize".to_string())?;
         Ok(Some(deserialized))
     }
 }
@@ -40,13 +40,13 @@ where
     CA: 'static + WasmCacheAccess,
 {
     fn read_pre<T: BorshDeserialize>(&self, key: &Key) -> Result<Option<T>> {
-        let x = Ctx::read_pre(&self, key)
+        let x = Ctx::read_pre(self, key)
             .wrap_err_with(|| format!("couldn't read_pre {}", key))?;
         Self::deserialize(x)
     }
 
     fn read_post<T: BorshDeserialize>(&self, key: &Key) -> Result<Option<T>> {
-        let x = Ctx::read_post(&self, key)
+        let x = Ctx::read_post(self, key)
             .wrap_err_with(|| format!("couldn't read_post {}", key))?;
         Self::deserialize(x)
     }

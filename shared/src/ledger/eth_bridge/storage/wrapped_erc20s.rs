@@ -124,7 +124,7 @@ impl TryFrom<&Key> for MultitokenKey {
 
         let asset = match key.segments.get(2) {
             Some(segment) => match segment {
-                DbKeySeg::StringSeg(segment) => EthAddress::from_str(&segment)?,
+                DbKeySeg::StringSeg(segment) => EthAddress::from_str(segment)?,
                 _ => {
                     return Err(Error::from(eyre!(
                         "key has unrecognized segment at index #2"
@@ -160,17 +160,15 @@ impl TryFrom<&Key> for MultitokenKey {
                     asset,
                     suffix: MultitokenKeyType::Supply,
                 };
-                return Ok(supply_key);
+                Ok(supply_key)
             }
             BALANCE_KEY_SEGMENT => {
                 let owner = match key.segments.get(4) {
                     Some(segment) => match segment {
                         DbKeySeg::StringSeg(segment) => {
                             Address::decode(segment).wrap_err_with(|| {
-                                format!(
-                                    "couldn't decode segment at index #4 into \
-                                     address"
-                                )
+                                "couldn't decode segment at index #4 into \
+                                 address"
                             })?
                         }
                         _ => {
@@ -189,14 +187,12 @@ impl TryFrom<&Key> for MultitokenKey {
                     asset,
                     suffix: MultitokenKeyType::Balance { owner },
                 };
-                return Ok(balance_key);
+                Ok(balance_key)
             }
-            _ => {
-                return Err(Error::from(eyre!(
-                    "key has unrecognized string segment at index #3"
-                )));
-            }
-        };
+            _ => Err(Error::from(eyre!(
+                "key has unrecognized string segment at index #3"
+            ))),
+        }
     }
 }
 
