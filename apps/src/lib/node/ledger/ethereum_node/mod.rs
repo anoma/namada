@@ -141,15 +141,17 @@ pub mod eth_fullnode {
                     let client = Web3::new(url, CLIENT_TIMEOUT);
 
                     const SLEEP_DUR: Duration = Duration::from_secs(1);
+                    tracing::info!(?url, "Checking Geth status");
                     loop {
                         if let Ok(false) = client.eth_syncing().await {
-                            tracing::info!("Finished syncing");
+                            tracing::info!(?url, "Finished syncing");
                             break;
                         }
                         if let Err(error) = client.eth_syncing().await {
                             // This is very noisy and usually not interesting.
                             // Still can be very useful
                             tracing::debug!(
+                                ?url,
                                 ?error,
                                 "Couldn't check Geth sync status"
                             );
