@@ -3087,6 +3087,7 @@ version = "0.9.0"
 dependencies = [
  "borsh",
  "derivative",
+ "hex",
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",
