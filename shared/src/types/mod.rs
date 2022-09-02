@@ -4,6 +4,7 @@ pub mod address;
 pub mod chain;
 pub mod dylib;
 pub mod ethereum_events;
+pub mod eth_bridge_pool;
 pub mod governance;
 pub mod hash;
 pub mod ibc;
