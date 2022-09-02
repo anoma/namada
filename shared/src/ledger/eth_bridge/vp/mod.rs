@@ -93,7 +93,7 @@ fn extract_valid_keys_changed(
 > {
     // we aren't concerned with keys that changed outside of our account
     let keys_changed: HashSet<_> = keys_changed
-        .into_iter()
+        .iter()
         .filter(|key| storage::is_eth_bridge_key(key))
         .collect();
     if keys_changed.is_empty() {
