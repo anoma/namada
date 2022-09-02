@@ -20,7 +20,7 @@ pub mod types;
 pub mod validation;
 
 use core::fmt::Debug;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt::{Display, Error};
 use std::hash::Hash;
@@ -43,7 +43,7 @@ use types::{
 
 use crate::btree_set::BTreeSetShims;
 use crate::rewards::PosRewardsCalculator;
-use crate::types::{Bond, BondId, WeightedValidator};
+use crate::types::{Bond, BondId, VoteInfo, WeightedValidator};
 
 /// Read-only part of the PoS system
 pub trait PosReadOnly {
@@ -895,6 +895,8 @@ pub trait PosBase {
         params: &PosParams,
         current_epoch: impl Into<Epoch>,
         inflation_amount: u64,
+        proposer_address: &Self::Address,
+        votes: &Vec<VoteInfo>,
     ) -> Result<(), Error> {
         let current_epoch: Epoch = current_epoch.into();
         let validator_set = self.read_validator_set();
@@ -911,8 +913,18 @@ pub trait PosBase {
              }| { sum + *voting_power },
         );
 
-        // TODO: figure out how to actually get this value from tendermint
-        let total_signing_stake = total_active_stake.clone();
+        let mut signer_set: HashSet<Self::Address> = HashSet::new();
+        let mut total_signing_stake = VotingPower::default();
+
+        for vote in votes.iter() {
+            if !vote.signed_last_block { continue; }
+            let tm_raw_hash_string = hex::encode_upper(vote.validator_address.clone());
+            let native_address = self
+                .read_validator_address_raw_hash(tm_raw_hash_string)
+                .unwrap();
+            signer_set.insert(native_address);
+            total_signing_stake += vote.validator_vp;
+        }
 
         let new_tokens: Decimal = inflation_amount.into();
         let active_val_stake: Decimal = u64::from(total_active_stake).into();
@@ -927,11 +939,6 @@ pub trait PosBase {
 
         rewards_calculator.set_reward_coeffs().unwrap();
 
-        // just here to prevent compile errors until I know how to determine
-        // these things
-        let is_proposer = true;
-        let is_signer = true;
-
         // iterate thru the validators, figure out if each is proposer or signer
         for validator in validators.active.iter() {
             let mut rewards: Decimal = Decimal::new(0, 0);
@@ -939,15 +946,15 @@ pub trait PosBase {
 
             // TODO: ensure that the multiplication / division logic is
             // correct + sound
-            //
+
             // Proposer reward
-            if is_proposer {
+            if validator.address == *proposer_address {
                 let coeff = rewards_calculator.get_proposer_coeff().unwrap();
                 rewards += coeff * new_tokens;
             }
 
             // Signer reward
-            if is_signer {
+            if signer_set.contains(&validator.address) {
                 let coeff = rewards_calculator.get_signer_coeff().unwrap();
                 let signing_frac: Decimal = stake / signing_stake;
                 rewards += coeff * new_tokens * signing_frac;
