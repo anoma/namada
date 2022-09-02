@@ -2,8 +2,9 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use namada::ledger::pos::{staking_token_address, total_nam_supply_key};
+use namada::ledger::pos::staking_token_address;
 use namada::types::key::*;
+use namada::types::token::total_supply_key;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
 
@@ -272,7 +273,7 @@ where
         );
         self.storage
             .write(
-                &total_nam_supply_key(),
+                &total_supply_key(&staking_token_address()),
                 total_balance
                     .try_to_vec()
                     .expect("encode initial total NAM balance"),

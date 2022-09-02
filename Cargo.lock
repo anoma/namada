@@ -3081,6 +3081,7 @@ dependencies = [
  "derivative",
  "proptest",
  "rust_decimal",
+ "tendermint-proto 0.23.5",
  "thiserror",
 ]
 
