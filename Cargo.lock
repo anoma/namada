@@ -3079,6 +3079,7 @@ version = "0.8.1"
 dependencies = [
  "borsh",
  "derivative",
+ "hex",
  "proptest",
  "rust_decimal",
  "tendermint-proto 0.23.5",

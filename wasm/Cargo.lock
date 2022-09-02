@@ -1415,6 +1415,8 @@ dependencies = [
  "borsh",
  "derivative",
  "proptest",
+ "rust_decimal",
+ "tendermint-proto",
  "thiserror",
 ]
 

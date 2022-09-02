@@ -16,6 +16,7 @@ testing = ["proptest"]
 [dependencies]
 borsh = "0.9.1"
 thiserror = "1.0.30"
+hex = "0.4.3"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 derivative = "2.2.0"
