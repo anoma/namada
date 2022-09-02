@@ -101,12 +101,16 @@ pub mod oracle_process {
             rt.block_on(async move {
                 LocalSet::new()
                     .run_until(async move {
-                        tracing::info!("Ethereum event oracle is starting");
+                        tracing::info!(
+                            ?url,
+                            "Ethereum event oracle is starting"
+                        );
 
                         let oracle = Oracle::new(&url, sender, abort_sender);
                         run_oracle_aux(oracle).await;
 
                         tracing::info!(
+                            ?url,
                             "Ethereum event oracle is no longer running"
                         );
                     })

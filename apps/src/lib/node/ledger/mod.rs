@@ -305,7 +305,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let (broadcaster_sender, broadcaster_receiver) =
         tokio::sync::mpsc::unbounded_channel();
 
-    let ethereum_url = config.ethereum_url();
+    let ethereum_url = config.ethereum.oracle_rpc_endpoint.clone();
     let (ethereum_node, oracle, broadcaster) = if matches!(
         config.tendermint.tendermint_mode,
         TendermintMode::Validator
@@ -340,8 +340,26 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
             res
         });
 
-        let oracle =
-            ethereum_node::run_oracle(ethereum_url, eth_sender, abort_sender);
+        let oracle = {
+            #[cfg(not(feature = "eth-fullnode"))]
+            if config.ethereum.oracle_event_endpoint {
+                ethereum_node::test_tools::event_endpoint::start_oracle(
+                    eth_sender,
+                )
+            } else {
+                ethereum_node::test_tools::mock_oracle::run_oracle(
+                    ethereum_url,
+                    eth_sender,
+                    abort_sender,
+                )
+            }
+            #[cfg(feature = "eth-fullnode")]
+            ethereum_node::oracle::run_oracle(
+                ethereum_url,
+                eth_sender,
+                abort_sender,
+            )
+        };
 
         // Shutdown ethereum_node via a message to ensure that the child process
         // is properly cleaned-up.
