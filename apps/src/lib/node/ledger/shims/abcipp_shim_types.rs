@@ -196,6 +196,7 @@ pub mod shim {
         #[cfg(not(feature = "abcipp"))]
         use namada::tendermint_proto::abci::RequestBeginBlock;
         use namada::types::address::Address;
+        use namada::ledger::pos::types::VoteInfo;
         use namada::types::hash::Hash;
         use namada::types::storage::{BlockHash, Header};
         use namada::types::time::DateTimeUtc;
@@ -215,31 +216,6 @@ pub mod shim {
         pub struct ProcessedTx {
             pub tx: super::TxBytes,
             pub result: super::response::TxResult,
-        }
-
-        // TODO: turn address into an Address from the Vec<u8> given by
-        // tendermint
-        pub struct Validator {
-            pub address: Vec<u8>,
-            pub voting_power: VotingPower,
-        }
-
-        pub struct VoteInfo {
-            pub validator: Validator,
-            pub signed_last_block: bool,
-        }
-
-        impl From<tendermint_proto::abci::VoteInfo> for VoteInfo {
-            fn from(info: tendermint_proto::abci::VoteInfo) -> VoteInfo {
-                let val_info = info.validator.clone().unwrap();
-                VoteInfo {
-                    validator: Validator {
-                        address: info.validator.unwrap().address,
-                        voting_power: VotingPower::from(val_info.power as u64),
-                    },
-                    signed_last_block: info.signed_last_block,
-                }
-            }
         }
 
         pub struct FinalizeBlock {
