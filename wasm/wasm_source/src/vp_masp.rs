@@ -39,6 +39,8 @@ fn validate_tx(
     );
 
     let signed = SignedTxData::try_from_slice(&tx_data[..]).unwrap();
+    // Also get the data as bytes for the VM.
+    let data = signed.data.as_ref().unwrap().clone();
     let transfer =
         token::Transfer::try_from_slice(&signed.data.unwrap()[..]).unwrap();
 
@@ -89,5 +91,6 @@ fn validate_tx(
         }
     }
 
-    true
+    // Do the expensive proof verification in the VM at the end.
+    verify_masp(data)
 }
