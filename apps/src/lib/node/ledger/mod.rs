@@ -307,7 +307,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let (broadcaster_sender, broadcaster_receiver) =
         tokio::sync::mpsc::unbounded_channel();
 
-    let ethereum_url = config.ethereum_url();
+    let ethereum_url = config.ethereum.oracle_rpc_endpoint.clone();
     let (ethereum_node, oracle, broadcaster) = if matches!(
         config.tendermint.tendermint_mode,
         TendermintMode::Validator
