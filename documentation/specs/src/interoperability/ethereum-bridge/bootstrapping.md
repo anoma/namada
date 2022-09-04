@@ -16,7 +16,7 @@ At this point, the bridge is launched and it may start being used. Validators' l
 
 ### Governance proposal
 
-The governance proposal can be freeform and simply indicate what the value of `h` should be. Validators should then configure their nodes to halt at this height.
+The governance proposal can be freeform and simply indicate what the value of `h` should be. Validators should then configure their nodes to halt at this height. The `grace_epoch` is arbitrary as there is no code to be executed as part of the proposal, instead validators must take action manually as soon as the proposal passes. `h` must be in an epoch that is strictly greater than `voting_end_epoch`.
 
 ### Value for launch height `h`
 
@@ -50,7 +50,7 @@ In this example, all epochs are assumed to be `100` blocks long, and the active 
     "author": "hello@heliax.dev",
     "voting_start_epoch": 30,
     "voting_end_epoch": 33,
-    "grace_epoch": 0,
+    "grace_epoch": 33,
 }
 ```
 
