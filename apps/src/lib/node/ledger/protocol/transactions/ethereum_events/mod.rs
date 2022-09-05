@@ -68,6 +68,13 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
     }
 }
 
+/// Applies derived state changes to storage, based on Ethereum `events` which
+/// have been newly seen by some active validator(s). For `events` which have
+/// been seen by enough voting power, extra state changes may take place, such
+/// as minting of wrapped ERC20s.
+///
+/// This function is deterministic based on some existing blockchain state and
+/// the passed `events`.
 pub(crate) fn apply_derived_tx(
     store: &mut impl StoreExt,
     events: Vec<MultiSignedEthEvent>,
