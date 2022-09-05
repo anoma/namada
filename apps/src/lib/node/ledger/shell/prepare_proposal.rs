@@ -521,11 +521,21 @@ mod test_prepare_proposal {
         let maybe_digest =
             shell.compress_ethereum_events(vec![signed_vote_extension]);
 
-        // we should be filtering out the vote extension with
-        // duped ethereum events; therefore, no valid vote
-        // extensions will remain, and we will get no
-        // digest from compressing nil vote extensions
-        assert!(maybe_digest.is_none());
+        #[cfg(feature = "abcipp")]
+        {
+            // we should be filtering out the vote extension with
+            // duped ethereum events; therefore, no valid vote
+            // extensions will remain, and we will get no
+            // digest from compressing nil vote extensions
+            assert!(maybe_digest.is_none());
+        }
+
+        #[cfg(not(feature = "abcipp"))]
+        {
+            use assert_matches::assert_matches;
+
+            assert_matches!(maybe_digest, Some(d) if d.signatures.is_empty());
+        }
     }
 
     /// Creates an Ethereum events digest manually, and encodes it as a
