@@ -549,6 +549,7 @@ where
             })
     }
 
+    #[cfg(feature = "abcipp")]
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
         let (check_prev_heights, height) = match can_send {
             SendValsetUpd::Now => (false, self.get_current_decision_height()),
@@ -578,6 +579,12 @@ where
         // ascending order, so we can just do a binary search over them
         check_prev_heights
             && fst_heights_of_each_epoch.binary_search(&height).is_ok()
+    }
+
+    #[cfg(not(feature = "abcipp"))]
+    #[inline(always)]
+    fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
+        true
     }
 
     #[inline]
@@ -691,6 +698,7 @@ mod test_queries {
         };
     }
 
+    #[cfg(feature = "abcipp")]
     test_can_send_validator_set_update! {
         epoch_assertions: [
             // (current epoch, current block height, can send valset upd)
@@ -724,6 +732,43 @@ mod test_queries {
             (2, 26, false),
             (2, 27, false),
             (2, 28, false),
+        ],
+    }
+
+    #[cfg(not(feature = "abcipp"))]
+    test_can_send_validator_set_update! {
+        epoch_assertions: [
+            // (current epoch, current block height, can send valset upd)
+            (0, 1, true),
+            (0, 2, true),
+            (0, 3, true),
+            (0, 4, true),
+            (0, 5, true),
+            (0, 6, true),
+            (0, 7, true),
+            (0, 8, true),
+            (0, 9, true),
+            (0, 10, true),
+            (0, 11, true),
+            // we will change epoch here
+            (1, 12, true),
+            (1, 13, true),
+            (1, 14, true),
+            (1, 15, true),
+            (1, 16, true),
+            (1, 17, true),
+            (1, 18, true),
+            (1, 19, true),
+            (1, 20, true),
+            (1, 21, true),
+            (1, 22, true),
+            (1, 23, true),
+            (1, 24, true),
+            // we will change epoch here
+            (2, 25, true),
+            (2, 26, true),
+            (2, 27, true),
+            (2, 28, true),
         ],
     }
 }

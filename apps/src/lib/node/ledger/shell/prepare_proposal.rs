@@ -14,7 +14,6 @@ use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 use crate::facade::tendermint_proto::abci::{
     tx_record::TxAction, ExtendedCommitInfo, TxRecord,
 };
-#[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
 use crate::node::ledger::shell::vote_extensions::{
     iter_protocol_txs, split_vote_extensions,
@@ -122,45 +121,22 @@ where
         );
         #[cfg(not(feature = "abcipp"))]
         let (eth_events, valset_upds) = split_vote_extensions(txs);
-        #[cfg(feature = "abcipp")]
-        const NOT_ENOUGH_VOTING_POWER_MSG: &str =
-            "A Tendermint quorum should never decide on a block including \
-             vote extensions reflecting less than or equal to 2/3 of the \
-             total stake.";
 
         let ethereum_events = self
             .compress_ethereum_events(eth_events)
-            .unwrap_or_else(|| {
-                panic!("{}", {
-                    #[cfg(feature = "abcipp")]
-                    {
-                        NOT_ENOUGH_VOTING_POWER_MSG
-                    }
+            .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
 
-                    #[cfg(not(feature = "abcipp"))]
-                    {
-                        "CONSENSUS FAILURE!!!!!"
-                    }
-                })
-            });
-
-        #[cfg(feature = "abcipp")]
-        let validator_set_update = if self
-            .storage
-            .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
-        {
-            Some(
-                self.compress_valset_updates(valset_upds)
-                    .expect(NOT_ENOUGH_VOTING_POWER_MSG),
-            )
-        } else {
-            None
-        };
-        #[cfg(not(feature = "abcipp"))]
-        let validator_set_update = Some(
-            self.compress_valset_updates(valset_upds)
-                .expect("CONSENSUS FAILURE!!!!!"),
-        );
+        let validator_set_update =
+            if self
+                .storage
+                .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
+            {
+                Some(self.compress_valset_updates(valset_upds).unwrap_or_else(
+                    || panic!("{}", not_enough_voting_power_msg()),
+                ))
+            } else {
+                None
+            };
 
         let protocol_key = self
             .mode
@@ -238,6 +214,21 @@ where
                 .to_bytes()
             })
             .collect()
+    }
+}
+
+/// Returns a suitable message to be displayed when Tendermint
+/// somehow decides on a block containing vote extensions
+/// reflecting `<= 2/3` of the total stake.
+const fn not_enough_voting_power_msg() -> &'static str {
+    #[cfg(feature = "abcipp")]
+    {
+        "A Tendermint quorum should never decide on a block including vote \
+         extensions reflecting less than or equal to 2/3 of the total stake."
+    }
+    #[cfg(not(feature = "abcipp"))]
+    {
+        "CONSENSUS FAILURE!!!!!11one!"
     }
 }
 
