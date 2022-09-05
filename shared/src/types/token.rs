@@ -8,6 +8,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use rust_decimal::prelude::*;
 
 use crate::types::address::{Address, Error as AddressError, InternalAddress};
 use crate::types::ibc::data::FungibleTokenPacketData;
@@ -37,7 +38,6 @@ pub struct Amount {
 pub const MAX_DECIMAL_PLACES: u32 = 9;
 /// Decimal scale of token [`Amount`] and [`Change`].
 pub const SCALE: u64 = 1_000_000_000;
-const SCALE_F64: f64 = SCALE as f64;
 
 /// A change in tokens amount
 pub type Change = i128;
@@ -109,20 +109,17 @@ impl<'de> serde::Deserialize<'de> for Amount {
     }
 }
 
-impl From<Amount> for f64 {
-    /// Warning: `f64` loses precision and it should not be used when exact
-    /// values are required.
+impl From<Amount> for Decimal {
     fn from(amount: Amount) -> Self {
-        amount.nano as f64 / SCALE_F64
+        Into::<Decimal>::into(amount.nano) / Into::<Decimal>::into(SCALE)
     }
 }
 
-impl From<f64> for Amount {
-    /// Warning: `f64` loses precision and it should not be used when exact
-    /// values are required.
-    fn from(nano: f64) -> Self {
+impl From<Decimal> for Amount {
+    fn from(nano: Decimal) -> Self {
+        let res = (nano * Into::<Decimal>::into(SCALE)).to_u64().unwrap();
         Self {
-            nano: (nano * SCALE_F64).round() as u64,
+            nano: res
         }
     }
 }
@@ -440,11 +437,11 @@ mod tests {
             /// The upper limit is set to `2^51`, because then the float is
             /// starting to lose precision.
             #[test]
-            fn test_token_amount_f64_conversion(raw_amount in 0..2_u64.pow(51)) {
+            fn test_token_amount_decimal_conversion(raw_amount in 0..2_u64.pow(51)) {
                 let amount = Amount::from(raw_amount);
-                // A round-trip conversion to and from f64 should be an identity
-                let float = f64::from(amount);
-                let identity = Amount::from(float);
+                // A round-trip conversion to and from Decimal should be an identity
+                let decimal = Decimal::from(amount);
+                let identity = Amount::from(decimal);
                 assert_eq!(amount, identity);
         }
     }
