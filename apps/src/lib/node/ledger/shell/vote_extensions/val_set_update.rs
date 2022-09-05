@@ -268,7 +268,7 @@ mod test_vote_extensions {
     // - add validator voting powers from storage
     #[test]
     fn test_reject_incorrect_block_height() {
-        let (shell, _, _) = test_utils::setup();
+        let (shell, _recv, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 
@@ -322,7 +322,7 @@ mod test_vote_extensions {
     /// a non-validator are rejected
     #[test]
     fn test_valset_upd_must_be_signed_by_validator() {
-        let (shell, _, _) = test_utils::setup();
+        let (shell, _recv, _) = test_utils::setup();
         let (protocol_key, validator_addr) = {
             let bertha_key = wallet::defaults::bertha_keypair();
             let bertha_addr = wallet::defaults::bertha_address();
@@ -442,7 +442,7 @@ mod test_vote_extensions {
     // - add validator voting powers from storage
     #[test]
     fn test_reject_bad_signatures() {
-        let (shell, _, _) = test_utils::setup();
+        let (shell, _recv, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 

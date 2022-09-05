@@ -625,7 +625,7 @@ mod test_queries {
             /// expected.
             #[test]
             fn test_can_send_validator_set_update() {
-                let (mut shell, _, _) = test_utils::setup_at_height(0u64);
+                let (mut shell, _recv, _) = test_utils::setup_at_height(0u64);
 
                 let epoch_assertions = $epoch_assertions;
 
