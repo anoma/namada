@@ -226,7 +226,7 @@ where
         );
 
         #[cfg(not(feature = "abcipp"))]
-        let voting_powers = voting_powers.unwrap_or_else(HashMap::new);
+        let voting_powers = voting_powers.unwrap_or_default();
 
         Some(validator_set_update::VextDigest {
             signatures,
