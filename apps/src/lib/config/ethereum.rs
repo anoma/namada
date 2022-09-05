@@ -1,4 +1,6 @@
 //! Configuration settings to do with the Ethereum bridge.
+#[allow(unused_imports)]
+use namada::types::ethereum_events::EthereumEvent;
 use serde::{Deserialize, Serialize};
 
 /// Default [Ethereum JSON-RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/) endpoint used by the oracle
@@ -12,7 +14,7 @@ pub struct Config {
     /// If this is set to `true`, then instead of the oracle listening for
     /// events at a Ethereum JSON-RPC endpoint, an endpoint will be exposed by
     /// the ledger for submission of Borsh-serialized
-    /// [`namada::types::ethereum_events::EthereumEvent`]s
+    /// [`EthereumEvent`]s
     #[cfg(not(feature = "eth-fullnode"))]
     pub oracle_event_endpoint: bool,
 }
