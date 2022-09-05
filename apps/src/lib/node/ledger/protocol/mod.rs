@@ -1,4 +1,6 @@
 //! The ledger's protocol
+mod transactions;
+
 use std::collections::BTreeSet;
 use std::panic;
 
@@ -24,6 +26,7 @@ use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
+use self::transactions::store::{LedgerStore, StoreExt};
 use crate::node::ledger::shell::Shell;
 
 #[derive(Error, Debug)]
@@ -34,6 +37,8 @@ pub enum Error {
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
+    #[error(transparent)]
+    ProtocolTxError(#[from] eyre::Error),
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
     #[error("Gas error: {0}")]
@@ -131,7 +136,8 @@ where
             },
         ),
         TxType::Protocol(ProtocolTx { tx, .. }) => {
-            apply_protocol_tx(tx, storage)
+            let mut store: LedgerStore<D, H> = storage.into();
+            apply_protocol_tx(tx, &mut store)
         }
         _ => {
             // other transaction types we treat as a noop
@@ -202,26 +208,17 @@ where
 /// is updated natively rather than via the wasm environment, so gas does not
 /// need to be metered and validity predicates are bypassed. A [`TxResult`]
 /// containing changed keys and the like should be returned in the normal way.
-pub(crate) fn apply_protocol_tx<'a, D, H>(
+pub(crate) fn apply_protocol_tx(
     tx: ProtocolTxType,
-    // TODO: eventually this `storage` parameter could be tightened further to
-    // an impl trait of only the subset of [`Storage`] functionality that we
-    // need
-    _storage: &'a mut Storage<D, H>,
-) -> Result<TxResult>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
+    store: &mut impl StoreExt,
+) -> Result<TxResult> {
     match tx {
         ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
             events,
             ..
         }) => {
-            if !events.is_empty() {
-                tracing::debug!(n = events.len(), "Ethereum events received");
-            }
-            Ok(TxResult::default())
+            self::transactions::ethereum_events::apply_derived_tx(store, events)
+                .map_err(Error::ProtocolTxError)
         }
         ProtocolTxType::ValidatorSetUpdate(_) => Ok(TxResult::default()),
         _ => {
