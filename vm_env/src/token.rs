@@ -20,7 +20,12 @@ pub mod vp {
     ) -> bool {
         let mut change: Change = 0;
         let all_checked = keys_changed.iter().all(|key| {
-            match token::is_balance_key(token, key) {
+            let owner: Option<&Address> =
+                match token::is_multitoken_balance_key(token, key) {
+                    Some((_, o)) => Some(o),
+                    None => token::is_balance_key(token, key),
+                };
+            match owner {
                 None => {
                     // Unknown changes to this address space are disallowed, but
                     // unknown changes anywhere else are permitted
@@ -73,38 +78,99 @@ pub mod tx {
         src: &Address,
         dest: &Address,
         token: &Address,
+        sub_prefix: Option<Key>,
         amount: Amount,
     ) {
-        let src_key = token::balance_key(token, src);
-        let dest_key = token::balance_key(token, dest);
+        let (src_key, dest_key) = match &sub_prefix {
+            Some(sub_prefix) => {
+                let prefix =
+                    token::multitoken_balance_prefix(token, sub_prefix);
+                (
+                    token::multitoken_balance_key(&prefix, src),
+                    token::multitoken_balance_key(&prefix, dest),
+                )
+            }
+            None => (
+                token::balance_key(token, src),
+                token::balance_key(token, dest),
+            ),
+        };
         let src_bal: Option<Amount> = tx::read(&src_key.to_string());
-        let mut src_bal = src_bal.unwrap_or_else(|| match src {
-            Address::Internal(InternalAddress::IbcMint) => Amount::max(),
-            _ => {
+        match src_bal {
+            None => {
                 tx::log_string(format!("src {} has no balance", src));
                 unreachable!()
             }
-        });
-        src_bal.spend(&amount);
-        let mut dest_bal: Amount =
-            tx::read(&dest_key.to_string()).unwrap_or_default();
-        dest_bal.receive(&amount);
-        match src {
-            Address::Internal(InternalAddress::IbcMint) => {
-                tx::write_temp(&src_key.to_string(), src_bal)
+            Some(mut src_bal) => {
+                src_bal.spend(&amount);
+                let mut dest_bal: Amount =
+                    tx::read(&dest_key.to_string()).unwrap_or_default();
+                dest_bal.receive(&amount);
+                tx::write(&src_key.to_string(), src_bal);
+                tx::write(&dest_key.to_string(), dest_bal);
             }
-            Address::Internal(InternalAddress::IbcBurn) => {
+        }
+    }
+
+    /// A token transfer with storage keys that can be used in a transaction.
+    pub fn transfer_with_keys(src_key: &Key, dest_key: &Key, amount: Amount) {
+        let src_owner = is_any_multitoken_balance_key(src_key).map(|(_, o)| o);
+        let src_bal: Option<Amount> = match src_owner {
+            Some(Address::Internal(InternalAddress::IbcMint)) => {
+                Some(Amount::max())
+            }
+            Some(Address::Internal(InternalAddress::IbcBurn)) => {
                 tx::log_string("invalid transfer from the burn address");
                 unreachable!()
             }
-            _ => tx::write(&src_key.to_string(), src_bal),
-        }
-        match dest {
-            Address::Internal(InternalAddress::IbcMint) => {
+            Some(_) => tx::read(&src_key.to_string()),
+            None => {
+                // the key is not a multitoken key
+                match is_any_token_balance_key(src_key) {
+                    Some(_) => tx::read(src_key.to_string()),
+                    None => {
+                        tx::log_string(format!(
+                            "invalid balance key: {}",
+                            src_key
+                        ));
+                        unreachable!()
+                    }
+                }
+            }
+        };
+        let mut src_bal = src_bal.unwrap_or_else(|| {
+            tx::log_string(format!("src {} has no balance", src_key));
+            unreachable!()
+        });
+        src_bal.spend(&amount);
+        let dest_owner =
+            is_any_multitoken_balance_key(dest_key).map(|(_, o)| o);
+        let mut dest_bal: Amount = match dest_owner {
+            Some(Address::Internal(InternalAddress::IbcMint)) => {
                 tx::log_string("invalid transfer to the mint address");
                 unreachable!()
             }
-            Address::Internal(InternalAddress::IbcBurn) => {
+            Some(_) => tx::read(dest_key.to_string()).unwrap_or_default(),
+            None => match is_any_token_balance_key(dest_key) {
+                Some(_) => tx::read(dest_key.to_string()).unwrap_or_default(),
+                None => {
+                    tx::log_string(format!(
+                        "invalid balance key: {}",
+                        dest_key
+                    ));
+                    unreachable!()
+                }
+            },
+        };
+        dest_bal.receive(&amount);
+        match src_owner {
+            Some(Address::Internal(InternalAddress::IbcMint)) => {
+                tx::write_temp(&src_key.to_string(), src_bal)
+            }
+            _ => tx::write(&src_key.to_string(), src_bal),
+        }
+        match dest_owner {
+            Some(Address::Internal(InternalAddress::IbcBurn)) => {
                 tx::write_temp(&dest_key.to_string(), dest_bal)
             }
             _ => tx::write(&dest_key.to_string(), dest_bal),
