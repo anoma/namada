@@ -91,8 +91,10 @@ The Wasm implementation of replay protection can't cope with this problem becaus
 
 To address this issue there could be two ways:
 
-- Keep the proposed replay protection mechanism and implement a batching mechanism in the client to embed more than one transaction in a single `Tx` struct
+- Keep the proposed replay protection in Wasm and implement a batching mechanism in both the client and the ledger to embed more than one transaction in a single `Tx` struct
 - Implement replay protection in protocol for the inner transaction (as discolsed in section [InnerTx](#InnerTx))
 
 Following the second option, the ledger would be able to analyze the validity of the counters, of all the transcations relating to a single address, against the value in storage at the beginning of the block.
 Finally, it could increment the counter in storage a single time by the correct amount (given by the amount of transactions that were executed with success).
+
+The first option, though, seems to have more benefits. In addition to allowing batching, it's more flexible and it also enables the in-order execution of the transactions included in the batch, which may come in handy in certain cases.
