@@ -10,6 +10,9 @@ use namada::types::storage::Key;
 use super::update;
 use crate::node::ledger::protocol::transactions::store::Store;
 
+/// Updates storage based on the given confirmed `event`. For example, for a
+/// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
+/// transferred assets to the appropriate receiver addresses.
 pub(super) fn act_on(
     store: &mut impl Store,
     event: &EthereumEvent,
