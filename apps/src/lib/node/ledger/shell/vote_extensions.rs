@@ -277,16 +277,22 @@ pub fn deserialize_vote_extensions(
     use namada::types::transaction::protocol::ProtocolTx;
 
     txs.iter().filter_map(|tx| {
-        if let Ok(tx) = Tx::try_from(tx.as_slice()) {
-            match process_tx(tx).ok()? {
-                TxType::Protocol(ProtocolTx {
-                    tx: ProtocolTxType::VoteExtension(ext),
-                    ..
-                }) => Some(ext),
-                _ => None,
+        let tx = match Tx::try_from(tx.as_slice()) {
+            Ok(tx) => tx,
+            Err(err) => {
+                tracing::warn!(
+                    ?err,
+                    "Failed to deserialize tx in deserialize_vote_extensions"
+                );
+                return None;
             }
-        } else {
-            None
+        };
+        match process_tx(tx).ok()? {
+            TxType::Protocol(ProtocolTx {
+                tx: ProtocolTxType::VoteExtension(ext),
+                ..
+            }) => Some(ext),
+            _ => None,
         }
     })
 }
@@ -309,9 +315,9 @@ pub fn iter_protocol_txs(
 /// Deserializes `vote_extensions` as [`VoteExtension`] instances, filtering
 /// out invalid data, and splits these into [`ethereum_events::Vext`]
 /// and [`validator_set_update::Vext`] instances.
-#[cfg(feature = "abcipp")]
 pub fn split_vote_extensions(
-    vote_extensions: Vec<ExtendedVoteInfo>,
+    #[cfg(feature = "abcipp")] vote_extensions: Vec<ExtendedVoteInfo>,
+    #[cfg(not(feature = "abcipp"))] vote_extensions: &[TxBytes],
 ) -> (
     Vec<Signed<ethereum_events::Vext>>,
     Vec<validator_set_update::SignedVext>,
@@ -320,29 +326,6 @@ pub fn split_vote_extensions(
     let mut valset_upds = vec![];
 
     for ext in deserialize_vote_extensions(vote_extensions) {
-        if let Some(validator_set_update) = ext.validator_set_update {
-            valset_upds.push(validator_set_update);
-        }
-        eth_evs.push(ext.ethereum_events);
-    }
-
-    (eth_evs, valset_upds)
-}
-
-/// Deserializes `vote_extensions` as [`VoteExtension`] instances, filtering
-/// out invalid data, and splits these into [`ethereum_events::Vext`]
-/// and [`validator_set_update::Vext`] instances.
-#[cfg(not(feature = "abcipp"))]
-pub fn split_vote_extensions(
-    transactions: &[TxBytes],
-) -> (
-    Vec<Signed<ethereum_events::Vext>>,
-    Vec<validator_set_update::SignedVext>,
-) {
-    let mut eth_evs = vec![];
-    let mut valset_upds = vec![];
-
-    for ext in deserialize_vote_extensions(transactions) {
         if let Some(validator_set_update) = ext.validator_set_update {
             valset_upds.push(validator_set_update);
         }
