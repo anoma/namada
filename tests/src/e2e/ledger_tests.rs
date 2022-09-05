@@ -425,6 +425,7 @@ fn invalid_transactions() -> Result<()> {
         source: find_address(&test, DAEWON)?,
         target: find_address(&test, ALBERT)?,
         token: find_address(&test, XAN)?,
+        sub_prefix: None,
         amount: token::Amount::whole(1),
     };
     let data = transfer

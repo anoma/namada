@@ -1,5 +1,6 @@
 //! Node and client configuration
 
+pub mod ethereum;
 pub mod genesis;
 pub mod global;
 pub mod utils;
@@ -38,8 +39,6 @@ pub const FILENAME: &str = "config.toml";
 pub const TENDERMINT_DIR: &str = "tendermint";
 /// Chain-specific Anoma DB. Nested in chain dirs.
 pub const DB_DIR: &str = "db";
-/// Websocket address for Ethereum fullnode RPC
-pub const ETHEREUM_URL: &str = "http://127.0.0.1:8545";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -84,6 +83,7 @@ pub struct Ledger {
     pub chain_id: ChainId,
     pub shell: Shell,
     pub tendermint: Tendermint,
+    pub ethereum: ethereum::Config,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -103,8 +103,6 @@ pub struct Shell {
     db_dir: PathBuf,
     /// Use the [`Ledger::tendermint_dir()`] method to read the value.
     tendermint_dir: PathBuf,
-    /// Use the [`Ledger::ethereum_url()`] method to read the value.
-    ethereum_url: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -176,7 +174,6 @@ impl Ledger {
                 tx_wasm_compilation_cache_bytes: None,
                 db_dir: DB_DIR.into(),
                 tendermint_dir: TENDERMINT_DIR.into(),
-                ethereum_url: ETHEREUM_URL.into(),
             },
             tendermint: Tendermint {
                 rpc_address: SocketAddr::new(
@@ -200,6 +197,7 @@ impl Ledger {
                 ),
                 instrumentation_namespace: "anoman_tm".to_string(),
             },
+            ethereum: ethereum::Config::default(),
         }
     }
 
@@ -216,11 +214,6 @@ impl Ledger {
     /// Get the directory path to Tendermint
     pub fn tendermint_dir(&self) -> PathBuf {
         self.shell.tendermint_dir(&self.chain_id)
-    }
-
-    /// Get the websocket url for the Ethereum fullnode
-    pub fn ethereum_url(&self) -> String {
-        self.shell.ethereum_url.clone()
     }
 }
 
