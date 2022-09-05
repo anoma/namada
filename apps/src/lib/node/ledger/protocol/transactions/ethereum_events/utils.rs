@@ -51,6 +51,7 @@ pub(super) fn sum_voting_powers(
 mod tests {
     use std::collections::HashSet;
 
+    use assert_matches::assert_matches;
     use namada::types::address;
     use namada::types::ethereum_events::testing::arbitrary_voting_power;
 
@@ -76,9 +77,7 @@ mod tests {
             Err(error) => panic!("error: {:?}", error),
         };
         assert_eq!(voting_powers.len(), 1);
-        assert!(
-            matches!(voting_powers.get(&sole_validator), Some(v) if *v == voting_power)
-        )
+        assert_matches!(voting_powers.get(&sole_validator), Some(v) if *v == voting_power);
     }
 
     #[test]
@@ -130,12 +129,8 @@ mod tests {
             Err(error) => panic!("error: {:?}", error),
         };
         assert_eq!(voting_powers.len(), 2);
-        assert!(
-            matches!(voting_powers.get(&validator_1), Some(v) if *v == voting_power_1)
-        );
-        assert!(
-            matches!(voting_powers.get(&validator_2), Some(v) if *v == voting_power_2)
-        );
+        assert_matches!(voting_powers.get(&validator_1), Some(v) if *v == voting_power_1);
+        assert_matches!(voting_powers.get(&validator_2), Some(v) if *v == voting_power_2);
     }
 
     #[test]
