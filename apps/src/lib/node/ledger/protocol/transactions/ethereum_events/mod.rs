@@ -15,7 +15,7 @@ use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::{self, Epoch};
 use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
-use num_rational::Ratio;
+use namada::types::voting_power::FractionalVotingPower;
 
 use super::store::{Store, StoreExt};
 
@@ -27,7 +27,7 @@ pub struct EthMsg {
     /// The event being stored
     pub body: EthereumEvent,
     /// The total voting power that's voted for this event across all epochs
-    pub voting_power: (u64, u64),
+    pub voting_power: FractionalVotingPower,
     /// The addresses of validators that voted for this event, in sorted order.
     pub seen_by: Vec<Address>,
     /// Whether this event has been acted on or not
@@ -237,8 +237,9 @@ fn apply_update_for_newly_seen(
 
     let seen_by_voting_power: u64 = seen_by_voting_power.into();
     let total_voting_power: u64 = total_voting_power.into();
-    let fvp: Ratio<u64> = Ratio::new(seen_by_voting_power, total_voting_power);
-    let newly_confirmed = fvp > threshold();
+    let fvp =
+        FractionalVotingPower::new(seen_by_voting_power, total_voting_power)?;
+    let newly_confirmed = fvp > FractionalVotingPower::TWO_THIRDS;
     Ok((
         EthMsg {
             body: update.body,
@@ -267,7 +268,7 @@ fn apply_update_for_previously_seen(
     let body: EthereumEvent = read::value(store, &eth_msg_keys.body())?;
     let seen: bool = read::value(store, &eth_msg_keys.seen())?;
     let seen_by: Vec<Address> = read::value(store, &eth_msg_keys.seen_by())?;
-    let voting_power: (u64, u64) =
+    let voting_power: FractionalVotingPower =
         read::value(store, &eth_msg_keys.voting_power())?;
 
     let eth_msg = EthMsg {
@@ -296,10 +297,6 @@ fn calculate_diff(
          event won't change"
     );
     (eth_msg, BTreeSet::default(), false)
-}
-
-fn threshold() -> Ratio<u64> {
-    Ratio::new(2, 3)
 }
 
 fn write_eth_msg(
