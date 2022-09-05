@@ -6,6 +6,9 @@ on:
       tag:
         description: 'The docker image tag'
         required: true
+  push:
+    branches:
+      - main
 
 env:
   GIT_LFS_SKIP_SMUDGE: 1
@@ -25,7 +28,7 @@ jobs:
             path: ./docker/namada-wasm
           - name: Build and Push Namada docker image
             image: namada
-            path: ./docker/namada-build
+            path: ./docker/namada
 
     steps:
       - name: Checkout repo
@@ -52,7 +55,7 @@ jobs:
           context: .
           file: ${{ matrix.make.path }}/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}:${{ matrix.make.image }}-${{ github.event.inputs.tag  }}
+          tags: ghcr.io/${{ github.repository }}:${{ matrix.make.image }}-${{ github.event.inputs.tag || steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ matrix.make.image }}-${{ github.event.inputs.tag  }}
+          cache-from: type=registry,ref=${{ matrix.make.image }}-${{ github.event.inputs.tag || steps.meta.outputs.tags }}
           cache-to: type=inline
