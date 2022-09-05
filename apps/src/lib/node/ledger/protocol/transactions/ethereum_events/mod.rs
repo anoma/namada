@@ -47,9 +47,9 @@ pub struct EthMsg {
     BorshDeserialize,
 )]
 pub struct EthMsgUpdate {
-    /// the event being seen
+    /// The event being seen
     pub body: EthereumEvent,
-    /// addresses of the validators who have just seen this event
+    /// Addresses of the validators who have just seen this event
     /// we use [`BTreeSet`] even though ordering is not important here, so that
     /// we can derive [`Hash`] for [`EthMsgUpdate`]. This also conveniently
     /// orders addresses in the order in which they should be stored in
