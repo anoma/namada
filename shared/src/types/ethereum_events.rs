@@ -14,6 +14,7 @@ use crate::types::token::Amount;
 #[derive(
     Clone,
     Debug,
+    Hash,
     PartialEq,
     Eq,
     PartialOrd,
