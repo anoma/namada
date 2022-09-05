@@ -905,7 +905,18 @@ mod test_prepare_proposal {
             record::remove(wrapper)
         );
         #[cfg(not(feature = "abcipp"))]
-        assert!(shell.prepare_proposal(req).txs.is_empty());
+        assert!('assertion: loop {
+            // this includes valset upd and eth events
+            // vote extension diggests
+            let transactions = shell.prepare_proposal(req).txs;
+            assert_eq!(transactions.len(), 2);
+            for tx in transactions {
+                if &tx == &wrapper {
+                    break 'assertion false;
+                }
+            }
+            break 'assertion true;
+        });
     }
 
     /// Test that the decrypted txs are included
