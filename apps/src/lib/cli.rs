@@ -1465,6 +1465,7 @@ pub mod args {
     const SOURCE: Arg<WalletAddress> = arg("source");
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
+    const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     const TARGET: Arg<WalletAddress> = arg("target");
     const TO_STDOUT: ArgFlag = flag("stdout");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
@@ -1610,6 +1611,8 @@ pub mod args {
         pub target: WalletAddress,
         /// Transferred token address
         pub token: WalletAddress,
+        /// Transferred token address
+        pub sub_prefix: Option<String>,
         /// Transferred token amount
         pub amount: token::Amount,
     }
@@ -1620,12 +1623,14 @@ pub mod args {
             let source = SOURCE.parse(matches);
             let target = TARGET.parse(matches);
             let token = TOKEN.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
             Self {
                 tx,
                 source,
                 target,
                 token,
+                sub_prefix,
                 amount,
             }
         }
@@ -1638,6 +1643,7 @@ pub mod args {
                 ))
                 .arg(TARGET.def().about("The target account address."))
                 .arg(TOKEN.def().about("The transfer token."))
+                .arg(SUB_PREFIX.def().about("The token's sub prefix."))
                 .arg(AMOUNT.def().about("The amount to transfer in decimal."))
         }
     }
@@ -2185,6 +2191,8 @@ pub mod args {
         pub owner: Option<WalletAddress>,
         /// Address of a token
         pub token: Option<WalletAddress>,
+        /// Sub prefix of an account
+        pub sub_prefix: Option<String>,
     }
 
     impl Args for QueryBalance {
@@ -2192,10 +2200,12 @@ pub mod args {
             let query = Query::parse(matches);
             let owner = OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
             Self {
                 query,
                 owner,
                 token,
+                sub_prefix,
             }
         }
 
@@ -2210,6 +2220,11 @@ pub mod args {
                     TOKEN_OPT
                         .def()
                         .about("The token's address whose balance to query."),
+                )
+                .arg(
+                    SUB_PREFIX.def().about(
+                        "The token's sub prefix whose balance to query.",
+                    ),
                 )
         }
     }

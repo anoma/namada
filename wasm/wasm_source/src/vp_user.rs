@@ -34,6 +34,10 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some(address) = token::is_any_token_balance_key(key) {
             Self::Token(address)
+        } else if let Some((_, address)) =
+            token::is_any_multitoken_balance_key(key)
+        {
+            Self::Token(address)
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
         } else if let Some(address) = intent::is_invalid_intent_key(key) {
@@ -412,7 +416,9 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(&source, address, &token, amount);
+            tx_host_env::token::transfer(
+                &source, address, &token, None, amount,
+            );
         });
 
         let vp_env = vp_host_env::take();
@@ -445,7 +451,9 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(address, &target, &token, amount);
+            tx_host_env::token::transfer(
+                address, &target, &token, None, amount,
+            );
         });
 
         let vp_env = vp_host_env::take();
@@ -482,7 +490,9 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(address, &target, &token, amount);
+            tx_host_env::token::transfer(
+                address, &target, &token, None, amount,
+            );
         });
 
         let mut vp_env = vp_host_env::take();
@@ -520,7 +530,9 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             tx_host_env::insert_verifier(address);
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(&source, &target, &token, amount);
+            tx_host_env::token::transfer(
+                &source, &target, &token, None, amount,
+            );
         });
 
         let vp_env = vp_host_env::take();
