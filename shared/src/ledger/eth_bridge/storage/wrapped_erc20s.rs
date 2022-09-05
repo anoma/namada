@@ -73,12 +73,6 @@ pub struct MultitokenKey {
     pub suffix: MultitokenKeyType,
 }
 
-#[allow(missing_docs)]
-#[derive(thiserror::Error, Debug)]
-#[error(transparent)]
-/// Generic error that may be returned
-pub struct Error(#[from] eyre::Error);
-
 impl From<&MultitokenKey> for Key {
     fn from(mt_key: &MultitokenKey) -> Self {
         let keys = Keys::from(&mt_key.asset);
@@ -96,7 +90,7 @@ impl From<MultitokenKey> for Key {
 }
 
 impl TryFrom<&Key> for MultitokenKey {
-    type Error = Error;
+    type Error = eyre::Error;
 
     // TODO: make this code prettier
     // TODO: write tests for this
@@ -104,27 +98,23 @@ impl TryFrom<&Key> for MultitokenKey {
         match key.segments.get(0) {
             Some(segment) => {
                 if segment != &ADDRESS.to_db_key() {
-                    return Err(Error::from(eyre!(
-                        "key does not belong to this account"
-                    )));
+                    return Err(eyre!("key does not belong to this account"));
                 }
             }
-            None => return Err(Error::from(eyre!("key has no segments"))),
+            None => return Err(eyre!("key has no segments")),
         }
         match key.segments.get(1) {
             Some(segment) => {
                 if segment
                     != &DbKeySeg::StringSeg(PREFIX_KEY_SEGMENT.to_owned())
                 {
-                    return Err(Error::from(eyre!(
+                    return Err(eyre!(
                         "key does not have the correct multitoken segment"
-                    )));
+                    ));
                 }
             }
             None => {
-                return Err(Error::from(eyre!(
-                    "key has no segment at index #1"
-                )));
+                return Err(eyre!("key has no segment at index #1"));
             }
         }
 
@@ -132,15 +122,13 @@ impl TryFrom<&Key> for MultitokenKey {
             Some(segment) => match segment {
                 DbKeySeg::StringSeg(segment) => EthAddress::from_str(segment)?,
                 _ => {
-                    return Err(Error::from(eyre!(
+                    return Err(eyre!(
                         "key has unrecognized segment at index #2"
-                    )));
+                    ));
                 }
             },
             None => {
-                return Err(Error::from(eyre!(
-                    "key has no segment at index #2"
-                )));
+                return Err(eyre!("key has no segment at index #2"));
             }
         };
 
@@ -148,15 +136,13 @@ impl TryFrom<&Key> for MultitokenKey {
             Some(segment) => match segment {
                 DbKeySeg::StringSeg(segment) => segment.to_owned(),
                 _ => {
-                    return Err(Error::from(eyre!(
+                    return Err(eyre!(
                         "key has unrecognized segment at index #3"
-                    )));
+                    ));
                 }
             },
             None => {
-                return Err(Error::from(eyre!(
-                    "key has no segment at index #3"
-                )));
+                return Err(eyre!("key has no segment at index #3"));
             }
         };
 
@@ -178,15 +164,13 @@ impl TryFrom<&Key> for MultitokenKey {
                             })?
                         }
                         _ => {
-                            return Err(Error::from(eyre!(
+                            return Err(eyre!(
                                 "key has unrecognized segment at index #4"
-                            )));
+                            ));
                         }
                     },
                     None => {
-                        return Err(Error::from(eyre!(
-                            "key has no segment at index #4"
-                        )));
+                        return Err(eyre!("key has no segment at index #4"));
                     }
                 };
                 let balance_key = MultitokenKey {
@@ -195,9 +179,7 @@ impl TryFrom<&Key> for MultitokenKey {
                 };
                 Ok(balance_key)
             }
-            _ => Err(Error::from(eyre!(
-                "key has unrecognized string segment at index #3"
-            ))),
+            _ => Err(eyre!("key has unrecognized string segment at index #3")),
         }
     }
 }
