@@ -3,7 +3,7 @@
 In order to facilitate transferring assets from Ethereum to Namada, There 
  will be two internal accounts with associated native validity predicates:
 
-- `#EthBridge` - Controls the `/eth_msgs/` [storage](ethereum_events_attestation.md/#storage) 
+- `#EthBridge` - Controls the `/eth_msgs/` [storage](ethereum_events_attestation.md#storage)
 - and ledgers of balances
   for wrapped Ethereum assets (ERC20 tokens) structured in a
   ["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy
