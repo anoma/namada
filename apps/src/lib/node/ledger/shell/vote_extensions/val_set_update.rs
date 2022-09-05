@@ -57,6 +57,7 @@ where
         (VotingPower, validator_set_update::SignedVext),
         VoteExtensionError,
     > {
+        #[cfg(feature = "abcipp")]
         if ext.data.block_height != last_height {
             let ext_height = ext.data.block_height;
             tracing::error!(
@@ -143,6 +144,11 @@ where
         &self,
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
+        #[cfg(not(feature = "abcipp"))]
+        if self.storage.last_height == BlockHeight(0) {
+            return None;
+        }
+
         let vexts_epoch =
             self.storage.get_epoch(self.storage.last_height).expect(
                 "The epoch of the last block height should always be known",
@@ -213,10 +219,14 @@ where
             return None;
         }
 
+        #[cfg(feature = "abcipp")]
         let voting_powers = voting_powers.expect(
             "We have enough voting power, so at least one validator set \
              update vote extension must have been validated.",
         );
+
+        #[cfg(not(feature = "abcipp"))]
+        let voting_powers = voting_powers.unwrap_or_else(HashMap::new);
 
         Some(validator_set_update::VextDigest {
             signatures,
