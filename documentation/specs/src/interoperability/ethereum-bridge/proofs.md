@@ -5,11 +5,11 @@ bridge header is a proof attached to a message understandable to the
 Ethereum smart contracts. For transferring value to Ethereum, a proof is a 
 signed Merkle tree root and inclusion proofs of asset transfer messages 
 understandable to the Ethereum smart contracts, as described in the section on 
-[batching](transfers_to_ethereum.md/#batching)
+[batching](transfers_to_ethereum.md#batching)
 
 A message for transferring value to Ethereum is a `TransferToNamada` 
 instance as described 
-[here](./transfers_to_ethereum.md/#bridge-pool-validity-predicate).
+[here](./transfers_to_ethereum.md#bridge-pool-validity-predicate).
 
 Additionally, when the validator set changes, the smart contracts on
 Ethereum must be updated so that it can continue to recognize valid proofs.

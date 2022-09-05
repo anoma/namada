@@ -15,7 +15,7 @@ use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::{self, Epoch};
 use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
-use num_rational::Ratio;
+use namada::types::voting_power::FractionalVotingPower;
 
 use super::store::{Store, StoreExt};
 
@@ -27,7 +27,7 @@ pub struct EthMsg {
     /// The event being stored
     pub body: EthereumEvent,
     /// The total voting power that's voted for this event across all epochs
-    pub voting_power: (u64, u64),
+    pub voting_power: FractionalVotingPower,
     /// The addresses of validators that voted for this event, in sorted order.
     pub seen_by: Vec<Address>,
     /// Whether this event has been acted on or not
@@ -47,9 +47,9 @@ pub struct EthMsg {
     BorshDeserialize,
 )]
 pub struct EthMsgUpdate {
-    /// the event being seen
+    /// The event being seen
     pub body: EthereumEvent,
-    /// addresses of the validators who have just seen this event
+    /// Addresses of the validators who have just seen this event
     /// we use [`BTreeSet`] even though ordering is not important here, so that
     /// we can derive [`Hash`] for [`EthMsgUpdate`]. This also conveniently
     /// orders addresses in the order in which they should be stored in
@@ -68,6 +68,13 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
     }
 }
 
+/// Applies derived state changes to storage, based on Ethereum `events` which
+/// have been newly seen by some active validator(s). For `events` which have
+/// been seen by enough voting power, extra state changes may take place, such
+/// as minting of wrapped ERC20s.
+///
+/// This function is deterministic based on some existing blockchain state and
+/// the passed `events`.
 pub(crate) fn apply_derived_tx(
     store: &mut impl StoreExt,
     events: Vec<MultiSignedEthEvent>,
@@ -188,61 +195,95 @@ fn apply_single_update(
     let exists_in_storage = store.has_key(&eth_msg_keys.seen())?;
 
     let (eth_msg, changed, newly_confirmed) = if !exists_in_storage {
-        tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-
-        let mut seen_by_voting_power: VotingPower = VotingPower::from(0);
-        for validator in &update.seen_by {
-            match voting_powers.get(validator) {
-                Some(voting_power) => seen_by_voting_power += *voting_power,
-                None => {
-                    return Err(eyre!(
-                        "voting power was not provided for validator {}",
-                        validator
-                    ));
-                }
-            };
-        }
-
-        let seen_by_voting_power: u64 = seen_by_voting_power.into();
-        let total_voting_power: u64 = total_voting_power.into();
-        let fvp: Ratio<u64> =
-            Ratio::new(seen_by_voting_power, total_voting_power);
-        let newly_confirmed = fvp > threshold();
-        (
-            EthMsg {
-                body: update.body,
-                voting_power: fvp.into(),
-                // the below `.collect()` is deterministic and will result in a
-                // sorted vector as `update.seen_by` is a [`BTreeSet`]
-                seen_by: update.seen_by.into_iter().collect(),
-                seen: newly_confirmed,
-            },
-            (&eth_msg_keys).into_iter().collect(),
-            true,
-        )
+        apply_update_for_newly_seen(
+            &eth_msg_keys,
+            update,
+            total_voting_power,
+            voting_powers,
+        )?
     } else {
-        tracing::debug!(
-            %eth_msg_keys.prefix,
-            "Ethereum event already exists in storage",
-        );
-        let body: EthereumEvent = read::value(store, &eth_msg_keys.body())?;
-        let seen: bool = read::value(store, &eth_msg_keys.seen())?;
-        let seen_by: Vec<Address> =
-            read::value(store, &eth_msg_keys.seen_by())?;
-        let voting_power: (u64, u64) =
-            read::value(store, &eth_msg_keys.voting_power())?;
-
-        let eth_msg = EthMsg {
-            body,
-            voting_power,
-            seen_by,
-            seen,
-        };
-        tracing::debug!("Read EthMsg - {:#?}", &eth_msg);
-        calculate_diff(eth_msg, update, total_voting_power, voting_powers)
+        apply_update_for_previously_seen(
+            store,
+            &eth_msg_keys,
+            update,
+            total_voting_power,
+            voting_powers,
+        )?
     };
     write_eth_msg(store, &eth_msg_keys, &eth_msg)?;
     Ok((changed, newly_confirmed))
+}
+
+fn apply_update_for_newly_seen(
+    eth_msg_keys: &eth_msgs::Keys,
+    update: EthMsgUpdate,
+    total_voting_power: VotingPower,
+    voting_powers: &HashMap<Address, VotingPower>,
+) -> Result<(EthMsg, BTreeSet<storage::Key>, bool)> {
+    tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
+
+    let mut seen_by_voting_power: VotingPower = VotingPower::from(0);
+    for validator in &update.seen_by {
+        match voting_powers.get(validator) {
+            Some(voting_power) => seen_by_voting_power += *voting_power,
+            None => {
+                return Err(eyre!(
+                    "voting power was not provided for validator {}",
+                    validator
+                ));
+            }
+        };
+    }
+
+    let seen_by_voting_power: u64 = seen_by_voting_power.into();
+    let total_voting_power: u64 = total_voting_power.into();
+    let fvp =
+        FractionalVotingPower::new(seen_by_voting_power, total_voting_power)?;
+    let newly_confirmed = fvp > FractionalVotingPower::TWO_THIRDS;
+    Ok((
+        EthMsg {
+            body: update.body,
+            voting_power: fvp.into(),
+            // the below `.collect()` is deterministic and will result in a
+            // sorted vector as `update.seen_by` is a [`BTreeSet`]
+            seen_by: update.seen_by.into_iter().collect(),
+            seen: newly_confirmed,
+        },
+        (&eth_msg_keys).into_iter().collect(),
+        true,
+    ))
+}
+
+fn apply_update_for_previously_seen(
+    store: &mut impl Store,
+    eth_msg_keys: &eth_msgs::Keys,
+    update: EthMsgUpdate,
+    total_voting_power: VotingPower,
+    voting_powers: &HashMap<Address, VotingPower>,
+) -> Result<(EthMsg, BTreeSet<storage::Key>, bool)> {
+    tracing::debug!(
+        %eth_msg_keys.prefix,
+        "Ethereum event already exists in storage",
+    );
+    let body: EthereumEvent = read::value(store, &eth_msg_keys.body())?;
+    let seen: bool = read::value(store, &eth_msg_keys.seen())?;
+    let seen_by: Vec<Address> = read::value(store, &eth_msg_keys.seen_by())?;
+    let voting_power: FractionalVotingPower =
+        read::value(store, &eth_msg_keys.voting_power())?;
+
+    let eth_msg = EthMsg {
+        body,
+        voting_power,
+        seen_by,
+        seen,
+    };
+    tracing::debug!("Read EthMsg - {:#?}", &eth_msg);
+    Ok(calculate_diff(
+        eth_msg,
+        update,
+        total_voting_power,
+        voting_powers,
+    ))
 }
 
 fn calculate_diff(
@@ -256,10 +297,6 @@ fn calculate_diff(
          event won't change"
     );
     (eth_msg, BTreeSet::default(), false)
-}
-
-fn threshold() -> Ratio<u64> {
-    Ratio::new(2, 3)
 }
 
 fn write_eth_msg(
