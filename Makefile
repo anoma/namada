@@ -112,30 +112,30 @@ test-unit-abcipp:
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
 		--features "testing std abcipp" \
-			-- \
+			$(TEST_FILTER) -- \
 			-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path \
 		./proof_of_stake/Cargo.toml \
 		--features "testing" \
-			-- \
+			$(TEST_FILTER) -- \
 			-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
 		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" \
-			-- \
+			$(TEST_FILTER) -- \
 			-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./vm_env/Cargo.toml \
 		--no-default-features \
 		--features "abcipp" \
-			-- \
+			$(TEST_FILTER) -- \
 			-Z unstable-options --report-time
 
 test-unit:
 	$(cargo) test \
-			-- \
+			$(TEST_FILTER) -- \
 			--skip e2e \
 			-Z unstable-options --report-time
 
