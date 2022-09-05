@@ -89,6 +89,12 @@ impl From<&MultitokenKey> for Key {
     }
 }
 
+impl From<MultitokenKey> for Key {
+    fn from(mt_key: MultitokenKey) -> Self {
+        (&mt_key).into()
+    }
+}
+
 impl TryFrom<&Key> for MultitokenKey {
     type Error = Error;
 
@@ -296,5 +302,50 @@ mod test {
                 "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/ERC20/0x6b175474e89094c44da98b954eedeac495271d0f/supply",
                 key.to_string(),
             )
+    }
+
+    #[test]
+    fn test_from_multitoken_key_for_key() {
+        // supply key
+        let wdai_supply = MultitokenKey {
+            asset: DAI_ERC20_ETH_ADDRESS,
+            suffix: MultitokenKeyType::Supply,
+        };
+        let key: Key = wdai_supply.into();
+        assert_matches!(
+            &key.segments[..],
+            [
+                DbKeySeg::AddressSeg(multitoken_addr),
+                DbKeySeg::StringSeg(multitoken_path),
+                DbKeySeg::StringSeg(token_id),
+                DbKeySeg::StringSeg(supply_key_seg),
+            ] if multitoken_addr == &ADDRESS &&
+            multitoken_path == PREFIX_KEY_SEGMENT &&
+            token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase() &&
+            supply_key_seg == SUPPLY_KEY_SEGMENT
+        );
+
+        // balance key
+        let wdai_balance = MultitokenKey {
+            asset: DAI_ERC20_ETH_ADDRESS,
+            suffix: MultitokenKeyType::Balance {
+                owner: Address::from_str(ARBITRARY_OWNER_ADDRESS).unwrap(),
+            },
+        };
+        let key: Key = wdai_balance.into();
+        assert_matches!(
+            &key.segments[..],
+            [
+                DbKeySeg::AddressSeg(multitoken_addr),
+                DbKeySeg::StringSeg(multitoken_path),
+                DbKeySeg::StringSeg(token_id),
+                DbKeySeg::StringSeg(balance_key_seg),
+                DbKeySeg::AddressSeg(owner_addr),
+            ] if multitoken_addr == &ADDRESS &&
+            multitoken_path == PREFIX_KEY_SEGMENT &&
+            token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase() &&
+            balance_key_seg == BALANCE_KEY_SEGMENT &&
+            owner_addr == &Address::decode(ARBITRARY_OWNER_ADDRESS).unwrap()
+        );
     }
 }
