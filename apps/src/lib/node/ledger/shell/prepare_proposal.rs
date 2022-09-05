@@ -347,14 +347,14 @@ mod test_prepare_proposal {
     #[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
         let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
-        let tx = Tx::new(
+        let non_wrapper_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
         );
         let req = RequestPrepareProposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
-            txs: vec![tx.to_bytes()],
+            txs: vec![non_wrapper_tx.to_bytes()],
             max_tx_bytes: 0,
             ..Default::default()
         };
@@ -362,10 +362,22 @@ mod test_prepare_proposal {
         assert_eq!(
             // NOTE: we process mempool txs after protocol txs
             shell.prepare_proposal(req).tx_records.remove(1),
-            record::remove(tx.to_bytes())
+            record::remove(non_wrapper_tx.to_bytes())
         );
         #[cfg(not(feature = "abcipp"))]
-        assert!(shell.prepare_proposal(req).txs.is_empty());
+        assert!('assertion: loop {
+            // this includes valset upd and eth events
+            // vote extension diggests
+            let transactions = shell.prepare_proposal(req).txs;
+            assert_eq!(transactions.len(), 2);
+            let non_wrapper_tx = non_wrapper_tx.to_bytes();
+            for tx in transactions {
+                if &tx == &non_wrapper_tx {
+                    break 'assertion false;
+                }
+            }
+            break 'assertion true;
+        });
     }
 
     /// Check if we are filtering out an invalid vote extension `vext`
