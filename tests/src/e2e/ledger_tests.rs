@@ -1257,7 +1257,9 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("No shielded ETH balance found")?;
     client.assert_success();
 
-    // Assert XAN balance at VK(B) is 30*ETH_reward*(epoch_5-epoch_3)
+    let mut ep = get_epoch(&test, &validator_one_rpc)?;
+
+    // Assert XAN balance at VK(B) is 30*ETH_reward*(ep-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1274,10 +1276,11 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "XAN: {}",
-        (amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)
+        (amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0)
     ))?;
     client.assert_success();
 
+    ep = get_epoch(&test, &validator_one_rpc)?;
     // Assert XAN balance at MASP pool is
     // 20*BTC_reward*(epoch_5-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
@@ -1296,8 +1299,8 @@ fn masp_incentives() -> Result<()> {
     )?;
     client.exp_string(&format!(
         "XAN: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep5.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
+        ((amt20 * masp_rewards[&btc()]).0 * (ep.0 - ep0.0))
+            + ((amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0))
     ))?;
     client.assert_success();
 
@@ -1485,7 +1488,7 @@ fn masp_incentives() -> Result<()> {
     // Wait till epoch boundary
     let _ep9 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 20*BTC_reward*(epoch_6-epoch_0) XAN from SK(A) to Christel
+    // Send 20*BTC_reward*(epoch_6-epoch_0) XAN from SK(A) to Bertha
     let mut client = run!(
         test,
         Bin::Client,
