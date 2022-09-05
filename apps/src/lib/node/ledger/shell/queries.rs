@@ -629,6 +629,17 @@ mod test_queries {
 
                 let epoch_assertions = $epoch_assertions;
 
+                // TODO: switch to `Result::into_ok_or_err` when it becomes
+                // stable
+                const fn extract(
+                    can_send: ::std::result::Result<bool, bool>,
+                ) -> bool {
+                    match can_send {
+                        Ok(x) => x,
+                        Err(x) => x,
+                    }
+                }
+
                 // test `SendValsetUpd::Now`  and `SendValsetUpd::AtPrevHeight`
                 for (idx, (curr_epoch, curr_block_height, can_send)) in
                     epoch_assertions.iter().copied().enumerate()
@@ -647,7 +658,7 @@ mod test_queries {
                         shell
                             .storage
                             .can_send_validator_set_update(SendValsetUpd::Now),
-                        can_send
+                        extract(can_send)
                     );
                     if let Some((epoch, height, can_send)) =
                         epoch_assertions.get(idx.wrapping_sub(1)).copied()
@@ -660,12 +671,12 @@ mod test_queries {
                             shell.storage.can_send_validator_set_update(
                                 SendValsetUpd::AtPrevHeight
                             ),
-                            can_send
+                            extract(can_send)
                         );
                     }
                     if epoch_assertions
                         .get(idx + 1)
-                        .map(|&(_, _, change_epoch)| change_epoch)
+                        .map(|&(_, _, change_epoch)| change_epoch.is_ok())
                         .unwrap_or(false)
                     {
                         let time = namada::types::time::DateTimeUtc::now();
@@ -691,7 +702,7 @@ mod test_queries {
                                 curr_block_height.into()
                             )
                         ),
-                        can_send
+                        extract(can_send)
                     );
                 }
             }
@@ -701,74 +712,74 @@ mod test_queries {
     #[cfg(feature = "abcipp")]
     test_can_send_validator_set_update! {
         epoch_assertions: [
-            // (current epoch, current block height, can send valset upd)
-            (0, 1, true),
-            (0, 2, false),
-            (0, 3, false),
-            (0, 4, false),
-            (0, 5, false),
-            (0, 6, false),
-            (0, 7, false),
-            (0, 8, false),
-            (0, 9, false),
-            (0, 10, false),
-            (0, 11, false),
+            // (current epoch, current block height, can send valset upd / Ok = change epoch)
+            (0, 1, Ok(true)),
+            (0, 2, Err(false)),
+            (0, 3, Err(false)),
+            (0, 4, Err(false)),
+            (0, 5, Err(false)),
+            (0, 6, Err(false)),
+            (0, 7, Err(false)),
+            (0, 8, Err(false)),
+            (0, 9, Err(false)),
+            (0, 10, Err(false)),
+            (0, 11, Err(false)),
             // we will change epoch here
-            (1, 12, true),
-            (1, 13, false),
-            (1, 14, false),
-            (1, 15, false),
-            (1, 16, false),
-            (1, 17, false),
-            (1, 18, false),
-            (1, 19, false),
-            (1, 20, false),
-            (1, 21, false),
-            (1, 22, false),
-            (1, 23, false),
-            (1, 24, false),
+            (1, 12, Ok(true)),
+            (1, 13, Err(false)),
+            (1, 14, Err(false)),
+            (1, 15, Err(false)),
+            (1, 16, Err(false)),
+            (1, 17, Err(false)),
+            (1, 18, Err(false)),
+            (1, 19, Err(false)),
+            (1, 20, Err(false)),
+            (1, 21, Err(false)),
+            (1, 22, Err(false)),
+            (1, 23, Err(false)),
+            (1, 24, Err(false)),
             // we will change epoch here
-            (2, 25, true),
-            (2, 26, false),
-            (2, 27, false),
-            (2, 28, false),
+            (2, 25, Ok(true)),
+            (2, 26, Err(false)),
+            (2, 27, Err(false)),
+            (2, 28, Err(false)),
         ],
     }
 
     #[cfg(not(feature = "abcipp"))]
     test_can_send_validator_set_update! {
         epoch_assertions: [
-            // (current epoch, current block height, can send valset upd)
-            (0, 1, true),
-            (0, 2, true),
-            (0, 3, true),
-            (0, 4, true),
-            (0, 5, true),
-            (0, 6, true),
-            (0, 7, true),
-            (0, 8, true),
-            (0, 9, true),
-            (0, 10, true),
-            (0, 11, true),
+            // (current epoch, current block height, can send valset upd / Ok = change epoch)
+            (0, 1, Ok(true)),
+            (0, 2, Err(true)),
+            (0, 3, Err(true)),
+            (0, 4, Err(true)),
+            (0, 5, Err(true)),
+            (0, 6, Err(true)),
+            (0, 7, Err(true)),
+            (0, 8, Err(true)),
+            (0, 9, Err(true)),
+            (0, 10, Err(true)),
+            (0, 11, Err(true)),
             // we will change epoch here
-            (1, 12, true),
-            (1, 13, true),
-            (1, 14, true),
-            (1, 15, true),
-            (1, 16, true),
-            (1, 17, true),
-            (1, 18, true),
-            (1, 19, true),
-            (1, 20, true),
-            (1, 21, true),
-            (1, 22, true),
-            (1, 23, true),
-            (1, 24, true),
+            (1, 12, Ok(true)),
+            (1, 13, Err(true)),
+            (1, 14, Err(true)),
+            (1, 15, Err(true)),
+            (1, 16, Err(true)),
+            (1, 17, Err(true)),
+            (1, 18, Err(true)),
+            (1, 19, Err(true)),
+            (1, 20, Err(true)),
+            (1, 21, Err(true)),
+            (1, 22, Err(true)),
+            (1, 23, Err(true)),
+            (1, 24, Err(true)),
             // we will change epoch here
-            (2, 25, true),
-            (2, 26, true),
-            (2, 27, true),
-            (2, 28, true),
+            (2, 25, Ok(true)),
+            (2, 26, Err(true)),
+            (2, 27, Err(true)),
+            (2, 28, Err(true)),
         ],
     }
 }
