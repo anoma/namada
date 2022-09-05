@@ -105,7 +105,7 @@ where
             "Validity predicate triggered",
         );
         let signed: SignedTxData =
-            BorshDeserialize::try_from_slice(&tx_data[..])
+            BorshDeserialize::try_from_slice(tx_data)
                 .map_err(|e| Error(e.into()))?;
 
         let transfer: PendingTransfer = match signed.data {
@@ -263,7 +263,7 @@ mod test_bridge_pool_vp {
     ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
         Ctx::new(
             storage,
-            &write_log,
+            write_log,
             tx,
             VpGasMeter::new(0u64),
             VpCache::new(temp_dir(), 100usize),
@@ -276,6 +276,7 @@ mod test_bridge_pool_vp {
         payer_delta: SignedAmount,
         escrow_delta: SignedAmount,
         insert_transfer: F,
+        keys_changed: BTreeSet<Key>,
         expect: bool,
     ) where
         F: FnOnce(
@@ -346,8 +347,6 @@ mod test_bridge_pool_vp {
         let vp = BridgePoolVp {
             ctx: setup_ctx(&tx, &storage, &write_log),
         };
-        let keys_changed = BTreeSet::default();
-        let verifiers = BTreeSet::default();
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
@@ -358,6 +357,7 @@ mod test_bridge_pool_vp {
         .try_to_vec()
         .expect("Test failed");
 
+        let verifiers = BTreeSet::default();
         let res = vp
             .validate_tx(&signed, &keys_changed, &verifiers)
             .expect("Test failed");
@@ -375,6 +375,7 @@ mod test_bridge_pool_vp {
                 pool.insert(transfer);
                 pool
             },
+            BTreeSet::default(),
             true,
         );
     }
@@ -391,6 +392,7 @@ mod test_bridge_pool_vp {
                 pool.insert(transfer);
                 pool
             },
+            BTreeSet::default(),
             false,
         );
     }
@@ -407,6 +409,7 @@ mod test_bridge_pool_vp {
                 pool.insert(transfer);
                 pool
             },
+            BTreeSet::default(),
             false,
         );
     }
@@ -423,6 +426,7 @@ mod test_bridge_pool_vp {
                 pool.insert(transfer);
                 pool
             },
+            BTreeSet::default(),
             false,
         );
     }
@@ -439,6 +443,7 @@ mod test_bridge_pool_vp {
                 pool.insert(transfer);
                 pool
             },
+            BTreeSet::default(),
             false,
         );
     }
@@ -451,6 +456,7 @@ mod test_bridge_pool_vp {
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
             |transfer, _pool| HashSet::from([transfer]),
+            BTreeSet::default(),
             false,
         );
     }
@@ -463,6 +469,7 @@ mod test_bridge_pool_vp {
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
             |_transfer, pool| pool,
+            BTreeSet::default(),
             false,
         );
     }
@@ -481,6 +488,7 @@ mod test_bridge_pool_vp {
                 pool.insert(wrong_transfer);
                 pool
             },
+            BTreeSet::default(),
             false,
         );
     }
@@ -489,6 +497,23 @@ mod test_bridge_pool_vp {
     /// the signed merkle root.
     #[test]
     fn test_signed_merkle_root_changes_rejected() {
+        assert_bidge_pool(
+            SignedAmount::Negative(GAS_FEE.into()),
+            SignedAmount::Positive(GAS_FEE.into()),
+            |transfer, pool| {
+                let mut pool = pool;
+                pool.insert(transfer);
+                pool
+            },
+            BTreeSet::from([get_signed_root_key()]),
+            false,
+        );
+    }
+
+    /// Test that a transfer added to the pool with zero gas fees
+    /// is rejected.
+    #[test]
+    fn test_zero_gas_fees_rejected() {
         // setup
         let mut write_log = new_writelog();
         let storage = Storage::<MockDB, Sha256Hasher>::open(
@@ -507,27 +532,10 @@ mod test_bridge_pool_vp {
                 nonce: 1u64.into(),
             },
             gas_fee: GasFee {
-                amount: GAS_FEE.into(),
+                amount: 0.into(),
                 payer: bertha_address(),
             },
         };
-        // change the payers account
-        let bertha_account_key = balance_key(&xan(), &bertha_address());
-        let new_bertha_balance = Amount::from(BERTHA_WEALTH - GAS_FEE)
-            .try_to_vec()
-            .expect("Test failed");
-        write_log
-            .write(&bertha_account_key, new_bertha_balance)
-            .expect("Test failed");
-
-        // change the escrow account
-        let escrow = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
-        let new_escrow_balance = Amount::from(ESCROWED_AMOUNT + GAS_FEE)
-            .try_to_vec()
-            .expect("Test failed");
-        write_log
-            .write(&escrow, new_escrow_balance)
-            .expect("Test failed");
 
         // add transfer to pool
         let mut pool = initial_pool();
@@ -541,7 +549,7 @@ mod test_bridge_pool_vp {
             ctx: setup_ctx(&tx, &storage, &write_log),
         };
         // inform the vp that the merkle root changed
-        let keys_changed = BTreeSet::from([get_signed_root_key()]);
+        let keys_changed = BTreeSet::default();
         let verifiers = BTreeSet::default();
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
@@ -550,12 +558,12 @@ mod test_bridge_pool_vp {
             data: Some(to_sign),
             sig,
         }
-            .try_to_vec()
-            .expect("Test failed");
+        .try_to_vec()
+        .expect("Test failed");
 
         let res = vp
             .validate_tx(&signed, &keys_changed, &verifiers)
             .expect("Test failed");
-        assert_eq!(res, false);
+        assert!(!res);
     }
 }
