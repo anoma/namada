@@ -771,8 +771,6 @@ mod test_prepare_proposal {
         const FIRST_HEIGHT: BlockHeight = BlockHeight(0);
         const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
 
-        // starting the shell like this will contain insufficient voting
-        // power
         let (mut shell, _recv, _) = test_utils::setup();
 
         // artificially change the voting power of the default validator to
@@ -861,9 +859,9 @@ mod test_prepare_proposal {
                 txs: vec![vote],
                 ..Default::default()
             });
-            assert_eq!(rsp.txs.len(), 1);
+            assert_eq!(rsp.txs.len(), 2);
 
-            let tx_bytes = rsp.txs.pop().unwrap();
+            let tx_bytes = rsp.txs.remove(0);
             let got = Tx::try_from(&tx_bytes[..]).unwrap();
             let got_signed_tx =
                 SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
