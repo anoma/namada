@@ -1,3 +1,4 @@
+//! Configuration settings to do with the Ethereum bridge.
 use serde::{Deserialize, Serialize};
 
 /// Default [Ethereum JSON-RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/) endpoint used by the oracle
