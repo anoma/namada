@@ -365,18 +365,20 @@ mod test_prepare_proposal {
             record::remove(non_wrapper_tx.to_bytes())
         );
         #[cfg(not(feature = "abcipp"))]
-        assert!('assertion: loop {
+        assert!({
+            let mut assertion = true;
             // this includes valset upd and eth events
             // vote extension diggests
             let transactions = shell.prepare_proposal(req).txs;
             assert_eq!(transactions.len(), 2);
             let non_wrapper_tx = non_wrapper_tx.to_bytes();
             for tx in transactions {
-                if &tx == &non_wrapper_tx {
-                    break 'assertion false;
+                if tx == non_wrapper_tx {
+                    assertion = false;
+                    break;
                 }
             }
-            break 'assertion true;
+            assertion
         });
     }
 
@@ -934,17 +936,19 @@ mod test_prepare_proposal {
             record::remove(wrapper)
         );
         #[cfg(not(feature = "abcipp"))]
-        assert!('assertion: loop {
+        assert!({
+            let mut assertion = true;
             // this includes valset upd and eth events
             // vote extension diggests
             let transactions = shell.prepare_proposal(req).txs;
             assert_eq!(transactions.len(), 2);
             for tx in transactions {
-                if &tx == &wrapper {
-                    break 'assertion false;
+                if tx == wrapper {
+                    assertion = false;
+                    break;
                 }
             }
-            break 'assertion true;
+            assertion
         });
     }
 
