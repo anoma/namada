@@ -118,6 +118,10 @@ if keys_changed.contains(&signed_root_key) {
                 "The bridge pool transfers are missing from storage"
             ))?;
         if !pending_post.contains(&transfer) {
+            tracing::debug!(
+                "Rejecting transaction as the transfer wasn't added to the \
+                 pending transfers"
+            );
             return Ok(false);
         }
         for item in pending_pre.symmetric_difference(&pending_post) {
