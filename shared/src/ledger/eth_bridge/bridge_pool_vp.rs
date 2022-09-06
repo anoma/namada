@@ -126,6 +126,11 @@ if keys_changed.contains(&signed_root_key) {
         }
         for item in pending_pre.symmetric_difference(&pending_post) {
             if item != &transfer {
+                tracing::debug!(
+                    ?item,
+                    "Rejecting transaction as an unrecognized item was added \
+                     to the pending transfers"
+                );
                 return Ok(false);
             }
         }
