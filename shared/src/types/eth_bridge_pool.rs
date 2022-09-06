@@ -63,7 +63,7 @@ pub struct PendingTransfer {
     BorshDeserialize,
 )]
 pub struct GasFee {
-    /// The amount of fess (in NAM)
+    /// The amount of fees (in NAM)
     pub amount: Amount,
     /// The account of fee payer.
     pub payer: Address,
