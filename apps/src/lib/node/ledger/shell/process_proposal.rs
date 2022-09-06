@@ -3,6 +3,7 @@
 
 use namada::ledger::pos::types::VotingPower;
 use namada::types::transaction::protocol::ProtocolTxType;
+#[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
 use super::queries::{QueriesExt, SendValsetUpd};
@@ -136,7 +137,9 @@ where
     where
         I: Iterator<Item = Option<VotingPower>>,
     {
+        #[cfg(feature = "abcipp")]
         let mut voting_power = FractionalVotingPower::default();
+        #[cfg(feature = "abcipp")]
         let total_power = {
             let epoch = self.storage.get_epoch(self.storage.last_height);
             u64::from(self.storage.get_total_voting_power(epoch))
@@ -144,18 +147,22 @@ where
 
         if vote_extensions.all(|maybe_ext| {
             maybe_ext
-                .map(|power| {
-                    voting_power += FractionalVotingPower::new(
-                        u64::from(power),
-                        total_power,
-                    )
-                    .expect(
-                        "The voting power we obtain from storage should \
-                         always be valid",
-                    );
+                .map(|_power| {
+                    #[cfg(feature = "abcipp")]
+                    {
+                        voting_power += FractionalVotingPower::new(
+                            u64::from(_power),
+                            total_power,
+                        )
+                        .expect(
+                            "The voting power we obtain from storage should \
+                             always be valid",
+                        );
+                    }
                 })
                 .is_some()
         }) {
+            #[cfg(feature = "abcipp")]
             if voting_power > FractionalVotingPower::TWO_THIRDS {
                 TxResult {
                     code: ErrorCodes::Ok.into(),
@@ -168,6 +175,14 @@ where
                            the backing stake of the vote extensions published \
                            in the proposal was insufficient"
                         .into(),
+                }
+            }
+
+            #[cfg(not(feature = "abcipp"))]
+            {
+                TxResult {
+                    code: ErrorCodes::Ok.into(),
+                    info: "Process proposal accepted this transaction".into(),
                 }
             }
         } else {
