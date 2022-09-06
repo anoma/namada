@@ -10,10 +10,11 @@ use namada::ledger::treasury::ADDRESS as treasury_address;
 use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
 use namada::types::storage::{BlockHash, Epoch, Header};
-use tendermint_proto::abci::Misbehavior as Evidence;
-use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+use namada::types::transaction::protocol::ProtocolTxType;
 
 use super::*;
+use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
+use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::node::ledger::events::EventType;
 
 impl<D, H> Shell<D, H>
