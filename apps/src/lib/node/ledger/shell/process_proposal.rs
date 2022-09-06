@@ -3,7 +3,9 @@
 
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use crate::facade::tendermint_proto::abci::{ExecTxResult, RequestProcessProposal};
+use crate::facade::tendermint_proto::abci::{
+    ExecTxResult, RequestProcessProposal,
+};
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
 impl<D, H> Shell<D, H>

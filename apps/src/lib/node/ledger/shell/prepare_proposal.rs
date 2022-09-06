@@ -10,9 +10,7 @@ use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::abci::{
-    tx_record::TxAction, TxRecord,
-};
+use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
