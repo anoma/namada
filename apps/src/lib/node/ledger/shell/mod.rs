@@ -52,7 +52,7 @@ use super::protocol::ShellParams;
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
 #[cfg(not(feature = "abcipp"))]
-use crate::facade::tendermint_proto::abci::ConsensusParams;
+use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };

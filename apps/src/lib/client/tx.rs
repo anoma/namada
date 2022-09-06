@@ -1197,9 +1197,20 @@ pub async fn submit_tx(
         } => (tx, wrapper_hash, decrypted_hash),
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
+
+    let websocket_timeout =
+        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
+            if let Ok(timeout) = val.parse::<u64>() {
+                Duration::new(timeout, 0)
+            } else {
+                Duration::new(300, 0)
+            }
+        } else {
+            Duration::new(300, 0)
+        };
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
         WebSocketAddress::try_from(address.clone())?,
-        None,
+        Some(websocket_timeout),
     )?;
 
     // It is better to subscribe to the transaction before it is broadcast
@@ -1215,7 +1226,7 @@ pub async fn submit_tx(
     let mut decrypted_tx_subscription = {
         let mut decrypted_tx_subscription = TendermintWebsocketClient::open(
             WebSocketAddress::try_from(address.clone())?,
-            None,
+            Some(websocket_timeout),
         )?;
         let query = Query::from(EventType::NewBlock)
             .and_eq(ACCEPTED_QUERY_KEY, decrypted_hash.as_str());

@@ -258,7 +258,7 @@ pub mod shim {
     /// Custom types for response payloads
     pub mod response {
         #[cfg(not(feature = "abcipp"))]
-        use crate::facade::tendermint_proto::abci::ConsensusParams;
+        use crate::facade::tendermint_proto::types::ConsensusParams;
         use crate::facade::tendermint_proto::abci::{
             Event as TmEvent, ResponseProcessProposal, ValidatorUpdate,
         };

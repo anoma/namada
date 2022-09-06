@@ -159,14 +159,8 @@ impl From<Event> for crate::facade::tendermint_proto::abci::Event {
                 .attributes
                 .into_iter()
                 .map(|(key, value)| EventAttribute {
-                    #[cfg(feature = "abcipp")]
                     key,
-                    #[cfg(not(feature = "abcipp"))]
-                    key: key.into_bytes(),
-                    #[cfg(feature = "abcipp")]
                     value,
-                    #[cfg(not(feature = "abcipp"))]
-                    value: value.into_bytes(),
                     index: true,
                 })
                 .collect(),
