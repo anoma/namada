@@ -1,11 +1,10 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
-use tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use tendermint_proto::abci::{
-    ExecTxResult, RequestProcessProposal, ResponseProcessProposal,
-};
 
 use super::*;
+use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
+use crate::facade::tendermint_proto::abci::{ExecTxResult, RequestProcessProposal};
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
 impl<D, H> Shell<D, H>
 where
@@ -30,14 +29,13 @@ where
     ) -> ResponseProcessProposal {
         let tx_results = self.process_txs(&req.txs);
 
-        ResponseProcessProposal {
+        ProcessProposal {
             status: if tx_results.iter().any(|res| res.code > 3) {
                 ProposalStatus::Reject as i32
             } else {
                 ProposalStatus::Accept as i32
             },
             tx_results,
-            ..Default::default()
         }
     }
 
@@ -200,8 +198,6 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
-    use tendermint_proto::abci::RequestInitChain;
-    use tendermint_proto::google::protobuf::Timestamp;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
