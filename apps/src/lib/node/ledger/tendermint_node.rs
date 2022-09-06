@@ -126,9 +126,7 @@ pub async fn run(
     let mut tendermint_node = Command::new(&tendermint_path);
     tendermint_node.args(&[
         "start",
-        "--mode",
-        &mode,
-        "--proxy-app",
+        "--proxy_app",
         &ledger_address,
         "--home",
         &home_dir_string,
