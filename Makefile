@@ -129,8 +129,6 @@ clean:
 
 build-doc:
 	$(cargo) doc --no-deps
-	$(cargo) run --bin namada_encoding_spec
-	make -C docs build
 
 doc:
 	# build and opens the docs in browser
