@@ -506,7 +506,7 @@ mod test_process_proposal {
         );
     }
 
-    fn check_rejected_digest(
+    fn check_rejected_eth_events_digest(
         shell: &mut TestShell,
         vote_extension_digest: ethereum_events::VextDigest,
         protocol_key: common::SecretKey,
@@ -582,7 +582,11 @@ mod test_process_proposal {
                 }],
             }
         };
-        check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
+        check_rejected_eth_events_digest(
+            &mut shell,
+            vote_extension_digest,
+            protocol_key,
+        );
     }
 
     /// Test that if a proposal contains Ethereum events with
@@ -633,7 +637,11 @@ mod test_process_proposal {
             }
         };
         #[cfg(feature = "abcipp")]
-        check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
+        check_rejected_eth_events_digest(
+            &mut shell,
+            vote_extension_digest,
+            protocol_key,
+        );
         #[cfg(not(feature = "abcipp"))]
         {
             let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
@@ -699,7 +707,11 @@ mod test_process_proposal {
                 }],
             }
         };
-        check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
+        check_rejected_eth_events_digest(
+            &mut shell,
+            vote_extension_digest,
+            protocol_key,
+        );
     }
 
     /// Test that if a wrapper tx is not signed, it is rejected
