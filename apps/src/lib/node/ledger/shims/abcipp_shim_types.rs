@@ -267,20 +267,16 @@ pub mod shim {
 
     /// Custom types for response payloads
     pub mod response {
+        use crate::facade::tendermint_proto::abci::{
+            Event as TmEvent, ResponseProcessProposal, ValidatorUpdate,
+        };
         #[cfg(not(feature = "abcipp"))]
-        use tendermint_proto::abci::{
-            ConsensusParams, Event as TmEvent, ResponseProcessProposal,
-            ValidatorUpdate,
-        };
+        use crate::facade::tendermint_proto::types::ConsensusParams;
         #[cfg(feature = "abcipp")]
-        use tendermint_proto_abcipp::abci::{
-            Event as TmEvent, ExecTxResult, ResponseFinalizeBlock,
-            ValidatorUpdate,
+        use crate::facade::tendermint_proto::{
+            abci::{ExecTxResult, ResponseFinalizeBlock},
+            types::ConsensusParams,
         };
-        #[cfg(feature = "abcipp")]
-        use tendermint_proto_abcipp::types::ConsensusParams;
-
-        use super::*;
         use crate::node::ledger::events::Event;
         #[cfg(feature = "abcipp")]
         use crate::node::ledger::events::EventLevel;

@@ -5,7 +5,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
-use tendermint_proto::abci::ResponseFinalizeBlock;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
 #[cfg(not(feature = "abcipp"))]

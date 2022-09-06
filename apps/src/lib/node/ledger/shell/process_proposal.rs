@@ -3,9 +3,7 @@
 
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use crate::facade::tendermint_proto::abci::{
-    ExecTxResult, RequestProcessProposal,
-};
+use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
 impl<D, H> Shell<D, H>
@@ -28,7 +26,7 @@ where
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,
-    ) -> ResponseProcessProposal {
+    ) -> ProcessProposal {
         let tx_results = self.process_txs(&req.txs);
 
         ProcessProposal {
@@ -42,13 +40,11 @@ where
     }
 
     /// Check all the given txs.
-    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<ExecTxResult> {
+    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<TxResult> {
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         txs.iter()
             .map(|tx_bytes| {
-                ExecTxResult::from(
-                    self.process_single_tx(tx_bytes, &mut tx_queue_iter),
-                )
+                self.process_single_tx(tx_bytes, &mut tx_queue_iter)
             })
             .collect()
     }
