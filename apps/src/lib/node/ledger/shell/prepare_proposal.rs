@@ -40,6 +40,7 @@ where
             // filter in half of the new txs from Tendermint, only keeping
             // wrappers
             let number_of_new_txs = 1 + req.txs.len() / 2;
+            #[cfg(feature = "abcipp")]
             let mut txs: Vec<TxRecord> = req
                 .txs
                 .into_iter()
@@ -54,24 +55,35 @@ where
                     }
                 })
                 .collect();
-
-            // decrypt the wrapper txs included in the previous block
-            let mut decrypted_txs = self
-                .storage
-                .tx_queue
-                .iter()
-                .map(|tx| {
-                    Tx::from(match tx.decrypt(privkey) {
-                        Ok(tx) => DecryptedTx::Decrypted(tx),
-                        _ => DecryptedTx::Undecryptable(tx.clone()),
-                    })
-                    .to_bytes()
+            #[cfg(not(feature = "abcipp"))]
+            let mut txs: Vec<TxBytes> = req
+                .txs
+                .into_iter()
+                .take(number_of_new_txs)
+                .filter_map(|tx_bytes| {
+                    if let Ok(Ok(TxType::Wrapper(_))) =
+                        Tx::try_from(tx_bytes.as_slice()).map(process_tx)
+                    {
+                        Some(tx_bytes)
+                    } else {
+                        None
+                    }
                 })
                 .collect();
+
+            // decrypt the wrapper txs included in the previous block
+            let decrypted_txs = self.storage.tx_queue.iter().map(|tx| {
+                Tx::from(match tx.decrypt(privkey) {
+                    Ok(tx) => DecryptedTx::Decrypted(tx),
+                    _ => DecryptedTx::Undecryptable(tx.clone()),
+                })
+                .to_bytes()
+            });
             #[cfg(feature = "abcipp")]
-            let decrypted_txs: Vec<TxRecord> =
-                decrypted_txs.into_iter().map(record::add).collect();
-            let mut decrypted_txs = decrypted_txs;
+            let mut decrypted_txs: Vec<_> =
+                decrypted_txs.map(record::add).collect();
+            #[cfg(not(feature = "abcipp"))]
+            let mut decrypted_txs: Vec<_> = decrypted_txs.collect();
 
             txs.append(&mut decrypted_txs);
             txs
