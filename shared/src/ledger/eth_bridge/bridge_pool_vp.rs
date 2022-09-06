@@ -101,7 +101,8 @@ where
 
         // check that the signed root is not modified
         let signed_root_key = get_signed_root_key();
-        if keys_changed.contains(&signed_root_key) {
+if keys_changed.contains(&signed_root_key) {
+            tracing::debug!("Rejecting transaction as it is attempting to change the signed root key");
             return Ok(false);
         }
         // check that the pending transfer (and only that) was added to the pool
