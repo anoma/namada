@@ -1,4 +1,14 @@
-//! Validity predicate for the Ethereum bridge
+//! Validity predicate for the Ethereum bridge pool
+//!
+//! This pool holds user initiated transfers of value from
+//! Namada to Ethereum. It is to act like a mempool: users
+//! add in their desired transfers and their chosen amount
+//! of NAM to cover Ethereum side gas fees. These transfers
+//! can be relayed in batches along with Merkle proofs.
+//!
+//! This VP checks that additions to the pool are handled
+//! correctly. This means that the appropriate data is
+//! added to the pool and gas fees are submitted appropriately.
 use std::collections::{BTreeSet, HashSet};
 
 use borsh::BorshDeserialize;
@@ -44,36 +54,12 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    /// Helper function for reading values from storage
-    fn read_post_value<T>(&self, key: &Key) -> Option<T>
-    where
-        T: BorshDeserialize,
-    {
-        if let Ok(Some(bytes)) = self.ctx.read_post(key) {
-            <T as BorshDeserialize>::try_from_slice(bytes.as_slice()).ok()
-        } else {
-            None
-        }
-    }
-
-    /// Helper function for reading values from storage
-    fn read_pre_value<T>(&self, key: &Key) -> Option<T>
-    where
-        T: BorshDeserialize,
-    {
-        if let Ok(Some(bytes)) = self.ctx.read_pre(key) {
-            <T as BorshDeserialize>::try_from_slice(bytes.as_slice()).ok()
-        } else {
-            None
-        }
-    }
-
     /// Get the change in the balance of an account
     /// associated with an address
     fn account_balance_delta(&self, address: &Address) -> Option<SignedAmount> {
         let account_key = balance_key(&xan(), address);
-        let before: Amount = self.read_pre_value(&account_key)?;
-        let after: Amount = self.read_post_value(&account_key)?;
+        let before: Amount = self.ctx.read_pre_value(&account_key)?;
+        let after: Amount = self.ctx.read_post_value(&account_key)?;
         if before > after {
             Some(SignedAmount::Negative(before - after))
         } else {
@@ -102,11 +88,10 @@ where
             tx_data_len = tx_data.len(),
             keys_changed_len = keys_changed.len(),
             verifiers_len = _verifiers.len(),
-            "Validity predicate triggered",
+            "Ethereum Bridge Pool VP triggered",
         );
-        let signed: SignedTxData =
-            BorshDeserialize::try_from_slice(tx_data)
-                .map_err(|e| Error(e.into()))?;
+        let signed: SignedTxData = BorshDeserialize::try_from_slice(tx_data)
+            .map_err(|e| Error(e.into()))?;
 
         let transfer: PendingTransfer = match signed.data {
             Some(data) => BorshDeserialize::try_from_slice(data.as_slice())
@@ -122,12 +107,13 @@ where
         // check that the pending transfer (and only that) was added to the pool
         // TODO: This will change slightly when we merkelize the pool,
         // but that will be a separate PR.
+        let pending_key = get_pending_key();
         let pending_pre: HashSet<PendingTransfer> =
-            self.read_pre_value(&get_pending_key()).ok_or(eyre!(
+            self.ctx.read_pre_value(&pending_key).ok_or(eyre!(
                 "The bridge pool transfers are missing from storage"
             ))?;
         let pending_post: HashSet<PendingTransfer> =
-            self.read_post_value(&get_pending_key()).ok_or(eyre!(
+            self.ctx.read_post_value(&pending_key).ok_or(eyre!(
                 "The bridge pool transfers are missing from storage"
             ))?;
         if !pending_post.contains(&transfer) {
@@ -272,7 +258,7 @@ mod test_bridge_pool_vp {
 
     /// Helper function that tests various ways gas can be escrowed,
     /// either correctly or incorrectly, is handled appropriately
-    fn assert_bidge_pool<F>(
+    fn assert_bridge_pool<F>(
         payer_delta: SignedAmount,
         escrow_delta: SignedAmount,
         insert_transfer: F,
@@ -367,7 +353,7 @@ mod test_bridge_pool_vp {
     /// Test adding a transfer to the pool and escrowing gas passes vp
     #[test]
     fn test_happy_flow() {
-        assert_bidge_pool(
+        assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
             |transfer, pool| {
@@ -384,7 +370,7 @@ mod test_bridge_pool_vp {
     /// was not correctly adjusted, reject
     #[test]
     fn test_incorrect_gas_withdrawn() {
-        assert_bidge_pool(
+        assert_bridge_pool(
             SignedAmount::Negative(10.into()),
             SignedAmount::Positive(GAS_FEE.into()),
             |transfer, pool| {
@@ -401,7 +387,7 @@ mod test_bridge_pool_vp {
     /// does not decrease, we reject the tx
     #[test]
     fn test_payer_balance_must_decrease() {
-        assert_bidge_pool(
+        assert_bridge_pool(
             SignedAmount::Positive(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
             |transfer, pool| {
@@ -418,7 +404,7 @@ mod test_bridge_pool_vp {
     /// the tx is rejected
     #[test]
     fn test_incorrect_gas_deposited() {
-        assert_bidge_pool(
+        assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(10.into()),
             |transfer, pool| {
@@ -435,7 +421,7 @@ mod test_bridge_pool_vp {
     /// otherwise the tx is rejected.
     #[test]
     fn test_escrowed_gas_must_increase() {
-        assert_bidge_pool(
+        assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Negative(GAS_FEE.into()),
             |transfer, pool| {
@@ -452,7 +438,7 @@ mod test_bridge_pool_vp {
     /// the pool, the tx is rejected.
     #[test]
     fn test_remove_transfer_rejected() {
-        assert_bidge_pool(
+        assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
             |transfer, _pool| HashSet::from([transfer]),
@@ -465,7 +451,7 @@ mod test_bridge_pool_vp {
     /// pool, the vp rejects
     #[test]
     fn test_not_adding_transfer_rejected() {
-        assert_bidge_pool(
+        assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
             |_transfer, pool| pool,
@@ -478,7 +464,7 @@ mod test_bridge_pool_vp {
     /// to the pool, it is rejected.
     #[test]
     fn test_add_wrong_transfer() {
-        assert_bidge_pool(
+        assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
             |_transfer, pool| {
@@ -497,7 +483,7 @@ mod test_bridge_pool_vp {
     /// the signed merkle root.
     #[test]
     fn test_signed_merkle_root_changes_rejected() {
-        assert_bidge_pool(
+        assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
             |transfer, pool| {

@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 
+use borsh::BorshDeserialize;
 use thiserror::Error;
 
 use crate::ledger::gas::VpGasMeter;
@@ -129,6 +130,32 @@ where
             key,
         )
         .map_err(Error::ContextError)
+    }
+
+    /// Helper function. After reading posterior state,
+    /// borsh deserialize to specified type
+    pub fn read_post_value<T>(&self, key: &Key) -> Option<T>
+    where
+        T: BorshDeserialize,
+    {
+        if let Ok(Some(bytes)) = self.read_post(key) {
+            <T as BorshDeserialize>::try_from_slice(bytes.as_slice()).ok()
+        } else {
+            None
+        }
+    }
+
+    /// Helper function. After reading prior state,
+    /// borsh deserialize to specified type
+    pub fn read_pre_value<T>(&self, key: &Key) -> Option<T>
+    where
+        T: BorshDeserialize,
+    {
+        if let Ok(Some(bytes)) = self.read_pre(key) {
+            <T as BorshDeserialize>::try_from_slice(bytes.as_slice()).ok()
+        } else {
+            None
+        }
     }
 
     /// Storage read temporary state (after tx execution). It will try to read
