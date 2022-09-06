@@ -194,13 +194,7 @@ fn validate_balance_change(
     // balance's owner
     let balance_a_pre = match reader.read_pre::<ERC20Amount>(&balance_a)? {
         Some(value) => value,
-        None => {
-            tracing::debug!(
-                ?balance_a,
-                "Rejecting transaction as could not read_pre balance key"
-            );
-            return Ok(None);
-        }
+        None => Amount::from(0),
     }
     .change();
     let balance_a_post = match reader.read_post::<ERC20Amount>(&balance_a)? {
@@ -216,13 +210,7 @@ fn validate_balance_change(
     .change();
     let balance_b_pre = match reader.read_pre::<ERC20Amount>(&balance_b)? {
         Some(value) => value,
-        None => {
-            tracing::debug!(
-                ?balance_b,
-                "Rejecting transaction as could not read_pre balance key"
-            );
-            return Ok(None);
-        }
+        None => Amount::from(0),
     }
     .change();
     let balance_b_post = match reader.read_post::<ERC20Amount>(&balance_b)? {
