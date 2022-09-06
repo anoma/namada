@@ -85,7 +85,7 @@ Replay protection will require interaction with the storage from both the protoc
 
 ## Batching
 
-The implementation proposed in this document doesn't support batching of multiple transactions from a same address in a single block. This is because the order in which transactions will be included in the block by the proposer is not guarateed. An out of order execution of multiple transaction would lead to the failure of some of them (in the worst case, the failure of all of them but the first one executed, in the best case, the failure of only the last transaction). This problem will be amplified by the introduction of Ferveo for DKG which will be able to reorder transactions.
+The implementation proposed in this document doesn't support batching of multiple transactions from a same address in a single block. More specifically, the transactions will all succeed only if they are executed in the intended order, but the order in which transactions will be included in the block by the proposer is not guaranteed. An out of order execution of multiple transactions would lead to the failure of some of them (in the worst case, the failure of all of them but the first one executed, in the best case, the failure of only the last transaction). This problem will be amplified by the introduction of Ferveo for DKG which will be able to reorder transactions.
 
 The Wasm implementation of replay protection can't cope with this problem because every wasm run (of either a transaction or a validity predicate) is only aware of its context, meaning the wasm bytecode and the serialized transaction data. The lack of awareness of the other transactions makes it impossible to develop a replay protection mechanism supporting batching in wasm.
 
@@ -94,7 +94,7 @@ To address this issue there could be two ways:
 - Keep the proposed replay protection in Wasm and implement a batching mechanism in both the client and the ledger to embed more than one transaction in a single `Tx` struct
 - Implement replay protection in protocol for the inner transaction (as discolsed in section [InnerTx](#InnerTx))
 
-Following the second option, the ledger would be able to analyze the validity of the counters, of all the transcations relating to a single address, against the value in storage at the beginning of the block.
+Following the second option, the ledger would be able to analyze the validity of the counters, of all the transactions relating to a single address, against the value in storage at the beginning of the block.
 Finally, it could increment the counter in storage a single time by the correct amount (given by the amount of transactions that were executed with success).
 
 The first option, though, seems to have more benefits. In addition to allowing batching, it's more flexible and it also enables the in-order execution of the transactions included in the batch, which may come in handy in certain cases.
