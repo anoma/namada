@@ -14,7 +14,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use byte_unit::Byte;
-use ethereum_node::EthereumNode;
 use futures::future::TryFutureExt;
 use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
@@ -306,16 +305,17 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         tokio::sync::mpsc::unbounded_channel();
 
     let ethereum_url = config.ethereum.oracle_rpc_endpoint.clone();
-    let (ethereum_node, oracle, broadcaster) = if matches!(
+    let (eth_node, oracle, broadcaster) = if matches!(
         config.tendermint.tendermint_mode,
         TendermintMode::Validator
     ) {
         // boot up the ethereum node process and wait for it to finish syncing
         let (eth_sender, eth_receiver) = unbounded_channel();
         let url = ethereum_url.clone();
-        let (ethereum_node, abort_sender) = EthereumNode::new(&url)
-            .await
-            .expect("Unable to start the Ethereum fullnode");
+        let (eth_node, abort_sender) =
+            ethereum_node::start(&url, config.ethereum.geth_startup)
+                .await
+                .expect("Unable to start the Ethereum fullnode");
 
         // Start Ethereum fullnode
         // Channel for signalling shut down to Tendermint process
@@ -323,7 +323,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
             tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>();
         let abort_send_for_eth = abort_send.clone();
         // run geth in the background
-        let ethereum_node = tokio::spawn(async move {
+        let eth_node = tokio::spawn(async move {
             // On panic or exit, the `Drop` of `AbortSender` will send abort
             // message
             let aborter = Aborter {
@@ -331,7 +331,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
                 who: "Ethereum",
             };
 
-            let res = ethereum_node::run(ethereum_node, eth_abort_recv)
+            let res = ethereum_node::monitor(eth_node, eth_abort_recv)
                 .map_err(Error::Ethereum)
                 .await;
             tracing::info!("Ethereum fullnode is no longer running.");
@@ -341,10 +341,15 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         });
 
         let oracle = {
-            #[cfg(not(feature = "eth-fullnode"))]
             if config.ethereum.oracle_event_endpoint {
                 ethereum_node::test_tools::event_endpoint::start_oracle(
                     eth_sender,
+                )
+            } else if config.ethereum.geth_startup {
+                ethereum_node::oracle::run_oracle(
+                    ethereum_url,
+                    eth_sender,
+                    abort_sender,
                 )
             } else {
                 ethereum_node::test_tools::mock_oracle::run_oracle(
@@ -353,16 +358,10 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
                     abort_sender,
                 )
             }
-            #[cfg(feature = "eth-fullnode")]
-            ethereum_node::oracle::run_oracle(
-                ethereum_url,
-                eth_sender,
-                abort_sender,
-            )
         };
 
-        // Shutdown ethereum_node via a message to ensure that the child process
-        // is properly cleaned-up.
+        // Shutdown the Ethereum node subprocess via a message to ensure that
+        // the child process is properly cleaned-up.
         let (eth_abort_resp_send, eth_abort_resp_recv) =
             tokio::sync::oneshot::channel::<()>();
         let abort_send_for_broadcaster = abort_send.clone();
@@ -373,7 +372,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
 
         (
             Some((
-                ethereum_node,
+                eth_node,
                 eth_abort_send,
                 eth_abort_resp_send,
                 eth_abort_resp_recv,
@@ -511,14 +510,14 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
 
     let res = if let (
         Some((
-            ethereum_node,
+            eth_node,
             eth_abort_send,
             eth_abort_resp_send,
             eth_abort_resp_recv,
         )),
         Some(oracle),
         Some((broadcaster, bc_abort_send)),
-    ) = (ethereum_node, oracle_proc, broadcaster)
+    ) = (eth_node, oracle_proc, broadcaster)
     {
         // Ask to shutdown tendermint node cleanly. Ignore error, which can
         // happen if the tendermint_node task has already finished.
@@ -536,13 +535,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         // request the broadcaster shutdown
         let _ = bc_abort_send.send(());
 
-        tokio::try_join!(
-            tendermint_node,
-            ethereum_node,
-            oracle,
-            abci,
-            broadcaster
-        )
+        tokio::try_join!(tendermint_node, eth_node, oracle, abci, broadcaster)
     } else {
         // if we are not a validator, the broadcaster service and Ethereum
         // fullnode are not active. Thus, we fill in their return values

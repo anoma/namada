@@ -1,4 +1,3 @@
-#[cfg(feature = "eth-fullnode")]
 pub mod oracle_process {
     use std::ops::Deref;
 
@@ -530,5 +529,4 @@ pub mod oracle_process {
     }
 }
 
-#[cfg(feature = "eth-fullnode")]
 pub use oracle_process::*;

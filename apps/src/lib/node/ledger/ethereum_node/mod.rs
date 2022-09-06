@@ -28,15 +28,25 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Run the Ethereum fullnode. If it stops or an abort
-/// signal is sent, this processes is halted.
-pub async fn run(
-    mut ethereum_node: EthereumNode,
+/// Monitor the Ethereum fullnode. If it stops or an abort
+/// signal is sent, the subprocess is halted.
+pub async fn monitor(
+    ethereum_node: Subprocess,
+    abort_recv: Receiver<Sender<()>>,
+) -> Result<()> {
+    match ethereum_node {
+        Subprocess::Mock(node) => monitor_mock(node, abort_recv).await,
+        Subprocess::Geth(node) => monitor_real(node, abort_recv).await,
+    }
+}
+
+async fn monitor_real(
+    mut ethereum_node: eth_fullnode::EthereumNode,
     abort_recv: Receiver<Sender<()>>,
 ) -> Result<()> {
     tokio::select! {
         // run the ethereum fullnode
-        status =  ethereum_node.wait() => status,
+        status = ethereum_node.wait() => status,
         // wait for an abort signal
         resp_sender = abort_recv => {
             match resp_sender {
@@ -56,7 +66,32 @@ pub async fn run(
     }
 }
 
-#[cfg(feature = "eth-fullnode")]
+async fn monitor_mock(
+    mut ethereum_node: test_tools::mock_eth_fullnode::EthereumNode,
+    abort_recv: Receiver<Sender<()>>,
+) -> Result<()> {
+    tokio::select! {
+        // run the ethereum fullnode
+        status = ethereum_node.wait() => status,
+        // wait for an abort signal
+        resp_sender = abort_recv => {
+            match resp_sender {
+                Ok(resp_sender) => {
+                    tracing::info!("Shutting down Ethereum fullnode...");
+                    ethereum_node.kill().await;
+                    resp_sender.send(()).unwrap();
+                },
+                Err(err) => {
+                    tracing::error!("The Ethereum abort sender has unexpectedly dropped: {}", err);
+                    tracing::info!("Shutting down Ethereum fullnode...");
+                    ethereum_node.kill().await;
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
 /// Tools for running a geth fullnode process
 pub mod eth_fullnode {
     use std::time::Duration;
@@ -196,7 +231,21 @@ pub mod eth_fullnode {
     }
 }
 
-#[cfg(feature = "eth-fullnode")]
-pub use eth_fullnode::EthereumNode;
-#[cfg(not(feature = "eth-fullnode"))]
-pub use test_tools::mock_eth_fullnode::EthereumNode;
+/// Starts an Ethereum fullnode in a subprocess and returns a handle for
+/// monitoring it using [`monitor`], as well as a channel for halting it.
+pub async fn start(url: &str, real: bool) -> Result<(Subprocess, Sender<()>)> {
+    if real {
+        let (node, sender) = eth_fullnode::EthereumNode::new(url).await?;
+        Ok((Subprocess::Geth(node), sender))
+    } else {
+        let (node, sender) =
+            test_tools::mock_eth_fullnode::EthereumNode::new().await?;
+        Ok((Subprocess::Mock(node), sender))
+    }
+}
+
+/// Represents a subprocess running an Ethereum full node
+pub enum Subprocess {
+    Mock(test_tools::mock_eth_fullnode::EthereumNode),
+    Geth(eth_fullnode::EthereumNode),
+}
