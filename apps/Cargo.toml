@@ -39,17 +39,35 @@ name = "namadaw"
 path = "src/bin/anoma-wallet/main.rs"
 
 [features]
-default = ["std"]
+default = ["std", "abciplus"]
 dev = ["namada/dev"]
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
 testing = ["dev"]
 
+abcipp = [
+    "tendermint-abcipp",
+    "tendermint-config-abcipp",
+    "tendermint-proto-abcipp",
+    "tendermint-rpc-abcipp",
+    "tower-abci-abcipp",
+    "namada/abcipp"
+]
+
+abciplus = [
+    "tendermint",
+    "tendermint-config",
+    "tendermint-rpc",
+    "tendermint-proto",
+    "tower-abci",
+    "namada/abciplus"
+]
+
 [dependencies]
 namada = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand", "secp256k1-sign-verify"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
-async-std = {version = "1.9.0", features = ["unstable"]}
+async-std = {version = "=1.11.0", features = ["unstable"]}
 async-trait = "0.1.51"
 base64 = "0.13.0"
 bech32 = "0.8.0"
@@ -105,10 +123,14 @@ sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", b
 sysinfo = {version = "=0.21.1", default-features = false}
 tar = "0.4.37"
 # temporarily using fork work-around
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["secp256k1"]}
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["http-client", "websocket-client"]}
+tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-config-abcipp = {package = "tendermint-config", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["http-client", "websocket-client"], optional = true}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abciplus", optional = true}
+tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abciplus", optional = true}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abciplus", optional = true}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abciplus", features = ["http-client", "websocket-client"], optional = true}
 thiserror = "1.0.30"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
@@ -116,7 +138,8 @@ tonic = "0.6.1"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 # with a patch for https://github.com/penumbra-zone/tower-abci/issues/7.
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci", rev = "f6463388fc319b6e210503b43b3aecf6faf6b200"}
+tower-abci-abcipp = {package = "tower-abci", git = "https://github.com/heliaxdev/tower-abci", rev = "f6463388fc319b6e210503b43b3aecf6faf6b200", optional = true}
+tower-abci = {git = "https://github.com/heliaxdev/tower-abci", branch = "bat/abciplus", optional = true}
 tracing = "0.1.30"
 tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", features = ["env-filter"]}
