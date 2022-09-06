@@ -341,15 +341,15 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         });
 
         let oracle = {
-            if config.ethereum.oracle_event_endpoint {
-                ethereum_node::test_tools::event_endpoint::start_oracle(
-                    eth_sender,
-                )
-            } else if config.ethereum.geth_startup {
+            if config.ethereum.geth_startup {
                 ethereum_node::oracle::run_oracle(
                     ethereum_url,
                     eth_sender,
                     abort_sender,
+                )
+            } else if config.ethereum.oracle_event_endpoint {
+                ethereum_node::test_tools::event_endpoint::start_oracle(
+                    eth_sender,
                 )
             } else {
                 ethereum_node::test_tools::mock_oracle::run_oracle(
