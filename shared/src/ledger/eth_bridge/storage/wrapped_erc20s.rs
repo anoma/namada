@@ -1,7 +1,7 @@
 //! Functionality for accessing the multitoken subspace
 use std::str::FromStr;
 
-use eyre::{eyre, Context};
+use eyre::eyre;
 
 use crate::ledger::eth_bridge::ADDRESS;
 use crate::types::address::Address;
@@ -157,15 +157,10 @@ impl TryFrom<&Key> for MultitokenKey {
             BALANCE_KEY_SEGMENT => {
                 let owner = match key.segments.get(4) {
                     Some(segment) => match segment {
-                        DbKeySeg::StringSeg(segment) => {
-                            Address::decode(segment).wrap_err_with(|| {
-                                "couldn't decode segment at index #4 into \
-                                 address"
-                            })?
-                        }
-                        _ => {
+                        DbKeySeg::AddressSeg(address) => address.to_owned(),
+                        DbKeySeg::StringSeg(_) => {
                             return Err(eyre!(
-                                "key has unrecognized segment at index #4"
+                                "key has string segment at index #4"
                             ));
                         }
                     },
@@ -186,6 +181,7 @@ impl TryFrom<&Key> for MultitokenKey {
 
 #[cfg(test)]
 mod test {
+    use std::result::Result;
     use std::str::FromStr;
 
     use super::*;
@@ -328,6 +324,64 @@ mod test {
             token_id == &DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase() &&
             balance_key_seg == BALANCE_KEY_SEGMENT &&
             owner_addr == &Address::decode(ARBITRARY_OWNER_ADDRESS).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_try_from_key_for_multitoken_key_supply() {
+        // supply key
+        let key = Key::from_str(&format!(
+            "#{}/ERC20/{}/supply",
+            ADDRESS,
+            DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase(),
+        ))
+        .expect("Should be able to construct key for test");
+
+        let result: Result<MultitokenKey, _> = MultitokenKey::try_from(&key);
+
+        let mt_key = match result {
+            Ok(mt_key) => mt_key,
+            Err(error) => {
+                panic!(
+                    "Could not convert key {:?} to MultitokenKey: {:?}",
+                    key, error
+                )
+            }
+        };
+
+        assert_eq!(mt_key.asset, DAI_ERC20_ETH_ADDRESS);
+        assert_eq!(mt_key.suffix, MultitokenKeyType::Supply);
+    }
+
+    #[test]
+    fn test_try_from_key_for_multitoken_key_balance() {
+        // supply key
+        let key = Key::from_str(&format!(
+            "#{}/ERC20/{}/balance/#{}",
+            ADDRESS,
+            DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_ascii_lowercase(),
+            ARBITRARY_OWNER_ADDRESS
+        ))
+        .expect("Should be able to construct key for test");
+
+        let result: Result<MultitokenKey, _> = MultitokenKey::try_from(&key);
+
+        let mt_key = match result {
+            Ok(mt_key) => mt_key,
+            Err(error) => {
+                panic!(
+                    "Could not convert key {:?} to MultitokenKey: {:?}",
+                    key, error
+                )
+            }
+        };
+
+        assert_eq!(mt_key.asset, DAI_ERC20_ETH_ADDRESS);
+        assert_eq!(
+            mt_key.suffix,
+            MultitokenKeyType::Balance {
+                owner: Address::from_str(ARBITRARY_OWNER_ADDRESS).unwrap()
+            }
         );
     }
 }
