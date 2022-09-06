@@ -80,7 +80,6 @@ clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default
 clarity = "0.5.1"
 color-eyre = "0.5.10"
 config = "0.11.0"
-curl = "0.4.43"
 derivative = "2.2.0"
 directories = "4.0.1"
 ed25519-consensus = "1.2.0"

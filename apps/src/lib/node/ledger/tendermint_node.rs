@@ -356,14 +356,6 @@ async fn update_tendermint_config(
     config.instrumentation.namespace =
         tendermint_config.instrumentation_namespace;
 
-    // setup the events log
-    {
-        // keep events for one minute
-        config.rpc.event_log_window_size =
-            std::time::Duration::from_secs(59).into();
-        // we do not limit the size of the events log
-        config.rpc.event_log_max_items = 0;
-    }
 
     let mut file = OpenOptions::new()
         .write(true)
