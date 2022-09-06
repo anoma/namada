@@ -10,11 +10,11 @@ use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Key, PrefixValue};
 use namada::types::token::{self, Amount};
-use tendermint_proto::crypto::{ProofOp, ProofOps};
-use tendermint_proto::google::protobuf;
-use tendermint_proto::types::EvidenceParams;
 
 use super::*;
+use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
+use crate::facade::tendermint_proto::google::protobuf;
+use crate::facade::tendermint_proto::types::EvidenceParams;
 use crate::node::ledger::response;
 
 impl<D, H> Shell<D, H>
@@ -211,7 +211,20 @@ where
                                     let mut cur_ops: Vec<ProofOp> = p
                                         .ops
                                         .into_iter()
-                                        .map(|op| op.into())
+                                        .map(|op| {
+                                            #[cfg(feature = "abcipp")]
+                                            {
+                                                ProofOp {
+                                                    r#type: op.field_type,
+                                                    key: op.key,
+                                                    data: op.data,
+                                                }
+                                            }
+                                            #[cfg(not(feature = "abcipp"))]
+                                            {
+                                                op.into()
+                                            }
+                                        })
                                         .collect();
                                     ops.append(&mut cur_ops);
                                 }
