@@ -1551,6 +1551,7 @@ dependencies = [
  "tendermint",
  "tendermint-proto",
  "thiserror",
+ "tiny-keccak",
  "tonic-build",
  "tracing",
  "wasmer",
@@ -2765,6 +2766,15 @@ name = "time-macros"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25eb0ca3468fc0acc11828786797f6ef9aa1555e4a211a60d64cc8e4d1be47d6"
+
+[[package]]
+name = "tiny-keccak"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c9d3793400a45f954c52e73d068316d76b6f4e36977e3fcebb13a2721e80237"
+dependencies = [
+ "crunchy",
+]
 
 [[package]]
 name = "tinyvec"

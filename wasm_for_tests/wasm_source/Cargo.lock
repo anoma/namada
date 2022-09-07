@@ -1357,7 +1357,7 @@ dependencies = [
 [[package]]
 name = "libsecp256k1"
 version = "0.7.0"
-source = "git+https://github.com/brentstone/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
+source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
  "arrayref",
  "base64",
@@ -1373,7 +1373,7 @@ dependencies = [
 [[package]]
 name = "libsecp256k1-core"
 version = "0.3.0"
-source = "git+https://github.com/brentstone/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
+source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
  "crunchy",
  "digest 0.9.0",
@@ -1383,7 +1383,7 @@ dependencies = [
 [[package]]
 name = "libsecp256k1-gen-ecmult"
 version = "0.3.0"
-source = "git+https://github.com/brentstone/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
+source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
  "libsecp256k1-core",
 ]
@@ -1391,7 +1391,7 @@ dependencies = [
 [[package]]
 name = "libsecp256k1-gen-genmult"
 version = "0.3.0"
-source = "git+https://github.com/brentstone/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
+source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
  "libsecp256k1-core",
 ]
@@ -1527,7 +1527,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "ark-bls12-381",
  "ark-serialize",
@@ -1562,6 +1562,7 @@ dependencies = [
  "tendermint",
  "tendermint-proto",
  "thiserror",
+ "tiny-keccak",
  "tonic-build",
  "tracing",
  "wasmer",
@@ -1576,7 +1577,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "quote",
  "syn",
@@ -1584,7 +1585,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "proptest",
@@ -1593,7 +1594,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -1611,7 +1612,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "namada_vm_env",
  "sha2 0.10.2",
@@ -1619,7 +1620,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "hex",
@@ -1629,7 +1630,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "namada_vm_env",
  "sha2 0.10.2",
@@ -1637,7 +1638,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm_for_tests"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "borsh",
  "getrandom",
@@ -2771,6 +2772,15 @@ name = "time-macros"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42657b1a6f4d817cda8e7a0ace261fe0cc946cf3a80314390b22cc61ae080792"
+
+[[package]]
+name = "tiny-keccak"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c9d3793400a45f954c52e73d068316d76b6f4e36977e3fcebb13a2721e80237"
+dependencies = [
+ "crunchy",
+]
 
 [[package]]
 name = "tinyvec"

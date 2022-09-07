@@ -22,6 +22,10 @@ use super::{
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PublicKey(pub libsecp256k1::PublicKey);
 
+/// Eth address derived from secp256k1 key
+#[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct EthAddress([u8; 20]);
+
 impl super::PublicKey for PublicKey {
     const TYPE: SchemeType = SigScheme::TYPE;
 
@@ -130,6 +134,23 @@ impl FromStr for PublicKey {
 impl From<libsecp256k1::PublicKey> for PublicKey {
     fn from(pk: libsecp256k1::PublicKey) -> Self {
         Self(pk)
+    }
+}
+
+impl From<&PublicKey> for EthAddress {
+    fn from(pk: &PublicKey) -> Self {
+        use tiny_keccak::Hasher;
+
+        let mut hasher = tiny_keccak::Keccak::v256();
+        // We're removing the first byte with
+        // `libsecp256k1::util::TAG_PUBKEY_FULL`
+        let pk_bytes = &pk.0.serialize()[1..];
+        hasher.update(pk_bytes);
+        let mut output = [0_u8; 32];
+        hasher.finalize(&mut output);
+        let mut addr = [0; 20];
+        addr.copy_from_slice(&output[12..]);
+        EthAddress(addr)
     }
 }
 
@@ -499,5 +520,31 @@ impl super::SigScheme for SigScheme {
                 )))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_eth_address_from_secp() {
+        // test vector from https://bitcoin.stackexchange.com/a/89848
+        let sk_hex =
+            "c2c72dfbff11dfb4e9d5b0a20c620c58b15bb7552753601f043db91331b0db15";
+        let expected_pk_hex = "a225bf565ff4ea039bccba3e26456e910cd74e4616d67ee0a166e26da6e5e55a08d0fa1659b4b547ba7139ca531f62907b9c2e72b80712f1c81ece43c33f4b8b";
+        let expected_eth_addr_hex = "6ea27154616a29708dce7650b475dd6b82eba6a3";
+
+        let sk_bytes = hex::decode(sk_hex).unwrap();
+        let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
+        let pk: PublicKey = sk.ref_to();
+        // We're removing the first byte with
+        // `libsecp256k1::util::TAG_PUBKEY_FULL`
+        let pk_hex = hex::encode(&pk.0.serialize()[1..]);
+        assert_eq!(expected_pk_hex, pk_hex);
+
+        let eth_addr: EthAddress = (&pk).into();
+        let eth_addr_hex = hex::encode(eth_addr.0);
+        assert_eq!(expected_eth_addr_hex, eth_addr_hex);
     }
 }
