@@ -2494,7 +2494,7 @@ dependencies = [
  "log 0.4.17",
  "openssl-probe",
  "openssl-sys",
- "url 2.2.2",
+ "url 2.3.0",
 ]
 
 [[package]]
@@ -3722,7 +3722,7 @@ dependencies = [
  "quicksink",
  "rw-stream-sink",
  "soketto",
- "url 2.2.2",
+ "url 2.3.0",
  "webpki-roots",
 ]
 
@@ -4054,7 +4054,7 @@ dependencies = [
  "serde 1.0.144",
  "strum",
  "tungstenite 0.16.0",
- "url 2.2.2",
+ "url 2.3.0",
 ]
 
 [[package]]
@@ -4949,7 +4949,7 @@ dependencies = [
  "serde 1.0.144",
  "static_assertions",
  "unsigned-varint 0.7.1",
- "url 2.2.2",
+ "url 2.3.0",
 ]
 
 [[package]]
@@ -5959,7 +5959,7 @@ dependencies = [
  "tokio",
  "tokio-native-tls",
  "tower-service",
- "url 2.2.2",
+ "url 2.3.0",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -6929,7 +6929,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#8cca4e1cb2824fedb5dff02e2734bf2e81a02a02"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
 dependencies = [
  "async-trait",
  "bytes 1.2.1",
@@ -6985,14 +6985,14 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#8cca4e1cb2824fedb5dff02e2734bf2e81a02a02"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
 dependencies = [
  "flex-error",
  "serde 1.0.144",
  "serde_json",
  "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
  "toml",
- "url 2.2.2",
+ "url 2.3.0",
 ]
 
 [[package]]
@@ -7005,13 +7005,13 @@ dependencies = [
  "serde_json",
  "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
  "toml",
- "url 2.2.2",
+ "url 2.3.0",
 ]
 
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#8cca4e1cb2824fedb5dff02e2734bf2e81a02a02"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -7037,7 +7037,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#8cca4e1cb2824fedb5dff02e2734bf2e81a02a02"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
 dependencies = [
  "bytes 1.2.1",
  "flex-error",
@@ -7071,7 +7071,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#8cca4e1cb2824fedb5dff02e2734bf2e81a02a02"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -7096,7 +7096,7 @@ dependencies = [
  "time 0.3.14",
  "tokio",
  "tracing 0.1.36",
- "url 2.2.2",
+ "url 2.3.0",
  "uuid",
  "walkdir",
 ]
@@ -7129,7 +7129,7 @@ dependencies = [
  "time 0.3.14",
  "tokio",
  "tracing 0.1.36",
- "url 2.2.2",
+ "url 2.3.0",
  "uuid",
  "walkdir",
 ]
@@ -7137,7 +7137,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#8cca4e1cb2824fedb5dff02e2734bf2e81a02a02"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",
@@ -7298,7 +7298,7 @@ dependencies = [
  "chunked_transfer",
  "log 0.4.17",
  "time 0.3.14",
- "url 2.2.2",
+ "url 2.3.0",
 ]
 
 [[package]]
@@ -7832,7 +7832,7 @@ dependencies = [
  "smallvec 1.9.0",
  "thiserror",
  "tinyvec",
- "url 2.2.2",
+ "url 2.3.0",
 ]
 
 [[package]]
@@ -7875,7 +7875,7 @@ dependencies = [
  "log 0.4.17",
  "rand 0.8.5",
  "sha-1 0.9.8",
- "url 2.2.2",
+ "url 2.3.0",
  "utf-8",
 ]
 
@@ -7894,7 +7894,7 @@ dependencies = [
  "rand 0.8.5",
  "sha-1 0.9.8",
  "thiserror",
- "url 2.2.2",
+ "url 2.3.0",
  "utf-8",
 ]
 
@@ -8032,13 +8032,12 @@ dependencies = [
 
 [[package]]
 name = "url"
-version = "2.2.2"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a507c383b2d33b5fc35d1861e77e6b383d158b2da5e14fe51b83dfedf6fd578c"
+checksum = "22fe195a4f217c25b25cb5058ced57059824a678474874038dc88d211bf508d3"
 dependencies = [
  "form_urlencoded",
  "idna 0.2.3",
- "matches",
  "percent-encoding 2.1.0",
 ]
 
