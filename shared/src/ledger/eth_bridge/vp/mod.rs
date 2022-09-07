@@ -73,7 +73,7 @@ where
             Some((key_a, key_b)) => (key_a, key_b),
             None => return Ok(false),
         };
-        let sender = match extract_valid_sender(&self.ctx, key_a, key_b)? {
+        let sender = match check_balance_changes(&self.ctx, key_a, key_b)? {
             Some(sender) => sender,
             None => return Ok(false),
         };
@@ -151,9 +151,12 @@ fn extract_valid_keys_changed(
     Ok(Some((key_a, key_b)))
 }
 
-/// Returns the `Address` which should be authorizing the balance change, or
-/// `None` if the balance change is invalid.
-fn extract_valid_sender(
+/// Checks that the balances at both `key_a` and `key_b` have changed by some
+/// amount, and that the changes balance each other out. If the balance changes
+/// are invalid, the reason is logged and a `None` is returned. Otherwise,
+/// return the `Address` of the owner of the balance which is decreasing, which
+/// should be authorizing the balance change.
+fn check_balance_changes(
     reader: impl Reader,
     key_a: wrapped_erc20s::Key,
     key_b: wrapped_erc20s::Key,
