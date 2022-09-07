@@ -30,6 +30,7 @@ pub struct ValidatorKeys {
     /// Special session keypair needed by validators for participating
     /// in the DKG protocol
     pub dkg_keypair: Option<DkgKeypair>,
+    // TODO add eth hot key
 }
 
 impl ValidatorKeys {
