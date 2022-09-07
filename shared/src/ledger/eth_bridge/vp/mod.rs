@@ -67,7 +67,7 @@ where
             tx_data_len = tx_data.len(),
             keys_changed_len = keys_changed.len(),
             verifiers_len = verifiers.len(),
-            "Validity predicate triggered",
+            "Ethereum Bridge VP triggered",
         );
         let (key_a, key_b) = match extract_valid_keys_changed(keys_changed)? {
             Some((key_a, key_b)) => (key_a, key_b),
