@@ -24,7 +24,7 @@ pub struct WrapperTx {
     /// Max amount of gas that can be used when executing the inner tx
     pub gas_limit: GasLimit,
     /// Transaction counter for replay-protection
-    pub tx_counter: u32,
+    pub tx_counter: u64,
     /// the encrypted payload
     pub inner_tx: EncryptedTx,
     /// sha-2 hash of the inner transaction acting as a commitment
@@ -36,12 +36,12 @@ pub struct WrapperTx {
 In addition, we need a counter in the storage subspace of every implict address:
 
 ```
-/$Address/tx_counter: u32
+/$Address/tx_counter: u64
 ```
 
-In `process_proposal` we check that `tx_counter` field in `WrapperTx` is greater or equal to the value currently in storage; if this doesn't hold, the transaction is considered invalid.
+In `process_proposal` we check that `tx_counter` field in `WrapperTx` is equal to the value currently in storage; if this doesn't hold, the transaction is considered invalid.
 
-At last, in `finalize_block`, the protocol updates the counter key in storage, increasing its value by one. Now, if a malicious user tried to replay this transaction, the `tx_counter` in the struct would no longer be greater or equal to the one in storage and the transaction would be deemed invalid. 
+At last, in `finalize_block`, the protocol updates the counter key in storage, increasing its value by one. Now, if a malicious user tried to replay this transaction, the `tx_counter` in the struct would no longer be equal to the one in storage and the transaction would be deemed invalid.
 
 Note that the address whose counter is involved in this process is the one signing the transaction (the same as the `pk` field of the struct).
 
@@ -50,7 +50,7 @@ Note that the address whose counter is involved in this process is the one signi
 The `EncryptedTx` incapsulated inside `WrapperTx` should be protected too. That's because, if it wasn't, an attacker could extract the inner tx, rewrap it, and replay it.\
 To simplify this check we will perform it entirely in Wasm: the check of the counter will be carryed out by the validity predicates while the actual writing of the counter in storage will be done by the transactions themselves. 
 
-To do so, the `SignedTxData` attached to the transaction will hold the current value of the counter in storage. The transaction will simply read the value from storage and increase its value by one. The VP will then check the validity of the signature and, if it's deemed valid, will proceed to checking if the pre value of the counter in storage was less or equal than the one contained in the transaction data and if the post value of the key in storage has been incremented by one.
+To do so, the `SignedTxData` attached to the transaction will hold the current value of the counter in storage. The transaction will simply read the value from storage and increase its value by one. The VP will then check the validity of the signature and, if it's deemed valid, will proceed to checking if the pre value of the counter in storage was equal to the one contained in the transaction data and if the post value of the key in storage has been incremented by one.
 
 In the specific case of a transfer, since MASP already comes with replay protection as part of the Zcash design (see the [MASP specs](https://specs.namada.net/masp.html) and [Zcash protocol specs](https://zips.z.cash/protocol/protocol.pdf)), the counter in `SignedTxData` should be optional.
 
@@ -61,11 +61,14 @@ pub struct Tx {
     pub code: Vec<u8>,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
-    pub tx_counter: Option<(Address, u32)>
+    pub tx_counter: Option<(Address, u64)>
 }
 ```
 
-The check would run in `process_proposal` and the update in `finalize_block`, just like for the wrapper transaction. The drawback of this implementation is that it implies the need for an hard fork in case of a modification of the replay protection mechanism.
+The check would run in `process_proposal` and the update in `finalize_block`, just like for the wrapper transaction. This implementation, though, shows two drawbacks:
+
+- it implies the need for an hard fork in case of a modification of the replay protection mechanism
+- it's not clear who's the source of the inner transaction from the outside, as that depends on the specific code of the transaction itself. We could use specific whitelisted txs set to define when it requires a counter (would not work for future programmable transactions), but still, we have no way to define which address should be targeted for replay protection (**blocking issue**)
 
 ### VPs and Txs
 
@@ -85,7 +88,7 @@ Replay protection will require interaction with the storage from both the protoc
 
 ## Batching
 
-The implementation proposed in this document doesn't support batching of multiple transactions from a same address in a single block. More specifically, the transactions will all succeed only if they are executed in the intended order, but the order in which transactions will be included in the block by the proposer is not guaranteed. An out of order execution of multiple transactions would lead to the failure of some of them (in the worst case, the failure of all of them but the first one executed, in the best case, the failure of only the last transaction). This problem will be amplified by the introduction of Ferveo for DKG which will be able to reorder transactions.
+The implementation proposed in this document doesn't support batching of multiple transactions from a same address in a single block. More specifically, the transactions will all succeed only if they are executed in the intended order, but the order in which transactions will be included in the block by the proposer is not guaranteed. An out of order execution of multiple transactions would lead to the failure of some of them (in the worst case, the failure of all of them but one, in the best case, the failure of only one). This problem will be amplified by the introduction of Ferveo for DKG which will be able to reorder transactions.
 
 The Wasm implementation of replay protection can't cope with this problem because every wasm run (of either a transaction or a validity predicate) is only aware of its context, meaning the wasm bytecode and the serialized transaction data. The lack of awareness of the other transactions makes it impossible to develop a replay protection mechanism supporting batching in wasm.
 
@@ -95,6 +98,6 @@ To address this issue there could be two ways:
 - Implement replay protection in protocol for the inner transaction (as discolsed in section [InnerTx](#InnerTx))
 
 Following the second option, the ledger would be able to analyze the validity of the counters, of all the transactions relating to a single address, against the value in storage at the beginning of the block.
-Finally, it could increment the counter in storage a single time by the correct amount (given by the amount of transactions that were executed with success).
+Finally, it could increment the counter in storage a single time by the correct amount (given by the amount of transactions that were executed with success). As already mentioned, though, this implementation suffers from some serious issues and seems to not be feasible.
 
-The first option, though, seems to have more benefits. In addition to allowing batching, it's more flexible and it also enables the in-order execution of the transactions included in the batch, which may come in handy in certain cases.
+The first option, instead, carries more benefits, since in addition to allowing batching, it's also more flexible.
