@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use super::*;
 use crate::facade::tendermint_proto::abci;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::wasm_loader;
 

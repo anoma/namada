@@ -15,6 +15,7 @@ use namada::types::transaction::protocol::ProtocolTxType;
 use super::*;
 use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::node::ledger::events::EventType;
 
 impl<D, H> Shell<D, H>
