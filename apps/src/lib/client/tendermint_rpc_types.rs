@@ -135,9 +135,9 @@ mod params {
 
     use serde::ser::SerializeTuple;
     use serde::{Deserialize, Serializer};
-    use tendermint_rpc::query::Query;
 
     use super::*;
+    use crate::facade::tendermint_rpc::query::Query;
 
     /// Opaque type for ordering events. Set by Tendermint
     #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
@@ -310,9 +310,8 @@ mod params {
 
     #[cfg(test)]
     mod test_rpc_types {
-        use tendermint_rpc::query::EventType;
-
         use super::*;
+        use crate::facade::tendermint_rpc::query::EventType;
 
         /// Test that [`EventParams`] is serialized correctly
         #[test]

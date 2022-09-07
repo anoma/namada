@@ -50,11 +50,11 @@ mod rpc_types {
     use std::str::FromStr;
 
     use serde::{de, Deserialize, Serialize, Serializer};
-    use tendermint_rpc::method::Method;
-    use tendermint_rpc::query::{EventType, Query};
-    use tendermint_rpc::{request, response};
 
     use super::Json;
+    use crate::facade::tendermint_rpc::method::Method;
+    use crate::facade::tendermint_rpc::query::{EventType, Query};
+    use crate::facade::tendermint_rpc::{request, response};
 
     #[derive(Debug, Deserialize, Serialize)]
     pub struct RpcRequest {

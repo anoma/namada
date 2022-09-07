@@ -5,20 +5,20 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
+#[cfg(not(feature = "abcipp"))]
+use namada::types::hash::Hash;
+use namada::types::storage::BlockHash;
+use namada::types::transaction::hash_tx;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
-#[cfg(not(feature = "abcipp"))]
-use tower_abci::{BoxError, Request as Req, Response as Resp};
-#[cfg(feature = "abcipp")]
-use tower_abci_abcipp::{BoxError, Request as Req, Response as Resp};
 
 use super::super::Shell;
-#[cfg(not(feature = "abcipp"))]
-use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
-#[cfg(feature = "abcipp")]
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
+#[cfg(not(feature = "abcipp"))]
+use crate::facade::tendermint_proto::abci::RequestBeginBlock;
+use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used

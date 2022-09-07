@@ -2,7 +2,6 @@
 
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proto::Tx;
-use namada::types::storage::BlockHeight;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -140,9 +139,10 @@ pub(super) mod record {
 
 #[cfg(test)]
 mod test_prepare_proposal {
+    use borsh::BorshSerialize;
     use namada::types::address::xan;
     use namada::types::storage::Epoch;
-    use namada::types::transaction::Fee;
+    use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};

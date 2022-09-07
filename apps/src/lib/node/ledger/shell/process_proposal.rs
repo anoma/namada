@@ -198,6 +198,8 @@ mod test_process_proposal {
     use namada::types::transaction::{EncryptionKey, Fee};
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::RequestInitChain;
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shell::test_utils::{
         gen_keypair, ProcessProposal, TestError, TestShell,
     };
