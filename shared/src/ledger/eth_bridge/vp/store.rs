@@ -25,13 +25,12 @@ pub(super) trait Reader {
     fn deserialize_if_present<T: BorshDeserialize>(
         maybe_bytes: Option<Vec<u8>>,
     ) -> Result<Option<T>> {
-        let bytes = match maybe_bytes {
-            Some(bytes) => bytes,
-            None => return Ok(None),
-        };
-        let deserialized = T::try_from_slice(&bytes)
-            .wrap_err_with(|| "couldn't deserialize".to_string())?;
-        Ok(Some(deserialized))
+        maybe_bytes
+            .map(|ref bytes| {
+                T::try_from_slice(bytes)
+                    .wrap_err_with(|| "couldn't deserialize".to_string())
+            })
+            .transpose()
     }
 }
 
