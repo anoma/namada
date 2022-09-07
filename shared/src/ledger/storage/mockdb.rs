@@ -447,15 +447,15 @@ pub struct MockIterator {
 pub type MockPrefixIterator = PrefixIterator<MockIterator>;
 
 impl Iterator for MockIterator {
-    type Item = KVBytes;
+    type Item = Result<KVBytes>;
 
     fn next(&mut self) -> Option<Self::Item> {
         for (key, val) in &mut self.iter {
             if key.starts_with(&self.prefix) {
-                return Some((
+                return Some(Ok((
                     Box::from(key.as_bytes()),
                     Box::from(val.as_slice()),
-                ));
+                )));
             }
         }
         None
@@ -468,7 +468,9 @@ impl Iterator for PrefixIterator<MockIterator> {
     /// Returns the next pair and the gas cost
     fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
         match self.iter.next() {
-            Some((key, val)) => {
+            Some(result) => {
+                let (key, val) =
+                    result.expect("Prefix iterator shouldn't fail");
                 let key = String::from_utf8(key.to_vec())
                     .expect("Cannot convert from bytes to key string");
                 match key.strip_prefix(&self.db_prefix) {

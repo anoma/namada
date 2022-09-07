@@ -323,10 +323,14 @@ impl DB for RocksDB {
         let mut epoch = None;
         let mut pred_epochs = None;
         let mut address_gen = None;
-        for (key, bytes) in self.0.iterator_opt(
+        for value in self.0.iterator_opt(
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             read_opts,
         ) {
+            let (key, bytes) = match value {
+                Ok(data) => data,
+                Err(e) => return Err(Error::DBError(e.into_string())),
+            };
             let path = &String::from_utf8((*key).to_vec()).map_err(|e| {
                 Error::Temporary {
                     error: format!(
@@ -837,7 +841,9 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
     /// Returns the next pair and the gas cost
     fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
         match self.0.iter.next() {
-            Some((key, val)) => {
+            Some(result) => {
+                let (key, val) =
+                    result.expect("Prefix iterator shouldn't fail");
                 let key = String::from_utf8(key.to_vec())
                     .expect("Cannot convert from bytes to key string");
                 match key.strip_prefix(&self.0.db_prefix) {

@@ -45,9 +45,10 @@ pub struct PrefixIterator<I> {
 
 impl<I> PrefixIterator<I> {
     /// Initialize a new prefix iterator
-    pub fn new(iter: I, db_prefix: String) -> Self
+    pub fn new<E>(iter: I, db_prefix: String) -> Self
     where
-        I: Iterator<Item = KVBytes>,
+        E: std::error::Error,
+        I: Iterator<Item = std::result::Result<KVBytes, E>>,
     {
         PrefixIterator { iter, db_prefix }
     }
