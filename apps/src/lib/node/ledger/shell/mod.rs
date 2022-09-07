@@ -493,6 +493,24 @@ where
         }
     }
 
+    /// INVARIANT: This method must be stateless.
+    pub fn extend_vote(
+        &self,
+        _req: request::ExtendVote,
+    ) -> response::ExtendVote {
+        Default::default()
+    }
+
+    /// INVARIANT: This method must be stateless.
+    pub fn verify_vote_extension(
+        &self,
+        _req: request::VerifyVoteExtension,
+    ) -> response::VerifyVoteExtension {
+        response::VerifyVoteExtension {
+            status: VerifyStatus::Accept as i32,
+        }
+    }
+
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
