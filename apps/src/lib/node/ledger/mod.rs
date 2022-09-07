@@ -26,7 +26,7 @@ use tower_abci::{response, split, Server};
 
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
-use crate::config::TendermintMode;
+use crate::config::{ethereum, TendermintMode};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
@@ -312,8 +312,10 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         // boot up the ethereum node process and wait for it to finish syncing
         let (eth_sender, eth_receiver) = unbounded_channel();
         let url = ethereum_url.clone();
+        let start_managed_eth_node =
+            matches!(config.ethereum.mode, ethereum::Mode::Managed);
         let (eth_node, abort_sender) =
-            ethereum_node::start(&url, config.ethereum.geth_startup)
+            ethereum_node::start(&url, start_managed_eth_node)
                 .await
                 .expect("Unable to start the Ethereum fullnode");
 
@@ -340,18 +342,18 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
             res
         });
 
-        let oracle = {
-            if config.ethereum.geth_startup {
-                ethereum_node::oracle::run_oracle(
-                    ethereum_url,
-                    eth_sender,
-                    abort_sender,
-                )
-            } else if config.ethereum.oracle_event_endpoint {
+        let oracle = match config.ethereum.mode {
+            ethereum::Mode::Managed => ethereum_node::oracle::run_oracle(
+                ethereum_url,
+                eth_sender,
+                abort_sender,
+            ),
+            ethereum::Mode::EventsEndpoint => {
                 ethereum_node::test_tools::event_endpoint::start_oracle(
                     eth_sender,
                 )
-            } else {
+            }
+            ethereum::Mode::Off => {
                 ethereum_node::test_tools::mock_oracle::run_oracle(
                     ethereum_url,
                     eth_sender,
