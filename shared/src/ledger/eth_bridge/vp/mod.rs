@@ -196,11 +196,10 @@ fn extract_valid_sender(
                 return Ok(None);
             }
         };
-    let balance_a_pre = match reader.read_pre::<Amount>(&balance_a)? {
-        Some(value) => value,
-        None => Amount::from(0),
-    }
-    .change();
+    let balance_a_pre = reader
+        .read_pre::<Amount>(&balance_a)?
+        .unwrap_or_default()
+        .change();
     let balance_a_post = match reader.read_post::<Amount>(&balance_a)? {
         Some(value) => value,
         None => {
@@ -212,11 +211,10 @@ fn extract_valid_sender(
         }
     }
     .change();
-    let balance_b_pre = match reader.read_pre::<Amount>(&balance_b)? {
-        Some(value) => value,
-        None => Amount::from(0),
-    }
-    .change();
+    let balance_b_pre = reader
+        .read_pre::<Amount>(&balance_b)?
+        .unwrap_or_default()
+        .change();
     let balance_b_post = match reader.read_post::<Amount>(&balance_b)? {
         Some(value) => value,
         None => {
