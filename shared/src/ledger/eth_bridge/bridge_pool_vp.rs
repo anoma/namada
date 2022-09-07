@@ -15,7 +15,7 @@ use borsh::BorshDeserialize;
 use eyre::eyre;
 
 use crate::ledger::eth_bridge::storage::bridge_pool::{
-    get_pending_key, get_signed_root_key, BRIDGE_POOL_ADDRESS,
+    get_pending_key, is_protected_storage, BRIDGE_POOL_ADDRESS,
 };
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
@@ -96,13 +96,20 @@ where
         let transfer: PendingTransfer = match signed.data {
             Some(data) => BorshDeserialize::try_from_slice(data.as_slice())
                 .map_err(|e| Error(e.into()))?,
-            None => return Ok(false),
+            None => {
+                tracing::debug!(
+                    "Rejecting transaction as there was no signed data"
+                );
+                return Ok(false);
+            }
         };
 
-        // check that the signed root is not modified
-        let signed_root_key = get_signed_root_key();
-if keys_changed.contains(&signed_root_key) {
-            tracing::debug!("Rejecting transaction as it is attempting to change the signed root key");
+        // check that only the pending_key value is changed
+        if keys_changed.iter().any(is_protected_storage) {
+            tracing::debug!(
+                "Rejecting transaction as it is attempting to change the \
+                 bridge pool storage other than the pending transaction pool"
+            );
             return Ok(false);
         }
         // check that the pending transfer (and only that) was added to the pool
@@ -145,6 +152,7 @@ if keys_changed.contains(&signed_root_key) {
                 return Ok(false);
             }
         } else {
+            tracing::debug!("The gas fee payers account was not debited.");
             return Ok(false);
         }
         // check that the correct amount was credited to escrow
@@ -155,9 +163,9 @@ if keys_changed.contains(&signed_root_key) {
                 return Ok(false);
             }
         } else {
+            tracing::debug!("The bridge pools escrow was not credited.");
             return Ok(false);
         }
-        // TODO: Verify nonce?
 
         Ok(true)
     }
@@ -170,6 +178,7 @@ mod test_bridge_pool_vp {
     use borsh::{BorshDeserialize, BorshSerialize};
 
     use super::*;
+    use crate::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::write_log::WriteLog;

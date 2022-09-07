@@ -32,3 +32,15 @@ pub fn get_signed_root_key() -> Key {
         ],
     }
 }
+
+/// Check if a key belongs to the bridge pools sub-storage
+pub fn is_bridge_pool_key(key: &Key) -> bool {
+    matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &BRIDGE_POOL_ADDRESS)
+}
+
+/// Check if a key belongs to the bridge pool but is not
+/// the key for the pending transaction pool. Such keys
+/// may not be modified via transactions.
+pub fn is_protected_storage(key: &Key) -> bool {
+    is_bridge_pool_key(key) && *key != get_pending_key()
+}
