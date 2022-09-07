@@ -7,7 +7,9 @@ use std::task::{Context, Poll};
 use futures::future::FutureExt;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
+#[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
+#[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;

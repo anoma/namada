@@ -27,8 +27,7 @@ pub mod shim {
         ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseExtendVote,
         ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
         ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
-        ResponsePrepareProposal, ResponseProcessProposal, ResponseQuery,
-        ResponseVerifyVoteExtension,
+        ResponsePrepareProposal, ResponseQuery, ResponseVerifyVoteExtension,
     };
     use thiserror::Error;
 
