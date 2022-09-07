@@ -6,14 +6,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use tendermint_config::net::Address;
-use tendermint_rpc::{
-    Client, Error as RpcError, Request, Response, SimpleRequest,
-};
 use thiserror::Error;
 use tokio::time::Instant;
 use websocket::result::WebSocketError;
 use websocket::{ClientBuilder, Message, OwnedMessage};
+
+use crate::facade::tendermint_config::net::Address;
+use crate::facade::tendermint_rpc::{
+    Client, Error as RpcError, Request, Response, SimpleRequest,
+};
 
 #[derive(Error, Debug)]
 pub enum Error {

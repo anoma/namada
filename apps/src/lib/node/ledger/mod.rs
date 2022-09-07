@@ -18,13 +18,13 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
-use tendermint_proto::abci::CheckTxType;
 use tower::ServiceBuilder;
 use tower_abci::{response, split, Server};
 
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
 use crate::config::TendermintMode;
+use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;

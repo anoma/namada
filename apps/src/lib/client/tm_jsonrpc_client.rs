@@ -4,12 +4,12 @@ use std::ops::{Deref, DerefMut};
 
 use curl::easy::{Easy2, Handler, WriteError};
 use serde::{Deserialize, Serialize};
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::query::Query;
 
 use crate::client::tendermint_rpc_types::{
     parse, Error, EventParams, EventReply, TxResponse,
 };
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_rpc::query::Query;
 
 /// Maximum number of times we try to send a curl request
 const MAX_SEND_ATTEMPTS: u8 = 10;

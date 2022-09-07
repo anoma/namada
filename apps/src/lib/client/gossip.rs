@@ -4,10 +4,10 @@ use std::io::Write;
 use borsh::BorshSerialize;
 use namada::proto::Signed;
 use namada::types::intent::{Exchange, FungibleTokenIntent};
-use tendermint_config::net::Address as TendermintAddress;
 
 use super::signing;
 use crate::cli::{self, args, Context};
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::proto::services::rpc_service_client::RpcServiceClient;
 use crate::proto::{services, RpcMessage};
 use crate::wallet::Wallet;
