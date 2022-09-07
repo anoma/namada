@@ -33,11 +33,11 @@ use epoched::{
 use parameters::PosParams;
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, Epoch, GenesisValidator, Slash, SlashType, Slashes,
-    TotalVotingPowers, Unbond, Unbonds, ValidatorConsensusKeys,
-    ValidatorEthKey, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
-    ValidatorState, ValidatorStates, ValidatorTotalDeltas,
-    ValidatorVotingPowers, VotingPower, VotingPowerDelta,
+    ActiveValidator, Bonds, Epoch, EthAddress, EthKeyAddresses,
+    GenesisValidator, Slash, SlashType, Slashes, TotalVotingPowers, Unbond,
+    Unbonds, ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet,
+    ValidatorSetUpdate, ValidatorSets, ValidatorState, ValidatorStates,
+    ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -159,6 +159,32 @@ pub trait PosReadOnly {
         &self,
         key: &Self::Address,
     ) -> Option<Self::PublicKey>;
+
+    /// Read PoS map from eth address derived from cold keys to native addresses
+    fn read_eth_cold_key_addresses(&self) -> EthKeyAddresses<Self::Address>;
+
+    /// Read PoS map from eth address derived from hot keys to native addresses
+    fn read_eth_hot_key_addresses(&self) -> EthKeyAddresses<Self::Address>;
+
+    /// Try to find a native address associated with the given eth address
+    /// derived from a eth cold key
+    fn find_address_from_eth_cold_key_address(
+        &self,
+        eth_addr: &EthAddress,
+    ) -> Option<Self::Address> {
+        let addresses = self.read_eth_cold_key_addresses();
+        addresses.get(eth_addr).cloned()
+    }
+
+    /// Try to find a native address associated with the given eth address
+    /// derived from a eth hot key
+    fn find_address_from_eth_hot_key_address(
+        &self,
+        eth_addr: &EthAddress,
+    ) -> Option<Self::Address> {
+        let addresses = self.read_eth_hot_key_addresses();
+        addresses.get(eth_addr).cloned()
+    }
 }
 
 /// PoS system trait to be implemented in integration that can read and write

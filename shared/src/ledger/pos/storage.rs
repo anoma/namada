@@ -24,6 +24,8 @@ const VALIDATOR_STAKING_REWARD_ADDRESS_STORAGE_KEY: &str =
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
 const VALIDATOR_ETH_COLD_KEY_STORAGE_KEY: &str = "eth_cold_key";
 const VALIDATOR_ETH_HOT_KEY_STORAGE_KEY: &str = "eth_hot_key";
+const ETH_COLD_KEY_ADDRESSES_STORAGE_KEY: &str = "eth_cold_key_addresses";
+const ETH_HOT_KEY_ADDRESSES_STORAGE_KEY: &str = "eth_hot_key_addresses";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
 const VALIDATOR_TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const VALIDATOR_VOTING_POWER_STORAGE_KEY: &str = "voting_power";
@@ -416,6 +418,38 @@ pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
         },
         None => None,
     }
+}
+
+/// Storage key for look-up from validator's eth cold key addresses to native
+/// address.
+pub fn eth_cold_key_addresses_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&ETH_COLD_KEY_ADDRESSES_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validators' eth cold key addresses?
+pub fn is_eth_cold_key_addresses_key(key: &Key) -> bool {
+    matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(suffix)]
+            if addr == &ADDRESS
+                && suffix == ETH_COLD_KEY_ADDRESSES_STORAGE_KEY)
+}
+
+/// Storage key for look-up from validator's eth hot key addresses to native
+/// address.
+pub fn eth_hot_key_addresses_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&ETH_HOT_KEY_ADDRESSES_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validators' eth hot key addresses?
+pub fn is_eth_hot_key_addresses_key(key: &Key) -> bool {
+    matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(suffix)]
+            if addr == &ADDRESS
+                && suffix == ETH_HOT_KEY_ADDRESSES_STORAGE_KEY)
 }
 
 impl<D, H> PosBase for Storage<D, H>
