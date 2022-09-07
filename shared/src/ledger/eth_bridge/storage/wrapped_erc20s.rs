@@ -107,21 +107,25 @@ impl TryFrom<&storage::Key> for Key {
             return Err(eyre!("key does not have ERC20 segment"));
         }
 
-        let asset = if let Some(DbKeySeg::StringSe(segment) = key.segments.get(2) {
-            EthAddress:from_str(segment)?
-        } else {
-            return Err(eyre!(
-                "key has an incorrect segment at index #2, expected an Ethereum address"
-            ));
-        };
+        let asset =
+            if let Some(DbKeySeg::StringSeg(segment)) = key.segments.get(2) {
+                EthAddress::from_str(segment)?
+            } else {
+                return Err(eyre!(
+                    "key has an incorrect segment at index #2, expected an \
+                     Ethereum address"
+                ));
+            };
 
-        let segment_3 = if let Some(DbKeySeg::StringSeg(segment)) = key.segments.get(3) {
-            segment.to_owned()
-        } else {
-            return Err(eyre!(
-                "key has an incorrect segment at index #3, expected a string segment"
-             ));
-        };
+        let segment_3 =
+            if let Some(DbKeySeg::StringSeg(segment)) = key.segments.get(3) {
+                segment.to_owned()
+            } else {
+                return Err(eyre!(
+                    "key has an incorrect segment at index #3, expected a \
+                     string segment"
+                ));
+            };
 
         match segment_3.as_str() {
             SUPPLY_KEY_SEGMENT => {
@@ -132,12 +136,15 @@ impl TryFrom<&storage::Key> for Key {
                 Ok(supply_key)
             }
             BALANCE_KEY_SEGMENT => {
-                let owner =  if let Some(DbKeySeg::AddressSeg(address)) =  key.segments.get(4) {
+                let owner = if let Some(DbKeySeg::AddressSeg(address)) =
+                    key.segments.get(4)
+                {
                     address.to_owned()
                 } else {
                     return Err(eyre!(
-                        "key has an incorrect segment at index #4, expected an address segment"
-                    ))
+                        "key has an incorrect segment at index #4, expected \
+                         an address segment"
+                    ));
                 };
                 let balance_key = Key {
                     asset,
