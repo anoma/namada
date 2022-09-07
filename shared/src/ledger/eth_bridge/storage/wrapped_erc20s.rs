@@ -132,22 +132,12 @@ impl TryFrom<&storage::Key> for Key {
                 Ok(supply_key)
             }
             BALANCE_KEY_SEGMENT => {
-                let owner = match key.segments.get(4) {
-                    Some(segment) => match segment {
-                        DbKeySeg::AddressSeg(address) => address.to_owned(),
-                        DbKeySeg::StringSeg(_) => {
-                            return Err(eyre!(
-                                "key has string segment at index #4, expected \
-                                 an address segment"
-                            ));
-                        }
-                    },
-                    None => {
-                        return Err(eyre!(
-                            "key has no segment at index #4, expected an \
-                             address segment"
-                        ));
-                    }
+                let owner =  if let Some(DbKeySeg::AddressSeg(address)) =  key.segments.get(4) {
+                    address.to_owned()
+                } else {
+                    return Err(eyre!(
+                        "key has an incorrect segment at index #4, expected an address segment"
+                    ))
                 };
                 let balance_key = Key {
                     asset,
