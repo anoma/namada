@@ -107,22 +107,12 @@ impl TryFrom<&storage::Key> for Key {
             return Err(eyre!("key does not have ERC20 segment"));
         }
 
-        let asset = match key.segments.get(2) {
-            Some(segment) => match segment {
-                DbKeySeg::StringSeg(segment) => EthAddress::from_str(segment)?,
-                _ => {
-                    return Err(eyre!(
-                        "key has unrecognized segment at index #2, expected \
-                         an Ethereum address"
-                    ));
-                }
-            },
-            None => {
-                return Err(eyre!(
-                    "key has no segment at index #2, expected an Ethereum \
-                     address"
-                ));
-            }
+        let asset = if let Some(DbKeySeg::StringSe(segment) = key.segments.get(2) {
+            EthAddress:from_str(segment)?
+        } else {
+            return Err(eyre!(
+                "key has an incorrect segment at index #2, expected an Ethereum address"
+            ));
         };
 
         let segment_3 = if let Some(DbKeySeg::StringSeg(segment)) = key.segments.get(3) {
