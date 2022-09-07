@@ -1,8 +1,10 @@
 /// tools for running a mock ethereum fullnode process
 pub mod mock_eth_fullnode {
+    use async_trait::async_trait;
     use tokio::sync::oneshot::{channel, Receiver, Sender};
 
     use super::super::Result;
+    use crate::node::ledger::ethereum_node::Monitorable;
 
     pub struct EthereumNode {
         #[allow(dead_code)]
@@ -14,12 +16,15 @@ pub mod mock_eth_fullnode {
             let (abort_sender, receiver) = channel();
             Ok((Self { receiver }, abort_sender))
         }
+    }
 
-        pub async fn wait(&mut self) -> Result<()> {
+    #[async_trait]
+    impl Monitorable for EthereumNode {
+        async fn wait(&mut self) -> Result<()> {
             std::future::pending().await
         }
 
-        pub async fn kill(&mut self) {}
+        async fn kill(&mut self) {}
     }
 }
 
