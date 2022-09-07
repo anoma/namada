@@ -48,6 +48,8 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
+#[cfg(feature = "abcipp")]
+use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
@@ -494,6 +496,7 @@ where
     }
 
     /// INVARIANT: This method must be stateless.
+    #[cfg(feature = "abcipp")]
     pub fn extend_vote(
         &self,
         _req: request::ExtendVote,
@@ -502,6 +505,7 @@ where
     }
 
     /// INVARIANT: This method must be stateless.
+    #[cfg(feature = "abcipp")]
     pub fn verify_vote_extension(
         &self,
         _req: request::VerifyVoteExtension,

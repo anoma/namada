@@ -15,7 +15,7 @@ pub enum Error {
     #[error("Error in sending JSON RPC request to Tendermint")]
     Send,
     #[error("Received an error response from Tendermint: {0:?}")]
-    Rpc(tendermint_rpc::response_error::ResponseError),
+    Rpc(crate::facade::tendermint_rpc::response_error::ResponseError),
     #[error("Received malformed JSON response from Tendermint")]
     MalformedJson,
     #[error("Received an empty response from Tendermint")]
