@@ -36,8 +36,15 @@ pub type Unbonds<TokenAmount> =
 pub type ValidatorSets<Address> =
     Epoched<ValidatorSet<Address>, OffsetUnboundingLen>;
 /// Epoched total voting power.
-pub type TotalVotingPowers =
-    EpochedDelta<VotingPowerDelta, OffsetUnboundingLen>;
+pub type TotalVotingPowers = EpochedDelta<VotingPowerDelta, OffsetUnbondingLen>;
+/// Epoched validator's eth key.
+pub type ValidatorEthKey<PublicKey> = Epoched<PublicKey, OffsetPipelineLen>;
+/// Map from eth addresses back to native addresses.
+pub type EthKeyAddresses<Address> = HashMap<EthAddress, Address>;
+
+/// Eth address derived from secp256k1 key
+#[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct EthAddress([u8; 20]);
 
 /// Epoch identifier. Epochs are identified by consecutive natural numbers.
 ///
@@ -118,6 +125,11 @@ pub struct GenesisValidator<Address, Token, PK> {
     pub consensus_key: PK,
     /// An public key associated with the staking reward address
     pub staking_reward_key: PK,
+    /// An Eth bridge governance public key
+    pub eth_cold_key: PK,
+    /// An Eth bridge hot signing public key used for validator set updates and
+    /// cross-chain transactions
+    pub eth_hot_key: PK,
 }
 
 /// An update of the active and inactive validator set.
