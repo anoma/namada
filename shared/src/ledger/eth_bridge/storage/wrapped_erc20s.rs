@@ -125,21 +125,12 @@ impl TryFrom<&storage::Key> for Key {
             }
         };
 
-        let segment_3 = match key.segments.get(3) {
-            Some(segment) => match segment {
-                DbKeySeg::StringSeg(segment) => segment.to_owned(),
-                _ => {
-                    return Err(eyre!(
-                        "key has unrecognized segment at index #3, expected a \
-                         string segment"
-                    ));
-                }
-            },
-            None => {
-                return Err(eyre!(
-                    "key has no segment at index #3, expected a string segment"
-                ));
-            }
+        let segment_3 = if let Some(DbKeySeg::StringSeg(segment)) = key.segments.get(3) {
+            segment.to_owned()
+        } else {
+            return Err(eyre!(
+                "key has an incorrect segment at index #3, expected a string segment"
+             ));
         };
 
         match segment_3.as_str() {
