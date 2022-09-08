@@ -387,8 +387,7 @@ where
     /// Checks if we have found the correct number of Ethereum events
     /// vote extensions in [`DigestCounters`].
     fn has_proper_eth_events_num(&self, c: &DigestCounters) -> bool {
-        self.storage.last_height.0 == 0
-            || self.storage.last_height.0 > 0 && c.eth_ev_digest_num == 1
+        self.storage.last_height.0 == 0 || c.eth_ev_digest_num == 1
     }
 
     /// Checks if we have found the correct number of validator set update
@@ -398,9 +397,7 @@ where
             .storage
             .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
         {
-            self.storage.last_height.0 == 0
-                || self.storage.last_height.0 > 0
-                    && c.valset_upd_digest_num == 1
+            self.storage.last_height.0 == 0 || c.valset_upd_digest_num == 1
         } else {
             true
         }
