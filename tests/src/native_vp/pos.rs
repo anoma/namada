@@ -571,6 +571,7 @@ pub mod testing {
     use derivative::Derivative;
     use itertools::Either;
     use namada::ledger::pos::namada_proof_of_stake::btree_set::BTreeSetShims;
+    use namada::ledger::pos::types::decimal_mult_i128;
     use namada::types::key::common::PublicKey;
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;

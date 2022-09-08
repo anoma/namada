@@ -8,6 +8,7 @@ use thiserror::Error;
 
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::pos;
+use crate::ledger::pos::types::decimal_mult_u64;
 use crate::ledger::pos::{BondId, Bonds, ValidatorSets, ValidatorTotalDeltas};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::types::address::Address;
@@ -198,7 +199,8 @@ fn apply_slashes(
     for slash in slashes {
         if Epoch::from(slash.epoch) >= epoch_start {
             let raw_delta: u64 = delta.into();
-            let current_slashed = token::Amount::from(slash.rate * raw_delta);
+            let current_slashed =
+                token::Amount::from(decimal_mult_u64(slash.rate, raw_delta));
             delta -= current_slashed;
         }
     }
