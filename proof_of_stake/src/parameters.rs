@@ -1,6 +1,9 @@
 //! Proof-of-Stake system parameters
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use thiserror::Error;
 
 /// Proof-of-Stake system parameters, set at genesis and can only be changed via governance
@@ -20,19 +23,19 @@ pub struct PosParams {
     /// Used in validators' voting power calculation to interface with tendermint.
     pub tm_votes_per_token: Decimal,
     /// Amount of tokens rewarded to a validator for proposing a block
-    pub block_proposer_reward: u64,
+    pub block_proposer_reward: Decimal,
     /// Amount of tokens rewarded to each validator that voted on a block
     /// proposal
-    pub block_vote_reward: u64,
+    pub block_vote_reward: Decimal,
     /// Maximum staking rewards rate per annum
     pub max_inflation_rate: Decimal,
     /// Target ratio of staked NAM tokens to total NAM tokens
     pub target_staked_ratio: Decimal,
-    /// Fraction of validator's stake that should be slashed on a duplicate
-    /// vote.
+    /// Portion of validator's stake that should be slashed on a duplicate
+    /// vote. Given in basis points (slashed amount per ten thousand tokens).
     pub duplicate_vote_slash_rate: Decimal,
-    /// Fraction of validator's stake that should be slashed on a light client
-    /// attack.
+    /// Portion of validator's stake that should be slashed on a light client
+    /// attack. Given in basis points (slashed amount per ten thousand tokens).
     pub light_client_attack_slash_rate: Decimal,
 }
 
@@ -42,18 +45,19 @@ impl Default for PosParams {
             max_validator_slots: 128,
             pipeline_len: 2,
             unbonding_len: 6,
-            // 1 tendermint voting power per 1000 tokens
-            tm_votes_per_token: BasisPoints::new(10),
-            block_proposer_reward: 100,
-            block_vote_reward: 1,
+            // 1 voting power per 1 fundamental token (10^6 per NAM or 1 per
+            // namnam)
+            tm_votes_per_token: dec!(1.0),
+            block_proposer_reward: dec!(0.0625),
+            block_vote_reward: dec!(0.05),
             // PoS inflation of 10%
             max_inflation_rate: dec!(0.1),
             // target staked ratio of 2/3
             target_staked_ratio: dec!(0.6667),
             // slash 5%
-            duplicate_vote_slash_rate: BasisPoints::new(500),
+            duplicate_vote_slash_rate: dec!(0.05),
             // slash 5%
-            light_client_attack_slash_rate: BasisPoints::new(500),
+            light_client_attack_slash_rate: dec!(0.05),
         }
     }
 }
@@ -67,7 +71,7 @@ pub enum ValidationError {
     )]
     TotalVotingPowerTooLarge(u64),
     #[error("Votes per token cannot be greater than 1, got {0}")]
-    VotesPerTokenGreaterThanOne(BasisPoints),
+    VotesPerTokenGreaterThanOne(Decimal),
     #[error("Pipeline length must be >= 2, got {0}")]
     PipelineLenTooShort(u64),
     #[error(
@@ -107,8 +111,8 @@ impl PosParams {
 
         // Check maximum total voting power cannot get larger than what
         // Tendermint allows
-        let max_total_voting_power = self.max_validator_slots
-            * (self.tm_votes_per_token * TOKEN_MAX_AMOUNT);
+        let max_total_voting_power = Decimal::from(self.max_validator_slots)
+            * self.tm_votes_per_token * Decimal::from(TOKEN_MAX_AMOUNT);
         match i64::try_from(max_total_voting_power) {
             Ok(max_total_voting_power_i64) => {
                 if max_total_voting_power_i64 > MAX_TOTAL_VOTING_POWER {
@@ -123,7 +127,7 @@ impl PosParams {
         }
 
         // Check that there is no more than 1 vote per token
-        if self.tm_votes_per_token > BasisPoints::new(10_000) {
+        if self.tm_votes_per_token > dec!(1.0) {
             errors.push(ValidationError::VotesPerTokenGreaterThanOne(
                 self.tm_votes_per_token,
             ))
@@ -177,7 +181,7 @@ pub mod testing {
                 max_validator_slots,
                 pipeline_len,
                 unbonding_len,
-                tm_votes_per_token: BasisPoints::new(tm_votes_per_token),
+                tm_votes_per_token: Decimal::from(tm_votes_per_token) / dec!(10_000),
                 // The rest of the parameters that are not being used in the PoS
                 // VP are constant for now
                 ..Default::default()
