@@ -937,7 +937,7 @@ pub mod testing {
                     let total_delta = validator_total_deltas
                         .get_at_offset(current_epoch, offset, params)
                         .unwrap_or_default();
-                    // Votes_per_token is relative to nano units so no need to convert
+                    // Votes_per_token is relative to micro units so no need to convert
                     let vp_before = params.votes_per_token * total_delta;
                     let vp_after = params.votes_per_token * (total_delta + token_delta);
                     // voting power delta
@@ -998,7 +998,7 @@ pub mod testing {
                         let total_delta = validator_total_deltas
                             .get(epoch)
                             .unwrap_or_default();
-                        // Votes_per_token is relative to nano units so no need to convert
+                        // Votes_per_token is relative to micro units so no need to convert
                         let vp_before = params.votes_per_token * total_delta;
                         let vp_after = params.votes_per_token * (total_delta + token_delta);
                         // voting power delta
@@ -1071,7 +1071,7 @@ pub mod testing {
                     let total_delta_cur = validator_total_deltas_cur
                         .get_at_offset(current_epoch, offset, params)
                         .unwrap_or_default();
-                    // Votes_per_token is relative to nano units so no need to convert
+                    // Votes_per_token is relative to micro units so no need to convert
                     let vp_before = params.votes_per_token * total_delta_cur;
                     let vp_after = params.votes_per_token * (total_delta_cur + token_delta);
                     // voting power delta

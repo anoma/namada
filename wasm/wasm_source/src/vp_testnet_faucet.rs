@@ -9,7 +9,7 @@ use namada_vp_prelude::{SignedTxData, *};
 use once_cell::unsync::Lazy;
 
 /// Allows anyone to withdraw up to 1_000 tokens in a single tx
-pub const MAX_FREE_DEBIT: i128 = 1_000_000_000_000; // in nano units
+pub const MAX_FREE_DEBIT: i128 = 1_000_000_000; // in micro units
 
 #[validity_predicate]
 fn validate_tx(
