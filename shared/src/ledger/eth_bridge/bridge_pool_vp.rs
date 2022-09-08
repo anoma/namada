@@ -58,8 +58,20 @@ where
     /// associated with an address
     fn account_balance_delta(&self, address: &Address) -> Option<SignedAmount> {
         let account_key = balance_key(&xan(), address);
-        let before: Amount = self.ctx.read_pre_value(&account_key)?;
-        let after: Amount = self.ctx.read_post_value(&account_key)?;
+        let before: Amount = self
+            .ctx
+            .read_pre_value(&account_key)
+            .unwrap_or_else(|error| {
+                tracing::warn!(?error, %account_key, "reading pre value");
+                None
+            })?;
+        let after: Amount = self
+            .ctx
+            .read_post_value(&account_key)
+            .unwrap_or_else(|error| {
+                tracing::warn!(?error, %account_key, "reading post value");
+                None
+            })?;
         if before > after {
             Some(SignedAmount::Negative(before - after))
         } else {
