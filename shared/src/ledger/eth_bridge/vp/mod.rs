@@ -1,16 +1,14 @@
 //! Validity predicate for the Ethereum bridge
 
 mod authorize;
-mod store;
 
 use std::collections::{BTreeSet, HashSet};
 
 use eyre::{eyre, Result};
 use itertools::Itertools;
 
-use self::store::Reader;
 use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
-use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::StorageHasher;
 use crate::types::address::{Address, InternalAddress};
@@ -157,7 +155,7 @@ fn extract_valid_keys_changed(
 /// return the `Address` of the owner of the balance which is decreasing, which
 /// should be authorizing the balance change.
 fn check_balance_changes(
-    reader: impl Reader,
+    reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,
     key_b: wrapped_erc20s::Key,
 ) -> Result<Option<Address>> {
@@ -200,10 +198,10 @@ fn check_balance_changes(
             }
         };
     let balance_a_pre = reader
-        .read_pre::<Amount>(&balance_a)?
+        .read_pre_value::<Amount>(&balance_a)?
         .unwrap_or_default()
         .change();
-    let balance_a_post = match reader.read_post::<Amount>(&balance_a)? {
+    let balance_a_post = match reader.read_post_value::<Amount>(&balance_a)? {
         Some(value) => value,
         None => {
             tracing::debug!(
@@ -215,10 +213,10 @@ fn check_balance_changes(
     }
     .change();
     let balance_b_pre = reader
-        .read_pre::<Amount>(&balance_b)?
+        .read_pre_value::<Amount>(&balance_b)?
         .unwrap_or_default()
         .change();
-    let balance_b_post = match reader.read_post::<Amount>(&balance_b)? {
+    let balance_b_post = match reader.read_post_value::<Amount>(&balance_b)? {
         Some(value) => value,
         None => {
             tracing::debug!(
