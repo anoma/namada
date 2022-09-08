@@ -17,10 +17,11 @@ use crate::btree_set::BTreeSetShims;
 use crate::epoched::DynEpochOffset;
 use crate::parameters::PosParams;
 use crate::types::{
-    BondId, Bonds, CommissionRates, Epoch, PublicKeyTmRawHash, Slash, Slashes,
-    TotalVotingPowers, Unbonds, ValidatorConsensusKeys, ValidatorSets,
-    ValidatorState, ValidatorStates, ValidatorTotalDeltas,
-    ValidatorVotingPowers, VotingPower, VotingPowerDelta, WeightedValidator,
+    decimal_mult_i128, decimal_mult_u64, BondId, Bonds, CommissionRates, Epoch,
+    PublicKeyTmRawHash, Slash, Slashes, TotalVotingPowers, Unbonds,
+    ValidatorConsensusKeys, ValidatorSets, ValidatorState, ValidatorStates,
+    ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
+    WeightedValidator,
 };
 
 #[allow(missing_docs)]
@@ -1908,8 +1909,9 @@ where
                     for slash in &slashes {
                         if slash.epoch >= *start_epoch {
                             let raw_delta: i128 = (*delta).into();
-                            let current_slashed =
-                                TokenChange::from(slash.rate * raw_delta);
+                            let current_slashed = TokenChange::from(
+                                decimal_mult_i128(slash.rate, raw_delta),
+                            );
                             *delta -= current_slashed;
                         }
                     }
@@ -1974,7 +1976,7 @@ where
                                 if slash.epoch >= *start_epoch {
                                     let raw_delta: u64 = delta.into();
                                     let current_slashed = TokenAmount::from(
-                                        slash.rate * raw_delta,
+                                        decimal_mult_u64(slash.rate, raw_delta),
                                     );
                                     delta -= current_slashed;
                                 }
@@ -2006,7 +2008,7 @@ where
                                 if slash.epoch >= *start_epoch {
                                     let raw_delta: u64 = delta.into();
                                     let current_slashed = TokenAmount::from(
-                                        slash.rate * raw_delta,
+                                        decimal_mult_u64(slash.rate, raw_delta),
                                     );
                                     delta -= current_slashed;
                                 }
@@ -2100,8 +2102,9 @@ where
                             && slash.epoch <= *end_epoch
                         {
                             let raw_delta: i128 = (*delta).into();
-                            let current_slashed =
-                                TokenChange::from(slash.rate * raw_delta);
+                            let current_slashed = TokenChange::from(
+                                decimal_mult_i128(slash.rate, raw_delta),
+                            );
                             *delta -= current_slashed;
                         }
                     }
@@ -2137,7 +2140,7 @@ where
                                 {
                                     let raw_delta: u64 = delta.into();
                                     let current_slashed = TokenAmount::from(
-                                        slash.rate * raw_delta,
+                                        decimal_mult_u64(slash.rate, raw_delta),
                                     );
                                     delta -= current_slashed;
                                 }
@@ -2170,7 +2173,7 @@ where
                                 {
                                     let raw_delta: u64 = delta.into();
                                     let current_slashed = TokenAmount::from(
-                                        slash.rate * raw_delta,
+                                        decimal_mult_u64(slash.rate, raw_delta),
                                     );
                                     delta -= current_slashed;
                                 }

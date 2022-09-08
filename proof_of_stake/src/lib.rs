@@ -34,7 +34,7 @@ use parameters::PosParams;
 use rust_decimal::Decimal;
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
+    decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
     SlashType, Slashes, TotalVotingPowers, Unbond, Unbonds,
     ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
     ValidatorState, ValidatorStates, ValidatorTotalDeltas,
