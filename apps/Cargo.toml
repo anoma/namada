@@ -149,6 +149,9 @@ web30 = "0.19.1"
 websocket = "0.26.2"
 winapi = "0.3.9"
 
+warp = "0.3.2"
+bytes = "1.1.0"
+
 [dev-dependencies]
 assert_matches = "1.5.0"
 namada = {path = "../shared", features = ["testing", "wasm-runtime"]}

@@ -16,6 +16,7 @@ pub mod proof_of_stake;
 pub mod token;
 
 pub mod tx_prelude {
+    pub use namada::ledger::eth_bridge::storage::bridge_pool;
     pub use namada::ledger::governance::storage;
     pub use namada::ledger::parameters::storage as parameters_storage;
     pub use namada::ledger::storage::types::encode;

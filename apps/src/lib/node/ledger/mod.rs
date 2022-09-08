@@ -342,8 +342,26 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
             res
         });
 
-        let oracle =
-            ethereum_node::run_oracle(ethereum_url, eth_sender, abort_sender);
+        let oracle = {
+            #[cfg(not(feature = "eth-fullnode"))]
+            if config.ethereum.oracle_event_endpoint {
+                ethereum_node::test_tools::event_endpoint::start_oracle(
+                    eth_sender,
+                )
+            } else {
+                ethereum_node::test_tools::mock_oracle::run_oracle(
+                    ethereum_url,
+                    eth_sender,
+                    abort_sender,
+                )
+            }
+            #[cfg(feature = "eth-fullnode")]
+            ethereum_node::oracle::run_oracle(
+                ethereum_url,
+                eth_sender,
+                abort_sender,
+            )
+        };
 
         // Shutdown ethereum_node via a message to ensure that the child process
         // is properly cleaned-up.

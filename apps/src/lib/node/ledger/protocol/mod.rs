@@ -2,6 +2,7 @@
 use std::collections::BTreeSet;
 use std::panic;
 
+use namada::ledger::eth_bridge::bridge_pool_vp::BridgePoolVp;
 use namada::ledger::eth_bridge::vp::EthBridge;
 use namada::ledger::gas::{self, BlockGasMeter, VpGasMeter};
 use namada::ledger::governance::GovernanceVp;
@@ -57,6 +58,8 @@ pub enum Error {
     TreasuryNativeVpError(namada::ledger::treasury::Error),
     #[error("Ethereum bridge native VP error: {0}")]
     EthBridgeNativeVpError(namada::ledger::eth_bridge::vp::Error),
+    #[error("Ethereum bridge pool native VP error: {0}")]
+    BridgePoolNativeVpError(namada::ledger::eth_bridge::bridge_pool_vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -449,6 +452,14 @@ where
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::EthBridgeNativeVpError);
                             gas_meter = bridge.ctx.gas_meter.into_inner();
+                            result
+                        }
+                        InternalAddress::EthBridgePool => {
+                            let bridge_pool = BridgePoolVp { ctx };
+                            let result = bridge_pool
+                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .map_err(Error::BridgePoolNativeVpError);
+                            gas_meter = bridge_pool.ctx.gas_meter.into_inner();
                             result
                         }
                     };
