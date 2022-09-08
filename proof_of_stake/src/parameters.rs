@@ -40,8 +40,8 @@ impl Default for PosParams {
             max_validator_slots: 128,
             pipeline_len: 2,
             unbonding_len: 6,
-            // 1 voting power per 100 fundamental tokens (10^7 / NAM or 0.01 / namnam)
-            votes_per_token: BasisPoints::new(100),
+            // 1 voting power per 1 fundamental token (10^6 per NAM or 1 per namnam)
+            votes_per_token: BasisPoints::new(10000),
             block_proposer_reward: 100,
             block_vote_reward: 1,
             // slash 5%
@@ -72,12 +72,12 @@ pub enum ValidationError {
 }
 
 /// The number of fundamental units per whole token of the native staking token
-pub const TOKENS_PER_NAM: u64 = 1_000_000_000;
+pub const TOKENS_PER_NAM: u64 = 1_000_000;
 
 /// From Tendermint: <https://github.com/tendermint/tendermint/blob/master/spec/abci/apps.md#updating-the-validator-set>
 const MAX_TOTAL_VOTING_POWER: i64 = i64::MAX / 8;
 
-/// Assuming token amount is `u64` in nano units.
+/// Assuming token amount is `u64` in micro units.
 const TOKEN_MAX_AMOUNT: u64 = u64::MAX / TOKENS_PER_NAM;
 
 impl PosParams {

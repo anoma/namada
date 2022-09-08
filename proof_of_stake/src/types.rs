@@ -366,7 +366,7 @@ pub trait PublicKeyTmRawHash {
 impl VotingPower {
     /// Convert token amount into a voting power.
     pub fn from_tokens(tokens: impl Into<u64>, params: &PosParams) -> Self {
-        // The token amount is expected to be in nano units already
+        // The token amount is expected to be in micro units already
         Self(params.votes_per_token * tokens.into())
     }
 }
@@ -393,7 +393,7 @@ impl VotingPowerDelta {
         change: impl Into<i128>,
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
-        // The token amount is expected to be in nano units already
+        // The token amount is expected to be in micro units already
         let delta: i128 = params.votes_per_token * change.into();
         let delta: i64 = TryFrom::try_from(delta)?;
         Ok(Self(delta))
@@ -404,7 +404,7 @@ impl VotingPowerDelta {
         tokens: impl Into<u64>,
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
-        // The token amount is expected to be in nano units already
+        // The token amount is expected to be in micro units already
         let delta: i64 =
             TryFrom::try_from(params.votes_per_token * tokens.into())?;
         Ok(Self(delta))
