@@ -1,9 +1,10 @@
-#[cfg(not(feature = "eth-fullnode"))]
 /// tools for running a mock ethereum fullnode process
 pub mod mock_eth_fullnode {
+    use async_trait::async_trait;
     use tokio::sync::oneshot::{channel, Receiver, Sender};
 
     use super::super::Result;
+    use crate::node::ledger::ethereum_node::Monitorable;
 
     pub struct EthereumNode {
         #[allow(dead_code)]
@@ -11,20 +12,22 @@ pub mod mock_eth_fullnode {
     }
 
     impl EthereumNode {
-        pub async fn new(_: &str) -> Result<(EthereumNode, Sender<()>)> {
+        pub async fn new() -> Result<(EthereumNode, Sender<()>)> {
             let (abort_sender, receiver) = channel();
             Ok((Self { receiver }, abort_sender))
         }
+    }
 
-        pub async fn wait(&mut self) -> Result<()> {
+    #[async_trait]
+    impl Monitorable for EthereumNode {
+        async fn wait(&mut self) -> Result<()> {
             std::future::pending().await
         }
 
-        pub async fn kill(&mut self) {}
+        async fn kill(&mut self) {}
     }
 }
 
-#[cfg(not(feature = "eth-fullnode"))]
 pub mod mock_oracle {
 
     use namada::types::ethereum_events::EthereumEvent;
@@ -47,7 +50,6 @@ pub mod mock_oracle {
     }
 }
 
-#[cfg(not(feature = "eth-fullnode"))]
 pub mod event_endpoint {
     use borsh::BorshDeserialize;
     use namada::types::ethereum_events::EthereumEvent;
@@ -110,7 +112,7 @@ pub mod event_endpoint {
     }
 }
 
-#[cfg(all(test, feature = "eth-fullnode"))]
+#[cfg(test)]
 pub mod mock_web3_client {
     use std::cell::RefCell;
     use std::fmt::Debug;

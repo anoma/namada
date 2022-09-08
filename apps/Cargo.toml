@@ -44,7 +44,6 @@ dev = ["namada/dev"]
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
 testing = ["dev"]
-eth-fullnode = []
 
 [dependencies]
 namada = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand", "secp256k1-sign-verify"]}

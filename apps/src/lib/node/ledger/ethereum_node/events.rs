@@ -1,4 +1,3 @@
-#[cfg(feature = "eth-fullnode")]
 pub mod signatures {
     pub const TRANSFER_TO_NAMADA_SIG: &str =
         "TransferToNamada(uint256,address[],string[],uint256[],uint32)";
@@ -38,7 +37,6 @@ pub mod signatures {
     }
 }
 
-#[cfg(feature = "eth-fullnode")]
 pub mod eth_events {
     use std::convert::TryInto;
     use std::fmt::Debug;
@@ -916,5 +914,4 @@ pub mod eth_events {
     }
 }
 
-#[cfg(feature = "eth-fullnode")]
 pub use eth_events::*;
