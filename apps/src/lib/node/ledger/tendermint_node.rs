@@ -321,10 +321,7 @@ async fn update_tendermint_config(
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("config.toml");
     let mut config =
-        TendermintConfig::load_toml_file(&path).map_err(|e| {
-            tracing::debug!("Error: {:?}", e);
-            Error::LoadConfig(e)
-        })?;
+        TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
     config.p2p.laddr =
         TendermintAddress::from_str(&tendermint_config.p2p_address.to_string())
             .unwrap();
