@@ -378,7 +378,14 @@ where
     /// Checks if we have found the correct number of Ethereum events
     /// vote extensions in [`DigestCounters`].
     fn has_proper_eth_events_num(&self, c: &DigestCounters) -> bool {
-        self.storage.last_height.0 > 0 && c.eth_ev_digest_num == 1
+        #[cfg(feature = "abcipp")]
+        {
+            self.storage.last_height.0 > 0 && c.eth_ev_digest_num == 1
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            c.eth_ev_digest_num <= 1
+        }
     }
 
     /// Checks if we have found the correct number of validator set update
