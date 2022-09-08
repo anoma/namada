@@ -51,12 +51,12 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use super::protocol::ShellParams;
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
-#[cfg(not(feature = "abcipp"))]
-use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
 use crate::facade::tendermint_proto::crypto::public_key;
+#[cfg(not(feature = "abcipp"))]
+use crate::facade::tendermint_proto::types::ConsensusParams;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::facade::tower_abci::{request, response};

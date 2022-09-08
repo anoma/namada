@@ -1208,6 +1208,7 @@ pub async fn submit_tx(
         } else {
             Duration::new(300, 0)
         };
+    tracing::debug!("Tenderming address: {:?}", address);
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
         WebSocketAddress::try_from(address.clone())?,
         Some(websocket_timeout),
@@ -1218,7 +1219,7 @@ pub async fn submit_tx(
     // Note that the `APPLIED_QUERY_KEY` key comes from a custom event
     // created by the shell
     let query = Query::from(EventType::NewBlock)
-        .and_eq(APPLIED_QUERY_KEY, wrapper_hash.as_str());
+        .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
     wrapper_tx_subscription.subscribe(query)?;
 
     // We also subscribe to the event emitted when the encrypted
@@ -1229,7 +1230,7 @@ pub async fn submit_tx(
             Some(websocket_timeout),
         )?;
         let query = Query::from(EventType::NewBlock)
-            .and_eq(ACCEPTED_QUERY_KEY, decrypted_hash.as_str());
+            .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
         decrypted_tx_subscription.subscribe(query)?;
         decrypted_tx_subscription
     };
@@ -1242,9 +1243,7 @@ pub async fn submit_tx(
             wrapper_tx_subscription.receive_response()?,
             NamadaEventType::Accepted,
             wrapper_hash,
-        )
-        .map_err(WsError::MalformedJson)?
-        .ok_or_else(|| WsError::MissingEvent(wrapper_hash.clone()))?;
+        );
 
         println!(
             "Transaction accepted with result: {}",
@@ -1257,9 +1256,7 @@ pub async fn submit_tx(
                 decrypted_tx_subscription.receive_response()?,
                 NamadaEventType::Applied,
                 decrypted_hash.as_str(),
-            )
-            .map_err(WsError::MalformedJson)?
-            .ok_or_else(|| WsError::MissingEvent(decrypted_hash.clone()))?;
+            );
             println!(
                 "Transaction applied with result: {}",
                 serde_json::to_string_pretty(&parsed).unwrap()

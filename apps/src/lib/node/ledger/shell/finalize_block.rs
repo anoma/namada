@@ -327,7 +327,8 @@ where
                     _ => {
                         tracing::error!(
                             "Internal logic error: FinalizeBlock received an \
-                             unsupported TxType::Protocol transaction"
+                             unsupported TxType::Protocol transaction: {:?}",
+                            protocol_tx
                         );
                         continue;
                     }
