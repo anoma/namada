@@ -1,6 +1,7 @@
 //! PoS rewards
 
 use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use thiserror::Error;
 
 use crate::types::VotingPower;
@@ -29,20 +30,20 @@ pub struct PosRewards {
 /// bing
 #[derive(Debug, Copy, Clone)]
 pub struct PosRewardsCalculator {
-    proposer_param: u64,
-    signer_param: u64,
     signing_stake: VotingPower,
     total_stake: VotingPower,
+    proposer_param: Decimal,
+    signer_param: Decimal,
     pos_rewards: Option<PosRewards>,
 }
 
 impl PosRewardsCalculator {
     /// new
     pub fn new(
-        proposer_param: u64,
-        signer_param: u64,
         signing_stake: VotingPower,
         total_stake: VotingPower,
+        proposer_param: Decimal,
+        signer_param: Decimal,
     ) -> Self {
         Self {
             proposer_param,
