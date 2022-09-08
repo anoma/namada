@@ -223,6 +223,7 @@ where
             }
             Ok(TxResult::default())
         }
+        ProtocolTxType::ValidatorSetUpdate(_) => Ok(TxResult::default()),
         _ => {
             tracing::error!(
                 "Attempt made to apply an unsupported protocol transaction! - \
