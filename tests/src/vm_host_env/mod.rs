@@ -182,6 +182,19 @@ mod tests {
             .sorted()
             .map(|i| (prefix.push(i).unwrap(), *i));
         itertools::assert_equal(iter, expected);
+
+        // Try to iterate over their prefix in reverse
+        let iter = namada_tx_prelude::rev_iter_prefix(tx::ctx(), &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+
+        // The order has to be reverse sorted by sub-key value
+        let expected = sub_keys
+            .iter()
+            .sorted()
+            .rev()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter, expected);
     }
 
     #[test]
@@ -411,6 +424,19 @@ mod tests {
             (prefix.push(i).unwrap(), val)
         });
         itertools::assert_equal(iter_post, expected_post);
+
+        // Try to iterate over their prefix in reverse
+        let iter_pre = namada_vp_prelude::rev_iter_prefix(&ctx_pre, &prefix)
+            .unwrap()
+            .map(|item| item.unwrap());
+
+        // The order in has to be reverse sorted by sub-key value
+        let expected_pre = sub_keys
+            .iter()
+            .sorted()
+            .rev()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter_pre, expected_pre);
     }
 
     #[test]
