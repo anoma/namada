@@ -35,10 +35,11 @@ use parameters::PosParams;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, Epoch, GenesisValidator, Slash, SlashType, Slashes,
-    TotalVotingPowers, Unbond, Unbonds, ValidatorConsensusKeys, ValidatorSet,
-    ValidatorSetUpdate, ValidatorSets, ValidatorState, ValidatorStates,
-    ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
+    decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bonds, Epoch,
+    GenesisValidator, Slash, SlashType, Slashes, TotalVotingPowers, Unbond,
+    Unbonds, ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate,
+    ValidatorSets, ValidatorState, ValidatorStates, ValidatorTotalDeltas,
+    ValidatorVotingPowers, VotingPower, VotingPowerDelta,
 };
 
 use crate::btree_set::BTreeSetShims;

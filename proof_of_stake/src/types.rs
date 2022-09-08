@@ -374,7 +374,8 @@ impl VotingPower {
     /// Convert token amount into a voting power.
     pub fn from_tokens(tokens: impl Into<u64>, params: &PosParams) -> Self {
         // The token amount is expected to be in micro units already
-        Self(params.votes_per_token * tokens.into())
+        let vp = decimal_mult_u64(params.votes_per_token, tokens.into());
+        Self(vp)
     }
 }
 
@@ -412,8 +413,8 @@ impl VotingPowerDelta {
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
         // The token amount is expected to be in micro units already
-        let delta: i64 =
-            TryFrom::try_from(params.votes_per_token * tokens.into())?;
+        let vp = decimal_mult_u64(params.votes_per_token, tokens.into());
+        let delta: i64 = TryFrom::try_from(vp.to_i64().unwrap())?;
         Ok(Self(delta))
     }
 }
@@ -741,8 +742,20 @@ impl Display for SlashType {
     }
 }
 
+/// Multiply a value of type Decimal with one of type u64 and then return the
+/// truncated u64
+pub fn decimal_mult_u64(dec: Decimal, int: u64) -> u64 {
+    let prod = dec * Decimal::from(int);
+    // truncate the number to the floor
+    prod.to_u64().expect("Product is out of bounds")
 }
 
+/// Multiply a value of type Decimal with one of type i128 and then return the
+/// truncated i128
+pub fn decimal_mult_i128(dec: Decimal, int: i128) -> i128 {
+    let prod = dec * Decimal::from(int);
+    // truncate the number to the floor
+    prod.to_i128().expect("Product is out of bounds")
 }
 
 #[cfg(test)]

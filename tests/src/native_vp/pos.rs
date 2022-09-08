@@ -575,6 +575,7 @@ pub mod testing {
     use derivative::Derivative;
     use itertools::Either;
     use namada::ledger::pos::namada_proof_of_stake::btree_set::BTreeSetShims;
+    use namada::ledger::pos::types::decimal_mult_i128;
     use namada::types::key::common::PublicKey;
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;
@@ -937,9 +938,14 @@ pub mod testing {
                     let total_delta = validator_total_deltas
                         .get_at_offset(current_epoch, offset, params)
                         .unwrap_or_default();
-                    // Votes_per_token is relative to micro units so no need to convert
-                    let vp_before = params.votes_per_token * total_delta;
-                    let vp_after = params.votes_per_token * (total_delta + token_delta);
+                    // Votes_per_token is relative to micro units so no need to
+                    // convert
+                    let vp_before =
+                        decimal_mult_i128(params.votes_per_token, total_delta);
+                    let vp_after = decimal_mult_i128(
+                        params.votes_per_token,
+                        total_delta + token_delta,
+                    );
                     // voting power delta
                     let vp_delta = vp_after - vp_before;
 
@@ -999,8 +1005,8 @@ pub mod testing {
                             .get(epoch)
                             .unwrap_or_default();
                         // Votes_per_token is relative to micro units so no need to convert
-                        let vp_before = params.votes_per_token * total_delta;
-                        let vp_after = params.votes_per_token * (total_delta + token_delta);
+                        let vp_before = decimal_mult_i128(params.votes_per_token, total_delta);
+                        let vp_after = decimal_mult_i128(params.votes_per_token, total_delta + token_delta);
                         // voting power delta
                         let vp_delta_at_unbonding =
                             vp_after - vp_before - vp_delta - total_vp_delta;
@@ -1071,9 +1077,16 @@ pub mod testing {
                     let total_delta_cur = validator_total_deltas_cur
                         .get_at_offset(current_epoch, offset, params)
                         .unwrap_or_default();
-                    // Votes_per_token is relative to micro units so no need to convert
-                    let vp_before = params.votes_per_token * total_delta_cur;
-                    let vp_after = params.votes_per_token * (total_delta_cur + token_delta);
+                    // Votes_per_token is relative to micro units so no need to
+                    // convert
+                    let vp_before = decimal_mult_i128(
+                        params.votes_per_token,
+                        total_delta_cur,
+                    );
+                    let vp_after = decimal_mult_i128(
+                        params.votes_per_token,
+                        total_delta_cur + token_delta,
+                    );
                     // voting power delta
                     let vp_delta = vp_after - vp_before;
 
