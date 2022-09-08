@@ -233,6 +233,16 @@ pub mod genesis_config {
         // Hashes of whitelisted txs array. `None` value or an empty array
         // disables whitelisting.
         pub tx_whitelist: Option<Vec<String>>,
+        /// Expected number of epochs per year
+        pub epochs_per_year: u64,
+        /// PoS gain p
+        pub pos_gain_p: Decimal,
+        /// PoS gain d
+        pub pos_gain_d: Decimal,
+        /// PoS staked ratio
+        pub staked_ratio: Decimal,
+        /// PoS reward rate last epoch
+        pub pos_reward_rate: Decimal,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -531,6 +541,11 @@ pub mod genesis_config {
                 .into(),
             vp_whitelist: config.parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: config.parameters.tx_whitelist.unwrap_or_default(),
+            epochs_per_year: config.parameters.epochs_per_year,
+            pos_gain_p: config.parameters.pos_gain_p,
+            pos_gain_d: config.parameters.pos_gain_d,
+            staked_ratio: config.parameters.staked_ratio,
+            pos_reward_rate: config.parameters.pos_reward_rate,
         };
 
         let gov_params = GovParams {
@@ -766,6 +781,12 @@ pub fn genesis() -> Genesis {
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         vp_whitelist: vec![],
         tx_whitelist: vec![],
+        epochs_per_year: 105_120, /* seconds in yr (60*60*24*365) div seconds
+                                   * per epoch (300) */
+        pos_gain_p: dec!(0.1),
+        pos_gain_d: dec!(0.1),
+        staked_ratio: dec!(0.4),
+        pos_reward_rate: dec!(0.1),
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
