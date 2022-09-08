@@ -4,6 +4,7 @@ use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::HEXLOWER;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -374,7 +375,7 @@ impl<T: Into<Vec<u8>>> From<T> for IntentId {
 
 impl Display for IntentId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
+        write!(f, "{}", HEXLOWER.encode(&self.0))
     }
 }
 

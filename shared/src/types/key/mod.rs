@@ -79,7 +79,7 @@ pub enum VerifySigError {
 #[derive(Error, Debug)]
 pub enum ParsePublicKeyError {
     #[error("Invalid public key hex: {0}")]
-    InvalidHex(hex::FromHexError),
+    InvalidHex(data_encoding::DecodeError),
     #[error("Invalid public key encoding: {0}")]
     InvalidEncoding(std::io::Error),
     #[error("Parsed public key does not belong to desired scheme")]
@@ -90,7 +90,7 @@ pub enum ParsePublicKeyError {
 #[derive(Error, Debug)]
 pub enum ParseSignatureError {
     #[error("Invalid signature hex: {0}")]
-    InvalidHex(hex::FromHexError),
+    InvalidHex(data_encoding::DecodeError),
     #[error("Invalid signature encoding: {0}")]
     InvalidEncoding(std::io::Error),
     #[error("Parsed signature does not belong to desired scheme")]
@@ -101,7 +101,7 @@ pub enum ParseSignatureError {
 #[derive(Error, Debug)]
 pub enum ParseSecretKeyError {
     #[error("Invalid secret key hex: {0}")]
-    InvalidHex(hex::FromHexError),
+    InvalidHex(data_encoding::DecodeError),
     #[error("Invalid secret key encoding: {0}")]
     InvalidEncoding(std::io::Error),
     #[error("Parsed secret key does not belong to desired scheme")]

@@ -21,6 +21,7 @@ pub struct Identity {
 // TODO this is needed because libp2p does not export ed255519 serde
 // feature maybe a MR for libp2p to export theses functions ?
 mod keypair_serde {
+    use data_encoding::HEXLOWER;
     use libp2p::identity::ed25519::Keypair;
     use serde::de::Error;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -33,7 +34,7 @@ mod keypair_serde {
         S: Serializer,
     {
         let bytes = value.encode();
-        let string = hex::encode(&bytes[..]);
+        let string = HEXLOWER.encode(&bytes[..]);
         string.serialize(serializer)
     }
     pub fn deserialize<'d, D>(deserializer: D) -> Result<Keypair, D::Error>
@@ -41,7 +42,8 @@ mod keypair_serde {
         D: Deserializer<'d>,
     {
         let string = String::deserialize(deserializer)?;
-        let mut bytes = hex::decode(&string).map_err(Error::custom)?;
+        let mut bytes =
+            HEXLOWER.decode(string.as_ref()).map_err(Error::custom)?;
         Keypair::decode(bytes.as_mut()).map_err(Error::custom)
     }
 }
