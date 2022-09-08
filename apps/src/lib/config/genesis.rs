@@ -29,7 +29,6 @@ pub mod genesis_config {
     use eyre::Context;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::{EpochDuration, Parameters};
-    use namada::ledger::pos::types::BasisPoints;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::address::Address;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
@@ -248,21 +247,21 @@ pub mod genesis_config {
         pub unbonding_len: u64,
         // Votes per token (in basis points).
         // XXX: u64 doesn't work with toml-rs!
-        pub votes_per_token: u64,
+        pub votes_per_token: Decimal,
         // Reward for proposing a block.
         // XXX: u64 doesn't work with toml-rs!
-        pub block_proposer_reward: u64,
+        pub block_proposer_reward: Decimal,
         // Reward for voting on a block.
         // XXX: u64 doesn't work with toml-rs!
-        pub block_vote_reward: u64,
+        pub block_vote_reward: Decimal,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote (in basis points).
         // XXX: u64 doesn't work with toml-rs!
-        pub duplicate_vote_slash_rate: u64,
+        pub duplicate_vote_slash_rate: Decimal,
         // Portion of a validator's stake that should be slashed on a
         // light client attack (in basis points).
         // XXX: u64 doesn't work with toml-rs!
-        pub light_client_attack_slash_rate: u64,
+        pub light_client_attack_slash_rate: Decimal,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -547,17 +546,15 @@ pub mod genesis_config {
             max_validator_slots: config.pos_params.max_validator_slots,
             pipeline_len: config.pos_params.pipeline_len,
             unbonding_len: config.pos_params.unbonding_len,
-            votes_per_token: BasisPoints::new(
-                config.pos_params.votes_per_token,
-            ),
+            votes_per_token: config.pos_params.votes_per_token,
             block_proposer_reward: config.pos_params.block_proposer_reward,
             block_vote_reward: config.pos_params.block_vote_reward,
-            duplicate_vote_slash_rate: BasisPoints::new(
-                config.pos_params.duplicate_vote_slash_rate,
-            ),
-            light_client_attack_slash_rate: BasisPoints::new(
-                config.pos_params.light_client_attack_slash_rate,
-            ),
+            duplicate_vote_slash_rate: config
+                .pos_params
+                .duplicate_vote_slash_rate,
+            light_client_attack_slash_rate: config
+                .pos_params
+                .light_client_attack_slash_rate,
         };
 
         let mut genesis = Genesis {
