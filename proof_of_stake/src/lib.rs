@@ -91,6 +91,7 @@ pub trait PosReadOnly {
     /// Cryptographic public key type
     type PublicKey: Debug
         + Clone
+        + TryInto<EthAddress>
         + BorshDeserialize
         + BorshSerialize
         + BorshSchema;
@@ -160,29 +161,17 @@ pub trait PosReadOnly {
         key: &Self::Address,
     ) -> Option<Self::PublicKey>;
 
-    /// Read PoS map from eth address derived from cold keys to native addresses
-    fn read_eth_cold_key_addresses(&self) -> EthKeyAddresses<Self::Address>;
+    /// Read PoS map from eth address derived from cold or hot keys to native
+    /// addresses
+    fn read_eth_key_addresses(&self) -> EthKeyAddresses<Self::Address>;
 
-    /// Read PoS map from eth address derived from hot keys to native addresses
-    fn read_eth_hot_key_addresses(&self) -> EthKeyAddresses<Self::Address>;
-
-    /// Try to find a native address associated with the given eth address
-    /// derived from a eth cold key
-    fn find_address_from_eth_cold_key_address(
+    /// Try to find a native address associated with the given Ethereum address
+    /// derived from an Ethereum cold or hot key
+    fn find_address_from_eth_key_address(
         &self,
         eth_addr: &EthAddress,
     ) -> Option<Self::Address> {
-        let addresses = self.read_eth_cold_key_addresses();
-        addresses.get(eth_addr).cloned()
-    }
-
-    /// Try to find a native address associated with the given eth address
-    /// derived from a eth hot key
-    fn find_address_from_eth_hot_key_address(
-        &self,
-        eth_addr: &EthAddress,
-    ) -> Option<Self::Address> {
-        let addresses = self.read_eth_hot_key_addresses();
+        let addresses = self.read_eth_key_addresses();
         addresses.get(eth_addr).cloned()
     }
 }
@@ -257,6 +246,10 @@ pub trait PosActions: PosReadOnly {
         value: ValidatorEthKey<Self::PublicKey>,
     );
 
+    /// Write PoS map from eth address derived from cold or hot keys to native
+    /// addresses
+    fn write_eth_key_addresses(&self, value: EthKeyAddresses<Self::Address>);
+
     /// Delete an emptied PoS bond (validator self-bond or a delegation).
     fn delete_bond(&mut self, key: &BondId<Self::Address>);
     /// Delete an emptied PoS unbond (unbonded tokens from validator self-bond
@@ -296,6 +289,18 @@ pub trait PosActions: PosReadOnly {
                     address.clone(),
                 ),
             );
+        }
+        let convert_key_to_addr = |k| {
+            k.try_into()
+                .map_err(|_| BecomeValidatorError::SecpKeyConversion)
+        };
+        let eth_addresses_map = self.read_eth_key_addresses();
+        let have_duped_key = eth_key_reverse_map
+            .contains_key(&convert_key_to_addr(eth_cold_key))
+            || eth_key_reverse_map
+                .contains_key(&convert_key_to_addr(eth_hot_key));
+        if have_duped_key {
+            return Err(BecomeValidatorError::DupedEthKeyFound);
         }
         let BecomeValidatorData {
             consensus_key,
@@ -584,6 +589,7 @@ pub trait PosBase {
     type PublicKey: 'static
         + Debug
         + Clone
+        + TryInto<EthAddress>
         + BorshDeserialize
         + BorshSerialize
         + BorshSchema;
@@ -707,6 +713,12 @@ pub trait PosBase {
         address: &Self::Address,
         value: &ValidatorEthKey<Self::PublicKey>,
     );
+    /// Write PoS map from eth address derived from cold or hot keys to native
+    /// addresses
+    fn write_eth_key_addresses(
+        &mut self,
+        value: &EthKeyAddresses<Self::Address>,
+    );
     /// Initialize staking reward account with the given public key.
     fn init_staking_reward_account(
         &mut self,
@@ -757,6 +769,8 @@ pub trait PosBase {
             total_bonded_balance,
         } = init_genesis(params, validators, current_epoch)?;
 
+        let mut eth_key_reverse_map = HashMap::default();
+
         for res in validators {
             let GenesisValidatorData {
                 ref address,
@@ -786,7 +800,22 @@ pub trait PosBase {
                 &staking_reward_address,
                 &staking_reward_key,
             );
+            let convert_key_to_addr =
+                |k| k.try_into().map_err(|_| GenesisError::SecpKeyConversion);
+            if eth_key_reverse_map
+                .insert(convert_key_to_addr(&eth_cold_key)?, address)
+                .is_some()
+            {
+                return Err(GenesisError::DupedEthKeyFound);
+            }
+            if eth_key_reverse_map
+                .insert(convert_key_to_addr(&eth_hot_key)?, address)
+                .is_some()
+            {
+                return Err(GenesisError::DupedEthKeyFound);
+            }
         }
+        self.write_eth_key_addresses(eth_key_reverse_map);
         self.write_validator_set(&validator_set);
         self.write_total_voting_power(&total_voting_power);
         // Credit the bonded tokens to the PoS account
@@ -980,6 +1009,10 @@ pub trait PosBase {
 pub enum GenesisError {
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
+    #[error("Ethereum address can only be of secp kind")]
+    SecpKeyConversion,
+    #[error("Duplicate Ethereum key found")]
+    DupedEthKeyFound,
 }
 
 #[allow(missing_docs)]
@@ -992,6 +1025,10 @@ pub enum BecomeValidatorError<Address: Display + Debug> {
          address {0}"
     )]
     StakingRewardAddressEqValidatorAddress(Address),
+    #[error("Ethereum address can only be of secp kind")]
+    SecpKeyConversion,
+    #[error("Duplicate Ethereum key found")]
+    DupedEthKeyFound,
 }
 
 #[allow(missing_docs)]
