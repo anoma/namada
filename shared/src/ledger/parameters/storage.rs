@@ -6,6 +6,11 @@ const EPOCH_DURATION_KEY: &str = "epoch_duration";
 const VP_WHITELIST_KEY: &str = "vp_whitelist";
 const TX_WHITELIST_KEY: &str = "tx_whitelist";
 const MAX_EXPECTED_TIME_PER_BLOCK_KEY: &str = "max_expected_time_per_block";
+const EPOCHS_PER_YEAR_KEY: &str = "epochs_per_year";
+const POS_GAIN_P_KEY: &str = "pos_gain_p";
+const POS_GAIN_D_KEY: &str = "pos_gain_d";
+const STAKED_RATIO_KEY: &str = "staked_ratio_key";
+const POS_REWARD_RATE_KEY: &str = "pos_reward_rate_key";
 
 /// Returns if the key is a parameter key.
 pub fn is_parameter_key(key: &Key) -> bool {
@@ -52,6 +57,46 @@ pub fn is_vp_whitelist_key(key: &Key) -> bool {
     ] if addr == &ADDRESS && vp_whitelist == VP_WHITELIST_KEY)
 }
 
+/// Returns if the key is the epoch_per_year key.
+pub fn is_epochs_per_year_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+        DbKeySeg::AddressSeg(addr),
+        DbKeySeg::StringSeg(epochs_per_year),
+    ] if addr == &ADDRESS && epochs_per_year == EPOCHS_PER_YEAR_KEY)
+}
+
+/// Returns if the key is the pos_gain_p key.
+pub fn is_pos_gain_p_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+        DbKeySeg::AddressSeg(addr),
+        DbKeySeg::StringSeg(pos_gain_p),
+    ] if addr == &ADDRESS && pos_gain_p == POS_GAIN_P_KEY)
+}
+
+/// Returns if the key is the pos_gain_d key.
+pub fn is_pos_gain_d_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+        DbKeySeg::AddressSeg(addr),
+        DbKeySeg::StringSeg(pos_gain_d),
+    ] if addr == &ADDRESS && pos_gain_d == POS_GAIN_D_KEY)
+}
+
+/// Returns if the key is the staked ratio key.
+pub fn is_staked_ratio_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+        DbKeySeg::AddressSeg(addr),
+        DbKeySeg::StringSeg(staked_ratio),
+    ] if addr == &ADDRESS && staked_ratio == STAKED_RATIO_KEY)
+}
+
+/// Returns if the key is the PoS reward rate key.
+pub fn is_pos_reward_rate_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+        DbKeySeg::AddressSeg(addr),
+        DbKeySeg::StringSeg(pos_reward_rate),
+    ] if addr == &ADDRESS && pos_reward_rate == POS_REWARD_RATE_KEY)
+}
+
 /// Storage key used for epoch parameter.
 pub fn get_epoch_duration_storage_key() -> Key {
     Key {
@@ -82,12 +127,62 @@ pub fn get_tx_whitelist_storage_key() -> Key {
     }
 }
 
-/// Storage key used for tx whitelist parameter.
+/// Storage key used for max_epected_time_per_block parameter.
 pub fn get_max_expected_time_per_block_key() -> Key {
     Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(MAX_EXPECTED_TIME_PER_BLOCK_KEY.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for epochs_per_year parameter.
+pub fn get_epochs_per_year_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(EPOCHS_PER_YEAR_KEY.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for pos_gain_p parameter.
+pub fn get_pos_gain_p_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(POS_GAIN_P_KEY.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for pos_gain_d parameter.
+pub fn get_pos_gain_d_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(POS_GAIN_D_KEY.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for staked ratio parameter.
+pub fn get_staked_ratio_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(STAKED_RATIO_KEY.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for staked ratio parameter.
+pub fn get_pos_reward_rate_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(POS_REWARD_RATE_KEY.to_string()),
         ],
     }
 }

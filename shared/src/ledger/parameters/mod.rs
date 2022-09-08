@@ -4,6 +4,7 @@ pub mod storage;
 use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use rust_decimal::Decimal;
 use thiserror::Error;
 
 use self::storage as parameter_storage;
@@ -122,8 +123,16 @@ pub struct Parameters {
     pub vp_whitelist: Vec<String>,
     /// Whitelisted tx hashes
     pub tx_whitelist: Vec<String>,
-    // TODO: add more parameters here?
-    // PoS: p_gain, d_gain, staked_ratio_last_epoch, reward_rate_last_epoch
+    /// Expected number of epochs per year
+    pub epochs_per_year: u64,
+    /// PoS gain p
+    pub pos_gain_p: Decimal,
+    /// PoS gain d
+    pub pos_gain_d: Decimal,
+    /// PoS staked ratio
+    pub staked_ratio: Decimal,
+    /// PoS reward rate last epoch
+    pub pos_reward_rate: Decimal,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -329,14 +338,72 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
+    // read epochs per year
+    let epochs_per_year_key = storage::get_epochs_per_year_key();
+    let (value, gas_epy) = storage
+        .read(&epochs_per_year_key)
+        .map_err(ReadError::StorageError)?;
+    let epochs_per_year: u64 =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
+    // read PoS gain P
+    let pos_gain_p_key = storage::get_pos_gain_p_key();
+    let (value, gas_gain_p) = storage
+        .read(&pos_gain_p_key)
+        .map_err(ReadError::StorageError)?;
+    let pos_gain_p: Decimal =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
+    // read PoS gain D
+    let pos_gain_d_key = storage::get_pos_gain_d_key();
+    let (value, gas_gain_d) = storage
+        .read(&pos_gain_d_key)
+        .map_err(ReadError::StorageError)?;
+    let pos_gain_d: Decimal =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
+    // read staked ratio
+    let staked_ratio_key = storage::get_staked_ratio_key();
+    let (value, gas_staked) = storage
+        .read(&staked_ratio_key)
+        .map_err(ReadError::StorageError)?;
+    let staked_ratio: Decimal =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
+    // read PoS reward_rate
+    let pos_reward_rate_key = storage::get_pos_reward_rate_key();
+    let (value, gas_reward) = storage
+        .read(&pos_reward_rate_key)
+        .map_err(ReadError::StorageError)?;
+    let pos_reward_rate: Decimal =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
     Ok((
         Parameters {
             epoch_duration,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            staked_ratio,
+            pos_reward_rate,
         },
-        gas_epoch + gas_tx + gas_vp + gas_time,
+        gas_epoch
+            + gas_tx
+            + gas_vp
+            + gas_time
+            + gas_epy
+            + gas_gain_p
+            + gas_gain_d
+            + gas_staked
+            + gas_reward,
     ))
 }
 
