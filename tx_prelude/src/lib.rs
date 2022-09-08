@@ -24,7 +24,8 @@ pub use namada::ledger::parameters::storage as parameters_storage;
 pub use namada::ledger::storage::types::encode;
 use namada::ledger::storage_api;
 pub use namada::ledger::storage_api::{
-    iter_prefix, iter_prefix_bytes, StorageRead, StorageWrite,
+    iter_prefix, iter_prefix_bytes, rev_iter_prefix, rev_iter_prefix_bytes,
+    StorageRead, StorageWrite,
 };
 pub use namada::ledger::treasury::storage as treasury_storage;
 pub use namada::ledger::tx_env::TxEnv;
@@ -174,6 +175,17 @@ impl StorageRead<'_> for Ctx {
         let prefix = prefix.to_string();
         let iter_id = unsafe {
             anoma_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        };
+        Ok(KeyValIterator(iter_id, PhantomData))
+    }
+
+    fn rev_iter_prefix(
+        &self,
+        prefix: &storage::Key,
+    ) -> storage_api::Result<Self::PrefixIter> {
+        let prefix = prefix.to_string();
+        let iter_id = unsafe {
+            anoma_tx_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
         };
         Ok(KeyValIterator(iter_id, PhantomData))
     }

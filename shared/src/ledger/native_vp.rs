@@ -186,6 +186,13 @@ where
         self.ctx.iter_prefix(prefix).into_storage_result()
     }
 
+    fn rev_iter_prefix(
+        &self,
+        prefix: &crate::types::storage::Key,
+    ) -> storage_api::Result<Self::PrefixIter> {
+        self.ctx.rev_iter_prefix(prefix).into_storage_result()
+    }
+
     fn iter_next(
         &self,
         iter: &mut Self::PrefixIter,
@@ -245,6 +252,13 @@ where
         prefix: &crate::types::storage::Key,
     ) -> Result<Self::PrefixIter, storage_api::Error> {
         self.ctx.iter_prefix(prefix).into_storage_result()
+    }
+
+    fn rev_iter_prefix(
+        &self,
+        prefix: &crate::types::storage::Key,
+    ) -> storage_api::Result<Self::PrefixIter> {
+        self.ctx.rev_iter_prefix(prefix).into_storage_result()
     }
 
     fn iter_next(
@@ -394,6 +408,17 @@ where
         prefix: &Key,
     ) -> Result<Self::PrefixIter, Self::Error> {
         vp_env::iter_prefix(
+            &mut *self.gas_meter.borrow_mut(),
+            self.storage,
+            prefix,
+        )
+    }
+
+    fn rev_iter_prefix(
+        &self,
+        prefix: &Key,
+    ) -> Result<Self::PrefixIter, Self::Error> {
+        vp_env::rev_iter_prefix(
             &mut *self.gas_meter.borrow_mut(),
             self.storage,
             prefix,

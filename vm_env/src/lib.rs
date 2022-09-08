@@ -48,8 +48,16 @@ pub mod tx {
         // Delete the given key and its value
         pub fn anoma_tx_delete(key_ptr: u64, key_len: u64);
 
-        // Get an ID of a data iterator with key prefix
+        // Get an ID of a data iterator with key prefix, ordered by storage
+        // keys.
         pub fn anoma_tx_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
+
+        // Get an ID of a data iterator with key prefix, reverse ordered by
+        // storage keys.
+        pub fn anoma_tx_rev_iter_prefix(
+            prefix_ptr: u64,
+            prefix_len: u64,
+        ) -> u64;
 
         // Returns the size of the value (can be 0), or -1 if there's no next
         // value. If a value is found, it will be placed in the read
@@ -133,8 +141,16 @@ pub mod vp {
         // Returns 1 if the key is present in posterior state, -1 otherwise.
         pub fn anoma_vp_has_key_post(key_ptr: u64, key_len: u64) -> i64;
 
-        // Get an ID of a data iterator with key prefix
+        // Get an ID of a data iterator with key prefix, ordered by storage
+        // keys.
         pub fn anoma_vp_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
+
+        // Get an ID of a data iterator with key prefix, reverse ordered by
+        // storage keys.
+        pub fn anoma_vp_rev_iter_prefix(
+            prefix_ptr: u64,
+            prefix_len: u64,
+        ) -> u64;
 
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if

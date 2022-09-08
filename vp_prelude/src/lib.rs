@@ -23,7 +23,8 @@ pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::*;
 pub use namada::ledger::governance::storage as gov_storage;
 pub use namada::ledger::storage_api::{
-    self, iter_prefix, iter_prefix_bytes, StorageRead,
+    self, iter_prefix, iter_prefix_bytes, rev_iter_prefix,
+    rev_iter_prefix_bytes, StorageRead,
 };
 pub use namada::ledger::vp_env::VpEnv;
 pub use namada::ledger::{parameters, pos as proof_of_stake};
@@ -238,6 +239,14 @@ impl VpEnv for Ctx {
         self.pre().iter_prefix(prefix).into_env_result()
     }
 
+    fn rev_iter_prefix(
+        &self,
+        prefix: &storage::Key,
+    ) -> Result<Self::PrefixIter, Self::Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        self.pre().rev_iter_prefix(prefix).into_env_result()
+    }
+
     fn iter_pre_next(
         &self,
         iter: &mut Self::PrefixIter,
@@ -339,6 +348,14 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
         iter_prefix_impl(prefix)
     }
 
+    fn rev_iter_prefix(
+        &self,
+        prefix: &storage::Key,
+    ) -> storage_api::Result<Self::PrefixIter> {
+        // Note that this is the same as `CtxPostStorageRead`
+        rev_iter_prefix_impl(prefix)
+    }
+
     fn iter_next(
         &self,
         iter: &mut Self::PrefixIter,
@@ -416,6 +433,14 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
         iter_prefix_impl(prefix)
     }
 
+    fn rev_iter_prefix(
+        &self,
+        prefix: &storage::Key,
+    ) -> storage_api::Result<Self::PrefixIter> {
+        // Note that this is the same as `CtxPreStorageRead`
+        rev_iter_prefix_impl(prefix)
+    }
+
     fn iter_next(
         &self,
         iter: &mut Self::PrefixIter,
@@ -450,6 +475,16 @@ fn iter_prefix_impl(
     let prefix = prefix.to_string();
     let iter_id = unsafe {
         anoma_vp_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+    };
+    Ok(KeyValIterator(iter_id, PhantomData))
+}
+
+fn rev_iter_prefix_impl(
+    prefix: &storage::Key,
+) -> Result<KeyValIterator<(String, Vec<u8>)>, storage_api::Error> {
+    let prefix = prefix.to_string();
+    let iter_id = unsafe {
+        anoma_vp_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
     };
     Ok(KeyValIterator(iter_id, PhantomData))
 }

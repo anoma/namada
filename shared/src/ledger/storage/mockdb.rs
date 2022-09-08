@@ -431,7 +431,28 @@ impl<'iter> DBIter<'iter> for MockDB {
         let db_prefix = "subspace/".to_owned();
         let prefix = format!("{}{}", db_prefix, prefix);
         let iter = self.0.borrow().clone().into_iter();
-        MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
+        MockPrefixIterator::new(
+            MockIterator {
+                prefix,
+                iter,
+                reverse_order: false,
+            },
+            db_prefix,
+        )
+    }
+
+    fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter {
+        let db_prefix = "subspace/".to_owned();
+        let prefix = format!("{}{}", db_prefix, prefix);
+        let iter = self.0.borrow().clone().into_iter();
+        MockPrefixIterator::new(
+            MockIterator {
+                prefix,
+                iter,
+                reverse_order: true,
+            },
+            db_prefix,
+        )
     }
 }
 
@@ -441,6 +462,8 @@ pub struct MockIterator {
     prefix: String,
     /// The concrete iterator
     pub iter: btree_map::IntoIter<String, Vec<u8>>,
+    /// Is the iterator in reverse order?
+    reverse_order: bool,
 }
 
 /// A prefix iterator for the [`MockDB`].
@@ -450,12 +473,23 @@ impl Iterator for MockIterator {
     type Item = KVBytes;
 
     fn next(&mut self) -> Option<Self::Item> {
-        for (key, val) in &mut self.iter {
-            if key.starts_with(&self.prefix) {
-                return Some((
-                    Box::from(key.as_bytes()),
-                    Box::from(val.as_slice()),
-                ));
+        if self.reverse_order {
+            for (key, val) in (&mut self.iter).rev() {
+                if key.starts_with(&self.prefix) {
+                    return Some((
+                        Box::from(key.as_bytes()),
+                        Box::from(val.as_slice()),
+                    ));
+                }
+            }
+        } else {
+            for (key, val) in &mut self.iter {
+                if key.starts_with(&self.prefix) {
+                    return Some((
+                        Box::from(key.as_bytes()),
+                        Box::from(val.as_slice()),
+                    ));
+                }
             }
         }
         None

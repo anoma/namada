@@ -806,24 +806,36 @@ impl<'iter> DBIter<'iter> for RocksDB {
         &'iter self,
         prefix: &Key,
     ) -> PersistentPrefixIterator<'iter> {
-        let db_prefix = "subspace/".to_owned();
-        let prefix = format!("{}{}", db_prefix, prefix);
-
-        let mut read_opts = ReadOptions::default();
-        // don't use the prefix bloom filter
-        read_opts.set_total_order_seek(true);
-        let mut upper_prefix = prefix.clone().into_bytes();
-        if let Some(last) = upper_prefix.pop() {
-            upper_prefix.push(last + 1);
-        }
-        read_opts.set_iterate_upper_bound(upper_prefix);
-
-        let iter = self.0.iterator_opt(
-            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
-            read_opts,
-        );
-        PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
+        iter_prefix(self, prefix, Direction::Forward)
     }
+
+    fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter {
+        iter_prefix(self, prefix, Direction::Reverse)
+    }
+}
+
+fn iter_prefix<'iter>(
+    db: &'iter RocksDB,
+    prefix: &Key,
+    direction: Direction,
+) -> PersistentPrefixIterator<'iter> {
+    let db_prefix = "subspace/".to_owned();
+    let prefix = format!("{}{}", db_prefix, prefix);
+
+    let mut read_opts = ReadOptions::default();
+    // don't use the prefix bloom filter
+    read_opts.set_total_order_seek(true);
+    let mut upper_prefix = prefix.clone().into_bytes();
+    if let Some(last) = upper_prefix.pop() {
+        upper_prefix.push(last + 1);
+    }
+    read_opts.set_iterate_upper_bound(upper_prefix);
+
+    let iter = db.0.iterator_opt(
+        IteratorMode::From(prefix.as_bytes(), direction),
+        read_opts,
+    );
+    PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
 }
 
 #[derive(Debug)]

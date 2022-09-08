@@ -335,6 +335,7 @@ mod native_tx_host_env {
     ));
     native_host_fn!(tx_delete(key_ptr: u64, key_len: u64));
     native_host_fn!(tx_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
+    native_host_fn!(tx_rev_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
     native_host_fn!(tx_iter_next(iter_id: u64) -> i64);
     native_host_fn!(tx_insert_verifier(addr_ptr: u64, addr_len: u64));
     native_host_fn!(tx_update_validity_predicate(
