@@ -927,6 +927,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "buf_redux"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b953a6887648bb07a535631f2bc00fbdb2a2216f135552cb3f534ed136b9c07f"
+dependencies = [
+ "memchr",
+ "safemem",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4247,6 +4257,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
+name = "multipart"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00dec633863867f29cb39df64a397cdf4a6354708ddd7759f70c7fb51c5f9182"
+dependencies = [
+ "buf_redux",
+ "httparse",
+ "log 0.4.17",
+ "mime 0.3.16",
+ "mime_guess",
+ "quick-error 1.2.3",
+ "rand 0.8.5",
+ "safemem",
+ "tempfile",
+ "twoway",
+]
+
+[[package]]
 name = "multistream-select"
 version = "0.10.3"
 source = "git+https://github.com/heliaxdev/rust-libp2p.git?rev=1abe349c231eb307d3dbe03f3ffffc6cf5e9084d#1abe349c231eb307d3dbe03f3ffffc6cf5e9084d"
@@ -4340,6 +4368,7 @@ dependencies = [
  "borsh",
  "byte-unit",
  "byteorder",
+ "bytes 1.2.1",
  "cargo-watch",
  "clap 3.0.0-beta.2",
  "clarity",
@@ -4413,6 +4442,7 @@ dependencies = [
  "tracing 0.1.36",
  "tracing-log",
  "tracing-subscriber 0.3.15",
+ "warp",
  "web30",
  "websocket",
  "winapi 0.3.9",
@@ -6267,6 +6297,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "scoped-tls"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea6a9290e3c9cf0f18145ef7ffa62d68ee0bf5fcd651017e586dc7fd5da448c2"
+
+[[package]]
 name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7499,6 +7535,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-tungstenite"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "511de3f85caf1c98983545490c3d09685fa8eb634e57eec22bb4db271f46cbd8"
+dependencies = [
+ "futures-util",
+ "log 0.4.17",
+ "pin-project 1.0.12",
+ "tokio",
+ "tungstenite 0.14.0",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7878,6 +7927,25 @@ dependencies = [
 
 [[package]]
 name = "tungstenite"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0b2d8558abd2e276b0a8df5c05a2ec762609344191e5fd23e292c910e9165b5"
+dependencies = [
+ "base64 0.13.0",
+ "byteorder",
+ "bytes 1.2.1",
+ "http",
+ "httparse",
+ "log 0.4.17",
+ "rand 0.8.5",
+ "sha-1 0.9.8",
+ "thiserror",
+ "url 2.3.0",
+ "utf-8",
+]
+
+[[package]]
+name = "tungstenite"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ad3713a14ae247f22a728a0456a545df14acf3867f905adff84be99e23b3ad1"
@@ -7893,6 +7961,15 @@ dependencies = [
  "thiserror",
  "url 2.3.0",
  "utf-8",
+]
+
+[[package]]
+name = "twoway"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59b11b2b5241ba34be09c3cc85a36e56e48f9888862e19cedf23336d35316ed1"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -8139,6 +8216,36 @@ checksum = "1ce8a968cb1cd110d136ff8b819a556d6fb6d919363c61534f6860c7eb172ba0"
 dependencies = [
  "log 0.4.17",
  "try-lock",
+]
+
+[[package]]
+name = "warp"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cef4e1e9114a4b7f1ac799f16ce71c14de5778500c5450ec6b7b920c55b587e"
+dependencies = [
+ "bytes 1.2.1",
+ "futures-channel",
+ "futures-util",
+ "headers",
+ "http",
+ "hyper 0.14.20",
+ "log 0.4.17",
+ "mime 0.3.16",
+ "mime_guess",
+ "multipart",
+ "percent-encoding 2.1.0",
+ "pin-project 1.0.12",
+ "scoped-tls",
+ "serde 1.0.144",
+ "serde_json",
+ "serde_urlencoded",
+ "tokio",
+ "tokio-stream",
+ "tokio-tungstenite",
+ "tokio-util 0.6.10",
+ "tower-service",
+ "tracing 0.1.36",
 ]
 
 [[package]]
