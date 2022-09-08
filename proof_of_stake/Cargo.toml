@@ -20,7 +20,8 @@ hex = "0.4.3"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 derivative = "2.2.0"
-rust_decimal = "1.14.3"
+rust_decimal = { version = "1.26.1", features = ["borsh"] }
+rust_decimal_macros = "1.26.1"
 tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 
 
