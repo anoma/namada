@@ -1407,7 +1407,8 @@ where
         ));
     }
     let raw_current_stake: i128 = current_stake.into();
-    let slashed_amount: TokenChange = (slash.rate * raw_current_stake).into();
+    let slashed_amount: TokenChange =
+        decimal_mult_i128(slash.rate, raw_current_stake).into();
     let token_change = -slashed_amount;
 
     // Apply slash at pipeline offset
@@ -1849,7 +1850,8 @@ where
                 for slash in &slashes {
                     if slash.epoch >= *epoch_start {
                         let raw_delta: u64 = slashed_bond_delta.into();
-                        let raw_slashed_delta = slash.rate * raw_delta;
+                        let raw_slashed_delta =
+                            decimal_mult_u64(slash.rate, raw_delta);
                         let slashed_delta =
                             TokenAmount::from(raw_slashed_delta);
                         slashed_bond_delta -= slashed_delta;
@@ -2146,8 +2148,9 @@ where
             for slash in &slashes {
                 if slash.epoch >= *epoch_start && slash.epoch <= *epoch_end {
                     let raw_delta: u64 = delta.into();
-                    let current_slashed =
-                        TokenAmount::from(slash.rate * raw_delta);
+                    let current_slashed = TokenAmount::from(decimal_mult_u64(
+                        slash.rate, raw_delta,
+                    ));
                     slashed += current_slashed;
                     delta -= current_slashed;
                 }
