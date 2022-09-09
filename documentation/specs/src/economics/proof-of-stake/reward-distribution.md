@@ -76,12 +76,12 @@ updateProducts
 -> HashMap<BondId, Token::amount>>
 
 updateProducts validatorProducts activeSet currentEpoch = 
-	let stake = PoS.readValidatorTotalDeltas validator currentEpoch
-        reward = PoS.reward stake currentEpoch
-		entries = lookup validatorProducts validator
-	    lastProduct = lookup entries (Epoch (currentEpoch - 1))
-	in insert currentEpoch (product*(1+rsratio)) entries
-	
+ let stake = PoS.readValidatorTotalDeltas validator currentEpoch
+     reward = PoS.reward stake currentEpoch
+     rsratio = reward / stake
+     entries = lookup validatorProducts validator
+     lastProduct = lookup entries (Epoch (currentEpoch - 1))
+ in insert currentEpoch (lastProduct*(1+rsratio)) entries
 ```
 
 
