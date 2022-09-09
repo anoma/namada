@@ -160,7 +160,6 @@ pub mod genesis_config {
         pub validator: HashMap<String, ValidatorConfig>,
     }
 
-    // TODO add eth keys here
     #[derive(Clone, Default, Debug, Deserialize, Serialize)]
     pub struct ValidatorConfig {
         // Public key for consensus. (default: generate)
@@ -923,11 +922,18 @@ pub mod tests {
         let srkp_arr = staking_reward_keypair.try_to_vec().unwrap();
         let (protocol_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
+
+        // TODO: derive validator eth address from an eth keypair
+        let eth_cold_gov_keypair: common::SecretKey = secp256k1::SigScheme::generate(&mut rng).try_to_sk().unwrap();
+        let eth_hot_bridge_keypair: common::SecretKey = secp256k1::SigScheme::generate(&mut rng).try_to_sk().unwrap();
+
         println!("address: {}", address);
         println!("staking_reward_address: {}", staking_reward_address);
         println!("keypair: {:?}", kp_arr);
         println!("staking_reward_keypair: {:?}", srkp_arr);
         println!("protocol_keypair: {:?}", protocol_keypair);
         println!("dkg_keypair: {:?}", dkg_keypair.try_to_vec().unwrap());
+        println!("eth_cold_gov_keypair: {:?}", eth_cold_gov_keypair.try_to_vec().unwrap());
+        println!("eth_hot_bridge_keypair: {:?}", eth_hot_bridge_keypair.try_to_vec().unwrap());
     }
 }
