@@ -21,6 +21,7 @@ use regex::Regex;
 use serde::{de, Deserialize, Serialize};
 use tendermint::Timeout;
 use tendermint_config::net::Address as TendermintAddress;
+use tendermint_config::TxIndexer;
 use thiserror::Error;
 
 use crate::cli;
@@ -124,6 +125,7 @@ pub struct Tendermint {
     pub instrumentation_prometheus: bool,
     pub instrumentation_prometheus_listen_addr: SocketAddr,
     pub instrumentation_namespace: String,
+    pub tx_indexer: TxIndexer,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -194,6 +196,7 @@ impl Ledger {
                     26661,
                 ),
                 instrumentation_namespace: "anoman_tm".to_string(),
+                tx_indexer: TxIndexer::Kv,
             },
         }
     }
