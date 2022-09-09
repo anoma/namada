@@ -528,7 +528,7 @@ pub async fn query_protocol_parameters(
     );
     println!("{:4}Pipeline length: {}", "", pos_params.pipeline_len);
     println!("{:4}Unbonding length: {}", "", pos_params.unbonding_len);
-    println!("{:4}Votes per token: {}", "", pos_params.votes_per_token);
+    println!("{:4}Votes per token: {}", "", pos_params.tm_votes_per_token);
 }
 
 /// Query PoS bond(s)

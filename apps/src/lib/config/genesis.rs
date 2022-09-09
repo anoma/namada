@@ -258,7 +258,7 @@ pub mod genesis_config {
         pub unbonding_len: u64,
         // Votes per token (in basis points).
         // XXX: u64 doesn't work with toml-rs!
-        pub votes_per_token: u64,
+        pub tm_votes_per_token: Decimal,
         // Reward for proposing a block.
         // XXX: u64 doesn't work with toml-rs!
         pub block_proposer_reward: u64,

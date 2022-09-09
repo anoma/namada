@@ -966,8 +966,8 @@ pub mod testing {
                     // We convert the tokens from micro units to whole tokens
                     // with division by 10^6
                     let vp_before =
-                        params.votes_per_token * (total_delta / TOKENS_PER_NAM);
-                    let vp_after = params.votes_per_token
+                        params.tm_votes_per_token * (total_delta / TOKENS_PER_NAM);
+                    let vp_after = params.tm_votes_per_token
                         * ((total_delta + token_delta) / TOKENS_PER_NAM);
                     // voting power delta
                     let vp_delta = vp_after - vp_before;
@@ -1029,9 +1029,9 @@ pub mod testing {
                             .unwrap_or_default();
                         // We convert the tokens from micro units to whole 
                         // tokens with division by 10^6
-                        let vp_before = params.votes_per_token
+                        let vp_before = params.tm_votes_per_token
                             * (total_delta / TOKENS_PER_NAM);
-                        let vp_after = params.votes_per_token
+                        let vp_after = params.tm_votes_per_token
                             * ((total_delta + token_delta) / TOKENS_PER_NAM);
                         // voting power delta
                         let vp_delta_at_unbonding =
@@ -1105,9 +1105,9 @@ pub mod testing {
                         .unwrap_or_default();
                     // We convert the tokens from micro units to whole tokens
                     // with division by 10^6
-                    let vp_before = params.votes_per_token
+                    let vp_before = params.tm_votes_per_token
                         * (total_delta_cur / TOKENS_PER_NAM);
-                    let vp_after = params.votes_per_token
+                    let vp_after = params.tm_votes_per_token
                         * ((total_delta_cur + token_delta) / TOKENS_PER_NAM);
                     // voting power delta
                     let vp_delta = vp_after - vp_before;
