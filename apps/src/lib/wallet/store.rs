@@ -292,7 +292,8 @@ impl Store {
     /// Note that this removes the validator data.
     pub fn gen_validator_keys(
         eth_bridge_keypair: Option<common::SecretKey>,
-        protocol_keypair: Either<SchemeType, common::SecretKey>,
+        protocol_keypair: Option<common::SecretKey>,
+        protocol_keypair_scheme: SchemeType,
     ) -> ValidatorKeys {
         let eth_bridge_keypair = eth_bridge_keypair
             .map(|k| {
@@ -304,7 +305,8 @@ impl Store {
                 k
             })
             .unwrap_or_else(|| gen_sk(SchemeType::Secp256k1));
-        let protocol_keypair = protocol_keypair.map_left(gen_sk).into_inner();
+        let protocol_keypair =
+            protocol_keypair.unwrap_or_else(|| gen_sk(protocol_keypair_scheme));
         let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
             &mut StdRng::from_entropy(),
         );
