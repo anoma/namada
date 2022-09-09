@@ -28,6 +28,8 @@ use crate::config::genesis::genesis_config::GenesisConfig;
 pub struct ValidatorKeys {
     /// Special keypair for signing protocol txs
     pub protocol_keypair: common::SecretKey,
+    /// Special keypair for signing Ethereum bridge txs
+    pub eth_bridge_keypair: common::SecretKey,
     /// Special session keypair needed by validators for participating
     /// in the DKG protocol
     pub dkg_keypair: Option<DkgKeypair>,
@@ -289,10 +291,10 @@ impl Store {
     ///
     /// Note that this removes the validator data.
     pub fn gen_validator_keys(
-        ethereum_bridge_key: Option<common::SecretKey>,
+        eth_bridge_keypair: Option<common::SecretKey>,
         protocol_keypair: Either<SchemeType, common::SecretKey>,
     ) -> ValidatorKeys {
-        let ethereum_bridge_key = ethereum_bridge_key
+        let eth_bridge_keypair = eth_bridge_keypair
             .map(|k| {
                 if !matches!(&k, common::SecretKey::Secp256k1(_)) {
                     panic!(
@@ -308,7 +310,7 @@ impl Store {
         );
         ValidatorKeys {
             protocol_keypair,
-            ethereum_bridge_key,
+            eth_bridge_keypair,
             dkg_keypair: Some(dkg_keypair.into()),
         }
     }
