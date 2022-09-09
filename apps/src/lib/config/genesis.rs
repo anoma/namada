@@ -268,6 +268,8 @@ pub mod genesis_config {
         // Maximum staking APY
         // XXX: u64 doesn't work with toml-rs!
         pub max_inflation_rate: Decimal,
+        // Target ratio of staked NAM tokens to total NAM tokens
+        pub target_staked_ratio: Decimal,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote (in basis points).
         // XXX: u64 doesn't work with toml-rs!
@@ -570,6 +572,7 @@ pub mod genesis_config {
             max_inflation_rate: config
                 .pos_params
                 .max_inflation_rate,
+            target_staked_ratio: config.pos_params.target_staked_ratio,
             duplicate_vote_slash_rate: config
                 .pos_params
                 .duplicate_vote_slash_rate,

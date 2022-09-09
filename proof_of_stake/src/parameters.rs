@@ -29,6 +29,8 @@ pub struct PosParams {
     pub block_vote_reward: Decimal,
     /// Maximum staking rewards rate per annum
     pub max_inflation_rate: Decimal,
+    /// Target ratio of staked NAM tokens to total NAM tokens
+    pub target_staked_ratio: Decimal,
     /// Portion of validator's stake that should be slashed on a duplicate
     /// vote. Given in basis points (slashed amount per ten thousand tokens).
     pub duplicate_vote_slash_rate: Decimal,
@@ -50,6 +52,8 @@ impl Default for PosParams {
             block_vote_reward: dec!(0.05),
             // PoS inflation of 10%
             max_inflation_rate: dec!(0.1),
+            // target staked ratio of 2/3
+            target_staked_ratio: dec!(0.6667),
             // slash 5%
             duplicate_vote_slash_rate: dec!(0.05),
             // slash 5%
