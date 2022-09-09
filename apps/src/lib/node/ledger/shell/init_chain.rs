@@ -187,6 +187,7 @@ where
         }
 
         // Initialize genesis validator accounts
+        let mut total_non_staked_tokens = token::Amount::default();
         for validator in &genesis.validators {
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.validator_vp_code_path.clone(),
@@ -227,7 +228,8 @@ where
                         .expect("encode public key"),
                 )
                 .expect("Unable to set genesis user public key");
-            // Account balance (tokens no staked in PoS)
+            // Account balance (tokens not staked in PoS)
+            total_non_staked_tokens += validator.non_staked_balance;
             self.storage
                 .write(
                     &token::balance_key(&address::xan(), addr),
@@ -271,6 +273,7 @@ where
                 .map(|validator| &validator.pos_data),
             current_epoch,
         );
+        // Set total supply of staking token in storage
         self.storage
             .write(
                 &total_supply_key(&staking_token_address()),
@@ -279,6 +282,10 @@ where
                     .expect("encode initial total NAM balance"),
             )
             .expect("unable to set total NAM balance in storage");
+
+        // Set total staked tokens (those locked in PoS) in storage
+        // TODO: test that this is correct
+        self.storage.write_total_staked_tokens(&(total_balance - total_non_staked_tokens));
 
         ibc::init_genesis_storage(&mut self.storage);
 

@@ -30,6 +30,7 @@ const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
 const TOTAL_VOTING_POWER_STORAGE_KEY: &str = "total_voting_power";
+const TOTAL_STAKED_TOKENS_STORAGE_KEY: &str = "total_staked_tokens";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -355,6 +356,25 @@ pub fn is_total_voting_power_key(key: &Key) -> bool {
     }
 }
 
+/// Storage key for total staked tokens.
+pub fn total_staked_tokens_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&TOTAL_STAKED_TOKENS_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for total staked tokens?
+pub fn is_total_staked_tokens_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
+            if addr == &ADDRESS && key == TOTAL_STAKED_TOKENS_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Get validator address from bond key
 pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
     match key.get_at(3) {
@@ -454,6 +474,11 @@ where
         decode(value.unwrap()).unwrap()
     }
 
+    fn read_total_staked_tokens(&self) -> Self::TokenAmount {
+        let (value, _gas) = self.read(&total_staked_tokens_key()).unwrap();
+        decode(value.unwrap()).unwrap()
+    }
+
     fn write_pos_params(&mut self, params: &PosParams) {
         self.write(&params_key(), encode(params)).unwrap();
     }
@@ -534,6 +559,11 @@ where
 
     fn write_total_voting_power(&mut self, value: &TotalVotingPowers) {
         self.write(&total_voting_power_key(), encode(value))
+            .unwrap();
+    }
+
+    fn write_total_staked_tokens(&mut self, value: &Self::TokenAmount) {
+        self.write(&total_staked_tokens_key(), encode(value))
             .unwrap();
     }
 

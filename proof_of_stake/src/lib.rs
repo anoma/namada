@@ -623,6 +623,8 @@ pub trait PosBase {
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total voting power of all validators (active and inactive).
     fn read_total_voting_power(&self) -> TotalVotingPowers;
+    /// Read total staked tokens in PoS for all validators (active and inactive).
+    fn read_total_staked_tokens(&self) -> Self::TokenAmount;
 
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
@@ -680,6 +682,8 @@ pub trait PosBase {
     fn write_validator_set(&mut self, value: &ValidatorSets<Self::Address>);
     /// Write PoS total voting power of all validators (active and inactive).
     fn write_total_voting_power(&mut self, value: &TotalVotingPowers);
+    /// Write total staked tokens in PoS for all validators (active and inactive)
+    fn write_total_staked_tokens(&mut self, value: &Self::TokenAmount);
     /// Initialize staking reward account with the given public key.
     fn init_staking_reward_account(
         &mut self,
