@@ -2718,7 +2718,7 @@ checksum = "35391ea974fa5ee869cb094d5b437688fbf3d8127d64d1b9fed5822a1ed39b12"
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=yuji/prost-0.9#be4b2293558361df2f452c60a3e90c6b5e52e225"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?branch=bat/arse-merkle-tree#b03d8df11a6a0cfbd47a1a33cda5b73353bb715d"
 dependencies = [
  "borsh",
  "cfg-if 1.0.0",

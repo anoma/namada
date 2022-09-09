@@ -348,11 +348,8 @@ impl DB for RocksDB {
                                     types::decode(bytes)
                                         .map_err(Error::CodingError)?,
                                 ),
-                                Some(&"store") => merkle_tree_stores.set_store(
-                                    &st,
-                                    types::decode(bytes)
-                                        .map_err(Error::CodingError)?,
-                                ),
+                                Some(&"store") => merkle_tree_stores
+                                    .set_store(st.decode_store(bytes)?),
                                 _ => unknown_key_error(path)?,
                             }
                         }
@@ -484,7 +481,7 @@ impl DB for RocksDB {
                     .map_err(Error::KeyError)?;
                 batch.put(
                     store_key.to_string(),
-                    types::encode(merkle_tree_stores.store(st)),
+                    merkle_tree_stores.store(st).encode(),
                 );
             }
         }
@@ -593,8 +590,7 @@ impl DB for RocksDB {
                 .map_err(|e| Error::DBError(e.into_string()))?;
             match bytes {
                 Some(b) => {
-                    let store = types::decode(b).map_err(Error::CodingError)?;
-                    merkle_tree_stores.set_store(st, store);
+                    merkle_tree_stores.set_store(st.decode_store(b)?);
                 }
                 None => return Ok(None),
             }
