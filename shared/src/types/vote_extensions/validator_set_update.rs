@@ -196,7 +196,7 @@ impl VotingPowersMapExt for VotingPowersMap {
                 let voting_power: u64 = voting_power.into();
 
                 // normalize the voting power
-                // https://github.com/anoma/ethereum-bridge/blob/main/test/utils/utilities.js#L29
+                // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
                 const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
 
                 let voting_power = Ratio::new(voting_power, total_voting_power)
