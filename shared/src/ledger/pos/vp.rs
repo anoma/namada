@@ -16,8 +16,8 @@ use namada_proof_of_stake::{validation, PosReadOnly};
 use thiserror::Error;
 
 use super::{
-    bond_key, is_bond_key, is_params_key, is_total_voting_power_key,
-    is_unbond_key, is_validator_set_key,
+    bond_key, eth_key_addresses_key, is_bond_key, is_params_key,
+    is_total_voting_power_key, is_unbond_key, is_validator_set_key,
     is_validator_staking_reward_address_key, is_validator_total_deltas_key,
     is_validator_voting_power_key, params_key, staking_token_address,
     total_voting_power_key, unbond_key, validator_consensus_key_key,
@@ -422,6 +422,15 @@ where
     ) -> Option<Self::PublicKey> {
         let value = self.ctx.read_pre(&validator_eth_hot_key_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
+    }
+
+    fn read_eth_key_addresses(&self) -> types::EthKeyAddresses<Self::Address> {
+        let value = self
+            .ctx
+            .read_pre(&eth_key_addresses_key())
+            .unwrap()
+            .unwrap();
+        decode(value).unwrap()
     }
 }
 

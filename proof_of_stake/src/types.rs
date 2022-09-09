@@ -43,8 +43,27 @@ pub type ValidatorEthKey<PublicKey> = Epoched<PublicKey, OffsetPipelineLen>;
 pub type EthKeyAddresses<Address> = HashMap<EthAddress, Address>;
 
 /// Eth address derived from secp256k1 key
-#[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct EthAddress([u8; 20]);
+#[derive(
+    Debug,
+    Eq,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
+pub struct EthAddress(pub [u8; 20]);
+
+/// A ref-to-value conversion that may fail
+
+pub trait TryRefTo<T> {
+    /// The error
+    type Error;
+    /// Try to perform the conversion.
+    fn try_ref_to(&self) -> Result<T, Self::Error>;
+}
 
 /// Epoch identifier. Epochs are identified by consecutive natural numbers.
 ///

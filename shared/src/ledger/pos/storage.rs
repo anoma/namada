@@ -633,6 +633,13 @@ where
             .unwrap();
     }
 
+    fn write_eth_key_addresses(
+        &mut self,
+        value: &types::EthKeyAddresses<Self::Address>,
+    ) {
+        self.write(&eth_key_addresses_key(), encode(value)).unwrap();
+    }
+
     fn init_staking_reward_account(
         &mut self,
         address: &Self::Address,

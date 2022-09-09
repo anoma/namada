@@ -20,7 +20,7 @@ pub mod validation;
 
 use core::fmt::Debug;
 use std::collections::{BTreeSet, HashMap};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::num::TryFromIntError;
@@ -34,8 +34,8 @@ use parameters::PosParams;
 use thiserror::Error;
 use types::{
     ActiveValidator, Bonds, Epoch, EthAddress, EthKeyAddresses,
-    GenesisValidator, Slash, SlashType, Slashes, TotalVotingPowers, Unbond,
-    Unbonds, ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet,
+    GenesisValidator, Slash, SlashType, Slashes, TotalVotingPowers, TryRefTo,
+    Unbond, Unbonds, ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet,
     ValidatorSetUpdate, ValidatorSets, ValidatorState, ValidatorStates,
     ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
 };
@@ -275,7 +275,7 @@ pub trait PosActions: PosReadOnly {
         current_epoch: impl Into<Epoch>,
     ) -> Result<(), BecomeValidatorError<Self::Address>>
     where
-        for<'a> &'a Self::PublicKey: TryInto<EthAddress>,
+        Self::PublicKey: TryRefTo<EthAddress>,
     {
         let current_epoch = current_epoch.into();
         let params = self.read_pos_params();
@@ -766,7 +766,7 @@ pub trait PosBase {
         current_epoch: impl Into<Epoch>,
     ) -> Result<(), GenesisError>
     where
-        &'a Self::PublicKey: TryInto<EthAddress>,
+        Self::PublicKey: TryRefTo<EthAddress>,
     {
         let current_epoch = current_epoch.into();
         self.write_pos_params(params);
@@ -1246,8 +1246,13 @@ where
         + BorshDeserialize
         + BorshSerialize
         + BorshSchema,
-    PK: 'a + Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema,
-    &'a PK: TryInto<EthAddress>,
+    PK: 'a
+        + Debug
+        + Clone
+        + BorshDeserialize
+        + BorshSerialize
+        + BorshSchema
+        + TryRefTo<EthAddress>,
 {
     // Accumulate the validator set and total voting power
     let mut active: BTreeSet<WeightedValidator<Address>> = BTreeSet::default();
@@ -1297,10 +1302,10 @@ where
                   eth_hot_key,
               }| {
             let convert_key_to_addr = |k: &'a PK| {
-                k.try_into().map_err(|_| GenesisError::SecpKeyConversion)
+                k.try_ref_to().map_err(|_| GenesisError::SecpKeyConversion)
             };
-            let eth_cold_key_addr = convert_key_to_addr(&eth_cold_key)?;
-            let eth_hot_key_addr = convert_key_to_addr(&eth_hot_key)?;
+            let eth_cold_key_addr = convert_key_to_addr(eth_cold_key)?;
+            let eth_hot_key_addr = convert_key_to_addr(eth_hot_key)?;
             let consensus_key =
                 Epoched::init_at_genesis(consensus_key.clone(), current_epoch);
             let eth_cold_key =
@@ -1483,8 +1488,12 @@ where
         + BorshDeserialize
         + BorshSerialize
         + BorshSchema,
-    PK: Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema,
-    &'a PK: TryInto<EthAddress>,
+    PK: Debug
+        + Clone
+        + BorshDeserialize
+        + BorshSerialize
+        + BorshSchema
+        + TryRefTo<EthAddress>,
     TokenChange: Default
         + Debug
         + Clone
@@ -1495,11 +1504,11 @@ where
         + BorshSchema,
 {
     let convert_key_to_addr = |k: &'a PK| {
-        k.try_into()
+        k.try_ref_to()
             .map_err(|_| BecomeValidatorError::SecpKeyConversion)
     };
-    let eth_cold_key_addr = convert_key_to_addr(&eth_cold_key)?;
-    let eth_hot_key_addr = convert_key_to_addr(&eth_hot_key)?;
+    let eth_cold_key_addr = convert_key_to_addr(eth_cold_key)?;
+    let eth_hot_key_addr = convert_key_to_addr(eth_hot_key)?;
     let consensus_key =
         Epoched::init(consensus_key.clone(), current_epoch, params);
     let eth_cold_key =

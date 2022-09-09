@@ -24,7 +24,7 @@ pub struct PublicKey(pub libsecp256k1::PublicKey);
 
 /// Eth address derived from secp256k1 key
 #[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct EthAddress([u8; 20]);
+pub struct EthAddress(pub [u8; 20]);
 
 impl super::PublicKey for PublicKey {
     const TYPE: SchemeType = SigScheme::TYPE;
