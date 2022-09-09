@@ -69,10 +69,10 @@ num-rational = "0.4.1"
 hex = "0.4.3"
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc = {git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false}
-ics23 = "0.6.7"
-itertools = "0.10.3"
+ibc = {git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false}
+ics23 = "0.7.0"
+itertools = "0.10.0"
 loupe = {version = "0.1.3", optional = true}
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 parity-wasm = {version = "0.42.2", optional = true}
