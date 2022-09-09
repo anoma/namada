@@ -154,32 +154,39 @@ where
                         }
                     } else {
                         // Check tx counter, replay-attack protection
-                        let tx_counter = self.get_tx_counter(&tx.fee_payer()).unwrap_or(u64::MAX);
-                        if tx.tx_counter < tx_counter {
-                            TxResult {
+                        match self.get_tx_counter(&tx.fee_payer()) {
+                            Ok(storage_counter) => {
+                                if tx.tx_counter != storage_counter {
+                                    return TxResult {
+                                        code: ErrorCodes::InvalidTx.into(),
+                                        info: format!("The provided transaction counter {} is different from the one in storage {}", tx.tx_counter, storage_counter)
+                                    }
+                                }
+                            },
+                            Err(e) => return TxResult {
                                 code: ErrorCodes::InvalidTx.into(),
-                                info: "The provided transaction counter is smaller than the expected one".into()
+                                info: format!("Couldn't read transaction counter in storage: {}", e)
+                            },
+                        }
+          
+                        // check that the fee payer has sufficient balance
+                        let balance = self
+                            .get_balance(&tx.fee.token, &tx.fee_payer())
+                            .unwrap_or_default();
+
+                        if tx.fee.amount <= balance {
+                            TxResult {
+                                code: ErrorCodes::Ok.into(),
+                                info: "Process proposal accepted this \
+                                    transaction"
+                                    .into(),
                             }
                         } else {
-                            // check that the fee payer has sufficient balance
-                            let balance = self
-                                .get_balance(&tx.fee.token, &tx.fee_payer())
-                                .unwrap_or_default();
-
-                            if tx.fee.amount <= balance {
-                                TxResult {
-                                    code: ErrorCodes::Ok.into(),
-                                    info: "Process proposal accepted this \
-                                        transaction"
-                                        .into(),
-                                }
-                            } else {
-                                TxResult {
-                                    code: ErrorCodes::InvalidTx.into(),
-                                    info: "The address given does not have \
-                                        sufficient balance to pay fee"
-                                        .into(),
-                                }
+                            TxResult {
+                                code: ErrorCodes::InvalidTx.into(),
+                                info: "The address given does not have \
+                                    sufficient balance to pay fee"
+                                    .into(),
                             }
                         }
                     }

@@ -43,6 +43,8 @@ pub const RESERVED_ADDRESS_PREFIX: char = '#';
 pub const VP_KEY_PREFIX: char = '?';
 /// The reserved storage key for validity predicates
 pub const RESERVED_VP_KEY: &str = "?";
+/// The storage key for transaction counter
+const TX_COUNTER: &str = "tx_counter";
 
 /// Height of a block, i.e. the level.
 #[derive(
@@ -293,6 +295,13 @@ impl Key {
             }
             _ => None,
         }
+    }
+
+    /// Returns a key of the transaction counter of the given address
+    pub fn tx_counter(addr: &Address) -> Self {
+        let mut segments = Self::from(addr.to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(TX_COUNTER.to_owned()));
+        Key { segments }
     }
 
     /// Returns a key from the given DB key path that has the height and
