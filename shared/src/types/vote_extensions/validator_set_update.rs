@@ -112,51 +112,69 @@ impl Vext {
     }
 }
 
+/// Container type for both kinds of Ethereum bridge addresses:
+///
+///   - An address derived from a hot key.
+///   - An address derived from a cold key.
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
+pub struct EthAddrBook {
+    /// Ethereum address derived from a hot key.
+    pub hot_key_addr: EthAddress,
+    /// Ethereum address derived from a cold key.
+    pub cold_key_addr: EthAddress,
+}
+
 /// Provides a mapping between [`EthAddress`] and [`VotingPower`] instances.
-pub type VotingPowersMap = HashMap<EthAddress, VotingPower>;
+pub type VotingPowersMap = HashMap<EthAddrBook, VotingPower>;
 
 /// This trait contains additional methods for a [`HashMap`], related
 /// with validator set update vote extensions logic.
 pub trait VotingPowersMapExt {
-    /// Returns the keccak hash of this [`VotingPowersMap`]
-    /// to be signed by an Ethereum validator key.
-    fn get_bridge_hash(&self, block_height: BlockHeight) -> KeccakHash;
+    /// Returns the list of Ethereum validator hot and cold addresses and their
+    /// respective voting power (in this order), with an Ethereum ABI
+    /// compatible encoding.
+    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>);
 
-    /// Returns the keccak hash of this [`VotingPowersMap`]
-    /// to be signed by an Ethereum governance key.
-    fn get_governance_hash(&self, block_height: BlockHeight) -> KeccakHash;
+    /// Returns the keccak hashes of this [`VotingPowersMap`],
+    /// to be signed by an Ethereum hot and cold key, respectively.
+    fn get_bridge_and_gov_hashes(
+        &self,
+        block_height: BlockHeight,
+    ) -> (KeccakHash, KeccakHash) {
+        let (hot_key_addrs, cold_key_addrs, voting_powers) =
+            self.get_abi_encoded();
 
-    /// Returns the list of Ethereum validator addresses and their respective
-    /// voting power (in this order), with an Ethereum ABI compatible encoding.
-    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>);
+        let bridge_hash = compute_hash(
+            block_height,
+            BRIDGE_CONTRACT_NAMESPACE,
+            hot_key_addrs,
+            voting_powers.clone(),
+        );
+
+        let governance_hash = compute_hash(
+            block_height,
+            GOVERNANCE_CONTRACT_NAMESPACE,
+            cold_key_addrs,
+            voting_powers,
+        );
+
+        (bridge_hash, governance_hash)
+    }
 }
 
 impl VotingPowersMapExt for VotingPowersMap {
-    #[inline]
-    fn get_bridge_hash(&self, block_height: BlockHeight) -> KeccakHash {
-        let (validators, voting_powers) = self.get_abi_encoded();
-
-        compute_hash(
-            block_height,
-            BRIDGE_CONTRACT_NAMESPACE,
-            validators,
-            voting_powers,
-        )
-    }
-
-    #[inline]
-    fn get_governance_hash(&self, block_height: BlockHeight) -> KeccakHash {
-        compute_hash(
-            block_height,
-            GOVERNANCE_CONTRACT_NAMESPACE,
-            // TODO: get governance validators
-            vec![],
-            // TODO: get governance voting powers
-            vec![],
-        )
-    }
-
-    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>) {
+    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>) {
         // get addresses and voting powers all into one vec
         let mut unsorted: Vec<_> = self.iter().collect();
 
@@ -171,14 +189,14 @@ impl VotingPowersMapExt for VotingPowersMap {
             .map(|&(_, &voting_power)| u64::from(voting_power))
             .sum();
 
-        // split the vec into two
-        sorted
-            .into_iter()
-            .map(|(&EthAddress(addr), &voting_power)| {
+        // split the vec into three portions
+        sorted.into_iter().fold(
+            Default::default(),
+            |accum, (addr_book, &voting_power)| {
                 let voting_power: u64 = voting_power.into();
 
                 // normalize the voting power
-                // https://github.com/anoma/ethereum-bridge/blob/main/test/utils/utilities.js#L29
+                // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
                 const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
 
                 let voting_power = Ratio::new(voting_power, total_voting_power)
@@ -186,12 +204,22 @@ impl VotingPowersMapExt for VotingPowersMap {
                 let voting_power = voting_power.round().to_integer();
                 let voting_power: ethereum::U256 = voting_power.into();
 
-                (
-                    Token::Address(ethereum::H160(addr)),
-                    Token::Uint(voting_power),
-                )
-            })
-            .unzip()
+                let (mut hot_key_addrs, mut cold_key_addrs, mut voting_powers) =
+                    accum;
+                let &EthAddrBook {
+                    hot_key_addr: EthAddress(hot_key_addr),
+                    cold_key_addr: EthAddress(cold_key_addr),
+                } = addr_book;
+
+                hot_key_addrs
+                    .push(Token::Address(ethereum::H160(hot_key_addr)));
+                cold_key_addrs
+                    .push(Token::Address(ethereum::H160(cold_key_addr)));
+                voting_powers.push(Token::Uint(voting_power));
+
+                (hot_key_addrs, cold_key_addrs, voting_powers)
+            },
+        )
     }
 }
 
@@ -240,20 +268,13 @@ mod tag {
         type Output = [u8; 32];
 
         fn serialize(ext: &Vext) -> Self::Output {
+            let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) = ext
+                .voting_powers
+                .get_bridge_and_gov_hashes(ext.block_height);
             let KeccakHash(output) = AbiEncode::signed_keccak256(&[
                 Token::String("updateValidatorsSet".into()),
-                Token::FixedBytes(
-                    ext.voting_powers
-                        .get_bridge_hash(ext.block_height)
-                        .0
-                        .to_vec(),
-                ),
-                Token::FixedBytes(
-                    ext.voting_powers
-                        .get_governance_hash(ext.block_height)
-                        .0
-                        .to_vec(),
-                ),
+                Token::FixedBytes(bridge_hash.to_vec()),
+                Token::FixedBytes(gov_hash.to_vec()),
                 bheight_to_token(ext.block_height),
             ]);
             output
