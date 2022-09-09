@@ -941,9 +941,9 @@ pub mod testing {
                     // Votes_per_token is relative to micro units so no need to
                     // convert
                     let vp_before =
-                        decimal_mult_i128(params.votes_per_token, total_delta);
+                        decimal_mult_i128(params.tm_votes_per_token, total_delta);
                     let vp_after = decimal_mult_i128(
-                        params.votes_per_token,
+                        params.tm_votes_per_token,
                         total_delta + token_delta,
                     );
                     // voting power delta
@@ -1005,8 +1005,8 @@ pub mod testing {
                             .get(epoch)
                             .unwrap_or_default();
                         // Votes_per_token is relative to micro units so no need to convert
-                        let vp_before = decimal_mult_i128(params.votes_per_token, total_delta);
-                        let vp_after = decimal_mult_i128(params.votes_per_token, total_delta + token_delta);
+                        let vp_before = decimal_mult_i128(params.tm_votes_per_token, total_delta);
+                        let vp_after = decimal_mult_i128(params.tm_votes_per_token, total_delta + token_delta);
                         // voting power delta
                         let vp_delta_at_unbonding =
                             vp_after - vp_before - vp_delta - total_vp_delta;
@@ -1080,11 +1080,11 @@ pub mod testing {
                     // Votes_per_token is relative to micro units so no need to
                     // convert
                     let vp_before = decimal_mult_i128(
-                        params.votes_per_token,
+                        params.tm_votes_per_token,
                         total_delta_cur,
                     );
                     let vp_after = decimal_mult_i128(
-                        params.votes_per_token,
+                        params.tm_votes_per_token,
                         total_delta_cur + token_delta,
                     );
                     // voting power delta

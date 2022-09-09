@@ -21,7 +21,7 @@ pub struct PosParams {
     pub unbonding_len: u64,
     /// Used in validators' voting power calculation. Given in basis points
     /// (voting power per ten thousand tokens).
-    pub votes_per_token: Decimal,
+    pub tm_votes_per_token: Decimal,
     /// Amount of tokens rewarded to a validator for proposing a block
     pub block_proposer_reward: Decimal,
     /// Amount of tokens rewarded to each validator that voted on a block
@@ -43,9 +43,9 @@ impl Default for PosParams {
             max_validator_slots: 128,
             pipeline_len: 2,
             unbonding_len: 6,
-            // 1 voting power per 1 fundamental token (10^6 per NAM or 1 per
+            // 1 tendermint voting power per 1 fundamental token (10^6 per NAM or 1 per
             // namnam)
-            votes_per_token: dec!(1.0),
+            tm_votes_per_token: dec!(1.0),
             block_proposer_reward: dec!(0.0625),
             block_vote_reward: dec!(0.05),
             // staking APY 20%
@@ -108,7 +108,8 @@ impl PosParams {
         // Check maximum total voting power cannot get larger than what
         // Tendermint allows
         let max_total_voting_power = Decimal::from(self.max_validator_slots)
-            * self.votes_per_token * Decimal::from(TOKEN_MAX_AMOUNT);
+            * self.tm_votes_per_token
+            * Decimal::from(TOKEN_MAX_AMOUNT);
         match i64::try_from(max_total_voting_power) {
             Ok(max_total_voting_power_i64) => {
                 if max_total_voting_power_i64 > MAX_TOTAL_VOTING_POWER {
@@ -123,9 +124,9 @@ impl PosParams {
         }
 
         // Check that there is no more than 1 vote per token
-        if self.votes_per_token > dec!(1.0) {
+        if self.tm_votes_per_token > dec!(1.0) {
             errors.push(ValidationError::VotesPerTokenGreaterThanOne(
-                self.votes_per_token,
+                self.tm_votes_per_token,
             ))
         }
 
@@ -170,13 +171,13 @@ pub mod testing {
             // `unbonding_len` > `pipeline_len`
             unbonding_len in pipeline_len + 1..pipeline_len + 8,
             pipeline_len in Just(pipeline_len),
-            votes_per_token in 1..10_001_u64)
+            tm_votes_per_token in 1..10_001_u64)
             -> PosParams {
             PosParams {
                 max_validator_slots,
                 pipeline_len,
                 unbonding_len,
-                votes_per_token: Decimal::from(votes_per_token) / dec!(10_000),
+                tm_votes_per_token: Decimal::from(tm_votes_per_token) / dec!(10_000),
                 // The rest of the parameters that are not being used in the PoS
                 // VP are constant for now
                 ..Default::default()

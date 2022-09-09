@@ -353,6 +353,7 @@ pub struct VoteInfo {
     pub signed_last_block: bool,
 }
 
+// TODO: figure out if i64 -> u64 needs to be handled more particularly from TM
 impl From<tendermint_proto::abci::VoteInfo> for VoteInfo {
     fn from(info: tendermint_proto::abci::VoteInfo) -> VoteInfo {
         let val_info = info.validator.clone().unwrap();
@@ -374,7 +375,7 @@ impl VotingPower {
     /// Convert token amount into a voting power.
     pub fn from_tokens(tokens: impl Into<u64>, params: &PosParams) -> Self {
         // The token amount is expected to be in micro units already
-        let vp = decimal_mult_u64(params.votes_per_token, tokens.into());
+        let vp = decimal_mult_u64(params.tm_votes_per_token, tokens.into());
         Self(vp)
     }
 }
@@ -402,7 +403,9 @@ impl VotingPowerDelta {
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
         // The token amount is expected to be in micro units already
-        let delta: i128 = params.votes_per_token * change.into();
+        let vp =
+            params.tm_votes_per_token * Decimal::from(Into::<i128>::into(change));
+        let delta: i128 = vp.to_i128().unwrap();
         let delta: i64 = TryFrom::try_from(delta)?;
         Ok(Self(delta))
     }
@@ -413,7 +416,7 @@ impl VotingPowerDelta {
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
         // The token amount is expected to be in micro units already
-        let vp = decimal_mult_u64(params.votes_per_token, tokens.into());
+        let vp = decimal_mult_u64(params.tm_votes_per_token, tokens.into());
         let delta: i64 = TryFrom::try_from(vp.to_i64().unwrap())?;
         Ok(Self(delta))
     }
