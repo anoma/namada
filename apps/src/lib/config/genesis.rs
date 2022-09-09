@@ -924,8 +924,14 @@ pub mod tests {
             wallet::defaults::validator_keys();
 
         // TODO: derive validator eth address from an eth keypair
-        let eth_cold_gov_keypair: common::SecretKey = secp256k1::SigScheme::generate(&mut rng).try_to_sk().unwrap();
-        let eth_hot_bridge_keypair: common::SecretKey = secp256k1::SigScheme::generate(&mut rng).try_to_sk().unwrap();
+        let eth_cold_gov_keypair: common::SecretKey =
+            secp256k1::SigScheme::generate(&mut rng)
+                .try_to_sk()
+                .unwrap();
+        let eth_hot_bridge_keypair: common::SecretKey =
+            secp256k1::SigScheme::generate(&mut rng)
+                .try_to_sk()
+                .unwrap();
 
         println!("address: {}", address);
         println!("staking_reward_address: {}", staking_reward_address);
@@ -933,7 +939,13 @@ pub mod tests {
         println!("staking_reward_keypair: {:?}", srkp_arr);
         println!("protocol_keypair: {:?}", protocol_keypair);
         println!("dkg_keypair: {:?}", dkg_keypair.try_to_vec().unwrap());
-        println!("eth_cold_gov_keypair: {:?}", eth_cold_gov_keypair.try_to_vec().unwrap());
-        println!("eth_hot_bridge_keypair: {:?}", eth_hot_bridge_keypair.try_to_vec().unwrap());
+        println!(
+            "eth_cold_gov_keypair: {:?}",
+            eth_cold_gov_keypair.try_to_vec().unwrap()
+        );
+        println!(
+            "eth_hot_bridge_keypair: {:?}",
+            eth_hot_bridge_keypair.try_to_vec().unwrap()
+        );
     }
 }
