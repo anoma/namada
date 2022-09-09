@@ -267,7 +267,7 @@ pub mod genesis_config {
         pub block_vote_reward: Decimal,
         // Maximum staking APY
         // XXX: u64 doesn't work with toml-rs!
-        pub max_staking_rewards_rate: Decimal,
+        pub max_inflation_rate: Decimal,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote (in basis points).
         // XXX: u64 doesn't work with toml-rs!
@@ -567,9 +567,9 @@ pub mod genesis_config {
             votes_per_token: config.pos_params.votes_per_token,
             block_proposer_reward: config.pos_params.block_proposer_reward,
             block_vote_reward: config.pos_params.block_vote_reward,
-            max_staking_rewards_rate: config
+            max_inflation_rate: config
                 .pos_params
-                .max_staking_rewards_rate,
+                .max_inflation_rate,
             duplicate_vote_slash_rate: config
                 .pos_params
                 .duplicate_vote_slash_rate,
