@@ -1,14 +1,10 @@
-use std::convert::TryFrom;
-
 use jsonpath_lib as jsonpath;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use serde::Serialize;
 
 use crate::cli::safe_exit;
-use crate::node::ledger::events::{
-    Attributes, Error, EventType as NamadaEventType,
-};
+use crate::node::ledger::events::EventType as NamadaEventType;
 
 /// Data needed for broadcasting a tx and
 /// monitoring its progress on chain
@@ -47,53 +43,11 @@ impl TxResponse {
         json: serde_json::Value,
         event_type: NamadaEventType,
         tx_hash: &str,
-    ) -> Result<Option<TxResponse>, Error> {
-        let mut selector = jsonpath::selector(&json);
-        let mut event = {
-            match selector(&format!("$.events.[?(@.type=='{}')]", event_type))
-                .unwrap()
-                .pop()
-            {
-                Some(event) => {
-                    let attrs = Attributes::try_from(event)?;
-                    match attrs.get("hash") {
-                        Some(hash) if hash == tx_hash => attrs,
-                        _ => return Ok(None),
-                    }
-                }
-                _ => return Ok(None),
-            }
-        };
-        let info = event.take("info").unwrap();
-        let log = event.take("log").unwrap();
-        let height = event.take("height").unwrap();
-        let hash = event.take("hash").unwrap();
-        let code = event.take("code").unwrap();
-        let gas_used =
-            event.take("gas_used").unwrap_or_else(|| String::from("0"));
-        let initialized_accounts = event.take("initialized_accounts");
-        let initialized_accounts = match initialized_accounts {
-            Some(values) => serde_json::from_str(&values).unwrap(),
-            _ => vec![],
-        };
-        Ok(Some(TxResponse {
-            info,
-            log,
-            height,
-            hash,
-            code,
-            gas_used,
-            initialized_accounts,
-        }))
-    }
-
-    /// Find a tx with a given hash from the the websocket subscription
-    /// to Tendermint events.
-    pub fn find_tx(json: serde_json::Value, tx_hash: &str) -> Self {
+    ) -> Self {
         let tx_hash_json = serde_json::Value::String(tx_hash.to_string());
         let mut selector = jsonpath::selector(&json);
         let mut index = 0;
-        let evt_key = "accepted";
+        let evt_key = event_type.to_string();
         // Find the tx with a matching hash
         let hash = loop {
             if let Ok(hash) =
