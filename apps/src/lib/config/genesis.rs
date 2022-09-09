@@ -258,7 +258,7 @@ pub mod genesis_config {
         pub unbonding_len: u64,
         // Votes per token (in basis points).
         // XXX: u64 doesn't work with toml-rs!
-        pub tm_votes_per_token: Decimal,
+        pub tm_votes_per_token: u64,
         // Reward for proposing a block.
         // XXX: u64 doesn't work with toml-rs!
         pub block_proposer_reward: u64,
@@ -267,7 +267,7 @@ pub mod genesis_config {
         pub block_vote_reward: u64,
         // Maximum staking APY
         // XXX: u64 doesn't work with toml-rs!
-        pub max_staking_rewards_rate: u64,
+        pub max_inflation_rate: u64,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote (in basis points).
         // XXX: u64 doesn't work with toml-rs!
@@ -570,8 +570,8 @@ pub mod genesis_config {
             ),
             block_proposer_reward: config.pos_params.block_proposer_reward,
             block_vote_reward: config.pos_params.block_vote_reward,
-            max_staking_rewards_rate: BasisPoints::new(
-                config.pos_params.max_staking_rewards_rate,
+            max_inflation_rate: BasisPoints::new(
+                config.pos_params.max_inflation_rate,
             ),
             duplicate_vote_slash_rate: BasisPoints::new(
                 config.pos_params.duplicate_vote_slash_rate,
