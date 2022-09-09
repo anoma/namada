@@ -28,12 +28,11 @@ use crate::config::genesis::genesis_config::GenesisConfig;
 pub struct ValidatorKeys {
     /// Special keypair for signing protocol txs
     pub protocol_keypair: common::SecretKey,
-    /// Special keypair for signing Ethereum bridge txs
+    /// Special hot keypair for signing Ethereum bridge txs
     pub eth_bridge_keypair: common::SecretKey,
     /// Special session keypair needed by validators for participating
     /// in the DKG protocol
     pub dkg_keypair: Option<DkgKeypair>,
-    // TODO add eth hot key
 }
 
 impl ValidatorKeys {
