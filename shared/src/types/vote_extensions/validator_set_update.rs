@@ -25,15 +25,34 @@ const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
 
 /// Contains the digest of all signatures from a quorum of
 /// validators for a [`Vext`].
-#[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct VextDigest {
     /// A mapping from a validator address to a [`Signature`].
     pub signatures: HashMap<Address, Signature>,
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     pub voting_powers: VotingPowersMap,
+}
+
+impl BorshSchema for VextDigest {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                HashMap::<Address, Signature>::declaration(),
+                VotingPowersMap::declaration()
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "validator_set_update::VextDigest".into()
+    }
 }
 
 impl VextDigest {
@@ -70,9 +89,7 @@ impl VextDigest {
 pub type SignedVext = Signed<Vext, SerializeWithAbiEncode>;
 
 /// Represents a validator set update, for some new [`Epoch`].
-#[derive(
-    Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Vext {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
