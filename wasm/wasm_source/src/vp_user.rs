@@ -73,15 +73,21 @@ fn validate_tx(
     let signed_tx_data =
         Lazy::new(|| SignedTxData::try_from_slice(&tx_data[..]));
 
+    // Check for a valid signature and transaction counter
     let valid_sig = Lazy::new(|| match &*signed_tx_data {
         Ok(signed_tx_data) => {
             let pk = key::get(ctx, &addr);
             match pk {
-                Ok(Some(pk)) => {
-                    matches!(
-                        ctx.verify_tx_signature(&pk, &signed_tx_data.sig),
-                        Ok(true)
-                    )
+                Ok(Some(pk)) => {    
+                    match ctx.verify_tx_signature(&pk, &signed_tx_data.sig) {
+                        Ok(s) if s => {
+                            match check_tx_counter(ctx, &addr, &signed_tx_data) {
+                                Ok(check) => check,
+                                _ => false,
+                            }        
+                        },
+                        _ => false,
+                    }
                 }
                 _ => false,
             }
@@ -370,6 +376,27 @@ fn check_intent(
     } else {
         accept()
     }
+}
+
+/// Check the validity of the transaction counter
+fn check_tx_counter(ctx: &Ctx, addr: &Address, signed_tx_data: &SignedTxData) -> VpResult {
+    let key = Key::tx_counter(addr);
+
+    // Check pre value in storage equals the one in signed_tx_data 
+    let pre_counter: u64 = ctx.read_pre(key)?.unwrap_or_default();
+
+    match signed_tx_data.tx_counter {
+        Some(tx_counter) => {
+            if tx_counter != pre_counter {
+                return Ok(false)
+            }
+        },
+        None => return Err(Error::SimpleMessage("Missing tx_counter in transaction data")),
+    };
+
+    // Check counter in storage was incremented by one
+    let post_counter: u64 = ctx.read_post(key)?.ok_or(Error::SimpleMessage("Missing tx_counter in storage after transaction"))?;
+    Ok(post_counter == pre_counter + 1) //FIXME: wrapping?
 }
 
 #[cfg(test)]
