@@ -1,5 +1,6 @@
 //! Cryptographic keys
 
+use std::convert::TryFrom;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -7,7 +8,9 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
+use super::secp256k1::EthAddress;
 use super::{
     ed25519, secp256k1, ParsePublicKeyError, ParseSecretKeyError,
     ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
@@ -78,6 +81,24 @@ impl FromStr for PublicKey {
         let vec = hex::decode(str).map_err(ParsePublicKeyError::InvalidHex)?;
         Self::try_from_slice(vec.as_slice())
             .map_err(ParsePublicKeyError::InvalidEncoding)
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum EthAddressConvError {
+    #[error("Eth key cannot be ed25519, only secp256k1")]
+    CannotBeEd25519,
+}
+
+impl TryFrom<&PublicKey> for EthAddress {
+    type Error = EthAddressConvError;
+
+    fn try_from(value: &PublicKey) -> Result<Self, Self::Error> {
+        match value {
+            PublicKey::Ed25519(_) => Err(EthAddressConvError::CannotBeEd25519),
+            PublicKey::Secp256k1(pk) => Ok(EthAddress::from(pk).into()),
+        }
     }
 }
 
