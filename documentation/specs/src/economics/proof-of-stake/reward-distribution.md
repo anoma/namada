@@ -14,10 +14,10 @@ Consider a system with
 - a set of validators $V_i$.
 - a set of delegations $D_{i, j}$, each to a particular validator and in a particular (initial) amount.
 - epoched proof-of-stake, where changes are applied as follows:
-	- bonding after the pipeline length
-	- unbonding after the unbonding length
-	- rewards are paid out at the end of each epoch, to wit, in each epoch $e$, $R_{e,i}$ is paid out to validator $V_i$
-	- slashing is applied as described in [slashing](cubic-slashing.md).
+  - bonding after the pipeline length
+  - unbonding after the pipeline + unbonding length
+  - rewards are paid out at the end of each epoch, to wit, in each epoch $e$, $R_{e,i}$ is paid out to validator $V_i$
+  - slashing is applied as described in [slashing](cubic-slashing.md).
 
 We wish to approximate as exactly as possible the following ideal delegator reward distribution system:
 
