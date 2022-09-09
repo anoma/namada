@@ -190,10 +190,9 @@ impl VotingPowersMapExt for VotingPowersMap {
             .sum();
 
         // split the vec into three portions
-        let init = (Vec::new(), Vec::new(), Vec::new());
-        sorted
-            .into_iter()
-            .fold(init, |accum, (addr_book, &voting_power)| {
+        sorted.into_iter().fold(
+            Default::default(),
+            |accum, (addr_book, &voting_power)| {
                 let voting_power: u64 = voting_power.into();
 
                 // normalize the voting power
@@ -205,18 +204,22 @@ impl VotingPowersMapExt for VotingPowersMap {
                 let voting_power = voting_power.round().to_integer();
                 let voting_power: ethereum::U256 = voting_power.into();
 
-                let (mut fst, mut snd, mut thd) = accum;
+                let (mut hot_key_addrs, mut cold_key_addrs, mut voting_powers) =
+                    accum;
                 let &EthAddrBook {
                     hot_key_addr: EthAddress(hot_key_addr),
                     cold_key_addr: EthAddress(cold_key_addr),
                 } = addr_book;
 
-                fst.push(Token::Address(ethereum::H160(hot_key_addr)));
-                snd.push(Token::Address(ethereum::H160(cold_key_addr)));
-                thd.push(Token::Uint(voting_power));
+                hot_key_addrs
+                    .push(Token::Address(ethereum::H160(hot_key_addr)));
+                cold_key_addrs
+                    .push(Token::Address(ethereum::H160(cold_key_addr)));
+                voting_powers.push(Token::Uint(voting_power));
 
-                (fst, snd, thd)
-            })
+                (hot_key_addrs, cold_key_addrs, voting_powers)
+            },
+        )
     }
 }
 
