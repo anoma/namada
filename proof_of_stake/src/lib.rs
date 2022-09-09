@@ -20,7 +20,7 @@ pub mod validation;
 
 use core::fmt::Debug;
 use std::collections::{BTreeSet, HashMap};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::num::TryFromIntError;
@@ -91,7 +91,6 @@ pub trait PosReadOnly {
     /// Cryptographic public key type
     type PublicKey: Debug
         + Clone
-        + TryInto<EthAddress>
         + BorshDeserialize
         + BorshSerialize
         + BorshSchema;
@@ -274,7 +273,10 @@ pub trait PosActions: PosReadOnly {
         eth_cold_key: &Self::PublicKey,
         eth_hot_key: &Self::PublicKey,
         current_epoch: impl Into<Epoch>,
-    ) -> Result<(), BecomeValidatorError<Self::Address>> {
+    ) -> Result<(), BecomeValidatorError<Self::Address>>
+    where
+        for<'a> &'a Self::PublicKey: TryInto<EthAddress>,
+    {
         let current_epoch = current_epoch.into();
         let params = self.read_pos_params();
         let mut validator_set = self.read_validator_set();
@@ -290,22 +292,13 @@ pub trait PosActions: PosReadOnly {
                 ),
             );
         }
-        let convert_key_to_addr = |k| {
-            k.try_into()
-                .map_err(|_| BecomeValidatorError::SecpKeyConversion)
-        };
-        let eth_addresses_map = self.read_eth_key_addresses();
-        let have_duped_key = eth_key_reverse_map
-            .contains_key(&convert_key_to_addr(eth_cold_key))
-            || eth_key_reverse_map
-                .contains_key(&convert_key_to_addr(eth_hot_key));
-        if have_duped_key {
-            return Err(BecomeValidatorError::DupedEthKeyFound);
-        }
         let BecomeValidatorData {
             consensus_key,
             eth_cold_key,
             eth_hot_key,
+            eth_cold_key_addr,
+            eth_hot_key_addr,
+
             state,
             total_deltas,
             voting_power,
@@ -317,7 +310,20 @@ pub trait PosActions: PosReadOnly {
             eth_hot_key,
             &mut validator_set,
             current_epoch,
-        );
+        )?;
+        let mut eth_addresses_map = self.read_eth_key_addresses();
+        if eth_addresses_map
+            .insert(eth_cold_key_addr, address.clone())
+            .is_some()
+        {
+            return Err(BecomeValidatorError::DupedEthKeyFound);
+        }
+        if eth_addresses_map
+            .insert(eth_hot_key_addr, address.clone())
+            .is_some()
+        {
+            return Err(BecomeValidatorError::DupedEthKeyFound);
+        }
         self.write_validator_staking_reward_address(
             address,
             staking_reward_address.clone(),
@@ -325,6 +331,7 @@ pub trait PosActions: PosReadOnly {
         self.write_validator_consensus_key(address, consensus_key);
         self.write_validator_eth_cold_key(address, eth_cold_key);
         self.write_validator_eth_hot_key(address, eth_hot_key);
+        self.write_eth_key_addresses(eth_addresses_map);
         self.write_validator_state(address, state);
         self.write_validator_set(validator_set);
         self.write_validator_address_raw_hash(address);
@@ -589,7 +596,6 @@ pub trait PosBase {
     type PublicKey: 'static
         + Debug
         + Clone
-        + TryInto<EthAddress>
         + BorshDeserialize
         + BorshSerialize
         + BorshSchema;
@@ -758,7 +764,10 @@ pub trait PosBase {
         > + Clone
         + 'a,
         current_epoch: impl Into<Epoch>,
-    ) -> Result<(), GenesisError> {
+    ) -> Result<(), GenesisError>
+    where
+        &'a Self::PublicKey: TryInto<EthAddress>,
+    {
         let current_epoch = current_epoch.into();
         self.write_pos_params(params);
 
@@ -769,7 +778,7 @@ pub trait PosBase {
             total_bonded_balance,
         } = init_genesis(params, validators, current_epoch)?;
 
-        let mut eth_key_reverse_map = HashMap::default();
+        let mut eth_addresses_map = HashMap::default();
 
         for res in validators {
             let GenesisValidatorData {
@@ -783,6 +792,8 @@ pub trait PosBase {
                 bond: (bond_id, bond),
                 eth_cold_key,
                 eth_hot_key,
+                eth_cold_key_addr,
+                eth_hot_key_addr,
             } = res?;
             self.write_validator_address_raw_hash(address);
             self.write_validator_staking_reward_address(
@@ -800,22 +811,20 @@ pub trait PosBase {
                 &staking_reward_address,
                 &staking_reward_key,
             );
-            let convert_key_to_addr =
-                |k| k.try_into().map_err(|_| GenesisError::SecpKeyConversion);
-            if eth_key_reverse_map
-                .insert(convert_key_to_addr(&eth_cold_key)?, address)
+            if eth_addresses_map
+                .insert(eth_cold_key_addr, address.clone())
                 .is_some()
             {
                 return Err(GenesisError::DupedEthKeyFound);
             }
-            if eth_key_reverse_map
-                .insert(convert_key_to_addr(&eth_hot_key)?, address)
+            if eth_addresses_map
+                .insert(eth_hot_key_addr, address.clone())
                 .is_some()
             {
                 return Err(GenesisError::DupedEthKeyFound);
             }
         }
-        self.write_eth_key_addresses(eth_key_reverse_map);
+        self.write_eth_key_addresses(&eth_addresses_map);
         self.write_validator_set(&validator_set);
         self.write_total_voting_power(&total_voting_power);
         // Credit the bonded tokens to the PoS account
@@ -1182,6 +1191,8 @@ where
     bond: (BondId<Address>, Bonds<TokenAmount>),
     eth_cold_key: ValidatorEthKey<PK>,
     eth_hot_key: ValidatorEthKey<PK>,
+    eth_cold_key_addr: EthAddress,
+    eth_hot_key_addr: EthAddress,
 }
 
 /// A function that returns genesis data created from the initial validator set.
@@ -1236,6 +1247,7 @@ where
         + BorshSerialize
         + BorshSchema,
     PK: 'a + Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema,
+    &'a PK: TryInto<EthAddress>,
 {
     // Accumulate the validator set and total voting power
     let mut active: BTreeSet<WeightedValidator<Address>> = BTreeSet::default();
@@ -1284,6 +1296,11 @@ where
                   eth_cold_key,
                   eth_hot_key,
               }| {
+            let convert_key_to_addr = |k: &'a PK| {
+                k.try_into().map_err(|_| GenesisError::SecpKeyConversion)
+            };
+            let eth_cold_key_addr = convert_key_to_addr(&eth_cold_key)?;
+            let eth_hot_key_addr = convert_key_to_addr(&eth_hot_key)?;
             let consensus_key =
                 Epoched::init_at_genesis(consensus_key.clone(), current_epoch);
             let eth_cold_key =
@@ -1326,6 +1343,8 @@ where
                 bond: (bond_id, bond),
                 eth_cold_key,
                 eth_hot_key,
+                eth_cold_key_addr,
+                eth_hot_key_addr,
             })
         },
     );
@@ -1438,23 +1457,26 @@ where
     consensus_key: ValidatorConsensusKeys<PK>,
     eth_cold_key: ValidatorEthKey<PK>,
     eth_hot_key: ValidatorEthKey<PK>,
+    eth_cold_key_addr: EthAddress,
+    eth_hot_key_addr: EthAddress,
     state: ValidatorStates,
     total_deltas: ValidatorTotalDeltas<TokenChange>,
     voting_power: ValidatorVotingPowers,
 }
 
 /// A function that initialized data for a new validator.
-fn become_validator<Address, PK, TokenChange>(
+fn become_validator<'a, Address, PK, TokenChange>(
     params: &PosParams,
     address: &Address,
     consensus_key: &PK,
-    eth_cold_key: &PK,
-    eth_hot_key: &PK,
+    eth_cold_key: &'a PK,
+    eth_hot_key: &'a PK,
     validator_set: &mut ValidatorSets<Address>,
     current_epoch: Epoch,
-) -> BecomeValidatorData<PK, TokenChange>
+) -> Result<BecomeValidatorData<PK, TokenChange>, BecomeValidatorError<Address>>
 where
-    Address: Debug
+    Address: Display
+        + Debug
         + Clone
         + Ord
         + Hash
@@ -1462,6 +1484,7 @@ where
         + BorshSerialize
         + BorshSchema,
     PK: Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema,
+    &'a PK: TryInto<EthAddress>,
     TokenChange: Default
         + Debug
         + Clone
@@ -1471,6 +1494,12 @@ where
         + BorshSerialize
         + BorshSchema,
 {
+    let convert_key_to_addr = |k: &'a PK| {
+        k.try_into()
+            .map_err(|_| BecomeValidatorError::SecpKeyConversion)
+    };
+    let eth_cold_key_addr = convert_key_to_addr(&eth_cold_key)?;
+    let eth_hot_key_addr = convert_key_to_addr(&eth_hot_key)?;
     let consensus_key =
         Epoched::init(consensus_key.clone(), current_epoch, params);
     let eth_cold_key =
@@ -1512,14 +1541,16 @@ where
         params,
     );
 
-    BecomeValidatorData {
+    Ok(BecomeValidatorData {
         consensus_key,
         state,
         total_deltas,
         voting_power,
         eth_cold_key,
         eth_hot_key,
-    }
+        eth_cold_key_addr,
+        eth_hot_key_addr,
+    })
 }
 
 struct BondData<TokenAmount, TokenChange>
