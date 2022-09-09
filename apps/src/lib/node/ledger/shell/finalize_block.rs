@@ -356,6 +356,17 @@ where
                             tx_event["hash"],
                             result
                         );
+
+                        // Replay protection for WrapperTx
+                        if let TxType::Wrapper(tx) = tx_type {
+                            let key = Key::tx_counter(tx.fee_payer().to_db_key());
+
+                            // Update counter in storage and add gas
+                            let tx_counter = tx.tx_counter + 1;
+                            let (write_gas, _) = self.write_log.write(&key, tx_counter.try_to_vec().unwrap()).expect("Write to log shouldn't fail");
+                            self.gas_meter.add(write_gas).map_err(|| Error::GasOverflow)?;
+                        }
+
                         self.write_log.commit_tx();
                         if !tx_event.contains_key("code") {
                             tx_event["code"] = ErrorCodes::Ok.into();

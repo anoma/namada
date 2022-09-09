@@ -68,9 +68,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct SignedTxData {
     /// The original tx data bytes, if any
     pub data: Option<Vec<u8>>,
+    /// The optional transaction counter for replay protection
+    pub tx_counter: Option<u64>,
     /// The signature is produced on the tx data concatenated with the tx code
     /// and the timestamp.
-    pub sig: common::Signature,
+    pub sig: common::Signature, //FIXME: add tx_counter in signature?
 }
 
 /// A generic signed data wrapper for Borsh encode-able data.

@@ -7,10 +7,11 @@ use masp_primitives::asset_type::AssetType;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::PosParams;
 use namada::ledger::storage::types;
+use namada::ledger::storage_api::StorageRead;
 use namada::types::address::Address;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::storage::{BlockResults, Key, PrefixValue};
+use namada::types::storage::{BlockResults, Key, PrefixValue, KeySeg};
 use namada::types::token::{self, Amount};
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 use tendermint_proto::google::protobuf;
@@ -158,15 +159,13 @@ where
     }
 
     /// Helper function to get the transactions' counter of a specified address
-    pub fn get_tx_counter(self, source: &Address) -> std::result::Result<u64, String>  {
-        let height = self.storage.get_block_height().0;
-        let key = Key::from(source.to_db_key()).push("tx_counter").expect("Cannot obtain a storage key"); //FIXME: improve
-        let query_resp = self.read_storage_value(&key, height, false);
+    pub fn get_tx_counter(self, source: &Address) -> std::result::Result<u64, String> {
+        let key = Key::tx_counter(source.to_db_key());
 
-        match query_resp.code {
-            0 => BorshDeserialize::try_from_slice(&query_resp.value).map_err(|_| format!("Unable to deserialize the transactions' counter of the given address {}", source)),
-            1 => Ok(0), // If key doesn't exist, default to 0
-            _ => Err(format!("Unable to read transactions' counter of the given address {}", source))
+        // If key doesn't exist default to 0
+        match StorageRead::read(&self.storage, &key) {
+            Ok(t) => Ok(t.unwrap_or_default()),
+            Err(e) => Err(format!("Unable to read transactions' counter of the given address {}: {}", source, e)),
         }
     }
 
