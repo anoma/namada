@@ -268,6 +268,8 @@ pub mod genesis_config {
         // Maximum staking APY
         // XXX: u64 doesn't work with toml-rs!
         pub max_inflation_rate: u64,
+        // Target ratio of staked NAM tokens to total NAM tokens
+        pub target_staked_ratio: u64,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote (in basis points).
         // XXX: u64 doesn't work with toml-rs!
@@ -570,15 +572,16 @@ pub mod genesis_config {
             ),
             block_proposer_reward: config.pos_params.block_proposer_reward,
             block_vote_reward: config.pos_params.block_vote_reward,
-            max_inflation_rate: BasisPoints::new(
-                config.pos_params.max_inflation_rate,
-            ),
-            duplicate_vote_slash_rate: BasisPoints::new(
-                config.pos_params.duplicate_vote_slash_rate,
-            ),
-            light_client_attack_slash_rate: BasisPoints::new(
-                config.pos_params.light_client_attack_slash_rate,
-            ),
+            max_inflation_rate: config
+                .pos_params
+                .max_inflation_rate,
+            target_staked_ratio: config.pos_params.target_staked_ratio,
+            duplicate_vote_slash_rate: config
+                .pos_params
+                .duplicate_vote_slash_rate,
+            light_client_attack_slash_rate: config
+                .pos_params
+                .light_client_attack_slash_rate,
         };
 
         let mut genesis = Genesis {

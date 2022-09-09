@@ -27,7 +27,9 @@ pub struct PosParams {
     /// proposal
     pub block_vote_reward: u64,
     /// Maximum staking rewards rate per annum
-    pub max_inflation_rate: BasisPoints,
+    pub max_inflation_rate: Decimal,
+    /// Target ratio of staked NAM tokens to total NAM tokens
+    pub target_staked_ratio: Decimal,
     /// Portion of validator's stake that should be slashed on a duplicate
     /// vote. Given in basis points (slashed amount per ten thousand tokens).
     pub duplicate_vote_slash_rate: BasisPoints,
@@ -47,7 +49,9 @@ impl Default for PosParams {
             block_proposer_reward: 100,
             block_vote_reward: 1,
             // PoS inflation of 10%
-            max_inflation_rate: BasisPoints::new(1000),
+            max_inflation_rate: dec!(0.1),
+            // target staked ratio of 2/3
+            target_staked_ratio: dec!(0.6667),
             // slash 5%
             duplicate_vote_slash_rate: BasisPoints::new(500),
             // slash 5%
