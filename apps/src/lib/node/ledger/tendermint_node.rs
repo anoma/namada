@@ -187,7 +187,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     // reset all the Tendermint state, if any
     std::process::Command::new(tendermint_path)
         .args(&[
-            "reset",
+            "reset-state",
             "unsafe-all",
             // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
             // "--log-level=\"*debug\"",
@@ -355,7 +355,6 @@ async fn update_tendermint_config(
         .to_string();
     config.instrumentation.namespace =
         tendermint_config.instrumentation_namespace;
-
 
     let mut file = OpenOptions::new()
         .write(true)
