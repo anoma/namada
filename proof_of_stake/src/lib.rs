@@ -961,9 +961,8 @@ pub trait PosBase {
     /// go.
     fn distribute_rewards(
         &mut self,
-        params: &PosParams,
         current_epoch: impl Into<Epoch>,
-        inflation_amount: u64,
+        inflation_amount: Self::TokenAmount,
         proposer_address: &Self::Address,
         votes: &Vec<VoteInfo>,
     ) -> Result<(), Error> {
@@ -974,16 +973,16 @@ pub trait PosBase {
 
         // TODO: should we add this value to storage??
         let total_active_stake = validators.active.iter().fold(
-            VotingPower::from(0),
+            0_u64,
             |sum,
              WeightedValidator {
                  voting_power,
                  address: _,
-             }| { sum + *voting_power },
+             }| { sum + u64::from(*voting_power) },
         );
 
         let mut signer_set: HashSet<Self::Address> = HashSet::new();
-        let mut total_signing_stake = VotingPower::default();
+        let mut total_signing_stake: u64 = 0;
 
         for vote in votes.iter() {
             if !vote.signed_last_block { continue; }
@@ -992,10 +991,10 @@ pub trait PosBase {
                 .read_validator_address_raw_hash(tm_raw_hash_string)
                 .unwrap();
             signer_set.insert(native_address);
-            total_signing_stake += vote.validator_vp;
+            total_signing_stake += u64::from(vote.validator_vp);
         }
 
-        let new_tokens: Decimal = inflation_amount.into();
+        let new_tokens: Decimal = Into::<u64>::into(inflation_amount).into();
         let active_val_stake: Decimal = u64::from(total_active_stake).into();
         let signing_stake: Decimal = u64::from(total_signing_stake).into();
 
