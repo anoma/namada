@@ -61,14 +61,33 @@ pub struct MultiSignedEthEvent {
 
 /// Compresses a set of signed [`Vext`] instances, to save
 /// space on a block.
-#[derive(
-    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct VextDigest {
     /// The signatures and signing address of each [`Vext`]
     pub signatures: HashMap<Address, Signature>,
     /// The events that were reported
     pub events: Vec<MultiSignedEthEvent>,
+}
+
+impl BorshSchema for VextDigest {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                HashMap::<Address, Signature>::declaration(),
+                Vec::<MultiSignedEthEvent>::declaration()
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "ethereum_events::VextDigest".into()
+    }
 }
 
 impl VextDigest {
