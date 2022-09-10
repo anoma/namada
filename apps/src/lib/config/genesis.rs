@@ -566,12 +566,10 @@ pub mod genesis_config {
             max_validator_slots: config.pos_params.max_validator_slots,
             pipeline_len: config.pos_params.pipeline_len,
             unbonding_len: config.pos_params.unbonding_len,
-            votes_per_token: config.pos_params.votes_per_token,
+            tm_votes_per_token: config.pos_params.tm_votes_per_token,
             block_proposer_reward: config.pos_params.block_proposer_reward,
             block_vote_reward: config.pos_params.block_vote_reward,
-            max_inflation_rate: config
-                .pos_params
-                .max_inflation_rate,
+            max_inflation_rate: config.pos_params.max_inflation_rate,
             target_staked_ratio: config.pos_params.target_staked_ratio,
             duplicate_vote_slash_rate: config
                 .pos_params
@@ -673,7 +671,7 @@ pub struct Validator {
     pub protocol_key: common::PublicKey,
     /// The public DKG session key used during the DKG protocol
     pub dkg_public_key: DkgPublicKey,
-    /// These tokens are no staked and hence do not contribute to the
+    /// These tokens are not staked and hence do not contribute to the
     /// validator's voting power
     pub non_staked_balance: token::Amount,
     /// Validity predicate code WASM

@@ -442,7 +442,6 @@ where
             )
             .expect("unable to encode new d gain (Decimal)");
 
-
         let pos_minted_tokens =
             decimal_mult_u64(new_pos_reward_rate, u64::from(total_tokens));
         let _masp_minted_tokens =

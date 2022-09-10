@@ -403,8 +403,8 @@ impl VotingPowerDelta {
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
         // The token amount is expected to be in micro units already
-        let vp =
-            params.tm_votes_per_token * Decimal::from(Into::<i128>::into(change));
+        let vp = params.tm_votes_per_token
+            * Decimal::from(Into::<i128>::into(change));
         let delta: i128 = vp.to_i128().unwrap();
         let delta: i64 = TryFrom::try_from(delta)?;
         Ok(Self(delta))

@@ -113,8 +113,8 @@ impl RewardsController {
 }
 
 /// Function that allows the protocol to mint some number of tokens of a desired
-/// type to a destination address TODO: think of error cases that must be
-/// handled.
+/// type to a destination address.
+/// TODO: think of error cases that must be handled.
 pub fn mint_tokens<S>(
     storage: &mut S,
     target: &Address,

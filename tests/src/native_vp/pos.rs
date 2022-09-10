@@ -940,8 +940,10 @@ pub mod testing {
                         .unwrap_or_default();
                     // Votes_per_token is relative to micro units so no need to
                     // convert
-                    let vp_before =
-                        decimal_mult_i128(params.tm_votes_per_token, total_delta);
+                    let vp_before = decimal_mult_i128(
+                        params.tm_votes_per_token,
+                        total_delta,
+                    );
                     let vp_after = decimal_mult_i128(
                         params.tm_votes_per_token,
                         total_delta + token_delta,

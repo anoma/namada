@@ -45,8 +45,8 @@ impl Default for PosParams {
             max_validator_slots: 128,
             pipeline_len: 2,
             unbonding_len: 6,
-            // 1 tendermint voting power per 1 fundamental token (10^6 per NAM or 1 per
-            // namnam)
+            // 1 tendermint voting power per 1 fundamental token (10^6 per NAM
+            // or 1 per namnam)
             tm_votes_per_token: dec!(1.0),
             block_proposer_reward: dec!(0.0625),
             block_vote_reward: dec!(0.05),

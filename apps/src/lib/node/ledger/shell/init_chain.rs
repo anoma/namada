@@ -285,7 +285,9 @@ where
 
         // Set total staked tokens (those locked in PoS) in storage
         // TODO: test that this is correct
-        self.storage.write_total_staked_tokens(&(total_balance - total_non_staked_tokens));
+        self.storage.write_total_staked_tokens(
+            &(total_balance - total_non_staked_tokens),
+        );
 
         ibc::init_genesis_storage(&mut self.storage);
 
