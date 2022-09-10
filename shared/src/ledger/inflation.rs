@@ -1,10 +1,9 @@
 //! General inflation system that will be used to process rewards for
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
-//!
-//! TODO: possibly change f64 types to BasisPoints
 
-use rust_decimal::prelude::Decimal;
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
@@ -20,31 +19,39 @@ pub enum RewardsType {
     PubGoodsFunding,
 }
 
+/// Holds the PD controller values that should be updated in storage
+pub struct ValsToUpdate {
+    pub locked_ratio_last: Decimal,
+    pub last_reward_rate: Decimal,
+    pub p_gain: Decimal,
+    pub d_gain: Decimal,
+}
+
 /// PD controller used to dynamically adjust the rewards rates
 pub struct RewardsController {
-    locked_tokens: u64,
-    total_tokens: u64,
+    locked_tokens: token::Amount,
+    total_tokens: token::Amount,
     locked_ratio_target: Decimal,
     locked_ratio_last: Decimal,
     max_reward_rate: Decimal,
     last_reward_rate: Decimal,
     p_gain: Decimal,
     d_gain: Decimal,
-    epochs_per_yr: u64,
+    epochs_per_year: u64,
 }
 
 impl RewardsController {
     /// Initialize a new PD controller
     pub fn new(
-        locked_tokens: u64,
-        total_tokens: u64,
+        locked_tokens: token::Amount,
+        total_tokens: token::Amount,
         locked_ratio_target: Decimal,
         locked_ratio_last: Decimal,
         max_reward_rate: Decimal,
         last_reward_rate: Decimal,
         p_gain: Decimal,
         d_gain: Decimal,
-        epochs_per_yr: u64,
+        epochs_per_year: u64,
     ) -> Self {
         Self {
             locked_tokens,
@@ -55,40 +62,54 @@ impl RewardsController {
             last_reward_rate,
             p_gain,
             d_gain,
-            epochs_per_yr,
+            epochs_per_year,
         }
     }
 
     /// Calculate a new rewards rate
-    pub fn get_new_reward_rate(&self) -> Decimal {
-        let locked: Decimal = self.locked_tokens.into();
-        let total: Decimal = self.total_tokens.into();
-        let epochs_py: Decimal = self.epochs_per_yr.into();
+    pub fn run(
+        Self {
+            locked_tokens,
+            total_tokens,
+            locked_ratio_target,
+            locked_ratio_last,
+            max_reward_rate,
+            last_reward_rate,
+            p_gain,
+            d_gain,
+            epochs_per_year,
+        }: &Self,
+    ) -> ValsToUpdate {
+        let locked: Decimal = u64::from(*locked_tokens).into();
+        let total: Decimal = u64::from(*total_tokens).into();
+        let epochs_py: Decimal = (*epochs_per_year).into();
 
         let locked_ratio = locked / total;
-        let error_p = self.locked_ratio_target - locked_ratio;
-        let error_d = self.locked_ratio_last - locked_ratio;
+        let error_p = locked_ratio_target - locked_ratio;
+        let error_d = locked_ratio_last - locked_ratio;
 
-        let gain_factor = self.max_reward_rate * total / epochs_py;
-        let p_gain_new = self.p_gain * gain_factor;
-        let d_gain_new = self.d_gain * gain_factor;
+        let gain_factor = max_reward_rate * total / epochs_py;
+        let p_gain_new = p_gain * gain_factor;
+        let d_gain_new = d_gain * gain_factor;
 
         let control_val = p_gain_new * error_p - d_gain_new * error_d;
-        let reward_rate =
-            match self.last_reward_rate + control_val > self.max_reward_rate {
-                true => self.max_reward_rate,
-                false => match self.last_reward_rate + control_val
-                    > Decimal::new(0, 0)
-                {
-                    true => self.last_reward_rate + control_val,
-                    false => Decimal::new(0, 0),
-                },
-            };
-        reward_rate
-    }
+        let reward_rate = if last_reward_rate + control_val > *max_reward_rate {
+            *max_reward_rate
+        } else {
+            if last_reward_rate + control_val > dec!(0.0) {
+                last_reward_rate + control_val
+            } else {
+                dec!(0.0)
+            }
+        };
 
-    // TODO: provide way to get the new gain factors to store for use in
-    // following epoch.
+        ValsToUpdate {
+            locked_ratio_last: locked_ratio,
+            last_reward_rate: reward_rate,
+            p_gain: p_gain_new,
+            d_gain: d_gain_new,
+        }
+    }
 }
 
 /// Function that allows the protocol to mint some number of tokens of a desired
@@ -109,6 +130,12 @@ where
     dest_bal.receive(&amount);
     storage.write(&dest_key, dest_bal)?;
 
-    // TODO: update total supply somewhere (perhaps in the storage)
+    // Update the total supply of the tokens in storage
+    let mut total_tokens: token::Amount = storage
+        .read(&token::total_supply_key(token))?
+        .unwrap_or_default();
+    total_tokens.receive(&amount);
+    storage.write(&token::total_supply_key(token), total_tokens)?;
+
     Ok(())
 }

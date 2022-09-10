@@ -5,9 +5,10 @@ use namada::ledger::governance::utils::{
     compute_tally, get_proposal_votes, ProposalEvent,
 };
 use namada::ledger::governance::vp::ADDRESS as gov_address;
-use namada::ledger::inflation;
+use namada::ledger::inflation::{self, RewardsController};
+use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::staking_token_address;
-use namada::ledger::pos::types::VoteInfo;
+use namada::ledger::pos::types::{decimal_mult_u64, VoteInfo};
 use namada::ledger::storage::types::encode;
 use namada::ledger::treasury::ADDRESS as treasury_address;
 use namada::types::address::{xan as m1t, Address};
@@ -331,7 +332,8 @@ where
         });
     }
 
-    /// apply inflation
+    /// Calculate the new inflation rate, mint the new tokens, then distribute
+    /// them to relevant parties
     fn apply_inflation(
         &mut self,
         proposer_address: &Vec<u8>,
@@ -345,22 +347,35 @@ where
         //
         // MASP is included below just for some completeness.
 
-        // figure out how to get these and what types they should be
-        let epochs_per_yr: u64 = 365;
-        let total_tokens = u64::from(total_tokens);
+        // read from Parameters storage
+        let epochs_per_year: u64 = self
+            .read_storage_key(&params_storage::get_epochs_per_year_key())
+            .unwrap();
+        let pos_locked_ratio_last: Decimal = self
+            .read_storage_key(&params_storage::get_staked_ratio_key())
+            .unwrap();
+        let pos_last_reward_rate = self
+            .read_storage_key(&params_storage::get_pos_reward_rate_key())
+            .unwrap();
+        let pos_p_gain: Decimal = self
+            .read_storage_key(&params_storage::get_pos_gain_p_key())
+            .unwrap();
+        let pos_d_gain: Decimal = self
+            .read_storage_key(&params_storage::get_pos_gain_d_key())
+            .unwrap();
+
+        // read from PoS storage
         let total_tokens: Amount = self
             .read_storage_key(&total_supply_key(&staking_token_address()))
             .unwrap();
+        let pos_locked_supply: Amount = self.storage.read_total_staked_tokens();
+        let pos_locked_ratio_target =
+            self.storage.read_pos_params().target_staked_ratio;
+        let pos_max_reward_rate =
+            self.storage.read_pos_params().max_inflation_rate;
 
-        let pos_locked_supply: u64 = 1000;
-        let pos_locked_ratio_target = Decimal::new(5, 1);
-        let pos_locked_ratio_last = Decimal::new(5, 1);
-        let pos_max_reward_rate = Decimal::new(2, 1);
-        let pos_last_reward_rate = Decimal::new(12, 2);
-        let pos_p_gain = Decimal::new(1, 1);
-        let pos_d_gain = Decimal::new(1, 1);
-
-        let masp_locked_supply: u64 = 1000;
+        // Arbitrary default values until real ones can be fetched
+        let masp_locked_supply: Amount = Amount::default();
         let masp_locked_ratio_target = Decimal::new(5, 1);
         let masp_locked_ratio_last = Decimal::new(5, 1);
         let masp_max_reward_rate = Decimal::new(2, 1);
@@ -377,9 +392,9 @@ where
             pos_last_reward_rate,
             pos_p_gain,
             pos_d_gain,
-            epochs_per_yr,
+            epochs_per_year,
         );
-        let masp_controller = inflation::RewardsController::new(
+        let _masp_controller = inflation::RewardsController::new(
             masp_locked_supply,
             total_tokens,
             masp_locked_ratio_target,
@@ -388,52 +403,81 @@ where
             masp_last_reward_rate,
             masp_p_gain,
             masp_d_gain,
-            epochs_per_yr,
+            epochs_per_year,
         );
 
-        // TODO: get other params such as p_gain, d_gain and write the necessary
-        // params to storage somewhere
+        let new_pos_vals = RewardsController::run(&pos_controller);
+        let new_masp_vals = RewardsController::run(&_masp_controller);
 
-        let new_pos_reward_rate = pos_controller.get_new_reward_rate();
-        let new_masp_reward_rate = pos_controller.get_new_reward_rate();
+        let new_pos_reward_rate = new_pos_vals.last_reward_rate;
+        let new_masp_reward_rate = new_masp_vals.last_reward_rate;
 
-        let total_tokens: Decimal = total_tokens.into();
+        self.storage
+            .write(
+                &params_storage::get_pos_reward_rate_key(),
+                new_pos_reward_rate
+                    .try_to_vec()
+                    .expect("encode new reward rate"),
+            )
+            .expect("unable to encode new reward rate (Decimal)");
+        self.storage
+            .write(
+                &params_storage::get_staked_ratio_key(),
+                new_pos_vals
+                    .locked_ratio_last
+                    .try_to_vec()
+                    .expect("encode new locked ratio"),
+            )
+            .expect("unable to encode new locked ratio (Decimal)");
+        self.storage
+            .write(
+                &params_storage::get_pos_gain_p_key(),
+                new_pos_vals.p_gain.try_to_vec().expect("encode new p gain"),
+            )
+            .expect("unable to encode new p gain (Decimal)");
+        self.storage
+            .write(
+                &params_storage::get_pos_gain_d_key(),
+                new_pos_vals.d_gain.try_to_vec().expect("encode new d gain"),
+            )
+            .expect("unable to encode new d gain (Decimal)");
+
+
+        let pos_minted_tokens =
+            decimal_mult_u64(new_pos_reward_rate, u64::from(total_tokens));
+        let _masp_minted_tokens =
+            decimal_mult_u64(new_masp_reward_rate, u64::from(total_tokens));
+
         let pos_address = self.storage.read_pos_address();
 
         // PoS inflation
-        let pos_minted_tokens: Decimal = new_pos_reward_rate * total_tokens;
-        let pos_minted_tokens: Amount =
-            Amount::from(pos_minted_tokens.to_u64().unwrap());
         inflation::mint_tokens(
             &mut self.storage,
             &pos_address,
             &staking_token_address(),
-            pos_minted_tokens,
+            Amount::from(pos_minted_tokens),
         )
         .unwrap();
-        
-        self.storage
-            .write(
-                &total_supply_key(&staking_token_address()),
-                (total_tokens + pos_minted_tokens)
-                    .try_to_vec()
-                    .expect("encode initial total NAM balance"),
-            )
-            .expect("unable to set total NAM balance in storage");
 
         let (current_epoch, _gas) = self.storage.get_current_epoch();
 
         // Get validator address from storage based on the consensus key hash
+        // TODO: do some more error handling here (to panic or not to panic?)
+        // perhaps use an expect instead of unwrap
         let tm_raw_hash_string = tm_raw_hash_to_string(proposer_address);
         let native_proposer_address = self
             .storage
             .read_validator_address_raw_hash(tm_raw_hash_string)
             .unwrap();
 
+        // TODO: reward distribution should be written in such a way that the reward products
+        // for each validator are updated rather than actually transferring tokens to the addresses.
+        // Must follow convention of auto-bonding the rewards basically
+
         self.storage
             .distribute_rewards(
                 current_epoch,
-                pos_minted_tokens,
+                Amount::from(pos_minted_tokens),
                 &native_proposer_address,
                 votes,
             )
