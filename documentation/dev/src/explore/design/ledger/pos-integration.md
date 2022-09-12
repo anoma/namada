@@ -14,18 +14,17 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
 - for any validator, all the following fields are required:
   - `validator/{validator_address}/consensus_key`
   - `validator/{validator_address}/state`
-  - `validator/{validator_address}/total_deltas`: sum of self-bonds and delegations to this validator, may contain negative delta values when unbonding
+  - `validator/{validator_address}/deltas`: the change in the amount of self-bonds and delegations to this validator per epoch, may contain negative delta values when unbonding
   - `validator/{validator_address}/total_unbonded`: sum of unbonded bonds from this validator, needed to determine the amount slashed in each epoch that it affects when a slash is applied
-  - `validator/{validator_address}/voting_power`
   - `validator/{validator_address}/validator_rewards_product`: a rewards product that is used to find the updated amount for self-bonds with staking rewards added to this validator - the past epoched data has to be kept indefinitely
   - `validator/{validator_address}/delegation_rewards_product`: similar to `validator_rewards_product`, but for delegations with commissions subtracted - the past epoched data also has to be kept indefinitely
   - `validator/{validator_address}/commissions`: the total amount of delegations commissions collected by this validator - this doesn't need to epoched data, just an accumulator of the total
-  - `validator/{validator_address}/commission_rate`: a validator chosen commission rate that is a fraction of delegation rewards charged by this validator
+  - `validator/{validator_address}/commission_rate`: a validator-chosen commission rate that is some fraction of the delegation rewards charged by this validator
 - `slash/{validator_address}` (optional): a list of slashes, where each record contains epoch and slash rate
 - `bond/{bond_source}/{bond_validator} (optional)`
 - `unbond/{unbond_source}/{unbond_validator} (optional)`
 - `validator_set (required)`
-- `total_voting_power (required)`
+- `total_deltas (required)`
 
 - standard validator metadata (these are regular storage values, not epoched data):
   - `validator/{validator_address}/address_raw_hash` (required): raw hash of validator's address associated with the address is used for look-up of validator address from a raw hash
@@ -62,9 +61,8 @@ The validator transactions are assumed to be applied with an account address `va
   - if `bond` exist, update it with the new bond amount in epoch `n + pipeline_length`
   - else, create a new record with bond amount in epoch `n + pipeline_length`
   - debit the token `amount` from the `validator_address` and credit it to the PoS account
-  - add the `amount` to `validator/{validator_address}/total_deltas` in epoch `n + pipeline_length`
-  - update the `validator/{validator_address}/voting_power` in epoch `n + pipeline_length`
-  - update the `total_voting_power` in epoch `n + pipeline_length`
+  - add the `amount` to `validator/{validator_address}/deltas` in epoch `n + pipeline_length`
+  - update the `total_deltas` in epoch `n + pipeline_length`
   - update `validator_set` in epoch `n + pipeline_length`
 - `unbond(amount)`:
   - let `bond = read(bond/{validator_address}/{validator_address}/delta)`
@@ -73,9 +71,8 @@ The validator transactions are assumed to be applied with an account address `va
   - if `total(bond) - total(pre_unbond) < amount`, panic
   - decrement the `bond` deltas starting from the rightmost value (a bond in a future-most epoch at the unbonding offset) until whole `amount` is decremented
   - for each decremented `bond` value write a new `unbond` in epoch `n + pipeline_length + unbonding_length` with the start epoch set to the epoch of the source value and end epoch `n + pipeline_length + unbonding_length`
-  - decrement the `amount` from `validator/{validator_address}/total_deltas` in epoch `n + pipeline_length`
-  - update the `validator/{validator_address}/voting_power` in epoch `n + pipeline_length`
-  - update the `total_voting_power` in epoch `n + pipeline_length`
+  - decrement the `amount` from `validator/{validator_address}/deltas` in epoch `n + pipeline_length`
+  - update the `total_deltas` in epoch `n + pipeline_length`
   - update `validator_set` in epoch `n + pipeline_length`
 - `withdraw_unbonds`:
   - let `unbond = read(unbond/{validator_address}/{validator_address}/delta)`
@@ -103,9 +100,8 @@ The delegator transactions are assumed to be applied with an account address `de
   - if `bond` exist, update it with the new bond amount in epoch `n + pipeline_length`
   - else, create a new record with bond amount in epoch `n + pipeline_length`
   - debit the token `amount` from the `delegator_address` and credit it to the PoS account
-  - add the `amount` to `validator/{validator_address}/total_deltas` in epoch `n + pipeline_length`
-  - update the `validator/{validator_address}/voting_power` in epoch `n + pipeline_length`
-  - update the `total_voting_power` in epoch `n + pipeline_length`
+  - add the `amount` to `validator/{validator_address}/deltas` in epoch `n + pipeline_length`
+  - update the `total_deltas` in epoch `n + pipeline_length`
   - update `validator_set` in epoch `n + pipeline_length`
 - `undelegate(validator_address, amount)`:
   - let `bond = read(bond/{delegator_address}/{validator_address}/delta)`
@@ -114,9 +110,8 @@ The delegator transactions are assumed to be applied with an account address `de
   - if `total(bond) - total(pre_unbond) < amount`, panic
   - decrement the `bond` deltas starting from the rightmost value (a bond in a future-most epoch) until whole `amount` is decremented
   - for each decremented `bond` value write a new `unbond` with the key set to the epoch of the source value
-  - decrement the `amount` from `validator/{validator_address}/total_deltas` in epoch `n + unbonding_length`
-  - update the `validator/{validator_address}/voting_power` in epoch `n + unbonding_length`
-  - update the `total_voting_power` in epoch `n + unbonding_length`
+  - decrement the `amount` from `validator/{validator_address}/deltas` in epoch `n + unbonding_length`
+  - update the `total_deltas` in epoch `n + unbonding_length`
   - update `validator_set` in epoch `n + unbonding_length`
 - `redelegate(src_validator_address, dest_validator_address, amount)`:
   - `undelegate(src_validator_address, amount)`
