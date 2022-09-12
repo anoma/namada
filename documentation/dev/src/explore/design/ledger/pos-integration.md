@@ -81,7 +81,7 @@ The validator transactions are assumed to be applied with an account address `va
   - for each `((bond_start, bond_end), amount) in unbond where unbond.epoch <= n`:
     - let `amount_after_slash = amount`
     - for each `slash in read(slash/{validator_address})`:
-      - if `bond_start <= slash.epoch && slash.epoch <= bond_end)`, `amount_after_slash *= (10_000 - slash.rate) / 10_000`
+      - if `bond_start <= slash.epoch && slash.epoch <= bond_end)`, `amount_after_slash *= (1 - slash.rate)`
     - credit the `amount_after_slash` to the `validator_address` and debit the whole `amount` (before slash, if any) from the PoS account
     - burn the slashed tokens (`amount - amount_after_slash`), if not zero
 - `change_consensus_key`:
