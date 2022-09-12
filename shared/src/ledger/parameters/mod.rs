@@ -115,23 +115,23 @@ pub enum WriteError {
     BorshSchema,
 )]
 pub struct Parameters {
-    /// Epoch duration
+    /// Epoch duration (read only)
     pub epoch_duration: EpochDuration,
-    /// Maximum expected time per block
+    /// Maximum expected time per block (read only)
     pub max_expected_time_per_block: DurationSecs,
-    /// Whitelisted validity predicate hashes
+    /// Whitelisted validity predicate hashes (read only)
     pub vp_whitelist: Vec<String>,
-    /// Whitelisted tx hashes
+    /// Whitelisted tx hashes (read only)
     pub tx_whitelist: Vec<String>,
-    /// Expected number of epochs per year
+    /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
-    /// PoS gain p
+    /// PoS gain p (read + write for every epoch)
     pub pos_gain_p: Decimal,
-    /// PoS gain d
+    /// PoS gain d (read + write for every epoch)
     pub pos_gain_d: Decimal,
-    /// PoS staked ratio
+    /// PoS staked ratio (read + write for every epoch)
     pub staked_ratio: Decimal,
-    /// PoS reward rate last epoch
+    /// PoS reward rate last epoch (read + write for every epoch)
     pub pos_reward_rate: Decimal,
 }
 
