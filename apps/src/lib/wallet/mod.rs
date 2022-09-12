@@ -130,14 +130,8 @@ impl Wallet {
                 Rc::new(data.keys.eth_bridge_keypair)
             })?;
         Ok(Store::gen_validator_keys(
-            eth_bridge_keypair.map(|sk| {
-                Rc::try_unwrap(sk)
-                    .expect("There should be only a single strong RC reference")
-            }),
-            protocol_keypair.map(|sk| {
-                Rc::try_unwrap(sk)
-                    .expect("There should be only a single strong RC reference")
-            }),
+            eth_bridge_keypair.map(|sk| sk.as_ref().clone()),
+            protocol_keypair.map(|sk| sk.as_ref().clone()),
             protocol_key_scheme,
         ))
     }
