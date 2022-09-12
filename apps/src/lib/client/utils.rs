@@ -590,6 +590,36 @@ pub fn init_network(
             keypair.ref_to()
         });
 
+        let eth_hot_pk = try_parse_public_key(
+            format!("validator {name} eth hot key"),
+            &config.eth_hot_key,
+        )
+        .unwrap_or_else(|| {
+            let alias = format!("{}-eth-hot-key", name);
+            println!("Generating validator {} eth hot key...", name);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Secp256k1,
+                Some(alias),
+                unsafe_dont_encrypt,
+            );
+            keypair.ref_to()
+        });
+
+        let eth_cold_pk = try_parse_public_key(
+            format!("validator {name} eth cold key"),
+            &config.eth_cold_key,
+        )
+        .unwrap_or_else(|| {
+            let alias = format!("{}-eth-cold-key", name);
+            println!("Generating validator {} eth cold key...", name);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Secp256k1,
+                Some(alias),
+                unsafe_dont_encrypt,
+            );
+            keypair.ref_to()
+        });
+
         let dkg_pk = &config
             .dkg_public_key
             .as_ref()
@@ -608,6 +638,7 @@ pub fn init_network(
 
                 let validator_keys = wallet
                     .gen_validator_keys(
+                        Some(eth_hot_pk.clone()),
                         Some(protocol_pk.clone()),
                         SchemeType::Ed25519,
                     )
@@ -624,6 +655,10 @@ pub fn init_network(
             Some(genesis_config::HexString(account_pk.to_string()));
         config.staking_reward_public_key =
             Some(genesis_config::HexString(staking_reward_pk.to_string()));
+        config.eth_cold_key =
+            Some(genesis_config::HexString(eth_cold_pk.to_string()));
+        config.eth_hot_key =
+            Some(genesis_config::HexString(eth_hot_pk.to_string()));
 
         config.protocol_public_key =
             Some(genesis_config::HexString(protocol_pk.to_string()));
