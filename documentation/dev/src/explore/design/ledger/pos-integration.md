@@ -18,7 +18,7 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
   - `validator/{validator_address}/total_unbonded`: sum of unbonded bonds from this validator, needed to determine the amount slashed in each epoch that it affects when a slash is applied
   - `validator/{validator_address}/validator_rewards_product`: a rewards product that is used to find the updated amount for self-bonds with staking rewards added to this validator - the past epoched data has to be kept indefinitely
   - `validator/{validator_address}/delegation_rewards_product`: similar to `validator_rewards_product`, but for delegations with commissions subtracted - the past epoched data also has to be kept indefinitely
-  - `validator/{validator_address}/commissions`: the total amount of delegations commissions collected by this validator - this doesn't need to epoched data, just an accumulator of the total
+  - `validator/{validator_address}/commissions`: the total amount of delegations commissions collected by this validator - this doesn't need to be epoched data, just an accumulator of the total
   - `validator/{validator_address}/commission_rate`: a validator-chosen commission rate that is some fraction of the delegation rewards charged by this validator
 - `slash/{validator_address}` (optional): a list of slashes, where each record contains epoch and slash rate
 - `bond/{bond_source}/{bond_validator} (optional)`
@@ -28,10 +28,10 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
 
 - standard validator metadata (these are regular storage values, not epoched data):
   - `validator/{validator_address}/address_raw_hash` (required): raw hash of validator's address associated with the address is used for look-up of validator address from a raw hash
-  - `validator/{validator_address}/max_commission_rate_change` (required): a validator chosen maximum commission rate change per epoch, set when the validator account is created and cannot be changed
-  - TBA (e.g. alias, website, description, delegation commission rate, etc.)
+  - `validator/{validator_address}/max_commission_rate_change` (required): a validator-chosen maximum commission rate change per epoch, set when the validator account is created and cannot be changed
+  - TBA (e.g. alias, website, description, etc.)
 
-Only XAN tokens can be staked in bonds. The tokens being staked (bonds and unbonds amounts) are kept in the PoS account under `{xan_address}/balance/{pos_address}` until they are withdrawn.
+Only NAM tokens can be staked in bonds. The tokens being staked (amounts in the bonds and unbonds) are kept in the PoS account under `{nam_address}/balance/{pos_address}` until they are withdrawn.
 
 ## Initialization
 
@@ -89,7 +89,7 @@ The validator transactions are assumed to be applied with an account address `va
 - `change_commission_rate`:
   - creates a record in `validator/{validator_address}/commission_rate` in epoch `n + pipeline_length`
 
-For `self_bond`, `unbond`, `withdraw_unbonds`, `become_validator` `change_consensus_key` and `change_commission_rate` the transaction must be signed with the validator's public key. Additionally, for `become_validator` and `change_consensus_key` we must attach a signature with the validator's consensus key to verify its ownership. Note that for `self_bond`, signature verification is also performed because there are tokens debited from the validator's account.
+For `self_bond`, `unbond`, `withdraw_unbonds`, `become_validator`, `change_consensus_key`, and `change_commission_rate`, the transaction must be signed with the validator's public key. Additionally, for `become_validator` and `change_consensus_key`, we must attach a signature with the validator's consensus key to verify its ownership. Note that for `self_bond`, signature verification is also performed because there are tokens debited from the validator's account.
 
 ### Delegator transactions
 
