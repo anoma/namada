@@ -1765,9 +1765,9 @@ pub mod args {
                      will be generated if none given. Note that this must be \
                      secp256k1.",
                 ))
-                .arg(VALIDATOR_ETH_COLD_KEY.def().about(
-                    "An Eth cold key for the validator account. A new one \
-                     will be generated if none given. Note that this must be \
+                .arg(VALIDATOR_ETH_HOT_KEY.def().about(
+                    "An Eth hot key for the validator account. A new one will \
+                     be generated if none given. Note that this must be \
                      secp256k1.",
                 ))
                 .arg(REWARDS_KEY.def().about(
