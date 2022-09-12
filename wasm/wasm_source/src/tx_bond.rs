@@ -74,6 +74,8 @@ mod tests {
         let staking_reward_address = address::testing::established_address_1();
         let consensus_key = key::testing::keypair_1().ref_to();
         let staking_reward_key = key::testing::keypair_2().ref_to();
+        let eth_hot_key = key::testing::keypair_3().ref_to();
+        let eth_cold_key = key::testing::keypair_4().ref_to();
 
         let genesis_validators = [GenesisValidator {
             address: bond.validator.clone(),
@@ -81,6 +83,8 @@ mod tests {
             tokens: initial_stake,
             consensus_key,
             staking_reward_key,
+            eth_hot_key,
+            eth_cold_key,
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
