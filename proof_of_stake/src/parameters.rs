@@ -109,12 +109,12 @@ impl PosParams {
             Ok(max_total_voting_power_i64) => {
                 if max_total_voting_power_i64 > MAX_TOTAL_VOTING_POWER {
                     errors.push(ValidationError::TotalVotingPowerTooLarge(
-                        max_total_voting_power,
+                        max_total_voting_power.to_u64().unwrap(),
                     ))
                 }
             }
             Err(_) => errors.push(ValidationError::TotalVotingPowerTooLarge(
-                max_total_voting_power,
+                max_total_voting_power.to_u64().unwrap(),
             )),
         }
 
