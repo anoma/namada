@@ -177,6 +177,8 @@ pub async fn submit_init_validator(
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
     let rewards_key_alias = format!("{}-rewards-key", alias);
+    let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
+    let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
     let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
         println!("Generating validator account key...");
         ctx.wallet
@@ -225,7 +227,7 @@ pub async fn submit_init_validator(
                 .gen_key(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
-                    Some(consensus_key_alias.clone()),
+                    Some(eth_cold_key_alias.clone()),
                     unsafe_dont_encrypt,
                 )
                 .1
@@ -246,7 +248,7 @@ pub async fn submit_init_validator(
                 .gen_key(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
-                    Some(consensus_key_alias.clone()),
+                    Some(eth_hot_key_alias.clone()),
                     unsafe_dont_encrypt,
                 )
                 .1
@@ -269,9 +271,12 @@ pub async fn submit_init_validator(
     if protocol_key.is_none() {
         println!("Generating protocol signing key...");
     }
+    let eth_hot_pk = eth_hot_key.ref_to();
     // Generate the validator keys
-    let validator_keys =
-        ctx.wallet.gen_validator_keys(protocol_key, scheme).unwrap();
+    let validator_keys = ctx
+        .wallet
+        .gen_validator_keys(Some(eth_hot_pk), protocol_key, scheme)
+        .unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair

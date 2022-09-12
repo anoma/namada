@@ -289,13 +289,15 @@ where
                 }
                 #[cfg(feature = "dev")]
                 {
-                    let validator_keys = wallet::defaults::validator_keys();
+                    let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
+                        wallet::defaults::validator_keys();
                     ShellMode::Validator {
                         data: wallet::ValidatorData {
                             address: wallet::defaults::validator_address(),
                             keys: wallet::ValidatorKeys {
-                                protocol_keypair: validator_keys.0,
-                                dkg_keypair: Some(validator_keys.1),
+                                protocol_keypair,
+                                eth_bridge_keypair,
+                                dkg_keypair: Some(dkg_keypair),
                             },
                         },
                         broadcast_sender,

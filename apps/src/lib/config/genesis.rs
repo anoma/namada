@@ -772,21 +772,15 @@ pub fn genesis() -> Genesis {
         65, 17, 187, 6, 238, 141, 63, 188, 76, 38, 102, 7, 47, 185, 28, 52,
     ])
     .unwrap();
-    let secp_eth_hot_keypair = secp256k1::SecretKey::try_from_slice(&[
-        117, 93, 118, 129, 202, 67, 51, 62, 202, 196, 130, 244, 5, 44, 88, 200,
-        121, 169, 11, 227, 79, 223, 74, 88, 49, 132, 213, 59, 64, 20, 13, 82,
-    ])
-    .unwrap();
 
     let staking_reward_keypair =
         common::SecretKey::try_from_sk(&ed_staking_reward_keypair).unwrap();
     let eth_cold_keypair =
         common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
-    let eth_hot_keypair =
-        common::SecretKey::try_from_sk(&secp_eth_hot_keypair).unwrap();
     let address = wallet::defaults::validator_address();
     let staking_reward_address = Address::decode("atest1v4ehgw36xcersvee8qerxd35x9prsw2xg5erxv6pxfpygd2x89z5xsf5xvmnysejgv6rwd2rnj2avt").unwrap();
-    let (protocol_keypair, dkg_keypair) = wallet::defaults::validator_keys();
+    let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
+        wallet::defaults::validator_keys();
     let validator = Validator {
         pos_data: GenesisValidator {
             address,
@@ -795,7 +789,7 @@ pub fn genesis() -> Genesis {
             consensus_key: consensus_keypair.ref_to(),
             staking_reward_key: staking_reward_keypair.ref_to(),
             eth_cold_key: eth_cold_keypair.ref_to(),
-            eth_hot_key: eth_hot_keypair.ref_to(),
+            eth_hot_key: eth_bridge_keypair.ref_to(),
         },
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),
@@ -920,7 +914,7 @@ pub mod tests {
         let staking_reward_keypair: common::SecretKey =
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
         let srkp_arr = staking_reward_keypair.try_to_vec().unwrap();
-        let (protocol_keypair, dkg_keypair) =
+        let (protocol_keypair, _eth_hot_bridge_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
 
         // TODO: derive validator eth address from an eth keypair

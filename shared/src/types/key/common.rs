@@ -97,7 +97,7 @@ impl TryFrom<&PublicKey> for EthAddress {
     fn try_from(value: &PublicKey) -> Result<Self, Self::Error> {
         match value {
             PublicKey::Ed25519(_) => Err(EthAddressConvError::CannotBeEd25519),
-            PublicKey::Secp256k1(pk) => Ok(EthAddress::from(pk).into()),
+            PublicKey::Secp256k1(pk) => Ok(EthAddress::from(pk)),
         }
     }
 }
