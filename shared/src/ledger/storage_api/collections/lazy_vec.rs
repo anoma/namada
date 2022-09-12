@@ -13,7 +13,7 @@ use super::LazyCollection;
 use crate::ledger::storage_api::validation::{self, Data};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::ledger::vp_env::VpEnv;
-use crate::types::storage;
+use crate::types::storage::{self, DbKeySeg};
 
 /// Subkey pointing to the length of the LazyVec
 pub const LEN_SUBKEY: &str = "len";
@@ -76,6 +76,8 @@ pub enum Action<T> {
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum ValidationError {
+    #[error("Storage error in reading key {0}")]
+    StorageError(storage::Key),
     #[error("Incorrect difference in LazyVec's length")]
     InvalidLenDiff,
     #[error("An empty LazyVec must be deleted from storage")]
@@ -93,6 +95,8 @@ pub enum ValidationError {
     IndexOverflow(<usize as TryInto<Index>>::Error),
     #[error("Unexpected underflow in `{0} - {0}`")]
     UnexpectedUnderflow(Index, Index),
+    #[error("Invalid storage key {0}")]
+    InvalidSubKey(storage::Key),
 }
 
 #[allow(missing_docs)]
@@ -155,6 +159,7 @@ impl<T> LazyVec<T> {
 
     /// Get the sub-key of vector's elements storage
     fn get_data_key(&self, index: Index) -> storage::Key {
+        // TODO rebase on ordered prefix iter (https://github.com/anoma/namada/pull/458) and remove `.to_string()`
         self.get_data_prefix().push(&index.to_string()).unwrap()
     }
 
@@ -248,58 +253,91 @@ where
         }))
     }
 
-    /// Check if the given storage key is a LazyVec sub-key and if so return
-    /// which one
-    pub fn is_sub_key(&self, key: &storage::Key) -> Option<SubKey> {
-        if let Some((prefix, storage::DbKeySeg::StringSeg(last))) =
-            key.split_last()
-        {
-            if let Ok(index) = Index::from_str(last) {
-                if let Some((prefix, storage::DbKeySeg::StringSeg(snd_last))) =
-                    prefix.split_last()
-                {
-                    if snd_last == DATA_SUBKEY && prefix.eq_owned(&self.key) {
-                        return Some(SubKey::Data(index));
-                    }
-                }
-            } else if last == LEN_SUBKEY && prefix.eq_owned(&self.key) {
-                return Some(SubKey::Len);
+    /// Check if the given storage key is a valid LazyVec sub-key and if so
+    /// return which one
+    pub fn is_valid_sub_key(
+        &self,
+        key: &storage::Key,
+    ) -> ValidationResult<Option<SubKey>> {
+        let suffix = match key.split_prefix(&self.key) {
+            None => {
+                // not matching prefix, irrelevant
+                return Ok(None);
             }
+            Some(None) => {
+                // no suffix, invalid
+                return Err(ValidationError::InvalidSubKey(key.clone()));
+            }
+            Some(Some(suffix)) => suffix,
+        };
+
+        // Match the suffix against expected sub-keys
+        match &suffix.segments[..] {
+            [DbKeySeg::StringSeg(sub)] if sub == LEN_SUBKEY => {
+                Ok(Some(SubKey::Len))
+            }
+            [DbKeySeg::StringSeg(sub_a), DbKeySeg::StringSeg(sub_b)]
+                if sub_a == DATA_SUBKEY =>
+            {
+                // TODO rebase on ordered prefix iter (https://github.com/anoma/namada/pull/458) and parse with `KeySeg::parse`
+                if let Ok(index) = Index::from_str(sub_b) {
+                    Ok(Some(SubKey::Data(index)))
+                } else {
+                    Err(ValidationError::InvalidSubKey(key.clone()))
+                }
+            }
+            _ => Err(ValidationError::InvalidSubKey(key.clone())),
         }
-        None
     }
 
     /// Accumulate storage changes inside a [`ValidationBuilder`]. This is
     /// typically done by the validity predicate while looping through the
     /// changed keys. If the resulting `builder` is not `None`, one must
     /// call `fn build()` on it to get the validation result.
+    /// This function will return `Ok(true)` if the storage key is a valid
+    /// sub-key of this collection, `Ok(false)` if the storage key doesn't match
+    /// the prefix of this collection, or fail with
+    /// [`ValidationError::InvalidSubKey`] if the prefix matches this
+    /// collection, but the key itself is not recognized.
     pub fn accumulate<ENV>(
         &self,
         env: &ENV,
         builder: &mut Option<ValidationBuilder<T>>,
         key_changed: &storage::Key,
-    ) -> std::result::Result<(), ENV::Error>
+    ) -> ValidationResult<bool>
     where
         ENV: VpEnv,
     {
-        if let Some(sub) = self.is_sub_key(key_changed) {
+        if let Some(sub) = self.is_valid_sub_key(key_changed)? {
             let change = match sub {
                 SubKey::Len => {
-                    let data = validation::read_data(env, key_changed)?;
+                    let data = validation::read_data(env, key_changed)
+                        // TODO this has to propagate errors from VpEnv rather
+                        // then replace them (e.g. it could be out-of-gas), but
+                        // VpEnv::Error is generic, maybe we should make it
+                        // concrete (only the VpEnv impls have extensible error
+                        // types)
+                        .map_err(|_| {
+                            ValidationError::StorageError(key_changed.clone())
+                        })?;
                     data.map(SubKeyWithData::Len)
                 }
                 SubKey::Data(index) => {
-                    let data = validation::read_data(env, key_changed)?;
+                    let data = validation::read_data(env, key_changed)
+                        .map_err(|_| {
+                            ValidationError::StorageError(key_changed.clone())
+                        })?;
                     data.map(|data| SubKeyWithData::Data(index, data))
                 }
             };
             if let Some(change) = change {
                 let builder =
                     builder.get_or_insert(ValidationBuilder::default());
-                builder.changes.push(change)
+                builder.changes.push(change);
+                return Ok(true);
             }
         }
-        Ok(())
+        Ok(false)
     }
 }
 
