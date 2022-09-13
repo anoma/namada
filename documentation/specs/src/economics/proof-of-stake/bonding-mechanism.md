@@ -9,9 +9,9 @@ An epoch is a range of blocks or time that is defined by the base ledger and mad
 Epoched data is data associated with a specific epoch that is set in advance.
 The data relevant to the PoS system in the ledger's state are epoched. Each data can be uniquely identified. These are:
 
-- [System parameters](#system-parameters). A single value for each epoch.
-- [Active validator set](#active-validator-set). A single value for each epoch.
-- Total voting power. A sum of all active and inactive validators' voting power. A single value for each epoch.
+- [System parameters](#system-parameters). Discrete values for each epoch in which the parameters have changed.
+- [Validator sets](#validator-sets). Discrete values for each epoch.
+- Total voting power. A sum of all validators' voting power, excluding jailed validators. A delta value for each epoch.
 - [Validators' consensus key, state and total bonded tokens](#validator). Identified by the validator's address.
 - [Bonds](#bonds) are created by self-bonding and delegations. They are identified by the pair of source address and the validator's address.
 
@@ -56,9 +56,17 @@ For each validator (in any state), the system also tracks total bonded tokens as
 - *change commission rate*:
   Set the new commission rate. When applied in epoch `n`, the new value will be set for epoch `n + pipeline_length`. The commission rate change must be within the `max_commission_rate_change` limit set by the validator.
 
-#### Active validator set
+#### Validator sets
 
-From all the *candidate* validators, in each epoch the ones with the most voting power limited up to the `max_validator_slots` [parameter](#system-parameters) are selected for the active validator set. The active validator set selected in epoch `n` is set for epoch `n + pipeline_length`.
+A *candidate* validator that is not jailed (see [slashing](#slashing)) can be in one of the three sets:
+
+- `consensus` - consensus validator set, capacity limited by the `max_validator_slots` [parameter](#system-parameters)
+- `below_capacity` - validators below consensus capacity, but above the threshold  set by `min_validator_stake` [parameter](#system-parameters)
+- `below_threshold` - validators with stake below `min_validator_stake` [parameter](#system-parameters)
+
+From all the *candidate* validators, in each epoch the ones with the most voting power limited up to the `max_validator_slots` [parameter](#system-parameters) are selected for the `consensus` validator set. Whenever stake of a validator is changed, the validator sets must be updated at the appropriate offset matching the stake update.
+
+The limit on `min_validator_stake` [parameter](#system-parameters) is introduced, because the protocol needs to iterate through the validator sets in order to copy the last known state into a new epoch when epoch changes (to avoid offloading this cost to a transaction that is unlucky enough to be the first one to update the validator set(s) in some new epoch) and also to [distribute rewards](./reward-distribution.md) to `consensus` validators and to record unchanged validator products for validators `below_capacity`, who do not receive rewards in the current epoch.
 
 ### Delegator
 
@@ -92,12 +100,6 @@ Any unbonds created in epoch `n` decrements the bond's validator's total bonded 
 An "unbond" with epoch set to `n` may be withdrawn by the bond's source address in or any time after the epoch `n`. Once withdrawn, the unbond is deleted and the tokens are credited to the source account.
 
 Note that unlike bonding and unbonding where token changes are delayed to some future epochs (pipeline or unbonding offset), the token withdrawal applies immediately. This because when the tokens are withdrawable, they are already "unlocked" from the PoS system and do not contribute to voting power.
-
-### Staking rewards
-
-Until we have programmable validity predicates, rewards can use the mechanism outlined in the [F1 paper](https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf), but it should use the exponential model, so that withdrawing rewards more frequently provides no additional benefit (this is a design constraint we should follow in general, we don't want to accidentally encourage transaction spam). This should be written in a way that allows for a natural upgrade to a validator-customisable rewards model (defaulting to this one) if possible.
-
-To a validator who proposed a block, the system rewards tokens based on the `block_proposer_reward` [system parameter](#system-parameters) and each validator that voted on a block receives `block_vote_reward`.
 
 ### Slashing
 
@@ -134,7 +136,8 @@ The invariant is that the sum of amounts that may be withdrawn from a misbehavin
 
 The default values that are relative to epoch duration assume that an epoch last about 24 hours.
 
-- `max_validator_slots`: Maximum active validators, default `128`
+- `max_validator_slots`: Maximum consensus validators, default `128`
+- `min_validator_stake`: Minimum stake of a validator that allows the validator to enter the `consensus` or `below_capacity` [sets](#validator-sets), in number of native tokens. Because the [inflation system](../inflation-system.md#proof-of-stake-rewards) targets a bonding ratio of 2/3, the minimum should be somewhere around `total_supply * 2/3 / max_validator_slots`, but it can and should be much lower to lower the entry cost, as long as it's enough to prevent validation account creation spam that could slow down PoS system update on epoch change
 - `pipeline_len`: Pipeline length in number of epochs, default `2` (see <https://github.com/cosmos/cosmos-sdk/blob/019444ae4328beaca32f2f8416ee5edbac2ef30b/docs/architecture/adr-039-epoched-staking.md#pipelining-the-epochs>)
 - `unboding_len`: Unbonding duration in number of epochs, default `6`
 - `votes_per_token`: Used in validators' voting power calculation, default 100‱ (1 voting power unit per 1000 tokens)
@@ -175,10 +178,9 @@ struct Epoched<Data> {
 }
 ```
 
-Note that not all epochs will have data set, only the ones in which some changes occurred. The only exception to this is validator sets, which are written on a new epoch from the latest state into the new epoch by the protocol. This so that a
-transaction never has to update the whole validator set when it hasn't changed yet in the current epoch, which would require a copy of the last epoch data and that copy would additionally have to be verified by the PoS validity predicate.
+Note that not all epochs will have data set, only the ones in which some changes occurred. The only exception to this are the `consensus` and `below_capacity` validator sets, which are written on a new epoch from the latest state into the new epoch by the protocol. This is so that a transaction never has to update the whole validator set when it hasn't changed yet in the current epoch, which would require a copy of the last epoch data and that copy would additionally have to be verified by the PoS validity predicate.
 
-To try to look-up a value for `Epoched` data with discrete values in each epoch (such as the active validator set) in the current epoch `n`:
+To try to look-up a value for `Epoched` data with discrete values in each epoch (such as the consensus validator set) in the current epoch `n`:
 
 1. read the `data` field at epoch `n`:
    1. if there's a value at `n` return it
@@ -212,7 +214,11 @@ To update a value in `Epoched` data with delta values in epoch `n` with value `d
 
 The invariants for updates in both cases are that `m >= n` (epoched data cannot be updated in an epoch lower than the current epoch) and `m - n <= LENGTH - past_epochs_to_store` (epoched data can only be updated at the future-most epoch set by the `LENGTH - past_epochs_to_store` of the data).
 
-We store all the active and inactive validators in two separate sets, ordered by their voting power. Conceptually, this may look like this:
+We store the `consensus` validators and validators `below_capacity` in two set, ordered by their voting power. We don't have to store the validators `below_threshold` in a set, because we don't need to know their order.
+
+Note that we still need to store `below_capacity` set in order of their voting power, because when e.g. one of the `consensus` validator's voting power drops below that of a maximum `below_capacity` validator, we need to know which validator to swap in into the `consensus` set. The protocol new epoch update just disregards validators who are not in `consensus` or `below_capacity` sets as `below_threshold` validators and so iteration on unbounded size is avoided. Instead the size of the validator set that is regarded for PoS rewards can be adjusted by the `min_validator_stake` parameter via governance.
+
+Conceptually, this may look like this:
 
 ```rust,ignore
 type VotingPower = u64;
@@ -229,30 +235,34 @@ struct WeightedValidator {
 
 struct ValidatorSet {
   /// Active validator set with maximum size equal to `max_validator_slots`
-  active: BTreeSet<WeightedValidator>,
-  /// All the other validators that are not active
-  inactive: BTreeSet<WeightedValidator>,
+  consensus: BTreeSet<WeightedValidator>,
+  /// Other validators that are not in `consensus`, but have stake above `min_validator_stake`
+  below_threshold: BTreeSet<WeightedValidator>,
 }
 
 type ValidatorSets = Epoched<ValidatorSet>;
 
-/// The sum of all active and inactive validators' voting power
+/// The sum of all validators voting power (including `below_threshold`)
 type TotalVotingPower = Epoched<VotingPower>;
 ```
 
-When any validator's voting power changes, we attempt to perform the following update on the `ActiveValidatorSet`:
+When any validator's voting power changes, we attempt to perform the following update on the `ValidatorSet`:
 
 1. let `validator` be the validator's address, `power_before` and `power_after` be the voting power before and after the change, respectively
+1. find if the `power_before` and `power_after` are above the `min_validator_stake` theshold
+   1. if they're both below the threshold, nothing else needs to be done
 1. let `power_delta = power_after - power_before`
-1. let `min_active = active.first()` (active validator with lowest voting power)
-1. let `max_inactive = inactive.last()` (inactive validator with greatest voting power)
-1. find whether the validator is active, let `is_active = power_before >= max_inactive.voting_power`
-   1. if `is_active`:
-      1. if `power_delta > 0 && power_after > max_inactive.voting_power`, update the validator in `active` set with `voting_power = power_after`
-      1. else, remove the validator from `active`, insert it into `inactive` and remove `max_inactive.address` from `inactive` and insert it into `active`
-   1. else (`!is_active`):
-      1. if `power_delta < 0 && power_after < min_active.voting_power`, update the validator in `inactive` set with `voting_power = power_after`
-      1. else, remove the validator from `inactive`, insert it into `active` and remove `min_active.address` from `active` and insert it into `inactive`
+1. let `min_consensus = consensus.first()` (consensus validator with lowest voting power)
+1. let `max_below_capacity = below_capacity.last()` (below_capacity validator with greatest voting power)
+1. find whether the validator was in consensus set, let `was_in_consensus = power_before >= max_below_capacity.voting_power`
+   1. if `was_in_consensus`:
+      1. if `power_after >= max_below_capacity.voting_power`, update the validator in `consensus` set with `voting_power = power_after`
+      1. else if `power_after < min_validator_stake`, remove the validator from `consensus`, insert the `max_below_capacity.address` validator into `consensus` and remove `max_below_capacity.address` from `below_capacity`
+      1. else, remove the validator from `consensus`, insert it into `below_capacity` and remove `max_below_capacity.address` from `below_capacity` and insert it into `consensus`
+   1. else (`!was_in_consensus`):
+      1. if `power_after <= min_consensus.voting_power`, update the validator in `below_capacity` set with `voting_power = power_after`
+      1. else if `power_after < min_validator_stake`, remove the validator from `below_capacity`
+      1. else, remove the validator from `below_capacity`, insert it into `consensus` and remove `min_consensus.address` from `consensus` and insert it into `below_capacity`
 
 Within each validator's address space, we store public consensus key, state, total bonded token amount, total unbonded token amount (needed for applying of slashes) and voting power calculated from the total bonded token amount (even though the voting power is stored in the `ValidatorSet`, we also need to have the `voting_power` here because we cannot look it up in the `ValidatorSet` without iterating the whole set):
 
@@ -313,4 +323,4 @@ struct Slash {
 
 An initial validator set with self-bonded token amounts must be given on system initialization.
 
-This set is used to pre-compute epochs in the genesis block from epoch `0` to epoch `pipeline_length - 1`.
+This set is used to initialize the state on the first epoch (naturally, there is no pipeline offset on genesis validators).

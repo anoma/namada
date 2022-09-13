@@ -23,7 +23,8 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
 - `slash/{validator_address}` (optional): a list of slashes, where each record contains epoch and slash rate
 - `bond/{bond_source}/{bond_validator} (optional)`
 - `unbond/{unbond_source}/{unbond_validator} (optional)`
-- `validator_set (required)`
+- `validator_set/consensus (required)`: up to `max_validator_slots` (parameter) validators, ordered by their voting power
+- `validator_set/below_capacity (required)`: validators below consensus capacity, but above the `min_validator_stake` parameter, also ordered by their voting power
 - `total_deltas (required)`
 
 - standard validator metadata (these are regular storage values, not epoched data):
