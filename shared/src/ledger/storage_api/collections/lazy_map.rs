@@ -75,7 +75,7 @@ where
     K: storage::KeySeg,
 {
     /// Create or use an existing map with the given storage `key`.
-    fn new(key: storage::Key) -> Self {
+    fn open(key: storage::Key) -> Self {
         Self {
             key,
             phantom_k: PhantomData,
@@ -119,7 +119,7 @@ where
     /// collection at the given key, a new empty one will be provided. The
     /// nested collection may be manipulated through its methods.
     pub fn at(&self, key: &K) -> V {
-        V::new(self.get_data_key(key))
+        V::open(self.get_data_key(key))
     }
 }
 
@@ -259,7 +259,7 @@ mod test {
         let mut storage = TestStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
-        let lazy_map = LazyMap::<u32, String>::new(key);
+        let lazy_map = LazyMap::<u32, String>::open(key);
 
         // The map should be empty at first
         assert!(lazy_map.is_empty(&storage)?);

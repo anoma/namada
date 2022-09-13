@@ -37,7 +37,7 @@ pub struct LazyHashSet<T> {
 
 impl<T> LazyCollection for LazyHashSet<T> {
     /// Create or use an existing set with the given storage `key`.
-    fn new(key: storage::Key) -> Self {
+    fn open(key: storage::Key) -> Self {
         Self {
             key,
             phantom: PhantomData,
@@ -149,7 +149,7 @@ mod test {
         let mut storage = TestStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
-        let lazy_set = LazyHashSet::<i64>::new(key);
+        let lazy_set = LazyHashSet::<i64>::open(key);
 
         // The set should be empty at first
         assert!(lazy_set.is_empty(&storage)?);

@@ -45,7 +45,7 @@ struct KeyVal<K, V> {
 
 impl<K, V> LazyCollection for LazyHashMap<K, V> {
     /// Create or use an existing map with the given storage `key`.
-    fn new(key: storage::Key) -> Self {
+    fn open(key: storage::Key) -> Self {
         Self {
             key,
             phantom_k: PhantomData,
@@ -225,7 +225,7 @@ mod test {
         let mut storage = TestStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
-        let lazy_map = LazyHashMap::<u32, String>::new(key);
+        let lazy_map = LazyHashMap::<u32, String>::open(key);
 
         // The map should be empty at first
         assert!(lazy_map.is_empty(&storage)?);

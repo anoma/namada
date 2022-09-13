@@ -41,5 +41,5 @@ pub enum ReadError {
 /// An empty collection must be deleted from storage.
 pub trait LazyCollection {
     /// Create or use an existing vector with the given storage `key`.
-    fn new(key: storage::Key) -> Self;
+    fn open(key: storage::Key) -> Self;
 }
