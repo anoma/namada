@@ -480,8 +480,11 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
                 TendermintMode::Validator => {
                     tracing::info!("This node is a validator");
                 }
-                TendermintMode::Full | TendermintMode::Seed => {
-                    tracing::info!("This node is not a validator");
+                TendermintMode::Full => {
+                    tracing::info!("This node is a fullnode");
+                }
+                TendermintMode::Seed => {
+                    tracing::info!("This node is a seednode");
                 }
             }
             shell.run()
