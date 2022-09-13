@@ -22,9 +22,6 @@ pub trait VpEnv<'view> {
     /// Storage read prefix iterator
     type PrefixIter;
 
-    /// Host functions possible errors, extensible with custom user errors.
-    type Error: From<storage_api::Error>;
-
     /// Type to read storage state before the transaction execution
     type Pre: StorageRead<'view, PrefixIter = Self::PrefixIter>;
 
@@ -43,36 +40,37 @@ pub trait VpEnv<'view> {
     fn read_temp<T: BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, Self::Error>;
+    ) -> Result<Option<T>, storage_api::Error>;
 
     /// Storage read temporary state raw bytes (after tx execution). It will try
     /// to read from only the write log.
     fn read_bytes_temp(
         &self,
         key: &Key,
-    ) -> Result<Option<Vec<u8>>, Self::Error>;
+    ) -> Result<Option<Vec<u8>>, storage_api::Error>;
 
     /// Getting the chain ID.
-    fn get_chain_id(&'view self) -> Result<String, Self::Error>;
+    fn get_chain_id(&'view self) -> Result<String, storage_api::Error>;
 
     /// Getting the block height. The height is that of the block to which the
     /// current transaction is being applied.
-    fn get_block_height(&'view self) -> Result<BlockHeight, Self::Error>;
+    fn get_block_height(&'view self)
+    -> Result<BlockHeight, storage_api::Error>;
 
     /// Getting the block hash. The height is that of the block to which the
     /// current transaction is being applied.
-    fn get_block_hash(&'view self) -> Result<BlockHash, Self::Error>;
+    fn get_block_hash(&'view self) -> Result<BlockHash, storage_api::Error>;
 
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
-    fn get_block_epoch(&'view self) -> Result<Epoch, Self::Error>;
+    fn get_block_epoch(&'view self) -> Result<Epoch, storage_api::Error>;
 
     /// Storage prefix iterator. It will try to get an iterator from the
     /// storage.
     fn iter_prefix(
         &'view self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter, Self::Error>;
+    ) -> Result<Self::PrefixIter, storage_api::Error>;
 
     /// Evaluate a validity predicate with given data. The address, changed
     /// storage keys and verifiers will have the same values as the input to
@@ -84,7 +82,7 @@ pub trait VpEnv<'view> {
         &self,
         vp_code: Vec<u8>,
         input_data: Vec<u8>,
-    ) -> Result<bool, Self::Error>;
+    ) -> Result<bool, storage_api::Error>;
 
     /// Verify a transaction signature. The signature is expected to have been
     /// produced on the encoded transaction [`crate::proto::Tx`]
@@ -93,10 +91,10 @@ pub trait VpEnv<'view> {
         &self,
         pk: &common::PublicKey,
         sig: &common::Signature,
-    ) -> Result<bool, Self::Error>;
+    ) -> Result<bool, storage_api::Error>;
 
     /// Get a tx hash
-    fn get_tx_code_hash(&self) -> Result<Hash, Self::Error>;
+    fn get_tx_code_hash(&self) -> Result<Hash, storage_api::Error>;
 
     // ---- Methods below have default implementation via `pre/post` ----
 
@@ -105,8 +103,8 @@ pub trait VpEnv<'view> {
     fn read_pre<T: BorshDeserialize>(
         &'view self,
         key: &Key,
-    ) -> Result<Option<T>, Self::Error> {
-        self.pre().read(key).map_err(Into::into)
+    ) -> Result<Option<T>, storage_api::Error> {
+        self.pre().read(key)
     }
 
     /// Storage read prior state raw bytes (before tx execution). It
@@ -114,8 +112,8 @@ pub trait VpEnv<'view> {
     fn read_bytes_pre(
         &'view self,
         key: &Key,
-    ) -> Result<Option<Vec<u8>>, Self::Error> {
-        self.pre().read_bytes(key).map_err(Into::into)
+    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
+        self.pre().read_bytes(key)
     }
 
     /// Storage read posterior state Borsh encoded value (after tx execution).
@@ -124,8 +122,8 @@ pub trait VpEnv<'view> {
     fn read_post<T: BorshDeserialize>(
         &'view self,
         key: &Key,
-    ) -> Result<Option<T>, Self::Error> {
-        self.post().read(key).map_err(Into::into)
+    ) -> Result<Option<T>, storage_api::Error> {
+        self.post().read(key)
     }
 
     /// Storage read posterior state raw bytes (after tx execution). It will try
@@ -134,20 +132,23 @@ pub trait VpEnv<'view> {
     fn read_bytes_post(
         &'view self,
         key: &Key,
-    ) -> Result<Option<Vec<u8>>, Self::Error> {
-        self.post().read_bytes(key).map_err(Into::into)
+    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
+        self.post().read_bytes(key)
     }
 
     /// Storage `has_key` in prior state (before tx execution). It will try to
     /// read from the storage.
-    fn has_key_pre(&'view self, key: &Key) -> Result<bool, Self::Error> {
-        self.pre().has_key(key).map_err(Into::into)
+    fn has_key_pre(&'view self, key: &Key) -> Result<bool, storage_api::Error> {
+        self.pre().has_key(key)
     }
 
     /// Storage `has_key` in posterior state (after tx execution). It will try
     /// to check the write log first and if no entry found then the storage.
-    fn has_key_post(&'view self, key: &Key) -> Result<bool, Self::Error> {
-        self.post().has_key(key).map_err(Into::into)
+    fn has_key_post(
+        &'view self,
+        key: &Key,
+    ) -> Result<bool, storage_api::Error> {
+        self.post().has_key(key)
     }
 
     /// Storage prefix iterator for prior state (before tx execution). It will
@@ -155,8 +156,8 @@ pub trait VpEnv<'view> {
     fn iter_pre_next(
         &'view self,
         iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        self.pre().iter_next(iter).map_err(Into::into)
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        self.pre().iter_next(iter)
     }
 
     /// Storage prefix iterator next for posterior state (after tx execution).
@@ -165,8 +166,8 @@ pub trait VpEnv<'view> {
     fn iter_post_next(
         &'view self,
         iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        self.post().iter_next(iter).map_err(Into::into)
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        self.post().iter_next(iter)
     }
 }
 
@@ -190,8 +191,6 @@ pub enum RuntimeError {
     ReadTemporaryValueError,
     #[error("Trying to read a permament value with read_temp")]
     ReadPermanentValueError,
-    #[error("Storage error: {0}")]
-    StorageApi(storage_api::Error),
 }
 
 /// VP environment function result
@@ -494,10 +493,4 @@ where
         }
     }
     Ok(None)
-}
-
-impl From<storage_api::Error> for RuntimeError {
-    fn from(err: storage_api::Error) -> Self {
-        Self::StorageApi(err)
-    }
 }

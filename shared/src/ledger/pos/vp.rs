@@ -47,8 +47,6 @@ use crate::vm::WasmCacheAccess;
 pub enum Error {
     #[error("Native VP error: {0}")]
     NativeVpError(native_vp::Error),
-    #[error("Storage error: {0}")]
-    StorageApi(storage_api::Error),
 }
 
 /// PoS functions result
@@ -324,7 +322,7 @@ where
 }
 
 impl_pos_read_only! {
-    type Error = native_vp::Error;
+    type Error = storage_api::Error;
     impl<'f, 'a, DB, H, CA> PosReadOnly for CtxPreStorageRead<'f, 'a, DB, H, CA>
         where
             DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
@@ -333,7 +331,7 @@ impl_pos_read_only! {
 }
 
 impl_pos_read_only! {
-    type Error = native_vp::Error;
+    type Error = storage_api::Error;
     impl<'f, 'a, DB, H, CA> PosReadOnly for CtxPostStorageRead<'f, 'a, DB, H, CA>
         where
             DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
@@ -344,11 +342,5 @@ impl_pos_read_only! {
 impl From<native_vp::Error> for Error {
     fn from(err: native_vp::Error) -> Self {
         Self::NativeVpError(err)
-    }
-}
-
-impl From<storage_api::Error> for Error {
-    fn from(err: storage_api::Error) -> Self {
-        Self::StorageApi(err)
     }
 }
