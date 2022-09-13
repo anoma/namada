@@ -17,9 +17,7 @@ use crate::types::storage::BlockHeight;
 /// This struct will be created and signed over by each
 /// active validator, to be included as a vote extension at the end of a
 /// Tendermint PreCommit phase.
-#[derive(
-    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct Vext {
     /// The block height for which this [`Vext`] was made.
     pub block_height: BlockHeight,
@@ -46,6 +44,28 @@ impl Vext {
     /// and return the signed data.
     pub fn sign(self, signing_key: &common::SecretKey) -> Signed<Self> {
         Signed::new(signing_key, self)
+    }
+}
+
+impl BorshSchema for Vext {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                BlockHeight::declaration(),
+                Address::declaration(),
+                Vec::<EthereumEvent>::declaration(),
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "ethereum_events::Vext".into()
     }
 }
 

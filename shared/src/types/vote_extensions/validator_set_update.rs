@@ -144,6 +144,28 @@ impl Vext {
     }
 }
 
+impl BorshSchema for Vext {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                VotingPowersMap::declaration(),
+                Address::declaration(),
+                BlockHeight::declaration(),
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "validator_set_update::Vext".into()
+    }
+}
+
 /// Container type for both kinds of Ethereum bridge addresses:
 ///
 ///   - An address derived from a hot key.
