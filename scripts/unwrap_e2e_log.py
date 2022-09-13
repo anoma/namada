@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# this script takes `expectrl` log outputs, such as the ones emitted by
+# e2e tests, and unwraps them into a more readable format
+
 import re
 import sys
 
