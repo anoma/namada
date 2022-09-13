@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use namada::types::token;
+use namada_apps::config::ethereum;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
@@ -1765,6 +1766,8 @@ fn test_genesis_validators() -> Result<()> {
             .rpc_address
             .set_port(first_port + 1);
         config.ledger.shell.ledger_address.set_port(first_port + 2);
+        // disable eth full node
+        config.ledger.ethereum.mode = ethereum::Mode::Off;
         config
     };
 
