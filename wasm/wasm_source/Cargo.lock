@@ -643,6 +643,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "data-encoding"
+version = "2.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ee2393c4a91429dffb4bedf19f4d6abf27d8a732c8ce4980305d782e5426d57"
+
+[[package]]
 name = "der"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1524,10 +1530,10 @@ dependencies = [
  "borsh",
  "chrono",
  "clru",
+ "data-encoding",
  "derivative",
  "ed25519-consensus",
  "ferveo-common",
- "hex",
  "ibc",
  "ibc-proto",
  "ics23",
@@ -1588,7 +1594,8 @@ dependencies = [
  "concat-idents",
  "derivative",
  "namada",
- "namada_vm_env",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
  "prost",
  "serde_json",
  "sha2 0.9.9",
@@ -1602,8 +1609,12 @@ dependencies = [
 name = "namada_tx_prelude"
 version = "0.7.1"
 dependencies = [
+ "borsh",
+ "namada",
+ "namada_macros",
  "namada_vm_env",
  "sha2 0.10.2",
+ "thiserror",
 ]
 
 [[package]]
@@ -1611,17 +1622,19 @@ name = "namada_vm_env"
 version = "0.7.1"
 dependencies = [
  "borsh",
- "hex",
  "namada",
- "namada_macros",
 ]
 
 [[package]]
 name = "namada_vp_prelude"
 version = "0.7.1"
 dependencies = [
+ "borsh",
+ "namada",
+ "namada_macros",
  "namada_vm_env",
  "sha2 0.10.2",
+ "thiserror",
 ]
 
 [[package]]

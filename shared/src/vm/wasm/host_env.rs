@@ -9,11 +9,11 @@ use wasmer::{
 };
 
 use crate::ledger::storage::{self, StorageHasher};
-use crate::vm::host_env::{TxEnv, VpEnv, VpEvaluator};
+use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{host_env, WasmCacheAccess};
 
-impl<DB, H, CA> WasmerEnv for TxEnv<'_, WasmMemory, DB, H, CA>
+impl<DB, H, CA> WasmerEnv for TxVmEnv<'_, WasmMemory, DB, H, CA>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
@@ -27,7 +27,7 @@ where
     }
 }
 
-impl<DB, H, EVAL, CA> WasmerEnv for VpEnv<'_, WasmMemory, DB, H, EVAL, CA>
+impl<DB, H, EVAL, CA> WasmerEnv for VpVmEnv<'_, WasmMemory, DB, H, EVAL, CA>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
@@ -48,7 +48,7 @@ where
 pub fn tx_imports<DB, H, CA>(
     wasm_store: &Store,
     initial_memory: Memory,
-    env: TxEnv<'static, WasmMemory, DB, H, CA>,
+    env: TxVmEnv<'static, WasmMemory, DB, H, CA>,
 ) -> ImportObject
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -67,6 +67,7 @@ where
             "anoma_tx_write_temp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_write_temp),
             "anoma_tx_delete" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_delete),
             "anoma_tx_iter_prefix" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_iter_prefix),
+            "anoma_tx_rev_iter_prefix" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_rev_iter_prefix),
             "anoma_tx_iter_next" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_iter_next),
             "anoma_tx_insert_verifier" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_insert_verifier),
             "anoma_tx_update_validity_predicate" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_update_validity_predicate),
@@ -87,7 +88,7 @@ where
 pub fn vp_imports<DB, H, EVAL, CA>(
     wasm_store: &Store,
     initial_memory: Memory,
-    env: VpEnv<'static, WasmMemory, DB, H, EVAL, CA>,
+    env: VpVmEnv<'static, WasmMemory, DB, H, EVAL, CA>,
 ) -> ImportObject
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -107,6 +108,7 @@ where
             "anoma_vp_has_key_pre" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_has_key_pre),
             "anoma_vp_has_key_post" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_has_key_post),
             "anoma_vp_iter_prefix" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_iter_prefix),
+            "anoma_vp_rev_iter_prefix" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_rev_iter_prefix),
             "anoma_vp_iter_pre_next" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_iter_pre_next),
             "anoma_vp_iter_post_next" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_iter_post_next),
             "anoma_vp_get_chain_id" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_chain_id),

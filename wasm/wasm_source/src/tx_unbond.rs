@@ -1,20 +1,15 @@
 //! A tx for a PoS unbond that removes staked tokens from a self-bond or a
 //! delegation to be withdrawn in or after unbonding epoch.
 
-use namada_tx_prelude::proof_of_stake::unbond_tokens;
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(tx_data: Vec<u8>) {
-    let signed = SignedTxData::try_from_slice(&tx_data[..]).unwrap();
-    let unbond =
-        transaction::pos::Unbond::try_from_slice(&signed.data.unwrap()[..])
-            .unwrap();
+fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
+    let signed = SignedTxData::try_from_slice(&tx_data[..])
+        .err_msg("failed to decode SignedTxData")?;
+    let data = signed.data.ok_or_err_msg("Missing data")?;
+    let unbond = transaction::pos::Unbond::try_from_slice(&data[..])
+        .err_msg("failed to decode Unbond")?;
 
-    if let Err(err) =
-        unbond_tokens(unbond.source.as_ref(), &unbond.validator, unbond.amount)
-    {
-        debug_log!("Unbonding failed with: {}", err);
-        panic!()
-    }
+    ctx.unbond_tokens(unbond.source.as_ref(), &unbond.validator, unbond.amount)
 }

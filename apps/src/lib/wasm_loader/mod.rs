@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use data_encoding::HEXLOWER;
 use futures::future::join_all;
-use hex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -144,7 +144,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                 Ok(bytes) => {
                     let mut hasher = Sha256::new();
                     hasher.update(bytes);
-                    let result = hex::encode(hasher.finalize());
+                    let result = HEXLOWER.encode(&hasher.finalize());
                     let derived_name = format!(
                         "{}.{}.wasm",
                         &name.split('.').collect::<Vec<&str>>()[0],

@@ -4034,12 +4034,12 @@ dependencies = [
  "byte-unit",
  "chrono",
  "clru",
+ "data-encoding",
  "derivative",
  "ed25519-consensus",
  "ferveo",
  "ferveo-common",
  "group-threshold-cryptography",
- "hex",
  "ibc",
  "ibc-proto",
  "ics23",
@@ -4098,6 +4098,7 @@ dependencies = [
  "color-eyre",
  "config",
  "curl",
+ "data-encoding",
  "derivative",
  "directories",
  "ed25519-consensus",
@@ -4108,7 +4109,6 @@ dependencies = [
  "flate2",
  "futures 0.3.21",
  "git2",
- "hex",
  "itertools 0.10.3",
  "jsonpath_lib",
  "libc",
@@ -4200,18 +4200,19 @@ dependencies = [
  "chrono",
  "color-eyre",
  "concat-idents",
+ "data-encoding",
  "derivative",
  "escargot",
  "expectrl",
  "eyre",
  "file-serve",
  "fs_extra",
- "hex",
  "itertools 0.10.3",
  "libp2p",
  "namada",
  "namada_apps",
- "namada_vm_env",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
  "pretty_assertions",
  "proptest",
  "prost 0.9.0",
@@ -4229,8 +4230,12 @@ dependencies = [
 name = "namada_tx_prelude"
 version = "0.7.1"
 dependencies = [
+ "borsh",
+ "namada",
+ "namada_macros",
  "namada_vm_env",
  "sha2 0.10.2",
+ "thiserror",
 ]
 
 [[package]]
@@ -4238,17 +4243,19 @@ name = "namada_vm_env"
 version = "0.7.1"
 dependencies = [
  "borsh",
- "hex",
  "namada",
- "namada_macros",
 ]
 
 [[package]]
 name = "namada_vp_prelude"
 version = "0.7.1"
 dependencies = [
+ "borsh",
+ "namada",
+ "namada_macros",
  "namada_vm_env",
  "sha2 0.10.2",
+ "thiserror",
 ]
 
 [[package]]
