@@ -59,7 +59,7 @@ clippy-abcipp:
 	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
-		--features "std testing abcipp eth-fullnode" && \
+		--features "std testing abcipp" && \
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./proof_of_stake/Cargo.toml \
 		--features "testing" && \
