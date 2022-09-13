@@ -331,7 +331,7 @@ mod test_prepare_proposal {
         shell.storage.last_height = LAST_HEIGHT;
 
         let signed_vote_extension = {
-            let (protocol_key, _) = wallet::defaults::validator_keys();
+            let (protocol_key, _, _) = wallet::defaults::validator_keys();
             let validator_addr = wallet::defaults::validator_address();
 
             // generate a valid signature
@@ -363,7 +363,7 @@ mod test_prepare_proposal {
         // artificially change the block height
         shell.storage.last_height = LAST_HEIGHT;
 
-        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
 
         let signed_vote_extension = {
@@ -422,7 +422,7 @@ mod test_prepare_proposal {
         // artificially change the block height
         shell.storage.last_height = LAST_HEIGHT;
 
-        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
 
         let ethereum_event = EthereumEvent::TransfersToNamada {
@@ -499,7 +499,7 @@ mod test_prepare_proposal {
         // artificially change the block height
         shell.storage.last_height = LAST_HEIGHT;
 
-        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
 
         let ethereum_event = EthereumEvent::TransfersToNamada {
@@ -620,7 +620,7 @@ mod test_prepare_proposal {
         );
 
         // test prepare proposal
-        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
 
         let ethereum_event = EthereumEvent::TransfersToNamada {

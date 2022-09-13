@@ -463,7 +463,7 @@ mod test_process_proposal {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
-        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
             let validator_addr = wallet::defaults::validator_address();
             let signed_vote_extension = {
@@ -531,7 +531,7 @@ mod test_process_proposal {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
-        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
             let addr = wallet::defaults::validator_address();
             let event = EthereumEvent::TransfersToNamada {
@@ -579,7 +579,7 @@ mod test_process_proposal {
         const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
         let (mut shell, _, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
-        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
             let addr = wallet::defaults::validator_address();
             let event = EthereumEvent::TransfersToNamada {
