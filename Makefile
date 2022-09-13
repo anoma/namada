@@ -50,7 +50,7 @@ check:
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
-	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets --features eth-fullnode -- -D warnings && \
+	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
@@ -175,8 +175,6 @@ clean:
 
 build-doc:
 	$(cargo) doc --no-deps
-	$(cargo) run --bin namada_encoding_spec
-	make -C docs build
 
 doc:
 	# build and opens the docs in browser

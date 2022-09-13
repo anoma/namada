@@ -324,8 +324,12 @@ where
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
-                    _ => {
+                    ProtocolTxType::ValidatorSetUpdate(_) => {
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    ref protocol_tx_type => {
                         tracing::error!(
+                            ?protocol_tx_type,
                             "Internal logic error: FinalizeBlock received an \
                              unsupported TxType::Protocol transaction: {:?}",
                             protocol_tx

@@ -3,6 +3,7 @@ pub mod oracle;
 pub mod test_tools;
 use std::ffi::OsString;
 
+use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::oneshot::{Receiver, Sender};
 
@@ -28,27 +29,63 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Run the Ethereum fullnode. If it stops or an abort
-/// signal is sent, this processes is halted.
-pub async fn run(
-    mut ethereum_node: EthereumNode,
+/// Represents a subprocess running an Ethereum full node
+pub enum Subprocess {
+    Mock(test_tools::mock_eth_fullnode::EthereumNode),
+    Geth(eth_fullnode::EthereumNode),
+}
+
+/// Starts an Ethereum fullnode in a subprocess and returns a handle for
+/// monitoring it using [`monitor`], as well as a channel for halting it.
+pub async fn start(url: &str, real: bool) -> Result<(Subprocess, Sender<()>)> {
+    if real {
+        let (node, sender) = eth_fullnode::EthereumNode::new(url).await?;
+        Ok((Subprocess::Geth(node), sender))
+    } else {
+        let (node, sender) =
+            test_tools::mock_eth_fullnode::EthereumNode::new().await?;
+        Ok((Subprocess::Mock(node), sender))
+    }
+}
+
+/// Monitor the Ethereum fullnode. If it stops or an abort
+/// signal is sent, the subprocess is halted.
+pub async fn monitor(
+    ethereum_node: Subprocess,
+    abort_recv: Receiver<Sender<()>>,
+) -> Result<()> {
+    match ethereum_node {
+        Subprocess::Mock(node) => monitor_node(node, abort_recv).await,
+        Subprocess::Geth(node) => monitor_node(node, abort_recv).await,
+    }
+}
+
+/// A handle on an Ethereum full node subprocess for monitoring it
+#[async_trait]
+pub trait Monitorable {
+    async fn wait(&mut self) -> Result<()>;
+    async fn kill(&mut self);
+}
+
+async fn monitor_node(
+    mut node: impl Monitorable,
     abort_recv: Receiver<Sender<()>>,
 ) -> Result<()> {
     tokio::select! {
         // run the ethereum fullnode
-        status =  ethereum_node.wait() => status,
+        status = node.wait() => status,
         // wait for an abort signal
         resp_sender = abort_recv => {
             match resp_sender {
                 Ok(resp_sender) => {
                     tracing::info!("Shutting down Ethereum fullnode...");
-                    ethereum_node.kill().await;
+                    node.kill().await;
                     resp_sender.send(()).unwrap();
                 },
                 Err(err) => {
                     tracing::error!("The Ethereum abort sender has unexpectedly dropped: {}", err);
                     tracing::info!("Shutting down Ethereum fullnode...");
-                    ethereum_node.kill().await;
+                    node.kill().await;
                 }
             }
             Ok(())
@@ -56,18 +93,18 @@ pub async fn run(
     }
 }
 
-#[cfg(feature = "eth-fullnode")]
 /// Tools for running a geth fullnode process
 pub mod eth_fullnode {
     use std::time::Duration;
 
+    use async_trait::async_trait;
     use tokio::process::{Child, Command};
     use tokio::sync::oneshot::error::TryRecvError;
     use tokio::sync::oneshot::{channel, Receiver, Sender};
     use tokio::task::LocalSet;
     use web30::client::Web3;
 
-    use super::{Error, Result};
+    use super::{Error, Monitorable, Result};
 
     /// A handle to a running geth process and a channel
     /// that indicates it should shut down if the oracle
@@ -164,11 +201,14 @@ pub mod eth_fullnode {
                 })
                 .await
         }
+    }
 
+    #[async_trait]
+    impl Monitorable for EthereumNode {
         /// Wait for the process to finish or an abort message was
         /// received from the Oracle process. If either, return the
         /// status.
-        pub async fn wait(&mut self) -> Result<()> {
+        async fn wait(&mut self) -> Result<()> {
             loop {
                 match self.process.try_wait() {
                     Ok(Some(status)) => {
@@ -190,13 +230,8 @@ pub mod eth_fullnode {
         }
 
         /// Stop the geth process
-        pub async fn kill(&mut self) {
+        async fn kill(&mut self) {
             self.process.kill().await.unwrap();
         }
     }
 }
-
-#[cfg(feature = "eth-fullnode")]
-pub use eth_fullnode::EthereumNode;
-#[cfg(not(feature = "eth-fullnode"))]
-pub use test_tools::mock_eth_fullnode::EthereumNode;

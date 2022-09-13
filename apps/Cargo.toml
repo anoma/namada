@@ -44,7 +44,6 @@ dev = ["namada/dev"]
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
 testing = ["dev"]
-eth-fullnode = []
 abcipp = [
     "tendermint-abcipp",
     "tendermint-config-abcipp",

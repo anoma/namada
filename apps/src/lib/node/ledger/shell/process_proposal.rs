@@ -380,7 +380,7 @@ where
     fn has_proper_eth_events_num(&self, c: &DigestCounters) -> bool {
         #[cfg(feature = "abcipp")]
         {
-            self.storage.last_height.0 > 0 && c.eth_ev_digest_num == 1
+            self.storage.last_height.0 == 0 || c.eth_ev_digest_num == 1
         }
         #[cfg(not(feature = "abcipp"))]
         {
@@ -390,19 +390,20 @@ where
 
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
-    fn has_proper_valset_upd_num(&self, _c: &DigestCounters) -> bool {
+    fn has_proper_valset_upd_num(&self, c: &DigestCounters) -> bool {
         #[cfg(feature = "abcipp")]
         if self
             .storage
             .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
         {
-            // TODO: confirm if we need a height check here or not
-            self.storage.last_height.0 > 0 && _c.valset_upd_digest_num == 1
+            self.storage.last_height.0 == 0 || c.valset_upd_digest_num == 1
         } else {
             true
         }
         #[cfg(not(feature = "abcipp"))]
-        true
+        {
+            c.valset_upd_digest_num <= 1
+        }
     }
 }
 
