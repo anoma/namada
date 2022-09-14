@@ -336,8 +336,8 @@ impl<T> ValidationBuilder<T> {
     ///
     /// The validation rules for a [`LazyVec`] are:
     ///   - A difference in the vector's length must correspond to the
-    ///     difference in how many elements were pushed versus how many
-    ///     elements were popped.
+    ///     difference in how many elements were pushed versus how many elements
+    ///     were popped.
     ///   - An empty vector must be deleted from storage
     ///   - In addition, we check that indices of any changes are within an
     ///     expected range (i.e. the vectors indices should always be
@@ -635,6 +635,7 @@ mod test {
             Just(Self(vec![])).boxed()
         }
 
+        // Apply a random transition to the state
         fn transitions(state: &Self::State) -> BoxedStrategy<Self::Transition> {
             if state.0.is_empty() {
                 prop_oneof![arb_test_vec_item().prop_map(Transition::Push)]
@@ -667,11 +668,14 @@ mod test {
             transition: &Self::Transition,
         ) -> bool {
             if state.0.is_empty() {
+                // Ensure that the pop or update transitions are not applied to
+                // an empty state
                 !matches!(
                     transition,
                     Transition::Pop | Transition::Update { .. }
                 )
             } else if let Transition::Update { index, .. } = transition {
+                // Ensure that the update index is a valid one
                 *index < (state.0.len() - 1) as Index
             } else {
                 true
@@ -742,10 +746,37 @@ mod test {
                     );
                 }
                 Transition::Update { index, value } => {
+                    let old_len = state.lazy_vec.len(&state.storage).unwrap();
+                    let old_val = state
+                        .lazy_vec
+                        .get(&state.storage, *index)
+                        .unwrap()
+                        .unwrap();
+
                     state
                         .lazy_vec
                         .update(&mut state.storage, *index, value.clone())
                         .unwrap();
+
+                    // Post-conditions:
+                    let new_len = state.lazy_vec.len(&state.storage).unwrap();
+                    let new_val = state
+                        .lazy_vec
+                        .get(&state.storage, *index)
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(old_len, new_len, "length must not change");
+                    assert_eq!(
+                        &old_val,
+                        state.eager_vec.get(*index as usize).unwrap(),
+                        "old value must match the value at the same index in \
+                         the eager vec before it's updated"
+                    );
+                    assert_eq!(
+                        &new_val, value,
+                        "new value must match that which was passed into the \
+                         Transition::Update"
+                    );
                 }
             }
 
