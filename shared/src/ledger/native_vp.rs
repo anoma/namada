@@ -158,13 +158,6 @@ where
 {
     type PrefixIter = <DB as storage::DBIter<'a>>::PrefixIter;
 
-    fn read<T: borsh::BorshDeserialize>(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> Result<Option<T>, storage_api::Error> {
-        self.ctx.read_pre(key).into_storage_result()
-    }
-
     fn read_bytes(
         &self,
         key: &crate::types::storage::Key,
@@ -218,13 +211,6 @@ where
     CA: 'static + WasmCacheAccess,
 {
     type PrefixIter = <DB as storage::DBIter<'a>>::PrefixIter;
-
-    fn read<T: borsh::BorshDeserialize>(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> Result<Option<T>, storage_api::Error> {
-        self.ctx.read_post(key).into_storage_result()
-    }
 
     fn read_bytes(
         &self,
