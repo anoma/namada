@@ -336,7 +336,7 @@ impl<T> ValidationBuilder<T> {
     ///
     /// The validation rules for a [`LazyVec`] are:
     ///   - A difference in the vector's length must correspond to the
-    ///     difference in how many elements where pushed versus how many
+    ///     difference in how many elements were pushed versus how many
     ///     elements were popped.
     ///   - An empty vector must be deleted from storage
     ///   - In addition, we check that indices of any changes are within an
@@ -400,7 +400,7 @@ impl<T> ValidationBuilder<T> {
                 },
             }
         }
-        let added_len: u64 = deleted
+        let added_len: u64 = added
             .len()
             .try_into()
             .map_err(ValidationError::IndexOverflow)?;
