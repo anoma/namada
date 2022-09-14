@@ -70,6 +70,7 @@ use crate::ibc::events::IbcEvent;
 use crate::ibc::mock::client_state::{MockClientState, MockConsensusState};
 use crate::ibc::timestamp::Timestamp;
 use crate::ledger::ibc::storage;
+use crate::ledger::storage_api;
 use crate::tendermint::Time;
 use crate::tendermint_proto::{Error as ProtoError, Protobuf};
 use crate::types::address::{Address, InternalAddress};
@@ -115,6 +116,14 @@ pub enum Error {
     SendingToken(String),
     #[error("Receiving a token error: {0}")]
     ReceivingToken(String),
+}
+
+// This is needed to use `ibc::Handler::Error` with `IbcActions` in
+// `tx_prelude/src/ibc.rs`
+impl From<Error> for storage_api::Error {
+    fn from(err: Error) -> Self {
+        storage_api::Error::new(err)
+    }
 }
 
 /// for handling IBC modules
