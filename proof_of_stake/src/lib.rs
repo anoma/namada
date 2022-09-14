@@ -36,10 +36,9 @@ use rust_decimal::prelude::{Decimal, ToPrimitive};
 use thiserror::Error;
 use types::{
     decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bonds, Epoch,
-    GenesisValidator, Slash, SlashType, Slashes, TotalVotingPowers, Unbond,
+    GenesisValidator, Slash, SlashType, Slashes, Unbond,
     Unbonds, ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate,
-    ValidatorSets, ValidatorState, ValidatorStates, ValidatorTotalDeltas,
-    ValidatorVotingPowers, VotingPower, VotingPowerDelta,
+    ValidatorSets, ValidatorState, ValidatorStates, ValidatorTotalDeltas, TotalDeltas,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -132,11 +131,7 @@ pub trait PosReadOnly {
         &self,
         key: &Self::Address,
     ) -> Result<Option<ValidatorTotalDeltas<Self::TokenChange>>, Self::Error>;
-    /// Read PoS validator's voting power.
-    fn read_validator_voting_power(
-        &self,
-        key: &Self::Address,
-    ) -> Result<Option<ValidatorVotingPowers>, Self::Error>;
+
     /// Read PoS slashes applied to a validator.
     fn read_validator_slashes(
         &self,
@@ -157,9 +152,8 @@ pub trait PosReadOnly {
     fn read_validator_set(
         &self,
     ) -> Result<ValidatorSets<Self::Address>, Self::Error>;
-    /// Read PoS total voting power of all validators (active and inactive).
-    fn read_total_voting_power(&self)
-    -> Result<TotalVotingPowers, Self::Error>;
+    /// Read PoS total deltas for all validators (active and inactive)
+    fn read_total_deltas(&self) -> Result<TotalDeltas<Self::TokenChange>, Self::Error>;
 }
 
 /// PoS system trait to be implemented in integration that can read and write
@@ -216,12 +210,7 @@ pub trait PosActions: PosReadOnly {
         key: &Self::Address,
         value: ValidatorTotalDeltas<Self::TokenChange>,
     ) -> Result<(), Self::Error>;
-    /// Write PoS validator's voting power.
-    fn write_validator_voting_power(
-        &mut self,
-        key: &Self::Address,
-        value: ValidatorVotingPowers,
-    ) -> Result<(), Self::Error>;
+
     /// Write PoS bond (validator self-bond or a delegation).
     fn write_bond(
         &mut self,
@@ -240,10 +229,11 @@ pub trait PosActions: PosReadOnly {
         &mut self,
         value: ValidatorSets<Self::Address>,
     ) -> Result<(), Self::Error>;
-    /// Write PoS total voting power of all validators (active and inactive).
-    fn write_total_voting_power(
+    /// Write PoS total deltas of all validators (active and inactive).
+    fn write_total_deltas(
         &mut self,
-        value: TotalVotingPowers,
+        value: TotalDeltas<Self::TokenChange>,
+    ) -> Result<(), Self::Error>;
     ) -> Result<(), Self::Error>;
 
     /// Delete an emptied PoS bond (validator self-bond or a delegation).
@@ -292,8 +282,7 @@ pub trait PosActions: PosReadOnly {
         let BecomeValidatorData {
             consensus_key,
             state,
-            total_deltas,
-            voting_power,
+            deltas,
         } = become_validator(
             &params,
             address,
@@ -309,8 +298,8 @@ pub trait PosActions: PosReadOnly {
         self.write_validator_state(address, state)?;
         self.write_validator_set(validator_set)?;
         self.write_validator_address_raw_hash(address, &consensus_key_clone)?;
-        self.write_validator_total_deltas(address, total_deltas)?;
-        self.write_validator_voting_power(address, voting_power)?;
+        self.write_validator_total_deltas(address, deltas)?;
+        // Do we need to write the total deltas of all validators?
         Ok(())
     }
 
@@ -350,15 +339,12 @@ pub trait PosActions: PosReadOnly {
         let bond = self.read_bond(&bond_id)?;
         let validator_total_deltas =
             self.read_validator_total_deltas(validator)?;
-        let validator_voting_power =
-            self.read_validator_voting_power(validator)?;
-        let mut total_voting_power = self.read_total_voting_power()?;
+        let mut total_deltas = self.read_total_deltas()?;
         let mut validator_set = self.read_validator_set()?;
 
         let BondData {
             bond,
             validator_total_deltas,
-            validator_voting_power,
         } = bond_tokens(
             &params,
             validator_state,
@@ -366,15 +352,13 @@ pub trait PosActions: PosReadOnly {
             bond,
             amount,
             validator_total_deltas,
-            validator_voting_power,
-            &mut total_voting_power,
+            &mut total_deltas,
             &mut validator_set,
             current_epoch,
         )?;
         self.write_bond(&bond_id, bond)?;
         self.write_validator_total_deltas(validator, validator_total_deltas)?;
-        self.write_validator_voting_power(validator, validator_voting_power)?;
-        self.write_total_voting_power(total_voting_power)?;
+        self.write_total_deltas(total_deltas)?;
         self.write_validator_set(validator_set)?;
 
         // Transfer the bonded tokens from the source to PoS
@@ -414,13 +398,8 @@ pub trait PosActions: PosReadOnly {
             .ok_or_else(|| {
                 UnbondError::ValidatorHasNoBonds(validator.clone())
             })?;
-        let mut validator_voting_power = self
-            .read_validator_voting_power(validator)?
-            .ok_or_else(|| {
-                UnbondError::ValidatorHasNoVotingPower(validator.clone())
-            })?;
         let slashes = self.read_validator_slashes(validator)?;
-        let mut total_voting_power = self.read_total_voting_power()?;
+        let mut total_deltas = self.read_total_deltas()?;
         let mut validator_set = self.read_validator_set()?;
 
         let UnbondData { unbond } = unbond_tokens(
@@ -431,8 +410,7 @@ pub trait PosActions: PosReadOnly {
             amount,
             slashes,
             &mut validator_total_deltas,
-            &mut validator_voting_power,
-            &mut total_voting_power,
+            &mut total_deltas,
             &mut validator_set,
             current_epoch,
         )?;
@@ -453,8 +431,7 @@ pub trait PosActions: PosReadOnly {
         }
         self.write_unbond(&bond_id, unbond)?;
         self.write_validator_total_deltas(validator, validator_total_deltas)?;
-        self.write_validator_voting_power(validator, validator_voting_power)?;
-        self.write_total_voting_power(total_voting_power)?;
+        self.write_total_deltas(total_deltas)?;
         self.write_validator_set(validator_set)?;
 
         Ok(())
@@ -612,17 +589,14 @@ pub trait PosBase {
         &self,
         key: &Self::Address,
     ) -> Option<ValidatorTotalDeltas<Self::TokenChange>>;
-    /// Read PoS validator's voting power.
-    fn read_validator_voting_power(
-        &self,
-        key: &Self::Address,
-    ) -> Option<ValidatorVotingPowers>;
+
     /// Read PoS slashes applied to a validator.
     fn read_validator_slashes(&self, key: &Self::Address) -> Slashes;
     /// Read PoS validator set (active and inactive).
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
-    /// Read PoS total voting power of all validators (active and inactive).
-    fn read_total_voting_power(&self) -> TotalVotingPowers;
+
+    /// Read PoS total deltas of all validators (active and inactive).
+    fn read_total_deltas(&self) -> TotalDeltas<Self::TokenChange>;
     /// Read total staked tokens in PoS for all validators (active and
     /// inactive).
     fn read_total_staked_tokens(&self) -> Self::TokenAmount;
@@ -661,12 +635,7 @@ pub trait PosBase {
         key: &Self::Address,
         value: &ValidatorTotalDeltas<Self::TokenChange>,
     );
-    /// Write PoS validator's voting power.
-    fn write_validator_voting_power(
-        &mut self,
-        key: &Self::Address,
-        value: &ValidatorVotingPowers,
-    );
+
     /// Write (append) PoS slash applied to a validator.
     fn write_validator_slash(
         &mut self,
@@ -681,8 +650,8 @@ pub trait PosBase {
     );
     /// Write PoS validator set (active and inactive).
     fn write_validator_set(&mut self, value: &ValidatorSets<Self::Address>);
-    /// Write PoS total voting power of all validators (active and inactive).
-    fn write_total_voting_power(&mut self, value: &TotalVotingPowers);
+    /// Write total deltas in PoS for all validators (active and inactive)
+    fn write_total_deltas(&mut self, value: &TotalDeltas<Self::TokenChange>);
     /// Write total staked tokens in PoS for all validators (active and
     /// inactive)
     fn write_total_staked_tokens(&mut self, value: &Self::TokenAmount);
@@ -732,7 +701,7 @@ pub trait PosBase {
         let GenesisData {
             validators,
             validator_set,
-            total_voting_power,
+            total_deltas,
             total_bonded_balance,
         } = init_genesis(params, validators, current_epoch)?;
 
@@ -743,8 +712,7 @@ pub trait PosBase {
                 consensus_key,
                 staking_reward_key,
                 state,
-                total_deltas,
-                voting_power,
+                deltas,
                 bond: (bond_id, bond),
             } = res?;
             self.write_validator_address_raw_hash(
@@ -760,7 +728,6 @@ pub trait PosBase {
             self.write_validator_consensus_key(address, &consensus_key);
             self.write_validator_state(address, &state);
             self.write_validator_total_deltas(address, &total_deltas);
-            self.write_validator_voting_power(address, &voting_power);
             self.write_bond(&bond_id, &bond);
             self.init_staking_reward_account(
                 &staking_reward_address,
@@ -768,7 +735,10 @@ pub trait PosBase {
             );
         }
         self.write_validator_set(&validator_set);
-        self.write_total_voting_power(&total_voting_power);
+        self.write_total_deltas(&total_deltas);
+
+        // TODO: write total_staked_tokens (Amount) to storage?
+
         // Credit the bonded tokens to the PoS account
         self.credit_tokens(
             &Self::staking_token_address(),
@@ -824,7 +794,7 @@ pub trait PosBase {
                         );
                         return None;
                     }
-                    if validator.voting_power == 0.into() {
+                    if validator.bonded_stake == 0 {
                         // If the validator was `Pending` in the previous epoch,
                         // it means that it just was just added to validator
                         // set. We have to skip it, because it's 0.
@@ -851,7 +821,7 @@ pub trait PosBase {
                     .clone();
                 Some(ValidatorSetUpdate::Active(ActiveValidator {
                     consensus_key,
-                    voting_power: validator.voting_power,
+                    bonded_stake: validator.bonded_stake,
                 }))
             },
         );
@@ -866,7 +836,7 @@ pub trait PosBase {
                     if prev_validators.inactive.contains(validator) {
                         return None;
                     }
-                    if validator.voting_power == 0.into() {
+                    if validator.bonded_stake == 0 {
                         // If the validator was `Pending` in the previous epoch,
                         // it means that it just was just added to validator
                         // set. We have to skip it, because it's 0.
@@ -914,9 +884,9 @@ pub trait PosBase {
             0_u64,
             |sum,
              WeightedValidator {
-                 voting_power,
+                 bonded_stake,
                  address: _,
-             }| { sum + u64::from(*voting_power) },
+             }| { sum + *bonded_stake },
         );
 
         let mut signer_set: HashSet<Self::Address> = HashSet::new();
@@ -951,7 +921,7 @@ pub trait PosBase {
         // iterate thru the validators, figure out if each is proposer or signer
         for validator in validators.active.iter() {
             let mut rewards: Decimal = Decimal::new(0, 0);
-            let stake: Decimal = u64::from(validator.voting_power).into();
+            let stake: Decimal = validator.bonded_stake.into();
 
             // TODO: ensure that the multiplication / division logic is
             // correct + sound
@@ -1011,37 +981,34 @@ pub trait PosBase {
             block_height: evidence_block_height.into(),
         };
 
-        let mut total_deltas =
+        let mut deltas =
             self.read_validator_total_deltas(validator).ok_or_else(|| {
                 SlashError::ValidatorHasNoTotalDeltas(validator.clone())
             })?;
-        let mut voting_power =
-            self.read_validator_voting_power(validator).ok_or_else(|| {
-                SlashError::ValidatorHasNoVotingPower(validator.clone())
-            })?;
         let mut validator_set = self.read_validator_set();
-        let mut total_voting_power = self.read_total_voting_power();
+        let mut total_deltas = self.read_total_deltas();
 
         let slashed_change = slash(
             params,
             current_epoch,
             validator,
             &validator_slash,
-            &mut total_deltas,
-            &mut voting_power,
+            &mut deltas,
             &mut validator_set,
-            &mut total_voting_power,
+            &mut total_deltas,
         )?;
         let slashed_change: i128 = slashed_change.into();
         let slashed_amount = u64::try_from(slashed_change)
             .map_err(|_err| SlashError::InvalidSlashChange(slashed_change))?;
         let slashed_amount = Self::TokenAmount::from(slashed_amount);
 
-        self.write_validator_total_deltas(validator, &total_deltas);
-        self.write_validator_voting_power(validator, &voting_power);
+        self.write_validator_total_deltas(validator, &deltas);
         self.write_validator_slash(validator, validator_slash);
         self.write_validator_set(&validator_set);
-        self.write_total_voting_power(&total_voting_power);
+        self.write_total_deltas(&total_deltas);
+
+        // TODO: write total staked tokens (Amount) to storage?
+
         // Transfer the slashed tokens to the PoS slash pool
         self.transfer(
             &Self::staking_token_address(),
@@ -1182,8 +1149,8 @@ where
     validators: Validators,
     /// Active and inactive validator sets
     validator_set: ValidatorSets<Address>,
-    /// The sum of all active and inactive validators' voting power
-    total_voting_power: TotalVotingPowers,
+    /// The sum of all active and inactive validators' bonded deltas
+    total_deltas: TotalDeltas<TokenChange>,
     /// The sum of all active and inactive validators' bonded tokens
     total_bonded_balance: TokenAmount,
 }
@@ -1218,8 +1185,7 @@ where
     consensus_key: ValidatorConsensusKeys<PK>,
     staking_reward_key: PK,
     state: ValidatorStates,
-    total_deltas: ValidatorTotalDeltas<TokenChange>,
-    voting_power: ValidatorVotingPowers,
+    deltas: ValidatorTotalDeltas<TokenChange>,
     bond: (BondId<Address>, Bonds<TokenAmount>),
 }
 
@@ -1268,6 +1234,7 @@ where
         + BorshSchema,
     TokenChange: 'a
         + Debug
+        + Default
         + Copy
         + Add<Output = TokenChange>
         + From<TokenAmount>
@@ -1276,9 +1243,9 @@ where
         + BorshSchema,
     PK: 'a + Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema,
 {
-    // Accumulate the validator set and total voting power
+    // Accumulate the validator set and total bonded token balance
     let mut active: BTreeSet<WeightedValidator<Address>> = BTreeSet::default();
-    let mut total_voting_power = VotingPowerDelta::default();
+    let mut total_bonded_delta = TokenChange::default();
     let mut total_bonded_balance = TokenAmount::default();
     let mut total_balance = TokenAmount::default();
     for GenesisValidator {
@@ -1286,12 +1253,11 @@ where
     } in validators.clone()
     {
         total_bonded_balance += *tokens;
-        let delta = VotingPowerDelta::try_from_tokens(*tokens, params)
-            .map_err(GenesisError::VotingPowerOverflow)?;
-        total_voting_power += delta;
-        let voting_power = VotingPower::from_tokens(*tokens, params);
+        // is some extra error handling needed here for casting the delta as i64? (TokenChange)
+        let delta = TokenChange::from(*tokens);
+        total_bonded_delta = total_bonded_delta + delta;
         active.insert(WeightedValidator {
-            voting_power,
+            bonded_stake: (*tokens).into(),
             address: address.clone(),
         });
     }
@@ -1310,15 +1276,14 @@ where
     }
     let validator_set = ValidatorSet { active, inactive };
     let validator_set = Epoched::init_at_genesis(validator_set, current_epoch);
-    let total_voting_power =
-        EpochedDelta::init_at_genesis(total_voting_power, current_epoch);
+    let total_bonded_delta =
+        EpochedDelta::init_at_genesis(total_bonded_delta, current_epoch);
 
     // Adapt the genesis validators data to PoS data
     let validators = validators.map(
         move |GenesisValidator {
                   address,
                   staking_reward_address,
-
                   tokens,
                   consensus_key,
                   staking_reward_key,
@@ -1330,13 +1295,8 @@ where
                 current_epoch,
             );
             let token_delta = TokenChange::from(*tokens);
-            let total_deltas =
+            let deltas =
                 EpochedDelta::init_at_genesis(token_delta, current_epoch);
-            let voting_power =
-                VotingPowerDelta::try_from_tokens(*tokens, params)
-                    .map_err(GenesisError::VotingPowerOverflow)?;
-            let voting_power =
-                EpochedDelta::init_at_genesis(voting_power, current_epoch);
             let bond_id = BondId {
                 source: address.clone(),
                 validator: address.clone(),
@@ -1356,17 +1316,17 @@ where
                 consensus_key,
                 staking_reward_key: staking_reward_key.clone(),
                 state,
-                total_deltas,
-                voting_power,
+                deltas,
                 bond: (bond_id, bond),
             })
         },
     );
 
+    // TODO: include total_tokens here, think abt where to write to storage
     Ok(GenesisData {
         validators,
         validator_set,
-        total_voting_power,
+        total_deltas: total_bonded_delta,
         total_bonded_balance,
     })
 }
@@ -1378,10 +1338,9 @@ fn slash<Address, TokenChange>(
     current_epoch: Epoch,
     validator: &Address,
     slash: &Slash,
-    total_deltas: &mut ValidatorTotalDeltas<TokenChange>,
-    voting_power: &mut ValidatorVotingPowers,
+    validator_deltas: &mut ValidatorTotalDeltas<TokenChange>,
     validator_set: &mut ValidatorSets<Address>,
-    total_voting_power: &mut TotalVotingPowers,
+    total_deltas: &mut TotalDeltas<TokenChange>,
 ) -> Result<TokenChange, SlashError<Address>>
 where
     Address: Display
@@ -1407,7 +1366,7 @@ where
         + BorshSchema,
 {
     let current_stake: TokenChange =
-        total_deltas.get(current_epoch).unwrap_or_default();
+        validator_deltas.get(current_epoch).unwrap_or_default();
     if current_stake < TokenChange::default() {
         return Err(SlashError::NegativeStake(
             current_stake.into(),
@@ -1431,28 +1390,25 @@ where
         token_change,
         update_offset,
         validator_set,
-        Some(total_deltas),
+        Some(validator_deltas),
         current_epoch,
     );
 
-    // Update validator's total deltas
-    total_deltas.add_at_offset(
+    // Update validator's deltas
+    validator_deltas.add_at_offset(
         token_change,
         current_epoch,
         update_offset,
         params,
     );
 
-    // Update the validator's and the total voting power.
-    update_voting_powers(
-        params,
-        update_offset,
-        total_deltas,
-        voting_power,
-        total_voting_power,
+    // Update total deltas of all validators
+    total_deltas.add_at_offset(
+        token_change,
         current_epoch,
-    )
-    .map_err(SlashError::VotingPowerOverflow)?;
+        update_offset,
+        params,
+    );
 
     Ok(slashed_amount)
 }
@@ -1471,8 +1427,7 @@ where
 {
     consensus_key: ValidatorConsensusKeys<PK>,
     state: ValidatorStates,
-    total_deltas: ValidatorTotalDeltas<TokenChange>,
-    voting_power: ValidatorVotingPowers,
+    deltas: ValidatorTotalDeltas<TokenChange>,
 }
 
 /// A function that initialized data for a new validator.
@@ -1508,13 +1463,7 @@ where
         Epoched::init_at_genesis(ValidatorState::Pending, current_epoch);
     state.set(ValidatorState::Candidate, current_epoch, params);
 
-    let total_deltas = EpochedDelta::init_at_offset(
-        Default::default(),
-        current_epoch,
-        DynEpochOffset::PipelineLen,
-        params,
-    );
-    let voting_power = EpochedDelta::init_at_offset(
+    let deltas = EpochedDelta::init_at_offset(
         Default::default(),
         current_epoch,
         DynEpochOffset::PipelineLen,
@@ -1524,7 +1473,7 @@ where
     validator_set.update_from_offset(
         |validator_set, _epoch| {
             let validator = WeightedValidator {
-                voting_power: VotingPower::default(),
+                bonded_stake: 0,
                 address: address.clone(),
             };
             if validator_set.active.len() < params.max_validator_slots as usize
@@ -1542,8 +1491,7 @@ where
     BecomeValidatorData {
         consensus_key,
         state,
-        total_deltas,
-        voting_power,
+        deltas,
     }
 }
 
@@ -1568,7 +1516,6 @@ where
 {
     pub bond: Bonds<TokenAmount>,
     pub validator_total_deltas: ValidatorTotalDeltas<TokenChange>,
-    pub validator_voting_power: ValidatorVotingPowers,
 }
 
 /// Bond tokens to a validator (self-bond or delegation).
@@ -1580,8 +1527,7 @@ fn bond_tokens<Address, TokenAmount, TokenChange>(
     current_bond: Option<Bonds<TokenAmount>>,
     amount: TokenAmount,
     validator_total_deltas: Option<ValidatorTotalDeltas<TokenChange>>,
-    validator_voting_power: Option<ValidatorVotingPowers>,
-    total_voting_power: &mut TotalVotingPowers,
+    total_deltas: &mut TotalDeltas<TokenChange>,
     validator_set: &mut ValidatorSets<Address>,
     current_epoch: Epoch,
 ) -> Result<BondData<TokenAmount, TokenChange>, BondError<Address>>
@@ -1648,13 +1594,14 @@ where
         }
     }
 
-    let update_offset = DynEpochOffset::PipelineLen;
-
     // Update or create the bond
+    //
     let mut value = Bond {
         pos_deltas: HashMap::default(),
         neg_deltas: TokenAmount::default(),
     };
+    // Initialize the bond at the pipeline offset
+    let update_offset = DynEpochOffset::PipelineLen;
     value
         .pos_deltas
         .insert(current_epoch + update_offset.value(params), amount);
@@ -1685,7 +1632,7 @@ where
         current_epoch,
     );
 
-    // Update validator's total deltas
+    // Update validator's total deltas and total staked token deltas
     let delta = TokenChange::from(amount);
     let validator_total_deltas = match validator_total_deltas {
         Some(mut validator_total_deltas) => {
@@ -1705,30 +1652,12 @@ where
         ),
     };
 
-    // Update the validator's and the total voting power.
-    let mut validator_voting_power = match validator_voting_power {
-        Some(voting_power) => voting_power,
-        None => EpochedDelta::init_at_offset(
-            VotingPowerDelta::default(),
-            current_epoch,
-            update_offset,
-            params,
-        ),
-    };
-    update_voting_powers(
-        params,
-        update_offset,
-        &validator_total_deltas,
-        &mut validator_voting_power,
-        total_voting_power,
-        current_epoch,
-    )
-    .map_err(BondError::VotingPowerOverflow)?;
+    total_deltas.add_at_offset(delta, current_epoch, update_offset, params);
+
 
     Ok(BondData {
         bond,
         validator_total_deltas,
-        validator_voting_power,
     })
 }
 
@@ -1756,9 +1685,8 @@ fn unbond_tokens<Address, TokenAmount, TokenChange>(
     unbond: Option<Unbonds<TokenAmount>>,
     amount: TokenAmount,
     slashes: Slashes,
-    validator_total_deltas: &mut ValidatorTotalDeltas<TokenChange>,
-    validator_voting_power: &mut ValidatorVotingPowers,
-    total_voting_power: &mut TotalVotingPowers,
+    validator_deltas: &mut ValidatorTotalDeltas<TokenChange>,
+    total_deltas: &mut TotalDeltas<TokenChange>,
     validator_set: &mut ValidatorSets<Address>,
     current_epoch: Epoch,
 ) -> Result<UnbondData<TokenAmount>, UnbondError<Address, TokenAmount>>
@@ -1897,23 +1825,16 @@ where
         token_change,
         update_offset,
         validator_set,
-        Some(validator_total_deltas),
+        Some(validator_deltas),
         current_epoch,
     );
 
-    // Update validator's total deltas
-    validator_total_deltas.add(token_change, current_epoch, params);
+    // Update validator's deltas
+    validator_deltas.add(token_change, current_epoch, params);
 
-    // Update the validator's and the total voting power.
-    update_voting_powers(
-        params,
-        update_offset,
-        validator_total_deltas,
-        validator_voting_power,
-        total_voting_power,
-        current_epoch,
-    )
-    .map_err(UnbondError::VotingPowerOverflow)?;
+    // Update the total deltas of all validators.
+    // TODO: provide some error handling that was maybe here before?
+    total_deltas.add(token_change, current_epoch, params);
 
     Ok(UnbondData { unbond })
 }
@@ -1964,26 +1885,24 @@ fn update_validator_set<Address, TokenChange>(
             let tokens_post: i128 = tokens_post.into();
             let tokens_pre: u64 = TryFrom::try_from(tokens_pre).unwrap();
             let tokens_post: u64 = TryFrom::try_from(tokens_post).unwrap();
-            let voting_power_pre = VotingPower::from_tokens(tokens_pre, params);
-            let voting_power_post =
-                VotingPower::from_tokens(tokens_post, params);
-            if voting_power_pre != voting_power_post {
+
+            if tokens_pre != tokens_post {
                 let validator_pre = WeightedValidator {
-                    voting_power: voting_power_pre,
+                    bonded_stake: tokens_pre,
                     address: validator.clone(),
                 };
                 let validator_post = WeightedValidator {
-                    voting_power: voting_power_post,
+                    bonded_stake: tokens_post,
                     address: validator.clone(),
                 };
 
                 if validator_set.inactive.contains(&validator_pre) {
                     let min_active_validator =
                         validator_set.active.first_shim();
-                    let min_voting_power = min_active_validator
-                        .map(|v| v.voting_power)
+                    let min_bonded_stake = min_active_validator
+                        .map(|v| v.bonded_stake)
                         .unwrap_or_default();
-                    if voting_power_post > min_voting_power {
+                    if tokens_post > min_bonded_stake {
                         let deactivate_min =
                             validator_set.active.pop_first_shim();
                         let popped =
@@ -2003,10 +1922,10 @@ fn update_validator_set<Address, TokenChange>(
                     );
                     let max_inactive_validator =
                         validator_set.inactive.last_shim();
-                    let max_voting_power = max_inactive_validator
-                        .map(|v| v.voting_power)
+                    let max_bonded_stake = max_inactive_validator
+                        .map(|v| v.bonded_stake)
                         .unwrap_or_default();
-                    if voting_power_post < max_voting_power {
+                    if tokens_post < max_bonded_stake {
                         let activate_max =
                             validator_set.inactive.pop_last_shim();
                         let popped =
@@ -2027,67 +1946,6 @@ fn update_validator_set<Address, TokenChange>(
         change_offset,
         params,
     )
-}
-
-/// Update the validator's voting power and the total voting power.
-fn update_voting_powers<TokenChange>(
-    params: &PosParams,
-    change_offset: DynEpochOffset,
-    validator_total_deltas: &ValidatorTotalDeltas<TokenChange>,
-    validator_voting_power: &mut ValidatorVotingPowers,
-    total_voting_power: &mut TotalVotingPowers,
-    current_epoch: Epoch,
-) -> Result<(), TryFromIntError>
-where
-    TokenChange: Display
-        + Debug
-        + Default
-        + Clone
-        + Copy
-        + Add<Output = TokenChange>
-        + Sub
-        + Into<i128>
-        + BorshDeserialize
-        + BorshSerialize
-        + BorshSchema,
-{
-    let change_offset = change_offset.value(params);
-    let start_epoch = current_epoch + change_offset;
-    // Update voting powers from the change offset to the the last epoch of
-    // voting powers data (unbonding epoch)
-    let epochs = start_epoch.iter_range(
-        DynEpochOffset::UnbondingLen.value(params) - change_offset + 1,
-    );
-    for epoch in epochs {
-        // Recalculate validator's voting power from validator's total deltas
-        let total_deltas_at_pipeline =
-            validator_total_deltas.get(epoch).unwrap_or_default();
-        let total_deltas_at_pipeline: i128 = total_deltas_at_pipeline.into();
-        let total_deltas_at_pipeline: u64 =
-            TryFrom::try_from(total_deltas_at_pipeline).unwrap();
-        let voting_power_at_pipeline =
-            validator_voting_power.get(epoch).unwrap_or_default();
-        let voting_power_delta = VotingPowerDelta::try_from_tokens(
-            total_deltas_at_pipeline,
-            params,
-        )? - voting_power_at_pipeline;
-
-        validator_voting_power.add_at_epoch(
-            voting_power_delta,
-            current_epoch,
-            epoch,
-            params,
-        );
-
-        // Update total voting power
-        total_voting_power.add_at_epoch(
-            voting_power_delta,
-            current_epoch,
-            epoch,
-            params,
-        );
-    }
-    Ok(())
 }
 
 struct WithdrawData<TokenAmount>
