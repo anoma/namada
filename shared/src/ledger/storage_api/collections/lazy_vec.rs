@@ -55,7 +55,7 @@ pub enum SubKeyWithData<T> {
 
 /// Possible actions that can modify a [`LazyVec`]. This roughly corresponds to
 /// the methods that have `StorageWrite` access.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Action<T> {
     /// Push a value `T` into a [`LazyVec<T>`]
     Push(T),
@@ -86,10 +86,10 @@ pub enum ValidationError {
     #[error("Pop at a wrong index. Got {got}, expected {expected}.")]
     UnexpectedPopIndex { got: Index, expected: Index },
     #[error(
-        "Update (combination of pop and push) at a wrong index. Got {got}, \
-         expected {expected}."
+        "Update (or a combination of pop and push) at a wrong index. Got \
+         {got}, expected maximum {max}."
     )]
-    UnexpectedUpdateIndex { got: Index, expected: Index },
+    UnexpectedUpdateIndex { got: Index, max: Index },
     #[error("An index has overflown its representation: {0}")]
     IndexOverflow(<usize as TryInto<Index>>::Error),
     #[error("Unexpected underflow in `{0} - {0}`")]
@@ -323,8 +323,8 @@ where
                 let builder =
                     builder.get_or_insert(ValidationBuilder::default());
                 builder.changes.push(change);
-                return Ok(true);
             }
+            return Ok(true);
         }
         Ok(false)
     }
@@ -474,34 +474,14 @@ impl<T> ValidationBuilder<T> {
             }
         }
 
-        // And finally iterate updates in increasing order of indices
-        let mut last_updated = Option::None;
+        // And finally iterate updates
         for index in updated {
-            if let Some(last_updated) = last_updated {
-                // Following additions should be at monotonically increasing
-                // indices
-                let expected = last_updated + 1;
-                if expected != index {
-                    return Err(ValidationError::UnexpectedUpdateIndex {
-                        got: index,
-                        expected,
-                    });
-                }
-            }
-            last_updated = Some(index);
-        }
-        if let Some(index) = last_updated {
-            let expected = len_pre.checked_sub(deleted_len).ok_or(
-                ValidationError::UnexpectedUnderflow(len_pre, deleted_len),
-            )?;
-            if index != expected {
-                // The last update must be at the pre length value minus
-                // deleted_len.
-                // If something is added and then deleted in a
-                // single tx, it will never be visible here.
+            // Update index has to be within the length bounds
+            let max = len_pre + len_diff;
+            if index >= max {
                 return Err(ValidationError::UnexpectedUpdateIndex {
                     got: index,
-                    expected: len_pre,
+                    max,
                 });
             }
         }
@@ -512,12 +492,6 @@ impl<T> ValidationBuilder<T> {
 
 #[cfg(test)]
 mod test {
-    use proptest::prelude::*;
-    use proptest::prop_state_machine;
-    use proptest::state_machine::{AbstractStateMachine, StateMachineTest};
-    use proptest::test_runner::Config;
-    use test_log::test;
-
     use super::*;
     use crate::ledger::storage::testing::TestStorage;
 
@@ -555,281 +529,5 @@ mod test {
         assert!(lazy_vec.get(&storage, 1)?.is_none());
 
         Ok(())
-    }
-
-    prop_state_machine! {
-        #![proptest_config(Config {
-            // Instead of the default 256, we only run 5 because otherwise it
-            // takes too long and it's preferable to crank up the number of
-            // transitions instead, to allow each case to run for more epochs as
-            // some issues only manifest once the model progresses further.
-            // Additionally, more cases will be explored every time this test is
-            // executed in the CI.
-            cases: 5,
-            .. Config::default()
-        })]
-        #[test]
-        /// A `StateMachineTest` implemented on `LazyVec` that manipulates
-        /// it with `Transition`s and checks its state against an in-memory
-        /// `std::collections::Vec`.
-        fn lazy_vec_api_state_machine_test(sequential 1..100 => ConcreteLazyVecState);
-
-    }
-
-    /// Some borsh-serializable type with arbitrary fields to be used inside
-    /// LazyVec state machine test
-    #[derive(
-        Clone,
-        Debug,
-        BorshSerialize,
-        BorshDeserialize,
-        PartialEq,
-        Eq,
-        PartialOrd,
-        Ord,
-    )]
-    struct TestVecItem {
-        x: u64,
-        y: bool,
-    }
-
-    #[derive(Debug)]
-    struct ConcreteLazyVecState {
-        // The eager vec in `AbstractLazyVecState` is not visible in `impl
-        // StateMachineTest for ConcreteLazyVecState`, it's only used to drive
-        // transition generation, so we duplicate it here and apply the
-        // transitions on it the same way (with
-        // `fn apply_transition_on_eager_vec`)
-        eager_vec: Vec<TestVecItem>,
-        lazy_vec: LazyVec<TestVecItem>,
-        storage: TestStorage,
-    }
-
-    #[derive(Clone, Debug)]
-    struct AbstractLazyVecState(Vec<TestVecItem>);
-
-    /// Possible transitions that can modify a [`LazyVec`]. This roughly
-    /// corresponds to the methods that have `StorageWrite` access and is very
-    /// similar to [`Action`]
-    #[derive(Clone, Debug)]
-    pub enum Transition<T> {
-        /// Push a value `T` into a [`LazyVec<T>`]
-        Push(T),
-        /// Pop a value from a [`LazyVec<T>`]
-        Pop,
-        /// Update a value `T` at index from pre to post state in a
-        /// [`LazyVec<T>`]
-        Update {
-            /// index at which the value is updated
-            index: Index,
-            /// value to update the element to
-            value: T,
-        },
-    }
-
-    impl AbstractStateMachine for AbstractLazyVecState {
-        type State = Self;
-        type Transition = Transition<TestVecItem>;
-
-        fn init_state() -> BoxedStrategy<Self::State> {
-            Just(Self(vec![])).boxed()
-        }
-
-        // Apply a random transition to the state
-        fn transitions(state: &Self::State) -> BoxedStrategy<Self::Transition> {
-            if state.0.is_empty() {
-                prop_oneof![arb_test_vec_item().prop_map(Transition::Push)]
-                    .boxed()
-            } else {
-                let indices: Vec<Index> =
-                    (0_usize..state.0.len()).map(|ix| ix as Index).collect();
-                let arb_index = proptest::sample::select(indices);
-                prop_oneof![
-                    Just(Transition::Pop),
-                    arb_test_vec_item().prop_map(Transition::Push),
-                    (arb_index, arb_test_vec_item()).prop_map(
-                        |(index, value)| Transition::Update { index, value }
-                    )
-                ]
-                .boxed()
-            }
-        }
-
-        fn apply_abstract(
-            mut state: Self::State,
-            transition: &Self::Transition,
-        ) -> Self::State {
-            apply_transition_on_eager_vec(&mut state.0, transition);
-            state
-        }
-
-        fn preconditions(
-            state: &Self::State,
-            transition: &Self::Transition,
-        ) -> bool {
-            if state.0.is_empty() {
-                // Ensure that the pop or update transitions are not applied to
-                // an empty state
-                !matches!(
-                    transition,
-                    Transition::Pop | Transition::Update { .. }
-                )
-            } else if let Transition::Update { index, .. } = transition {
-                // Ensure that the update index is a valid one
-                *index < (state.0.len() - 1) as Index
-            } else {
-                true
-            }
-        }
-    }
-
-    impl StateMachineTest for ConcreteLazyVecState {
-        type Abstract = AbstractLazyVecState;
-        type ConcreteState = Self;
-
-        fn init_test(
-            _initial_state: <Self::Abstract as AbstractStateMachine>::State,
-        ) -> Self::ConcreteState {
-            Self {
-                eager_vec: vec![],
-                lazy_vec: LazyVec::open(
-                    storage::Key::parse("key_path/arbitrary").unwrap(),
-                ),
-                storage: TestStorage::default(),
-            }
-        }
-
-        fn apply_concrete(
-            mut state: Self::ConcreteState,
-            transition: <Self::Abstract as AbstractStateMachine>::Transition,
-        ) -> Self::ConcreteState {
-            // Transition application on lazy vec and post-conditions:
-            match dbg!(&transition) {
-                Transition::Push(value) => {
-                    let old_len = state.lazy_vec.len(&state.storage).unwrap();
-
-                    state
-                        .lazy_vec
-                        .push(&mut state.storage, value.clone())
-                        .unwrap();
-
-                    // Post-conditions:
-                    let new_len = state.lazy_vec.len(&state.storage).unwrap();
-                    let stored_value = state
-                        .lazy_vec
-                        .get(&state.storage, new_len - 1)
-                        .unwrap()
-                        .unwrap();
-                    assert_eq!(
-                        &stored_value, value,
-                        "the new item must be added to the back"
-                    );
-                    assert_eq!(old_len + 1, new_len, "length must increment");
-                }
-                Transition::Pop => {
-                    let old_len = state.lazy_vec.len(&state.storage).unwrap();
-
-                    let popped = state
-                        .lazy_vec
-                        .pop(&mut state.storage)
-                        .unwrap()
-                        .unwrap();
-
-                    // Post-conditions:
-                    let new_len = state.lazy_vec.len(&state.storage).unwrap();
-                    assert_eq!(old_len, new_len + 1, "length must decrement");
-                    assert_eq!(
-                        &popped,
-                        state.eager_vec.last().unwrap(),
-                        "popped element matches the last element in eager vec \
-                         before it's updated"
-                    );
-                }
-                Transition::Update { index, value } => {
-                    let old_len = state.lazy_vec.len(&state.storage).unwrap();
-                    let old_val = state
-                        .lazy_vec
-                        .get(&state.storage, *index)
-                        .unwrap()
-                        .unwrap();
-
-                    state
-                        .lazy_vec
-                        .update(&mut state.storage, *index, value.clone())
-                        .unwrap();
-
-                    // Post-conditions:
-                    let new_len = state.lazy_vec.len(&state.storage).unwrap();
-                    let new_val = state
-                        .lazy_vec
-                        .get(&state.storage, *index)
-                        .unwrap()
-                        .unwrap();
-                    assert_eq!(old_len, new_len, "length must not change");
-                    assert_eq!(
-                        &old_val,
-                        state.eager_vec.get(*index as usize).unwrap(),
-                        "old value must match the value at the same index in \
-                         the eager vec before it's updated"
-                    );
-                    assert_eq!(
-                        &new_val, value,
-                        "new value must match that which was passed into the \
-                         Transition::Update"
-                    );
-                }
-            }
-
-            // Apply transition in the eager vec for comparison
-            apply_transition_on_eager_vec(&mut state.eager_vec, &transition);
-
-            // Global post-conditions:
-
-            // All items in eager vec must be present in lazy vec
-            for (ix, expected_item) in state.eager_vec.iter().enumerate() {
-                let got = state
-                    .lazy_vec
-                    .get(&state.storage, ix as Index)
-                    .unwrap()
-                    .expect("The expected item must be present in lazy vec");
-                assert_eq!(expected_item, &got, "at index {ix}");
-            }
-
-            // All items in lazy vec must be present in eager vec
-            for (ix, expected_item) in
-                state.lazy_vec.iter(&state.storage).unwrap().enumerate()
-            {
-                let expected_item = expected_item.unwrap();
-                let got = state
-                    .eager_vec
-                    .get(ix)
-                    .expect("The expected item must be present in eager vec");
-                assert_eq!(&expected_item, got, "at index {ix}");
-            }
-
-            state
-        }
-    }
-
-    /// Generate an arbitrary `TestVecItem`
-    fn arb_test_vec_item() -> impl Strategy<Value = TestVecItem> {
-        (any::<u64>(), any::<bool>()).prop_map(|(x, y)| TestVecItem { x, y })
-    }
-
-    /// Apply `Transition` on an eager `Vec`.
-    fn apply_transition_on_eager_vec(
-        vec: &mut Vec<TestVecItem>,
-        transition: &Transition<TestVecItem>,
-    ) {
-        match transition {
-            Transition::Push(value) => vec.push(value.clone()),
-            Transition::Pop => {
-                let _popped = vec.pop();
-            }
-            Transition::Update { index, value } => {
-                let entry = vec.get_mut(*index as usize).unwrap();
-                *entry = value.clone();
-            }
-        }
     }
 }

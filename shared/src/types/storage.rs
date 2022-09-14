@@ -378,15 +378,18 @@ impl Key {
     ///   - `Some(None)` if the prefix is matched, but it has no suffix, or
     ///   - `None` if it doesn't match
     pub fn split_prefix(&self, prefix: &Self) -> Option<Option<Self>> {
-        if self.segments.len() < prefix.len() {
+        if self.segments.len() < prefix.segments.len() {
             return None;
         } else if self == prefix {
             return Some(None);
         }
-        let mut self_prefix = self.segments.clone();
-        let rest = self_prefix.split_off(prefix.len());
+        // This is safe, because we check that the length of segments in self >=
+        // in prefix above
+        let (self_prefix, rest) = self.segments.split_at(prefix.segments.len());
         if self_prefix == prefix.segments {
-            Some(Some(Key { segments: rest }))
+            Some(Some(Key {
+                segments: rest.to_vec(),
+            }))
         } else {
             None
         }

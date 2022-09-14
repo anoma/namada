@@ -18,6 +18,8 @@ use namada::vm::{self, WasmCacheRwAccess};
 use namada_tx_prelude::{BorshSerialize, Ctx};
 use tempfile::TempDir;
 
+use crate::vp::TestVpEnv;
+
 /// Tx execution context provides access to host env functions
 static mut CTX: Ctx = unsafe { Ctx::new() };
 
@@ -233,6 +235,29 @@ mod native_tx_host_env {
 
     pub fn commit_tx_and_block() {
         with(|env| env.commit_tx_and_block())
+    }
+
+    /// Set the [`TestTxEnv`] back from a [`TestVpEnv`]. This is useful when
+    /// testing validation with multiple transactions that accumulate some state
+    /// changes.
+    pub fn set_from_vp_env(vp_env: TestVpEnv) {
+        let TestVpEnv {
+            storage,
+            write_log,
+            tx,
+            vp_wasm_cache,
+            vp_cache_dir,
+            ..
+        } = vp_env;
+        let tx_env = TestTxEnv {
+            storage,
+            write_log,
+            vp_wasm_cache,
+            vp_cache_dir,
+            tx,
+            ..Default::default()
+        };
+        set(tx_env);
     }
 
     /// A helper macro to create implementations of the host environment
