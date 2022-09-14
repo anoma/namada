@@ -25,9 +25,7 @@ pub type ValidatorStates = Epoched<ValidatorState, OffsetPipelineLen>;
 /// Epoched validator's total deltas.
 pub type ValidatorTotalDeltas<TokenChange> =
     EpochedDelta<TokenChange, OffsetUnbondingLen>;
-/// Epoched validator's voting power.
-pub type ValidatorVotingPowers =
-    EpochedDelta<VotingPowerDelta, OffsetUnbondingLen>;
+
 /// Epoched bond.
 pub type Bonds<TokenAmount> =
     EpochedDelta<Bond<TokenAmount>, OffsetUnbondingLen>;
@@ -37,8 +35,8 @@ pub type Unbonds<TokenAmount> =
 /// Epoched validator set.
 pub type ValidatorSets<Address> =
     Epoched<ValidatorSet<Address>, OffsetUnbondingLen>;
-/// Epoched total voting power.
-pub type TotalVotingPowers = EpochedDelta<VotingPowerDelta, OffsetUnbondingLen>;
+/// Epoched total deltas.
+pub type TotalDeltas<TokenChange> = EpochedDelta<TokenChange, OffsetUnbondingLen>;
 /// Epoched validator commission rate
 pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
 
@@ -62,40 +60,6 @@ pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
     BorshSchema,
 )]
 pub struct Epoch(u64);
-
-/// Voting power is calculated from staked tokens.
-#[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    BorshDeserialize,
-    BorshSerialize,
-    BorshSchema,
-)]
-pub struct VotingPower(u64);
-
-/// A change of voting power.
-#[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    BorshDeserialize,
-    BorshSerialize,
-    BorshSchema,
-)]
-pub struct VotingPowerDelta(i64);
 
 /// A genesis validator definition.
 #[derive(
@@ -136,8 +100,8 @@ pub enum ValidatorSetUpdate<PK> {
 pub struct ActiveValidator<PK> {
     /// A public key used for signing validator's consensus actions
     pub consensus_key: PK,
-    /// Voting power
-    pub voting_power: VotingPower,
+    /// Total bonded stake of the validator
+    pub bonded_stake: u64,
 }
 
 /// ID of a bond and/or an unbond.
@@ -198,11 +162,11 @@ where
         + BorshSchema
         + BorshSerialize,
 {
-    /// The `voting_power` field must be on top, because lexicographic ordering
+    /// The `total_stake` field must be on top, because lexicographic ordering
     /// is based on the top-to-bottom declaration order and in the
     /// `ValidatorSet` the `WeightedValidator`s these need to be sorted by
-    /// the `voting_power`.
-    pub voting_power: VotingPower,
+    /// the `total_stake`.
+    pub bonded_stake: u64,
     /// Validator's address
     pub address: Address,
 }
@@ -225,7 +189,7 @@ where
         write!(
             f,
             "{} with voting power {}",
-            self.address, self.voting_power
+            self.address, self.bonded_stake
         )
     }
 }
@@ -349,86 +313,8 @@ pub trait PublicKeyTmRawHash {
     fn tm_raw_hash(&self) -> String;
 }
 
-impl VotingPower {
-    /// Convert token amount into a voting power.
-    pub fn from_tokens(tokens: impl Into<u64>, params: &PosParams) -> Self {
-        // The token amount is expected to be in micro units
-        let tokens: u64 = tokens.into();
-        Self(decimal_mult_u64(params.tm_votes_per_token, tokens))
-    }
-}
 
-impl Add for VotingPower {
-    type Output = VotingPower;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
-
-impl Sub for VotingPower {
-    type Output = VotingPower;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0 - rhs.0)
-    }
-}
-
-impl VotingPowerDelta {
-    /// Try to convert token change into a voting power change.
-    pub fn try_from_token_change(
-        change: impl Into<i128>,
-        params: &PosParams,
-    ) -> Result<Self, TryFromIntError> {
-        // The token amount is expected to be in micro units
-        let change: i128 = change.into();
-        let delta = decimal_mult_i128(params.tm_votes_per_token, change);
-        let delta: i64 = TryFrom::try_from(delta)?;
-        Ok(Self(delta))
-    }
-
-    /// Try to convert token amount into a voting power change.
-    pub fn try_from_tokens(
-        tokens: impl Into<u64>,
-        params: &PosParams,
-    ) -> Result<Self, TryFromIntError> {
-        // The token amount is expected to be in micro units
-        let tokens: u64 = tokens.into();
-        let delta = decimal_mult_u64(params.tm_votes_per_token, tokens);
-        let delta: i64 = TryFrom::try_from(delta)?;
-        Ok(Self(delta))
-    }
-}
-
-impl TryFrom<VotingPower> for VotingPowerDelta {
-    type Error = TryFromIntError;
-
-    fn try_from(value: VotingPower) -> Result<Self, Self::Error> {
-        let delta: i64 = TryFrom::try_from(value.0)?;
-        Ok(Self(delta))
-    }
-}
-
-impl TryFrom<VotingPowerDelta> for VotingPower {
-    type Error = TryFromIntError;
-
-    fn try_from(value: VotingPowerDelta) -> Result<Self, Self::Error> {
-        let vp: u64 = TryFrom::try_from(value.0)?;
-        Ok(Self(vp))
-    }
-}
-
-impl Display for VotingPower {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl Display for VotingPowerDelta {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
 
 impl Epoch {
     /// Iterate a range of consecutive epochs starting from `self` of a given
@@ -622,82 +508,6 @@ where
             }
         });
         self
-    }
-}
-
-impl From<u64> for VotingPower {
-    fn from(voting_power: u64) -> Self {
-        Self(voting_power)
-    }
-}
-
-impl From<VotingPower> for u64 {
-    fn from(vp: VotingPower) -> Self {
-        vp.0
-    }
-}
-
-impl AddAssign for VotingPower {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0
-    }
-}
-
-impl SubAssign for VotingPower {
-    fn sub_assign(&mut self, rhs: Self) {
-        self.0 -= rhs.0
-    }
-}
-
-impl From<i64> for VotingPowerDelta {
-    fn from(delta: i64) -> Self {
-        Self(delta)
-    }
-}
-
-impl From<VotingPowerDelta> for i64 {
-    fn from(vp: VotingPowerDelta) -> Self {
-        vp.0
-    }
-}
-
-impl Add for VotingPowerDelta {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
-
-impl AddAssign for VotingPowerDelta {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0
-    }
-}
-
-impl Sub for VotingPowerDelta {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0 - rhs.0)
-    }
-}
-
-impl Sub<i64> for VotingPowerDelta {
-    type Output = Self;
-
-    fn sub(self, rhs: i64) -> Self::Output {
-        Self(self.0 - rhs)
-    }
-}
-
-impl<Address, Token, PK> GenesisValidator<Address, Token, PK>
-where
-    Token: Copy + Into<u64>,
-{
-    /// Calculate validator's voting power
-    pub fn voting_power(&self, params: &PosParams) -> VotingPower {
-        VotingPower::from_tokens(self.tokens, params)
     }
 }
 
