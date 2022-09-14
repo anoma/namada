@@ -4,7 +4,7 @@
 mod error;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-pub use error::{CustomError, Error, Result, ResultExt};
+pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 
 use crate::types::storage::{self, BlockHash, BlockHeight, Epoch};
 
@@ -37,7 +37,16 @@ pub trait StorageRead<'iter> {
     fn read<T: BorshDeserialize>(
         &self,
         key: &storage::Key,
-    ) -> Result<Option<T>>;
+    ) -> Result<Option<T>> {
+        let bytes = self.read_bytes(key)?;
+        match bytes {
+            Some(bytes) => {
+                let val = T::try_from_slice(&bytes).into_storage_result()?;
+                Ok(Some(val))
+            }
+            None => Ok(None),
+        }
+    }
 
     /// Storage read raw bytes. It will try to read from the storage.
     fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>>;
@@ -94,7 +103,10 @@ pub trait StorageWrite {
         &mut self,
         key: &storage::Key,
         val: T,
-    ) -> Result<()>;
+    ) -> Result<()> {
+        let bytes = val.try_to_vec().into_storage_result()?;
+        self.write_bytes(key, bytes)
+    }
 
     /// Write a value as bytes at the given key to storage.
     fn write_bytes(

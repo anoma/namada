@@ -17,7 +17,9 @@ use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::WasmCacheAccess;
 
 /// Possible error in a native VP host function call
-pub type Error = vp_env::RuntimeError;
+/// The `storage_api::Error` may wrap the `vp_env::RuntimeError` and can
+/// be extended with other custom errors when using `trait VpEnv`.
+pub type Error = storage_api::Error;
 
 /// A native VP module should implement its validation logic using this trait.
 pub trait NativeVp {
@@ -76,25 +78,25 @@ where
 /// Read access to the prior storage (state before tx execution) via
 /// [`trait@StorageRead`].
 #[derive(Debug)]
-pub struct CtxPreStorageRead<'b, 'a: 'b, DB, H, CA>
+pub struct CtxPreStorageRead<'view, 'a: 'view, DB, H, CA>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    ctx: &'b Ctx<'a, DB, H, CA>,
+    ctx: &'view Ctx<'a, DB, H, CA>,
 }
 
 /// Read access to the posterior storage (state after tx execution) via
 /// [`trait@StorageRead`].
 #[derive(Debug)]
-pub struct CtxPostStorageRead<'f, 'a: 'f, DB, H, CA>
+pub struct CtxPostStorageRead<'view, 'a: 'view, DB, H, CA>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    ctx: &'f Ctx<'a, DB, H, CA>,
+    ctx: &'view Ctx<'a, DB, H, CA>,
 }
 
 impl<'a, DB, H, CA> Ctx<'a, DB, H, CA>
@@ -139,18 +141,21 @@ where
 
     /// Read access to the prior storage (state before tx execution)
     /// via [`trait@StorageRead`].
-    pub fn pre<'b>(&'b self) -> CtxPreStorageRead<'b, 'a, DB, H, CA> {
+    pub fn pre<'view>(&'view self) -> CtxPreStorageRead<'view, 'a, DB, H, CA> {
         CtxPreStorageRead { ctx: self }
     }
 
     /// Read access to the posterior storage (state after tx execution)
     /// via [`trait@StorageRead`].
-    pub fn post<'b>(&'b self) -> CtxPostStorageRead<'b, 'a, DB, H, CA> {
+    pub fn post<'view>(
+        &'view self,
+    ) -> CtxPostStorageRead<'view, 'a, DB, H, CA> {
         CtxPostStorageRead { ctx: self }
     }
 }
 
-impl<'f, 'a, DB, H, CA> StorageRead<'f> for CtxPreStorageRead<'f, 'a, DB, H, CA>
+impl<'view, 'a, DB, H, CA> StorageRead<'view>
+    for CtxPreStorageRead<'view, 'a, DB, H, CA>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -158,32 +163,29 @@ where
 {
     type PrefixIter = <DB as storage::DBIter<'a>>::PrefixIter;
 
-    fn read<T: borsh::BorshDeserialize>(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> Result<Option<T>, storage_api::Error> {
-        self.ctx.read_pre(key).into_storage_result()
-    }
-
     fn read_bytes(
         &self,
         key: &crate::types::storage::Key,
     ) -> Result<Option<Vec<u8>>, storage_api::Error> {
-        self.ctx.read_bytes_pre(key).into_storage_result()
+        vp_env::read_pre(
+            &mut *self.ctx.gas_meter.borrow_mut(),
+            self.ctx.storage,
+            self.ctx.write_log,
+            key,
+        )
+        .into_storage_result()
     }
 
     fn has_key(
         &self,
         key: &crate::types::storage::Key,
     ) -> Result<bool, storage_api::Error> {
-        self.ctx.has_key_pre(key).into_storage_result()
-    }
-
-    fn iter_prefix(
-        &self,
-        prefix: &crate::types::storage::Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
-        self.ctx.iter_prefix(prefix).into_storage_result()
+        vp_env::has_key_pre(
+            &mut *self.ctx.gas_meter.borrow_mut(),
+            self.ctx.storage,
+            key,
+        )
+        .into_storage_result()
     }
 
     fn rev_iter_prefix(
@@ -197,28 +199,39 @@ where
         &self,
         iter: &mut Self::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        self.ctx.iter_pre_next(iter).into_storage_result()
+        vp_env::iter_pre_next::<DB>(&mut *self.ctx.gas_meter.borrow_mut(), iter)
+            .into_storage_result()
+    }
+
+    // ---- Methods below are implemented in `self.ctx`, because they are
+    //      the same in `pre/post` ----
+
+    fn iter_prefix(
+        &self,
+        prefix: &crate::types::storage::Key,
+    ) -> Result<Self::PrefixIter, storage_api::Error> {
+        self.ctx.iter_prefix(prefix)
     }
 
     fn get_chain_id(&self) -> Result<String, storage_api::Error> {
-        self.ctx.get_chain_id().into_storage_result()
+        self.ctx.get_chain_id()
     }
 
     fn get_block_height(&self) -> Result<BlockHeight, storage_api::Error> {
-        self.ctx.get_block_height().into_storage_result()
+        self.ctx.get_block_height()
     }
 
     fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
-        self.ctx.get_block_hash().into_storage_result()
+        self.ctx.get_block_hash()
     }
 
     fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
-        self.ctx.get_block_epoch().into_storage_result()
+        self.ctx.get_block_epoch()
     }
 }
 
-impl<'f, 'a, DB, H, CA> StorageRead<'f>
-    for CtxPostStorageRead<'f, 'a, DB, H, CA>
+impl<'view, 'a, DB, H, CA> StorageRead<'view>
+    for CtxPostStorageRead<'view, 'a, DB, H, CA>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -226,32 +239,30 @@ where
 {
     type PrefixIter = <DB as storage::DBIter<'a>>::PrefixIter;
 
-    fn read<T: borsh::BorshDeserialize>(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> Result<Option<T>, storage_api::Error> {
-        self.ctx.read_post(key).into_storage_result()
-    }
-
     fn read_bytes(
         &self,
         key: &crate::types::storage::Key,
     ) -> Result<Option<Vec<u8>>, storage_api::Error> {
-        self.ctx.read_bytes_post(key).into_storage_result()
+        vp_env::read_post(
+            &mut *self.ctx.gas_meter.borrow_mut(),
+            self.ctx.storage,
+            self.ctx.write_log,
+            key,
+        )
+        .into_storage_result()
     }
 
     fn has_key(
         &self,
         key: &crate::types::storage::Key,
     ) -> Result<bool, storage_api::Error> {
-        self.ctx.has_key_post(key).into_storage_result()
-    }
-
-    fn iter_prefix(
-        &self,
-        prefix: &crate::types::storage::Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
-        self.ctx.iter_prefix(prefix).into_storage_result()
+        vp_env::has_key_post(
+            &mut *self.ctx.gas_meter.borrow_mut(),
+            self.ctx.storage,
+            self.ctx.write_log,
+            key,
+        )
+        .into_storage_result()
     }
 
     fn rev_iter_prefix(
@@ -265,189 +276,138 @@ where
         &self,
         iter: &mut Self::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        self.ctx.iter_post_next(iter).into_storage_result()
+        vp_env::iter_post_next::<DB>(
+            &mut *self.ctx.gas_meter.borrow_mut(),
+            self.ctx.write_log,
+            iter,
+        )
+        .into_storage_result()
+    }
+
+    // ---- Methods below are implemented in `self.ctx`, because they are
+    //      the same in `pre/post` ----
+
+    fn iter_prefix(
+        &self,
+        prefix: &crate::types::storage::Key,
+    ) -> Result<Self::PrefixIter, storage_api::Error> {
+        self.ctx.iter_prefix(prefix)
     }
 
     fn get_chain_id(&self) -> Result<String, storage_api::Error> {
-        self.ctx.get_chain_id().into_storage_result()
+        self.ctx.get_chain_id()
     }
 
     fn get_block_height(&self) -> Result<BlockHeight, storage_api::Error> {
-        self.ctx.get_block_height().into_storage_result()
+        self.ctx.get_block_height()
     }
 
     fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
-        self.ctx.get_block_hash().into_storage_result()
+        self.ctx.get_block_hash()
     }
 
     fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
-        self.ctx.get_block_epoch().into_storage_result()
+        self.ctx.get_block_epoch()
     }
 }
 
-impl<'a, DB, H, CA> VpEnv for Ctx<'a, DB, H, CA>
+impl<'view, 'a: 'view, DB, H, CA> VpEnv<'view> for Ctx<'a, DB, H, CA>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type Error = Error;
+    type Post = CtxPostStorageRead<'view, 'a, DB, H, CA>;
+    type Pre = CtxPreStorageRead<'view, 'a, DB, H, CA>;
     type PrefixIter = <DB as storage::DBIter<'a>>::PrefixIter;
 
-    fn read_pre<T: borsh::BorshDeserialize>(
-        &self,
-        key: &Key,
-    ) -> Result<Option<T>, Self::Error> {
-        vp_env::read_pre(
-            &mut *self.gas_meter.borrow_mut(),
-            self.storage,
-            self.write_log,
-            key,
-        )
-        .map(|data| data.and_then(|t| T::try_from_slice(&t[..]).ok()))
+    fn pre(&'view self) -> Self::Pre {
+        CtxPreStorageRead { ctx: self }
     }
 
-    fn read_bytes_pre(
-        &self,
-        key: &Key,
-    ) -> Result<Option<Vec<u8>>, Self::Error> {
-        vp_env::read_pre(
-            &mut *self.gas_meter.borrow_mut(),
-            self.storage,
-            self.write_log,
-            key,
-        )
-    }
-
-    fn read_post<T: borsh::BorshDeserialize>(
-        &self,
-        key: &Key,
-    ) -> Result<Option<T>, Self::Error> {
-        vp_env::read_post(
-            &mut *self.gas_meter.borrow_mut(),
-            self.storage,
-            self.write_log,
-            key,
-        )
-        .map(|data| data.and_then(|t| T::try_from_slice(&t[..]).ok()))
-    }
-
-    fn read_bytes_post(
-        &self,
-        key: &Key,
-    ) -> Result<Option<Vec<u8>>, Self::Error> {
-        vp_env::read_post(
-            &mut *self.gas_meter.borrow_mut(),
-            self.storage,
-            self.write_log,
-            key,
-        )
+    fn post(&'view self) -> Self::Post {
+        CtxPostStorageRead { ctx: self }
     }
 
     fn read_temp<T: borsh::BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, Self::Error> {
+    ) -> Result<Option<T>, storage_api::Error> {
         vp_env::read_temp(
             &mut *self.gas_meter.borrow_mut(),
             self.write_log,
             key,
         )
         .map(|data| data.and_then(|t| T::try_from_slice(&t[..]).ok()))
+        .into_storage_result()
     }
 
     fn read_bytes_temp(
         &self,
         key: &Key,
-    ) -> Result<Option<Vec<u8>>, Self::Error> {
+    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
         vp_env::read_temp(
             &mut *self.gas_meter.borrow_mut(),
             self.write_log,
             key,
         )
+        .into_storage_result()
     }
 
-    fn has_key_pre(&self, key: &Key) -> Result<bool, Self::Error> {
-        vp_env::has_key_pre(
-            &mut *self.gas_meter.borrow_mut(),
-            self.storage,
-            key,
-        )
-    }
-
-    fn has_key_post(&self, key: &Key) -> Result<bool, Self::Error> {
-        vp_env::has_key_post(
-            &mut *self.gas_meter.borrow_mut(),
-            self.storage,
-            self.write_log,
-            key,
-        )
-    }
-
-    fn get_chain_id(&self) -> Result<String, Self::Error> {
+    fn get_chain_id(&'view self) -> Result<String, storage_api::Error> {
         vp_env::get_chain_id(&mut *self.gas_meter.borrow_mut(), self.storage)
+            .into_storage_result()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, Self::Error> {
+    fn get_block_height(
+        &'view self,
+    ) -> Result<BlockHeight, storage_api::Error> {
         vp_env::get_block_height(
             &mut *self.gas_meter.borrow_mut(),
             self.storage,
         )
+        .into_storage_result()
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, Self::Error> {
+    fn get_block_hash(&'view self) -> Result<BlockHash, storage_api::Error> {
         vp_env::get_block_hash(&mut *self.gas_meter.borrow_mut(), self.storage)
+            .into_storage_result()
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, Self::Error> {
+    fn get_block_epoch(&'view self) -> Result<Epoch, storage_api::Error> {
         vp_env::get_block_epoch(&mut *self.gas_meter.borrow_mut(), self.storage)
+            .into_storage_result()
     }
 
     fn iter_prefix(
-        &self,
+        &'view self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter, Self::Error> {
+    ) -> Result<Self::PrefixIter, storage_api::Error> {
         vp_env::iter_prefix(
             &mut *self.gas_meter.borrow_mut(),
             self.storage,
             prefix,
         )
+        .into_storage_result()
     }
 
     fn rev_iter_prefix(
         &self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter, Self::Error> {
+    ) -> Result<Self::PrefixIter, storage_api::Error> {
         vp_env::rev_iter_prefix(
             &mut *self.gas_meter.borrow_mut(),
             self.storage,
             prefix,
         )
-    }
-
-    fn iter_pre_next(
-        &self,
-        iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        vp_env::iter_pre_next::<DB>(&mut *self.gas_meter.borrow_mut(), iter)
-    }
-
-    fn iter_post_next(
-        &self,
-        iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        vp_env::iter_post_next::<DB>(
-            &mut *self.gas_meter.borrow_mut(),
-            self.write_log,
-            iter,
-        )
+        .into_storage_result()
     }
 
     fn eval(
         &self,
         vp_code: Vec<u8>,
         input_data: Vec<u8>,
-    ) -> Result<bool, Self::Error> {
+    ) -> Result<bool, storage_api::Error> {
         #[cfg(feature = "wasm-runtime")]
         {
             use std::marker::PhantomData;
@@ -505,11 +465,12 @@ where
         &self,
         pk: &crate::types::key::common::PublicKey,
         sig: &crate::types::key::common::Signature,
-    ) -> Result<bool, Self::Error> {
+    ) -> Result<bool, storage_api::Error> {
         Ok(self.tx.verify_sig(pk, sig).is_ok())
     }
 
-    fn get_tx_code_hash(&self) -> Result<Hash, Self::Error> {
+    fn get_tx_code_hash(&self) -> Result<Hash, storage_api::Error> {
         vp_env::get_tx_code_hash(&mut *self.gas_meter.borrow_mut(), self.tx)
+            .into_storage_result()
     }
 }

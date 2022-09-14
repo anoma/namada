@@ -711,17 +711,6 @@ where
 {
     type PrefixIter = <D as DBIter<'iter>>::PrefixIter;
 
-    fn read<T: borsh::BorshDeserialize>(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> std::result::Result<Option<T>, storage_api::Error> {
-        self.read_bytes(key)
-            .map(|maybe_value| {
-                maybe_value.and_then(|t| T::try_from_slice(&t[..]).ok())
-            })
-            .into_storage_result()
-    }
-
     fn read_bytes(
         &self,
         key: &crate::types::storage::Key,
@@ -786,15 +775,6 @@ where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
-    fn write<T: borsh::BorshSerialize>(
-        &mut self,
-        key: &crate::types::storage::Key,
-        val: T,
-    ) -> storage_api::Result<()> {
-        let val = val.try_to_vec().into_storage_result()?;
-        self.write_bytes(key, val)
-    }
-
     fn write_bytes(
         &mut self,
         key: &crate::types::storage::Key,

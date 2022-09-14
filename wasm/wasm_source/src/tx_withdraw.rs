@@ -6,10 +6,10 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let signed = SignedTxData::try_from_slice(&tx_data[..])
-        .err_msg("failed to decode SignedTxData")?;
+        .wrap_err("failed to decode SignedTxData")?;
     let data = signed.data.ok_or_err_msg("Missing data")?;
     let withdraw = transaction::pos::Withdraw::try_from_slice(&data[..])
-        .err_msg("failed to decode Withdraw")?;
+        .wrap_err("failed to decode Withdraw")?;
 
     let slashed =
         ctx.withdraw_tokens(withdraw.source.as_ref(), &withdraw.validator)?;

@@ -6,7 +6,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-mod error;
 pub mod intent;
 pub mod key;
 pub mod nft;
@@ -20,11 +19,10 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
-pub use error::*;
 pub use namada::ledger::governance::storage as gov_storage;
 pub use namada::ledger::storage_api::{
     self, iter_prefix, iter_prefix_bytes, rev_iter_prefix,
-    rev_iter_prefix_bytes, StorageRead,
+    rev_iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
 };
 pub use namada::ledger::vp_env::VpEnv;
 pub use namada::ledger::{parameters, pos as proof_of_stake};
@@ -137,6 +135,9 @@ pub struct CtxPostStorageRead<'a> {
     _ctx: &'a Ctx,
 }
 
+/// Result of `VpEnv` or `storage_api::StorageRead` method call
+pub type EnvResult<T> = Result<T, Error>;
+
 /// Validity predicate result
 pub type VpResult = EnvResult<bool>;
 
@@ -153,42 +154,23 @@ pub fn reject() -> VpResult {
 #[derive(Debug)]
 pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 
-impl VpEnv for Ctx {
-    type Error = Error;
+impl<'view> VpEnv<'view> for Ctx {
+    type Post = CtxPostStorageRead<'view>;
+    type Pre = CtxPreStorageRead<'view>;
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
 
-    fn read_pre<T: BorshDeserialize>(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<T>, Self::Error> {
-        self.pre().read(key).into_env_result()
+    fn pre(&'view self) -> Self::Pre {
+        CtxPreStorageRead { _ctx: self }
     }
 
-    fn read_bytes_pre(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<Vec<u8>>, Self::Error> {
-        self.pre().read_bytes(key).into_env_result()
-    }
-
-    fn read_post<T: BorshDeserialize>(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<T>, Self::Error> {
-        self.post().read(key).into_env_result()
-    }
-
-    fn read_bytes_post(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<Vec<u8>>, Self::Error> {
-        self.post().read_bytes(key).into_env_result()
+    fn post(&'view self) -> Self::Post {
+        CtxPostStorageRead { _ctx: self }
     }
 
     fn read_temp<T: BorshDeserialize>(
         &self,
         key: &storage::Key,
-    ) -> Result<Option<T>, Self::Error> {
+    ) -> Result<Option<T>, Error> {
         let key = key.to_string();
         let read_result =
             unsafe { anoma_vp_read_temp(key.as_ptr() as _, key.len() as _) };
@@ -199,73 +181,54 @@ impl VpEnv for Ctx {
     fn read_bytes_temp(
         &self,
         key: &storage::Key,
-    ) -> Result<Option<Vec<u8>>, Self::Error> {
+    ) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
         let read_result =
             unsafe { anoma_vp_read_temp(key.as_ptr() as _, key.len() as _) };
         Ok(read_from_buffer(read_result, anoma_vp_result_buffer))
     }
 
-    fn has_key_pre(&self, key: &storage::Key) -> Result<bool, Self::Error> {
-        self.pre().has_key(key).into_env_result()
-    }
-
-    fn has_key_post(&self, key: &storage::Key) -> Result<bool, Self::Error> {
-        self.post().has_key(key).into_env_result()
-    }
-
-    fn get_chain_id(&self) -> Result<String, Self::Error> {
+    fn get_chain_id(&'view self) -> Result<String, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
-        self.pre().get_chain_id().into_env_result()
+        get_chain_id()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, Self::Error> {
-        self.pre().get_block_height().into_env_result()
+    fn get_block_height(&'view self) -> Result<BlockHeight, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_block_height()
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, Self::Error> {
-        self.pre().get_block_hash().into_env_result()
+    fn get_block_hash(&'view self) -> Result<BlockHash, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_block_hash()
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, Self::Error> {
-        self.pre().get_block_epoch().into_env_result()
+    fn get_block_epoch(&'view self) -> Result<Epoch, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_block_epoch()
     }
 
     fn iter_prefix(
         &self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, Self::Error> {
+    ) -> Result<Self::PrefixIter, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
-        self.pre().iter_prefix(prefix).into_env_result()
+        self.pre().iter_prefix(prefix)
     }
 
     fn rev_iter_prefix(
         &self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, Self::Error> {
+    ) -> Result<Self::PrefixIter, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
-        self.pre().rev_iter_prefix(prefix).into_env_result()
-    }
-
-    fn iter_pre_next(
-        &self,
-        iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        self.pre().iter_next(iter).into_env_result()
-    }
-
-    fn iter_post_next(
-        &self,
-        iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        self.post().iter_next(iter).into_env_result()
+        self.pre().rev_iter_prefix(prefix)
     }
 
     fn eval(
         &self,
         vp_code: Vec<u8>,
         input_data: Vec<u8>,
-    ) -> Result<bool, Self::Error> {
+    ) -> Result<bool, Error> {
         let result = unsafe {
             anoma_vp_eval(
                 vp_code.as_ptr() as _,
@@ -281,7 +244,7 @@ impl VpEnv for Ctx {
         &self,
         pk: &common::PublicKey,
         sig: &common::Signature,
-    ) -> Result<bool, Self::Error> {
+    ) -> Result<bool, Error> {
         let pk = BorshSerialize::try_to_vec(pk).unwrap();
         let sig = BorshSerialize::try_to_vec(sig).unwrap();
         let valid = unsafe {
@@ -295,7 +258,7 @@ impl VpEnv for Ctx {
         Ok(HostEnvResult::is_success(valid))
     }
 
-    fn get_tx_code_hash(&self) -> Result<Hash, Self::Error> {
+    fn get_tx_code_hash(&self) -> Result<Hash, Error> {
         let result = Vec::with_capacity(HASH_LENGTH);
         unsafe {
             anoma_vp_get_tx_code_hash(result.as_ptr() as _);
@@ -309,57 +272,24 @@ impl VpEnv for Ctx {
 impl StorageRead<'_> for CtxPreStorageRead<'_> {
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
 
-    fn read<T: BorshDeserialize>(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<T>, storage_api::Error> {
-        let bytes = self.read_bytes(key)?;
-        match bytes {
-            Some(bytes) => match T::try_from_slice(&bytes[..]) {
-                Ok(val) => Ok(Some(val)),
-                Err(err) => Err(storage_api::Error::new(err)),
-            },
-            None => Ok(None),
-        }
-    }
-
-    fn read_bytes(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
+    fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
         let read_result =
             unsafe { anoma_vp_read_pre(key.as_ptr() as _, key.len() as _) };
         Ok(read_from_buffer(read_result, anoma_vp_result_buffer))
     }
 
-    fn has_key(&self, key: &storage::Key) -> Result<bool, storage_api::Error> {
+    fn has_key(&self, key: &storage::Key) -> Result<bool, Error> {
         let key = key.to_string();
         let found =
             unsafe { anoma_vp_has_key_pre(key.as_ptr() as _, key.len() as _) };
         Ok(HostEnvResult::is_success(found))
     }
 
-    fn iter_prefix(
-        &self,
-        prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
-        // Note that this is the same as `CtxPostStorageRead`
-        iter_prefix_impl(prefix)
-    }
-
-    fn rev_iter_prefix(
-        &self,
-        prefix: &storage::Key,
-    ) -> storage_api::Result<Self::PrefixIter> {
-        // Note that this is the same as `CtxPostStorageRead`
-        rev_iter_prefix_impl(prefix)
-    }
-
     fn iter_next(
         &self,
         iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+    ) -> Result<Option<(String, Vec<u8>)>, Error> {
         let read_result = unsafe { anoma_vp_iter_pre_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
             read_result,
@@ -367,84 +297,60 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
         ))
     }
 
-    fn get_chain_id(&self) -> Result<String, storage_api::Error> {
-        get_chain_id()
-    }
-
-    fn get_block_height(&self) -> Result<BlockHeight, storage_api::Error> {
-        Ok(BlockHeight(unsafe { anoma_vp_get_block_height() }))
-    }
-
-    fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
-        let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
-        unsafe {
-            anoma_vp_get_block_hash(result.as_ptr() as _);
-        }
-        let slice = unsafe {
-            slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH)
-        };
-        Ok(BlockHash::try_from(slice).expect("Cannot convert the hash"))
-    }
-
-    fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
-        Ok(Epoch(unsafe { anoma_vp_get_block_epoch() }))
-    }
-}
-
-impl StorageRead<'_> for CtxPostStorageRead<'_> {
-    type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
-
-    fn read<T: BorshDeserialize>(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<T>, storage_api::Error> {
-        let bytes = self.read_bytes(key)?;
-        match bytes {
-            Some(bytes) => match T::try_from_slice(&bytes[..]) {
-                Ok(val) => Ok(Some(val)),
-                Err(err) => Err(storage_api::Error::new(err)),
-            },
-            None => Ok(None),
-        }
-    }
-
-    fn read_bytes(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
-        let key = key.to_string();
-        let read_result =
-            unsafe { anoma_vp_read_post(key.as_ptr() as _, key.len() as _) };
-        Ok(read_from_buffer(read_result, anoma_vp_result_buffer))
-    }
-
-    fn has_key(&self, key: &storage::Key) -> Result<bool, storage_api::Error> {
-        let key = key.to_string();
-        let found =
-            unsafe { anoma_vp_has_key_post(key.as_ptr() as _, key.len() as _) };
-        Ok(HostEnvResult::is_success(found))
-    }
+    // ---- Methods below share the same implementation in `pre/post` ----
 
     fn iter_prefix(
         &self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
-        // Note that this is the same as `CtxPreStorageRead`
+    ) -> Result<Self::PrefixIter, Error> {
         iter_prefix_impl(prefix)
     }
 
     fn rev_iter_prefix(
         &self,
         prefix: &storage::Key,
-    ) -> storage_api::Result<Self::PrefixIter> {
-        // Note that this is the same as `CtxPreStorageRead`
+    ) -> Result<Self::PrefixIter, Error> {
         rev_iter_prefix_impl(prefix)
+    }
+
+    fn get_chain_id(&self) -> Result<String, Error> {
+        get_chain_id()
+    }
+
+    fn get_block_height(&self) -> Result<BlockHeight, Error> {
+        get_block_height()
+    }
+
+    fn get_block_hash(&self) -> Result<BlockHash, Error> {
+        get_block_hash()
+    }
+
+    fn get_block_epoch(&self) -> Result<Epoch, Error> {
+        get_block_epoch()
+    }
+}
+
+impl StorageRead<'_> for CtxPostStorageRead<'_> {
+    type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
+
+    fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
+        let key = key.to_string();
+        let read_result =
+            unsafe { anoma_vp_read_post(key.as_ptr() as _, key.len() as _) };
+        Ok(read_from_buffer(read_result, anoma_vp_result_buffer))
+    }
+
+    fn has_key(&self, key: &storage::Key) -> Result<bool, Error> {
+        let key = key.to_string();
+        let found =
+            unsafe { anoma_vp_has_key_post(key.as_ptr() as _, key.len() as _) };
+        Ok(HostEnvResult::is_success(found))
     }
 
     fn iter_next(
         &self,
         iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+    ) -> Result<Option<(String, Vec<u8>)>, Error> {
         let read_result = unsafe { anoma_vp_iter_post_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
             read_result,
@@ -452,26 +358,42 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
         ))
     }
 
-    fn get_chain_id(&self) -> Result<String, storage_api::Error> {
+    // ---- Methods below share the same implementation in `pre/post` ----
+
+    fn iter_prefix(
+        &self,
+        prefix: &storage::Key,
+    ) -> Result<Self::PrefixIter, Error> {
+        iter_prefix_impl(prefix)
+    }
+
+    fn rev_iter_prefix(
+        &self,
+        prefix: &storage::Key,
+    ) -> storage_api::Result<Self::PrefixIter> {
+        rev_iter_prefix_impl(prefix)
+    }
+
+    fn get_chain_id(&self) -> Result<String, Error> {
         get_chain_id()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, storage_api::Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, Error> {
         get_block_height()
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
+    fn get_block_hash(&self) -> Result<BlockHash, Error> {
         get_block_hash()
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
+    fn get_block_epoch(&self) -> Result<Epoch, Error> {
         get_block_epoch()
     }
 }
 
 fn iter_prefix_impl(
     prefix: &storage::Key,
-) -> Result<KeyValIterator<(String, Vec<u8>)>, storage_api::Error> {
+) -> Result<KeyValIterator<(String, Vec<u8>)>, Error> {
     let prefix = prefix.to_string();
     let iter_id = unsafe {
         anoma_vp_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
@@ -481,7 +403,7 @@ fn iter_prefix_impl(
 
 fn rev_iter_prefix_impl(
     prefix: &storage::Key,
-) -> Result<KeyValIterator<(String, Vec<u8>)>, storage_api::Error> {
+) -> Result<KeyValIterator<(String, Vec<u8>)>, Error> {
     let prefix = prefix.to_string();
     let iter_id = unsafe {
         anoma_vp_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
@@ -489,7 +411,7 @@ fn rev_iter_prefix_impl(
     Ok(KeyValIterator(iter_id, PhantomData))
 }
 
-fn get_chain_id() -> Result<String, storage_api::Error> {
+fn get_chain_id() -> Result<String, Error> {
     let result = Vec::with_capacity(CHAIN_ID_LENGTH);
     unsafe {
         anoma_vp_get_chain_id(result.as_ptr() as _);
@@ -502,11 +424,11 @@ fn get_chain_id() -> Result<String, storage_api::Error> {
     )
 }
 
-fn get_block_height() -> Result<BlockHeight, storage_api::Error> {
+fn get_block_height() -> Result<BlockHeight, Error> {
     Ok(BlockHeight(unsafe { anoma_vp_get_block_height() }))
 }
 
-fn get_block_hash() -> Result<BlockHash, storage_api::Error> {
+fn get_block_hash() -> Result<BlockHash, Error> {
     let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
     unsafe {
         anoma_vp_get_block_hash(result.as_ptr() as _);
@@ -516,6 +438,6 @@ fn get_block_hash() -> Result<BlockHash, storage_api::Error> {
     Ok(BlockHash::try_from(slice).expect("Cannot convert the hash"))
 }
 
-fn get_block_epoch() -> Result<Epoch, storage_api::Error> {
+fn get_block_epoch() -> Result<Epoch, Error> {
     Ok(Epoch(unsafe { anoma_vp_get_block_epoch() }))
 }
