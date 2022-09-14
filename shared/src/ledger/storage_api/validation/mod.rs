@@ -4,6 +4,7 @@ use std::fmt::Debug;
 
 use borsh::BorshDeserialize;
 
+use crate::ledger::storage_api;
 use crate::ledger::vp_env::VpEnv;
 use crate::types::storage;
 
@@ -33,10 +34,10 @@ pub enum Data<T> {
 pub fn read_data<ENV, T>(
     env: &ENV,
     key: &storage::Key,
-) -> Result<Option<Data<T>>, ENV::Error>
+) -> Result<Option<Data<T>>, storage_api::Error>
 where
     T: BorshDeserialize,
-    ENV: VpEnv,
+    ENV: for<'a> VpEnv<'a>,
 {
     let pre = env.read_pre(key)?;
     let post = env.read_post(key)?;

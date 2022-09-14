@@ -2,7 +2,6 @@
 
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
@@ -159,8 +158,7 @@ impl<T> LazyVec<T> {
 
     /// Get the sub-key of vector's elements storage
     fn get_data_key(&self, index: Index) -> storage::Key {
-        // TODO rebase on ordered prefix iter (https://github.com/anoma/namada/pull/458) and remove `.to_string()`
-        self.get_data_prefix().push(&index.to_string()).unwrap()
+        self.get_data_prefix().push(&index).unwrap()
     }
 
     /// Get the sub-key of vector's length storage
@@ -258,7 +256,7 @@ where
     pub fn is_valid_sub_key(
         &self,
         key: &storage::Key,
-    ) -> ValidationResult<Option<SubKey>> {
+    ) -> storage_api::Result<Option<SubKey>> {
         let suffix = match key.split_prefix(&self.key) {
             None => {
                 // not matching prefix, irrelevant
@@ -266,7 +264,8 @@ where
             }
             Some(None) => {
                 // no suffix, invalid
-                return Err(ValidationError::InvalidSubKey(key.clone()));
+                return Err(ValidationError::InvalidSubKey(key.clone()))
+                    .into_storage_result();
             }
             Some(Some(suffix)) => suffix,
         };
@@ -279,14 +278,15 @@ where
             [DbKeySeg::StringSeg(sub_a), DbKeySeg::StringSeg(sub_b)]
                 if sub_a == DATA_SUBKEY =>
             {
-                // TODO rebase on ordered prefix iter (https://github.com/anoma/namada/pull/458) and parse with `KeySeg::parse`
-                if let Ok(index) = Index::from_str(sub_b) {
+                if let Ok(index) = storage::KeySeg::parse(sub_b.clone()) {
                     Ok(Some(SubKey::Data(index)))
                 } else {
                     Err(ValidationError::InvalidSubKey(key.clone()))
+                        .into_storage_result()
                 }
             }
-            _ => Err(ValidationError::InvalidSubKey(key.clone())),
+            _ => Err(ValidationError::InvalidSubKey(key.clone()))
+                .into_storage_result(),
         }
     }
 
@@ -304,29 +304,18 @@ where
         env: &ENV,
         builder: &mut Option<ValidationBuilder<T>>,
         key_changed: &storage::Key,
-    ) -> ValidationResult<bool>
+    ) -> storage_api::Result<bool>
     where
-        ENV: VpEnv,
+        ENV: for<'a> VpEnv<'a>,
     {
         if let Some(sub) = self.is_valid_sub_key(key_changed)? {
             let change = match sub {
                 SubKey::Len => {
-                    let data = validation::read_data(env, key_changed)
-                        // TODO this has to propagate errors from VpEnv rather
-                        // then replace them (e.g. it could be out-of-gas), but
-                        // VpEnv::Error is generic, maybe we should make it
-                        // concrete (only the VpEnv impls have extensible error
-                        // types)
-                        .map_err(|_| {
-                            ValidationError::StorageError(key_changed.clone())
-                        })?;
+                    let data = validation::read_data(env, key_changed)?;
                     data.map(SubKeyWithData::Len)
                 }
                 SubKey::Data(index) => {
-                    let data = validation::read_data(env, key_changed)
-                        .map_err(|_| {
-                            ValidationError::StorageError(key_changed.clone())
-                        })?;
+                    let data = validation::read_data(env, key_changed)?;
                     data.map(|data| SubKeyWithData::Data(index, data))
                 }
             };
