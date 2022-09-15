@@ -464,7 +464,9 @@ mod test_vote_extensions {
     /// Test if a [`validator_set_update::Vext`] is signed with a secp key
     /// that belongs to an active validator of some previous epoch
     #[test]
+    #[ignore]
     fn test_secp_key_belongs_to_active_validator() {
-        // TODO
+        // TODO: we need to prove ownership of validator keys
+        // https://github.com/anoma/namada/issues/106
     }
 }
