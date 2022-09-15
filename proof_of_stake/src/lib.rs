@@ -655,6 +655,10 @@ pub trait PosBase {
         key: &Self::Address,
     ) -> Option<Self::PublicKey>;
 
+    /// Read PoS map from eth address derived from cold or hot keys to native
+    /// addresses
+    fn read_eth_key_addresses(&self) -> EthKeyAddresses<Self::Address>;
+
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
     /// Write PoS validator's raw hash its address.
