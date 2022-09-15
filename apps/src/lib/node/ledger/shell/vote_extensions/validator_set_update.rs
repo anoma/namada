@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::types::storage::BlockHeight;
@@ -69,11 +70,51 @@ where
             tracing::error!("Dropping vote extension issued at genesis");
             return Err(VoteExtensionError::IssuedAtGenesis);
         }
-        // get the public key associated with this validator
-        let validator = &ext.data.validator_addr;
+        // verify if the voting powers in storage match the voting powers in the
+        // vote extensions
+        let eth_to_namada_map = self.storage.read_eth_key_addresses();
         let last_height_epoch = self.storage.get_epoch(last_height).expect(
             "The epoch of the last block height should always be known",
         );
+        let next_epoch = last_height_epoch.next();
+        for (eth_addr, namada_addr) in eth_to_namada_map.iter() {
+            let &ext_power = match ext.data.voting_powers.get(eth_addr) {
+                Some(voting_power) => voting_power,
+                _ => {
+                    tracing::error!(
+                        eth_addr,
+                        "Could not find expected Ethereum address in valset \
+                         upd vote extension",
+                    );
+                    return Err(
+                        VoteExtensionError::ValidatorMissingFromExtension,
+                    );
+                }
+            };
+            let (namada_power, _) = self
+                .storage
+                .get_validator_from_address(namada_addr, Some(next_epoch))
+                .map_err(|err| {
+                    tracing::error!(
+                        ?err,
+                        validator = %namada_addr,
+                        "Could not get voting power from Storage for some validator, \
+                         while validating valset upd vote extension"
+                    );
+                    VoteExtensionError::PubKeyNotInStorage
+                })?;
+            if namada_power != ext_power {
+                tracing::error!(
+                    validator = %namada_addr,
+                    expected = ?namada_power,
+                    got = ?ext_power,
+                    "Found unexpected voting power value in valset upd vote extension",
+                );
+                return Err(VoteExtensionError::DivergesFromStorage);
+            }
+        }
+        // get the public key associated with this validator
+        let validator = &ext.data.validator_addr;
         let (voting_power, pk) = self
             .storage
             .get_validator_from_address(validator, Some(last_height_epoch))
@@ -81,7 +122,8 @@ where
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Could not get public key from Storage for some validator, while validating validator set update vote extension"
+                    "Could not get public key from Storage for some validator, \
+                     while validating valset upd vote extension"
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
@@ -91,7 +133,8 @@ where
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Failed to verify the signature of a validator set update vote extension issued by some validator"
+                    "Failed to verify the signature of a valset upd vote \
+                     extension issued by some validator"
                 );
                 VoteExtensionError::VerifySigFailed
             })

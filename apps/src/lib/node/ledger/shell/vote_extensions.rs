@@ -47,6 +47,16 @@ mod extend_votes {
         PubKeyNotInStorage,
         #[error("The vote extension's signature is invalid.")]
         VerifySigFailed,
+        #[error(
+            "Validator is missing from an expected field in the vote \
+             extension."
+        )]
+        ValidatorMissingFromExtension,
+        #[error(
+            "Found value for a field in the vote extension diverging from the \
+             equivalent field in storage."
+        )]
+        DivergesFromStorage,
     }
 
     impl<D, H> Shell<D, H>
