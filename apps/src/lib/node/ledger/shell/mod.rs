@@ -781,12 +781,29 @@ mod test_utils {
     }
 
     /// Generate a random public/private keypair
+    #[inline]
     pub(super) fn gen_keypair() -> common::SecretKey {
+        gen_ed25519_keypair()
+    }
+
+    /// Generate a random ed25519 public/private keypair
+    pub(super) fn gen_ed25519_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
         let mut rng: ThreadRng = thread_rng();
         ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
+    }
+
+    /// Generate a random secp256k1 public/private keypair
+    pub(super) fn gen_secp256k1_keypair() -> common::SecretKey {
+        use rand::prelude::ThreadRng;
+        use rand::thread_rng;
+
+        let mut rng: ThreadRng = thread_rng();
+        secp256k1::SigScheme::generate(&mut rng)
+            .try_to_sk()
+            .unwrap()
     }
 
     /// Invalidate a valid signature `sig`.
@@ -800,11 +817,9 @@ mod test_utils {
                 common::Signature::Ed25519(ed25519::Signature(sig_bytes.into()))
             }
             common::Signature::Secp256k1(secp256k1::Signature(ref sig)) => {
-                let mut sig_bytes = sig.to_bytes();
+                let mut sig_bytes = sig.serialize();
                 sig_bytes[0] = sig_bytes[0].wrapping_add(1);
-                common::Signature::Secp256k1(secp256k1::Signature(
-                    sig_bytes.into(),
-                ))
+                common::Signature::Secp256k1((&sig_bytes).try_into().unwrap())
             }
         }
     }
