@@ -793,14 +793,20 @@ mod test_utils {
     pub(super) fn invalidate_signature(
         sig: common::Signature,
     ) -> common::Signature {
-        let mut sig_bytes = match sig {
+        match sig {
             common::Signature::Ed25519(ed25519::Signature(ref sig)) => {
-                sig.to_bytes()
+                let mut sig_bytes = sig.to_bytes();
+                sig_bytes[0] = sig_bytes[0].wrapping_add(1);
+                common::Signature::Ed25519(ed25519::Signature(sig_bytes.into()))
             }
-            _ => unreachable!(),
-        };
-        sig_bytes[0] = sig_bytes[0].wrapping_add(1);
-        common::Signature::Ed25519(ed25519::Signature(sig_bytes.into()))
+            common::Signature::Secp256k1(secp256k1::Signature(ref sig)) => {
+                let mut sig_bytes = sig.to_bytes();
+                sig_bytes[0] = sig_bytes[0].wrapping_add(1);
+                common::Signature::Secp256k1(secp256k1::Signature(
+                    sig_bytes.into(),
+                ))
+            }
+        }
     }
 
     /// A wrapper around the shell that implements

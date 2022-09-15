@@ -261,9 +261,6 @@ mod test_vote_extensions {
 
     /// Test if a [`validator_set_update::Vext`] that incorrectly labels what
     /// block height it was included on in a vote extension is rejected
-    // TODO:
-    // - sign with secp key
-    // - add validator voting powers from storage
     #[test]
     fn test_reject_incorrect_block_height() {
         let (shell, _, _) = test_utils::setup();
@@ -271,6 +268,8 @@ mod test_vote_extensions {
             shell.mode.get_validator_address().unwrap().clone();
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let eth_bridge_key =
+            shell.mode.get_eth_bridge_keypair().expect("Test failed");
 
         let ethereum_events = ethereum_events::Vext::empty(
             shell.storage.get_current_decision_height(),
@@ -278,17 +277,24 @@ mod test_vote_extensions {
         )
         .sign(protocol_key);
 
+        let voting_powers = {
+            let next_epoch = shell.storage.get_current_epoch().0.next();
+            shell
+                .storage
+                .get_active_eth_addresses(Some(next_epoch))
+                .map(|(eth_addr_book, _, voting_power)| {
+                    (eth_addr_book, voting_power)
+                })
+                .collect()
+        };
         let validator_set_update = Some(
             validator_set_update::Vext {
-                // TODO: get voting powers from storage, associated with eth
-                // addrs
-                voting_powers: std::collections::HashMap::new(),
+                voting_powers,
                 validator_addr,
                 // invalid height
                 block_height: shell.storage.get_current_decision_height() + 1,
             }
-            // TODO: sign with secp key
-            .sign(protocol_key),
+            .sign(eth_bridge_key),
         );
 
         let req = request::VerifyVoteExtension {
@@ -321,11 +327,19 @@ mod test_vote_extensions {
             validator_addr.clone(),
         )
         .sign(&protocol_key);
+        let voting_powers = {
+            let next_epoch = shell.storage.get_current_epoch().0.next();
+            shell
+                .storage
+                .get_active_eth_addresses(Some(next_epoch))
+                .map(|(eth_addr_book, _, voting_power)| {
+                    (eth_addr_book, voting_power)
+                })
+                .collect()
+        };
         let validator_set_update = Some(
             validator_set_update::Vext {
-                // TODO: get voting powers from storage, associated with eth
-                // addrs
-                voting_powers: std::collections::HashMap::new(),
+                voting_powers,
                 block_height: shell.storage.get_current_decision_height(),
                 validator_addr,
             }
@@ -361,10 +375,18 @@ mod test_vote_extensions {
             .expect("Test failed")
             .clone();
         let signed_height = shell.storage.get_current_decision_height();
+        let voting_powers = {
+            let next_epoch = shell.storage.get_current_epoch().0.next();
+            shell
+                .storage
+                .get_active_eth_addresses(Some(next_epoch))
+                .map(|(eth_addr_book, _, voting_power)| {
+                    (eth_addr_book, voting_power)
+                })
+                .collect()
+        };
         let vote_ext = validator_set_update::Vext {
-            // TODO: get voting powers from storage, associated with eth
-            // addrs
-            voting_powers: std::collections::HashMap::new(),
+            voting_powers,
             block_height: signed_height,
             validator_addr,
         }
@@ -425,6 +447,8 @@ mod test_vote_extensions {
             shell.mode.get_validator_address().unwrap().clone();
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let eth_bridge_key =
+            shell.mode.get_eth_bridge_keypair().expect("Test failed");
 
         let ethereum_events = ethereum_events::Vext::empty(
             shell.storage.get_current_decision_height(),
@@ -433,15 +457,22 @@ mod test_vote_extensions {
         .sign(protocol_key);
 
         let validator_set_update = {
+            let voting_powers = {
+                let next_epoch = shell.storage.get_current_epoch().0.next();
+                shell
+                    .storage
+                    .get_active_eth_addresses(Some(next_epoch))
+                    .map(|(eth_addr_book, _, voting_power)| {
+                        (eth_addr_book, voting_power)
+                    })
+                    .collect()
+            };
             let mut ext = validator_set_update::Vext {
-                // TODO: get voting powers from storage, associated with eth
-                // addrs
-                voting_powers: std::collections::HashMap::new(),
+                voting_powers,
                 block_height: shell.storage.get_current_decision_height(),
                 validator_addr,
             }
-            // TODO: sign with secp key
-            .sign(protocol_key);
+            .sign(eth_bridge_key);
             ext.sig = test_utils::invalidate_signature(ext.sig);
             Some(ext)
         };
