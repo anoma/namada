@@ -536,6 +536,11 @@ where
         value.map(|value| decode(value).unwrap())
     }
 
+    fn read_eth_key_addresses(&self) -> types::EthKeyAddresses<Self::Address> {
+        let (value, _gas) = self.read(&eth_key_addresses_key()).unwrap();
+        decode(value.unwrap()).unwrap()
+    }
+
     fn write_pos_params(&mut self, params: &PosParams) {
         self.write(&params_key(), encode(params)).unwrap();
     }
