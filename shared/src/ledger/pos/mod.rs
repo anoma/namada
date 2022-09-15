@@ -17,8 +17,8 @@ pub use vp::PosVP;
 
 use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
 use crate::types::address::{self, Address, InternalAddress};
+use crate::types::ethereum_events::EthAddress;
 use crate::types::key::common;
-use crate::types::key::secp256k1::EthAddress;
 use crate::types::storage::Epoch;
 use crate::types::token;
 

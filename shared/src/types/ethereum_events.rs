@@ -80,6 +80,13 @@ impl FromStr for EthAddress {
     }
 }
 
+impl From<namada_proof_of_stake::types::EthAddress> for EthAddress {
+    #[inline]
+    fn from(addr: namada_proof_of_stake::types::EthAddress) -> EthAddress {
+        EthAddress(addr.0)
+    }
+}
+
 /// A Keccak hash
 #[derive(
     Clone,

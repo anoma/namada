@@ -10,12 +10,12 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::secp256k1::EthAddress;
 use super::{
     ed25519, secp256k1, ParsePublicKeyError, ParseSecretKeyError,
     ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
     VerifySigError,
 };
+use crate::types::ethereum_events::EthAddress;
 
 /// Public key
 #[derive(

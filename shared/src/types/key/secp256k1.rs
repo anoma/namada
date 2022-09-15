@@ -17,14 +17,11 @@ use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, VerifySigError,
 };
+use crate::types::ethereum_events::EthAddress;
 
 /// secp256k1 public key
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PublicKey(pub libsecp256k1::PublicKey);
-
-/// Eth address derived from secp256k1 key
-#[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct EthAddress(pub [u8; 20]);
 
 impl super::PublicKey for PublicKey {
     const TYPE: SchemeType = SigScheme::TYPE;
