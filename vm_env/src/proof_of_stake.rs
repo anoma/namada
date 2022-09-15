@@ -187,10 +187,6 @@ impl namada_proof_of_stake::PosReadOnly for PoS {
     ) -> Option<Self::PublicKey> {
         tx::read(validator_eth_hot_key_key(key).to_string())
     }
-
-    fn read_eth_key_addresses(&self) -> types::EthKeyAddresses<Self::Address> {
-        tx::read(eth_key_addresses_key().to_string()).unwrap()
-    }
 }
 
 impl namada_proof_of_stake::PosActions for PoS {
@@ -297,12 +293,5 @@ impl namada_proof_of_stake::PosActions for PoS {
         value: types::ValidatorEthKey<Self::PublicKey>,
     ) {
         tx::write(validator_eth_hot_key_key(address).to_string(), &value)
-    }
-
-    fn write_eth_key_addresses(
-        &self,
-        value: types::EthKeyAddresses<Self::Address>,
-    ) {
-        tx::write(eth_key_addresses_key().to_string(), &value)
     }
 }
