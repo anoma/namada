@@ -317,10 +317,10 @@ mod test_vote_extensions {
     #[test]
     fn test_valset_upd_must_be_signed_by_validator() {
         let (shell, _, _) = test_utils::setup();
-        let (protocol_key, validator_addr) = {
+        let (eth_bridge_key, protocol_key, validator_addr) = {
             let bertha_key = wallet::defaults::bertha_keypair();
             let bertha_addr = wallet::defaults::bertha_address();
-            (bertha_key, bertha_addr)
+            (test_utils::gen_secp256k1_keypair(), bertha_key, bertha_addr)
         };
         let ethereum_events = ethereum_events::Vext::empty(
             shell.storage.get_current_decision_height(),
@@ -343,7 +343,7 @@ mod test_vote_extensions {
                 block_height: shell.storage.get_current_decision_height(),
                 validator_addr,
             }
-            .sign(&protocol_key),
+            .sign(&eth_bridge_key),
         );
         let req = request::VerifyVoteExtension {
             vote_extension: VoteExtension {
@@ -369,6 +369,11 @@ mod test_vote_extensions {
         let (mut shell, _, _) = test_utils::setup();
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
+        let eth_bridge_key = shell
+            .mode
+            .get_eth_bridge_keypair()
+            .expect("Test failed")
+            .clone();
         let validator_addr = shell
             .mode
             .get_validator_address()
@@ -390,7 +395,7 @@ mod test_vote_extensions {
             block_height: signed_height,
             validator_addr,
         }
-        .sign(&protocol_key);
+        .sign(&eth_bridge_key);
 
         // validators from the current epoch sign over validator
         // set of the next epoch
