@@ -11,7 +11,6 @@ mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::proto::Signed;
     use namada::types::transaction::protocol::ProtocolTxType;
-    use namada::types::vote_extensions::validator_set_update::EthAddrBook;
     use namada::types::vote_extensions::{
         ethereum_events, validator_set_update, VoteExtension,
         VoteExtensionDigest,
@@ -122,30 +121,9 @@ mod extend_votes {
                     let next_epoch = self.storage.get_current_epoch().0.next();
                     let voting_powers = self
                         .storage
-                        .get_active_validators(Some(next_epoch))
-                        .into_iter()
-                        .map(|validator| {
-                            let hot_key_addr = self
-                                .storage
-                                .get_ethbridge_from_namada_addr(
-                                    &validator.address,
-                                )
-                                .expect(
-                                    "All Namada validators should have an \
-                                     Ethereum bridge key",
-                                );
-                            let cold_key_addr = self
-                                .storage
-                                .get_ethgov_from_namada_addr(&validator.address)
-                                .expect(
-                                    "All Namada validators should have an \
-                                     Ethereum governance key",
-                                );
-                            let eth_addr_book = EthAddrBook {
-                                hot_key_addr,
-                                cold_key_addr,
-                            };
-                            (eth_addr_book, validator.voting_power)
+                        .get_active_eth_addresses(Some(next_epoch))
+                        .map(|(eth_addr_book, _, voting_power)| {
+                            (eth_addr_book, voting_power)
                         })
                         .collect();
 

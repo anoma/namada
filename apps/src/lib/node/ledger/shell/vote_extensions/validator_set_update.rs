@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 
-use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::types::storage::BlockHeight;
@@ -72,18 +71,19 @@ where
         }
         // verify if the voting powers in storage match the voting powers in the
         // vote extensions
-        let eth_to_namada_map = self.storage.read_eth_key_addresses();
         let last_height_epoch = self.storage.get_epoch(last_height).expect(
             "The epoch of the last block height should always be known",
         );
         let next_epoch = last_height_epoch.next();
-        for (eth_addr, namada_addr) in eth_to_namada_map.iter() {
-            let &ext_power = match ext.data.voting_powers.get(eth_addr) {
+        for (eth_addr_book, namada_addr, namada_power) in
+            self.storage.get_active_eth_addresses(Some(next_epoch))
+        {
+            let &ext_power = match ext.data.voting_powers.get(&eth_addr_book) {
                 Some(voting_power) => voting_power,
                 _ => {
                     tracing::error!(
-                        eth_addr,
-                        "Could not find expected Ethereum address in valset \
+                        ?eth_addr_book,
+                        "Could not find expected Ethereum addresses in valset \
                          upd vote extension",
                     );
                     return Err(
@@ -91,18 +91,6 @@ where
                     );
                 }
             };
-            let (namada_power, _) = self
-                .storage
-                .get_validator_from_address(namada_addr, Some(next_epoch))
-                .map_err(|err| {
-                    tracing::error!(
-                        ?err,
-                        validator = %namada_addr,
-                        "Could not get voting power from Storage for some validator, \
-                         while validating valset upd vote extension"
-                    );
-                    VoteExtensionError::PubKeyNotInStorage
-                })?;
             if namada_power != ext_power {
                 tracing::error!(
                     validator = %namada_addr,
