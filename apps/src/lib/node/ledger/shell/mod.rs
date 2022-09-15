@@ -244,9 +244,9 @@ impl ShellMode {
         }
     }
 
-    /// Get the protocol keypair for this validator
+    /// Get the protocol keypair for this validator.
     pub fn get_protocol_key(&self) -> Option<&common::SecretKey> {
-        match &self {
+        match self {
             ShellMode::Validator {
                 data:
                     ValidatorData {
@@ -258,6 +258,24 @@ impl ShellMode {
                     },
                 ..
             } => Some(protocol_keypair),
+            _ => None,
+        }
+    }
+
+    /// Get the Ethereum bridge keypair for this validator.
+    pub fn get_eth_bridge_keypair(&self) -> Option<&common::SecretKey> {
+        match self {
+            ShellMode::Validator {
+                data:
+                    ValidatorData {
+                        keys:
+                            ValidatorKeys {
+                                eth_bridge_keypair, ..
+                            },
+                        ..
+                    },
+                ..
+            } => Some(eth_bridge_keypair),
             _ => None,
         }
     }
