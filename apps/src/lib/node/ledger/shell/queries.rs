@@ -9,6 +9,7 @@ use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
 use namada::types::address::Address;
+use namada::types::ethereum_events::EthAddress;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Epoch, Key, PrefixValue};
@@ -332,6 +333,13 @@ pub(crate) trait QueriesExt {
 
     /// Retrieves the [`BlockHeight`] that is currently being decided.
     fn get_current_decision_height(&self) -> BlockHeight;
+
+    /// For a given Namada validator, return its corresponding Ethereum bridge
+    /// address.
+    fn get_ethbridge_from_namada_addr(
+        &self,
+        validator: &Address,
+    ) -> Option<EthAddress>;
 }
 
 impl<D, H> QueriesExt for Storage<D, H>
@@ -540,6 +548,15 @@ where
     #[inline]
     fn get_current_decision_height(&self) -> BlockHeight {
         self.last_height + 1
+    }
+
+    fn get_ethbridge_from_namada_addr(
+        &self,
+        validator: &Address,
+    ) -> Option<EthAddress> {
+        self.read_validator_eth_hot_key(validator)
+            .as_ref()
+            .and_then(|pk| pk.try_into().ok())
     }
 }
 
