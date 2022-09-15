@@ -24,7 +24,6 @@ const VALIDATOR_STAKING_REWARD_ADDRESS_STORAGE_KEY: &str =
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
 const VALIDATOR_ETH_COLD_KEY_STORAGE_KEY: &str = "eth_cold_key";
 const VALIDATOR_ETH_HOT_KEY_STORAGE_KEY: &str = "eth_hot_key";
-const ETH_KEY_ADDRESSES_STORAGE_KEY: &str = "eth_key_addresses";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
 const VALIDATOR_TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const VALIDATOR_VOTING_POWER_STORAGE_KEY: &str = "voting_power";
@@ -419,22 +418,6 @@ pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
     }
 }
 
-/// Storage key for look-up from validator's eth key addresses to native
-/// address.
-pub fn eth_key_addresses_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&ETH_KEY_ADDRESSES_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for validators' eth key addresses?
-pub fn is_eth_key_addresses_key(key: &Key) -> bool {
-    matches!(&key.segments[..],
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(suffix)]
-            if addr == &ADDRESS
-                && suffix == ETH_KEY_ADDRESSES_STORAGE_KEY)
-}
-
 impl<D, H> PosBase for Storage<D, H>
 where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -536,11 +519,6 @@ where
         value.map(|value| decode(value).unwrap())
     }
 
-    fn read_eth_key_addresses(&self) -> types::EthKeyAddresses<Self::Address> {
-        let (value, _gas) = self.read(&eth_key_addresses_key()).unwrap();
-        decode(value.unwrap()).unwrap()
-    }
-
     fn write_pos_params(&mut self, params: &PosParams) {
         self.write(&params_key(), encode(params)).unwrap();
     }
@@ -636,13 +614,6 @@ where
     ) {
         self.write(&validator_eth_hot_key_key(address), encode(value))
             .unwrap();
-    }
-
-    fn write_eth_key_addresses(
-        &mut self,
-        value: &types::EthKeyAddresses<Self::Address>,
-    ) {
-        self.write(&eth_key_addresses_key(), encode(value)).unwrap();
     }
 
     fn init_staking_reward_account(

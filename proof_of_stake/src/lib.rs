@@ -33,11 +33,11 @@ use epoched::{
 use parameters::PosParams;
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, Epoch, EthAddress, EthKeyAddresses,
-    GenesisValidator, Slash, SlashType, Slashes, TotalVotingPowers, TryRefTo,
-    Unbond, Unbonds, ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet,
-    ValidatorSetUpdate, ValidatorSets, ValidatorState, ValidatorStates,
-    ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
+    ActiveValidator, Bonds, Epoch, EthAddress, GenesisValidator, Slash,
+    SlashType, Slashes, TotalVotingPowers, TryRefTo, Unbond, Unbonds,
+    ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet, ValidatorSetUpdate,
+    ValidatorSets, ValidatorState, ValidatorStates, ValidatorTotalDeltas,
+    ValidatorVotingPowers, VotingPower, VotingPowerDelta,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -159,20 +159,6 @@ pub trait PosReadOnly {
         &self,
         key: &Self::Address,
     ) -> Option<Self::PublicKey>;
-
-    /// Read PoS map from eth address derived from cold or hot keys to native
-    /// addresses
-    fn read_eth_key_addresses(&self) -> EthKeyAddresses<Self::Address>;
-
-    /// Try to find a native address associated with the given Ethereum address
-    /// derived from an Ethereum cold or hot key
-    fn find_address_from_eth_key_address(
-        &self,
-        eth_addr: &EthAddress,
-    ) -> Option<Self::Address> {
-        let addresses = self.read_eth_key_addresses();
-        addresses.get(eth_addr).cloned()
-    }
 }
 
 /// PoS system trait to be implemented in integration that can read and write
@@ -245,10 +231,6 @@ pub trait PosActions: PosReadOnly {
         value: ValidatorEthKey<Self::PublicKey>,
     );
 
-    /// Write PoS map from eth address derived from cold or hot keys to native
-    /// addresses
-    fn write_eth_key_addresses(&self, value: EthKeyAddresses<Self::Address>);
-
     /// Delete an emptied PoS bond (validator self-bond or a delegation).
     fn delete_bond(&mut self, key: &BondId<Self::Address>);
     /// Delete an emptied PoS unbond (unbonded tokens from validator self-bond
@@ -296,9 +278,6 @@ pub trait PosActions: PosReadOnly {
             consensus_key,
             eth_cold_key,
             eth_hot_key,
-            eth_cold_key_addr,
-            eth_hot_key_addr,
-
             state,
             total_deltas,
             voting_power,
@@ -311,19 +290,6 @@ pub trait PosActions: PosReadOnly {
             &mut validator_set,
             current_epoch,
         )?;
-        let mut eth_addresses_map = self.read_eth_key_addresses();
-        if eth_addresses_map
-            .insert(eth_cold_key_addr, address.clone())
-            .is_some()
-        {
-            return Err(BecomeValidatorError::DupedEthKeyFound);
-        }
-        if eth_addresses_map
-            .insert(eth_hot_key_addr, address.clone())
-            .is_some()
-        {
-            return Err(BecomeValidatorError::DupedEthKeyFound);
-        }
         self.write_validator_staking_reward_address(
             address,
             staking_reward_address.clone(),
@@ -331,7 +297,6 @@ pub trait PosActions: PosReadOnly {
         self.write_validator_consensus_key(address, consensus_key);
         self.write_validator_eth_cold_key(address, eth_cold_key);
         self.write_validator_eth_hot_key(address, eth_hot_key);
-        self.write_eth_key_addresses(eth_addresses_map);
         self.write_validator_state(address, state);
         self.write_validator_set(validator_set);
         self.write_validator_address_raw_hash(address);
@@ -655,10 +620,6 @@ pub trait PosBase {
         key: &Self::Address,
     ) -> Option<Self::PublicKey>;
 
-    /// Read PoS map from eth address derived from cold or hot keys to native
-    /// addresses
-    fn read_eth_key_addresses(&self) -> EthKeyAddresses<Self::Address>;
-
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
     /// Write PoS validator's raw hash its address.
@@ -723,12 +684,6 @@ pub trait PosBase {
         address: &Self::Address,
         value: &ValidatorEthKey<Self::PublicKey>,
     );
-    /// Write PoS map from eth address derived from cold or hot keys to native
-    /// addresses
-    fn write_eth_key_addresses(
-        &mut self,
-        value: &EthKeyAddresses<Self::Address>,
-    );
     /// Initialize staking reward account with the given public key.
     fn init_staking_reward_account(
         &mut self,
@@ -782,8 +737,6 @@ pub trait PosBase {
             total_bonded_balance,
         } = init_genesis(params, validators, current_epoch)?;
 
-        let mut eth_addresses_map = HashMap::default();
-
         for res in validators {
             let GenesisValidatorData {
                 ref address,
@@ -796,8 +749,6 @@ pub trait PosBase {
                 bond: (bond_id, bond),
                 eth_cold_key,
                 eth_hot_key,
-                eth_cold_key_addr,
-                eth_hot_key_addr,
             } = res?;
             self.write_validator_address_raw_hash(address);
             self.write_validator_staking_reward_address(
@@ -815,20 +766,7 @@ pub trait PosBase {
                 &staking_reward_address,
                 &staking_reward_key,
             );
-            if eth_addresses_map
-                .insert(eth_cold_key_addr, address.clone())
-                .is_some()
-            {
-                return Err(GenesisError::DupedEthKeyFound);
-            }
-            if eth_addresses_map
-                .insert(eth_hot_key_addr, address.clone())
-                .is_some()
-            {
-                return Err(GenesisError::DupedEthKeyFound);
-            }
         }
-        self.write_eth_key_addresses(&eth_addresses_map);
         self.write_validator_set(&validator_set);
         self.write_total_voting_power(&total_voting_power);
         // Credit the bonded tokens to the PoS account
@@ -1024,8 +962,6 @@ pub enum GenesisError {
     VotingPowerOverflow(TryFromIntError),
     #[error("Ethereum address can only be of secp kind")]
     SecpKeyConversion,
-    #[error("Duplicate Ethereum key found")]
-    DupedEthKeyFound,
 }
 
 #[allow(missing_docs)]
@@ -1040,8 +976,6 @@ pub enum BecomeValidatorError<Address: Display + Debug> {
     StakingRewardAddressEqValidatorAddress(Address),
     #[error("Ethereum address can only be of secp kind")]
     SecpKeyConversion,
-    #[error("Duplicate Ethereum key found")]
-    DupedEthKeyFound,
 }
 
 #[allow(missing_docs)]
@@ -1195,8 +1129,6 @@ where
     bond: (BondId<Address>, Bonds<TokenAmount>),
     eth_cold_key: ValidatorEthKey<PK>,
     eth_hot_key: ValidatorEthKey<PK>,
-    eth_cold_key_addr: EthAddress,
-    eth_hot_key_addr: EthAddress,
 }
 
 /// A function that returns genesis data created from the initial validator set.
@@ -1305,11 +1237,6 @@ where
                   eth_cold_key,
                   eth_hot_key,
               }| {
-            let convert_key_to_addr = |k: &'a PK| {
-                k.try_ref_to().map_err(|_| GenesisError::SecpKeyConversion)
-            };
-            let eth_cold_key_addr = convert_key_to_addr(eth_cold_key)?;
-            let eth_hot_key_addr = convert_key_to_addr(eth_hot_key)?;
             let consensus_key =
                 Epoched::init_at_genesis(consensus_key.clone(), current_epoch);
             let eth_cold_key =
@@ -1347,8 +1274,6 @@ where
                 bond: (bond_id, bond),
                 eth_cold_key,
                 eth_hot_key,
-                eth_cold_key_addr,
-                eth_hot_key_addr,
             })
         },
     );
@@ -1461,8 +1386,6 @@ where
     consensus_key: ValidatorConsensusKeys<PK>,
     eth_cold_key: ValidatorEthKey<PK>,
     eth_hot_key: ValidatorEthKey<PK>,
-    eth_cold_key_addr: EthAddress,
-    eth_hot_key_addr: EthAddress,
     state: ValidatorStates,
     total_deltas: ValidatorTotalDeltas<TokenChange>,
     voting_power: ValidatorVotingPowers,
@@ -1502,12 +1425,6 @@ where
         + BorshSerialize
         + BorshSchema,
 {
-    let convert_key_to_addr = |k: &'a PK| {
-        k.try_ref_to()
-            .map_err(|_| BecomeValidatorError::SecpKeyConversion)
-    };
-    let eth_cold_key_addr = convert_key_to_addr(eth_cold_key)?;
-    let eth_hot_key_addr = convert_key_to_addr(eth_hot_key)?;
     let consensus_key =
         Epoched::init(consensus_key.clone(), current_epoch, params);
     let eth_cold_key =
@@ -1556,8 +1473,6 @@ where
         voting_power,
         eth_cold_key,
         eth_hot_key,
-        eth_cold_key_addr,
-        eth_hot_key_addr,
     })
 }
 

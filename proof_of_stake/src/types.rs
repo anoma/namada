@@ -40,8 +40,6 @@ pub type TotalVotingPowers =
     EpochedDelta<VotingPowerDelta, OffsetUnboundingLen>;
 /// Epoched validator's eth key.
 pub type ValidatorEthKey<PublicKey> = Epoched<PublicKey, OffsetPipelineLen>;
-/// Map from eth addresses back to native addresses.
-pub type EthKeyAddresses<Address> = HashMap<EthAddress, Address>;
 
 /// Eth address derived from secp256k1 key
 #[derive(
