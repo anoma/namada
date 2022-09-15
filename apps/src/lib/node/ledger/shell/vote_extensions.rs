@@ -11,6 +11,7 @@ mod extend_votes {
     use borsh::BorshDeserialize;
     use namada::proto::Signed;
     use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::vote_extensions::validator_set_update::EthAddrBook;
     use namada::types::vote_extensions::{
         ethereum_events, validator_set_update, VoteExtension,
         VoteExtensionDigest,
@@ -109,28 +110,51 @@ mod extend_votes {
                 .can_send_validator_set_update(SendValsetUpd::Now)
                 .then(|| {
                     let next_epoch = self.storage.get_current_epoch().0.next();
-                    let _validator_set =
-                        self.storage.get_active_validators(Some(next_epoch));
+                    let voting_powers = self
+                        .storage
+                        .get_active_validators(Some(next_epoch))
+                        .into_iter()
+                        .map(|validator| {
+                            let hot_key_addr = self
+                                .storage
+                                .get_ethbridge_from_namada_addr(
+                                    &validator.address,
+                                )
+                                .expect(
+                                    "All Namada validators should have an \
+                                     Ethereum bridge key",
+                                );
+                            let cold_key_addr = self
+                                .storage
+                                .get_ethgov_from_namada_addr(&validator.address)
+                                .expect(
+                                    "All Namada validators should have an \
+                                     Ethereum governance key",
+                                );
+                            let eth_addr_book = EthAddrBook {
+                                hot_key_addr,
+                                cold_key_addr,
+                            };
+                            (eth_addr_book, validator.voting_power)
+                        })
+                        .collect();
 
                     let ext = validator_set_update::Vext {
                         validator_addr,
-                        // TODO: we need a way to map ethereum addresses to
-                        // namada validator addresses
-                        voting_powers: std::collections::HashMap::new(),
+                        voting_powers,
                         block_height: self
                             .storage
                             .get_current_decision_height(),
                     };
 
-                    let protocol_key = match &self.mode {
+                    let eth_key = match &self.mode {
                         ShellMode::Validator { data, .. } => {
-                            &data.keys.protocol_keypair
+                            &data.keys.eth_bridge_keypair
                         }
                         _ => unreachable!("{VALIDATOR_EXPECT_MSG}"),
                     };
 
-                    // TODO: sign validator set update with secp key instead
-                    ext.sign(protocol_key)
+                    ext.sign(eth_key)
                 })
         }
 

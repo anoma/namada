@@ -340,6 +340,13 @@ pub(crate) trait QueriesExt {
         &self,
         validator: &Address,
     ) -> Option<EthAddress>;
+
+    /// For a given Namada validator, return its corresponding Ethereum
+    /// governance address.
+    fn get_ethgov_from_namada_addr(
+        &self,
+        validator: &Address,
+    ) -> Option<EthAddress>;
 }
 
 impl<D, H> QueriesExt for Storage<D, H>
@@ -550,11 +557,22 @@ where
         self.last_height + 1
     }
 
+    #[inline]
     fn get_ethbridge_from_namada_addr(
         &self,
         validator: &Address,
     ) -> Option<EthAddress> {
         self.read_validator_eth_hot_key(validator)
+            .as_ref()
+            .and_then(|pk| pk.try_into().ok())
+    }
+
+    #[inline]
+    fn get_ethgov_from_namada_addr(
+        &self,
+        validator: &Address,
+    ) -> Option<EthAddress> {
+        self.read_validator_eth_cold_key(validator)
             .as_ref()
             .and_then(|pk| pk.try_into().ok())
     }
