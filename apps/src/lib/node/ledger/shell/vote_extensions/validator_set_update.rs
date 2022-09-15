@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::types::storage::BlockHeight;
@@ -42,12 +43,6 @@ where
     /// This method behaves exactly like [`Self::validate_valset_upd_vext`],
     /// with the added bonus of returning the vote extension back, if it
     /// is valid.
-    // TODO:
-    // - verify if the voting powers in the vote extension are the same
-    // as the ones in storage. we can't do this yet, because we need to map
-    // ethereum addresses to namada validator addresses
-    //
-    // - verify signatures with a secp key, instead of an ed25519 key
     pub fn validate_valset_upd_vext_and_get_it_back(
         &self,
         ext: validator_set_update::SignedVext,
@@ -103,7 +98,7 @@ where
         }
         // get the public key associated with this validator
         let validator = &ext.data.validator_addr;
-        let (voting_power, pk) = self
+        let (voting_power, _) = self
             .storage
             .get_validator_from_address(validator, Some(last_height_epoch))
             .map_err(|err| {
@@ -115,6 +110,10 @@ where
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
+        let pk = self
+            .storage
+            .read_validator_eth_hot_key(validator)
+            .expect("We should have this hot key in storage");
         // verify the signature of the vote extension
         ext.verify(&pk)
             .map_err(|err| {
