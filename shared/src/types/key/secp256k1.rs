@@ -405,6 +405,21 @@ impl PartialOrd for Signature {
     }
 }
 
+impl TryFrom<&[u8; 64]> for Signature {
+    type Error = ParseSignatureError;
+
+    fn try_from(sig: &[u8; 64]) -> Result<Self, Self::Error> {
+        libsecp256k1::Signature::parse_standard(sig)
+            .map(Self)
+            .map_err(|err| {
+                ParseSignatureError::InvalidEncoding(std::io::Error::new(
+                    ErrorKind::Other,
+                    err,
+                ))
+            })
+    }
+}
+
 /// An implementation of the Secp256k1 signature scheme
 #[derive(
     Debug,
