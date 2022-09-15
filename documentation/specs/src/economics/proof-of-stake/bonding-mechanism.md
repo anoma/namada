@@ -249,20 +249,30 @@ type TotalVotingPower = Epoched<VotingPower>;
 When any validator's voting power changes, we attempt to perform the following update on the `ValidatorSet`:
 
 1. let `validator` be the validator's address, `power_before` and `power_after` be the voting power before and after the change, respectively
-1. find if the `power_before` and `power_after` are above the `min_validator_stake` theshold
+1. find if the `power_before` and `power_after` are above the `min_validator_stake` threshold
    1. if they're both below the threshold, nothing else needs to be done
 1. let `power_delta = power_after - power_before`
 1. let `min_consensus = consensus.first()` (consensus validator with lowest voting power)
 1. let `max_below_capacity = below_capacity.last()` (below_capacity validator with greatest voting power)
 1. find whether the validator was in consensus set, let `was_in_consensus = power_before >= max_below_capacity.voting_power`
+1. find whether the validator was in below capacity set, let `was_below_capacity = power_before > min_validator_stake`
    1. if `was_in_consensus`:
       1. if `power_after >= max_below_capacity.voting_power`, update the validator in `consensus` set with `voting_power = power_after`
       1. else if `power_after < min_validator_stake`, remove the validator from `consensus`, insert the `max_below_capacity.address` validator into `consensus` and remove `max_below_capacity.address` from `below_capacity`
       1. else, remove the validator from `consensus`, insert it into `below_capacity` and remove `max_below_capacity.address` from `below_capacity` and insert it into `consensus`
-   1. else (`!was_in_consensus`):
+   1. else if `was_below_capacity`:
       1. if `power_after <= min_consensus.voting_power`, update the validator in `below_capacity` set with `voting_power = power_after`
       1. else if `power_after < min_validator_stake`, remove the validator from `below_capacity`
       1. else, remove the validator from `below_capacity`, insert it into `consensus` and remove `min_consensus.address` from `consensus` and insert it into `below_capacity`
+   1. else (if validator was below minimum stake):
+      1. if `power_after > min_consensus.voting_power`, remove the `min_consensus.address` from `consensus`, insert the `min_consensus.address` into `below_capacity` and insert the validator in `consensus` set with `voting_power = power_after`
+      1. else if `power_after >= min_validator_stake`, insert the validator into `below_capacity` set with `voting_power = power_after`
+      1. else, do nothing
+
+Additionally, for [rewards distribution](./reward-distribution.md):
+
+- When a validator moves from `below_threshold` set to either `below_capacity` or `consensus` set, the transaction must also fill in the validator's reward products from its last known value, if any, in all epochs starting from their `last_known_product_epoch` (exclusive) up to the `current_epoch + pipeline_len - 1` (inclusive) in order to make their look-up cost constant (assuming that validator's stake can only be increased at `pipeline_len` offset).
+- And on the opposite side, when a stake of a validator from `consensus` or `below_capacity` drops below `min_validator_stake`, we record their `last_known_product_epoch`, so that it can be used if and when the validator's stake goes above `min_validator_stake`.
 
 Within each validator's address space, we store public consensus key, state, total bonded token amount, total unbonded token amount (needed for applying of slashes) and voting power calculated from the total bonded token amount (even though the voting power is stored in the `ValidatorSet`, we also need to have the `voting_power` here because we cannot look it up in the `ValidatorSet` without iterating the whole set):
 

@@ -18,6 +18,7 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
   - `validator/{validator_address}/total_unbonded`: sum of unbonded bonds from this validator, needed to determine the amount slashed in each epoch that it affects when a slash is applied
   - `validator/{validator_address}/validator_rewards_product`: a rewards product that is used to find the updated amount for self-bonds with staking rewards added to this validator - the past epoched data has to be kept indefinitely
   - `validator/{validator_address}/delegation_rewards_product`: similar to `validator_rewards_product`, but for delegations with commissions subtracted - the past epoched data also has to be kept indefinitely
+  - `validator/{validator_address}/last_known_product_epoch`: optionally set when a validator crosses from `consensus` or `below_capacity` validator set into `below_threshold` set, at which point the protocol will stop updating their rewards products during epoch change
   - `validator/{validator_address}/commissions`: the total amount of delegations commissions collected by this validator - this doesn't need to be epoched data, just an accumulator of the total
   - `validator/{validator_address}/commission_rate`: a validator-chosen commission rate that is some fraction of the delegation rewards charged by this validator
 - `slash/{validator_address}` (optional): a list of slashes, where each record contains epoch and slash rate
