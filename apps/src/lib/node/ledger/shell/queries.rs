@@ -340,6 +340,7 @@ pub(crate) trait QueriesExt {
     fn get_ethbridge_from_namada_addr(
         &self,
         validator: &Address,
+        epoch: Option<Epoch>,
     ) -> Option<EthAddress>;
 
     /// For a given Namada validator, return its corresponding Ethereum
@@ -347,6 +348,7 @@ pub(crate) trait QueriesExt {
     fn get_ethgov_from_namada_addr(
         &self,
         validator: &Address,
+        epoch: Option<Epoch>,
     ) -> Option<EthAddress>;
 
     /// Extension of [`Self::get_active_validators`], which additionally returns
@@ -569,20 +571,24 @@ where
     fn get_ethbridge_from_namada_addr(
         &self,
         validator: &Address,
+        epoch: Option<Epoch>,
     ) -> Option<EthAddress> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
         self.read_validator_eth_hot_key(validator)
             .as_ref()
-            .and_then(|pk| pk.try_into().ok())
+            .and_then(|epk| epk.get(epoch).and_then(|pk| pk.try_into().ok()))
     }
 
     #[inline]
     fn get_ethgov_from_namada_addr(
         &self,
         validator: &Address,
+        epoch: Option<Epoch>,
     ) -> Option<EthAddress> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
         self.read_validator_eth_cold_key(validator)
             .as_ref()
-            .and_then(|pk| pk.try_into().ok())
+            .and_then(|epk| epk.get(epoch).and_then(|pk| pk.try_into().ok()))
     }
 
     #[inline]
@@ -593,15 +599,21 @@ where
     {
         let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
         Box::new(self.get_active_validators(Some(epoch)).into_iter().map(
-            |validator| {
+            move |validator| {
                 let hot_key_addr = self
-                    .get_ethbridge_from_namada_addr(&validator.address)
+                    .get_ethbridge_from_namada_addr(
+                        &validator.address,
+                        Some(epoch),
+                    )
                     .expect(
                         "All Namada validators should have an Ethereum bridge \
                          key",
                     );
                 let cold_key_addr = self
-                    .get_ethgov_from_namada_addr(&validator.address)
+                    .get_ethgov_from_namada_addr(
+                        &validator.address,
+                        Some(epoch),
+                    )
                     .expect(
                         "All Namada validators should have an Ethereum \
                          governance key",

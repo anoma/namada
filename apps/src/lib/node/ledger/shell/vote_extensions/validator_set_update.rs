@@ -110,12 +110,15 @@ where
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
-        let pk = self
+        let epoched_pk = self
             .storage
             .read_validator_eth_hot_key(validator)
             .expect("We should have this hot key in storage");
+        let pk = epoched_pk
+            .get(last_height_epoch)
+            .expect("We should have the hot key of the given epoch");
         // verify the signature of the vote extension
-        ext.verify(&pk)
+        ext.verify(pk)
             .map_err(|err| {
                 tracing::error!(
                     ?err,
