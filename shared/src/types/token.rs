@@ -6,6 +6,7 @@ use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -13,7 +14,7 @@ use crate::types::address::{Address, Error as AddressError, InternalAddress};
 use crate::types::ibc::data::FungibleTokenPacketData;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
-/// Amount in nano units. For different granularity another representation
+/// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
 #[derive(
     Clone,
@@ -30,14 +31,13 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
     Hash,
 )]
 pub struct Amount {
-    nano: u64,
+    micro: u64,
 }
 
 /// Maximum decimal places in a token [`Amount`] and [`Change`].
-pub const MAX_DECIMAL_PLACES: u32 = 9;
+pub const MAX_DECIMAL_PLACES: u32 = 6;
 /// Decimal scale of token [`Amount`] and [`Change`].
-pub const SCALE: u64 = 1_000_000_000;
-const SCALE_F64: f64 = SCALE as f64;
+pub const SCALE: u64 = 1_000_000;
 
 /// A change in tokens amount
 pub type Change = i128;
@@ -45,31 +45,31 @@ pub type Change = i128;
 impl Amount {
     /// Get the amount as a [`Change`]
     pub fn change(&self) -> Change {
-        self.nano as Change
+        self.micro as Change
     }
 
     /// Spend a given amount.
-    /// Panics when given `amount` > `self.nano` amount.
+    /// Panics when given `amount` > `self.micro` amount.
     pub fn spend(&mut self, amount: &Amount) {
-        self.nano = self.nano.checked_sub(amount.nano).unwrap();
+        self.micro = self.micro.checked_sub(amount.micro).unwrap();
     }
 
     /// Receive a given amount.
     /// Panics on overflow.
     pub fn receive(&mut self, amount: &Amount) {
-        self.nano = self.nano.checked_add(amount.nano).unwrap();
+        self.micro = self.micro.checked_add(amount.micro).unwrap();
     }
 
     /// Create a new amount from whole number of tokens
     pub const fn whole(amount: u64) -> Self {
         Self {
-            nano: amount * SCALE,
+            micro: amount * SCALE,
         }
     }
 
     /// Create a new amount with the maximum value
     pub fn max() -> Self {
-        Self { nano: u64::MAX }
+        Self { micro: u64::MAX }
     }
 
     /// Create amount from Change
@@ -79,7 +79,7 @@ impl Amount {
     /// Panics if the change is negative or overflows `u64`.
     pub fn from_change(change: Change) -> Self {
         Self {
-            nano: change as u64,
+            micro: change as u64,
         }
     }
 }
@@ -113,29 +113,26 @@ impl From<Amount> for f64 {
     /// Warning: `f64` loses precision and it should not be used when exact
     /// values are required.
     fn from(amount: Amount) -> Self {
-        amount.nano as f64 / SCALE_F64
+        Into::<Decimal>::into(amount.micro) / Into::<Decimal>::into(SCALE)
     }
 }
 
-impl From<f64> for Amount {
-    /// Warning: `f64` loses precision and it should not be used when exact
-    /// values are required.
-    fn from(nano: f64) -> Self {
-        Self {
-            nano: (nano * SCALE_F64).round() as u64,
-        }
+impl From<Decimal> for Amount {
+    fn from(micro: Decimal) -> Self {
+        let res = (micro * Into::<Decimal>::into(SCALE)).to_u64().unwrap();
+        Self { micro: res }
     }
 }
 
 impl From<u64> for Amount {
-    fn from(nano: u64) -> Self {
-        Self { nano }
+    fn from(micro: u64) -> Self {
+        Self { micro }
     }
 }
 
 impl From<Amount> for u64 {
     fn from(amount: Amount) -> Self {
-        amount.nano
+        amount.micro
     }
 }
 
@@ -149,7 +146,7 @@ impl Add for Amount {
     type Output = Amount;
 
     fn add(mut self, rhs: Self) -> Self::Output {
-        self.nano += rhs.nano;
+        self.micro += rhs.micro;
         self
     }
 }
@@ -158,14 +155,14 @@ impl Mul<Amount> for u64 {
     type Output = Amount;
 
     fn mul(mut self, rhs: Amount) -> Self::Output {
-        self *= rhs.nano;
+        self *= rhs.micro;
         Self::Output::from(self)
     }
 }
 
 impl AddAssign for Amount {
     fn add_assign(&mut self, rhs: Self) {
-        self.nano += rhs.nano
+        self.micro += rhs.micro
     }
 }
 
@@ -173,14 +170,14 @@ impl Sub for Amount {
     type Output = Amount;
 
     fn sub(mut self, rhs: Self) -> Self::Output {
-        self.nano -= rhs.nano;
+        self.micro -= rhs.micro;
         self
     }
 }
 
 impl SubAssign for Amount {
     fn sub_assign(&mut self, rhs: Self) {
-        self.nano -= rhs.nano
+        self.micro -= rhs.micro
     }
 }
 
@@ -210,10 +207,10 @@ impl FromStr for Amount {
                 }
                 let whole =
                     decimal * rust_decimal::Decimal::new(SCALE as i64, 0);
-                let nano: u64 =
+                let micro: u64 =
                     rust_decimal::prelude::ToPrimitive::to_u64(&whole)
                         .ok_or(AmountParseError::InvalidRange)?;
-                Ok(Self { nano })
+                Ok(Self { micro })
             }
             Err(err) => Err(AmountParseError::InvalidDecimal(err)),
         }
@@ -223,7 +220,7 @@ impl FromStr for Amount {
 impl Display for Amount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let decimal = rust_decimal::Decimal::from_i128_with_scale(
-            self.nano as i128,
+            self.micro as i128,
             MAX_DECIMAL_PLACES,
         )
         .normalize();
@@ -233,7 +230,7 @@ impl Display for Amount {
 
 impl From<Amount> for Change {
     fn from(amount: Amount) -> Self {
-        amount.nano as i128
+        amount.micro as i128
     }
 }
 
