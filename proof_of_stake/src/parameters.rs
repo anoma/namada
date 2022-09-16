@@ -111,6 +111,9 @@ impl PosParams {
 
         // Check maximum total voting power cannot get larger than what
         // Tendermint allows
+        //
+        // TODO: decide if this is still a check we want to do (in its current state
+        // with our latest voting power conventions, it will fail always)
         let max_total_voting_power = Decimal::from(self.max_validator_slots)
             * self.tm_votes_per_token
             * Decimal::from(TOKEN_MAX_AMOUNT);

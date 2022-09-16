@@ -468,9 +468,10 @@ where
             .read_validator_address_raw_hash(tm_raw_hash_string)
             .unwrap();
 
-        // TODO: reward distribution should be written in such a way that the reward products
-        // for each validator are updated rather than actually transferring tokens to the addresses.
-        // Must follow convention of auto-bonding the rewards basically
+        // TODO: reward distribution should be written in such a way that the
+        // reward products for each validator are updated rather than
+        // actually transferring tokens to the addresses. Must follow
+        // convention of auto-bonding the rewards basically
 
         self.storage
             .distribute_rewards(

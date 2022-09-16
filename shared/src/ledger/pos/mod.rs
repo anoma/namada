@@ -6,7 +6,7 @@ pub mod vp;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::types::{
-    self, Slash, Slashes, ValidatorStates, decimal_mult_u64
+    self, decimal_mult_u64, Slash, Slashes, ValidatorStates,
 };
 use namada_proof_of_stake::PosBase;
 use rust_decimal::Decimal;
@@ -31,8 +31,12 @@ pub fn staking_token_address() -> Address {
     address::xan()
 }
 
-/// Calculate voting power in the tendermint context (which is stored as i64) from the number of tokens
-pub fn into_tm_voting_power(votes_per_token: Decimal, tokens: impl Into<u64>) -> i64 {
+/// Calculate voting power in the tendermint context (which is stored as i64)
+/// from the number of tokens
+pub fn into_tm_voting_power(
+    votes_per_token: Decimal,
+    tokens: impl Into<u64>,
+) -> i64 {
     let prod = decimal_mult_u64(votes_per_token, tokens.into());
     i64::try_from(prod).expect("Invalid validator voting power (i64)")
 }

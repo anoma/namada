@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use namada::ledger::pos::{staking_token_address, into_tm_voting_power};
+use namada::ledger::pos::{into_tm_voting_power, staking_token_address};
 use namada::types::key::*;
 use namada::types::token::total_supply_key;
 #[cfg(not(feature = "dev"))]
@@ -284,7 +284,8 @@ where
             .expect("unable to set total NAM balance in storage");
 
         // Set total staked tokens (those locked in PoS) in storage
-        // TODO: test that this is correct
+        // TODO: test that this is correct, check that total_deltas is written
+        // or initialized too.
         self.storage.write_total_staked_tokens(
             &(total_balance - total_non_staked_tokens),
         );
@@ -300,7 +301,10 @@ where
                 sum: Some(key_to_tendermint(&consensus_key).unwrap()),
             };
             abci_validator.pub_key = Some(pub_key);
-            abci_validator.power = into_tm_voting_power(genesis.pos_params.tm_votes_per_token, validator.pos_data.tokens);
+            abci_validator.power = into_tm_voting_power(
+                genesis.pos_params.tm_votes_per_token,
+                validator.pos_data.tokens,
+            );
             response.validators.push(abci_validator);
         }
         Ok(response)

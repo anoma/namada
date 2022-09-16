@@ -1,14 +1,12 @@
 //! Proof-of-Stake storage keys and storage integration via [`PosBase`] trait.
 
 use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::types::{
-ValidatorStates,
-};
+use namada_proof_of_stake::types::ValidatorStates;
 use namada_proof_of_stake::{types, PosBase};
 
 use super::{
-    BondId, Bonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas, TotalDeltas,
-    ADDRESS,
+    BondId, Bonds, TotalDeltas, ValidatorConsensusKeys, ValidatorSets,
+    ValidatorTotalDeltas, ADDRESS,
 };
 use crate::ledger::storage::types::{decode, encode};
 use crate::ledger::storage::{self, Storage, StorageHasher};

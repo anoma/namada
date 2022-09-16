@@ -20,6 +20,7 @@ pub enum RewardsType {
 }
 
 /// Holds the PD controller values that should be updated in storage
+#[allow(missing_docs)]
 pub struct ValsToUpdate {
     pub locked_ratio_last: Decimal,
     pub last_reward_rate: Decimal,

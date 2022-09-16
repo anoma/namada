@@ -938,18 +938,18 @@ pub async fn query_bonded_stake(ctx: Context, args: args::QueryVotingPower) {
         Some(validator) => {
             let validator = ctx.get(&validator);
             // Find voting power for the given validator
-            let validator_deltas_key = pos::validator_total_deltas_key(&validator);
-            let validator_deltas =
-                query_storage_value::<pos::ValidatorTotalDeltas>(
-                    &client,
-                    &validator_deltas_key,
-                )
-                .await;
+            let validator_deltas_key =
+                pos::validator_total_deltas_key(&validator);
+            let validator_deltas = query_storage_value::<
+                pos::ValidatorTotalDeltas,
+            >(&client, &validator_deltas_key)
+            .await;
             match validator_deltas.and_then(|data| data.get(epoch)) {
                 Some(val_stake) => {
                     let bonded_stake: u64 = val_stake.try_into().expect(
-                            "The sum of the bonded stake deltas shouldn't be negative",
-                        );
+                        "The sum of the bonded stake deltas shouldn't be \
+                         negative",
+                    );
                     let weighted = WeightedValidator {
                         address: validator.clone(),
                         bonded_stake,
@@ -1002,12 +1002,10 @@ pub async fn query_bonded_stake(ctx: Context, args: args::QueryVotingPower) {
         }
     }
     let total_deltas_key = pos::total_deltas_key();
-    let total_deltas = query_storage_value::<pos::TotalDeltas>(
-        &client,
-        &total_deltas_key,
-    )
-    .await
-    .expect("Total bonded stake should always be set");
+    let total_deltas =
+        query_storage_value::<pos::TotalDeltas>(&client, &total_deltas_key)
+            .await
+            .expect("Total bonded stake should always be set");
     let total_bonded_stake = total_deltas
         .get(epoch)
         .expect("Total bonded stake should be always set in the current epoch");

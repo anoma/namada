@@ -36,7 +36,8 @@ pub type Unbonds<TokenAmount> =
 pub type ValidatorSets<Address> =
     Epoched<ValidatorSet<Address>, OffsetUnbondingLen>;
 /// Epoched total total deltas.
-pub type TotalDeltas<TokenChange> = EpochedDelta<TokenChange, OffsetUnbondingLen>;
+pub type TotalDeltas<TokenChange> =
+    EpochedDelta<TokenChange, OffsetUnbondingLen>;
 
 /// Epoch identifier. Epochs are identified by consecutive natural numbers.
 ///
@@ -335,9 +336,6 @@ pub trait PublicKeyTmRawHash {
     fn tm_raw_hash(&self) -> String;
 }
 
-
-
-
 impl Epoch {
     /// Iterate a range of consecutive epochs starting from `self` of a given
     /// length. Work-around for `Step` implementation pending on stabilization of <https://github.com/rust-lang/rust/issues/42168>.
@@ -571,8 +569,12 @@ pub fn decimal_mult_i128(dec: Decimal, int: i128) -> i128 {
     prod.to_i128().expect("Product is out of bounds")
 }
 
-/// Calculate voting power in the tendermint context (which is stored as i64) from the number of tokens
-pub fn into_tm_voting_power(votes_per_token: Decimal, tokens: impl Into<u64>) -> i64 {
+/// Calculate voting power in the tendermint context (which is stored as i64)
+/// from the number of tokens
+pub fn into_tm_voting_power(
+    votes_per_token: Decimal,
+    tokens: impl Into<u64>,
+) -> i64 {
     let prod = decimal_mult_u64(votes_per_token, tokens.into());
     i64::try_from(prod).expect("Invalid voting power")
 }

@@ -453,7 +453,7 @@ where
         current_epoch: impl Into<Epoch>,
         params: &PosParams,
     ) {
-        let epoch = current_epoch.into();
+        let epoch: Epoch = current_epoch.into();
         let offset = Offset::value(params) as usize;
         let last_update = self.last_update;
         let shift: usize =

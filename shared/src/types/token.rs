@@ -6,9 +6,9 @@ use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use rust_decimal::prelude::{Decimal, ToPrimitive};
 
 use crate::types::address::{Address, Error as AddressError, InternalAddress};
 use crate::types::ibc::data::FungibleTokenPacketData;
@@ -118,9 +118,7 @@ impl From<Amount> for Decimal {
 impl From<Decimal> for Amount {
     fn from(micro: Decimal) -> Self {
         let res = (micro * Into::<Decimal>::into(SCALE)).to_u64().unwrap();
-        Self {
-            micro: res
-        }
+        Self { micro: res }
     }
 }
 

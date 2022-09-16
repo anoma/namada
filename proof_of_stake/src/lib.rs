@@ -36,9 +36,9 @@ use rust_decimal::prelude::{Decimal, ToPrimitive};
 use thiserror::Error;
 use types::{
     decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bonds, Epoch,
-    GenesisValidator, Slash, SlashType, Slashes, Unbond,
-    Unbonds, ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate,
-    ValidatorSets, ValidatorState, ValidatorStates, ValidatorTotalDeltas, TotalDeltas,
+    GenesisValidator, Slash, SlashType, Slashes, TotalDeltas, Unbond, Unbonds,
+    ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
+    ValidatorState, ValidatorStates, ValidatorTotalDeltas,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -153,7 +153,14 @@ pub trait PosReadOnly {
         &self,
     ) -> Result<ValidatorSets<Self::Address>, Self::Error>;
     /// Read PoS total deltas for all validators (active and inactive)
-    fn read_total_deltas(&self) -> Result<TotalDeltas<Self::TokenChange>, Self::Error>;
+    fn read_total_deltas(
+        &self,
+    ) -> Result<TotalDeltas<Self::TokenChange>, Self::Error>;
+    /// Read total staked tokens in PoS for all validators (active and
+    /// inactive).
+    fn read_total_staked_tokens(
+        &self,
+    ) -> Result<Self::TokenAmount, Self::Error>;
 }
 
 /// PoS system trait to be implemented in integration that can read and write
@@ -873,6 +880,10 @@ pub trait PosBase {
         proposer_address: &Self::Address,
         votes: &Vec<VoteInfo>,
     ) -> Result<(), Error> {
+        // TODO: refactor logic here to use lazy DS over the validator set
+        // storage, will keep fewer resources from being held in memory
+        // like is done here
+
         let current_epoch: Epoch = current_epoch.into();
         let validator_set = self.read_validator_set();
         let validators = validator_set.get(current_epoch).unwrap();
@@ -891,6 +902,7 @@ pub trait PosBase {
         let mut signer_set: HashSet<Self::Address> = HashSet::new();
         let mut total_signing_stake: u64 = 0;
 
+        // TODO: make sure this works properly
         for vote in votes.iter() {
             if !vote.signed_last_block {
                 continue;
@@ -919,7 +931,7 @@ pub trait PosBase {
 
         // iterate thru the validators, figure out if each is proposer or signer
         for validator in validators.active.iter() {
-            let mut rewards: Decimal = Decimal::new(0, 0);
+            let mut rewards: Decimal = Decimal::default();
             let stake: Decimal = validator.bonded_stake.into();
 
             // TODO: ensure that the multiplication / division logic is
@@ -945,6 +957,9 @@ pub trait PosBase {
             rewards += active_val_coeff * new_tokens * active_val_frac;
 
             // distribute the rewards to the validator address.
+            // TODO: rather than transfer, keep tokens in PoS, then
+            // update validator products (self bonds, delegations)
+            // Need function to update products (see PoS specs update PR 283)
             self.transfer(
                 &Self::staking_token_address(),
                 Self::TokenAmount::from(rewards.to_u64().unwrap()),
@@ -1252,7 +1267,8 @@ where
     } in validators.clone()
     {
         total_bonded_balance += *tokens;
-        // is some extra error handling needed here for casting the delta as i64? (TokenChange)
+        // is some extra error handling needed here for casting the delta as
+        // i64? (TokenChange)
         let delta = TokenChange::from(*tokens);
         total_bonded_delta = total_bonded_delta + delta;
         active.insert(WeightedValidator {
@@ -1577,8 +1593,8 @@ where
             return Err(BondError::NotAValidator(bond_id.validator.clone()));
         }
         Some(validator_state) => {
-            // Check that it's not inactive anywhere from the current epoch
-            // to the pipeline offset
+            // Check that the validator is not inactive anywhere from the
+            // current epoch to the pipeline offset
             for epoch in
                 current_epoch.iter_range(OffsetPipelineLen::value(params))
             {
@@ -1652,7 +1668,6 @@ where
     };
 
     total_deltas.add_at_offset(delta, current_epoch, update_offset, params);
-
 
     Ok(BondData {
         bond,

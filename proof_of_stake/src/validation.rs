@@ -17,10 +17,9 @@ use crate::epoched::DynEpochOffset;
 use crate::parameters::PosParams;
 use crate::types::{
     decimal_mult_i128, decimal_mult_u64, BondId, Bonds, Epoch,
-    PublicKeyTmRawHash, Slash, Slashes, Unbonds,
+    PublicKeyTmRawHash, Slash, Slashes, TotalDeltas, Unbonds,
     ValidatorConsensusKeys, ValidatorSets, ValidatorState, ValidatorStates,
-    ValidatorTotalDeltas,
-    WeightedValidator, TotalDeltas,
+    ValidatorTotalDeltas, WeightedValidator,
 };
 
 #[allow(missing_docs)]
@@ -471,11 +470,12 @@ where
                         for validator in &post.active {
                             match total_stakes.get(&validator.address) {
                                 Some((_stake_pre, stake_post)) => {
-
                                     // Any validator who's total deltas changed,
                                     // should
                                     // be up-to-date
-                                    if validator.bonded_stake != Into::<u64>::into(*stake_post) {
+                                    if validator.bonded_stake
+                                        != Into::<u64>::into(*stake_post)
+                                    {
                                         errors.push(
                                             Error::InvalidActiveValidator(
                                                 validator.clone(),
@@ -517,7 +517,9 @@ where
                                             {
                                                 is_valid = validator
                                                     .bonded_stake
-                                                    == Into::<u64>::into(*last_total_stake);
+                                                    == Into::<u64>::into(
+                                                        *last_total_stake,
+                                                    );
                                                 break;
                                             } else {
                                                 search_epoch -= 1;
@@ -540,7 +542,9 @@ where
                             // be up-to-date
                             match total_stakes.get(&validator.address) {
                                 Some((_stake_pre, stake_post)) => {
-                                    if validator.bonded_stake != Into::<u64>::into(*stake_post) {
+                                    if validator.bonded_stake
+                                        != Into::<u64>::into(*stake_post)
+                                    {
                                         errors.push(
                                             Error::InvalidInactiveValidator(
                                                 validator.clone(),
@@ -582,7 +586,9 @@ where
                                             {
                                                 is_valid = validator
                                                     .bonded_stake
-                                                    == Into::<u64>::into(*last_total_stake);
+                                                    == Into::<u64>::into(
+                                                        *last_total_stake,
+                                                    );
                                                 break;
                                             } else {
                                                 search_epoch -= 1;
@@ -993,7 +999,6 @@ where
                         address,
                         data,
                     ),
- 
                 },
                 Balance(data) => Self::balance(errors, balance_delta, data),
                 Bond { id, data, slashes } => {
@@ -1366,10 +1371,7 @@ where
             Epoch,
             HashMap<Address, TokenAmount>,
         >,
-        expected_total_delta_by_epoch: &mut HashMap<
-            Epoch,
-            TokenChange,
-        >,
+        expected_total_delta_by_epoch: &mut HashMap<Epoch, TokenChange>,
         new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
         address: Address,
         data: Data<ValidatorTotalDeltas<TokenChange>>,
@@ -1409,10 +1411,9 @@ where
                             })
                             .unwrap_or_default();
                         if delta_pre != *delta_post {
-                            let current_delta =
-                                expected_total_delta_by_epoch
-                                    .entry(epoch)
-                                    .or_insert_with(Default::default);
+                            let current_delta = expected_total_delta_by_epoch
+                                .entry(epoch)
+                                .or_insert_with(Default::default);
                             *current_delta += *delta_post - delta_pre;
                         }
 
@@ -1422,7 +1423,10 @@ where
                                 bonded_tokens_by_epoch
                                     .entry(epoch)
                                     .or_insert_with(HashMap::default)
-                                    .insert(address.clone(), TokenAmount::from(vp));
+                                    .insert(
+                                        address.clone(),
+                                        TokenAmount::from(vp),
+                                    );
                             }
                             Err(_) => {
                                 // TODO: may need better error handling here
@@ -1445,7 +1449,8 @@ where
                         )
                         .unwrap_or_default()
                         .into();
-                    validator.bonded_stake = u64::try_from(stake).unwrap_or_default();
+                    validator.bonded_stake =
+                        u64::try_from(stake).unwrap_or_default();
                 }
             }
             (Some(_), None) => {
@@ -1946,10 +1951,7 @@ where
     fn total_deltas(
         constants: &Constants,
         errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
-        total_delta_by_epoch: &mut HashMap<
-            Epoch,
-            TokenChange,
-        >,
+        total_delta_by_epoch: &mut HashMap<Epoch, TokenChange>,
         data: Data<TotalDeltas<TokenChange>>,
     ) {
         match (data.pre, data.post) {

@@ -2,8 +2,8 @@
 
 pub use namada::ledger::pos::*;
 use namada::ledger::pos::{
-    bond_key, namada_proof_of_stake, params_key,
-    unbond_key, validator_address_raw_hash_key, validator_consensus_key_key,
+    bond_key, namada_proof_of_stake, params_key, unbond_key,
+    validator_address_raw_hash_key, validator_consensus_key_key,
     validator_set_key, validator_slashes_key,
     validator_staking_reward_address_key, validator_state_key,
     validator_total_deltas_key,
