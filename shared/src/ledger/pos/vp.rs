@@ -8,23 +8,22 @@ use itertools::Itertools;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::types::{
-    self, Slash, Slashes, TotalVotingPowers, ValidatorStates,
-    ValidatorVotingPowers,
+    self, Slash, Slashes, ValidatorStates
 };
 use namada_proof_of_stake::validation::validate;
 use namada_proof_of_stake::{validation, PosReadOnly};
 use thiserror::Error;
 
 use super::{
-    bond_key, is_bond_key, is_params_key, is_total_voting_power_key,
+    bond_key, is_bond_key, is_params_key, is_total_staked_tokens_key, is_total_deltas_key,
     is_unbond_key, is_validator_set_key,
     is_validator_staking_reward_address_key, is_validator_total_deltas_key,
-    is_validator_voting_power_key, params_key, staking_token_address,
-    total_voting_power_key, unbond_key, validator_consensus_key_key,
+    is_validator_bonded_stake_key, params_key, staking_token_address, total_deltas_key,
+    total_staked_tokens_key, unbond_key, validator_consensus_key_key,
     validator_set_key, validator_slashes_key,
     validator_staking_reward_address_key, validator_state_key,
-    validator_total_deltas_key, validator_voting_power_key, BondId, Bonds,
-    Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
+    validator_total_deltas_key, BondId, Bonds,
+    Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas
 };
 use crate::impl_pos_read_only;
 use crate::ledger::governance::vp::is_proposal_accepted;
@@ -185,18 +184,7 @@ where
                 });
                 changes.push(Validator {
                     address: validator.clone(),
-                    update: TotalDeltas(Data { pre, post }),
-                });
-            } else if let Some(validator) = is_validator_voting_power_key(key) {
-                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                    ValidatorVotingPowers::try_from_slice(&bytes[..]).ok()
-                });
-                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                    ValidatorVotingPowers::try_from_slice(&bytes[..]).ok()
-                });
-                changes.push(Validator {
-                    address: validator.clone(),
-                    update: VotingPowerUpdate(Data { pre, post }),
+                    update: ValidatorDeltas(Data { pre, post }),
                 });
             } else if let Some(raw_hash) =
                 is_validator_address_raw_hash_key(key)
@@ -268,14 +256,14 @@ where
                     data: Data { pre, post },
                     slashes,
                 });
-            } else if is_total_voting_power_key(key) {
+            } else if is_total_deltas_key(key) {
                 let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                    TotalVotingPowers::try_from_slice(&bytes[..]).ok()
+                    super::TotalDeltas::try_from_slice(&bytes[..]).ok()
                 });
                 let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                    TotalVotingPowers::try_from_slice(&bytes[..]).ok()
+                    super::TotalDeltas::try_from_slice(&bytes[..]).ok()
                 });
-                changes.push(TotalVotingPower(Data { pre, post }));
+                changes.push(TotalDeltas(Data { pre, post }));
             } else if key.segments.get(0) == Some(&addr.to_db_key()) {
                 // Unknown changes to this address space are disallowed
                 tracing::info!("PoS unrecognized key change {} rejected", key);
