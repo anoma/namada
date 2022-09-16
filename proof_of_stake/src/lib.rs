@@ -235,7 +235,6 @@ pub trait PosActions: PosReadOnly {
         value: TotalDeltas<Self::TokenChange>,
     ) -> Result<(), Self::Error>;
     ) -> Result<(), Self::Error>;
-
     /// Delete an emptied PoS bond (validator self-bond or a delegation).
     fn delete_bond(
         &mut self,

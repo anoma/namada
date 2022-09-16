@@ -2,11 +2,11 @@
 
 pub use namada::ledger::pos::*;
 use namada::ledger::pos::{
-    bond_key, namada_proof_of_stake, params_key, total_voting_power_key,
+    bond_key, namada_proof_of_stake, params_key,
     unbond_key, validator_address_raw_hash_key, validator_consensus_key_key,
     validator_set_key, validator_slashes_key,
     validator_staking_reward_address_key, validator_state_key,
-    validator_total_deltas_key, validator_voting_power_key,
+    validator_total_deltas_key,
 };
 use namada::types::address::Address;
 use namada::types::transaction::InitValidator;
@@ -172,14 +172,6 @@ impl namada_proof_of_stake::PosActions for Ctx {
         self.write(&validator_total_deltas_key(key), &value)
     }
 
-    fn write_validator_voting_power(
-        &mut self,
-        key: &Self::Address,
-        value: ValidatorVotingPowers,
-    ) -> Result<(), Self::Error> {
-        self.write(&validator_voting_power_key(key), &value)
-    }
-
     fn write_bond(
         &mut self,
         key: &BondId,
@@ -203,11 +195,11 @@ impl namada_proof_of_stake::PosActions for Ctx {
         self.write(&validator_set_key(), &value)
     }
 
-    fn write_total_voting_power(
+    fn write_total_deltas(
         &mut self,
-        value: TotalVotingPowers,
+        value: TotalDeltas,
     ) -> Result<(), Self::Error> {
-        self.write(&total_voting_power_key(), &value)
+        self.write(&total_deltas_key(), &value)
     }
 
     fn delete_bond(&mut self, key: &BondId) -> Result<(), Self::Error> {

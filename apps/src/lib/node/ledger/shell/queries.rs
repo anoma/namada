@@ -313,7 +313,7 @@ where
                         "DKG public key in storage should be deserializable",
                     );
                 TendermintValidator {
-                    power: validator.voting_power.into(),
+                    power: validator.bonded_stake,
                     address: validator.address.to_string(),
                     public_key: dkg_publickey.into(),
                 }

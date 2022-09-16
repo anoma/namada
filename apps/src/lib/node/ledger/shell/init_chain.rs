@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use namada::ledger::pos::staking_token_address;
+use namada::ledger::pos::{staking_token_address, into_tm_voting_power};
 use namada::types::key::*;
 use namada::types::token::total_supply_key;
 #[cfg(not(feature = "dev"))]
@@ -300,11 +300,7 @@ where
                 sum: Some(key_to_tendermint(&consensus_key).unwrap()),
             };
             abci_validator.pub_key = Some(pub_key);
-            let power: u64 =
-                validator.pos_data.voting_power(&genesis.pos_params).into();
-            abci_validator.power = power
-                .try_into()
-                .expect("unexpected validator's voting power");
+            abci_validator.power = into_tm_voting_power(genesis.pos_params.tm_votes_per_token, validator.pos_data.tokens);
             response.validators.push(abci_validator);
         }
         Ok(response)
