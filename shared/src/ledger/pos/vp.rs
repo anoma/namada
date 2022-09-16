@@ -420,7 +420,7 @@ where
     fn read_validator_eth_cold_key(
         &self,
         key: &Self::Address,
-    ) -> Option<Self::PublicKey> {
+    ) -> Option<types::ValidatorEthKey<Self::PublicKey>> {
         let value =
             self.ctx.read_pre(&validator_eth_cold_key_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
@@ -429,7 +429,7 @@ where
     fn read_validator_eth_hot_key(
         &self,
         key: &Self::Address,
-    ) -> Option<Self::PublicKey> {
+    ) -> Option<types::ValidatorEthKey<Self::PublicKey>> {
         let value = self.ctx.read_pre(&validator_eth_hot_key_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }

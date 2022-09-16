@@ -152,13 +152,13 @@ pub trait PosReadOnly {
     fn read_validator_eth_cold_key(
         &self,
         key: &Self::Address,
-    ) -> Option<Self::PublicKey>;
+    ) -> Option<ValidatorEthKey<Self::PublicKey>>;
 
     /// Read PoS validator's Eth validator set update signing key
     fn read_validator_eth_hot_key(
         &self,
         key: &Self::Address,
-    ) -> Option<Self::PublicKey>;
+    ) -> Option<ValidatorEthKey<Self::PublicKey>>;
 }
 
 /// PoS system trait to be implemented in integration that can read and write
@@ -612,13 +612,13 @@ pub trait PosBase {
     fn read_validator_eth_cold_key(
         &self,
         key: &Self::Address,
-    ) -> Option<Self::PublicKey>;
+    ) -> Option<ValidatorEthKey<Self::PublicKey>>;
 
     /// Read PoS validator's Eth validator set update signing key
     fn read_validator_eth_hot_key(
         &self,
         key: &Self::Address,
-    ) -> Option<Self::PublicKey>;
+    ) -> Option<ValidatorEthKey<Self::PublicKey>>;
 
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
