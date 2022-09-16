@@ -14,6 +14,6 @@
     "tx_withdraw.wasm": "tx_withdraw.eb07fbbde79b5c2355a4f73a30355aba1e64e803eff29cfc8161fbda946b2de5.wasm",
     "vp_nft.wasm": "vp_nft.1613c09ad9ecac50584160bc8f4eb1b1acc2d96c5b51e91ac69ad17a439c01d6.wasm",
     "vp_testnet_faucet.wasm": "vp_testnet_faucet.598942468d0cb42d987be7b93f2efaeba98d837441c5a6971217c0dff6161064.wasm",
-    "vp_token.wasm": "vp_token.4988b829c7825aa101ac47903d3e363ab38b6887df95eec739e1726e3b29234f.wasm",
-    "vp_user.wasm": "vp_user.bf58f7316e142118328e4c63486e53003812b142b9b5927c83681cd0de0f74d8.wasm"
+    "vp_token.wasm": "vp_token.e3df9b76b573bf1a4d722073f7573822a7504e9ccba65c641ca54067943c009f.wasm",
+    "vp_user.wasm": "vp_user.42678c7c959fca64e6003b9b84dbe66cfd22797e7fd22047d352b3e61f58b17c.wasm"
 }
