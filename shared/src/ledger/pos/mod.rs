@@ -6,10 +6,10 @@ pub mod vp;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::types::{
-    self, Slash, Slashes, TotalVotingPowers, ValidatorStates,
-    ValidatorVotingPowers,
+    self, Slash, Slashes, ValidatorStates, decimal_mult_u64
 };
 use namada_proof_of_stake::PosBase;
+use rust_decimal::Decimal;
 pub use storage::*;
 pub use vp::PosVP;
 
@@ -29,6 +29,12 @@ pub const SLASH_POOL_ADDRESS: Address =
 /// Address of the staking token (NAM)
 pub fn staking_token_address() -> Address {
     address::nam()
+}
+
+/// Calculate voting power in the tendermint context (which is stored as i64) from the number of tokens
+pub fn into_tm_voting_power(votes_per_token: Decimal, tokens: impl Into<u64>) -> i64 {
+    let prod = decimal_mult_u64(votes_per_token, tokens.into());
+    i64::try_from(prod).expect("Invalid validator voting power (i64)")
 }
 
 /// Initialize storage in the genesis block.
@@ -77,6 +83,8 @@ pub type GenesisValidator = namada_proof_of_stake::types::GenesisValidator<
 
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type CommissionRates = namada_proof_of_stake::types::CommissionRates;
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type TotalDeltas = namada_proof_of_stake::types::TotalDeltas<token::Change>;
 
 impl From<Epoch> for namada_proof_of_stake::types::Epoch {
     fn from(epoch: Epoch) -> Self {
@@ -223,15 +231,6 @@ mod macros {
                 Ok(value.map(|value| $crate::ledger::storage::types::decode(value).unwrap()))
             }
 
-            fn read_validator_voting_power(
-                &self,
-                key: &Self::Address,
-            ) -> std::result::Result<Option<ValidatorVotingPowers>, Self::Error> {
-                let value =
-                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_voting_power_key(key))?;
-                Ok(value.map(|value| $crate::ledger::storage::types::decode(value).unwrap()))
-            }
-
             fn read_validator_slashes(
                 &self,
                 key: &Self::Address,
@@ -266,11 +265,12 @@ mod macros {
                 Ok($crate::ledger::storage::types::decode(value).unwrap())
             }
 
-            fn read_total_voting_power(
+            fn read_total_deltas(
                 &self,
-            ) -> std::result::Result<TotalVotingPowers, Self::Error> {
+            ) -> std::result::Result<types::TotalDeltas<Self::TokenChange>, Self::Error> {
                 let value =
-                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &total_voting_power_key())?.unwrap();
+                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &total_deltas_key())?.unwrap();
+                Ok($crate::ledger::storage::types::decode(value).unwrap())
                 Ok($crate::ledger::storage::types::decode(value).unwrap())
             }
         }
