@@ -177,14 +177,14 @@ impl namada_proof_of_stake::PosReadOnly for PoS {
     fn read_validator_eth_cold_key(
         &self,
         key: &Self::Address,
-    ) -> Option<Self::PublicKey> {
+    ) -> Option<types::ValidatorEthKey<Self::PublicKey>> {
         tx::read(validator_eth_cold_key_key(key).to_string())
     }
 
     fn read_validator_eth_hot_key(
         &self,
         key: &Self::Address,
-    ) -> Option<Self::PublicKey> {
+    ) -> Option<types::ValidatorEthKey<Self::PublicKey>> {
         tx::read(validator_eth_hot_key_key(key).to_string())
     }
 }
