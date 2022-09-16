@@ -292,10 +292,9 @@ where
             let (consensus_key, power) = match update {
                 ValidatorSetUpdate::Active(ActiveValidator {
                     consensus_key,
-                    voting_power,
+                    bonded_stake,
                 }) => {
-                    let power: u64 = voting_power.into();
-                    let power: i64 = power
+                    let power: i64 = bonded_stake
                         .try_into()
                         .expect("unexpected validator's voting power");
                     (consensus_key, power)
