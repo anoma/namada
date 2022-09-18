@@ -353,8 +353,8 @@ where
         let pos_locked_ratio_last: Decimal = self
             .read_storage_key(&params_storage::get_staked_ratio_key())
             .unwrap();
-        let pos_last_reward_rate = self
-            .read_storage_key(&params_storage::get_pos_reward_rate_key())
+        let pos_last_inflation_rate = self
+            .read_storage_key(&params_storage::get_pos_inflation_rate_key())
             .unwrap();
         let pos_p_gain: Decimal = self
             .read_storage_key(&params_storage::get_pos_gain_p_key())
@@ -370,15 +370,15 @@ where
         let pos_locked_supply: Amount = self.storage.read_total_staked_tokens();
         let pos_locked_ratio_target =
             self.storage.read_pos_params().target_staked_ratio;
-        let pos_max_reward_rate =
+        let pos_max_inflation_rate =
             self.storage.read_pos_params().max_inflation_rate;
 
         // Arbitrary default values until real ones can be fetched
         let masp_locked_supply: Amount = Amount::default();
         let masp_locked_ratio_target = Decimal::new(5, 1);
         let masp_locked_ratio_last = Decimal::new(5, 1);
-        let masp_max_reward_rate = Decimal::new(2, 1);
-        let masp_last_reward_rate = Decimal::new(12, 2);
+        let masp_max_inflation_rate = Decimal::new(2, 1);
+        let masp_last_inflation_rate = Decimal::new(12, 2);
         let masp_p_gain = Decimal::new(1, 1);
         let masp_d_gain = Decimal::new(1, 1);
 
@@ -387,8 +387,8 @@ where
             total_tokens,
             pos_locked_ratio_target,
             pos_locked_ratio_last,
-            pos_max_reward_rate,
-            pos_last_reward_rate,
+            pos_max_inflation_rate,
+            pos_last_inflation_rate,
             pos_p_gain,
             pos_d_gain,
             epochs_per_year,
@@ -398,8 +398,8 @@ where
             total_tokens,
             masp_locked_ratio_target,
             masp_locked_ratio_last,
-            masp_max_reward_rate,
-            masp_last_reward_rate,
+            masp_max_inflation_rate,
+            masp_last_inflation_rate,
             masp_p_gain,
             masp_d_gain,
             epochs_per_year,
@@ -408,13 +408,13 @@ where
         let new_pos_vals = RewardsController::run(&pos_controller);
         let new_masp_vals = RewardsController::run(&_masp_controller);
 
-        let new_pos_reward_rate = new_pos_vals.last_reward_rate;
-        let new_masp_reward_rate = new_masp_vals.last_reward_rate;
+        let new_pos_inflation_rate = new_pos_vals.last_inflation_rate;
+        let new_masp_inflation_rate = new_masp_vals.last_inflation_rate;
 
         self.storage
             .write(
-                &params_storage::get_pos_reward_rate_key(),
-                new_pos_reward_rate
+                &params_storage::get_pos_inflation_rate_key(),
+                new_pos_inflation_rate
                     .try_to_vec()
                     .expect("encode new reward rate"),
             )
@@ -442,9 +442,9 @@ where
             .expect("unable to encode new d gain (Decimal)");
 
         let pos_minted_tokens =
-            decimal_mult_u64(new_pos_reward_rate, u64::from(total_tokens));
+            decimal_mult_u64(new_pos_inflation_rate, u64::from(total_tokens));
         let _masp_minted_tokens =
-            decimal_mult_u64(new_masp_reward_rate, u64::from(total_tokens));
+            decimal_mult_u64(new_masp_inflation_rate, u64::from(total_tokens));
 
         let pos_address = self.storage.read_pos_address();
 

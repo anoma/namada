@@ -23,7 +23,7 @@ pub enum RewardsType {
 #[allow(missing_docs)]
 pub struct ValsToUpdate {
     pub locked_ratio_last: Decimal,
-    pub last_reward_rate: Decimal,
+    pub last_inflation_rate: Decimal,
     pub p_gain: Decimal,
     pub d_gain: Decimal,
 }
@@ -106,7 +106,7 @@ impl RewardsController {
 
         ValsToUpdate {
             locked_ratio_last: locked_ratio,
-            last_reward_rate: reward_rate,
+            last_inflation_rate: reward_rate,
             p_gain: p_gain_new,
             d_gain: d_gain_new,
         }
