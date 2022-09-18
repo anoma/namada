@@ -132,7 +132,7 @@ pub struct Parameters {
     /// PoS staked ratio (read + write for every epoch)
     pub staked_ratio: Decimal,
     /// PoS reward rate last epoch (read + write for every epoch)
-    pub pos_reward_rate: Decimal,
+    pub pos_inflation_rate: Decimal,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -373,12 +373,12 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
-    // read PoS reward_rate
-    let pos_reward_rate_key = storage::get_pos_reward_rate_key();
+    // read PoS inflation rate
+    let pos_inflation_rate_key = storage::get_pos_inflation_rate_key();
     let (value, gas_reward) = storage
-        .read(&pos_reward_rate_key)
+        .read(&pos_inflation_rate_key)
         .map_err(ReadError::StorageError)?;
-    let pos_reward_rate: Decimal =
+    let pos_inflation_rate: Decimal =
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
@@ -392,7 +392,7 @@ where
             pos_gain_p,
             pos_gain_d,
             staked_ratio,
-            pos_reward_rate,
+            pos_inflation_rate,
         },
         gas_epoch
             + gas_tx
