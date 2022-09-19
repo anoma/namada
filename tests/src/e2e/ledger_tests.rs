@@ -236,7 +236,23 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 7. Query the raw bytes of a storage key
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
+    use namada_apps::config::Config;
+
     let test = setup::network(|genesis| genesis, None)?;
+
+    let update_config = |mut config: Config| {
+        // disable eth full node
+        config.ledger.ethereum.mode = ethereum::Mode::Off;
+        config
+    };
+
+    let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
+    let validator_0_config = update_config(
+        Config::load(&validator_0_base_dir, &test.net.chain_id, None),
+    );
+    validator_0_config
+        .write(&validator_0_base_dir, &test.net.chain_id, true)
+        .unwrap();
 
     // 1. Run the ledger node
     let mut ledger =
