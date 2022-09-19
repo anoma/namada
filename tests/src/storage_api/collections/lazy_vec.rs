@@ -418,7 +418,10 @@ mod tests {
                     validation_builder.is_some(),
                     "If some keys were changed, the builder must get filled in"
                 );
-                let actions = validation_builder.unwrap().build().expect(
+                let actions = LazyVec::<TestVecItem>::validate(
+                    validation_builder.unwrap(),
+                )
+                .expect(
                     "With valid transitions only, validation should always \
                      pass",
                 );

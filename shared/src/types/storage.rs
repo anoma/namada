@@ -285,6 +285,11 @@ impl Key {
         self.len() == 0
     }
 
+    /// Returns the first segment of the key, or `None` if it is empty.
+    pub fn first(&self) -> Option<&DbKeySeg> {
+        self.segments.first()
+    }
+
     /// Returns the last segment of the key, or `None` if it is empty.
     pub fn last(&self) -> Option<&DbKeySeg> {
         self.segments.last()

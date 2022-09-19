@@ -1,9 +1,11 @@
 //! Lazy map.
 
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use derivative::Derivative;
 use thiserror::Error;
 
 use super::super::Result;
@@ -30,14 +32,18 @@ pub const DATA_SUBKEY: &str = "data";
 /// This is different from [`super::LazyHashMap`], which hashes borsh encoded
 /// key.
 #[derive(Debug)]
-pub struct LazyMap<K, V> {
+pub struct LazyMap<K, V, SON = super::Simple> {
     key: storage::Key,
     phantom_k: PhantomData<K>,
     phantom_v: PhantomData<V>,
+    phantom_son: PhantomData<SON>,
 }
 
+/// A `LazyMap` with another `LazyCollection` inside it's value `V`
+pub type NestedMap<K, V> = LazyMap<K, V, super::Nested>;
+
 /// Possible sub-keys of a [`LazyMap`]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum SubKey<K> {
     /// Data sub-key, further sub-keyed by its literal map key
     Data(K),
@@ -45,16 +51,14 @@ pub enum SubKey<K> {
 
 /// Possible sub-keys of a [`LazyMap`], together with their [`validation::Data`]
 /// that contains prior and posterior state.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum SubKeyWithData<K, V> {
     /// Data sub-key, further sub-keyed by its literal map key
     Data(K, Data<V>),
 }
 
-/// Possible actions that can modify a [`LazyMap`]. This roughly corresponds to
-/// the methods that have `StorageWrite` access.
-/// TODO: In a nested collection, `V` may be an action inside the nested
-/// collection.
+/// Possible actions that can modify a simple (not nested) [`LazyMap`]. This
+/// roughly corresponds to the methods that have `StorageWrite` access.
 #[derive(Clone, Debug)]
 pub enum Action<K, V> {
     /// Insert or update a value `V` at key `K` in a [`LazyMap<K, V>`].
@@ -72,14 +76,23 @@ pub enum Action<K, V> {
     },
 }
 
-/// TODO: In a nested collection, `V` may be an action inside the nested
-/// collection.
-#[derive(Debug)]
-pub enum Nested<K, V> {
-    /// Insert or update a value `V` at key `K` in a [`LazyMap<K, V>`].
-    Insert(K, V),
-    /// Remove a value `V` at key `K` from a [`LazyMap<K, V>`].
-    Remove(K, V),
+/// Possible actions that can modify a nested [`LazyMap`].
+#[derive(Clone, Debug)]
+pub enum NestedAction<K, A> {
+    /// Nested collection action `A` at key `K`
+    At(K, A),
+}
+
+/// Possible sub-keys of a nested [`LazyMap`]
+#[derive(Clone, Debug)]
+pub enum NestedSubKey<K, S> {
+    /// Data sub-key
+    Data {
+        /// Literal map key
+        key: K,
+        /// Sub-key in the nested collection
+        nested_sub_key: S,
+    },
 }
 
 #[allow(missing_docs)]
@@ -87,57 +100,228 @@ pub enum Nested<K, V> {
 pub enum ValidationError {
     #[error("Storage error in reading key {0}")]
     StorageError(storage::Key),
-    // #[error("Incorrect difference in LazyVec's length")]
-    // InvalidLenDiff,
-    // #[error("An empty LazyVec must be deleted from storage")]
-    // EmptyVecShouldBeDeleted,
-    // #[error("Push at a wrong index. Got {got}, expected {expected}.")]
-    // UnexpectedPushIndex { got: Index, expected: Index },
-    // #[error("Pop at a wrong index. Got {got}, expected {expected}.")]
-    // UnexpectedPopIndex { got: Index, expected: Index },
-    // #[error(
-    //     "Update (combination of pop and push) at a wrong index. Got {got},
-    // \      expected {expected}."
-    // )]
-    // UnexpectedUpdateIndex { got: Index, expected: Index },
-    // #[error("An index has overflown its representation: {0}")]
-    // IndexOverflow(<usize as TryInto<Index>>::Error),
-    // #[error("Unexpected underflow in `{0} - {0}`")]
-    // UnexpectedUnderflow(Index, Index),
     #[error("Invalid storage key {0}")]
     InvalidSubKey(storage::Key),
+    #[error("Invalid nested storage key {0}")]
+    InvalidNestedSubKey(storage::Key),
 }
 
 /// [`LazyMap`] validation result
 pub type ValidationResult<T> = std::result::Result<T, ValidationError>;
 
-/// [`LazyMap`] validation builder from storage changes. The changes can be
-/// accumulated with `LazyMap::validate()` and then turned into a list
-/// of valid actions on the map with `ValidationBuilder::build()`.
-#[derive(Debug, Derivative)]
-// https://mcarton.github.io/rust-derivative/latest/Default.html#custom-bound
-#[derivative(Default(bound = ""))]
-pub struct ValidationBuilder<K, V> {
-    /// The accumulator of found changes under the vector
-    pub changes: Vec<SubKeyWithData<K, V>>,
+impl<K, V> LazyCollection for LazyMap<K, V, super::Nested>
+where
+    K: storage::KeySeg + Clone + Hash + Eq + Debug,
+    V: LazyCollection + Debug,
+{
+    type Action = NestedAction<K, <V as LazyCollection>::Action>;
+    type SubKey = NestedSubKey<K, <V as LazyCollection>::SubKey>;
+    type SubKeyWithData =
+        NestedSubKey<K, <V as LazyCollection>::SubKeyWithData>;
+    type Value = <V as LazyCollection>::Value;
+
+    fn open(key: storage::Key) -> Self {
+        Self {
+            key,
+            phantom_k: PhantomData,
+            phantom_v: PhantomData,
+            phantom_son: PhantomData,
+        }
+    }
+
+    fn is_valid_sub_key(
+        &self,
+        key: &storage::Key,
+    ) -> storage_api::Result<Option<Self::SubKey>> {
+        let suffix = match key.split_prefix(&self.key) {
+            None => {
+                // not matching prefix, irrelevant
+                return Ok(None);
+            }
+            Some(None) => {
+                // no suffix, invalid
+                return Err(ValidationError::InvalidSubKey(key.clone()))
+                    .into_storage_result();
+            }
+            Some(Some(suffix)) => suffix,
+        };
+
+        // Match the suffix against expected sub-keys
+        match &suffix.segments[..2] {
+            [DbKeySeg::StringSeg(sub_a), DbKeySeg::StringSeg(sub_b)]
+                if sub_a == DATA_SUBKEY =>
+            {
+                if let Ok(key_in_kv) = storage::KeySeg::parse(sub_b.clone()) {
+                    let nested = self.at(&key_in_kv).is_valid_sub_key(key)?;
+                    match nested {
+                        Some(nested_sub_key) => Ok(Some(NestedSubKey::Data {
+                            key: key_in_kv,
+                            nested_sub_key,
+                        })),
+                        None => Err(ValidationError::InvalidNestedSubKey(
+                            key.clone(),
+                        ))
+                        .into_storage_result(),
+                    }
+                } else {
+                    Err(ValidationError::InvalidSubKey(key.clone()))
+                        .into_storage_result()
+                }
+            }
+            _ => Err(ValidationError::InvalidSubKey(key.clone()))
+                .into_storage_result(),
+        }
+    }
+
+    fn read_sub_key_data<ENV>(
+        env: &ENV,
+        storage_key: &storage::Key,
+        sub_key: Self::SubKey,
+    ) -> storage_api::Result<Option<Self::SubKeyWithData>>
+    where
+        ENV: for<'a> VpEnv<'a>,
+    {
+        let NestedSubKey::Data {
+            key,
+            // In here, we just have a nested sub-key without data
+            nested_sub_key,
+        } = sub_key;
+        // Try to read data from the nested collection
+        let nested_data = <V as LazyCollection>::read_sub_key_data(
+            env,
+            storage_key,
+            nested_sub_key,
+        )?;
+        // If found, transform it back into a `NestedSubKey`, but with
+        // `nested_sub_key` replaced with the one we read
+        Ok(nested_data.map(|nested_sub_key| NestedSubKey::Data {
+            key,
+            nested_sub_key,
+        }))
+    }
+
+    fn validate_changed_sub_keys(
+        keys: Vec<Self::SubKeyWithData>,
+    ) -> storage_api::Result<Vec<Self::Action>> {
+        // We have to group the nested sub-keys by the key from this map
+        let mut grouped_by_key: HashMap<
+            K,
+            Vec<<V as LazyCollection>::SubKeyWithData>,
+        > = HashMap::new();
+        for NestedSubKey::Data {
+            key,
+            nested_sub_key,
+        } in keys
+        {
+            grouped_by_key
+                .entry(key)
+                .or_insert_with(Vec::new)
+                .push(nested_sub_key);
+        }
+
+        // Recurse for each sub-keys group
+        let mut actions = vec![];
+        for (key, sub_keys) in grouped_by_key {
+            let nested_actions =
+                <V as LazyCollection>::validate_changed_sub_keys(sub_keys)?;
+            actions.extend(
+                nested_actions
+                    .into_iter()
+                    .map(|action| NestedAction::At(key.clone(), action)),
+            );
+        }
+        Ok(actions)
+    }
 }
 
-impl<K, V> LazyCollection for LazyMap<K, V>
+impl<K, V> LazyCollection for LazyMap<K, V, super::Simple>
 where
-    K: storage::KeySeg,
+    K: storage::KeySeg + Debug,
+    V: BorshDeserialize + BorshSerialize + 'static + Debug,
 {
+    type Action = Action<K, V>;
+    type SubKey = SubKey<K>;
+    type SubKeyWithData = SubKeyWithData<K, V>;
+    type Value = V;
+
     /// Create or use an existing map with the given storage `key`.
     fn open(key: storage::Key) -> Self {
         Self {
             key,
             phantom_k: PhantomData,
             phantom_v: PhantomData,
+            phantom_son: PhantomData,
         }
+    }
+
+    fn is_valid_sub_key(
+        &self,
+        key: &storage::Key,
+    ) -> storage_api::Result<Option<Self::SubKey>> {
+        let suffix = match key.split_prefix(&self.key) {
+            None => {
+                // not matching prefix, irrelevant
+                return Ok(None);
+            }
+            Some(None) => {
+                // no suffix, invalid
+                return Err(ValidationError::InvalidSubKey(key.clone()))
+                    .into_storage_result();
+            }
+            Some(Some(suffix)) => suffix,
+        };
+
+        // Match the suffix against expected sub-keys
+        match &suffix.segments[..] {
+            [DbKeySeg::StringSeg(sub_a), DbKeySeg::StringSeg(sub_b)]
+                if sub_a == DATA_SUBKEY =>
+            {
+                if let Ok(key_in_kv) = storage::KeySeg::parse(sub_b.clone()) {
+                    Ok(Some(SubKey::Data(key_in_kv)))
+                } else {
+                    Err(ValidationError::InvalidSubKey(key.clone()))
+                        .into_storage_result()
+                }
+            }
+            _ => Err(ValidationError::InvalidSubKey(key.clone()))
+                .into_storage_result(),
+        }
+    }
+
+    fn read_sub_key_data<ENV>(
+        env: &ENV,
+        storage_key: &storage::Key,
+        sub_key: Self::SubKey,
+    ) -> storage_api::Result<Option<Self::SubKeyWithData>>
+    where
+        ENV: for<'a> VpEnv<'a>,
+    {
+        let SubKey::Data(key) = sub_key;
+        let data = validation::read_data(env, storage_key)?;
+        Ok(data.map(|data| SubKeyWithData::Data(key, data)))
+    }
+
+    fn validate_changed_sub_keys(
+        keys: Vec<Self::SubKeyWithData>,
+    ) -> storage_api::Result<Vec<Self::Action>> {
+        Ok(keys
+            .into_iter()
+            .map(|change| {
+                let SubKeyWithData::Data(key, data) = change;
+                match data {
+                    Data::Add { post } => Action::Insert(key, post),
+                    Data::Update { pre, post } => {
+                        Action::Update { key, pre, post }
+                    }
+                    Data::Delete { pre } => Action::Remove(key, pre),
+                }
+            })
+            .collect())
     }
 }
 
 // Generic `LazyMap` methods that require no bounds on values `V`
-impl<K, V> LazyMap<K, V>
+impl<K, V, SON> LazyMap<K, V, SON>
 where
     K: storage::KeySeg,
 {
@@ -162,10 +346,10 @@ where
 }
 
 // `LazyMap` methods with nested `LazyCollection`s `V`
-impl<K, V> LazyMap<K, V>
+impl<K, V> LazyMap<K, V, super::Nested>
 where
-    K: storage::KeySeg,
-    V: LazyCollection,
+    K: storage::KeySeg + Clone + Hash + Eq + Debug,
+    V: LazyCollection + Debug,
 {
     /// Get a nested collection at given key `key`. If there is no nested
     /// collection at the given key, a new empty one will be provided. The
@@ -173,10 +357,39 @@ where
     pub fn at(&self, key: &K) -> V {
         V::open(self.get_data_key(key))
     }
+
+    /// An iterator visiting all key-value elements, where the values are from
+    /// the inner-most collection. The iterator element type is `Result<_>`,
+    /// because iterator's call to `next` may fail with e.g. out of gas or
+    /// data decoding error.
+    ///
+    /// Note that this function shouldn't be used in transactions and VPs code
+    /// on unbounded maps to avoid gas usage increasing with the length of the
+    /// map.
+    pub fn iter<'iter>(
+        &'iter self,
+        storage: &'iter impl StorageRead<'iter>,
+    ) -> Result<
+        impl Iterator<
+            Item = Result<(
+                <Self as LazyCollection>::SubKey,
+                <Self as LazyCollection>::Value,
+            )>,
+        > + 'iter,
+    > {
+        let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
+        Ok(iter.map(|key_val_res| {
+            let (key, val) = key_val_res?;
+            let sub_key = LazyCollection::is_valid_sub_key(self, &key)?
+                .ok_or(ReadError::UnexpectedlyEmptyStorageKey)
+                .into_storage_result()?;
+            Ok((sub_key, val))
+        }))
+    }
 }
 
 // `LazyMap` methods with borsh encoded values `V`
-impl<K, V> LazyMap<K, V>
+impl<K, V> LazyMap<K, V, super::Simple>
 where
     K: storage::KeySeg,
     V: BorshDeserialize + BorshSerialize + 'static,
@@ -298,96 +511,6 @@ where
         val: V,
     ) -> Result<()> {
         storage.write(storage_key, val)
-    }
-
-    /// Check if the given storage key is a valid LazyMap sub-key and if so
-    /// return which one
-    pub fn is_valid_sub_key(
-        &self,
-        key: &storage::Key,
-    ) -> storage_api::Result<Option<SubKey<K>>> {
-        let suffix = match key.split_prefix(&self.key) {
-            None => {
-                // not matching prefix, irrelevant
-                return Ok(None);
-            }
-            Some(None) => {
-                // no suffix, invalid
-                return Err(ValidationError::InvalidSubKey(key.clone()))
-                    .into_storage_result();
-            }
-            Some(Some(suffix)) => suffix,
-        };
-
-        // Match the suffix against expected sub-keys
-        match &suffix.segments[..] {
-            [DbKeySeg::StringSeg(sub_a), DbKeySeg::StringSeg(sub_b)]
-                if sub_a == DATA_SUBKEY =>
-            {
-                if let Ok(key_in_kv) = storage::KeySeg::parse(sub_b.clone()) {
-                    Ok(Some(SubKey::Data(key_in_kv)))
-                } else {
-                    Err(ValidationError::InvalidSubKey(key.clone()))
-                        .into_storage_result()
-                }
-            }
-            _ => Err(ValidationError::InvalidSubKey(key.clone()))
-                .into_storage_result(),
-        }
-    }
-
-    /// Accumulate storage changes inside a [`ValidationBuilder`]. This is
-    /// typically done by the validity predicate while looping through the
-    /// changed keys. If the resulting `builder` is not `None`, one must
-    /// call `fn build()` on it to get the validation result.
-    /// This function will return `Ok(true)` if the storage key is a valid
-    /// sub-key of this collection, `Ok(false)` if the storage key doesn't match
-    /// the prefix of this collection, or fail with
-    /// [`ValidationError::InvalidSubKey`] if the prefix matches this
-    /// collection, but the key itself is not recognized.
-    pub fn accumulate<ENV>(
-        &self,
-        env: &ENV,
-        builder: &mut Option<ValidationBuilder<K, V>>,
-        key_changed: &storage::Key,
-    ) -> storage_api::Result<bool>
-    where
-        ENV: for<'a> VpEnv<'a>,
-    {
-        if let Some(sub) = self.is_valid_sub_key(key_changed)? {
-            let SubKey::Data(key) = sub;
-            let data = validation::read_data(env, key_changed)?;
-            let change = data.map(|data| SubKeyWithData::Data(key, data));
-            if let Some(change) = change {
-                let builder =
-                    builder.get_or_insert(ValidationBuilder::default());
-                builder.changes.push(change);
-            }
-            return Ok(true);
-        }
-        Ok(false)
-    }
-}
-
-impl<K, V> ValidationBuilder<K, V>
-where
-    K: storage::KeySeg + Ord + Clone,
-{
-    /// Build a list of actions from storage changes.
-    pub fn build(self) -> Vec<Action<K, V>> {
-        self.changes
-            .into_iter()
-            .map(|change| {
-                let SubKeyWithData::Data(key, data) = change;
-                match data {
-                    Data::Add { post } => Action::Insert(key, post),
-                    Data::Update { pre, post } => {
-                        Action::Update { key, pre, post }
-                    }
-                    Data::Delete { pre } => Action::Remove(key, pre),
-                }
-            })
-            .collect()
     }
 }
 

@@ -7,6 +7,9 @@ mod tests {
     use namada::types::address::{self, Address};
     use namada::types::storage;
     use namada_tx_prelude::storage::KeySeg;
+    use namada_tx_prelude::storage_api::collections::lazy_map::{
+        NestedMap, NestedSubKey, SubKey,
+    };
     use namada_tx_prelude::storage_api::collections::{
         lazy_map, LazyCollection, LazyMap,
     };
@@ -31,11 +34,8 @@ mod tests {
             .. Config::default()
         })]
         #[test]
-        fn lazy_map_api_state_machine_test(sequential 1..100 => ConcreteLazyMapState);
+        fn nested_lazy_map_api_state_machine_test(sequential 1..100 => ConcreteLazyMapState);
     }
-
-    /// Type of key used in the map
-    type TestKey = u64;
 
     /// Some borsh-serializable type with arbitrary fields to be used inside
     /// LazyMap state machine test
@@ -53,6 +53,16 @@ mod tests {
         x: u64,
         y: bool,
     }
+
+    type KeyOuter = u64;
+    type KeyMiddle = i32;
+    type KeyInner = i8;
+
+    type NestedTestMap =
+        NestedMap<KeyOuter, NestedMap<KeyMiddle, LazyMap<KeyInner, TestVal>>>;
+
+    type NestedEagerMap =
+        BTreeMap<KeyOuter, BTreeMap<KeyMiddle, BTreeMap<KeyInner, TestVal>>>;
 
     /// A `StateMachineTest` implemented on this struct manipulates it with
     /// `Transition`s, which are also being accumulated into
@@ -74,9 +84,9 @@ mod tests {
         /// In the test, we apply the same transitions on the `lazy_map` as on
         /// `eager_map` to check that `lazy_map`'s state is consistent with
         /// `eager_map`.
-        eager_map: BTreeMap<TestKey, TestVal>,
-        /// Handle to a lazy map
-        lazy_map: LazyMap<TestKey, TestVal>,
+        eager_map: NestedEagerMap,
+        /// Handle to a lazy map with nested lazy collections
+        lazy_map: NestedTestMap,
         /// Valid LazyMap changes in the current transaction
         current_transitions: Vec<Transition>,
     }
@@ -89,7 +99,7 @@ mod tests {
         committed_transitions: Vec<Transition>,
     }
 
-    /// Possible transitions that can modify a [`LazyMap<TestKey, TestVal>`].
+    /// Possible transitions that can modify a [`NestedTestMap`].
     /// This roughly corresponds to the methods that have `StorageWrite`
     /// access and is very similar to [`Action`]
     #[derive(Clone, Debug)]
@@ -100,13 +110,16 @@ mod tests {
         /// commit the current block
         CommitTxAndBlock,
         /// Insert a key-val into a [`LazyMap`]
-        Insert(TestKey, TestVal),
+        Insert(Key, TestVal),
         /// Remove a key-val from a [`LazyMap`]
-        Remove(TestKey),
+        Remove(Key),
         /// Update a value at key from pre to post state in a
         /// [`LazyMap`]
-        Update(TestKey, TestVal),
+        Update(Key, TestVal),
     }
+
+    /// A key for transition
+    type Key = (KeyOuter, KeyMiddle, KeyInner);
 
     impl AbstractStateMachine for AbstractLazyMapState {
         type State = Self;
@@ -131,15 +144,15 @@ mod tests {
                 let arb_existing_map_key =
                     || proptest::sample::select(keys.clone());
                 prop_oneof![
-		    1 => Just(Transition::CommitTx),
-		    1 => Just(Transition::CommitTxAndBlock),
-		    3 => (arb_existing_map_key(), arb_map_val()).prop_map(|(key, val)|
-                              Transition::Update(key, val)
-                         ),
-		    3 => arb_existing_map_key().prop_map(Transition::Remove),
-            5 => (arb_map_key().prop_filter("insert on non-existing keys only", 
-                move |key| !keys.contains(key)), arb_map_val())
-                .prop_map(|(key, val)| Transition::Insert(key, val))
+                    1 => Just(Transition::CommitTx),
+                    1 => Just(Transition::CommitTxAndBlock),
+                    3 => (arb_existing_map_key(), arb_map_val()).prop_map(|(key, val)|
+                            Transition::Update(key, val)),
+                    3 => arb_existing_map_key().prop_map(Transition::Remove),
+                    5 => (arb_map_key().prop_filter(
+                            "insert on non-existing keys only",
+                            move |key| !keys.contains(key)), arb_map_val())
+                            .prop_map(|(key, val)| Transition::Insert(key, val))
 		]
                 .boxed()
             }
@@ -212,7 +225,7 @@ mod tests {
             Self {
                 address,
                 eager_map: BTreeMap::new(),
-                lazy_map: LazyMap::open(
+                lazy_map: NestedTestMap::open(
                     lazy_map_prefix.push(&"arbitrary".to_string()).unwrap(),
                 ),
                 current_transitions: vec![],
@@ -247,12 +260,17 @@ mod tests {
                     // commit the tx and the block
                     tx_host_env::commit_tx_and_block();
                 }
-                Transition::Insert(key, value) => {
-                    state.lazy_map.insert(ctx, *key, value.clone()).unwrap();
+                Transition::Insert(
+                    (key_outer, key_middle, key_inner),
+                    value,
+                ) => {
+                    let inner = state.lazy_map.at(key_outer).at(key_middle);
+
+                    inner.insert(ctx, *key_inner, value.clone()).unwrap();
 
                     // Post-conditions:
                     let stored_value =
-                        state.lazy_map.get(ctx, key).unwrap().unwrap();
+                        inner.get(ctx, key_inner).unwrap().unwrap();
                     assert_eq!(
                         &stored_value, value,
                         "the new item must be added to the back"
@@ -260,32 +278,51 @@ mod tests {
 
                     state.assert_validation_accepted();
                 }
-                Transition::Remove(key) => {
+                Transition::Remove((key_outer, key_middle, key_inner)) => {
+                    let inner = state.lazy_map.at(key_outer).at(key_middle);
+
                     let removed =
-                        state.lazy_map.remove(ctx, key).unwrap().unwrap();
+                        inner.remove(ctx, key_inner).unwrap().unwrap();
 
                     // Post-conditions:
                     assert_eq!(
                         &removed,
-                        state.eager_map.get(key).unwrap(),
+                        state
+                            .eager_map
+                            .get(key_outer)
+                            .unwrap()
+                            .get(key_middle)
+                            .unwrap()
+                            .get(key_inner)
+                            .unwrap(),
                         "removed element matches the value in eager map \
                          before it's updated"
                     );
 
                     state.assert_validation_accepted();
                 }
-                Transition::Update(key, value) => {
-                    let old_val =
-                        state.lazy_map.get(ctx, key).unwrap().unwrap();
+                Transition::Update(
+                    (key_outer, key_middle, key_inner),
+                    value,
+                ) => {
+                    let inner = state.lazy_map.at(key_outer).at(key_middle);
 
-                    state.lazy_map.insert(ctx, *key, value.clone()).unwrap();
+                    let old_val = inner.get(ctx, key_inner).unwrap().unwrap();
+
+                    inner.insert(ctx, *key_inner, value.clone()).unwrap();
 
                     // Post-conditions:
-                    let new_val =
-                        state.lazy_map.get(ctx, key).unwrap().unwrap();
+                    let new_val = inner.get(ctx, key_inner).unwrap().unwrap();
                     assert_eq!(
                         &old_val,
-                        state.eager_map.get(key).unwrap(),
+                        state
+                            .eager_map
+                            .get(key_outer)
+                            .unwrap()
+                            .get(key_middle)
+                            .unwrap()
+                            .get(key_inner)
+                            .unwrap(),
                         "old value must match the value at the same key in \
                          the eager map before it's updated"
                     );
@@ -305,22 +342,51 @@ mod tests {
             // Global post-conditions:
 
             // All items in eager map must be present in lazy map
-            for (key, expected_item) in state.eager_map.iter() {
-                let got =
-                    state.lazy_map.get(ctx, key).unwrap().expect(
-                        "The expected item must be present in lazy map",
-                    );
-                assert_eq!(expected_item, &got, "at key {key}");
+            for (key_outer, middle) in state.eager_map.iter() {
+                for (key_middle, inner) in middle {
+                    for (key_inner, expected_item) in inner {
+                        let got = state
+                            .lazy_map
+                            .at(key_outer)
+                            .at(key_middle)
+                            .get(ctx, key_inner)
+                            .unwrap()
+                            .expect(
+                                "The expected item must be present in lazy map",
+                            );
+                        assert_eq!(
+                            expected_item, &got,
+                            "at key {key_outer}, {key_middle} {key_inner}"
+                        );
+                    }
+                }
             }
 
             // All items in lazy map must be present in eager map
             for key_val in state.lazy_map.iter(ctx).unwrap() {
-                let (key, expected_val) = key_val.unwrap();
+                let (
+                    NestedSubKey::Data {
+                        key: key_outer,
+                        nested_sub_key:
+                            NestedSubKey::Data {
+                                key: key_middle,
+                                nested_sub_key: SubKey::Data(key_inner),
+                            },
+                    },
+                    expected_val,
+                ) = key_val.unwrap();
                 let got = state
                     .eager_map
-                    .get(&key)
+                    .get(&key_outer)
+                    .unwrap()
+                    .get(&key_middle)
+                    .unwrap()
+                    .get(&key_inner)
                     .expect("The expected item must be present in eager map");
-                assert_eq!(&expected_val, got, "at key {key}");
+                assert_eq!(
+                    &expected_val, got,
+                    "at key {key_outer}, {key_middle} {key_inner})"
+                );
             }
 
             state
@@ -340,7 +406,7 @@ mod tests {
         }
 
         /// Build an eager map from the committed and current transitions
-        fn eager_map(&self) -> BTreeMap<TestKey, TestVal> {
+        fn eager_map(&self) -> NestedEagerMap {
             let mut eager_map = BTreeMap::new();
             for transition in &self.committed_transitions {
                 apply_transition_on_eager_map(&mut eager_map, transition);
@@ -352,8 +418,23 @@ mod tests {
         }
 
         /// Find the keys currently present in the map
-        fn find_existing_keys(&self) -> Vec<TestKey> {
-            self.eager_map().keys().cloned().collect()
+        fn find_existing_keys(&self) -> Vec<Key> {
+            let outer_map = self.eager_map();
+            outer_map
+                .into_iter()
+                .fold(vec![], |acc, (outer, middle_map)| {
+                    middle_map.into_iter().fold(
+                        acc,
+                        |mut acc, (middle, inner_map)| {
+                            acc.extend(
+                                inner_map
+                                    .into_iter()
+                                    .map(|(inner, _)| (outer, middle, inner)),
+                            );
+                            acc
+                        },
+                    )
+                })
         }
     }
 
@@ -428,10 +509,9 @@ mod tests {
                     validation_builder.is_some(),
                     "If some keys were changed, the builder must get filled in"
                 );
-                let actions = LazyMap::<TestKey, TestVal>::validate(
-                    validation_builder.unwrap(),
-                )
-                .unwrap();
+                let actions =
+                    NestedTestMap::validate(validation_builder.unwrap())
+                        .unwrap();
                 let mut actions_to_check = actions.clone();
 
                 // Check that every transition has a corresponding action from
@@ -440,6 +520,9 @@ mod tests {
                 let current_transitions =
                     normalize_transitions(&self.current_transitions);
                 for transition in &current_transitions {
+                    use lazy_map::Action;
+                    use lazy_map::NestedAction::At;
+
                     match transition {
                         Transition::CommitTx | Transition::CommitTxAndBlock => {
                         }
@@ -447,10 +530,17 @@ mod tests {
                             for (ix, action) in
                                 actions_to_check.iter().enumerate()
                             {
-                                if let lazy_map::Action::Insert(key, val) =
-                                    action
+                                if let At(
+                                    key_outer,
+                                    At(
+                                        key_middle,
+                                        Action::Insert(key_inner, val),
+                                    ),
+                                ) = action
                                 {
-                                    if expected_key == key
+                                    let key =
+                                        (*key_outer, *key_middle, *key_inner);
+                                    if expected_key == &key
                                         && expected_val == val
                                     {
                                         actions_to_check.remove(ix);
@@ -463,10 +553,17 @@ mod tests {
                             for (ix, action) in
                                 actions_to_check.iter().enumerate()
                             {
-                                if let lazy_map::Action::Remove(key, _val) =
-                                    action
+                                if let At(
+                                    key_outer,
+                                    At(
+                                        key_middle,
+                                        Action::Remove(key_inner, _val),
+                                    ),
+                                ) = action
                                 {
-                                    if expected_key == key {
+                                    let key =
+                                        (*key_outer, *key_middle, *key_inner);
+                                    if expected_key == &key {
                                         actions_to_check.remove(ix);
                                         break;
                                     }
@@ -477,13 +574,21 @@ mod tests {
                             for (ix, action) in
                                 actions_to_check.iter().enumerate()
                             {
-                                if let lazy_map::Action::Update {
-                                    key,
-                                    pre: _,
-                                    post,
-                                } = action
+                                if let At(
+                                    key_outer,
+                                    At(
+                                        key_middle,
+                                        Action::Update {
+                                            key: key_inner,
+                                            pre: _,
+                                            post,
+                                        },
+                                    ),
+                                ) = action
                                 {
-                                    if expected_key == key && post == value {
+                                    let key =
+                                        (*key_outer, *key_middle, *key_inner);
+                                    if expected_key == &key && post == value {
                                         actions_to_check.remove(ix);
                                         break;
                                     }
@@ -508,8 +613,8 @@ mod tests {
     }
 
     /// Generate an arbitrary `TestKey`
-    fn arb_map_key() -> impl Strategy<Value = TestKey> {
-        any::<u64>()
+    fn arb_map_key() -> impl Strategy<Value = (KeyOuter, KeyMiddle, KeyInner)> {
+        (any::<u64>(), any::<i32>(), any::<i8>())
     }
 
     /// Generate an arbitrary `TestVal`
@@ -519,20 +624,25 @@ mod tests {
 
     /// Apply `Transition` on an eager `Map`.
     fn apply_transition_on_eager_map(
-        map: &mut BTreeMap<TestKey, TestVal>,
+        map: &mut NestedEagerMap,
         transition: &Transition,
     ) {
         match transition {
             Transition::CommitTx | Transition::CommitTxAndBlock => {}
-            Transition::Insert(key, value) => {
-                map.insert(*key, value.clone());
+            Transition::Insert((key_outer, key_middle, key_inner), value)
+            | Transition::Update((key_outer, key_middle, key_inner), value) => {
+                let middle =
+                    map.entry(*key_outer).or_insert_with(Default::default);
+                let inner =
+                    middle.entry(*key_middle).or_insert_with(Default::default);
+                inner.insert(*key_inner, value.clone());
             }
-            Transition::Remove(key) => {
-                let _popped = map.remove(key);
-            }
-            Transition::Update(key, value) => {
-                let entry = map.get_mut(key).unwrap();
-                *entry = value.clone();
+            Transition::Remove((key_outer, key_middle, key_inner)) => {
+                let middle =
+                    map.entry(*key_outer).or_insert(Default::default());
+                let inner =
+                    middle.entry(*key_middle).or_insert_with(Default::default);
+                let _popped = inner.remove(key_inner);
             }
         }
     }

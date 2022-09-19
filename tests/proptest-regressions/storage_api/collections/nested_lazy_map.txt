@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc b5ce7502439712f95a4b50de0d5455e0a6788cc95dbd535e749d5717da0ee8e1 # shrinks to (initial_state, transitions) = (AbstractLazyMapState { valid_transitions: [], committed_transitions: [] }, [Insert((22253647846329582, -2060910714, -85), TestVal { x: 16862967849328560500, y: true })])
