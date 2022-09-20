@@ -311,8 +311,7 @@ dependencies = [
 [[package]]
 name = "async-io"
 version = "1.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83e21f3a490c72b3b0cf44962180e60045de2925d8dff97918f7ee43c8f637c7"
+source = "git+https://github.com/heliaxdev/async-io.git?rev=9285dad39c9a37ecd0dbd498c5ce5b0e65b02489#9285dad39c9a37ecd0dbd498c5ce5b0e65b02489"
 dependencies = [
  "autocfg 1.1.0",
  "concurrent-queue",
@@ -322,6 +321,7 @@ dependencies = [
  "once_cell",
  "parking",
  "polling",
+ "rustversion",
  "slab",
  "socket2 0.4.7",
  "waker-fn",
@@ -340,8 +340,7 @@ dependencies = [
 [[package]]
 name = "async-process"
 version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02111fd8655a613c25069ea89fc8d9bb89331fa77486eb3bc059ee757cfa481c"
+source = "git+https://github.com/heliaxdev/async-process.git?rev=e42c527e87d937da9e01aaeb563c0b948580dc89#e42c527e87d937da9e01aaeb563c0b948580dc89"
 dependencies = [
  "async-io",
  "autocfg 1.1.0",
@@ -351,6 +350,7 @@ dependencies = [
  "futures-lite",
  "libc",
  "once_cell",
+ "rustversion",
  "signal-hook",
  "winapi 0.3.9",
 ]
@@ -4697,13 +4697,13 @@ checksum = "1df8c4ec4b0627e53bdf214615ad287367e482558cf84b109250b37464dc03ae"
 [[package]]
 name = "polling"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "899b00b9c8ab553c743b3e11e87c5c7d423b2a2de229ba95b24a756344748011"
+source = "git+https://github.com/heliaxdev/polling.git?rev=02a655775282879459a3460e2646b60c005bca2c#02a655775282879459a3460e2646b60c005bca2c"
 dependencies = [
  "autocfg 1.1.0",
  "cfg-if 1.0.0",
  "libc",
  "log 0.4.17",
+ "rustversion",
  "wepoll-ffi",
  "winapi 0.3.9",
 ]

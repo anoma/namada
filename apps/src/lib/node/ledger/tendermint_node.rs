@@ -185,11 +185,9 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
 /// Convert a common signing scheme validator key into JSON for
 /// Tendermint
 fn validator_key_to_json(
-    address: &Address,
     sk: &common::SecretKey,
 ) -> std::result::Result<serde_json::Value, ParseSecretKeyError> {
-    let address = address.raw_hash().unwrap();
-
+    let raw_hash = tm_consensus_key_raw_hash(&sk.ref_to());
     let (id_str, pk_arr, kp_arr) = match sk {
         common::SecretKey::Ed25519(_) => {
             let sk_ed: ed25519::SecretKey = sk.try_to_sk().unwrap();
@@ -211,7 +209,7 @@ fn validator_key_to_json(
     };
 
     Ok(json!({
-        "address": address,
+        "address": raw_hash,
         "pub_key": {
             "type": format!("tendermint/PubKey{}",id_str),
             "value": base64::encode(pk_arr),
