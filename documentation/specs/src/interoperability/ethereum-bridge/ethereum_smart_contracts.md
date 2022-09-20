@@ -61,8 +61,8 @@ The _Vault_ contract is fixed forever once the bridge has been deployed.
 When an account on Namada becomes a validator, they must provide two Ethereum
 secp256k1 keys:
 
-- a "hot" key for normal operations
-- a "cold" key for exceptional operations, like emergency withdrawal from the
+- the bridge key - a hot key for normal operations
+- the governance key - a cold key for exceptional operations, like emergency withdrawal from the
   bridge
 
 These keys are used to control the bridge smart contracts, via signing of
