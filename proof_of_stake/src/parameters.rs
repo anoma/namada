@@ -39,6 +39,9 @@ pub struct PosParams {
     /// Fraction of validator's stake that should be slashed on a light client
     /// attack.
     pub light_client_attack_min_slash_rate: Decimal,
+    /// The minimum amount of bonded tokens that a validator needs to be in
+    /// either the `consensus` or `below_capacity` validator sets
+    pub min_validator_stake: u64,
 }
 
 impl Default for PosParams {
@@ -60,6 +63,7 @@ impl Default for PosParams {
             duplicate_vote_min_slash_rate: dec!(0.001),
             // slash 0.1%
             light_client_attack_min_slash_rate: dec!(0.001),
+            min_validator_stake: 1_000_000,
         }
     }
 }

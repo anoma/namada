@@ -180,6 +180,9 @@ duplicate_vote_min_slash_rate = 0.001
 # Portion of a validator's stake that should be slashed on a light
 # client attack.
 light_client_attack_min_slash_rate = 0.001
+# The minimum amount of bonded tokens that a validator needs to be in either the `consensus`
+# or `below_capacity` validator sets
+min_validator_stake = 1_000_000
 
 # Governance parameters.
 [gov_params]
