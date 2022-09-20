@@ -1,14 +1,14 @@
 [book]
-authors = ["Heliax R&D Team"]
+authors = ["Heliax AG"]
 language = "en"
 multilingual = false
 site-url = "https://docs.namada.net/"
 src = "src"
-title = "Namada Docs"
+title = "Namada Documentation"
 
 [output.html]
-edit-url-template = "https://github.com/anoma/namada/documentation/docs/edit/main/{path}"
-git-repository-url = "https://github.com/anoma/namada/documentation/docs"
+edit-url-template = "https://github.com/anoma/namada/edit/main/documentation/docs/{path}"
+git-repository-url = "https://github.com/anoma/namada"
 additional-css = ["assets/custom.css", "assets/mdbook-admonish.css"]
 git-branch = "main"
 

@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada"
 resolver = "2"
-version = "0.7.0"
+version = "0.7.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -72,7 +72,7 @@ ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c3
 ics23 = "0.6.7"
 itertools = "0.10.0"
 loupe = {version = "0.1.3", optional = true}
-libsecp256k1 = {git = "https://github.com/brentstone/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
+libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 parity-wasm = {version = "0.42.2", optional = true}
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
@@ -105,7 +105,7 @@ zeroize = "1.5.5"
 [dev-dependencies]
 assert_matches = "1.5.0"
 byte-unit = "4.0.13"
-libsecp256k1 = {git = "https://github.com/brentstone/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
+libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
 pretty_assertions = "0.7.2"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
