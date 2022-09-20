@@ -1354,14 +1354,14 @@ pub mod testing {
         let mut validator_set = tx::ctx().read_validator_set().unwrap();
         validator_set.update_from_offset(
             |validator_set, epoch| {
-                let total_delta = validator_deltas
+                let validator_stake = validator_deltas
                     .as_ref()
-                    .and_then(|delta| delta.get(epoch));
-                match total_delta {
-                    Some(total_delta) => {
-                        let tokens_pre: u64 = total_delta.try_into().unwrap();
+                    .and_then(|deltas| deltas.get(epoch));
+                match validator_stake {
+                    Some(validator_stake) => {
+                        let tokens_pre: u64 = validator_stake.try_into().unwrap();
                         let tokens_post: u64 =
-                            (total_delta + token_delta).try_into().unwrap();
+                            (validator_stake + token_delta).try_into().unwrap();
                         let weighed_validator_pre = WeightedValidator {
                             bonded_stake: tokens_pre,
                             address: validator.clone(),

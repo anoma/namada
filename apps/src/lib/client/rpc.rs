@@ -1908,16 +1908,16 @@ async fn get_validator_stake(
     epoch: Epoch,
     validator: &Address,
 ) -> VotePower {
-    let total_voting_power_key = pos::validator_deltas_key(validator);
-    let total_voting_power = query_storage_value::<pos::ValidatorTotalDeltas>(
+    let validator_deltas_key = pos::validator_deltas_key(validator);
+    let validator_deltas = query_storage_value::<pos::ValidatorDeltas>(
         client,
-        &total_voting_power_key,
+        &validator_deltas_key,
     )
     .await
     .expect("Total deltas should be defined");
-    let epoched_total_voting_power = total_voting_power.get(epoch);
+    let validator_stake = validator_deltas.get(epoch);
 
-    VotePower::try_from(epoched_total_voting_power.unwrap_or_default())
+    VotePower::try_from(validator_stake.unwrap_or_default())
         .unwrap_or_default()
 }
 
