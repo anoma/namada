@@ -797,8 +797,7 @@ pub fn genesis() -> Genesis {
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         vp_whitelist: vec![],
         tx_whitelist: vec![],
-        epochs_per_year: 105_120, /* seconds in yr (60*60*24*365) div seconds
-                                   * per epoch (300) */
+        epochs_per_year: 365,
         pos_gain_p: dec!(0.1),
         pos_gain_d: dec!(0.1),
         staked_ratio: dec!(0.4),
