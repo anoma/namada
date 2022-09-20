@@ -5,7 +5,6 @@ use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::num::TryFromIntError;
 use std::ops::{Add, AddAssign, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};

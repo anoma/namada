@@ -13,8 +13,7 @@ use namada_proof_of_stake::{validation, PosReadOnly};
 use thiserror::Error;
 
 use super::{
-    bond_key, is_bond_key, is_params_key, is_total_deltas_key,
-    is_total_staked_tokens_key, is_unbond_key, is_validator_bonded_stake_key,
+    bond_key, is_bond_key, is_params_key, is_total_deltas_key, is_unbond_key,
     is_validator_set_key, is_validator_staking_reward_address_key,
     is_validator_deltas_key, params_key, staking_token_address,
     total_deltas_key, total_staked_tokens_key, unbond_key,
