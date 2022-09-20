@@ -278,6 +278,9 @@ pub mod genesis_config {
         // light client attack (in basis points).
         // XXX: u64 doesn't work with toml-rs!
         pub light_client_attack_slash_rate: Decimal,
+        /// The minimum amount of bonded tokens that a validator needs to be in
+        /// either the `consensus` or `below_capacity` validator sets
+        pub min_validator_stake: u64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -577,6 +580,7 @@ pub mod genesis_config {
             light_client_attack_slash_rate: config
                 .pos_params
                 .light_client_attack_slash_rate,
+            min_validator_stake: config.pos_params.min_validator_stake,
         };
 
         let mut genesis = Genesis {
