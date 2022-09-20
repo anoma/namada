@@ -109,13 +109,13 @@ mod tests {
 
         // Read some data before the tx is executed
         let total_deltas_pre = ctx().read_total_deltas()?;
-        let validator_deltas_pre = ctx().read_validator_total_deltas(&bond.validator)?.unwrap();
+        let validator_deltas_pre = ctx().read_validator_deltas(&bond.validator)?.unwrap();
         let validator_sets_pre = ctx().read_validator_set()?;
 
         apply_tx(ctx(), tx_data)?;
 
         // Read the data after the tx is executed.
-        let validator_deltas_post = ctx().read_validator_total_deltas(&bond.validator)?.unwrap();
+        let validator_deltas_post = ctx().read_validator_deltas(&bond.validator)?.unwrap();
         let total_deltas_post = ctx().read_total_deltas()?;
         let validator_sets_post = ctx().read_validator_set()?;
 
