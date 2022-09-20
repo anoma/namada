@@ -6,7 +6,7 @@ use namada_proof_of_stake::{types, PosBase};
 
 use super::{
     BondId, Bonds, TotalDeltas, ValidatorConsensusKeys, ValidatorSets,
-    ValidatorTotalDeltas, ADDRESS,
+    ValidatorDeltas, ADDRESS,
 };
 use crate::ledger::storage::types::{decode, encode};
 use crate::ledger::storage::{self, Storage, StorageHasher};
@@ -21,7 +21,7 @@ const VALIDATOR_STAKING_REWARD_ADDRESS_STORAGE_KEY: &str =
     "staking_reward_address";
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
-const VALIDATOR_TOTAL_DELTAS_STORAGE_KEY: &str = "validator_total_deltas";
+const VALIDATOR_DELTAS_STORAGE_KEY: &str = "validator_deltas";
 const SLASHES_PREFIX: &str = "slash";
 const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
@@ -165,15 +165,15 @@ pub fn is_validator_state_key(key: &Key) -> Option<&Address> {
     }
 }
 
-/// Storage key for validator's total deltas.
-pub fn validator_total_deltas_key(validator: &Address) -> Key {
+/// Storage key for validator's deltas.
+pub fn validator_deltas_key(validator: &Address) -> Key {
     validator_prefix(validator)
-        .push(&VALIDATOR_TOTAL_DELTAS_STORAGE_KEY.to_owned())
+        .push(&VALIDATOR_DELTAS_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
 /// Is storage key for validator's total deltas?
-pub fn is_validator_total_deltas_key(key: &Key) -> Option<&Address> {
+pub fn is_validator_deltas_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
@@ -182,28 +182,7 @@ pub fn is_validator_total_deltas_key(key: &Key) -> Option<&Address> {
             DbKeySeg::StringSeg(key),
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_TOTAL_DELTAS_STORAGE_KEY =>
-        {
-            Some(validator)
-        }
-        _ => None,
-    }
-}
-
-    validator_prefix(validator)
-        .push(&VALIDATOR_VOTING_POWER_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(validator),
-            DbKeySeg::StringSeg(key),
-        ] if addr == &ADDRESS
-            && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_VOTING_POWER_STORAGE_KEY =>
+            && key == VALIDATOR_DELTAS_STORAGE_KEY =>
         {
             Some(validator)
         }
@@ -432,12 +411,12 @@ where
         value.map(|value| decode(value).unwrap())
     }
 
-    fn read_validator_total_deltas(
+    fn read_validator_deltas(
         &self,
         key: &Self::Address,
-    ) -> Option<types::ValidatorTotalDeltas<Self::TokenChange>> {
+    ) -> Option<types::ValidatorDeltas<Self::TokenChange>> {
         let (value, _gas) =
-            self.read(&validator_total_deltas_key(key)).unwrap();
+            self.read(&validator_deltas_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
@@ -504,12 +483,12 @@ where
             .unwrap();
     }
 
-    fn write_validator_total_deltas(
+    fn write_validator_deltas(
         &mut self,
         key: &Self::Address,
-        value: &ValidatorTotalDeltas,
+        value: &ValidatorDeltas,
     ) {
-        self.write(&validator_total_deltas_key(key), encode(value))
+        self.write(&validator_deltas_key(key), encode(value))
             .unwrap();
     }
 

@@ -939,9 +939,9 @@ pub async fn query_bonded_stake(ctx: Context, args: args::QueryVotingPower) {
             let validator = ctx.get(&validator);
             // Find voting power for the given validator
             let validator_deltas_key =
-                pos::validator_total_deltas_key(&validator);
+                pos::validator_deltas_key(&validator);
             let validator_deltas = query_storage_value::<
-                pos::ValidatorTotalDeltas,
+                pos::ValidatorDeltas,
             >(&client, &validator_deltas_key)
             .await;
             match validator_deltas.and_then(|data| data.get(epoch)) {
@@ -1901,7 +1901,7 @@ async fn get_validator_stake(
     epoch: Epoch,
     validator: &Address,
 ) -> VotePower {
-    let total_voting_power_key = pos::validator_total_deltas_key(validator);
+    let total_voting_power_key = pos::validator_deltas_key(validator);
     let total_voting_power = query_storage_value::<pos::ValidatorTotalDeltas>(
         client,
         &total_voting_power_key,

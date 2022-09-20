@@ -16,12 +16,12 @@ use super::{
     bond_key, is_bond_key, is_params_key, is_total_deltas_key,
     is_total_staked_tokens_key, is_unbond_key, is_validator_bonded_stake_key,
     is_validator_set_key, is_validator_staking_reward_address_key,
-    is_validator_total_deltas_key, params_key, staking_token_address,
+    is_validator_deltas_key, params_key, staking_token_address,
     total_deltas_key, total_staked_tokens_key, unbond_key,
     validator_consensus_key_key, validator_set_key, validator_slashes_key,
     validator_staking_reward_address_key, validator_state_key,
-    validator_total_deltas_key, BondId, Bonds, Unbonds, ValidatorConsensusKeys,
-    ValidatorSets, ValidatorTotalDeltas,
+    validator_deltas_key, BondId, Bonds, Unbonds, ValidatorConsensusKeys,
+    ValidatorSets, ValidatorDeltas,
 };
 use crate::impl_pos_read_only;
 use crate::ledger::governance::vp::is_proposal_accepted;
@@ -173,12 +173,12 @@ where
                     address: validator.clone(),
                     update: ConsensusKey(Data { pre, post }),
                 });
-            } else if let Some(validator) = is_validator_total_deltas_key(key) {
+            } else if let Some(validator) = is_validator_deltas_key(key) {
                 let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                    ValidatorTotalDeltas::try_from_slice(&bytes[..]).ok()
+                    namada_proof_of_stake::types::ValidatorDeltas::try_from_slice(&bytes[..]).ok()
                 });
                 let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                    ValidatorTotalDeltas::try_from_slice(&bytes[..]).ok()
+                    namada_proof_of_stake::types::ValidatorDeltas::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(Validator {
                     address: validator.clone(),

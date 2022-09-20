@@ -9,7 +9,7 @@ use thiserror::Error;
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::pos;
 use crate::ledger::pos::types::decimal_mult_u64;
-use crate::ledger::pos::{BondId, Bonds, ValidatorSets, ValidatorTotalDeltas};
+use crate::ledger::pos::{BondId, Bonds, ValidatorSets, ValidatorDeltas};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::types::address::Address;
 use crate::types::governance::{ProposalVote, TallyResult, VotePower};
@@ -351,13 +351,13 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    let total_delta_key = pos::validator_total_deltas_key(validator);
+    let total_delta_key = pos::validator_deltas_key(validator);
     let (total_delta_bytes, _) = storage
         .read(&total_delta_key)
         .expect("Validator delta should be defined.");
     if let Some(total_delta_bytes) = total_delta_bytes {
         let total_delta =
-            ValidatorTotalDeltas::try_from_slice(&total_delta_bytes[..]).ok();
+            ValidatorDeltas::try_from_slice(&total_delta_bytes[..]).ok();
         if let Some(total_delta) = total_delta {
             let epoched_total_delta = total_delta.get(epoch);
             if let Some(epoched_total_delta) = epoched_total_delta {

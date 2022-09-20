@@ -6,7 +6,7 @@ use namada::ledger::pos::{
     validator_address_raw_hash_key, validator_consensus_key_key,
     validator_set_key, validator_slashes_key,
     validator_staking_reward_address_key, validator_state_key,
-    validator_total_deltas_key,
+    validator_deltas_key,
 };
 use namada::types::address::Address;
 use namada::types::transaction::InitValidator;
@@ -164,10 +164,10 @@ impl namada_proof_of_stake::PosActions for Ctx {
         self.write(&validator_state_key(key), &value)
     }
 
-    fn write_validator_total_deltas(
+    fn write_validator_deltas(
         &mut self,
         key: &Self::Address,
-        value: ValidatorTotalDeltas,
+        value: ValidatorDeltas,
     ) -> Result<(), Self::Error> {
         self.write(&validator_total_deltas_key(key), &value)
     }

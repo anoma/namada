@@ -140,7 +140,7 @@ mod tests {
         let total_deltas_pre = ctx().read_total_deltas()?;
         let validator_sets_pre = ctx().read_validator_set()?;
         let validator_deltas_pre = ctx()
-            .read_validator_total_deltas(&unbond.validator)?
+            .read_validator_deltas(&unbond.validator)?
             .unwrap();
         let bonds_pre = ctx().read_bond(&unbond_id)?.unwrap();
         dbg!(&bonds_pre);
@@ -156,7 +156,7 @@ mod tests {
         //     - `#{PoS}/validator_set`
         let total_deltas_post = ctx().read_total_deltas()?;
         let validator_deltas_post =
-            ctx().read_validator_total_deltas(&unbond.validator)?;
+            ctx().read_validator_deltas(&unbond.validator)?;
         let validator_sets_post = ctx().read_validator_set()?;
 
         let expected_amount_before_pipeline = if is_delegation {

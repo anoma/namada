@@ -19,7 +19,7 @@ use crate::types::{
     decimal_mult_i128, decimal_mult_u64, BondId, Bonds, Epoch,
     PublicKeyTmRawHash, Slash, Slashes, TotalDeltas, Unbonds,
     ValidatorConsensusKeys, ValidatorSets, ValidatorState, ValidatorStates,
-    ValidatorTotalDeltas, WeightedValidator,
+    ValidatorDeltas, WeightedValidator,
 };
 
 #[allow(missing_docs)]
@@ -272,7 +272,7 @@ where
     /// Staking reward address update
     StakingRewardAddress(Data<Address>),
     /// Validator deltas update
-    ValidatorDeltas(Data<ValidatorTotalDeltas<TokenChange>>),
+    ValidatorDeltas(Data<ValidatorDeltas<TokenChange>>),
 }
 
 /// Data update with prior and posterior state.
@@ -1205,7 +1205,7 @@ where
         >,
         new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
         address: Address,
-        data: Data<ValidatorTotalDeltas<TokenChange>>,
+        data: Data<ValidatorDeltas<TokenChange>>,
     ) {
         match (data.pre, data.post) {
             (Some(pre), Some(post)) => {
