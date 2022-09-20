@@ -313,9 +313,6 @@ pub trait PublicKeyTmRawHash {
     fn tm_raw_hash(&self) -> String;
 }
 
-
-
-
 impl Epoch {
     /// Iterate a range of consecutive epochs starting from `self` of a given
     /// length. Work-around for `Step` implementation pending on stabilization of <https://github.com/rust-lang/rust/issues/42168>.

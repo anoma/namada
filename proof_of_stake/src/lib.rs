@@ -289,8 +289,7 @@ pub trait PosActions: PosReadOnly {
         let BecomeValidatorData {
             consensus_key,
             state,
-            total_deltas,
-            voting_power,
+            deltas,
             commission_rate,
             max_commission_rate_change,
         } = become_validator(
@@ -1675,7 +1674,6 @@ where
     };
 
     total_deltas.add_at_offset(delta, current_epoch, update_offset, params);
-
 
     Ok(BondData {
         bond,
