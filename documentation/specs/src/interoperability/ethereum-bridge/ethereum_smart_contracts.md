@@ -133,9 +133,9 @@ Given this data, anyone should be able to make the relevant Ethereum smart
 contract method call, if they are willing to pay the Ethereum gas. A call is
 then authorized to happen if:
 
-- the active validator set specified in the call hashes to *either* of the
+- The active validator set specified in the call hashes to *either* of the
   validator set hashes stored in the smart contract
-- a quorum (i.e. more than 2/3 by voting power) of the signatures over the
+- A quorum (i.e. more than 2/3 by voting power) of the signatures over the
   message are valid
 
 ### Validator set updates
