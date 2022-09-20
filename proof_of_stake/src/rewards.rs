@@ -64,7 +64,8 @@ impl PosRewardsCalculator {
         // TODO: error handling to ensure proposer_coeff is > 0?
         let proposer_coeff = self.proposer_param
             * Decimal::from(self.signing_stake - votes_needed)
-            / Decimal::from(self.total_stake);
+            / Decimal::from(self.total_stake)
+            + dec!(0.01);
         let signer_coeff = self.signer_param;
         let active_val_coeff = dec!(1.0) - proposer_coeff - signer_coeff;
 
