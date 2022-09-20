@@ -19,7 +19,7 @@ const VALIDATOR_STORAGE_PREFIX: &str = "validator";
 const VALIDATOR_ADDRESS_RAW_HASH: &str = "address_raw_hash";
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
-const VALIDATOR_DELTAS_STORAGE_KEY: &str = "validator_deltas";
+const VALIDATOR_DELTAS_STORAGE_KEY: &str = "deltas";
 const VALIDATOR_COMMISSION_RATE_STORAGE_KEY: &str = "commission_rate";
 const VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY: &str =
     "max_commission_rate_change";
