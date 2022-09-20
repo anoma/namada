@@ -32,9 +32,9 @@ by the _Governance_ contract.
 ### Governance
 
 The _Governance_ contract may "upgrade" the bridge by updating the _Proxy_
-contract to point to a new _Bridge_ contract. It may also withdraw all funds
-from the _Vault_ to any specified Ethereum address, if a quorum of validators
-choose to do so.
+contract to point to a new _Bridge_ contract and/or a new _Governance_ contract.
+It may also withdraw all funds from the _Vault_ to any specified Ethereum
+address, if a quorum of validators choose to do so.
 
 ### wNAM
 
