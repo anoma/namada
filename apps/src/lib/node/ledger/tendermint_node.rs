@@ -9,15 +9,17 @@ use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
-use tendermint::Genesis;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_config::{Error as TendermintError, TendermintConfig};
 use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 use crate::config;
+use crate::facade::tendermint::Genesis;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_config::{
+    Error as TendermintError, TendermintConfig,
+};
 
 /// Env. var to output Tendermint log to stdout
 pub const ENV_VAR_TM_STDOUT: &str = "ANOMA_TM_STDOUT";
@@ -114,16 +116,17 @@ pub async fn run(
             .await;
         }
     }
+    #[cfg(feature = "abcipp")]
     write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
+    #[cfg(not(feature = "abcipp"))]
+    write_tm_genesis(&home_dir, chain_id, genesis_time).await;
 
     update_tendermint_config(&home_dir, config).await?;
 
     let mut tendermint_node = Command::new(&tendermint_path);
     tendermint_node.args(&[
         "start",
-        "--mode",
-        &mode,
-        "--proxy-app",
+        "--proxy_app",
         &ledger_address,
         "--home",
         &home_dir_string,
@@ -182,7 +185,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     // reset all the Tendermint state, if any
     std::process::Command::new(tendermint_path)
         .args(&[
-            "reset",
+            "reset-state",
             "unsafe-all",
             // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
             // "--log-level=\"*debug\"",
@@ -319,7 +322,6 @@ async fn update_tendermint_config(
     let path = home_dir.join("config").join("config.toml");
     let mut config =
         TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
-
     config.p2p.laddr =
         TendermintAddress::from_str(&tendermint_config.p2p_address.to_string())
             .unwrap();
@@ -351,21 +353,13 @@ async fn update_tendermint_config(
     config.instrumentation.namespace =
         tendermint_config.instrumentation_namespace;
 
-    // setup the events log
-    {
-        // keep events for one minute
-        config.rpc.event_log_window_size =
-            std::time::Duration::from_secs(59).into();
-        // we do not limit the size of the events log
-        config.rpc.event_log_max_items = 0;
-    }
-
     let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
         .open(path)
         .await
         .map_err(Error::OpenWriteConfig)?;
+
     let config_str =
         toml::to_string(&config).map_err(Error::ConfigSerializeToml)?;
     file.write_all(config_str.as_bytes())
@@ -377,7 +371,7 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    config: &config::Tendermint,
+    #[cfg(feature = "abcipp")] config: &config::Tendermint,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
@@ -398,8 +392,11 @@ async fn write_tm_genesis(
     genesis.genesis_time = genesis_time
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
-    genesis.consensus_params.timeout.commit =
-        config.consensus_timeout_commit.into();
+    #[cfg(feature = "abcipp")]
+    {
+        genesis.consensus_params.timeout.commit =
+            config.consensus_timeout_commit.into();
+    }
 
     let mut file = OpenOptions::new()
         .write(true)

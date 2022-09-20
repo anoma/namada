@@ -27,8 +27,15 @@ const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
 /// validators for a [`Vext`].
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct VextDigest {
+    #[cfg(feature = "abcipp")]
     /// A mapping from a validator address to a [`Signature`].
     pub signatures: HashMap<Address, Signature>,
+    #[cfg(not(feature = "abcipp"))]
+    /// A mapping from a validator address to a [`Signature`].
+    ///
+    /// The key includes the block height at which a validator
+    /// set was signed by a given validator.
+    pub signatures: HashMap<(Address, BlockHeight), Signature>,
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     pub voting_powers: VotingPowersMap,
@@ -58,6 +65,12 @@ impl BorshSchema for VextDigest {
 impl VextDigest {
     /// Decompresses a set of signed [`Vext`] instances.
     pub fn decompress(self, block_height: BlockHeight) -> Vec<SignedVext> {
+        #[cfg(not(feature = "abcipp"))]
+        {
+            #[allow(clippy::drop_copy)]
+            drop(block_height);
+        }
+
         let VextDigest {
             signatures,
             voting_powers,
@@ -66,6 +79,8 @@ impl VextDigest {
         let mut extensions = vec![];
 
         for (validator_addr, signature) in signatures.into_iter() {
+            #[cfg(not(feature = "abcipp"))]
+            let (validator_addr, block_height) = validator_addr;
             let voting_powers = voting_powers.clone();
             let data = Vext {
                 validator_addr,
@@ -126,6 +141,28 @@ impl Vext {
     #[inline]
     pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
         SignedVext::new(sk, self.clone())
+    }
+}
+
+impl BorshSchema for Vext {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                VotingPowersMap::declaration(),
+                Address::declaration(),
+                BlockHeight::declaration(),
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "validator_set_update::Vext".into()
     }
 }
 
