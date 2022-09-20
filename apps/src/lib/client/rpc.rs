@@ -23,7 +23,7 @@ use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
-use namada::ledger::treasury::storage as treasury_storage;
+use namada::ledger::slash_fund::storage as slash_fund_storage;
 use namada::types::address::Address;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalVote, TallyResult, ProposalResult,
@@ -474,8 +474,8 @@ pub async fn query_protocol_parameters(
         .expect("Parameter should be definied.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
 
-    println!("Treasury parameters");
-    let key = treasury_storage::get_max_transferable_fund_key();
+    println!("Slash Fund parameters");
+    let key = slash_fund_storage::get_max_transferable_fund_key();
     let max_transferable_amount = query_storage_value::<Amount>(&client, &key)
         .await
         .expect("Parameter should be definied.");

@@ -33,8 +33,8 @@ pub mod main {
         let target_key = storage::get_min_proposal_grace_epoch_key();
         write(&target_key.to_string(), 9_u64);
 
-        // treasury
-        let target_key = treasury_storage::get_max_transferable_fund_key();
+        // slash fund
+        let target_key = slash_fund_storage::get_max_transferable_fund_key();
         write(&target_key.to_string(), token::Amount::whole(20_000));
 
         // parameters

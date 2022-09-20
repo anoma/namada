@@ -1,15 +1,15 @@
-//! Treasury VP
+//! SlashFund VP
 
 use std::collections::BTreeSet;
-/// treasury parameters
+/// SlashFund parameters
 pub mod parameters;
-/// treasury storage
+/// SlashFund storage
 pub mod storage;
 
 use borsh::BorshDeserialize;
 use thiserror::Error;
 
-use self::storage as treasury_storage;
+use self::storage as slash_fund_storage;
 use super::governance::vp::is_proposal_accepted;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
@@ -18,8 +18,8 @@ use crate::types::storage::Key;
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
 
-/// Internal treasury address
-pub const ADDRESS: Address = Address::Internal(InternalAddress::Treasury);
+/// Internal SlashFund address
+pub const ADDRESS: Address = Address::Internal(InternalAddress::SlashFund);
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -28,11 +28,11 @@ pub enum Error {
     NativeVpError(native_vp::Error),
 }
 
-/// Treasury functions result
+/// SlashFund functions result
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Treasury VP
-pub struct TreasuryVp<'a, DB, H, CA>
+/// SlashFund VP
+pub struct SlashFundVp<'a, DB, H, CA>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: StorageHasher,
@@ -42,7 +42,7 @@ where
     pub ctx: Ctx<'a, DB, H, CA>,
 }
 
-impl<'a, DB, H, CA> NativeVp for TreasuryVp<'a, DB, H, CA>
+impl<'a, DB, H, CA> NativeVp for SlashFundVp<'a, DB, H, CA>
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -50,7 +50,7 @@ where
 {
     type Error = Error;
 
-    const ADDR: InternalAddress = InternalAddress::Treasury;
+    const ADDR: InternalAddress = InternalAddress::SlashFund;
 
     fn validate_tx(
         &self,
@@ -78,7 +78,7 @@ where
                         return false;
                     };
                     let is_max_funds_transfer_key =
-                        treasury_storage::get_max_transferable_fund_key();
+                    slash_fund_storage::get_max_transferable_fund_key();
                     let balance_key = token::balance_key(&nam(), &ADDRESS);
                     let max_transfer_amount =
                         self.ctx.read_pre(&is_max_funds_transfer_key);
@@ -141,7 +141,7 @@ where
                         _ => false,
                     }
                 }
-                KeyType::UNKNOWN_TREASURY => false,
+                KeyType::UNKNOWN_SLASH_FUND => false,
                 KeyType::UNKNOWN => true,
             }
         });
@@ -157,17 +157,17 @@ enum KeyType {
     PARAMETER,
     #[allow(clippy::upper_case_acronyms)]
     #[allow(non_camel_case_types)]
-    UNKNOWN_TREASURY,
+    UNKNOWN_SLASH_FUND,
     #[allow(clippy::upper_case_acronyms)]
     UNKNOWN,
 }
 
 impl From<&Key> for KeyType {
     fn from(value: &Key) -> Self {
-        if treasury_storage::is_parameter_key(value) {
+        if slash_fund_storage::is_parameter_key(value) {
             KeyType::PARAMETER
-        } else if treasury_storage::is_treasury_key(value) {
-            KeyType::UNKNOWN_TREASURY
+        } else if slash_fund_storage::is_slash_fund_key(value) {
+            KeyType::UNKNOWN_SLASH_FUND
         } else if token::is_any_token_balance_key(value).is_some() {
             match token::is_balance_key(&nam(), value) {
                 Some(addr) => KeyType::BALANCE(addr.clone()),

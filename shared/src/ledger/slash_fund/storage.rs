@@ -3,8 +3,8 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 const MAX_TRANSFERABLE_FUND_KEY: &str = "max_fund";
 
-/// Check if a key is a treasury key
-pub fn is_treasury_key(key: &Key) -> bool {
+/// Check if a key is a slash fund key
+pub fn is_slash_fund_key(key: &Key) -> bool {
     matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &ADDRESS)
 }
 

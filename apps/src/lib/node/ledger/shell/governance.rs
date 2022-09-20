@@ -5,7 +5,7 @@ use anoma::ledger::governance::utils::{
 use anoma::ledger::governance::vp::ADDRESS as gov_address;
 use anoma::ledger::storage::types::encode;
 use anoma::ledger::storage::{DBIter, StorageHasher, DB};
-use anoma::ledger::treasury::ADDRESS as treasury_address;
+use anoma::ledger::slash_fund::ADDRESS as slash_fund_address;
 use anoma::types::address::{xan as m1t, Address};
 use anoma::types::governance::TallyResult;
 use anoma::types::storage::Epoch;
@@ -133,7 +133,7 @@ where
                                     response.events.push(proposal_event);
                                     proposals_result.rejected.push(id);
 
-                                    treasury_address
+                                    slash_fund_address
                                 }
                             }
                             Err(_e) => {
@@ -149,7 +149,7 @@ where
                                 response.events.push(proposal_event);
                                 proposals_result.rejected.push(id);
 
-                                treasury_address
+                                slash_fund_address
                             }
                         }
                     }
@@ -181,7 +181,7 @@ where
                 response.events.push(proposal_event);
                 proposals_result.rejected.push(id);
 
-                treasury_address
+                slash_fund_address
             }
         };
 
