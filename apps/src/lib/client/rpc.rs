@@ -21,7 +21,7 @@ use namada::ledger::pos::types::{
     decimal_mult_u64, Epoch as PosEpoch, WeightedValidator,
 };
 use namada::ledger::pos::{
-    self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
+    self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds, into_tm_voting_power,
 };
 use namada::types::address::Address;
 use namada::types::governance::{
@@ -918,7 +918,7 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
 }
 
 /// Query PoS voting power
-pub async fn query_bonded_stake(ctx: Context, args: args::QueryVotingPower) {
+pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
         None => query_epoch(args.query.clone()).await,
@@ -1009,7 +1009,14 @@ pub async fn query_bonded_stake(ctx: Context, args: args::QueryVotingPower) {
     let total_bonded_stake = total_deltas
         .get(epoch)
         .expect("Total bonded stake should be always set in the current epoch");
-    println!("Total bonded stake: {}", total_bonded_stake);
+    let pos_params_key = pos::params_key();
+    let pos_params = query_storage_value::<pos::PosParams>(&client, &pos_params_key)
+        .await
+        .expect("PoS parameters should always exist in storage");
+    let total_bonded_stake: u64 = total_bonded_stake.try_into().expect("total_bonded_stake should be a positive value");
+    let total_voting_power = into_tm_voting_power(pos_params.tm_votes_per_token, total_bonded_stake);
+    
+    println!("Total voting power: {}", total_voting_power);
 }
 
 /// Query PoS slashes
