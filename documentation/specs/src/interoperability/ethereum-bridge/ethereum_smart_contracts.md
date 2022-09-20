@@ -62,8 +62,8 @@ When an account on Namada becomes a validator, they must provide two Ethereum
 secp256k1 keys:
 
 - the bridge key - a hot key for normal operations
-- the governance key - a cold key for exceptional operations, like emergency withdrawal from the
-  bridge
+- the governance key - a cold key for exceptional operations, like emergency
+  withdrawal from the bridge
 
 These keys are used to control the bridge smart contracts, via signing of
 messages. Validators may be challenged periodically to prove they still retain
@@ -112,9 +112,9 @@ At any time, the _Governance_ and _Bridge_ contracts must store:
 - a hash of the current Namada epoch's active validator set
 - a hash of another epoch's active validator set. When the bridge is first
   deployed, this will also be the current Namada epoch's active validator set,
-  but after the first valset update is submitted to the _Governance_ smart
-  contract, this hash will always be an adjacent Namada epoch's active validator
-  set i.e. either the previous epoch's, or the next epoch's
+  but after the first validator set update is submitted to the _Governance_
+  smart contract, this hash will always be an adjacent Namada epoch's active
+  validator set i.e. either the previous epoch's, or the next epoch's
 
 In the case of the _Governance_ contract, these are hashes of a map of
 validator's _cold_ key addresses to their voting powers, while for the _Bridge_
@@ -138,7 +138,7 @@ then authorized to happen if:
 - a quorum (i.e. more than 2/3 by voting power) of the signatures over the
   message are valid
 
-### Valset updates
+### Validator set updates
 
 Initial deployment aside, at the beginning of each epoch, the smart contracts
 will contain details of the current epoch's validator set and the previous
@@ -153,28 +153,30 @@ set. This should happen before the current Namada epoch ends. If this does not
 happen, then the Namada chain must either halt or not progress to the next
 epoch, to avoid losing control of the bridge.
 
-When a valset update is submitted, the hashes for the oldest valset are
-effectively "evicted" from the _Governance_ and _Bridge_ smart contracts. At
-that point, messages signed by that evicted valset will no longer be accepted by
-the bridge.
+When a validator set update is submitted, the hashes for the oldest validator
+set are effectively "evicted" from the _Governance_ and _Bridge_ smart
+contracts. At that point, messages signed by that evicted validator set will no
+longer be accepted by the bridge.
 
 #### Example flow
 
 - Namada epoch `10` begins. Currently, the _Governance_ contract knows the
-  hashes of the valsets for epochs `9` and `10`, as does the _Bridge_ contract.
+  hashes of the validator sets for epochs `9` and `10`, as does the _Bridge_
+  contract.
 - Validators for epoch `10` post signatures over the hash of details of the
-  valset for epoch `11` to Namada as protocol transactions
+  validator set for epoch `11` to Namada as protocol transactions
 - A point is reached during epoch `10` at which a quorum of such signatures is
   present on the Namada chain
-- A relayer submits a valset update for epoch `11` to _Governance_, using a
-  quorum of signatures from the Namada chain
-- The _Governance_ and _Bridge_ contracts now know the hashes of the valsets for
-  epochs `10` and `11`, and will accept messages signed by either of them. It
-  will no longer accept messages signed by the valset for epoch `9`.
+- A relayer submits a validator set update for epoch `11` to _Governance_, using
+  a quorum of signatures from the Namada chain
+- The _Governance_ and _Bridge_ contracts now know the hashes of the validator
+  sets for epochs `10` and `11`, and will accept messages signed by either of
+  them. It will no longer accept messages signed by the validator set for epoch
+  `9`.
 - Namada progresses to epoch `11`, and the flow repeats
 
 NB: the flow for when the bridge has just launched is similar, except the
-contracts know the details of only one epoch's valset - the launch epoch's. E.g.
-if the bridge launches at epoch `10`, then initially the contracts know the hash
-only for epoch `10` and not epochs `10` and `11`, until the first valset update
-has been submitted
+contracts know the details of only one epoch's validator set - the launch
+epoch's. E.g. if the bridge launches at epoch `10`, then initially the contracts
+know the hash only for epoch `10` and not epochs `10` and `11`, until the first
+validator set update has been submitted
