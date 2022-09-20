@@ -1359,7 +1359,8 @@ pub mod testing {
                     .and_then(|deltas| deltas.get(epoch));
                 match validator_stake {
                     Some(validator_stake) => {
-                        let tokens_pre: u64 = validator_stake.try_into().unwrap();
+                        let tokens_pre: u64 =
+                            validator_stake.try_into().unwrap();
                         let tokens_post: u64 =
                             (validator_stake + token_delta).try_into().unwrap();
                         let weighed_validator_pre = WeightedValidator {

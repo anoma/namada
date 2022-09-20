@@ -102,8 +102,8 @@ mod tests {
             }
         });
 
-        // Initialize the delegation if it is the case - unlike genesis validator's self-bond,
-        // this happens at pipeline offset
+        // Initialize the delegation if it is the case - unlike genesis
+        // validator's self-bond, this happens at pipeline offset
         if is_delegation {
             ctx().bond_tokens(
                 unbond.source.as_ref(),
@@ -139,9 +139,8 @@ mod tests {
 
         let total_deltas_pre = ctx().read_total_deltas()?;
         let validator_sets_pre = ctx().read_validator_set()?;
-        let validator_deltas_pre = ctx()
-            .read_validator_deltas(&unbond.validator)?
-            .unwrap();
+        let validator_deltas_pre =
+            ctx().read_validator_deltas(&unbond.validator)?.unwrap();
         let bonds_pre = ctx().read_bond(&unbond_id)?.unwrap();
         dbg!(&bonds_pre);
 
@@ -176,8 +175,8 @@ mod tests {
             assert_eq!(
                 validator_deltas_post.as_ref().unwrap().get(epoch),
                 Some(expected_amount_before_pipeline.into()),
-                "The validator deltas before the pipeline offset must not change \
-                 - checking in epoch: {epoch}"
+                "The validator deltas before the pipeline offset must not \
+                 change - checking in epoch: {epoch}"
             );
             assert_eq!(
                 total_deltas_post.get(epoch),
@@ -186,7 +185,8 @@ mod tests {
                  - checking in epoch: {epoch}"
             );
             assert_eq!(
-                validator_sets_pre.get(epoch), validator_sets_post.get(epoch),
+                validator_sets_pre.get(epoch),
+                validator_sets_post.get(epoch),
                 "Validator set before pipeline offset must not change - \
                  checking epoch {epoch}"
             );
@@ -198,24 +198,26 @@ mod tests {
             assert_eq!(
                 validator_deltas_post.as_ref().unwrap().get(epoch),
                 Some(initial_stake.into()),
-                "The validator deltas at and after the unbonding offset must have changed \
-                 - checking in epoch: {epoch}"
+                "The validator deltas at and after the unbonding offset must \
+                 have changed - checking in epoch: {epoch}"
             );
             assert_eq!(
                 total_deltas_post.get(epoch),
                 Some(initial_stake.into()),
-                "The total deltas at and after the unbonding offset must have changed \
-                 - checking in epoch: {epoch}"
+                "The total deltas at and after the unbonding offset must have \
+                 changed - checking in epoch: {epoch}"
             );
             assert_ne!(
-                validator_sets_post.get(epoch), validator_sets_post.get(epoch),
-                "Validator set at and after pipeline offset must have \
-                 changed - checking epoch {epoch}"
+                validator_sets_post.get(epoch),
+                validator_sets_post.get(epoch),
+                "Validator set at and after pipeline offset must have changed \
+                 - checking epoch {epoch}"
             );
         }
 
         {
-            // TODO: should this loop over epochs after this one as well? Are there any?
+            // TODO: should this loop over epochs after this one as well? Are
+            // there any?
             let epoch = pos_params.unbonding_len + 1;
             let expected_stake =
                 i128::from(initial_stake) - i128::from(unbond.amount);

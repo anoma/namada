@@ -18,8 +18,8 @@ use crate::parameters::PosParams;
 use crate::types::{
     decimal_mult_i128, decimal_mult_u64, BondId, Bonds, Epoch,
     PublicKeyTmRawHash, Slash, Slashes, TotalDeltas, Unbonds,
-    ValidatorConsensusKeys, ValidatorSets, ValidatorState, ValidatorStates,
-    ValidatorDeltas, WeightedValidator,
+    ValidatorConsensusKeys, ValidatorDeltas, ValidatorSets, ValidatorState,
+    ValidatorStates, WeightedValidator,
 };
 
 #[allow(missing_docs)]

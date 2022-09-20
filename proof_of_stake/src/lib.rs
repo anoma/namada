@@ -37,8 +37,8 @@ use thiserror::Error;
 use types::{
     decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bonds, Epoch,
     GenesisValidator, Slash, SlashType, Slashes, TotalDeltas, Unbond, Unbonds,
-    ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
-    ValidatorState, ValidatorStates, ValidatorDeltas,
+    ValidatorConsensusKeys, ValidatorDeltas, ValidatorSet, ValidatorSetUpdate,
+    ValidatorSets, ValidatorState, ValidatorStates,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -343,8 +343,7 @@ pub trait PosActions: PosReadOnly {
             validator: validator.clone(),
         };
         let bond = self.read_bond(&bond_id)?;
-        let validator_deltas =
-            self.read_validator_deltas(validator)?;
+        let validator_deltas = self.read_validator_deltas(validator)?;
         let mut total_deltas = self.read_total_deltas()?;
         let mut validator_set = self.read_validator_set()?;
 
@@ -399,9 +398,8 @@ pub trait PosActions: PosReadOnly {
             None => Err(UnbondError::NoBondFound)?,
         };
         let unbond = self.read_unbond(&bond_id)?;
-        let mut validator_deltas = self
-            .read_validator_deltas(validator)?
-            .ok_or_else(|| {
+        let mut validator_deltas =
+            self.read_validator_deltas(validator)?.ok_or_else(|| {
                 UnbondError::ValidatorHasNoBonds(validator.clone())
             })?;
         let slashes = self.read_validator_slashes(validator)?;

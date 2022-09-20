@@ -9,7 +9,7 @@ use thiserror::Error;
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::pos;
 use crate::ledger::pos::types::decimal_mult_u64;
-use crate::ledger::pos::{BondId, Bonds, ValidatorSets, ValidatorDeltas};
+use crate::ledger::pos::{BondId, Bonds, ValidatorDeltas, ValidatorSets};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::types::address::Address;
 use crate::types::governance::{ProposalVote, TallyResult, VotePower};

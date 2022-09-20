@@ -14,13 +14,13 @@ use thiserror::Error;
 
 use super::{
     bond_key, is_bond_key, is_params_key, is_total_deltas_key, is_unbond_key,
-    is_validator_set_key, is_validator_staking_reward_address_key,
-    is_validator_deltas_key, params_key, staking_token_address,
+    is_validator_deltas_key, is_validator_set_key,
+    is_validator_staking_reward_address_key, params_key, staking_token_address,
     total_deltas_key, total_staked_tokens_key, unbond_key,
-    validator_consensus_key_key, validator_set_key, validator_slashes_key,
-    validator_staking_reward_address_key, validator_state_key,
-    validator_deltas_key, BondId, Bonds, Unbonds, ValidatorConsensusKeys,
-    ValidatorSets, ValidatorDeltas,
+    validator_consensus_key_key, validator_deltas_key, validator_set_key,
+    validator_slashes_key, validator_staking_reward_address_key,
+    validator_state_key, BondId, Bonds, Unbonds, ValidatorConsensusKeys,
+    ValidatorDeltas, ValidatorSets,
 };
 use crate::impl_pos_read_only;
 use crate::ledger::governance::vp::is_proposal_accepted;

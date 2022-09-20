@@ -5,8 +5,8 @@ use namada_proof_of_stake::types::ValidatorStates;
 use namada_proof_of_stake::{types, PosBase};
 
 use super::{
-    BondId, Bonds, TotalDeltas, ValidatorConsensusKeys, ValidatorSets,
-    ValidatorDeltas, ADDRESS,
+    BondId, Bonds, TotalDeltas, ValidatorConsensusKeys, ValidatorDeltas,
+    ValidatorSets, ADDRESS,
 };
 use crate::ledger::storage::types::{decode, encode};
 use crate::ledger::storage::{self, Storage, StorageHasher};
@@ -415,8 +415,7 @@ where
         &self,
         key: &Self::Address,
     ) -> Option<types::ValidatorDeltas<Self::TokenChange>> {
-        let (value, _gas) =
-            self.read(&validator_deltas_key(key)).unwrap();
+        let (value, _gas) = self.read(&validator_deltas_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
