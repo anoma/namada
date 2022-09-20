@@ -2,11 +2,11 @@
 
 Anoma introduce a governance mechanism to propose and apply protocol changes with and without the need for an hard fork. Anyone holding some M1T will be able to prosose some changes to which delegators and validator will cast their yay or nay votes. Governance on Anoma supports both signaling and voting mechanism. The difference between the the two, is that the former is needed when the changes require an hard fork. In cases where the chain is not able to produce blocks anymore, Anoma relies an off chain signaling mechanism to agree on a common strategy.
 
-## Governance & Treasury addresses
+## Governance & SlashFund addresses
 
 Governance introduce two internal address with their corresponding native vps:
 - Governance address, which is in charge of validating on-chain proposals and votes
-- Treasury address, which is in charge of holding treasury funds
+- SlashFund address, which is in charge of holding slashed funds
 
 Also, it introduces some protocol parameters:
 - `min_proposal_fund`
@@ -55,7 +55,7 @@ and follow these rules:
 - `content` should follow the `Anoma Improvement Proposal schema` and must be less than `max_proposal_content_size` kibibytes.
 - `author` must be a valid address on-chain
 
-A proposal gets accepted if, at least 2/3 of the total voting power (computed at the epoch definied in the `startEpoch` field) vote `yay`. If the proposal is accepted, the locked funds are returned to the address definied in the `proposal_author` field, otherwise are moved to the treasury address.
+A proposal gets accepted if, at least 2/3 of the total voting power (computed at the epoch definied in the `startEpoch` field) vote `yay`. If the proposal is accepted, the locked funds are returned to the address definied in the `proposal_author` field, otherwise are moved to the slash fund address.
 
 The `proposal_code` field can execute arbitrary code in the form of a wasm transaction. If the proposal gets accepted, the code is executed in the first block of the epoch following the `graceEpoch`.
 
@@ -91,7 +91,7 @@ Vote is valid if it follow this rules:
 
 The outcome of a proposal is compute at the epoch specific in the `endEpoch` field and executed at `graceEpoch` field (if it contains a non-empty `proposalCode` field).
 A proposal is accepted only if more than 2/3 of the voting power vote `yay`.
-If a proposal gets accepted, the locked funds will be reimbursed to the author. In case it gets rejected, the locked funds will be moved to treasury.
+If a proposal gets accepted, the locked funds will be reimbursed to the author. In case it gets rejected, the locked funds will be moved to slash fund.
 
 
 ## Off-chain proposal

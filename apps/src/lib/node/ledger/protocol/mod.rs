@@ -11,7 +11,7 @@ use anoma::ledger::parameters::{self, ParametersVp};
 use anoma::ledger::pos::{self, PosVP};
 use anoma::ledger::storage::write_log::WriteLog;
 use anoma::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use anoma::ledger::treasury::TreasuryVp;
+use anoma::ledger::slash_fund::SlashFundVp;
 use anoma::proto::{self, Tx};
 use anoma::types::address::{Address, InternalAddress};
 use anoma::types::storage;
@@ -49,8 +49,8 @@ pub enum Error {
     IbcTokenNativeVpError(anoma::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
     GovernanceNativeVpError(anoma::ledger::governance::vp::Error),
-    #[error("Treasury native VP error: {0}")]
-    TreasuryNativeVpError(anoma::ledger::treasury::Error),
+    #[error("SlashFund native VP error: {0}")]
+    SlashFundNativeVpError(anoma::ledger::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]
     EthBridgeNativeVpError(anoma::ledger::eth_bridge::vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
@@ -325,12 +325,12 @@ where
                             gas_meter = governance.ctx.gas_meter.into_inner();
                             result
                         }
-                        InternalAddress::Treasury => {
-                            let treasury = TreasuryVp { ctx };
-                            let result = treasury
+                        InternalAddress::SlashFund => {
+                            let slash_fund = SlashFundVp { ctx };
+                            let result = slash_fund
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
-                                .map_err(Error::TreasuryNativeVpError);
-                            gas_meter = treasury.ctx.gas_meter.into_inner();
+                                .map_err(Error::SlashFundNativeVpError);
+                            gas_meter = slash_fund.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::IbcEscrow(_)

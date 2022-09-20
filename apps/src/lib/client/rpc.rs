@@ -17,7 +17,7 @@ use anoma::ledger::pos::types::{
 use anoma::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
-use anoma::ledger::treasury::storage as treasury_storage;
+use anoma::ledger::slash_fund::storage as slash_fund_storage;
 use anoma::types::address::Address;
 use anoma::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
@@ -491,8 +491,8 @@ pub async fn query_protocol_parameters(
         .expect("Parameter should be definied.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
 
-    println!("Treasury parameters");
-    let key = treasury_storage::get_max_transferable_fund_key();
+    println!("Slash Fund parameters");
+    let key = slash_fund_storage::get_max_transferable_fund_key();
     let max_transferable_amount = query_storage_value::<Amount>(&client, &key)
         .await
         .expect("Parameter should be definied.");
