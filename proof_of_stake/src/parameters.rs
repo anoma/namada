@@ -3,9 +3,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
-use crate::types::BasisPoints;
-
-/// Proof-of-Stake system parameters
+/// Proof-of-Stake system parameters, set at genesis and can only be changed via governance
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
 pub struct PosParams {
     /// A maximum number of active validators
@@ -18,9 +16,9 @@ pub struct PosParams {
     /// `n + slashable_period_len` epoch.
     /// The value must be greater or equal to `pipeline_len`.
     pub unbonding_len: u64,
-    /// Used in validators' voting power calculation. Given in basis points
-    /// (voting power per ten thousand tokens).
-    pub tm_votes_per_token: BasisPoints,
+    /// The voting power per fundamental unit of the staking token (namnam).
+    /// Used in validators' voting power calculation to interface with tendermint.
+    pub tm_votes_per_token: Decimal,
     /// Amount of tokens rewarded to a validator for proposing a block
     pub block_proposer_reward: u64,
     /// Amount of tokens rewarded to each validator that voted on a block
@@ -30,12 +28,12 @@ pub struct PosParams {
     pub max_inflation_rate: Decimal,
     /// Target ratio of staked NAM tokens to total NAM tokens
     pub target_staked_ratio: Decimal,
-    /// Portion of validator's stake that should be slashed on a duplicate
-    /// vote. Given in basis points (slashed amount per ten thousand tokens).
-    pub duplicate_vote_slash_rate: BasisPoints,
-    /// Portion of validator's stake that should be slashed on a light client
-    /// attack. Given in basis points (slashed amount per ten thousand tokens).
-    pub light_client_attack_slash_rate: BasisPoints,
+    /// Fraction of validator's stake that should be slashed on a duplicate
+    /// vote.
+    pub duplicate_vote_slash_rate: Decimal,
+    /// Fraction of validator's stake that should be slashed on a light client
+    /// attack.
+    pub light_client_attack_slash_rate: Decimal,
 }
 
 impl Default for PosParams {

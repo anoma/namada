@@ -5,8 +5,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::num::TryFromIntError;
-use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use rust_decimal::Decimal;
