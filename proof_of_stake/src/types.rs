@@ -23,7 +23,7 @@ pub type ValidatorConsensusKeys<PublicKey> =
 /// Epoched validator's state.
 pub type ValidatorStates = Epoched<ValidatorState, OffsetPipelineLen>;
 /// Epoched validator's total deltas.
-pub type ValidatorTotalDeltas<TokenChange> =
+pub type ValidatorDeltas<TokenChange> =
     EpochedDelta<TokenChange, OffsetUnbondingLen>;
 
 /// Epoched bond.

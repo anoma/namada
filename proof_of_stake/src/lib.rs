@@ -37,7 +37,7 @@ use types::{
     decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
     SlashType, Slashes, TotalVotingPowers, Unbond, Unbonds,
     ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
-    ValidatorState, ValidatorStates, ValidatorTotalDeltas,
+    ValidatorState, ValidatorStates, ValidatorDeltas,
     TotalDeltas
 };
 
@@ -121,10 +121,10 @@ pub trait PosReadOnly {
     ) -> Result<Option<ValidatorStates>, Self::Error>;
     /// Read PoS validator's total deltas of their bonds (validator self-bonds
     /// and delegations).
-    fn read_validator_total_deltas(
+    fn read_validator_deltas(
         &self,
         key: &Self::Address,
-    ) -> Result<Option<ValidatorTotalDeltas<Self::TokenChange>>, Self::Error>;
+    ) -> Result<Option<ValidatorDeltas<Self::TokenChange>>, Self::Error>;
 
     /// Read PoS slashes applied to a validator.
     fn read_validator_slashes(
@@ -219,10 +219,10 @@ pub trait PosActions: PosReadOnly {
     ) -> Result<(), Self::Error>;
     /// Write PoS validator's total deltas of their bonds (validator self-bonds
     /// and delegations).
-    fn write_validator_total_deltas(
+    fn write_validator_deltas(
         &mut self,
         key: &Self::Address,
-        value: ValidatorTotalDeltas<Self::TokenChange>,
+        value: ValidatorDeltas<Self::TokenChange>,
     ) -> Result<(), Self::Error>;
 
     /// Write PoS bond (validator self-bond or a delegation).
@@ -306,7 +306,7 @@ pub trait PosActions: PosReadOnly {
         self.write_validator_state(address, state)?;
         self.write_validator_set(validator_set)?;
         self.write_validator_address_raw_hash(address, &consensus_key_clone)?;
-        self.write_validator_total_deltas(address, total_deltas)?;
+        self.write_validator_deltas(address, deltas)?;
         self.write_validator_max_commission_rate_change(
             address,
             max_commission_rate_change,
@@ -354,27 +354,27 @@ pub trait PosActions: PosReadOnly {
             validator: validator.clone(),
         };
         let bond = self.read_bond(&bond_id)?;
-        let validator_total_deltas =
-            self.read_validator_total_deltas(validator)?;
+        let validator_deltas =
+            self.read_validator_deltas(validator)?;
         let mut total_deltas = self.read_total_deltas()?;
         let mut validator_set = self.read_validator_set()?;
 
         let BondData {
             bond,
-            validator_total_deltas,
+            validator_deltas,
         } = bond_tokens(
             &params,
             validator_state,
             &bond_id,
             bond,
             amount,
-            validator_total_deltas,
+            validator_deltas,
             &mut total_deltas,
             &mut validator_set,
             current_epoch,
         )?;
         self.write_bond(&bond_id, bond)?;
-        self.write_validator_total_deltas(validator, validator_total_deltas)?;
+        self.write_validator_deltas(validator, validator_deltas)?;
         self.write_total_deltas(total_deltas)?;
         self.write_validator_set(validator_set)?;
 
@@ -410,8 +410,8 @@ pub trait PosActions: PosReadOnly {
             None => return Err(UnbondError::NoBondFound.into()),
         };
         let unbond = self.read_unbond(&bond_id)?;
-        let mut validator_total_deltas = self
-            .read_validator_total_deltas(validator)?
+        let mut validator_deltas = self
+            .read_validator_deltas(validator)?
             .ok_or_else(|| {
                 UnbondError::ValidatorHasNoBonds(validator.clone())
             })?;
@@ -426,7 +426,7 @@ pub trait PosActions: PosReadOnly {
             unbond,
             amount,
             slashes,
-            &mut validator_total_deltas,
+            &mut validator_deltas,
             &mut total_deltas,
             &mut validator_set,
             current_epoch,
@@ -447,7 +447,7 @@ pub trait PosActions: PosReadOnly {
             }
         }
         self.write_unbond(&bond_id, unbond)?;
-        self.write_validator_total_deltas(validator, validator_total_deltas)?;
+        self.write_validator_deltas(validator, validator_deltas)?;
         self.write_total_deltas(total_deltas)?;
         self.write_validator_set(validator_set)?;
 
@@ -676,10 +676,10 @@ pub trait PosBase {
     ) -> Option<ValidatorStates>;
     /// Read PoS validator's total deltas of their bonds (validator self-bonds
     /// and delegations).
-    fn read_validator_total_deltas(
+    fn read_validator_deltas(
         &self,
         key: &Self::Address,
-    ) -> Option<ValidatorTotalDeltas<Self::TokenChange>>;
+    ) -> Option<ValidatorDeltas<Self::TokenChange>>;
 
     /// Read PoS slashes applied to a validator.
     fn read_validator_slashes(&self, key: &Self::Address) -> Slashes;
@@ -720,10 +720,10 @@ pub trait PosBase {
     );
     /// Write PoS validator's total deltas of their bonds (validator self-bonds
     /// and delegations).
-    fn write_validator_total_deltas(
+    fn write_validator_deltas(
         &mut self,
         key: &Self::Address,
-        value: &ValidatorTotalDeltas<Self::TokenChange>,
+        value: &ValidatorDeltas<Self::TokenChange>,
     );
     /// Write PoS validator's commission rate.
     fn write_validator_commission_rate(
@@ -815,7 +815,7 @@ pub trait PosBase {
             );
             self.write_validator_consensus_key(address, &consensus_key);
             self.write_validator_state(address, &state);
-            self.write_validator_total_deltas(address, &total_deltas);
+            self.write_validator_deltas(address, &deltas);
             self.write_bond(&bond_id, &bond);
             self.write_validator_commission_rate(address, &commission_rate);
             self.write_validator_max_commission_rate_change(
@@ -973,7 +973,7 @@ pub trait PosBase {
         };
 
         let mut deltas =
-            self.read_validator_total_deltas(validator).ok_or_else(|| {
+            self.read_validator_deltas(validator).ok_or_else(|| {
                 SlashError::ValidatorHasNoTotalDeltas(validator.clone())
             })?;
         let mut validator_set = self.read_validator_set();
@@ -993,7 +993,7 @@ pub trait PosBase {
             .map_err(|_err| SlashError::InvalidSlashChange(slashed_change))?;
         let slashed_amount = Self::TokenAmount::from(slashed_amount);
 
-        self.write_validator_total_deltas(validator, &deltas);
+        self.write_validator_deltas(validator, &deltas);
         self.write_validator_slash(validator, validator_slash);
         self.write_validator_set(&validator_set);
         self.write_total_deltas(&total_deltas);
@@ -1201,7 +1201,7 @@ where
     commission_rate: CommissionRates,
     max_commission_rate_change: Decimal,
     state: ValidatorStates,
-    deltas: ValidatorTotalDeltas<TokenChange>,
+    deltas: ValidatorDeltas<TokenChange>,
     bond: (BondId<Address>, Bonds<TokenAmount>),
 }
 
@@ -1354,7 +1354,7 @@ fn slash<Address, TokenChange>(
     current_epoch: Epoch,
     validator: &Address,
     slash: &Slash,
-    validator_deltas: &mut ValidatorTotalDeltas<TokenChange>,
+    validator_deltas: &mut ValidatorDeltas<TokenChange>,
     validator_set: &mut ValidatorSets<Address>,
     total_deltas: &mut TotalDeltas<TokenChange>,
 ) -> Result<TokenChange, SlashError<Address>>
@@ -1398,7 +1398,7 @@ where
     let update_offset = DynEpochOffset::PipelineLen;
 
     // Update validator set. This has to be done before we update the
-    // `validator_total_deltas`, because we need to look-up the validator with
+    // `validator_deltas`, because we need to look-up the validator with
     // its voting power before the change.
     update_validator_set(
         params,
@@ -1443,7 +1443,7 @@ where
 {
     consensus_key: ValidatorConsensusKeys<PK>,
     state: ValidatorStates,
-    total_deltas: ValidatorTotalDeltas<TokenChange>,
+    deltas: ValidatorDeltas<TokenChange>,
     commission_rate: Decimal,
     max_commission_rate_change: Decimal,
 }
@@ -1511,7 +1511,7 @@ where
     BecomeValidatorData {
         consensus_key,
         state,
-        total_deltas,
+        deltas,
         commission_rate,
         max_commission_rate_change,
     }
@@ -1537,7 +1537,7 @@ where
         + BorshSchema,
 {
     pub bond: Bonds<TokenAmount>,
-    pub validator_total_deltas: ValidatorTotalDeltas<TokenChange>,
+    pub validator_deltas: ValidatorDeltas<TokenChange>,
 }
 
 /// Bond tokens to a validator (self-bond or delegation).
@@ -1548,7 +1548,7 @@ fn bond_tokens<Address, TokenAmount, TokenChange>(
     bond_id: &BondId<Address>,
     current_bond: Option<Bonds<TokenAmount>>,
     amount: TokenAmount,
-    validator_total_deltas: Option<ValidatorTotalDeltas<TokenChange>>,
+    validator_deltas: Option<ValidatorDeltas<TokenChange>>,
     total_deltas: &mut TotalDeltas<TokenChange>,
     validator_set: &mut ValidatorSets<Address>,
     current_epoch: Epoch,
@@ -1641,7 +1641,7 @@ where
     };
 
     // Update validator set. This has to be done before we update the
-    // `validator_total_deltas`, because we need to look-up the validator with
+    // `validator_deltas`, because we need to look-up the validator with
     // its voting power before the change.
     let token_change = TokenChange::from(amount);
     update_validator_set(
@@ -1650,21 +1650,21 @@ where
         token_change,
         update_offset,
         validator_set,
-        validator_total_deltas.as_ref(),
+        validator_deltas.as_ref(),
         current_epoch,
     );
 
     // Update validator's total deltas and total staked token deltas
     let delta = TokenChange::from(amount);
-    let validator_total_deltas = match validator_total_deltas {
-        Some(mut validator_total_deltas) => {
-            validator_total_deltas.add_at_offset(
+    let validator_deltas = match validator_deltas {
+        Some(mut validator_deltas) => {
+            validator_deltas.add_at_offset(
                 delta,
                 current_epoch,
                 update_offset,
                 params,
             );
-            validator_total_deltas
+            validator_deltas
         }
         None => EpochedDelta::init_at_offset(
             delta,
@@ -1679,7 +1679,7 @@ where
 
     Ok(BondData {
         bond,
-        validator_total_deltas,
+        validator_deltas,
     })
 }
 
@@ -1707,7 +1707,7 @@ fn unbond_tokens<Address, TokenAmount, TokenChange>(
     unbond: Option<Unbonds<TokenAmount>>,
     amount: TokenAmount,
     slashes: Slashes,
-    validator_deltas: &mut ValidatorTotalDeltas<TokenChange>,
+    validator_deltas: &mut ValidatorDeltas<TokenChange>,
     total_deltas: &mut TotalDeltas<TokenChange>,
     validator_set: &mut ValidatorSets<Address>,
     current_epoch: Epoch,
@@ -1838,7 +1838,7 @@ where
     );
 
     // Update validator set. This has to be done before we update the
-    // `validator_total_deltas`, because we need to look-up the validator with
+    // `validator_deltas`, because we need to look-up the validator with
     // its voting power before the change.
     let token_change = -TokenChange::from(slashed_amount);
     update_validator_set(
@@ -1869,7 +1869,7 @@ fn update_validator_set<Address, TokenChange>(
     token_change: TokenChange,
     change_offset: DynEpochOffset,
     validator_set: &mut ValidatorSets<Address>,
-    validator_total_deltas: Option<&ValidatorTotalDeltas<TokenChange>>,
+    validator_deltas: Option<&ValidatorDeltas<TokenChange>>,
     current_epoch: Epoch,
 ) where
     Address: Display
@@ -1899,7 +1899,7 @@ fn update_validator_set<Address, TokenChange>(
         |validator_set, epoch| {
             // Find the validator's voting power at the epoch that's being
             // updated from its total deltas
-            let tokens_pre = validator_total_deltas
+            let tokens_pre = validator_deltas
                 .and_then(|d| d.get(epoch))
                 .unwrap_or_default();
             let tokens_post = tokens_pre + token_change;

@@ -18,8 +18,8 @@ use crate::epoched::DynEpochOffset;
 use crate::parameters::PosParams;
 use crate::types::{
     decimal_mult_i128, decimal_mult_u64, BondId, Bonds, CommissionRates, Epoch, PublicKeyTmRawHash, Slash, Slashes,
-    TotalVotingPowers, Unbonds, ValidatorConsensusKeys, ValidatorSets,
-    ValidatorState, ValidatorStates, ValidatorTotalDeltas,
+    Unbonds, ValidatorConsensusKeys, ValidatorSets,
+    ValidatorState, ValidatorStates, ValidatorDeltas,
     WeightedValidator, TotalDeltas,
 };
 
@@ -281,7 +281,7 @@ where
     /// Consensus key update
     ConsensusKey(Data<ValidatorConsensusKeys<PublicKey>>),
     /// Validator deltas update
-    ValidatorDeltas(Data<ValidatorTotalDeltas<TokenChange>>),
+    ValidatorDeltas(Data<ValidatorDeltas<TokenChange>>),
     /// Commission rate update
     CommissionRate(Data<CommissionRates>, Option<Decimal>),
     /// Maximum commission rate change update
@@ -991,7 +991,7 @@ where
                         address,
                         data,
                     ),
-                    TotalDeltas(data) => Self::validator_total_deltas(
+                    ValidatorDeltas(data) => Self::validator_total_deltas(
                         constants,
                         errors,
                         total_deltas,
@@ -1198,7 +1198,7 @@ where
         >,
         new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
         address: Address,
-        data: Data<ValidatorTotalDeltas<TokenChange>>,
+        data: Data<ValidatorDeltas<TokenChange>>,
     ) {
         match (data.pre, data.post) {
             (Some(pre), Some(post)) => {

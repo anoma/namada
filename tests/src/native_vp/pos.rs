@@ -681,7 +681,7 @@ pub mod testing {
             #[derivative(Debug = "ignore")]
             pk: PublicKey,
         },
-        ValidatorTotalDeltas {
+        ValidatorDeltas {
             validator: Address,
             delta: i128,
             offset: DynEpochOffset,
@@ -1287,13 +1287,13 @@ pub mod testing {
                     .write_validator_consensus_key(&validator, consensus_key)
                     .unwrap();
             }
-            PosStorageChange::ValidatorTotalDeltas {
+            PosStorageChange::ValidatorDeltas {
                 validator,
                 delta,
                 offset,
             } => {
                 let validator_deltas = tx::ctx()
-                    .read_validator_total_deltas(&validator)
+                    .read_validator_deltas(&validator)
                     .unwrap()
                     .map(|mut validator_deltas| {
                         validator_deltas.add_at_offset(
@@ -1313,7 +1313,7 @@ pub mod testing {
                         )
                     });
                 tx::ctx()
-                    .write_validator_total_deltas(&validator, validator_deltas)
+                    .write_validator_deltas(&validator, validator_deltas)
                     .unwrap();
             }
             PosStorageChange::ValidatorState { validator, state } => {
@@ -1398,12 +1398,12 @@ pub mod testing {
     ) {
         use namada_tx_prelude::{PosRead, PosWrite};
 
-        let validator_total_deltas =
-            tx::ctx().read_validator_total_deltas(&validator).unwrap();
+        let validator_deltas =
+            tx::ctx().read_validator_deltas(&validator).unwrap();
         let mut validator_set = tx::ctx().read_validator_set().unwrap();
         validator_set.update_from_offset(
             |validator_set, epoch| {
-                let total_delta = validator_total_deltas
+                let total_delta = validator_deltas
                     .as_ref()
                     .and_then(|delta| delta.get(epoch));
                 match total_delta {

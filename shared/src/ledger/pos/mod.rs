@@ -59,8 +59,8 @@ pub type ValidatorConsensusKeys =
     >;
 
 /// Alias for a PoS type with the same name with concrete type parameters
-pub type ValidatorTotalDeltas =
-    namada_proof_of_stake::types::ValidatorTotalDeltas<token::Change>;
+pub type ValidatorDeltas =
+    namada_proof_of_stake::types::ValidatorDeltas<token::Change>;
 
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type Bonds = namada_proof_of_stake::types::Bonds<token::Amount>;
@@ -222,12 +222,12 @@ mod macros {
                 Ok(value.map(|value| $crate::ledger::storage::types::decode(value).unwrap()))
             }
 
-            fn read_validator_total_deltas(
+            fn read_validator_deltas(
                 &self,
                 key: &Self::Address,
-            ) -> std::result::Result<Option<ValidatorTotalDeltas>, Self::Error> {
+            ) -> std::result::Result<Option<ValidatorDeltas>, Self::Error> {
                 let value =
-                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_total_deltas_key(key))?;
+                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_deltas_key(key))?;
                 Ok(value.map(|value| $crate::ledger::storage::types::decode(value).unwrap()))
             }
 
