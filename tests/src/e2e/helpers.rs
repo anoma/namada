@@ -94,7 +94,7 @@ pub fn find_keypair(
     })
 }
 
-/// Find the address of an account by its alias from the wallet
+/// Find the voting power of an account by its alias from the wallet
 pub fn find_voting_power(
     test: &Test,
     alias: impl AsRef<str>,
