@@ -23,7 +23,7 @@
 //! ## Pos Parameters
 //!
 //! Arbitrary valid PoS parameters are provided from its module via
-//! [`proof_of_stake::parameters::testing::arb_pos_params`].
+//! [`namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params`].
 //!
 //! ## Valid transitions
 //!
