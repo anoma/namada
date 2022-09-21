@@ -110,7 +110,7 @@ fn test_node_connectivity() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 3. Check that all the nodes processed the tx with the same result
@@ -344,7 +344,7 @@ fn ledger_txs_and_queries() -> Result<()> {
                 client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
             }
-            client.exp_string("Transaction added to mempool:")?;
+            client.exp_string("Transaction is valid.")?;
             client.assert_success();
         }
     }
@@ -588,7 +588,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 3. Submit a delegation to the genesis validator
@@ -610,7 +610,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 4. Submit an unbond of the self-bond
@@ -631,7 +631,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 5. Submit an unbond of the delegation
@@ -653,7 +653,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 6. Wait for the unbonding epoch
@@ -694,7 +694,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 8. Submit a withdrawal of the delegation
@@ -714,7 +714,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     Ok(())
@@ -783,7 +783,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 3. Submit a delegation to the new validator
@@ -808,7 +808,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
     //     Then self-bond the tokens:
     let tx_args = vec![
@@ -829,7 +829,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 4. Transfer some XAN to the new validator
@@ -853,7 +853,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 5. Submit a self-bond for the new validator
@@ -873,7 +873,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 6. Wait for the pipeline epoch when the validator's voting power should
@@ -963,7 +963,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
                 let mut client = run!(*test, Bin::Client, args, Some(40))?;
                 client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
-                client.exp_string("Transaction added to mempool:")?;
+                client.exp_string("Transaction is valid.")?;
                 client.assert_success();
                 let res: Result<()> = Ok(());
                 res
@@ -1032,7 +1032,7 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 2. Submit valid proposal
@@ -1077,7 +1077,7 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 3. Query the proposal
@@ -1233,7 +1233,7 @@ fn proposal_submission() -> Result<()> {
         submit_proposal_vote,
         Some(15)
     )?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     let submit_proposal_vote_delagator = vec![
@@ -1250,7 +1250,7 @@ fn proposal_submission() -> Result<()> {
 
     let mut client =
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 10. Send a yay vote from a non-validator/non-delegator user
@@ -1269,7 +1269,7 @@ fn proposal_submission() -> Result<()> {
     // this is valid because the client filter ALBERT delegation and there are
     // none
     let mut client = run!(test, Bin::Client, submit_proposal_vote, Some(15))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 11. Query the proposal and check the result
@@ -1379,7 +1379,7 @@ fn proposal_offline() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 2. Create an offline proposal
@@ -1839,7 +1839,7 @@ fn test_genesis_validators() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction added to mempool:")?;
+    client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 3. Check that all the nodes processed the tx with the same result
