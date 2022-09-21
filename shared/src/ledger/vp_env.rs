@@ -65,10 +65,17 @@ pub trait VpEnv<'view> {
     /// current transaction is being applied.
     fn get_block_epoch(&'view self) -> Result<Epoch, storage_api::Error>;
 
-    /// Storage prefix iterator. It will try to get an iterator from the
-    /// storage.
+    /// Storage prefix iterator, ordered by storage keys. It will try to get an
+    /// iterator from the storage.
     fn iter_prefix(
         &'view self,
+        prefix: &Key,
+    ) -> Result<Self::PrefixIter, storage_api::Error>;
+
+    /// Storage prefix iterator, reverse ordered by storage keys. It will try to
+    /// get an iterator from the storage.
+    fn rev_iter_prefix(
+        &self,
         prefix: &Key,
     ) -> Result<Self::PrefixIter, storage_api::Error>;
 
@@ -427,7 +434,8 @@ where
     Ok(epoch)
 }
 
-/// Storage prefix iterator. It will try to get an iterator from the storage.
+/// Storage prefix iterator, ordered by storage keys. It will try to get an
+/// iterator from the storage.
 pub fn iter_prefix<'a, DB, H>(
     gas_meter: &mut VpGasMeter,
     storage: &'a Storage<DB, H>,
@@ -438,6 +446,22 @@ where
     H: StorageHasher,
 {
     let (iter, gas) = storage.iter_prefix(prefix);
+    add_gas(gas_meter, gas)?;
+    Ok(iter)
+}
+
+/// Storage prefix iterator, reverse ordered by storage keys. It will try to get
+/// an iterator from the storage.
+pub fn rev_iter_prefix<'a, DB, H>(
+    gas_meter: &mut VpGasMeter,
+    storage: &'a Storage<DB, H>,
+    prefix: &Key,
+) -> EnvResult<<DB as storage::DBIter<'a>>::PrefixIter>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    let (iter, gas) = storage.rev_iter_prefix(prefix);
     add_gas(gas_meter, gas)?;
     Ok(iter)
 }

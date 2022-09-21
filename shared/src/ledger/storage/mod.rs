@@ -245,8 +245,13 @@ pub trait DBIter<'iter> {
     /// The concrete type of the iterator
     type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
-    /// Read account subspace key value pairs with the given prefix from the DB
+    /// Read account subspace key value pairs with the given prefix from the DB,
+    /// ordered by the storage keys.
     fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
+
+    /// Read account subspace key value pairs with the given prefix from the DB,
+    /// reverse ordered by the storage keys.
+    fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.
@@ -414,12 +419,21 @@ where
         }
     }
 
-    /// Returns a prefix iterator and the gas cost
+    /// Returns a prefix iterator, ordered by storage keys, and the gas cost
     pub fn iter_prefix(
         &self,
         prefix: &Key,
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
         (self.db.iter_prefix(prefix), prefix.len() as _)
+    }
+
+    /// Returns a prefix iterator, reverse ordered by storage keys, and the gas
+    /// cost
+    pub fn rev_iter_prefix(
+        &self,
+        prefix: &Key,
+    ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
+        (self.db.rev_iter_prefix(prefix), prefix.len() as _)
     }
 
     /// Write a value to the specified subspace and returns the gas cost and the
@@ -717,6 +731,13 @@ where
         prefix: &crate::types::storage::Key,
     ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
         Ok(self.db.iter_prefix(prefix))
+    }
+
+    fn rev_iter_prefix(
+        &'iter self,
+        prefix: &crate::types::storage::Key,
+    ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
+        Ok(self.db.rev_iter_prefix(prefix))
     }
 
     fn iter_next(

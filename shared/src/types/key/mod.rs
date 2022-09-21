@@ -7,6 +7,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::HEXUPPER;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -80,7 +81,7 @@ pub enum VerifySigError {
 #[derive(Error, Debug)]
 pub enum ParsePublicKeyError {
     #[error("Invalid public key hex: {0}")]
-    InvalidHex(hex::FromHexError),
+    InvalidHex(data_encoding::DecodeError),
     #[error("Invalid public key encoding: {0}")]
     InvalidEncoding(std::io::Error),
     #[error("Parsed public key does not belong to desired scheme")]
@@ -91,7 +92,7 @@ pub enum ParsePublicKeyError {
 #[derive(Error, Debug)]
 pub enum ParseSignatureError {
     #[error("Invalid signature hex: {0}")]
-    InvalidHex(hex::FromHexError),
+    InvalidHex(data_encoding::DecodeError),
     #[error("Invalid signature encoding: {0}")]
     InvalidEncoding(std::io::Error),
     #[error("Parsed signature does not belong to desired scheme")]
@@ -102,7 +103,7 @@ pub enum ParseSignatureError {
 #[derive(Error, Debug)]
 pub enum ParseSecretKeyError {
     #[error("Invalid secret key hex: {0}")]
-    InvalidHex(hex::FromHexError),
+    InvalidHex(data_encoding::DecodeError),
     #[error("Invalid secret key encoding: {0}")]
     InvalidEncoding(std::io::Error),
     #[error("Parsed secret key does not belong to desired scheme")]
@@ -368,7 +369,7 @@ pub fn tm_consensus_key_raw_hash(pk: &common::PublicKey) -> String {
 
 /// Convert Tendermint validator's raw hash bytes to Anoma raw hash string
 pub fn tm_raw_hash_to_string(raw_hash: impl AsRef<[u8]>) -> String {
-    hex::encode_upper(raw_hash)
+    HEXUPPER.encode(raw_hash.as_ref())
 }
 
 /// Helpers for testing with keys.

@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use data_encoding::HEXLOWER;
 use namada::types::key::*;
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
@@ -108,15 +109,15 @@ pub struct EncryptedKeypair(Vec<u8>);
 
 impl Display for EncryptedKeypair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
+        write!(f, "{}", HEXLOWER.encode(self.0.as_ref()))
     }
 }
 
 impl FromStr for EncryptedKeypair {
-    type Err = hex::FromHexError;
+    type Err = data_encoding::DecodeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        hex::decode(s).map(Self)
+        HEXLOWER.decode(s.as_ref()).map(Self)
     }
 }
 

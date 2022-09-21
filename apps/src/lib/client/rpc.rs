@@ -11,6 +11,7 @@ use async_std::fs::{self};
 use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::BorshDeserialize;
+use data_encoding::HEXLOWER;
 use itertools::Itertools;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
@@ -83,7 +84,7 @@ pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
         .unwrap();
     match response.code {
         Code::Ok => {
-            println!("{}", hex::encode(&response.value));
+            println!("{}", HEXLOWER.encode(&response.value));
         }
         Code::Err(err) => {
             eprintln!(

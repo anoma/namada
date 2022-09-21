@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
+use data_encoding::HEXLOWER;
 use namada::types::token;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
@@ -383,7 +384,7 @@ fn ledger_txs_and_queries() -> Result<()> {
                 &validator_one_rpc,
             ],
             // expect hex encoded of borsh encoded bytes
-            hex::encode(christel_balance.try_to_vec().unwrap()),
+            HEXLOWER.encode(&christel_balance.try_to_vec().unwrap()),
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {

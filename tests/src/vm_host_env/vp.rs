@@ -326,6 +326,7 @@ mod native_vp_host_env {
     native_host_fn!(vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_has_key_post(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
+    native_host_fn!(vp_rev_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
     native_host_fn!(vp_iter_pre_next(iter_id: u64) -> i64);
     native_host_fn!(vp_iter_post_next(iter_id: u64) -> i64);
     native_host_fn!(vp_get_chain_id(result_ptr: u64));

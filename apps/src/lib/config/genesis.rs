@@ -26,8 +26,8 @@ pub mod genesis_config {
     use std::path::Path;
     use std::str::FromStr;
 
+    use data_encoding::HEXLOWER;
     use eyre::Context;
-    use hex;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::pos::types::BasisPoints;
@@ -51,12 +51,12 @@ pub mod genesis_config {
 
     impl HexString {
         pub fn to_bytes(&self) -> Result<Vec<u8>, HexKeyError> {
-            let bytes = hex::decode(&self.0)?;
+            let bytes = HEXLOWER.decode(self.0.as_ref())?;
             Ok(bytes)
         }
 
         pub fn to_sha256_bytes(&self) -> Result<[u8; 32], HexKeyError> {
-            let bytes = hex::decode(&self.0)?;
+            let bytes = HEXLOWER.decode(self.0.as_ref())?;
             let slice = bytes.as_slice();
             let array: [u8; 32] = slice.try_into()?;
             Ok(array)
@@ -77,15 +77,15 @@ pub mod genesis_config {
     #[derive(Error, Debug)]
     pub enum HexKeyError {
         #[error("Invalid hex string: {0:?}")]
-        InvalidHexString(hex::FromHexError),
+        InvalidHexString(data_encoding::DecodeError),
         #[error("Invalid sha256 checksum: {0}")]
         InvalidSha256(TryFromSliceError),
         #[error("Invalid public key: {0}")]
         InvalidPublicKey(ParsePublicKeyError),
     }
 
-    impl From<hex::FromHexError> for HexKeyError {
-        fn from(err: hex::FromHexError) -> Self {
+    impl From<data_encoding::DecodeError> for HexKeyError {
+        fn from(err: data_encoding::DecodeError) -> Self {
             Self::InvalidHexString(err)
         }
     }
