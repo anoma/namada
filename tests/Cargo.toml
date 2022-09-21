@@ -15,7 +15,7 @@ wasm-runtime = ["namada/wasm-runtime"]
 namada = {path = "../shared", features = ["testing", "ibc-mocks"]}
 namada_vp_prelude = {path = "../vp_prelude"}
 namada_tx_prelude = {path = "../tx_prelude"}
-chrono = "0.4.19"
+chrono = "0.4.22"
 concat-idents = "1.1.2"
 prost = "0.9.0"
 serde_json = {version = "1.0.65"}
