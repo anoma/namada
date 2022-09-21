@@ -3,14 +3,14 @@
 
 use namada::ledger::pos::types::VotingPower;
 use namada::types::transaction::protocol::ProtocolTxType;
+#[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
-use tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use tendermint_proto::abci::{
-    ExecTxResult, RequestProcessProposal, ResponseProcessProposal,
-};
 
 use super::queries::{QueriesExt, SendValsetUpd};
 use super::*;
+use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
+use crate::facade::tendermint_proto::abci::RequestProcessProposal;
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
 /// Contains stateful data about the number of vote extension
 /// digests found as protocol transactions in a proposed block.
@@ -42,7 +42,7 @@ where
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,
-    ) -> ResponseProcessProposal {
+    ) -> ProcessProposal {
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         tracing::info!(
             proposer = ?hex::encode(&req.proposer_address),
@@ -53,7 +53,7 @@ where
         );
         // the number of vote extension digests included in the block proposal
         let mut counters = DigestCounters::default();
-        let tx_results: Vec<ExecTxResult> = req
+        let tx_results: Vec<_> = req
             .txs
             .iter()
             .map(|tx_bytes| {
@@ -62,7 +62,6 @@ where
                     &mut tx_queue_iter,
                     &mut counters,
                 )
-                .into()
             })
             .collect();
 
@@ -122,32 +121,11 @@ where
         } else {
             ProposalStatus::Accept
         };
-        tracing::info!(
-            proposer = ?hex::encode(&req.proposer_address),
-            height = req.height,
-            hash = ?hex::encode(&req.hash),
-            ?status,
-            "Processed block proposal",
-        );
-        ResponseProcessProposal {
+
+        ProcessProposal {
             status: status as i32,
             tx_results,
-            ..Default::default()
         }
-    }
-
-    /// Check all the given txs.
-    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<ExecTxResult> {
-        let mut tx_queue_iter = self.storage.tx_queue.iter();
-        txs.iter()
-            .map(|tx_bytes| {
-                ExecTxResult::from(self.process_single_tx(
-                    tx_bytes,
-                    &mut tx_queue_iter,
-                    &mut Default::default(),
-                ))
-            })
-            .collect()
     }
 
     /// Validates a list of vote extensions, included in PrepareProposal.
@@ -159,7 +137,9 @@ where
     where
         I: Iterator<Item = Option<VotingPower>>,
     {
+        #[cfg(feature = "abcipp")]
         let mut voting_power = FractionalVotingPower::default();
+        #[cfg(feature = "abcipp")]
         let total_power = {
             let epoch = self.storage.get_epoch(self.storage.last_height);
             u64::from(self.storage.get_total_voting_power(epoch))
@@ -167,18 +147,22 @@ where
 
         if vote_extensions.all(|maybe_ext| {
             maybe_ext
-                .map(|power| {
-                    voting_power += FractionalVotingPower::new(
-                        u64::from(power),
-                        total_power,
-                    )
-                    .expect(
-                        "The voting power we obtain from storage should \
-                         always be valid",
-                    );
+                .map(|_power| {
+                    #[cfg(feature = "abcipp")]
+                    {
+                        voting_power += FractionalVotingPower::new(
+                            u64::from(_power),
+                            total_power,
+                        )
+                        .expect(
+                            "The voting power we obtain from storage should \
+                             always be valid",
+                        );
+                    }
                 })
                 .is_some()
         }) {
+            #[cfg(feature = "abcipp")]
             if voting_power > FractionalVotingPower::TWO_THIRDS {
                 TxResult {
                     code: ErrorCodes::Ok.into(),
@@ -191,6 +175,14 @@ where
                            the backing stake of the vote extensions published \
                            in the proposal was insufficient"
                         .into(),
+                }
+            }
+
+            #[cfg(not(feature = "abcipp"))]
+            {
+                TxResult {
+                    code: ErrorCodes::Ok.into(),
+                    info: "Process proposal accepted this transaction".into(),
                 }
             }
         } else {
@@ -272,7 +264,6 @@ where
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthereumEvents(digest) => {
                     counters.eth_ev_digest_num += 1;
-
                     let extensions =
                         digest.decompress(self.storage.last_height);
                     let valid_extensions =
@@ -387,12 +378,20 @@ where
     /// Checks if we have found the correct number of Ethereum events
     /// vote extensions in [`DigestCounters`].
     fn has_proper_eth_events_num(&self, c: &DigestCounters) -> bool {
-        self.storage.last_height.0 == 0 || c.eth_ev_digest_num == 1
+        #[cfg(feature = "abcipp")]
+        {
+            self.storage.last_height.0 == 0 || c.eth_ev_digest_num == 1
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            c.eth_ev_digest_num <= 1
+        }
     }
 
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
     fn has_proper_valset_upd_num(&self, c: &DigestCounters) -> bool {
+        #[cfg(feature = "abcipp")]
         if self
             .storage
             .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
@@ -400,6 +399,10 @@ where
             self.storage.last_height.0 == 0 || c.valset_upd_digest_num == 1
         } else {
             true
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            c.valset_upd_digest_num <= 1
         }
     }
 }
@@ -445,9 +448,16 @@ mod test_process_proposal {
         )
         .sign(protocol_key);
         ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
+            #[cfg(feature = "abcipp")]
             signatures: {
                 let mut s = HashMap::new();
                 s.insert(addr, ext.sig);
+                s
+            },
+            #[cfg(not(feature = "abcipp"))]
+            signatures: {
+                let mut s = HashMap::new();
+                s.insert((addr, shell.storage.last_height), ext.sig);
                 s
             },
             events: vec![],
@@ -461,7 +471,7 @@ mod test_process_proposal {
     #[test]
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _, _) = test_utils::setup();
+        let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
@@ -479,7 +489,13 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(validator_addr, signed_vote_extension.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert(
+                        (validator_addr, LAST_HEIGHT),
+                        signed_vote_extension.sig,
+                    );
                     s
                 },
                 events: vec![],
@@ -498,7 +514,7 @@ mod test_process_proposal {
         );
     }
 
-    fn check_rejected_digest(
+    fn check_rejected_eth_events_digest(
         shell: &mut TestShell,
         vote_extension_digest: ethereum_events::VextDigest,
         protocol_key: common::SecretKey,
@@ -529,7 +545,7 @@ mod test_process_proposal {
     #[test]
     fn test_drop_vext_digest_with_invalid_sigs() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _, _) = test_utils::setup();
+        let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
@@ -555,20 +571,30 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = HashSet::new();
+                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, LAST_HEIGHT));
                         s
                     },
                 }],
             }
         };
-        check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
+        check_rejected_eth_events_digest(
+            &mut shell,
+            vote_extension_digest,
+            protocol_key,
+        );
     }
 
     /// Test that if a proposal contains Ethereum events with
@@ -577,7 +603,7 @@ mod test_process_proposal {
     fn test_drop_vext_digest_with_invalid_bheights() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
         const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
-        let (mut shell, _, _) = test_utils::setup();
+        let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
@@ -599,20 +625,45 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), PRED_LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = HashSet::new();
+                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, PRED_LAST_HEIGHT));
                         s
                     },
                 }],
             }
         };
-        check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
+        #[cfg(feature = "abcipp")]
+        check_rejected_eth_events_digest(
+            &mut shell,
+            vote_extension_digest,
+            protocol_key,
+        );
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
+                .sign(&protocol_key)
+                .to_bytes();
+            let request = ProcessProposal { txs: vec![tx] };
+            if let Ok(mut resp) = shell.process_proposal(request) {
+                assert_eq!(resp.len(), 1);
+                let processed = resp.remove(0);
+                assert_eq!(processed.result.code, ErrorCodes::Ok as u32);
+            } else {
+                panic!("Test failed");
+            }
+        }
     }
 
     /// Test that if a proposal contains Ethereum events with
@@ -620,7 +671,7 @@ mod test_process_proposal {
     #[test]
     fn test_drop_vext_digest_with_invalid_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _, _) = test_utils::setup();
+        let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (addr, protocol_key) = {
             let bertha_key = wallet::defaults::bertha_keypair();
@@ -645,27 +696,37 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = HashSet::new();
+                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, LAST_HEIGHT));
                         s
                     },
                 }],
             }
         };
-        check_rejected_digest(&mut shell, vote_extension_digest, protocol_key);
+        check_rejected_eth_events_digest(
+            &mut shell,
+            vote_extension_digest,
+            protocol_key,
+        );
     }
 
     /// Test that if a wrapper tx is not signed, it is rejected
     /// by [`process_proposal`].
     #[test]
     fn test_unsigned_wrapper_rejected() {
-        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -711,7 +772,7 @@ mod test_process_proposal {
     /// Test that a wrapper tx with invalid signature is rejected
     #[test]
     fn test_wrapper_bad_signature_rejected() {
-        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -794,7 +855,7 @@ mod test_process_proposal {
     /// non-zero, [`process_proposal`] rejects that tx
     #[test]
     fn test_wrapper_unknown_address() {
-        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -838,7 +899,7 @@ mod test_process_proposal {
     /// [`process_proposal`] rejects that tx
     #[test]
     fn test_wrapper_insufficient_balance_address() {
-        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -885,7 +946,7 @@ mod test_process_proposal {
     /// validated, [`process_proposal`] rejects it
     #[test]
     fn test_decrypted_txs_out_of_order() {
-        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let mut txs = vec![];
         for i in 0..3 {
@@ -950,7 +1011,7 @@ mod test_process_proposal {
     /// is rejected by [`process_proposal`]
     #[test]
     fn test_incorrectly_labelled_as_undecryptable() {
-        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
 
         let tx = Tx::new(
@@ -1001,7 +1062,7 @@ mod test_process_proposal {
     /// undecryptable but still accepted
     #[test]
     fn test_invalid_hash_commitment() {
-        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -1047,7 +1108,7 @@ mod test_process_proposal {
     /// marked undecryptable and the errors handled correctly
     #[test]
     fn test_undecryptable() {
-        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
         let pubkey = EncryptionKey::default();
         // not valid tx bytes
@@ -1089,7 +1150,7 @@ mod test_process_proposal {
     /// [`process_proposal`] than expected, they are rejected
     #[test]
     fn test_too_many_decrypted_txs() {
-        let (mut shell, _, _) = TestShell::new();
+        let (mut shell, _recv, _) = TestShell::new();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1122,7 +1183,7 @@ mod test_process_proposal {
     /// Process Proposal should reject a RawTx, but not panic
     #[test]
     fn test_raw_tx_rejected() {
-        let (mut shell, _, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),

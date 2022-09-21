@@ -16,10 +16,10 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::error::Error as SmtError;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
-use tendermint::merkle::proof::{Proof, ProofOp};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
+use crate::tendermint::merkle::proof::{Proof, ProofOp};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{DbKeySeg, Error as StorageError, Key};
 
