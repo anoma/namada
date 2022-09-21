@@ -150,6 +150,49 @@ The commission rate $c_V(e)$ is the same for all delegations to a validator $V$ 
 
 While rewards are given out at the end of every epoch, voting power is only updated after the pipeline offset. According to the [proof-of-stake system](bonding-mechanism.md#epoched-data),  at the current epoch `e`, the validator sets an only be updated for epoch `e + pipeline_offset`, and it should remain unchanged from epoch `e` to `e + pipeline_offset - 1`. Updating voting power in the current epoch would violate this rule.
 
+
+## Distribution to validators
+
+A validator can earn a portion of the block rewards in three different ways: 
+
+- Proposing the block
+- Providing a signature on the constructed block (voting)
+- Being a member of the consensus validator set
+
+The reward mechanism calculates fractions of the total block reward that are given for the above-mentioned three behaviors, such that
+
+$$ R_p + R_s + R_b = 1, $$
+
+where $R_p$ is the proposer reward fraction, $R_s$ is the reward fraction for the set of signers, and $R_b$ is the reward fraction for the whole active validator set.
+
+The reward for proposing a block is dependent on the combined voting power of all validators whose signatures are included in the block. This is to incentivize the block proposer to maximize the inclusion of signatures, as blocks with more signatures are (JUSTIFY THIS POINT HERE).
+
+The block proposer reward is parameterized as
+
+$$ R_p = r_p\Big(f - \frac{2}{3}\Big) + 0.01, $$
+
+where $f$ is the ratio of the combined stake of all block signers to the combined stake of all consensus validators. The value of $f$ is bounded from below at 2/3, since a block requires this amount of signing stake to be verified. We currently enforce that the block proposer reward is a minimum of 1%.
+
+The block signer reward for a validator $V_i$ is parameterized as
+
+$$ R_s^i = r_s \frac{s_i}{s_{sign}} = r_s \frac{s_i}{fs_{tot}}, $$
+
+where $s_i$ is the stake of validator $V_i$, $s_{sign} is the combined stake of all signers, and $s_{tot} is the combined stake of all consensus validators.
+
+Finally, the remaining reward just for being in the consensus validator set is parameterized as
+
+$$ R_b^i = (1 - R_p - R_s) \frac{s_i}{s_{tot}}. $$
+
+The values of the parameters $r_p$ and $r_s$ are set in the proof-of-stake storage and can only change via governance. The values are chosen relative to each other such that a block proposer is always incentivized to include as much signing stake as possible. These values at genesis are currently:
+
+- $r_s = 0.1$
+- $r_p = 0.125$
+
+TODO describe / figure out:
+
+- how reward products will be stored
+- how reward fractions will be properly stored for all blocks in an epoch before the inflation rate is determined at the end of the epoch
+
 ## Slashes
 
 Slashes should lead to punishment for delegators who were contributing voting power to the validator at the height of the infraction, _as if_ the delegations were iterated over and slashed individually.
