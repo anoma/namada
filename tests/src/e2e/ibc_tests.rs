@@ -13,6 +13,13 @@ use core::convert::TryFrom;
 use core::str::FromStr;
 use core::time::Duration;
 
+use color_eyre::eyre::Result;
+use eyre::eyre;
+use ibc_relayer::config::types::{MaxMsgNum, MaxTxSize, Memo};
+use ibc_relayer::config::{AddressType, ChainConfig, GasPrice, PacketFilter};
+use ibc_relayer::keyring::Store;
+use ibc_relayer::light_client::tendermint::LightClient as TmLightClient;
+use ibc_relayer::light_client::{LightClient, Verified};
 use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use namada::ibc::clients::ics07_tendermint::client_state::{
     AllowUpdate, ClientState as TmClientState,
@@ -75,14 +82,6 @@ use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key};
 use namada_apps::client::rpc::query_storage_value_bytes;
 use namada_apps::client::utils::id_from_pk;
-use color_eyre::eyre::Result;
-use eyre::eyre;
-use ibc_relayer::config::types::{MaxMsgNum, MaxTxSize, Memo};
-use ibc_relayer::config::ChainConfig;
-use ibc_relayer::config::{AddressType, GasPrice, PacketFilter};
-use ibc_relayer::keyring::Store;
-use ibc_relayer::light_client::tendermint::LightClient as TmLightClient;
-use ibc_relayer::light_client::{LightClient, Verified};
 use setup::constants::*;
 use tendermint_config::net::Address as TendermintAddress;
 use tendermint_rpc::{Client, HttpClient, Url};
@@ -104,13 +103,8 @@ fn run_ledger_ibc() -> Result<()> {
     let mut ledger_b =
         run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger_b.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger_a.exp_string("started node")?;
-        ledger_b.exp_string("started node")?;
-    } else {
-        ledger_a.exp_string("Started node")?;
-        ledger_b.exp_string("Started node")?;
-    }
+    ledger_a.exp_string("This node is a validator")?;
+    ledger_b.exp_string("This node is a validator")?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 
@@ -272,7 +266,9 @@ fn make_consensus_state(
 }
 
 fn proof_specs() -> ProofSpecs {
-    MerkleTree::<Sha256Hasher>::default().proof_specs().into()
+    MerkleTree::<Sha256Hasher>::default()
+        .ibc_proof_specs()
+        .into()
 }
 
 fn update_client_with_height(
@@ -1263,7 +1259,7 @@ fn check_balances(
         vec!["balance", "--token", XAN, "--ledger-address", &rpc_a];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the source balance
-    let expected = format!(":  900000, owned by {}", sender);
+    let expected = format!(": 900000, owned by {}", sender);
     client.exp_string(&expected)?;
     // Check the escrowed balance
     let key_prefix = ibc_account_prefix(
@@ -1273,7 +1269,7 @@ fn check_balances(
     );
     let sub_prefix = key_prefix.sub_key().unwrap().to_string();
     let expected = format!(
-        " with {}:  100000, owned by {}",
+        "with {}: 100000, owned by {}",
         sub_prefix,
         Address::Internal(InternalAddress::IbcEscrow)
     );
@@ -1374,7 +1370,7 @@ fn check_balances_after_back(
         vec!["balance", "--token", XAN, "--ledger-address", &rpc_a];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the source balance
-    let expected = format!(":  950000, owned by {}", sender);
+    let expected = format!(": 950000, owned by {}", sender);
     client.exp_string(&expected)?;
     // Check the escrowed balance
     let key_prefix = ibc_account_prefix(
@@ -1384,7 +1380,7 @@ fn check_balances_after_back(
     );
     let sub_prefix = key_prefix.sub_key().unwrap().to_string();
     let expected = format!(
-        " with {}:  50000, owned by {}",
+        "with {}: 50000, owned by {}",
         sub_prefix,
         Address::Internal(InternalAddress::IbcEscrow)
     );
