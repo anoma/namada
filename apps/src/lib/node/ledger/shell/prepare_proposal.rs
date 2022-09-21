@@ -120,7 +120,12 @@ where
                 .votes,
         );
         #[cfg(not(feature = "abcipp"))]
-        let (eth_events, valset_upds) = split_vote_extensions(txs);
+        let (protocol_txs, eth_events, valset_upds) =
+            split_vote_extensions(txs);
+
+        // TODO: remove this later, when we get rid of `abciplus`
+        #[cfg(feature = "abcipp")]
+        let protocol_txs = vec![];
 
         let ethereum_events = self
             .compress_ethereum_events(eth_events)
@@ -148,6 +153,8 @@ where
             validator_set_update,
         })
         .map(|tx| tx.sign(protocol_key).to_bytes())
+        // TODO: remove this later, when we get rid of `abciplus`
+        .chain(protocol_txs.into_iter())
         .collect()
     }
 
