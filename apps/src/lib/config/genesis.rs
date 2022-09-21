@@ -323,13 +323,13 @@ pub mod genesis_config {
                     .to_public_key()
                     .unwrap(),
                 eth_cold_key: config
-                    .staking_reward_public_key
+                    .eth_cold_key
                     .as_ref()
                     .unwrap()
                     .to_public_key()
                     .unwrap(),
                 eth_hot_key: config
-                    .staking_reward_public_key
+                    .eth_hot_key
                     .as_ref()
                     .unwrap()
                     .to_public_key()
