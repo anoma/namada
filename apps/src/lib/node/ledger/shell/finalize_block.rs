@@ -331,18 +331,20 @@ where
         });
     }
 
-    /// Calculate the new inflation rate, mint the new tokens, then distribute
-    /// them to relevant parties
+    /// Calculate the new inflation rate, mint the new tokens to the PoS account, then update 
+    /// the reward products of the validators
     fn apply_inflation(
         &mut self,
         proposer_address: &Vec<u8>,
         votes: &Vec<VoteInfo>,
     ) {
+        let (current_epoch, _gas) = self.storage.get_current_epoch();
+        let last_epoch = current_epoch - 1;
+        // Get input values needed for the PD controller for PoS and MASP.
+        // Run the PD controllers to calculate new rates.
+        // 
         // TODO:
-        // Get input values needed for the PD controller for PoS and MASP
-        // Run the PD controllers to calculate new rates
-        // Mint new tokens from rate per epoch and send to the PoS and MASP
-        // addresses
+        // Mint new tokens to POS address and update reward products
         //
         // MASP is included below just for some completeness.
 
@@ -364,16 +366,18 @@ where
             .unwrap();
 
         // read from PoS storage
-        let total_tokens: Amount = self
+        let total_tokens = self
             .read_storage_key(&total_supply_key(&staking_token_address()))
             .unwrap();
-        let pos_locked_supply: Amount = self.storage.read_total_staked_tokens();
-        let pos_locked_ratio_target =
-            self.storage.read_pos_params().target_staked_ratio;
-        let pos_max_inflation_rate =
-            self.storage.read_pos_params().max_inflation_rate;
+        let total_deltas = self.storage.read_total_deltas();
+        let pos_locked_supply = total_deltas.get(last_epoch).expect("maximum possible sum should fit within an i128");
+        let pos_locked_supply: Amount = u64::try_from(pos_locked_supply).expect("pos_locked_supply should be positive").into();
+        let pos_params = self.storage.read_pos_params();
+        let pos_locked_ratio_target = pos_params.target_staked_ratio;
+        let pos_max_inflation_rate = pos_params.max_inflation_rate;
 
         // Arbitrary default values until real ones can be fetched
+        // TODO: these need to be properly fetched.
         let masp_locked_supply: Amount = Amount::default();
         let masp_locked_ratio_target = Decimal::new(5, 1);
         let masp_locked_ratio_last = Decimal::new(5, 1);
@@ -446,9 +450,8 @@ where
         let _masp_minted_tokens =
             decimal_mult_u64(new_masp_inflation_rate, u64::from(total_tokens));
 
+        // Mint tokens to PoS account
         let pos_address = self.storage.read_pos_address();
-
-        // PoS inflation
         inflation::mint_tokens(
             &mut self.storage,
             &pos_address,
@@ -457,16 +460,12 @@ where
         )
         .unwrap();
 
-        let (current_epoch, _gas) = self.storage.get_current_epoch();
-
-        // Get validator address from storage based on the consensus key hash
-        // TODO: do some more error handling here (to panic or not to panic?)
-        // perhaps use an expect instead of unwrap
+        // Get proposer address from storage based on the consensus key hash
         let tm_raw_hash_string = tm_raw_hash_to_string(proposer_address);
         let native_proposer_address = self
             .storage
             .read_validator_address_raw_hash(tm_raw_hash_string)
-            .unwrap();
+            .expect("Unable to find native validator address of block proposer from tendermint raw hash");
 
         // TODO: reward distribution should be written in such a way that the
         // reward products for each validator are updated rather than
