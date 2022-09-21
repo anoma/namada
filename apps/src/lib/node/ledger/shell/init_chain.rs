@@ -283,13 +283,6 @@ where
             )
             .expect("unable to set total NAM balance in storage");
 
-        // Set total staked tokens (those locked in PoS) in storage
-        // TODO: test that this is correct, check that total_deltas is written
-        // or initialized too.
-        self.storage.write_total_staked_tokens(
-            &(total_balance - total_non_staked_tokens),
-        );
-
         ibc::init_genesis_storage(&mut self.storage);
 
         // Set the initial validator set

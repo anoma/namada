@@ -30,7 +30,6 @@ const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
-const TOTAL_STAKED_TOKENS_STORAGE_KEY: &str = "total_staked_tokens";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -383,18 +382,19 @@ pub fn is_total_deltas_key(key: &Key) -> bool {
     }
 }
 
-/// Storage key for total staked tokens.
-pub fn total_staked_tokens_key() -> Key {
+
+/// Storage key for total deltas of all validators.
+pub fn total_deltas_key() -> Key {
     Key::from(ADDRESS.to_db_key())
-        .push(&TOTAL_STAKED_TOKENS_STORAGE_KEY.to_owned())
+        .push(&TOTAL_DELTAS_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for total staked tokens?
-pub fn is_total_staked_tokens_key(key: &Key) -> bool {
+/// Is storage key for total deltas of all validators?
+pub fn is_total_deltas_key(key: &Key) -> bool {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if addr == &ADDRESS && key == TOTAL_STAKED_TOKENS_STORAGE_KEY =>
+            if addr == &ADDRESS && key == TOTAL_DELTAS_STORAGE_KEY =>
         {
             true
         }
@@ -498,18 +498,14 @@ where
             self.read(&validator_commission_rate_key(key)).unwrap();
         value.map(|value| decode(value).unwrap()).unwrap()
     }
+
     fn read_validator_set(&self) -> ValidatorSets {
         let (value, _gas) = self.read(&validator_set_key()).unwrap();
         decode(value.unwrap()).unwrap()
     }
 
     fn read_total_deltas(&self) -> TotalDeltas {
-        let (value, _gas) = self.read(&total_staked_tokens_key()).unwrap();
-        decode(value.unwrap()).unwrap()
-    }
-
-    fn read_total_staked_tokens(&self) -> Self::TokenAmount {
-        let (value, _gas) = self.read(&total_staked_tokens_key()).unwrap();
+        let (value, _gas) = self.read(&total_deltas_key()).unwrap();
         decode(value.unwrap()).unwrap()
     }
 
@@ -602,11 +598,6 @@ where
 
     fn write_total_deltas(&mut self, value: &TotalDeltas) {
         self.write(&total_deltas_key(), encode(value)).unwrap();
-    }
-
-    fn write_total_staked_tokens(&mut self, value: &Self::TokenAmount) {
-        self.write(&total_staked_tokens_key(), encode(value))
-            .unwrap();
     }
 
     fn init_staking_reward_account(

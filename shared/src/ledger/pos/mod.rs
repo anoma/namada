@@ -256,7 +256,6 @@ mod macros {
                 let value =
                     $crate::ledger::storage_api::StorageRead::read_bytes(self, &total_deltas_key())?.unwrap();
                 Ok($crate::ledger::storage::types::decode(value).unwrap())
-                Ok($crate::ledger::storage::types::decode(value).unwrap())
             }
         }
     }

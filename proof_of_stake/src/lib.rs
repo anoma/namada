@@ -156,11 +156,6 @@ pub trait PosReadOnly {
     fn read_total_deltas(
         &self,
     ) -> Result<TotalDeltas<Self::TokenChange>, Self::Error>;
-    /// Read total staked tokens in PoS for all validators (active and
-    /// inactive).
-    fn read_total_staked_tokens(
-        &self,
-    ) -> Result<Self::TokenAmount, Self::Error>;
 }
 
 /// PoS system trait to be implemented in integration that can read and write
@@ -240,7 +235,6 @@ pub trait PosActions: PosReadOnly {
     fn write_total_deltas(
         &mut self,
         value: TotalDeltas<Self::TokenChange>,
-    ) -> Result<(), Self::Error>;
     ) -> Result<(), Self::Error>;
     /// Delete an emptied PoS bond (validator self-bond or a delegation).
     fn delete_bond(
@@ -605,13 +599,8 @@ pub trait PosBase {
     ) -> Decimal;
     /// Read PoS validator set (active and inactive).
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
-
     /// Read PoS total deltas of all validators (active and inactive).
     fn read_total_deltas(&self) -> TotalDeltas<Self::TokenChange>;
-    /// Read total staked tokens in PoS for all validators (active and
-    /// inactive).
-    fn read_total_staked_tokens(&self) -> Self::TokenAmount;
-
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
     /// Write PoS validator's raw hash of its consensus key.
@@ -674,9 +663,6 @@ pub trait PosBase {
     fn write_validator_set(&mut self, value: &ValidatorSets<Self::Address>);
     /// Write total deltas in PoS for all validators (active and inactive)
     fn write_total_deltas(&mut self, value: &TotalDeltas<Self::TokenChange>);
-    /// Write total staked tokens in PoS for all validators (active and
-    /// inactive)
-    fn write_total_staked_tokens(&mut self, value: &Self::TokenAmount);
     /// Initialize staking reward account with the given public key.
     fn init_staking_reward_account(
         &mut self,
@@ -765,8 +751,6 @@ pub trait PosBase {
         }
         self.write_validator_set(&validator_set);
         self.write_total_deltas(&total_deltas);
-
-        // TODO: write total_staked_tokens (Amount) to storage?
 
         // Credit the bonded tokens to the PoS account
         self.credit_tokens(
