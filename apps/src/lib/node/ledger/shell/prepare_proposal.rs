@@ -728,14 +728,8 @@ mod test_prepare_proposal {
                 txs: vec![tx],
                 ..Default::default()
             });
-            #[cfg(feature = "abcipp")]
-            assert_eq!(rsp.txs.len(), 1);
-            #[cfg(not(feature = "abcipp"))]
-            assert_eq!(rsp.txs.len(), 2);
+            assert_eq!(rsp.txs.len(), 3);
 
-            #[cfg(feature = "abcipp")]
-            let tx_bytes = rsp.txs.pop().unwrap();
-            #[cfg(not(feature = "abcipp"))]
             // NOTE: we remove the first pos, bc the ethereum events
             // vote extension protocol tx will always precede the
             // valset upd vext protocol tx
@@ -868,7 +862,7 @@ mod test_prepare_proposal {
                 txs: vec![vote],
                 ..Default::default()
             });
-            assert_eq!(rsp.txs.len(), 2);
+            assert_eq!(rsp.txs.len(), 3);
 
             let tx_bytes = rsp.txs.remove(0);
             let got = Tx::try_from(&tx_bytes[..]).unwrap();
