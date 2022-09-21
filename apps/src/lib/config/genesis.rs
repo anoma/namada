@@ -129,9 +129,12 @@ pub mod genesis_config {
         // Maximum size of proposal in kibibytes (KiB)
         // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_code_size: u64,
-        // Proposal period length in epoch
+        // Minimum proposal period length in epochs
         // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_period: u64,
+        // Maximum proposal period length in epochs
+        // XXX: u64 doesn't work with toml-rs!
+        pub max_proposal_period: u64,
         // Maximum number of characters in the proposal content
         // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_content_size: u64,
@@ -539,6 +542,7 @@ pub mod genesis_config {
             min_proposal_fund: config.gov_params.min_proposal_fund,
             max_proposal_code_size: config.gov_params.max_proposal_code_size,
             min_proposal_period: config.gov_params.min_proposal_period,
+            max_proposal_period: config.gov_params.max_proposal_period,
             max_proposal_content_size: config
                 .gov_params
                 .max_proposal_content_size,
