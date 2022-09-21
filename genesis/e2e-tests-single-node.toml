@@ -142,6 +142,16 @@ max_expected_time_per_block = 30
 vp_whitelist = []
 # tx whitelist
 tx_whitelist = []
+# Expect number of epochs per year
+epochs_per_year = 365
+# The P gain factor in the Proof of Stake rewards controller
+pos_gain_p = 0.1
+# The D gain factor in the Proof of Stake rewards controller
+pos_gain_d = 0.1
+# The ratio of tokens locked in Proof of Stake to the total token supply
+staked_ratio = 0.4
+# The inflation rate for Proof of Stake
+pos_inflation_rate = 0.1
 
 # Proof of stake parameters.
 [pos_params]
@@ -153,8 +163,8 @@ pipeline_len = 2
 # Unbonding length (in epochs). Validators may have their stake slashed
 # for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
 unbonding_len = 3
-# Votes per token (in basis points, i.e., per 10,000 tokens)
-votes_per_token = 10
+# Votes per fundamental staking token (namnam)
+tm_votes_per_token = 1
 # Reward for proposing a block.
 block_proposer_reward = 0.125
 # Reward for voting on a block.
@@ -164,11 +174,11 @@ max_inflation_rate = 0.1
 # Targeted ratio of staked tokens to total tokens in the supply
 target_staked_ratio = 0.6667
 # Portion of a validator's stake that should be slashed on a duplicate
-# vote (in basis points, i.e., 500 = 5%).
-duplicate_vote_slash_rate = 500
+# vote.
+duplicate_vote_slash_rate = 0.001
 # Portion of a validator's stake that should be slashed on a light
-# client attack (in basis points, i.e., 500 = 5%).
-light_client_attack_slash_rate = 500
+# client attack.
+light_client_attack_slash_rate = 0.001
 # The minimum amount of bonded tokens that a validator needs to be in either the `consensus`
 # or `below_capacity` validator sets
 min_validator_stake = 1_000_000
