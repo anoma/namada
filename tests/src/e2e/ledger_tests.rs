@@ -419,6 +419,174 @@ fn ledger_txs_and_queries() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn transaction_history() -> Result<()> {
+    // Download the shielded pool parameters before starting node
+    let _ = ShieldedContext::new(PathBuf::new());
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                min_duration: 60,
+                ..genesis.parameters
+            };
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+
+    ledger.exp_string("Anoma ledger node started")?;
+    if !cfg!(feature = "ABCI") {
+        ledger.exp_string("started node")?;
+    } else {
+        ledger.exp_string("Started node")?;
+    }
+
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // 2. Add viewing keys to wallet
+    let wallet_args = vec![
+        (
+            vec![
+                "masp",
+                "add",
+                "--alias",
+                "avk",
+                "--value",
+                AA_VIEWING_KEY,
+            ],
+            "Successfully added a viewing key"
+        ),
+        (
+            vec![
+                "masp",
+                "add",
+                "--alias",
+                "bvk",
+                "--value",
+                AB_VIEWING_KEY,
+            ],
+            "Successfully added a viewing key"
+        ),
+        (
+            vec![
+                "masp",
+                "add",
+                "--alias",
+                "cvk",
+                "--value",
+                AC_VIEWING_KEY,
+            ],
+            "Successfully added a viewing key"
+        ),
+    ];
+
+    let txs_args = vec![
+        // 3. Send 20 BTC from Albert to PA(A)
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "20",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 4. Spend 7 BTC at SK(A) to PA(B)
+        (
+            vec![
+                "transfer",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "7",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 5. Spend 5 BTC at SK(B) to PA(C)
+        (
+            vec![
+                "transfer",
+                "--source",
+                B_SPENDING_KEY,
+                "--target",
+                AC_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "5",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+    ];
+
+    // Wait till epoch boundary
+    let _ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    for (wallet_args, wallet_result) in wallet_args {
+            let mut client = run!(test, Bin::Wallet, wallet_args, Some(300))?;
+            client.exp_string(wallet_result)?;
+    }
+
+    for (tx_args, tx_result) in &txs_args {
+        for &dry_run in &[false] {
+            let tx_args = if dry_run && tx_args[0] == "transfer" {
+                vec![tx_args.clone(), vec!["--dry-run"]].concat()
+            } else {
+                tx_args.clone()
+            };
+            let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
+
+            if *tx_result == "Transaction is valid" && !dry_run {
+                if !cfg!(feature = "ABCI") {
+                    client.exp_string("Transaction accepted")?;
+                }
+                client.exp_string("Transaction applied")?;
+            }
+            client.exp_string(tx_result)?;
+        }
+    }
+
+    let mut wallet_cmd = run!(test, Bin::Wallet, vec!["address", "find", "--alias", ALBERT], Some(300))?;
+    let wallet_output = wallet_cmd.exp_regex(r"Found address Established: .*")?;
+    let albert_address = &wallet_output.1[27..wallet_output.1.len()-1];
+
+    let mut client = run!(test, Bin::Client, vec!["show-transfers", "--ledger-address", &validator_one_rpc], Some(300))?;
+    client.exp_string(&format!("{}: -20 BTC", albert_address))?;
+    client.exp_string(&format!("{}: +20 BTC", AA_VIEWING_KEY))?;
+    client.exp_string(&format!("{}: -7 BTC", AA_VIEWING_KEY))?;
+    client.exp_string(&format!("{}: +7 BTC", AB_VIEWING_KEY))?;
+    client.exp_string(&format!("{}: +5 BTC", AC_VIEWING_KEY))?;
+    client.exp_string(&format!("{}: -5 BTC", AB_VIEWING_KEY))?;
+    Ok(())
+}
+
 /// In this test we:
 /// 1. Run the ledger node
 /// 2. Attempt to spend 10 BTC at SK(A) to PA(B)
@@ -870,7 +1038,7 @@ fn masp_incentives() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: 240,
+                min_duration: 60,
                 ..genesis.parameters
             };
             GenesisConfig {

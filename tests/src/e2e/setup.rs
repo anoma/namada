@@ -788,7 +788,7 @@ pub mod constants {
     pub const C_SPENDING_KEY: &str = "xsktest1qqqqqqqqqqqqqq8cxw3ef0fardt9wq0aqeh29wwljyctw39q4j2t5kmwu6c8x2hfwftnwm6pxtmzyyawm3kruxvk2fdgey90pv3jj9ffvdkxq5vmew5s495qwfyrerrwhxcmx6dl08xh7t36fnn99cdkmsefdv3p3cvw7cq8f4y37q0kh60pdsm6vfkgft2thpu6t9y6ucn68aerump87dgv864yfrxg5529kek99uhzheqajyfrynvsm70v44vsxj2pq5x0wwudryg6zznrz";
     // A viewing key derived from C_SPENDING_KEY
     pub const AC_VIEWING_KEY: &str = "xfvktest1qqqqqqqqqqqqqq8cxw3ef0fardt9wq0aqeh29wwljyctw39q4j2t5kmwu6c8x2hfwtlqw4tv6u0me086mffgk9mutyarawfl9mpgjg320fn5jhyes4fmjauwa0yj4gqpg3clnqck5w8xa5svdzm2ngyex4tvpvr7e4t7tcx3f4y37q0kh60pdsm6vfkgft2thpu6t9y6ucn68aerump87dgv864yfrxg5529kek99uhzheqajyfrynvsm70v44vsxj2pq5x0wwudrygd9jdpk";
-    // A viewing key derived from C_VIEWING_KEY
+    // A payment address derived from C_VIEWING_KEY
     pub const AC_PAYMENT_ADDRESS: &str = "ppatest1rjs986uryqf6qf7v0yrkgmn0kds857xkehk6cd6e8xlqpujsqx69gh08n7m77yxw2emsylq9wx2";
 
     //  Native VP aliases
