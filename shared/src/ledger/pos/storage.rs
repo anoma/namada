@@ -32,14 +32,16 @@ const SLASHES_PREFIX: &str = "slash";
 const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
-const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
-const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
-const CURRENT_BLOCK_PROPOSER_STORAGE_KEY: &str = "current_block_proposer";
-const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
-    "reward_accumulator";
 const VALIDATOR_SET_STORAGE_PREFIX: &str = "validator_set";
 const CONSENSUS_VALIDATOR_SET_STORAGE_PREFIX: &str = "consensus";
 const CONSENSUS_VALIDATOR_SET_STORAGE_KEY: &str = "set";
+const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
+    "reward_accumulator";
+const BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY: &str = "below_capacity";
+const BELOW_THRESHOLD_VALIDATOR_SET_STORAGE_KEY: &str = "below_threshold";
+const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
+const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
+const CURRENT_BLOCK_PROPOSER_STORAGE_KEY: &str = "current_block_proposer";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -290,7 +292,7 @@ pub fn validator_deltas_key(validator: &Address) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for validator's total deltas?
+/// Is storage key for validator's deltas?
 pub fn is_validator_deltas_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
         [
@@ -305,6 +307,25 @@ pub fn is_validator_deltas_key(key: &Key) -> Option<&Address> {
             Some(validator)
         }
         _ => None,
+    }
+}
+
+/// Storage key for validator's deltas.
+pub fn total_deltas_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&TOTAL_DELTAS_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for total deltas of all validators?
+pub fn is_total_deltas_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
+            if addr == &ADDRESS && key == TOTAL_DELTAS_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
     }
 }
 
@@ -448,18 +469,92 @@ pub fn consensus_validator_set_key() -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Storage key for total deltas of all validators.
-pub fn total_deltas_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&TOTAL_DELTAS_STORAGE_KEY.to_owned())
+/// Is storage key for the consensus validator set?
+pub fn is_consensus_validator_set_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(set),
+            DbKeySeg::StringSeg(field),
+        ] if addr == &ADDRESS
+            && key == VALIDATOR_SET_STORAGE_KEY
+            && set == CONSENSUS_VALIDATOR_SET_STORAGE_PREFIX
+            && field == CONSENSUS_VALIDATOR_SET_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Storage key for the consensus validator set rewards accumulator.
+pub fn consensus_validator_set_accumulator_key() -> Key {
+    consensus_validator_set_prefix()
+        .push(&CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for total deltas of all validators?
-pub fn is_total_deltas_key(key: &Key) -> bool {
+/// Is storage key for the consensus validator set?
+pub fn is_consensus_validator_set_accumulator_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if addr == &ADDRESS && key == TOTAL_DELTAS_STORAGE_KEY =>
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(set),
+            DbKeySeg::StringSeg(field),
+        ] if addr == &ADDRESS
+            && key == VALIDATOR_SET_STORAGE_PREFIX
+            && set == CONSENSUS_VALIDATOR_SET_STORAGE_PREFIX
+            && field == CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Storage key for the below capacity validator set
+pub fn below_capacity_validator_set_key() -> Key {
+    validator_set_prefix()
+        .push(&BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for the below capacity validator set?
+pub fn is_below_capacity_validator_set_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(set),
+        ] if addr == &ADDRESS
+            && key == VALIDATOR_SET_STORAGE_PREFIX
+            && set == BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Storage key for the below threshold validator set
+pub fn below_threshold_validator_set_key() -> Key {
+    validator_set_prefix()
+        .push(&BELOW_THRESHOLD_VALIDATOR_SET_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for the below threshold validator set?
+pub fn is_below_threshold_validator_set_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(set),
+        ] if addr == &ADDRESS
+            && key == VALIDATOR_SET_STORAGE_PREFIX
+            && set == BELOW_THRESHOLD_VALIDATOR_SET_STORAGE_KEY =>
         {
             true
         }
@@ -499,32 +594,6 @@ pub fn is_current_block_proposer_key(key: &Key) -> bool {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if addr == &ADDRESS
                 && key == CURRENT_BLOCK_PROPOSER_STORAGE_KEY =>
-        {
-            true
-        }
-        _ => false,
-    }
-}
-
-/// Storage key for the consensus validator set rewards accumulator.
-pub fn consensus_validator_set_accumulator_key() -> Key {
-    consensus_validator_set_prefix()
-        .push(&CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for the consensus validator set?
-pub fn is_consensus_validator_set_accumulator_key(key: &Key) -> bool {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(key),
-            DbKeySeg::StringSeg(set),
-            DbKeySeg::StringSeg(field),
-        ] if addr == &ADDRESS
-            && key == VALIDATOR_SET_STORAGE_PREFIX
-            && set == CONSENSUS_VALIDATOR_SET_STORAGE_PREFIX
-            && field == CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY =>
         {
             true
         }
