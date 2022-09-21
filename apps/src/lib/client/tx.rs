@@ -522,7 +522,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
     let signer = WalletAddress::new(proposal.clone().author.to_string());
-    let goverance_parameters = rpc::get_governance_parameters(&client).await;
+    let governance_parameters = rpc::get_governance_parameters(&client).await;
     let current_epoch = rpc::query_epoch(args::Query {
         ledger_address: args.tx.ledger_address.clone(),
     })
@@ -530,14 +530,14 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
 
     if proposal.voting_start_epoch <= current_epoch
         || proposal.voting_start_epoch.0
-            % goverance_parameters.min_proposal_period
+            % governance_parameters.min_proposal_period
             != 0
     {
         println!("{}", proposal.voting_start_epoch <= current_epoch);
         println!(
             "{}",
             proposal.voting_start_epoch.0
-                % goverance_parameters.min_proposal_period
+                % governance_parameters.min_proposal_period
                 == 0
         );
         eprintln!(
@@ -545,34 +545,37 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
              epoch {} and a multiple of {}",
             proposal.voting_start_epoch,
             current_epoch,
-            goverance_parameters.min_proposal_period
+            governance_parameters.min_proposal_period
         );
         if !args.tx.force {
             safe_exit(1)
         }
     } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
         || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-            < goverance_parameters.min_proposal_period
+            < governance_parameters.min_proposal_period
+        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
+            > governance_parameters.max_proposal_period
         || proposal.voting_end_epoch.0 % 3 != 0
     {
         eprintln!(
             "Invalid proposal end epoch: difference between proposal start \
-             and end epoch must be at least {} and end epoch must be a \
-             multiple of {}",
-            goverance_parameters.min_proposal_period,
-            goverance_parameters.min_proposal_period
+             and end epoch must be at least {} and at max {} and end epoch must \
+             be a multiple of {}",
+            governance_parameters.min_proposal_period,
+            governance_parameters.max_proposal_period,
+            governance_parameters.min_proposal_period
         );
         if !args.tx.force {
             safe_exit(1)
         }
     } else if proposal.grace_epoch <= proposal.voting_end_epoch
         || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
-            < goverance_parameters.min_proposal_grace_epochs
+            < governance_parameters.min_proposal_grace_epochs
     {
         eprintln!(
             "Invalid proposal grace epoch: difference between proposal grace \
              and end epoch must be at least {}",
-            goverance_parameters.min_proposal_grace_epochs
+            governance_parameters.min_proposal_grace_epochs
         );
         if !args.tx.force {
             safe_exit(1)
@@ -619,7 +622,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
             .await
             .unwrap_or_default();
-        if balance < token::Amount::from(goverance_parameters.min_proposal_fund)
+        if balance < token::Amount::from(governance_parameters.min_proposal_fund)
         {
             eprintln!(
                 "Address {} doesn't have enough funds.",
@@ -629,7 +632,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         }
 
         if init_proposal_data.content.len()
-            > goverance_parameters.max_proposal_content_size as usize
+            > governance_parameters.max_proposal_content_size as usize
         {
             eprintln!("Proposal content size too big.",);
             safe_exit(1);

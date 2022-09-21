@@ -263,12 +263,16 @@ where
     let min_period_parameter_key = gov_storage::get_min_proposal_period_key();
     let min_period: Option<u64> =
         read(ctx, &min_period_parameter_key, ReadType::PRE).ok();
+    let max_period_parameter_key = gov_storage::get_max_proposal_period_key();
+    let max_period: Option<u64> =
+        read(ctx, &max_period_parameter_key, ReadType::PRE).ok();
     let has_pre_start_epoch = ctx.has_key_pre(&start_epoch_key).ok();
     let has_pre_end_epoch = ctx.has_key_pre(&end_epoch_key).ok();
     match (
         has_pre_start_epoch,
         has_pre_end_epoch,
         min_period,
+        max_period,
         start_epoch,
         end_epoch,
         current_epoch,
@@ -277,6 +281,7 @@ where
             Some(has_pre_start_epoch),
             Some(has_pre_end_epoch),
             Some(min_period),
+            Some(max_period),
             Some(start_epoch),
             Some(end_epoch),
             Some(current_epoch),
@@ -288,6 +293,7 @@ where
                 && !has_pre_end_epoch
                 && (end_epoch - start_epoch) % min_period == 0
                 && (end_epoch - start_epoch).0 >= min_period
+                && (end_epoch - start_epoch).0 <= max_period
         }
         _ => false,
     }
