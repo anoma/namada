@@ -155,9 +155,9 @@ max_validator_slots = 128
 pipeline_len = 2
 # Unbonding length (in epochs). Validators may have their stake slashed
 # for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
-unbonding_len = 6
-# Votes per token
-votes_per_token = 0.001
+unbonding_len = 21
+# Votes per fundamental staking token (namnam)
+tm_votes_per_token = 1
 # Reward for proposing a block.
 block_proposer_reward = 100
 # Reward for voting on a block.
@@ -166,10 +166,10 @@ block_vote_reward = 1
 max_inflation_rate = 0.1
 # Portion of a validator's stake that should be slashed on a duplicate
 # vote.
-duplicate_vote_slash_rate = 0.05
+duplicate_vote_slash_rate = 0.001
 # Portion of a validator's stake that should be slashed on a light
 # client attack.
-light_client_attack_slash_rate = 0.05
+light_client_attack_slash_rate = 0.001
 
 # Governance parameters.
 [gov_params]
