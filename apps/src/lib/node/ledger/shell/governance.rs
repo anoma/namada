@@ -39,27 +39,26 @@ where
 
     for id in std::mem::take(&mut shell.proposal_data) {
         let proposal_funds_key = gov_storage::get_funds_key(id);
-        let proposal_start_epoch_key =
-            gov_storage::get_voting_start_epoch_key(id);
+        let proposal_end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
 
         let funds = shell
             .read_storage_key::<token::Amount>(&proposal_funds_key)
             .ok_or_else(|| {
                 Error::BadProposal(id, "Invalid proposal funds.".to_string())
             })?;
-        let proposal_start_epoch = shell
-            .read_storage_key::<Epoch>(&proposal_start_epoch_key)
+        let proposal_end_epoch = shell
+            .read_storage_key::<Epoch>(&proposal_end_epoch_key)
             .ok_or_else(|| {
                 Error::BadProposal(
                     id,
-                    "Invalid proposal start_epoch.".to_string(),
+                    "Invalid proposal end_epoch.".to_string(),
                 )
             })?;
 
         let votes =
-            get_proposal_votes(&shell.storage, proposal_start_epoch, id);
+            get_proposal_votes(&shell.storage, proposal_end_epoch, id);
         let tally_result =
-            compute_tally(&shell.storage, proposal_start_epoch, votes);
+            compute_tally(&shell.storage, proposal_end_epoch, votes);
 
         let transfer_address = match tally_result {
             TallyResult::Passed => {
