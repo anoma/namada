@@ -1,10 +1,10 @@
 # PoS integration
 
-The [PoS system](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html) is integrated into Namada ledger at 3 different layers:
+The [PoS system](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html) is integrated into the Namada ledger at 3 different layers:
 
-- base ledger that performs genesis initialization, validator set updates on new epoch and applies slashes when they are received from ABCI
+- a base ledger that performs the genesis initialization, validator set updates on a new epoch, and applies slashes when they are received from ABCI
 - an account with an internal address and a [native VP](vp.md#native-vps) that validates any changes applied by transactions to the PoS account state
-- transaction WASMs to perform various PoS actions, also available as a library code for custom made transactions
+- transaction WASMs that perform various PoS actions, also available as a library code for custom made transactions
 
 The `votes_per_token` PoS system parameter must be chosen to satisfy the [Tendermint requirement](https://github.com/tendermint/spec/blob/60395941214439339cc60040944c67893b5f8145/spec/abci/apps.md#validator-updates) of `MaxTotalVotingPower = MaxInt64 / 8`.
 
@@ -14,7 +14,7 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
 - for any validator, all the following fields are required:
   - `validator/{validator_address}/consensus_key`
   - `validator/{validator_address}/state`
-  - `validator/{validator_address}/deltas`: the change in the amount of self-bonds and delegations to this validator per epoch, may contain negative delta values when unbonding
+  - `validator/{validator_address}/deltas`: the change in the amount of self-bonds and delegations to this validator per epoch, may contain negative delta values due to unbonding
   - `validator/{validator_address}/total_unbonded`: sum of unbonded bonds from this validator, needed to determine the amount slashed in each epoch that it affects when a slash is applied
   - `validator/{validator_address}/validator_rewards_product`: a rewards product that is used to find the updated amount for self-bonds with staking rewards added to this validator - the past epoched data has to be kept indefinitely
   - `validator/{validator_address}/delegation_rewards_product`: similar to `validator_rewards_product`, but for delegations with commissions subtracted - the past epoched data also has to be kept indefinitely
@@ -24,8 +24,8 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
 - `slash/{validator_address}` (optional): a list of slashes, where each record contains epoch and slash rate
 - `bond/{bond_source}/{bond_validator} (optional)`
 - `unbond/{unbond_source}/{unbond_validator} (optional)`
-- `validator_set/consensus (required)`: up to `max_validator_slots` (parameter) validators, ordered by their voting power
-- `validator_set/below_capacity (required)`: validators below consensus capacity, but above the `min_validator_stake` parameter, also ordered by their voting power
+- `validator_set/consensus (required)`: the set of up to `max_validator_slots` (parameter) validators, ordered by their bonded stake
+- `validator_set/below_capacity (required)`: the set of validators below consensus capacity, but with bonded stake above the `min_validator_stake` parameter, also ordered by their bonded stake
 - `total_deltas (required)`
 
 - standard validator metadata (these are regular storage values, not epoched data):
@@ -59,8 +59,8 @@ The validator transactions are assumed to be applied with an account address `va
 - `reactivate`:
   - sets `validator/{validator_address}/state` to `candidate` in epoch `n + pipeline_length`
 - `self_bond(amount)`:
-  - let `bond = read(bond/{validator_address}/{validator_address}/delta)`
-  - if `bond` exist, update it with the new bond amount in epoch `n + pipeline_length`
+  - let `bond = read(bond/{validator_address}/{validator_address}/deltas)`
+  - if `bond` exists, update it with the new bond amount in epoch `n + pipeline_length`
   - else, create a new record with bond amount in epoch `n + pipeline_length`
   - debit the token `amount` from the `validator_address` and credit it to the PoS account
   - add the `amount` to `validator/{validator_address}/deltas` in epoch `n + pipeline_length`
@@ -136,15 +136,14 @@ For `delegate`, `undelegate`, `redelegate` and `withdraw_unbonds` the transactio
 Evidence for byzantine behaviour is received from Tendermint ABCI on `BeginBlock`. For each evidence:
 
 - append the `evidence` into `slash/{evidence.validator_address}`
-- calculate the slashed amount from deltas in and before the `evidence.epoch` in `validator/{validator_address}/total_deltas` for the `evidence.validator_address` and the slash rate
-- deduct the slashed amount from the `validator/{validator_address}/total_deltas` at `pipeline_length` offset
-- update the `validator/{validator_address}/voting_power` for the `evidence.validator_address` in and after epoch `n + pipeline_length`
-- update the `total_voting_power` in and after epoch `n + pipeline_length`
+- calculate the slashed amount from the deltas in and before the `evidence.epoch` in `validator/{validator_address}/deltas` for the `evidence.validator_address` and the slash rate
+- deduct the slashed amount from the `validator/{validator_address}/deltas` at epoch `n + pipeline_length`
+- update the `total_deltas` in epoch `n + pipeline_length`
 - update `validator_set` in and after epoch `n + pipeline_length`
 
 ## Validity predicate
 
-In the following description, "pre-state" is the state prior to transaction execution and "post-state" is the state posterior to it.
+In the following description, "pre-state" is the state prior to transaction execution and "post-state" is the state after execution.
 
 Any changes to PoS epoched data are checked to update the structure as described in [epoched data storage](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html#storage).
 
@@ -153,7 +152,7 @@ Because some key changes are expected to relate to others, the VP also accumulat
 - `balance_delta: token::Change`
 - `bond_delta: HashMap<Address, token::Change>`
 - `unbond_delta: HashMap<Address, token::Change>`
-- `total_deltas: HashMap<Address, token::Change>`
+- `validator_deltas: HashMap<Address, token::Change>`
 - `total_stake_by_epoch: HashMap<Epoch, HashMap<Address, token::Amount>>`
 - `expected_voting_power_by_epoch: HashMap<Epoch, HashMap<Address, VotingPower>>`: calculated from the validator's total deltas
 - `expected_total_voting_power_delta_by_epoch: HashMap<Epoch, VotingPowerDelta>`: calculated from the validator's total deltas
@@ -207,10 +206,8 @@ The validity predicate triggers a validation logic based on the storage keys mod
   }
   ```
 
-- `validator/{validator_address}/total_deltas`:
+- `validator/{validator_address}/deltas`:
   - find the difference between the pre-state and post-state values and add it to the `total_deltas` accumulator and update `total_stake_by_epoch`, `expected_voting_power_by_epoch` and `expected_total_voting_power_delta_by_epoch`
-- `validator/{validator_address}/voting_power`:
-  - find the difference between the pre-state and post-state value and insert it into the `voting_power_by_epoch` accumulator
 - `validator/{validator_address}/validator_rewards_product`: cannot be changed by a transaction, updated by the protocol
 - `validator/{validator_address}/delegation_rewards_product`: cannot be changed by a transaction, updated by the protocol
 - `validator/{validator_address}/commissions`: cannot be changed by a transaction, updated by the protocol
