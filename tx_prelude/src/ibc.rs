@@ -62,7 +62,7 @@ impl IbcActions for Ctx {
         token: &Address,
         amount: Amount,
     ) -> std::result::Result<(), Self::Error> {
-        transfer(self, src, dest, token, amount)?;
+        transfer(self, src, dest, token, None, amount)?;
         Ok(())
     }
 

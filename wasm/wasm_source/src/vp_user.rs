@@ -34,6 +34,10 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some(address) = token::is_any_token_balance_key(key) {
             Self::Token(address)
+        } else if let Some((_, address)) =
+            token::is_any_multitoken_balance_key(key)
+        {
+            Self::Token(address)
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
         } else if let Some(address) = intent::is_invalid_intent_key(key) {
@@ -432,6 +436,7 @@ mod tests {
                 &source,
                 address,
                 &token,
+                None,
                 amount,
             )
             .unwrap();
@@ -475,6 +480,7 @@ mod tests {
                 address,
                 &target,
                 &token,
+                None,
                 amount,
             )
             .unwrap();
@@ -522,6 +528,7 @@ mod tests {
                 address,
                 &target,
                 &token,
+                None,
                 amount,
             )
             .unwrap();
@@ -570,6 +577,7 @@ mod tests {
                 &source,
                 &target,
                 &token,
+                None,
                 amount,
             )
             .unwrap();

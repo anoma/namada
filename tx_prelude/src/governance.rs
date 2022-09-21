@@ -60,6 +60,7 @@ pub fn init_proposal(ctx: &mut Ctx, data: InitProposalData) -> TxResult {
         &data.author,
         &governance_address,
         &m1t(),
+        None,
         min_proposal_funds,
     )
 }

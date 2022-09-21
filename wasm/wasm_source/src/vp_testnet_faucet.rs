@@ -149,6 +149,7 @@ mod tests {
                 &source,
                 address,
                 &token,
+                None,
                 amount,
             )
             .unwrap();
@@ -279,7 +280,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
         // Apply transfer in a transaction
-        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, amount).unwrap();
+        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount).unwrap();
         });
 
         let vp_env = vp_host_env::take();
@@ -312,7 +313,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
         // Apply transfer in a transaction
-        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, amount).unwrap();
+        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount).unwrap();
         });
 
         let vp_env = vp_host_env::take();

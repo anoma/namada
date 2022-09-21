@@ -20,7 +20,12 @@ pub fn vp(
 ) -> VpResult {
     let mut change: Change = 0;
     for key in keys_changed.iter() {
-        match token::is_balance_key(token, key) {
+        let owner: Option<&Address> =
+            match token::is_multitoken_balance_key(token, key) {
+                Some((_, o)) => Some(o),
+                None => token::is_balance_key(token, key),
+            };
+        match owner {
             None => {
                 // Unknown changes to this address space are disallowed, but
                 // unknown changes anywhere else are permitted

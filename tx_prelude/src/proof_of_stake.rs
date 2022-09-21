@@ -260,6 +260,6 @@ impl namada_proof_of_stake::PosActions for Ctx {
         src: &Self::Address,
         dest: &Self::Address,
     ) -> Result<(), Self::Error> {
-        crate::token::transfer(self, src, dest, token, amount)
+        crate::token::transfer(self, src, dest, token, None, amount)
     }
 }

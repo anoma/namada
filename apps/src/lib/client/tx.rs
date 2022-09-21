@@ -22,7 +22,7 @@ use namada::types::transaction::governance::{
 };
 use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use namada::types::{address, token};
+use namada::types::{address, storage, token};
 use namada::{ledger, vm};
 use tendermint_config::net::Address as TendermintAddress;
 use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -410,7 +410,17 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         }
     }
     // Check source balance
-    let balance_key = token::balance_key(&token, &source);
+    let (sub_prefix, balance_key) = match args.sub_prefix {
+        Some(sub_prefix) => {
+            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
+            (
+                Some(sub_prefix),
+                token::multitoken_balance_key(&prefix, &source),
+            )
+        }
+        None => (None, token::balance_key(&token, &source)),
+    };
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
@@ -442,6 +452,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         source,
         target,
         token,
+        sub_prefix,
         amount: args.amount,
     };
     tracing::debug!("Transfer data {:?}", transfer);

@@ -19,10 +19,11 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         source,
         target,
         token,
+        sub_prefix,
         amount,
     } in tx_data.matches.transfers
     {
-        token::transfer(ctx, &source, &target, &token, amount)?;
+        token::transfer(ctx, &source, &target, &token, sub_prefix, amount)?;
     }
 
     for intent in tx_data.matches.exchanges.values() {
