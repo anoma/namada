@@ -112,6 +112,10 @@ pub struct GenesisValidator<Address, Token, PK> {
     pub tokens: Token,
     /// A public key used for signing validator's consensus actions
     pub consensus_key: PK,
+    /// Commission rate charged on rewards for delegators (bounded inside 0-1)
+    pub commission_rate: Decimal,
+    /// Maximum change in commission rate permitted per epoch
+    pub max_commission_rate_change: Decimal,
 }
 
 /// An update of the active and inactive validator set.
