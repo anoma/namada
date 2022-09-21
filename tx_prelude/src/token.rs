@@ -1,4 +1,3 @@
-use namada::ledger::storage_api::ResultExt;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::token;
 pub use namada::types::token::*;
@@ -121,13 +120,13 @@ pub fn transfer_with_keys(
     dest_bal.receive(&amount);
     match src_owner {
         Some(Address::Internal(InternalAddress::IbcMint)) => {
-            ctx.write_temp(src_key, src_bal).into_storage_result()?
+            ctx.write_temp(src_key, src_bal)?;
         }
         _ => ctx.write(src_key, src_bal)?,
     }
     match dest_owner {
         Some(Address::Internal(InternalAddress::IbcBurn)) => {
-            ctx.write_temp(dest_key, dest_bal).into_storage_result()?
+            ctx.write_temp(dest_key, dest_bal)?;
         }
         _ => ctx.write(dest_key, dest_bal)?,
     }

@@ -4,7 +4,7 @@
 mod error;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-pub use error::{CustomError, Error, Result, ResultExt};
+pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 
 use crate::types::storage::{self, BlockHash, BlockHeight, Epoch};
 
