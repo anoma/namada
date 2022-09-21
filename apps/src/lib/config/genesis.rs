@@ -185,6 +185,11 @@ pub mod genesis_config {
         /// Tendermint node key is used to derive Tendermint node ID for node
         /// authentication
         pub tendermint_node_key: Option<HexString>,
+        /// Commission rate charged on rewards for delegators (bounded inside
+        /// 0-1)
+        pub commission_rate: Option<Decimal>,
+        /// Maximum change in commission rate permitted per epoch
+        pub max_commission_rate_change: Option<Decimal>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -319,6 +324,29 @@ pub mod genesis_config {
                     .unwrap()
                     .to_public_key()
                     .unwrap(),
+                commission_rate: config
+                    .commission_rate
+                    .and_then(|rate| {
+                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
+                            Some(rate)
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("Commission rate must be between 0.0 and 1.0"),
+                max_commission_rate_change: config
+                    .max_commission_rate_change
+                    .and_then(|rate| {
+                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
+                            Some(rate)
+                        } else {
+                            None
+                        }
+                    })
+                    .expect(
+                        "Max commission rate change must be between 0.0 and \
+                         1.0",
+                    ),
             },
             account_key: config
                 .account_public_key
@@ -778,6 +806,8 @@ pub fn genesis() -> Genesis {
             tokens: token::Amount::whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
             staking_reward_key: staking_reward_keypair.ref_to(),
+            commission_rate: dec!(0.05),
+            max_commission_rate_change: dec!(0.01),
         },
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),

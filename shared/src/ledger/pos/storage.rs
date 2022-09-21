@@ -22,6 +22,9 @@ const VALIDATOR_STAKING_REWARD_ADDRESS_STORAGE_KEY: &str =
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
 const VALIDATOR_DELTAS_STORAGE_KEY: &str = "validator_deltas";
+const VALIDATOR_COMMISSION_RATE_STORAGE_KEY: &str = "commission_rate";
+const VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY: &str =
+    "max_commission_rate_change";
 const SLASHES_PREFIX: &str = "slash";
 const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
@@ -108,6 +111,58 @@ pub fn is_validator_staking_reward_address_key(key: &Key) -> Option<&Address> {
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
             && key == VALIDATOR_STAKING_REWARD_ADDRESS_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Storage key for validator's commission rate.
+pub fn validator_commission_rate_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_COMMISSION_RATE_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's commissionr ate?
+pub fn is_validator_commission_rate_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_COMMISSION_RATE_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Storage key for validator's maximum commission rate change per epoch.
+pub fn validator_max_commission_rate_change_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's maximum commission rate change per epoch?
+pub fn is_validator_max_commission_rate_change_key(
+    key: &Key,
+) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY =>
         {
             Some(validator)
         }
@@ -426,6 +481,23 @@ where
             .unwrap_or_default()
     }
 
+    fn read_validator_commission_rate(
+        &self,
+        key: &Self::Address,
+    ) -> rust_decimal::Decimal {
+        let (value, _gas) =
+            self.read(&validator_commission_rate_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap()).unwrap()
+    }
+
+    fn read_validator_max_commission_rate_change(
+        &self,
+        key: &Self::Address,
+    ) -> rust_decimal::Decimal {
+        let (value, _gas) =
+            self.read(&validator_commission_rate_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap()).unwrap()
+    }
     fn read_validator_set(&self) -> ValidatorSets {
         let (value, _gas) = self.read(&validator_set_key()).unwrap();
         decode(value.unwrap()).unwrap()
@@ -463,6 +535,24 @@ where
         self.write(&validator_staking_reward_address_key(key), encode(value))
             .unwrap();
     }
+
+    fn write_validator_commission_rate(
+            &mut self,
+            key: &Self::Address,
+            value: &rust_decimal::Decimal,
+        ) {
+        self.write(&validator_commission_rate_key(key), encode(value))
+            .unwrap();
+    }
+
+    fn write_validator_max_commission_rate_change(
+        &mut self,
+        key: &Self::Address,
+        value: &rust_decimal::Decimal,
+    ) {
+    self.write(&validator_max_commission_rate_change_key(key), encode(value))
+        .unwrap();
+}
 
     fn write_validator_consensus_key(
         &mut self,

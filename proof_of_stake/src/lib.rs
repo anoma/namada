@@ -596,6 +596,13 @@ pub trait PosBase {
 
     /// Read PoS slashes applied to a validator.
     fn read_validator_slashes(&self, key: &Self::Address) -> Slashes;
+    /// Read PoS validator's commission rate
+    fn read_validator_commission_rate(&self, key: &Self::Address) -> Decimal;
+    /// Read PoS validator's maximum commission rate change per epoch
+    fn read_validator_max_commission_rate_change(
+        &self,
+        key: &Self::Address,
+    ) -> Decimal;
     /// Read PoS validator set (active and inactive).
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
 
@@ -639,7 +646,18 @@ pub trait PosBase {
         key: &Self::Address,
         value: &ValidatorDeltas<Self::TokenChange>,
     );
-
+    /// Write PoS validator's commission rate.
+    fn write_validator_commission_rate(
+        &mut self,
+        key: &Self::Address,
+        value: &Decimal,
+    );
+    /// Write PoS validator's commission rate.
+    fn write_validator_max_commission_rate_change(
+        &mut self,
+        key: &Self::Address,
+        value: &Decimal,
+    );
     /// Write (append) PoS slash applied to a validator.
     fn write_validator_slash(
         &mut self,
@@ -715,6 +733,8 @@ pub trait PosBase {
                 staking_reward_address,
                 consensus_key,
                 staking_reward_key,
+                commission_rate,
+                max_commission_rate_change,
                 state,
                 deltas,
                 bond: (bond_id, bond),
@@ -736,6 +756,11 @@ pub trait PosBase {
             self.init_staking_reward_account(
                 &staking_reward_address,
                 &staking_reward_key,
+            );
+            self.write_validator_commission_rate(address, &commission_rate);
+            self.write_validator_max_commission_rate_change(
+                address,
+                &max_commission_rate_change,
             );
         }
         self.write_validator_set(&validator_set);
@@ -1196,6 +1221,8 @@ where
     staking_reward_address: Address,
     consensus_key: ValidatorConsensusKeys<PK>,
     staking_reward_key: PK,
+    commission_rate: Decimal,
+    max_commission_rate_change: Decimal,
     state: ValidatorStates,
     deltas: ValidatorDeltas<TokenChange>,
     bond: (BondId<Address>, Bonds<TokenAmount>),
@@ -1300,6 +1327,8 @@ where
                   tokens,
                   consensus_key,
                   staking_reward_key,
+                  commission_rate,
+                  max_commission_rate_change,
               }| {
             let consensus_key =
                 Epoched::init_at_genesis(consensus_key.clone(), current_epoch);
@@ -1328,6 +1357,8 @@ where
                 staking_reward_address: staking_reward_address.clone(),
                 consensus_key,
                 staking_reward_key: staking_reward_key.clone(),
+                commission_rate: commission_rate.clone(),
+                max_commission_rate_change: max_commission_rate_change.clone(),
                 state,
                 deltas,
                 bond: (bond_id, bond),
