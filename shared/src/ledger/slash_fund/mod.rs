@@ -1,8 +1,7 @@
 //! SlashFund VP
 
 use std::collections::BTreeSet;
-/// SlashFund parameters
-pub mod parameters;
+
 /// SlashFund storage
 pub mod storage;
 
@@ -61,84 +60,15 @@ where
         let result = keys_changed.iter().all(|key| {
             let key_type: KeyType = key.into();
             match key_type {
-                KeyType::PARAMETER => {
-                    let proposal_id = u64::try_from_slice(tx_data).ok();
-                    match proposal_id {
-                        Some(id) => is_proposal_accepted(&self.ctx, id),
-                        _ => false,
-                    }
-                }
                 KeyType::BALANCE(addr) => {
-                    let proposal_id = u64::try_from_slice(tx_data).ok();
-                    if let Some(id) = proposal_id {
-                        if !is_proposal_accepted(&self.ctx, id) {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    };
-                    let is_max_funds_transfer_key =
-                    slash_fund_storage::get_max_transferable_fund_key();
-                    let balance_key = token::balance_key(&nam(), &ADDRESS);
-                    let max_transfer_amount =
-                        self.ctx.read_pre(&is_max_funds_transfer_key);
-                    let pre_balance = self.ctx.read_pre(&balance_key);
-                    let post_balance = self.ctx.read_post(&balance_key);
                     if addr.ne(&ADDRESS) {
                         return true;
                     }
-                    match (max_transfer_amount, pre_balance, post_balance) {
-                        (
-                            Ok(max_transfer_amount),
-                            Ok(pre_balance),
-                            Ok(post_balance),
-                        ) => {
-                            match (
-                                max_transfer_amount,
-                                pre_balance,
-                                post_balance,
-                            ) {
-                                (
-                                    Some(max_transfer_amount),
-                                    Some(pre_balance),
-                                    Some(post_balance),
-                                ) => {
-                                    let max_transfer_amount =
-                                        token::Amount::try_from_slice(
-                                            &max_transfer_amount[..],
-                                        )
-                                        .ok();
-                                    let pre_balance =
-                                        token::Amount::try_from_slice(
-                                            &pre_balance[..],
-                                        )
-                                        .ok();
-                                    let post_balance =
-                                        token::Amount::try_from_slice(
-                                            &post_balance[..],
-                                        )
-                                        .ok();
-                                    match (
-                                        max_transfer_amount,
-                                        pre_balance,
-                                        post_balance,
-                                    ) {
-                                        (
-                                            Some(max_transfer_amount),
-                                            Some(pre_balance),
-                                            Some(post_balance),
-                                        ) => {
-                                            post_balance > pre_balance
-                                                || (pre_balance - post_balance
-                                                    <= max_transfer_amount)
-                                        }
-                                        _ => false,
-                                    }
-                                }
-                                _ => false,
-                            }
-                        }
-                        _ => false,
+
+                    let proposal_id = u64::try_from_slice(tx_data).ok();
+                    match proposal_id {
+                        Some(id) => is_proposal_accepted(&self.ctx, id),
+                        None => false,
                     }
                 }
                 KeyType::UNKNOWN_SLASH_FUND => false,
@@ -154,8 +84,6 @@ enum KeyType {
     #[allow(clippy::upper_case_acronyms)]
     BALANCE(Address),
     #[allow(clippy::upper_case_acronyms)]
-    PARAMETER,
-    #[allow(clippy::upper_case_acronyms)]
     #[allow(non_camel_case_types)]
     UNKNOWN_SLASH_FUND,
     #[allow(clippy::upper_case_acronyms)]
@@ -164,9 +92,7 @@ enum KeyType {
 
 impl From<&Key> for KeyType {
     fn from(value: &Key) -> Self {
-        if slash_fund_storage::is_parameter_key(value) {
-            KeyType::PARAMETER
-        } else if slash_fund_storage::is_slash_fund_key(value) {
+        if slash_fund_storage::is_slash_fund_key(value) {
             KeyType::UNKNOWN_SLASH_FUND
         } else if token::is_any_token_balance_key(value).is_some() {
             match token::is_balance_key(&nam(), value) {

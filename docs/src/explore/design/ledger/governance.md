@@ -14,7 +14,6 @@ Also, it introduces some protocol parameters:
 - `min_proposal_period`
 - `max_proposal_content_size`
 - `min_proposal_grace_epochs`
-- `max_proposal_fund_transfer`
 
 ## On-chain proposals
 
@@ -26,7 +25,6 @@ On-chain proposals are created under the `governance_address` storage space and,
 /$GovernanceAddress/min_proposal_period: u64
 /$GovernanceAddress/max_proposal_content_size: u64
 /$GovernanceAddress/min_proposal_grace_epochs: u64
-/$GovernanceAddress/max_proposal_fund_transfer: u64
 ```
 
 In order to create a valid proposal, a transaction need to modify these storage keys:
