@@ -9,7 +9,6 @@ use derivative::Derivative;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::{GenesisValidator, PosParams};
-use namada::ledger::slash_fund::parameters::SlashFundParams;
 use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
@@ -31,7 +30,6 @@ pub mod genesis_config {
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::pos::types::BasisPoints;
     use namada::ledger::pos::{GenesisValidator, PosParams};
-    use namada::ledger::slash_fund::parameters::SlashFundParams;
     use namada::types::address::Address;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
@@ -119,8 +117,6 @@ pub mod genesis_config {
         pub pos_params: PosParamsConfig,
         // Governance parameters
         pub gov_params: GovernanceParamsConfig,
-        // Slash Fund parameters
-        pub slash_fund_params: SlashFundParamasConfig,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }
@@ -142,13 +138,6 @@ pub mod genesis_config {
         // Minimum number of epoch between end and grace epoch
         // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_grace_epochs: u64,
-    }
-
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct SlashFundParamasConfig {
-        // Maximum funds that can be moved from slash fund in a single transfer
-        // XXX: u64 doesn't work with toml-rs!
-        pub max_proposal_fund_transfer: u64,
     }
 
     /// Validator pre-genesis configuration can be created with client utils
@@ -558,10 +547,6 @@ pub mod genesis_config {
                 .min_proposal_grace_epochs,
         };
 
-        let slash_fund_params = SlashFundParams {
-            max_proposal_fund_transfer: 10_000,
-        };
-
         let pos_params = PosParams {
             max_validator_slots: config.pos_params.max_validator_slots,
             pipeline_len: config.pos_params.pipeline_len,
@@ -588,7 +573,6 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
-            slash_fund_params,
         };
         genesis.init();
         genesis
@@ -623,7 +607,6 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
-    pub slash_fund_params: SlashFundParams,
 }
 
 impl Genesis {
@@ -859,7 +842,6 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
-        slash_fund_params: SlashFundParams::default(),
     }
 }
 
