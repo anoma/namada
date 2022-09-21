@@ -589,6 +589,13 @@ pub trait PosBase {
     ) -> Option<ValidatorVotingPowers>;
     /// Read PoS slashes applied to a validator.
     fn read_validator_slashes(&self, key: &Self::Address) -> Slashes;
+    /// Read PoS validator's commission rate
+    fn read_validator_commission_rate(&self, key: &Self::Address) -> Decimal;
+    /// Read PoS validator's maximum commission rate change per epoch
+    fn read_validator_max_commission_rate_change(
+        &self,
+        key: &Self::Address,
+    ) -> Decimal;
     /// Read PoS validator set (active and inactive).
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total voting power of all validators (active and inactive).
@@ -626,6 +633,18 @@ pub trait PosBase {
         &mut self,
         key: &Self::Address,
         value: &ValidatorVotingPowers,
+    );
+    /// Write PoS validator's commission rate.
+    fn write_validator_commission_rate(
+        &mut self,
+        key: &Self::Address,
+        value: &Decimal,
+    );
+    /// Write PoS validator's commission rate.
+    fn write_validator_max_commission_rate_change(
+        &mut self,
+        key: &Self::Address,
+        value: &Decimal,
     );
     /// Write (append) PoS slash applied to a validator.
     fn write_validator_slash(
@@ -691,6 +710,8 @@ pub trait PosBase {
             let GenesisValidatorData {
                 ref address,
                 consensus_key,
+                commission_rate,
+                max_commission_rate_change,
                 state,
                 total_deltas,
                 voting_power,
@@ -1053,6 +1074,8 @@ where
 {
     address: Address,
     consensus_key: ValidatorConsensusKeys<PK>,
+    commission_rate: Decimal,
+    max_commission_rate_change: Decimal,
     state: ValidatorStates,
     total_deltas: ValidatorTotalDeltas<TokenChange>,
     voting_power: ValidatorVotingPowers,
@@ -1153,6 +1176,8 @@ where
                   address,
                   tokens,
                   consensus_key,
+                  commission_rate,
+                  max_commission_rate_change,
               }| {
             let consensus_key =
                 Epoched::init_at_genesis(consensus_key.clone(), current_epoch);
@@ -1184,6 +1209,8 @@ where
             Ok(GenesisValidatorData {
                 address: address.clone(),
                 consensus_key,
+                commission_rate: commission_rate.clone(),
+                max_commission_rate_change: max_commission_rate_change.clone(),
                 state,
                 total_deltas,
                 voting_power,
