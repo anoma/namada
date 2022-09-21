@@ -5,7 +5,7 @@ use namada_vp_prelude::*;
 
 #[validity_predicate]
 fn validate_tx(
-    _tx_data: Vec<u8>,
+    tx_data: Vec<u8>,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
@@ -18,7 +18,7 @@ fn validate_tx(
         verifiers
     );
 
-    if !is_tx_whitelisted() {
+    if !is_valid_tx(&tx_data) {
         return false;
     }
 

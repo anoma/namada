@@ -40,7 +40,7 @@ fn validate_tx(
         _ => false,
     });
 
-    if !is_tx_whitelisted() {
+    if !is_valid_tx(&tx_data) {
         return false;
     }
 

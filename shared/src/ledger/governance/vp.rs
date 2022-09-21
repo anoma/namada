@@ -479,7 +479,7 @@ pub enum ReadType {
     POST,
 }
 
-/// Check if a proposal id is beign executed
+/// Check if a proposal id is being executed
 pub fn is_proposal_accepted<DB, H, CA>(
     context: &Ctx<DB, H, CA>,
     proposal_id: u64,
