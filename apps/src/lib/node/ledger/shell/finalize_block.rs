@@ -331,8 +331,8 @@ where
         });
     }
 
-    /// Calculate the new inflation rate, mint the new tokens to the PoS account, then update 
-    /// the reward products of the validators
+    /// Calculate the new inflation rate, mint the new tokens to the PoS
+    /// account, then update the reward products of the validators
     fn apply_inflation(
         &mut self,
         proposer_address: &Vec<u8>,
@@ -342,7 +342,7 @@ where
         let last_epoch = current_epoch - 1;
         // Get input values needed for the PD controller for PoS and MASP.
         // Run the PD controllers to calculate new rates.
-        // 
+        //
         // TODO:
         // Mint new tokens to POS address and update reward products
         //
@@ -370,8 +370,12 @@ where
             .read_storage_key(&total_supply_key(&staking_token_address()))
             .unwrap();
         let total_deltas = self.storage.read_total_deltas();
-        let pos_locked_supply = total_deltas.get(last_epoch).expect("maximum possible sum should fit within an i128");
-        let pos_locked_supply: Amount = u64::try_from(pos_locked_supply).expect("pos_locked_supply should be positive").into();
+        let pos_locked_supply = total_deltas
+            .get(last_epoch)
+            .expect("maximum possible sum should fit within an i128");
+        let pos_locked_supply: Amount = u64::try_from(pos_locked_supply)
+            .expect("pos_locked_supply should be positive")
+            .into();
         let pos_params = self.storage.read_pos_params();
         let pos_locked_ratio_target = pos_params.target_staked_ratio;
         let pos_max_inflation_rate = pos_params.max_inflation_rate;
@@ -465,7 +469,10 @@ where
         let native_proposer_address = self
             .storage
             .read_validator_address_raw_hash(tm_raw_hash_string)
-            .expect("Unable to find native validator address of block proposer from tendermint raw hash");
+            .expect(
+                "Unable to find native validator address of block proposer \
+                 from tendermint raw hash",
+            );
 
         // TODO: reward distribution should be written in such a way that the
         // reward products for each validator are updated rather than

@@ -21,7 +21,7 @@ const VALIDATOR_STAKING_REWARD_ADDRESS_STORAGE_KEY: &str =
     "staking_reward_address";
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
-const VALIDATOR_DELTAS_STORAGE_KEY: &str = "validator_deltas";
+const VALIDATOR_DELTAS_STORAGE_KEY: &str = "deltas";
 const VALIDATOR_COMMISSION_RATE_STORAGE_KEY: &str = "commission_rate";
 const VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY: &str =
     "max_commission_rate_change";

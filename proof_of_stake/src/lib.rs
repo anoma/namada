@@ -32,7 +32,7 @@ use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
 use parameters::PosParams;
-use rust_decimal::prelude::{Decimal, ToPrimitive};
+use rust_decimal::Decimal;
 use thiserror::Error;
 use types::{
     decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bonds, Epoch,
@@ -581,13 +581,12 @@ pub trait PosBase {
         &self,
         key: &Self::Address,
     ) -> Option<ValidatorStates>;
-    /// Read PoS validator's total deltas of their bonds (validator self-bonds
+    /// Read PoS validator's bond deltas (validator self-bonds
     /// and delegations).
     fn read_validator_deltas(
         &self,
         key: &Self::Address,
     ) -> Option<ValidatorDeltas<Self::TokenChange>>;
-
     /// Read PoS slashes applied to a validator.
     fn read_validator_slashes(&self, key: &Self::Address) -> Slashes;
     /// Read PoS validator's commission rate
@@ -876,10 +875,8 @@ pub trait PosBase {
         active_validators.chain(inactive_validators).for_each(f)
     }
 
-    /// Distribute the PoS inflation rewards to all of the active validators.
-    /// WIP!
-    /// TODO: figure out if using Decimal type throughout is the right way to
-    /// go.
+    /// Distribute the PoS inflation rewards by updating the validator rewards
+    /// products.
     fn distribute_rewards(
         &mut self,
         current_epoch: impl Into<Epoch>,
@@ -918,7 +915,10 @@ pub trait PosBase {
                 hex::encode_upper(vote.validator_address.clone());
             let native_address = self
                 .read_validator_address_raw_hash(tm_raw_hash_string)
-                .unwrap();
+                .expect(
+                    "Unable to read native address of validator from \
+                     tendermint raw hash",
+                );
             signer_set.insert(native_address);
             total_signing_stake += u64::from(vote.validator_vp);
         }
@@ -941,9 +941,6 @@ pub trait PosBase {
             let mut rewards: Decimal = Decimal::default();
             let stake: Decimal = validator.bonded_stake.into();
 
-            // TODO: ensure that the multiplication / division logic is
-            // correct + sound
-
             // Proposer reward
             if validator.address == *proposer_address {
                 let coeff = rewards_calculator.get_proposer_coeff().unwrap();
@@ -963,20 +960,9 @@ pub trait PosBase {
             let active_val_frac = stake / active_val_stake;
             rewards += active_val_coeff * new_tokens * active_val_frac;
 
-            // distribute the rewards to the validator address.
-            // TODO: rather than transfer, keep tokens in PoS, then
-            // update validator products (self bonds, delegations)
-            // Need function to update products (see PoS specs update PR 283)
-            self.transfer(
-                &Self::staking_token_address(),
-                Self::TokenAmount::from(rewards.to_u64().unwrap()),
-                &Self::POS_ADDRESS,
-                &validator.address,
-            );
-
-            // TODO: do we need to perform any storage_writes in here? Where
-            // should the logic that distributes rewards to
-            // delegators exist?
+            // TODO: update the rewards products and then update
+            // relevant values in storage (validator_deltas, total_deltas, etc)
+            // - see PoS specs update PR 283
         }
 
         Ok(())
