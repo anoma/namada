@@ -7,7 +7,7 @@ Namada introduces a governance mechanism to propose and apply protocol changes w
 ### Governance Address
 Governance adds 2 internal addresses:
 - `GovernanceAddress`
-- `TreasuryAddress`
+- `SlashFundAddress`
 
 The first internal address contains all the proposals under its address space.
 The second internal address holds the funds of rejected proposals.
@@ -72,7 +72,7 @@ The governance machinery also relies on a subkey stored under the `NAM` token ad
 ```
 
 This is to leverage the `NAM` VP to check that the funds were correctly locked.
-The governance subkey, `/\$GovernanceAddress/proposal/\$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to Treasury.
+The governance subkey, `/\$GovernanceAddress/proposal/\$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to SlashFund.
 
 ### GovernanceAddress VP
 Just like Pos, also governance has his own storage space. The `GovernanceAddress` validity predicate task is to check the integrity and correctness of new proposals. A proposal, to be correct, must satisfy the following:
@@ -167,7 +167,7 @@ All the computation above must be made at the epoch specified in the `start_epoc
 It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/governance/utils.rs#L68).
 
 ### Refund and Proposal Execution mechanism
-Together with tallying, in the first block at the beginning of each epoch, in the `FinalizeBlock` event, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). For each proposal that has been rejected, instead, the locked funds will be moved to the `TreasuryAddress`. Moreover, if the proposal had a positive outcome and `proposal_code` is defined, these changes will be executed right away.
+Together with tallying, in the first block at the beginning of each epoch, in the `FinalizeBlock` event, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). For each proposal that has been rejected, instead, the locked funds will be moved to the `SlashFundAddress`. Moreover, if the proposal had a positive outcome and `proposal_code` is defined, these changes will be executed right away.
 To summarize the execution of governance in the `FinalizeBlock` event:
 
 If the proposal outcome is positive and current epoch is equal to the proposal `grace_epoch`, in the `FinalizeBlock` event:
@@ -175,33 +175,28 @@ If the proposal outcome is positive and current epoch is equal to the proposal `
 - execute any changes specified by `proposal_code`
 
 In case the proposal was rejected or if any error, in the `FinalizeBlock` event:
-- transfer the locked funds to `TreasuryAddress`
+- transfer the locked funds to `SlashFundAddress`
 
 The result is then signaled by creating and inserting a [`Tendermint Event`](https://github.com/tendermint/tendermint/blob/ab0835463f1f89dcadf83f9492e98d85583b0e71/docs/spec/abci/abci.md#events.
 
 
-## TreasuryAddress
-Funds locked in `TreasuryAddress` address should be spendable only by proposals.
+## SlashFundAddress
+Funds locked in `SlashFundAddress` address should be spendable only by proposals.
 
-### TreasuryAddress storage
+### SlashFundAddress storage
 ```
-/\$TreasuryAddress/max_transferable_fund: u64
-/\$TreasuryAddress/?: Vec<u8>
+/\$SlashFundAddress/?: Vec<u8>
 ```
 
 The funds will be stored under:
 ```
-/\$NAMAddress/balance/\$TreasuryAddress: u64
+/\$NAMAddress/balance/\$SlashFundAddress: u64
 ```
 
-### TreasuryAddress VP
-The treasury validity predicate will approve a transfer only if:
-- the transfer has been made by the protocol (by checking the existence of `/$GovernanceAddress/pending/$proposal_id` storage key)
-- the transfered amount is <= `MAX_SPENDABLE_SUM`
+### SlashFundAddress VP
+The slash_fund validity predicate will approve a transfer only if the transfer has been made by the protocol (by checking the existence of `/$GovernanceAddress/pending/$proposal_id` storage key)
 
-`MAX_SPENDABLE_SUM` is a parameter of the treasury native vp.
-
-It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/treasury/mod.rs#L55).
+It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/main/shared/src/ledger/slash_fund/mod.rs#L70).
 
 ## Off-chain protocol
 

@@ -51,9 +51,9 @@ and follow these rules:
   - be grater than `currentEpoch`, where current epoch is the epoch in which the transaction is executed and included in a block
   - be a multiple of `min_proposal_period`.
 - `endEpoch` must:
-    - be at least `min_proposal_period` epochs greater than `startEpoch`
-    - be at most `max_proposal_period` epochs greater than `startEpoch`
-    - be a multiple of `min_proposal_period`
+  - be at least `min_proposal_period` epochs greater than `startEpoch`
+  - be at most `max_proposal_period` epochs greater than `startEpoch`
+  - be a multiple of `min_proposal_period`
 - `graceEpoch` must:
   - be at least `min_grace_epoch` epochs greater than `endEpoch`
 - `proposalCode` can be empty and must be a valid transaction with size less than `max_proposal_code_size` kibibytes.
