@@ -11,6 +11,7 @@ use borsh::BorshSerialize;
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::{eyre, Result};
 use namada::ledger::eth_bridge::storage::eth_msgs::Keys;
+use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada::types::address::Address;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage;
@@ -18,7 +19,7 @@ use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
-use super::store::{Store, StoreExt};
+use crate::node::ledger::shell::queries::QueriesExt;
 
 /// The keys changed while applying a protocol transaction
 type ChangedKeys = BTreeSet<storage::Key>;
@@ -30,10 +31,14 @@ type ChangedKeys = BTreeSet<storage::Key>;
 ///
 /// This function is deterministic based on some existing blockchain state and
 /// the passed `events`.
-pub(crate) fn apply_derived_tx(
-    store: &mut impl StoreExt,
+pub(crate) fn apply_derived_tx<D, H>(
+    storage: &mut Storage<D, H>,
     events: Vec<MultiSignedEthEvent>,
-) -> Result<TxResult> {
+) -> Result<TxResult>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     if events.is_empty() {
         return Ok(TxResult::default());
     }
@@ -43,9 +48,9 @@ pub(crate) fn apply_derived_tx(
          protocol transaction"
     );
 
-    let (updates, voting_powers) = get_update_data(store, events)?;
+    let (updates, voting_powers) = get_update_data(storage, events)?;
 
-    let changed_keys = apply_updates(store, updates, voting_powers)?;
+    let changed_keys = apply_updates(storage, updates, voting_powers)?;
 
     Ok(TxResult {
         changed_keys,
@@ -55,17 +60,21 @@ pub(crate) fn apply_derived_tx(
 
 /// Constructs all needed data that may be needed for updating #EthBridge
 /// internal account storage based on `events`.
-fn get_update_data(
-    store: &impl StoreExt,
+fn get_update_data<D, H>(
+    storage: &Storage<D, H>,
     events: Vec<MultiSignedEthEvent>,
 ) -> Result<(
     HashSet<EthMsgUpdate>,
     HashMap<Address, FractionalVotingPower>,
-)> {
-    let last_epoch = store.get_last_epoch();
+)>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let (last_epoch, _) = storage.get_last_epoch();
     tracing::debug!(?last_epoch, "Got epoch of last block");
 
-    let active_validators = store.get_active_validators(Some(last_epoch));
+    let active_validators = storage.get_active_validators(Some(last_epoch));
     tracing::debug!(
         n = active_validators.len(),
         "got active validators - {:#?}",
@@ -88,11 +97,15 @@ fn get_update_data(
 }
 
 /// Apply an Ethereum state update + act on any events which are confirmed
-pub(super) fn apply_updates(
-    store: &mut impl Store,
+pub(super) fn apply_updates<D, H>(
+    storage: &mut Storage<D, H>,
     updates: HashSet<EthMsgUpdate>,
     voting_powers: HashMap<Address, FractionalVotingPower>,
-) -> Result<ChangedKeys> {
+) -> Result<ChangedKeys>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     tracing::debug!(
         updates.len = updates.len(),
         ?voting_powers,
@@ -105,7 +118,7 @@ pub(super) fn apply_updates(
         // The order in which updates are applied to storage does not matter.
         // The final storage state will be the same regardless.
         let (mut changed, newly_confirmed) =
-            apply_update(store, update.clone(), &voting_powers)?;
+            apply_update(storage, update.clone(), &voting_powers)?;
         changed_keys.append(&mut changed);
         if newly_confirmed {
             confirmed.push(update.body);
@@ -120,7 +133,7 @@ pub(super) fn apply_updates(
     // Right now, the order in which events are acted on does not matter.
     // For `TransfersToNamada` events, they can happen in any order.
     for event in &confirmed {
-        let mut changed = events::act_on(store, event)?;
+        let mut changed = events::act_on(storage, event)?;
         changed_keys.append(&mut changed);
     }
     Ok(changed_keys)
@@ -128,24 +141,28 @@ pub(super) fn apply_updates(
 
 /// Apply an [`EthMsgUpdate`] to storage. Returns any keys changed and whether
 /// the event was newly seen.
-fn apply_update(
-    store: &mut impl Store,
+fn apply_update<D, H>(
+    storage: &mut Storage<D, H>,
     update: EthMsgUpdate,
     voting_powers: &HashMap<Address, FractionalVotingPower>,
-) -> Result<(ChangedKeys, bool)> {
+) -> Result<(ChangedKeys, bool)>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     let eth_msg_keys = Keys::from(&update.body);
 
     // we arbitrarily look at whether the seen key is present to
     // determine if the /eth_msg already exists in storage, but maybe there
     // is a less arbitrary way to do this
-    let exists_in_storage = store.has_key(&eth_msg_keys.seen())?;
+    let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
     let (eth_msg_post, changed) = if !exists_in_storage {
         calculate_new_eth_msg(update, voting_powers)?
     } else {
-        calculate_updated_eth_msg(store, update, voting_powers)?
+        calculate_updated_eth_msg(storage, update, voting_powers)?
     };
-    write_eth_msg(store, &eth_msg_keys, &eth_msg_post)?;
+    write_eth_msg(storage, &eth_msg_keys, &eth_msg_post)?;
     Ok((changed, !exists_in_storage))
 }
 
@@ -184,11 +201,15 @@ fn calculate_new_eth_msg(
     ))
 }
 
-fn calculate_updated_eth_msg(
-    store: &mut impl Store,
+fn calculate_updated_eth_msg<D, H>(
+    store: &mut Storage<D, H>,
     update: EthMsgUpdate,
     voting_powers: &HashMap<Address, FractionalVotingPower>,
-) -> Result<(EthMsg, ChangedKeys)> {
+) -> Result<(EthMsg, ChangedKeys)>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     let eth_msg_keys = Keys::from(&update.body);
     tracing::debug!(
         %eth_msg_keys.prefix,
@@ -222,16 +243,20 @@ fn calculate_diff(
     (eth_msg, BTreeSet::default())
 }
 
-fn write_eth_msg(
-    store: &mut impl Store,
+fn write_eth_msg<D, H>(
+    storage: &mut Storage<D, H>,
     eth_msg_keys: &Keys,
     eth_msg: &EthMsg,
-) -> Result<()> {
+) -> Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     tracing::debug!("writing EthMsg - {:#?}", eth_msg);
-    store.write(&eth_msg_keys.body(), &eth_msg.body.try_to_vec()?)?;
-    store.write(&eth_msg_keys.seen(), &eth_msg.seen.try_to_vec()?)?;
-    store.write(&eth_msg_keys.seen_by(), &eth_msg.seen_by.try_to_vec()?)?;
-    store.write(
+    storage.write(&eth_msg_keys.body(), &eth_msg.body.try_to_vec()?)?;
+    storage.write(&eth_msg_keys.seen(), &eth_msg.seen.try_to_vec()?)?;
+    storage.write(&eth_msg_keys.seen_by(), &eth_msg.seen_by.try_to_vec()?)?;
+    storage.write(
         &eth_msg_keys.voting_power(),
         &eth_msg.voting_power.try_to_vec()?,
     )?;
@@ -244,6 +269,7 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use namada::ledger::eth_bridge::storage::wrapped_erc20s;
+    use namada::ledger::storage::testing::TestStorage;
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
@@ -252,7 +278,6 @@ mod tests {
     use namada::types::token::Amount;
 
     use super::*;
-    use crate::node::ledger::protocol::transactions::store::testing::FakeStore;
 
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer
@@ -279,7 +304,7 @@ mod tests {
             sole_validator.clone(),
             FractionalVotingPower::new(1, 1).unwrap(),
         )]);
-        let mut storage = FakeStore::default();
+        let mut storage = TestStorage::default();
 
         let changed_keys = apply_updates(&mut storage, updates, voting_powers)?;
 
@@ -297,28 +322,37 @@ mod tests {
             changed_keys
         );
 
-        let body_bytes = storage.read(&eth_msg_keys.body())?.unwrap();
+        let (body_bytes, _) = storage.read(&eth_msg_keys.body())?;
+        let body_bytes = body_bytes.unwrap();
         assert_eq!(EthereumEvent::try_from_slice(&body_bytes)?, body);
-        let seen_bytes = storage.read(&eth_msg_keys.seen())?.unwrap();
+
+        let (seen_bytes, _) = storage.read(&eth_msg_keys.seen())?;
+        let seen_bytes = seen_bytes.unwrap();
         assert!(bool::try_from_slice(&seen_bytes)?);
-        let seen_by_bytes = storage.read(&eth_msg_keys.seen_by())?.unwrap();
+
+        let (seen_by_bytes, _) = storage.read(&eth_msg_keys.seen_by())?;
+        let seen_by_bytes = seen_by_bytes.unwrap();
         assert_eq!(
             Vec::<Address>::try_from_slice(&seen_by_bytes)?,
             vec![sole_validator]
         );
-        let voting_power_bytes =
-            storage.read(&eth_msg_keys.voting_power())?.unwrap();
+
+        let (voting_power_bytes, _) =
+            storage.read(&eth_msg_keys.voting_power())?;
+        let voting_power_bytes = voting_power_bytes.unwrap();
         assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 1));
 
-        let wrapped_erc20_balance_bytes = storage
-            .read(&wrapped_erc20_keys.balance(&receiver))?
-            .unwrap();
+        let (wrapped_erc20_balance_bytes, _) =
+            storage.read(&wrapped_erc20_keys.balance(&receiver))?;
+        let wrapped_erc20_balance_bytes = wrapped_erc20_balance_bytes.unwrap();
         assert_eq!(
             Amount::try_from_slice(&wrapped_erc20_balance_bytes)?,
             amount
         );
-        let wrapped_erc20_supply_bytes =
-            storage.read(&wrapped_erc20_keys.supply())?.unwrap();
+
+        let (wrapped_erc20_supply_bytes, _) =
+            storage.read(&wrapped_erc20_keys.supply())?;
+        let wrapped_erc20_supply_bytes = wrapped_erc20_supply_bytes.unwrap();
         assert_eq!(
             Amount::try_from_slice(&wrapped_erc20_supply_bytes)?,
             amount

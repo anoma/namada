@@ -5,4 +5,3 @@
 //! natively rather than via the wasm environment as happens with regular
 //! transactions.
 pub(super) mod ethereum_events;
-pub(super) mod store;

@@ -4,22 +4,26 @@ use std::collections::BTreeSet;
 
 use eyre::Result;
 use namada::ledger::eth_bridge::storage::wrapped_erc20s;
+use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
 use namada::types::storage::Key;
 
 use super::update;
-use crate::node::ledger::protocol::transactions::store::Store;
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
 /// transferred assets to the appropriate receiver addresses.
-pub(super) fn act_on(
-    store: &mut impl Store,
+pub(super) fn act_on<D, H>(
+    storage: &mut Storage<D, H>,
     event: &EthereumEvent,
-) -> Result<BTreeSet<Key>> {
+) -> Result<BTreeSet<Key>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     match &event {
         EthereumEvent::TransfersToNamada { transfers, .. } => {
-            act_on_transfers_to_namada(store, transfers)
+            act_on_transfers_to_namada(storage, transfers)
         }
         _ => {
             tracing::debug!("No actions taken for event");
@@ -28,10 +32,14 @@ pub(super) fn act_on(
     }
 }
 
-fn act_on_transfers_to_namada(
-    store: &mut impl Store,
+fn act_on_transfers_to_namada<D, H>(
+    storage: &mut Storage<D, H>,
     transfers: &[TransferToNamada],
-) -> Result<BTreeSet<Key>> {
+) -> Result<BTreeSet<Key>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     let mut changed_keys = BTreeSet::default();
     for TransferToNamada {
         amount,
@@ -41,7 +49,7 @@ fn act_on_transfers_to_namada(
     {
         let keys: wrapped_erc20s::Keys = asset.into();
         let balance_key = keys.balance(receiver);
-        update::amount(store, &balance_key, |balance| {
+        update::amount(storage, &balance_key, |balance| {
             tracing::debug!(
                 %balance_key,
                 ?balance,
@@ -57,7 +65,7 @@ fn act_on_transfers_to_namada(
         _ = changed_keys.insert(balance_key);
 
         let supply_key = keys.supply();
-        update::amount(store, &supply_key, |supply| {
+        update::amount(storage, &supply_key, |supply| {
             tracing::debug!(
                 %supply_key,
                 ?supply,
@@ -77,7 +85,11 @@ fn act_on_transfers_to_namada(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use assert_matches::assert_matches;
     use borsh::BorshSerialize;
+    use namada::ledger::storage::testing::TestStorage;
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
         arbitrary_eth_address, arbitrary_keccak_hash, arbitrary_nonce,
@@ -86,13 +98,12 @@ mod tests {
     use namada::types::token::Amount;
 
     use super::*;
-    use crate::node::ledger::protocol::transactions::store::testing::FakeStore;
 
     #[test]
     /// Test that we do not make any changes to storage when acting on most
     /// events
     fn test_act_on_does_nothing_for_other_events() {
-        let mut store = FakeStore::default();
+        let mut storage = TestStorage::default();
         let events = vec![
             EthereumEvent::NewContract {
                 name: "bridge".to_string(),
@@ -118,10 +129,11 @@ mod tests {
         ];
 
         for event in events.iter() {
-            act_on(&mut store, event).unwrap();
-
-            assert!(
-                store.values.is_empty(),
+            act_on(&mut storage, event).unwrap();
+            let root = Key::from_str("").unwrap();
+            assert_eq!(
+                storage.iter_prefix(&root).0.count(),
+                0,
                 "storage changed unexpectedly while acting on event: {:#?}",
                 event
             );
@@ -132,7 +144,7 @@ mod tests {
     /// Test that storage is indeed changed when we act on a non-empty
     /// TransfersToNamada batch
     fn test_act_on_changes_storage_for_transfers_to_namada() {
-        let mut store = FakeStore::default();
+        let mut storage = TestStorage::default();
         let amount = Amount::from(100);
         let receiver = address::testing::established_address_1();
         let transfers = vec![TransferToNamada {
@@ -145,15 +157,16 @@ mod tests {
             transfers,
         };
 
-        act_on(&mut store, &event).unwrap();
+        act_on(&mut storage, &event).unwrap();
 
-        assert!(!store.values.is_empty());
+        let root = Key::from_str("").unwrap();
+        assert_eq!(storage.iter_prefix(&root).0.count(), 2);
     }
 
     #[test]
     /// Test acting on a single transfer and minting the first ever wDAI
     fn test_act_on_transfers_to_namada_mints_wdai() {
-        let mut store = FakeStore::default();
+        let mut storage = TestStorage::default();
 
         let amount = Amount::from(100);
         let receiver = address::testing::established_address_1();
@@ -163,20 +176,19 @@ mod tests {
             receiver: receiver.clone(),
         }];
 
-        act_on_transfers_to_namada(&mut store, &transfers).unwrap();
+        act_on_transfers_to_namada(&mut storage, &transfers).unwrap();
 
         let wdai: wrapped_erc20s::Keys = (&DAI_ERC20_ETH_ADDRESS).into();
         let receiver_balance_key = wdai.balance(&receiver);
         let wdai_supply_key = wdai.supply();
 
-        assert_eq!(store.values.len(), 2);
-        assert_eq!(
-            store.values.get(&receiver_balance_key).unwrap(),
-            &amount.try_to_vec().unwrap()
-        );
-        assert_eq!(
-            store.values.get(&wdai_supply_key).unwrap(),
-            &amount.try_to_vec().unwrap()
-        );
+        let root = Key::from_str("").unwrap();
+        assert_eq!(storage.iter_prefix(&root).0.count(), 2);
+
+        let expected_amount = amount.try_to_vec().unwrap();
+        for key in vec![receiver_balance_key, wdai_supply_key] {
+            let (value, _) = storage.read(&key).unwrap();
+            assert_matches!(value, Some(bytes) if bytes == expected_amount);
+        }
     }
 }

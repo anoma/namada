@@ -26,7 +26,6 @@ use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
-use self::transactions::store::{LedgerStore, StoreExt};
 use crate::node::ledger::shell::Shell;
 
 #[derive(Error, Debug)]
@@ -136,8 +135,7 @@ where
             },
         ),
         TxType::Protocol(ProtocolTx { tx, .. }) => {
-            let mut store: LedgerStore<D, H> = storage.into();
-            apply_protocol_tx(tx, &mut store)
+            apply_protocol_tx(tx, storage)
         }
         _ => {
             // other transaction types we treat as a noop
@@ -208,18 +206,22 @@ where
 /// is updated natively rather than via the wasm environment, so gas does not
 /// need to be metered and validity predicates are bypassed. A [`TxResult`]
 /// containing changed keys and the like should be returned in the normal way.
-pub(crate) fn apply_protocol_tx(
+pub(crate) fn apply_protocol_tx<D, H>(
     tx: ProtocolTxType,
-    store: &mut impl StoreExt,
-) -> Result<TxResult> {
+    storage: &mut Storage<D, H>,
+) -> Result<TxResult>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     match tx {
         ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
             events,
             ..
-        }) => {
-            self::transactions::ethereum_events::apply_derived_tx(store, events)
-                .map_err(Error::ProtocolTxError)
-        }
+        }) => self::transactions::ethereum_events::apply_derived_tx(
+            storage, events,
+        )
+        .map_err(Error::ProtocolTxError),
         ProtocolTxType::ValidatorSetUpdate(_) => Ok(TxResult::default()),
         _ => {
             tracing::error!(
