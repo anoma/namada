@@ -105,8 +105,7 @@ pub trait LazyCollection {
     /// call `fn build()` on it to get the validation result.
     /// This function will return `Ok(true)` if the storage key is a valid
     /// sub-key of this collection, `Ok(false)` if the storage key doesn't match
-    /// the prefix of this collection, or fail with
-    /// [`ValidationError::InvalidSubKey`] if the prefix matches this
+    /// the prefix of this collection, or error if the prefix matches this
     /// collection, but the key itself is not recognized.
     fn accumulate<ENV>(
         &self,

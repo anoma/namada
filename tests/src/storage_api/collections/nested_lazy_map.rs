@@ -639,7 +639,7 @@ mod tests {
             }
             Transition::Remove((key_outer, key_middle, key_inner)) => {
                 let middle =
-                    map.entry(*key_outer).or_insert(Default::default());
+                    map.entry(*key_outer).or_insert_with(Default::default);
                 let inner =
                     middle.entry(*key_middle).or_insert_with(Default::default);
                 let _popped = inner.remove(key_inner);

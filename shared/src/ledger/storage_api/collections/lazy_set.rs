@@ -1,11 +1,14 @@
 //! Lazy set.
 
+use std::fmt::Debug;
 use std::marker::PhantomData;
+
+use thiserror::Error;
 
 use super::super::Result;
 use super::{LazyCollection, ReadError};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
-use crate::types::storage::{self, KeySeg};
+use crate::types::storage::{self, DbKeySeg, KeySeg};
 
 /// Subkey corresponding to the data elements of the LazySet
 pub const DATA_SUBKEY: &str = "data";
@@ -29,13 +32,109 @@ pub struct LazySet<T> {
     phantom: PhantomData<T>,
 }
 
-impl<T> LazyCollection for LazySet<T> {
+/// Possible sub-keys of a [`LazySet`]
+#[derive(Clone, Debug)]
+pub enum SubKey<T> {
+    /// Data sub-key with its literal set value
+    Data(T),
+}
+
+/// Possible actions that can modify a [`LazySet`]. This
+/// roughly corresponds to the methods that have `StorageWrite` access.
+#[derive(Clone, Debug)]
+pub enum Action<T> {
+    /// Insert or update a value `T` in a [`LazySet<T>`].
+    Insert(T),
+    /// Remove a value `T` from a [`LazySet<T>`].
+    Remove(T),
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ValidationError {
+    #[error("Invalid storage key {0}")]
+    InvalidSubKey(storage::Key),
+}
+
+impl<T> LazyCollection for LazySet<T>
+where
+    T: storage::KeySeg + Debug,
+{
+    type Action = Action<T>;
+    type SubKey = SubKey<T>;
+    // In a set, the `SubKey` already contains the data, but we have to
+    // distinguish `Insert` from `Remove`
+    type SubKeyWithData = Action<T>;
+    // There is no "value" for LazySet, `T` is written into the key
+    type Value = ();
+
     /// Create or use an existing set with the given storage `key`.
     fn open(key: storage::Key) -> Self {
         Self {
             key,
             phantom: PhantomData,
         }
+    }
+
+    fn is_valid_sub_key(
+        &self,
+        key: &storage::Key,
+    ) -> storage_api::Result<Option<Self::SubKey>> {
+        let suffix = match key.split_prefix(&self.key) {
+            None => {
+                // not matching prefix, irrelevant
+                return Ok(None);
+            }
+            Some(None) => {
+                // no suffix, invalid
+                return Err(ValidationError::InvalidSubKey(key.clone()))
+                    .into_storage_result();
+            }
+            Some(Some(suffix)) => suffix,
+        };
+
+        // Match the suffix against expected sub-keys
+        match &suffix.segments[..] {
+            [DbKeySeg::StringSeg(sub_a), DbKeySeg::StringSeg(sub_b)]
+                if sub_a == DATA_SUBKEY =>
+            {
+                if let Ok(key_in_kv) = storage::KeySeg::parse(sub_b.clone()) {
+                    Ok(Some(SubKey::Data(key_in_kv)))
+                } else {
+                    Err(ValidationError::InvalidSubKey(key.clone()))
+                        .into_storage_result()
+                }
+            }
+            _ => Err(ValidationError::InvalidSubKey(key.clone()))
+                .into_storage_result(),
+        }
+    }
+
+    fn read_sub_key_data<ENV>(
+        env: &ENV,
+        storage_key: &storage::Key,
+        sub_key: Self::SubKey,
+    ) -> storage_api::Result<Option<Self::SubKeyWithData>>
+    where
+        ENV: for<'a> crate::ledger::vp_env::VpEnv<'a>,
+    {
+        // There is no "value" for LazySet, `T` is written into the key
+        let SubKey::Data(sub_key) = sub_key;
+        let has_pre = env.has_key_pre(storage_key)?;
+        let has_post = env.has_key_post(storage_key)?;
+        if has_pre && !has_post {
+            Ok(Some(Action::Remove(sub_key)))
+        } else if !has_pre && has_post {
+            Ok(Some(Action::Insert(sub_key)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn validate_changed_sub_keys(
+        keys: Vec<Self::SubKeyWithData>,
+    ) -> storage_api::Result<Vec<Self::Action>> {
+        Ok(keys)
     }
 }
 
