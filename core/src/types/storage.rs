@@ -1018,7 +1018,7 @@ pub struct Epochs {
     first_known_epoch: Epoch,
     /// The block heights of the first block of each known epoch.
     /// Invariant: the values must be sorted in ascending order.
-    first_block_heights: Vec<BlockHeight>,
+    pub first_block_heights: Vec<BlockHeight>,
 }
 
 impl Default for Epochs {

@@ -36,6 +36,8 @@ pub type ValidatorSets = Epoched<ValidatorSet, OffsetUnbondingLen>;
 pub type TotalDeltas = EpochedDelta<token::Change, OffsetUnbondingLen>;
 /// Epoched validator commission rate
 pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
+/// Epoched rewards products
+pub type RewardsProducts = std::collections::HashMap<Epoch, Decimal>;
 
 /// A genesis validator definition.
 #[derive(
@@ -234,6 +236,7 @@ pub enum SlashType {
 }
 
 /// VoteInfo inspired from tendermint
+#[derive(Debug, Clone)]
 pub struct VoteInfo {
     /// the first 20 bytes of the validator public key hash (SHA-256) taken
     /// from tendermint
