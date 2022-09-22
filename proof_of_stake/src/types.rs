@@ -8,8 +8,7 @@ use std::hash::Hash;
 use std::ops::{Add, AddAssign, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use rust_decimal::prelude::ToPrimitive;
-use rust_decimal::Decimal;
+use rust_decimal::prelude::{Decimal, ToPrimitive};
 
 use crate::epoched::{
     Epoched, EpochedDelta, OffsetPipelineLen, OffsetUnbondingLen,
