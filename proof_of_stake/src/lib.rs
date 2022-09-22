@@ -601,7 +601,7 @@ pub trait PosBase {
     /// Read PoS validator's delegation reward products
     fn read_validator_delegation_rewards_products(&self, key: &Self::Address) -> RewardsProducts;
     /// Read PoS consensus validator's rewards accumulator
-    fn read_consensus_validator_rewards_accumulator(&self) -> std::collections::HashMap<Self::Address, Decimal>;
+    fn read_consensus_validator_rewards_accumulator(&self) -> Option<std::collections::HashMap<Self::Address, Decimal>>;
     /// Read PoS validator set (active and inactive).
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total deltas of all validators (active and inactive).
@@ -958,7 +958,9 @@ pub trait PosBase {
 
         // Iterate over validators, calculating their fraction of the block rewards accounting for
         // possible block proposal and signing (voting)
-        let mut validator_accumulators = self.read_consensus_validator_rewards_accumulator();
+        let mut validator_accumulators = self.read_consensus_validator_rewards_accumulator().unwrap_or(
+            HashMap::<Self::Address, Decimal>::new()
+        );
         for validator in validators.active.iter() {
             let mut rewards_frac: Decimal = Decimal::default();
             let stake: Decimal = validator.bonded_stake.into();
@@ -982,7 +984,7 @@ pub trait PosBase {
             let active_val_frac = stake / active_val_stake;
             rewards_frac += active_val_coeff * active_val_frac;
 
-            let prev_val = *validator_accumulators.get(&validator.address).unwrap();
+            let prev_val = *validator_accumulators.get(&validator.address).unwrap_or(&Decimal::ZERO);
             validator_accumulators.insert(validator.address.clone(), prev_val + rewards_frac);
         }
 

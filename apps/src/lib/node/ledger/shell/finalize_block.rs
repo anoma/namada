@@ -58,6 +58,7 @@ where
         // begin the next block and check if a new epoch began
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
+        let (current_epoch, _gas) = self.storage.get_current_epoch();
 
         if new_epoch {
             let _proposals_result =
@@ -246,9 +247,9 @@ where
 
         if new_epoch {
             self.update_epoch(&mut response);
-            self.apply_inflation(&req.proposer_address, &req.votes);
+            self.apply_inflation(&current_epoch, &req.proposer_address, &req.votes);
         } else {
-            self.apply_block_rewards(&req.proposer_address, &req.votes);
+            self.apply_block_rewards(&current_epoch, &req.proposer_address, &req.votes);
         }
 
         let _ = self
@@ -336,11 +337,10 @@ where
     /// Calculate the block rewards and apply them to the consensus validators' reward accumulators
     fn apply_block_rewards(
         &mut self,
+        current_epoch: &Epoch,
         proposer_address: &Vec<u8>,
         votes: &Vec<VoteInfo>
     ) {
-        let (current_epoch, _gas) = self.storage.get_current_epoch();
-
         // Get proposer address from storage based on the consensus key hash
         let tm_raw_hash_string = tm_raw_hash_to_string(proposer_address);
         let native_proposer_address = self
@@ -351,18 +351,18 @@ where
                  from tendermint raw hash",
             );
 
-        self.storage.log_block_rewards(current_epoch, &native_proposer_address, votes).unwrap();
+        self.storage.log_block_rewards(*current_epoch, &native_proposer_address, votes).unwrap();
     }
 
     /// Calculate the new inflation rate, mint the new tokens to the PoS
     /// account, then update the reward products of the validators
     fn apply_inflation(
         &mut self,
+        current_epoch: &Epoch,
         proposer_address: &Vec<u8>,
         votes: &Vec<VoteInfo>,
     ) {
-        let (current_epoch, _gas) = self.storage.get_current_epoch();
-        let last_epoch = current_epoch - 1;
+        let last_epoch = *current_epoch - 1;
         // Get input values needed for the PD controller for PoS and MASP.
         // Run the PD controllers to calculate new rates.
         //
@@ -501,7 +501,7 @@ where
         // for each of the consensus validators
         self.storage
             .log_block_rewards(
-                current_epoch,
+                *current_epoch,
                 &native_proposer_address,
                 votes,
             )
@@ -513,6 +513,8 @@ where
         // TODO: update implementation using lazy DS and be more memory-efficient
         let first_block_of_this_epoch: u64 = self.storage.block.pred_epochs.first_block_heights.as_slice().last().unwrap().0;
         let num_blocks_in_this_epoch = current_epoch.0 - first_block_of_this_epoch + 1;
+        
+        let accumulators = self.storage.read_consensus_validator_rewards_accumulator().expect("Accumulators should exist since we are applying the inflation in the last block of an epoch");
         
         let mut reward_tokens_remaining = pos_minted_tokens.clone();
         let current_epoch = namada::ledger::pos::types::Epoch::from(current_epoch.0);
