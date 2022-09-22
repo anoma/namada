@@ -662,11 +662,13 @@ async fn start_ethereum_node(
     // Start the oracle for listening to Ethereum events
     let (eth_sender, eth_receiver) = mpsc::unbounded_channel();
     let oracle = match config.ethereum.mode {
-        ethereum::Mode::Managed => ethereum_node::oracle::run_oracle(
-            ethereum_url,
-            eth_sender,
-            abort_sender,
-        ),
+        ethereum::Mode::Managed | ethereum::Mode::Remote => {
+            ethereum_node::oracle::run_oracle(
+                ethereum_url,
+                eth_sender,
+                abort_sender,
+            )
+        }
         ethereum::Mode::EventsEndpoint => {
             ethereum_node::test_tools::event_endpoint::start_oracle(eth_sender)
         }
