@@ -65,21 +65,12 @@ pub fn add_validators(num: u8, mut genesis: GenesisConfig) -> GenesisConfig {
     let validator_0 = genesis.validator.get_mut("validator-0").unwrap();
     // Clone the first validator before modifying it
     let other_validators = validator_0.clone();
-    // Set the first validator to be a bootstrap node to enable P2P connectivity
-    validator_0.intent_gossip_seed = Some(true);
-    // A bootstrap node doesn't participate in the gossipsub protocol for
-    // gossiping intents, so we remove its matchmaker
-    validator_0.matchmaker_account = None;
-    validator_0.matchmaker_code = None;
-    validator_0.matchmaker_tx = None;
     let net_address_0 =
         SocketAddr::from_str(validator_0.net_address.as_ref().unwrap())
             .unwrap();
     let net_address_port_0 = net_address_0.port();
     for ix in 0..num {
         let mut validator = other_validators.clone();
-        // Only the first validator is bootstrap
-        validator.intent_gossip_seed = None;
         let mut net_address = net_address_0;
         // 6 ports for each validator
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
@@ -769,7 +760,6 @@ pub mod constants {
     pub const CHRISTEL: &str = "Christel";
     pub const CHRISTEL_KEY: &str = "Christel-key";
     pub const DAEWON: &str = "Daewon";
-    pub const MATCHMAKER_KEY: &str = "matchmaker-key";
 
     //  Native VP aliases
     pub const GOVERNANCE_ADDRESS: &str = "governance";

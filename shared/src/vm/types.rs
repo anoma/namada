@@ -29,9 +29,6 @@ pub struct VpInput<'a> {
     pub verifiers: &'a BTreeSet<Address>,
 }
 
-/// Input for matchmaker wasm module call
-pub type MatchmakerInput = Vec<u8>;
-
 /// Key-value pair represents data from account's subspace
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct KeyVal {

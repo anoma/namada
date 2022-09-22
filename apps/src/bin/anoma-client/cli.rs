@@ -3,7 +3,7 @@
 use color_eyre::eyre::Result;
 use namada_apps::cli;
 use namada_apps::cli::cmds::*;
-use namada_apps::client::{gossip, rpc, tx, utils};
+use namada_apps::client::{rpc, tx, utils};
 
 pub async fn main() -> Result<()> {
     match cli::anoma_client_cli() {
@@ -79,13 +79,6 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
                     rpc::query_protocol_parameters(ctx, args).await;
-                }
-                // Gossip cmds
-                Sub::Intent(Intent(args)) => {
-                    gossip::gossip_intent(ctx, args).await;
-                }
-                Sub::SubscribeTopic(SubscribeTopic(args)) => {
-                    gossip::subscribe_topic(ctx, args).await;
                 }
             }
         }

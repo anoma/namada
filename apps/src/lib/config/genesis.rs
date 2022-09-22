@@ -189,16 +189,6 @@ pub mod genesis_config {
         pub staking_reward_vp: Option<String>,
         // IP:port of the validator. (used in generation only)
         pub net_address: Option<String>,
-        /// Matchmaker account's alias, if any
-        pub matchmaker_account: Option<String>,
-        /// Path to a matchmaker WASM program, if any
-        pub matchmaker_code: Option<String>,
-        /// Path to a transaction WASM code used by the matchmaker, if any
-        pub matchmaker_tx: Option<String>,
-        /// Is this validator running a seed intent gossip node? A seed node is
-        /// not part of the gossipsub where intents are being propagated and
-        /// hence cannot run matchmakers
-        pub intent_gossip_seed: Option<bool>,
         /// Tendermint node key is used to derive Tendermint node ID for node
         /// authentication
         pub tendermint_node_key: Option<HexString>,
@@ -803,13 +793,6 @@ pub fn genesis() -> Genesis {
         public_key: Some(wallet::defaults::christel_keypair().ref_to()),
         storage: HashMap::default(),
     };
-    let matchmaker = EstablishedAccount {
-        address: wallet::defaults::matchmaker_address(),
-        vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::matchmaker_keypair().ref_to()),
-        storage: HashMap::default(),
-    };
     let implicit_accounts = vec![ImplicitAccount {
         public_key: wallet::defaults::daewon_keypair().ref_to(),
     }];
@@ -836,10 +819,6 @@ pub fn genesis() -> Genesis {
             default_key_tokens,
         ),
         ((&validator.account_key).into(), default_key_tokens),
-        (
-            matchmaker.public_key.as_ref().unwrap().into(),
-            default_key_tokens,
-        ),
     ]);
     let token_accounts = address::tokens()
         .into_iter()
@@ -853,7 +832,7 @@ pub fn genesis() -> Genesis {
     Genesis {
         genesis_time: DateTimeUtc::now(),
         validators: vec![validator],
-        established_accounts: vec![albert, bertha, christel, matchmaker],
+        established_accounts: vec![albert, bertha, christel],
         implicit_accounts,
         token_accounts,
         parameters,

@@ -140,7 +140,7 @@ build-wasm-image-docker:
 build-wasm-scripts-docker: build-wasm-image-docker
 	docker run --rm -v ${PWD}:/__w/namada/namada namada-wasm make build-wasm-scripts
 
-# Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
+# Build the validity predicate and transactions wasm
 build-wasm-scripts:
 	make -C $(wasms)
 	make opt-wasm
