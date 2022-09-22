@@ -518,6 +518,12 @@ where
         let (value, _gas) = self.read(&validator_delegation_rewards_product_key(key)).unwrap();
         decode(value.unwrap()).unwrap()
     }
+
+    fn read_consensus_validator_rewards_accumulator(&self) -> std::collections::HashMap<Self::Address, rust_decimal::Decimal> {
+        let (value, _gas) = self.read(&consensus_validator_set_accumulator_key()).unwrap();
+        decode(value.unwrap()).unwrap()
+    }
+
     fn read_validator_set(&self) -> ValidatorSets {
         let (value, _gas) = self.read(&validator_set_key()).unwrap();
         decode(value.unwrap()).unwrap()
@@ -580,6 +586,15 @@ where
         self.write(&validator_delegation_rewards_product_key(key), encode(value))
             .unwrap();
     }
+
+    fn write_consensus_validator_rewards_accumulator(
+        &mut self,
+        value: &std::collections::HashMap<Self::Address, rust_decimal::Decimal>,
+    ) {
+        self.write(&consensus_validator_set_accumulator_key(), encode(value))
+            .unwrap();
+    }
+
     fn write_validator_consensus_key(
         &mut self,
         key: &Self::Address,

@@ -699,6 +699,8 @@ pub trait PosBase {
     fn read_validator_rewards_products(&self, key: &Self::Address) -> RewardsProducts;
     /// Read PoS validator's delegation reward products
     fn read_validator_delegation_rewards_products(&self, key: &Self::Address) -> RewardsProducts;
+    /// Read PoS consensus validator's rewards accumulator
+    fn read_consensus_validator_rewards_accumulator(&self) -> std::collections::HashMap<Self::Address, Decimal>;
     /// Read PoS validator set (active and inactive).
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total deltas of all validators (active and inactive).
@@ -756,6 +758,11 @@ pub trait PosBase {
         &mut self,
         key: &Self::Address,
         value: &RewardsProducts,
+    );
+    /// Write PoS validator's delegation rewards products.
+    fn write_consensus_validator_rewards_accumulator(
+        &mut self,
+        value: &std::collections::HashMap<Self::Address, Decimal>,
     );
     /// Write (append) PoS slash applied to a validator.
     fn write_validator_slash(
@@ -974,10 +981,9 @@ pub trait PosBase {
 
     /// Distribute the PoS inflation rewards by updating the validator rewards
     /// products.
-    fn distribute_rewards(
+    fn log_block_rewards(
         &mut self,
         current_epoch: impl Into<Epoch>,
-        inflation_amount: Self::TokenAmount,
         proposer_address: &Self::Address,
         votes: &Vec<VoteInfo>,
     ) -> Result<(), Error> {
@@ -986,7 +992,7 @@ pub trait PosBase {
         let validators = validator_set.get(current_epoch).unwrap();
         let pos_params = self.read_pos_params();
 
-        // TODO: should we add this value to storage??
+        // Get total stake of the consensus validator set
         let total_active_stake = validators.active.iter().fold(
             0_u64,
             |sum,
@@ -999,6 +1005,7 @@ pub trait PosBase {
         let mut signer_set: HashSet<Self::Address> = HashSet::new();
         let mut total_signing_stake: u64 = 0;
 
+        // Get set of signing validator addresses and the combined stake of these signers
         for vote in votes.iter() {
             if !vote.signed_last_block { continue; }
             let tm_raw_hash_string = hex::encode_upper(vote.validator_address.clone());
@@ -1009,12 +1016,11 @@ pub trait PosBase {
                      tendermint raw hash",
                 );
             signer_set.insert(native_address);
-            total_signing_stake += u64::from(vote.validator_vp);
+            total_signing_stake += vote.validator_vp;
         }
 
-        let new_tokens: Decimal = Into::<u64>::into(inflation_amount).into();
-        let active_val_stake: Decimal = u64::from(total_active_stake).into();
-        let signing_stake: Decimal = u64::from(total_signing_stake).into();
+        let active_val_stake: Decimal = total_active_stake.into();
+        let signing_stake: Decimal = total_signing_stake.into();
 
         let mut rewards_calculator = PosRewardsCalculator::new(
             pos_params.block_proposer_reward,
@@ -1025,35 +1031,38 @@ pub trait PosBase {
 
         rewards_calculator.set_reward_coeffs().unwrap();
 
-        // iterate thru the validators, figure out if each is proposer or signer
+        // Iterate over validators, calculating their fraction of the block rewards accounting for
+        // possible block proposal and signing (voting)
+        let mut validator_accumulators = self.read_consensus_validator_rewards_accumulator();
         for validator in validators.active.iter() {
-            let mut rewards: Decimal = Decimal::new(0, 0);
-            let stake: Decimal = u64::from(validator.voting_power).into();
+            let mut rewards_frac: Decimal = Decimal::default();
+            let stake: Decimal = validator.bonded_stake.into();
 
             // Proposer reward
             if validator.address == *proposer_address {
                 let coeff = rewards_calculator.get_proposer_coeff().unwrap();
-                rewards += coeff * new_tokens;
+                rewards_frac += coeff;
             }
 
             // Signer reward
             if signer_set.contains(&validator.address) {
                 let coeff = rewards_calculator.get_signer_coeff().unwrap();
-                let signing_frac: Decimal = stake / signing_stake;
-                rewards += coeff * new_tokens * signing_frac;
+                let signing_frac = stake / signing_stake;
+                rewards_frac += coeff * signing_frac;
             }
 
             // Active validator reward
             let active_val_coeff =
                 rewards_calculator.get_active_val_coeff().unwrap();
             let active_val_frac = stake / active_val_stake;
-            rewards += active_val_coeff * new_tokens * active_val_frac;
+            rewards_frac += active_val_coeff * active_val_frac;
 
-            // TODO: update the rewards products and then update
-            // relevant values in storage (validator_deltas, total_deltas, etc)
-            // - see PoS specs update PR 283
+            let prev_val = *validator_accumulators.get(&validator.address).unwrap();
+            validator_accumulators.insert(validator.address.clone(), prev_val + rewards_frac);
         }
 
+        // Write the updated map fo reward accumulators back to storage
+        self.write_consensus_validator_rewards_accumulator(&validator_accumulators);
         Ok(())
     }
 
