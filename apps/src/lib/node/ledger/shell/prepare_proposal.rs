@@ -120,7 +120,12 @@ where
                 .votes,
         );
         #[cfg(not(feature = "abcipp"))]
-        let (eth_events, valset_upds) = split_vote_extensions(txs);
+        let (protocol_txs, eth_events, valset_upds) =
+            split_vote_extensions(txs);
+
+        // TODO: remove this later, when we get rid of `abciplus`
+        #[cfg(feature = "abcipp")]
+        let protocol_txs = vec![];
 
         let ethereum_events = self
             .compress_ethereum_events(eth_events)
@@ -148,6 +153,8 @@ where
             validator_set_update,
         })
         .map(|tx| tx.sign(protocol_key).to_bytes())
+        // TODO: remove this later, when we get rid of `abciplus`
+        .chain(protocol_txs.into_iter())
         .collect()
     }
 
@@ -721,14 +728,8 @@ mod test_prepare_proposal {
                 txs: vec![tx],
                 ..Default::default()
             });
-            #[cfg(feature = "abcipp")]
-            assert_eq!(rsp.txs.len(), 1);
-            #[cfg(not(feature = "abcipp"))]
-            assert_eq!(rsp.txs.len(), 2);
+            assert_eq!(rsp.txs.len(), 3);
 
-            #[cfg(feature = "abcipp")]
-            let tx_bytes = rsp.txs.pop().unwrap();
-            #[cfg(not(feature = "abcipp"))]
             // NOTE: we remove the first pos, bc the ethereum events
             // vote extension protocol tx will always precede the
             // valset upd vext protocol tx
@@ -861,7 +862,7 @@ mod test_prepare_proposal {
                 txs: vec![vote],
                 ..Default::default()
             });
-            assert_eq!(rsp.txs.len(), 2);
+            assert_eq!(rsp.txs.len(), 3);
 
             let tx_bytes = rsp.txs.remove(0);
             let got = Tx::try_from(&tx_bytes[..]).unwrap();
