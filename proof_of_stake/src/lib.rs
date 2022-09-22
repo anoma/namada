@@ -38,7 +38,7 @@ use types::{
     ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
     SlashType, Slashes, TotalDeltas, Unbond, Unbonds, ValidatorConsensusKeys,
     ValidatorDeltas, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
-    ValidatorState, ValidatorStates,
+    ValidatorState, ValidatorStates, RewardsProducts,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -695,6 +695,10 @@ pub trait PosBase {
         &self,
         key: &Self::Address,
     ) -> Decimal;
+    /// Read PoS validator's reward products
+    fn read_validator_rewards_products(&self, key: &Self::Address) -> RewardsProducts;
+    /// Read PoS validator's delegation reward products
+    fn read_validator_delegation_rewards_products(&self, key: &Self::Address) -> RewardsProducts;
     /// Read PoS validator set (active and inactive).
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total deltas of all validators (active and inactive).
@@ -738,6 +742,20 @@ pub trait PosBase {
         &mut self,
         key: &Self::Address,
         value: &Decimal,
+    );
+    // TODO: should the rewards products be written entirely or appended?
+
+    /// Write PoS validator's rewards products.
+    fn write_validator_rewards_products(
+        &mut self,
+        key: &Self::Address,
+        value: &RewardsProducts,
+    );
+    /// Write PoS validator's delegation rewards products.
+    fn write_validator_delegation_rewards_products(
+        &mut self,
+        key: &Self::Address,
+        value: &RewardsProducts,
     );
     /// Write (append) PoS slash applied to a validator.
     fn write_validator_slash(
