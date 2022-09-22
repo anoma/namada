@@ -34,7 +34,7 @@ However, we wish to implement this without actually needing to iterate over all 
 
 We will demonstrate this for a delegation $D$ to a validator $V$. Let $s_D(e)$ denote the stake of $D$ at epoch $e$.
 
-For two epochs $m$ and $n$ with $m<n$, define the function $p(n,m)$ as
+For two epochs $m$ and $n$ with $m < n$, define the function $p(n,m)$ as
 
 $$
 p(n, m) = \prod_{e = m}^{n} \Big(1 + \frac{r_V(e)} {s_V(e)}\Big).
@@ -171,27 +171,39 @@ The block proposer reward is parameterized as
 
 $$ R_p = r_p\Big(f - \frac{2}{3}\Big) + 0.01, $$
 
-where $f$ is the ratio of the combined stake of all block signers to the combined stake of all consensus validators. The value of $f$ is bounded from below at 2/3, since a block requires this amount of signing stake to be verified. We currently enforce that the block proposer reward is a minimum of 1%.
+where $f$ is the ratio of the combined stake of all block signers to the combined stake of all consensus validators:
+
+$$ f = \frac{s_{sign}}{s_{cons}}. $$
+
+The value of $f$ is bounded from below at 2/3, since a block requires this amount of signing stake to be verified. We currently enforce that the block proposer reward is a minimum of 1%.
 
 The block signer reward for a validator $V_i$ is parameterized as
 
-$$ R_s^i = r_s \frac{s_i}{s_{sign}} = r_s \frac{s_i}{fs_{tot}}, $$
+$$ R_s^i = r_s \frac{s_i}{s_{sign}} = r_s \frac{s_i}{fs_{cons}}, $$
 
-where $s_i$ is the stake of validator $V_i$, $s_{sign} is the combined stake of all signers, and $s_{tot} is the combined stake of all consensus validators.
+where $s_i$ is the stake of validator $V_i$, $s_{sign}$ is the combined stake of all signers, and $s_{cons}$ is the combined stake of all consensus validators.
 
 Finally, the remaining reward just for being in the consensus validator set is parameterized as
 
-$$ R_b^i = (1 - R_p - R_s) \frac{s_i}{s_{tot}}. $$
+$$ R_b^i = (1 - R_p - R_s) \frac{s_i}{s_{cons}}. $$
+
+Thus, as an example, the total fraction of the block reward for the proposer (assuming they include their own signature in the block) would be:
+
+$$ R_{prop} = r_p\Big(f - \frac{2}{3}\Big) + 0.01 + r_s \frac{s_i}{fs_{cons}} + \Big(1 - r_p\Big(f - \frac{2}{3}\Big) - r_s\Big) \frac{s_i}{s_{cons}}. $$
 
 The values of the parameters $r_p$ and $r_s$ are set in the proof-of-stake storage and can only change via governance. The values are chosen relative to each other such that a block proposer is always incentivized to include as much signing stake as possible. These values at genesis are currently:
 
 - $r_s = 0.1$
 - $r_p = 0.125$
 
+These rewards must be determined for every single block, but the inflationary token rewards are only minted at the end of an epoch. Thus, the rewards products are only updated at the end of an epoch as well. In order to maintain a record of the block rewards over the course of an epoch, a reward fraction accumulator is held in a storage key `#{PoS}/validator/{validator_address}/rewards_accumulator` (TODO: THINK ABT THIS!) for each consensus validator.
+
+When finalizing each block, the accumulator for each consensus validator is incremented with the fraction of that block's reward owed to the validator. At the end of the epoch when the rewards products are updated, the accumulator value is divided by the number of blocks in that epoch, which yields the fraction of the newly minted inflation tokens owed to the validator. The next entry of the rewards products for each validator can then be created. The accumulator values are then reset to 0 for every validator in preparation for the next epoch.
+
+
 TODO describe / figure out:
 
-- how reward products will be stored
-- how reward fractions will be properly stored for all blocks in an epoch before the inflation rate is determined at the end of the epoch
+- how leftover reward tokens from round-off / truncation are handled
 
 ## Slashes
 
