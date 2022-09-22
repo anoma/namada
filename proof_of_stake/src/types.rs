@@ -37,6 +37,8 @@ pub type ValidatorSets<Address> =
 /// Epoched total total deltas.
 pub type TotalDeltas<TokenChange> =
     EpochedDelta<TokenChange, OffsetUnbondingLen>;
+/// Epoched rewards products
+pub type RewardsProducts = std::collections::HashMap<Epoch, Decimal>;
 
 /// Epoch identifier. Epochs are identified by consecutive natural numbers.
 ///
