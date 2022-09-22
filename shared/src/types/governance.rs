@@ -5,6 +5,7 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -101,13 +102,19 @@ pub struct ProposalResult {
 
 impl Display for ProposalResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let percentage = Decimal::checked_div(
+            self.total_yay_power.into(),
+            self.total_voting_power.into(),
+        )
+        .unwrap_or_default();
+
         write!(
             f,
             "{} with {} yay votes over {} ({:.2}%)",
             self.result,
             self.total_yay_power / SCALE as u128,
             self.total_voting_power / SCALE as u128,
-            (self.total_yay_power / self.total_voting_power) * 100
+            percentage.checked_mul(100.into()).unwrap_or_default()
         )
     }
 }
