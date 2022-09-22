@@ -1046,7 +1046,7 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // 2. Submit valid proposal
-    let test_dir = tempfile::tempdir_in(test.base_dir.path()).unwrap();
+    let test_dir = tempfile::tempdir_in(test.test_dir.path()).unwrap();
     let proposal_code = wasm_abs_path(TX_PROPOSAL_CODE);
 
     let albert = find_address(&test, ALBERT)?;
@@ -1064,9 +1064,9 @@ fn proposal_submission() -> Result<()> {
                 "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 12,
-            "voting_end_epoch": 24,
-            "grace_epoch": 30,
+            "voting_start_epoch": 12 as u64,
+            "voting_end_epoch": 24 as u64,
+            "grace_epoch": 30 as u64,
             "proposal_code_path": proposal_code.to_str().unwrap()
         }
     );
@@ -1164,9 +1164,9 @@ fn proposal_submission() -> Result<()> {
     eros.",             "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 9999,
-            "voting_end_epoch": 10000,
-            "grace_epoch": 10009,
+            "voting_start_epoch": 9999 as u64,
+            "voting_end_epoch": 10000 as u64,
+            "grace_epoch": 10009 as u64,
         }
     );
     let invalid_proposal_file =
@@ -1393,8 +1393,8 @@ fn proposal_offline() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 2. Create an offline proposal
-    let test_dir = tempfile::tempdir_in(test.base_dir.path()).unwrap();
+    // 2. Create an offline
+    let test_dir = tempfile::tempdir_in(test.test_dir.path()).unwrap();
 
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json = json!(
@@ -1411,9 +1411,9 @@ fn proposal_offline() -> Result<()> {
                 "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 3,
-            "voting_end_epoch": 9,
-            "grace_epoch": 18
+            "voting_start_epoch": 3 as u64,
+            "voting_end_epoch": 9 as u64,
+            "grace_epoch": 18 as u64
         }
     );
     let proposal_file =

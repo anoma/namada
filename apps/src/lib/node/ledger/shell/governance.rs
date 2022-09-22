@@ -1,15 +1,15 @@
-use anoma::ledger::governance::storage as gov_storage;
-use anoma::ledger::governance::utils::{
+use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::governance::utils::{
     compute_tally, get_proposal_votes, ProposalEvent,
 };
-use anoma::ledger::governance::vp::ADDRESS as gov_address;
-use anoma::ledger::storage::types::encode;
-use anoma::ledger::storage::{DBIter, StorageHasher, DB};
-use anoma::ledger::slash_fund::ADDRESS as slash_fund_address;
-use anoma::types::address::{xan as m1t, Address};
-use anoma::types::governance::TallyResult;
-use anoma::types::storage::Epoch;
-use anoma::types::token;
+use namada::ledger::governance::vp::ADDRESS as gov_address;
+use namada::ledger::storage::types::encode;
+use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::ledger::slash_fund::ADDRESS as slash_fund_address;
+use namada::types::address::{xan as m1t, Address};
+use namada::types::governance::TallyResult;
+use namada::types::storage::Epoch;
+use namada::types::token;
 
 use super::*;
 use crate::node::ledger::events::EventType;

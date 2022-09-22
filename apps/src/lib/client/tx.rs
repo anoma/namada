@@ -17,7 +17,6 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::nft::{self, Nft, NftToken};
 use namada::types::storage::Epoch;
-use namada::types::token::Amount;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
