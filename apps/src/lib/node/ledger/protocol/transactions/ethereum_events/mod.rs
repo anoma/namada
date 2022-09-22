@@ -1,4 +1,6 @@
-//! Code for handling [`ProtocolTxType::EthereumEvents`] transactions.
+//! Code for handling
+//! [`namada::types::transaction::protocol::ProtocolTxType::EthereumEvents`]
+//! transactions.
 mod eth_msgs;
 mod events;
 mod read;
