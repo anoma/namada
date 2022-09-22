@@ -379,12 +379,9 @@ async fn run_aux_setup(
     }
 }
 
-/// Launches two tasks into the asynchronous runtime:
-///
-///   1. An ABCI server.
-///   2. A service for broadcasting transactions via an HTTP client.
-///
-/// Lastly, this function executes an ABCI shell on a new OS thread.
+/// This function spawns an ABCI server and a [`Broadcaster`] into the
+/// asynchronous runtime. Additionally, it executes a shell in
+/// a new OS thread, to drive the ABCI server.
 fn start_abci_broadcaster_shell(
     spawner: &mut AbortableSpawner,
     eth_receiver: Option<mpsc::UnboundedReceiver<EthereumEvent>>,
@@ -534,7 +531,7 @@ async fn run_abci(
 }
 
 /// Launches a new task managing a Tendermint process into the asynchronous
-/// runtime, and returns its `JoinHandle`.
+/// runtime, and returns its [`task::JoinHandle`].
 fn start_tendermint(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
@@ -685,7 +682,8 @@ async fn start_ethereum_node(
     (eth_node, eth_receiver, oracle)
 }
 
-/// Spawn a dummy async task, which will resolve instantly.
+/// Spawn a dummy asynchronous task into the runtime,
+/// which will resolve instantly.
 fn spawn_dummy_task<T>() -> task::JoinHandle<T> {
     // ```
     // tokio::spawn(async { std::future::ready(()).await })
