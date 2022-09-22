@@ -473,8 +473,11 @@ fn start_abci_broadcaster_shell(
                 TendermintMode::Validator => {
                     tracing::info!("This node is a validator");
                 }
-                TendermintMode::Full | TendermintMode::Seed => {
-                    tracing::info!("This node is not a validator");
+                TendermintMode::Full => {
+                    tracing::info!("This node is a fullnode");
+                }
+                TendermintMode::Seed => {
+                    tracing::info!("This node is a seednode");
                 }
             }
             shell.run()
