@@ -519,7 +519,7 @@ where
         decode(value.unwrap()).unwrap()
     }
 
-    fn read_consensus_validator_rewards_accumulator(&self) -> std::collections::HashMap<Self::Address, rust_decimal::Decimal> {
+    fn read_consensus_validator_rewards_accumulator(&self) -> Option<std::collections::HashMap<Self::Address, rust_decimal::Decimal>> {
         let (value, _gas) = self.read(&consensus_validator_set_accumulator_key()).unwrap();
         decode(value.unwrap()).unwrap()
     }
