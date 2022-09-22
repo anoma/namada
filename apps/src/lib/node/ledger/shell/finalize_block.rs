@@ -511,8 +511,8 @@ where
         // update the rewards products
         //
         // TODO: update implementation using lazy DS and be more memory-efficient
-        let num_blocks_in_last_epoch: u64 = 0; // TODO: figure out how to actually get this
-        let accumulators = self.storage.read_consensus_validator_rewards_accumulator();
+        let first_block_of_this_epoch: u64 = self.storage.block.pred_epochs.first_block_heights.as_slice().last().unwrap().0;
+        let num_blocks_in_this_epoch = current_epoch.0 - first_block_of_this_epoch + 1;
         
         let mut reward_tokens_remaining = pos_minted_tokens.clone();
         let current_epoch = namada::ledger::pos::types::Epoch::from(current_epoch.0);
@@ -520,7 +520,7 @@ where
         
         // TODO: maybe change reward to Decimal
         for (address, acc) in accumulators.iter() {
-            let fractional_claim = acc / Decimal::from(num_blocks_in_last_epoch);
+            let fractional_claim = acc / Decimal::from(num_blocks_in_this_epoch);
             let reward = decimal_mult_u64(fractional_claim, pos_minted_tokens);
 
             let validator_deltas = self.storage.read_validator_deltas(address).unwrap();
