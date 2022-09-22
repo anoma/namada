@@ -28,9 +28,6 @@ pub const DATA_SUBKEY: &str = "data";
 /// In the [`LazyMap`], the type of key `K` can be anything that implements
 /// [`storage::KeySeg`] and this trait is used to turn the keys into key
 /// segments.
-///
-/// This is different from [`super::LazyHashMap`], which hashes borsh encoded
-/// key.
 #[derive(Debug)]
 pub struct LazyMap<K, V, SON = super::Simple> {
     key: storage::Key,
