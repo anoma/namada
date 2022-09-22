@@ -1,0 +1,196 @@
+name: Build docs
+
+on:
+  push:
+    branches:
+      - main
+  # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  GIT_LFS_SKIP_SMUDGE: 1
+
+jobs:
+  docs:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        nightly_version: [nightly-2022-05-20]
+        mdbook_version: [rust-lang/mdbook@v0.4.18]
+        mdbook_mermaid: [badboy/mdbook-mermaid@v0.11.1]
+        mdbook_linkcheck: [Michael-F-Bryan/mdbook-linkcheck@v0.7.6]
+        mdbook_open_on_gh: [badboy/mdbook-open-on-gh@v2.2.0]
+        mdbook_admonish: [tommilligan/mdbook-admonish@v1.7.0]
+        mdbook_katex: [lzanini/mdbook-katex@v0.2.10]
+        make:
+          - name: Build specs
+            folder: documentation/specs
+            bucket: namada-specs-static-website
+            command: cd documentation/specs && mdbook build
+            cache_subkey: specs
+            cache_version: v1
+          - name: Build docs
+            folder: documentation/docs
+            bucket: namada-docs-static-website
+            command: cd documentation/docs && mdbook build
+            cache_subkey: docs
+            cache_version: v1
+          - name: Build development docs
+            folder: documentation/dev
+            bucket: namada-dev-static-website
+            command: cargo run --bin namada_encoding_spec && cd documentation/dev && mdbook build
+            cache_subkey: dev
+            cache_version: v1
+
+    env:
+      CARGO_INCREMENTAL: 0
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: 100G
+      SCCACHE_BUCKET: namada-sccache-master
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          aws-region: eu-west-1
+      - name: Install sccache (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          LINK: https://github.com/mozilla/sccache/releases/download
+          SCCACHE_VERSION: v0.3.0
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install sccache (macos-latest)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install sccache
+      - name: Setup rust toolchain
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          profile: default
+          override: true
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: default
+      - name: Show rust toolchain info
+        run: rustup show
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Install cargo tool
+        run: |
+            curl https://i.jpillora.com/${{ matrix.mdbook_version }}! | bash
+            curl https://i.jpillora.com/${{ matrix.mdbook_mermaid }}! | bash
+            curl https://i.jpillora.com/${{ matrix.mdbook_linkcheck }}! | bash
+            curl https://i.jpillora.com/${{ matrix.mdbook_open_on_gh }}! | bash
+            curl https://i.jpillora.com/${{ matrix.mdbook_admonish }}! | bash
+            curl https://i.jpillora.com/${{ matrix.mdbook_katex }}! | bash
+            cd ${{ matrix.make.folder }} && mdbook-admonish install
+      - name: ${{ matrix.make.name }}
+        run: ${{ matrix.make.command }}
+      - name: Publish docs
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: aws s3 sync ${{ matrix.make.folder }}/book/html/ s3://${{ matrix.make.bucket }} --region eu-west-1 --delete
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true
+
+  rust-docs:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+
+    env:
+      CARGO_INCREMENTAL: 0
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: 100G
+      SCCACHE_BUCKET: namada-sccache-master
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          aws-region: eu-west-1
+      - name: Install sccache (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          LINK: https://github.com/mozilla/sccache/releases/download
+          SCCACHE_VERSION: v0.3.0
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install sccache (macos-latest)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install sccache
+      - name: Setup rust toolchain
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          profile: default
+          override: true
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: default
+      - name: Show rust toolchain info
+        run: rustup show
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Build rust-docs
+        run: make build-doc
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true

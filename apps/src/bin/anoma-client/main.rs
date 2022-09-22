@@ -1,7 +1,7 @@
 mod cli;
 
-use anoma_apps::logging;
 use color_eyre::eyre::Result;
+use namada_apps::logging;
 use tracing_subscriber::filter::LevelFilter;
 
 #[tokio::main]

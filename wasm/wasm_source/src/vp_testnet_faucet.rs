@@ -5,7 +5,7 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use anoma_vp_prelude::{SignedTxData, *};
+use namada_vp_prelude::{SignedTxData, *};
 use once_cell::unsync::Lazy;
 
 /// Allows anyone to withdraw up to 1_000 tokens in a single tx
@@ -88,11 +88,11 @@ fn validate_tx(
 mod tests {
     use address::testing::arb_non_internal_address;
     // Use this as `#[test]` annotation to enable logging
-    use anoma_tests::log::test;
-    use anoma_tests::tx::{tx_host_env, TestTxEnv};
-    use anoma_tests::vp::vp_host_env::storage::Key;
-    use anoma_tests::vp::*;
-    use anoma_vp_prelude::key::RefTo;
+    use namada_tests::log::test;
+    use namada_tests::tx::{tx_host_env, TestTxEnv};
+    use namada_tests::vp::vp_host_env::storage::Key;
+    use namada_tests::vp::*;
+    use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 
@@ -136,7 +136,9 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(&source, address, &token, amount);
+            tx_host_env::token::transfer(
+                &source, address, &token, None, amount,
+            );
         });
 
         let vp_env = vp_host_env::take();
@@ -251,7 +253,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
         // Apply transfer in a transaction
-        tx_host_env::token::transfer(address, &target, &token, amount);
+        tx_host_env::token::transfer(address, &target, &token, None, amount);
         });
 
         let vp_env = vp_host_env::take();
@@ -284,7 +286,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
         // Apply transfer in a transaction
-        tx_host_env::token::transfer(address, &target, &token, amount);
+        tx_host_env::token::transfer(address, &target, &token, None, amount);
         });
 
         let vp_env = vp_host_env::take();

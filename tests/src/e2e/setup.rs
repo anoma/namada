@@ -1,35 +1,48 @@
 use std::ffi::OsStr;
+use std::fmt::Display;
+use std::fs::{File, OpenOptions};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::Once;
-use std::{env, fs, mem, thread, time};
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::{env, fs, thread, time};
 
-use anoma::types::chain::ChainId;
-use anoma_apps::client::utils;
-use anoma_apps::config::genesis::genesis_config::{self, GenesisConfig};
-use anoma_apps::{config, wallet};
 use assert_cmd::assert::OutputAssertExt;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use escargot::CargoBuild;
+use expectrl::process::unix::{PtyStream, UnixProcess};
 use expectrl::session::Session;
+use expectrl::stream::log::LoggedStream;
 use expectrl::{Eof, WaitStatus};
 use eyre::eyre;
+use itertools::{Either, Itertools};
+use namada::types::chain::ChainId;
+use namada_apps::client::utils;
+use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
+use namada_apps::{config, wallet};
+use rand::Rng;
 use tempfile::{tempdir, TempDir};
+
+use crate::e2e::helpers::generate_bin_command;
 
 /// For `color_eyre::install`, which fails if called more than once in the same
 /// process
 pub static INIT: Once = Once::new();
 
-const APPS_PACKAGE: &str = "anoma_apps";
+pub const APPS_PACKAGE: &str = "namada_apps";
 
 /// Env. var for running E2E tests in debug mode
 pub const ENV_VAR_DEBUG: &str = "ANOMA_E2E_DEBUG";
 
 /// Env. var for keeping temporary files created by the E2E tests
 const ENV_VAR_KEEP_TEMP: &str = "ANOMA_E2E_KEEP_TEMP";
+
+/// Env. var to use a set of prebuilt binaries. This variable holds the path to
+/// a folder.
+pub const ENV_VAR_USE_PREBUILT_BINARIES: &str =
+    "ANOMA_E2E_USE_PREBUILT_BINARIES";
 
 /// The E2E tests genesis config source.
 /// This file must contain a single validator with alias "validator-0".
@@ -41,10 +54,6 @@ pub const SINGLE_NODE_NET_GENESIS: &str = "genesis/e2e-tests-single-node.toml";
 pub struct Network {
     pub chain_id: ChainId,
 }
-
-/// Offset the ports used in the network configuration by 1000 for ABCI++ to
-/// avoid shared resources
-pub const ABCI_PLUS_PLUS_PORT_OFFSET: u16 = 1000;
 
 /// Add `num` validators to the genesis config. Note that called from inside
 /// the [`network`]'s first argument's closure, there is 1 validator already
@@ -73,15 +82,7 @@ pub fn add_validators(num: u8, mut genesis: GenesisConfig) -> GenesisConfig {
         validator.intent_gossip_seed = None;
         let mut net_address = net_address_0;
         // 6 ports for each validator
-        let first_port = net_address_port_0
-            + 6 * (ix as u16 + 1)
-            + if cfg!(feature = "ABCI") {
-                0
-            } else {
-                // The ABCI++ ports at `26670 + ABCI_PLUS_PLUS_PORT_OFFSET`,
-                // see `network`
-                ABCI_PLUS_PLUS_PORT_OFFSET
-            };
+        let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
         net_address.set_port(first_port);
         validator.net_address = Some(net_address.to_string());
         let name = format!("validator-{}", ix + 1);
@@ -95,7 +96,6 @@ pub fn single_node_net() -> Result<Test> {
     network(|genesis| genesis, None)
 }
 
-/// Setup a configurable network.
 pub fn network(
     update_genesis: impl Fn(GenesisConfig) -> GenesisConfig,
     consensus_timeout_commit: Option<&'static str>,
@@ -105,33 +105,21 @@ pub fn network(
             eprintln!("Failed setting up colorful error reports {}", err);
         }
     });
+
     let working_dir = working_dir();
-    let base_dir = tempdir().unwrap();
+    let test_dir = TestDir::new();
 
     // Open the source genesis file
-    let mut genesis = genesis_config::open_genesis_config(
+    let genesis = genesis_config::open_genesis_config(
         working_dir.join(SINGLE_NODE_NET_GENESIS),
     );
-
-    if !cfg!(feature = "ABCI") {
-        // The ABCI ports start at `26670`, ABCI++ at `26670 +
-        // ABCI_PLUS_PLUS_PORT_OFFSET`to avoid using shared resources with ABCI
-        // feature if running at the same time.
-        let validator_0 = genesis.validator.get_mut("validator-0").unwrap();
-        let mut net_address_0 =
-            SocketAddr::from_str(validator_0.net_address.as_ref().unwrap())
-                .unwrap();
-        let current_port = net_address_0.port();
-        net_address_0.set_port(current_port + ABCI_PLUS_PLUS_PORT_OFFSET);
-        validator_0.net_address = Some(net_address_0.to_string());
-    };
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);
 
     // Run `init-network` to generate the finalized genesis config, keys and
     // addresses and update WASM checksums
-    let genesis_file = base_dir.path().join("e2e-test-genesis-src.toml");
+    let genesis_file = test_dir.path().join("e2e-test-genesis-src.toml");
     genesis_config::write_genesis_config(&genesis, &genesis_file);
     let genesis_path = genesis_file.to_string_lossy();
     let checksums_path = working_dir
@@ -161,7 +149,7 @@ pub fn network(
         args,
         Some(5),
         &working_dir,
-        &base_dir,
+        &test_dir,
         "validator",
         format!("{}:{}", std::file!(), std::line!()),
     )?;
@@ -177,7 +165,7 @@ pub fn network(
 
     // Move the "others" accounts wallet in the main base dir, so that we can
     // use them with `Who::NonValidator`
-    let chain_dir = base_dir.path().join(net.chain_id.as_str());
+    let chain_dir = test_dir.path().join(net.chain_id.as_str());
     std::fs::rename(
         wallet::wallet_file(
             chain_dir
@@ -197,7 +185,7 @@ pub fn network(
 
     Ok(Test {
         working_dir,
-        base_dir,
+        test_dir,
         net,
         genesis,
     })
@@ -213,33 +201,64 @@ pub enum Bin {
 
 #[derive(Debug)]
 pub struct Test {
+    /// The dir where the tests run from, usually the repo root dir
     pub working_dir: PathBuf,
-    pub base_dir: TempDir,
+    /// Temporary test directory is used as the default base-dir for running
+    /// Anoma cmds
+    pub test_dir: TestDir,
     pub net: Network,
     pub genesis: GenesisConfig,
 }
 
-impl Drop for Test {
-    fn drop(&mut self) {
+#[derive(Debug)]
+pub struct TestDir(Either<TempDir, PathBuf>);
+
+impl AsRef<Path> for TestDir {
+    fn as_ref(&self) -> &Path {
+        match &self.0 {
+            Either::Left(temp_dir) => temp_dir.path(),
+            Either::Right(path) => path.as_ref(),
+        }
+    }
+}
+
+impl TestDir {
+    /// Setup a `TestDir` in a temporary directory. The directory will be
+    /// automatically deleted after the test run, unless `ENV_VAR_KEEP_TEMP`
+    /// is set to `true`.
+    pub fn new() -> Self {
         let keep_temp = match env::var(ENV_VAR_KEEP_TEMP) {
             Ok(val) => val.to_ascii_lowercase() != "false",
             _ => false,
         };
+
         if keep_temp {
-            if cfg!(any(unix, target_os = "redox", target_os = "wasi")) {
-                let path = mem::replace(&mut self.base_dir, tempdir().unwrap());
-                println!(
-                    "{}: \"{}\"",
-                    "Keeping temporary directory at".underline().yellow(),
-                    path.path().to_string_lossy()
-                );
-                mem::forget(path);
-            } else {
-                eprintln!(
-                    "Setting {} is not supported on this platform",
-                    ENV_VAR_KEEP_TEMP
-                );
-            }
+            let path = tempdir().unwrap().into_path();
+            println!(
+                "{}: \"{}\"",
+                "Keeping test directory at".underline().yellow(),
+                path.to_string_lossy()
+            );
+            Self(Either::Right(path))
+        } else {
+            Self(Either::Left(tempdir().unwrap()))
+        }
+    }
+
+    /// Get the [`Path`] to the test directory.
+    pub fn path(&self) -> &Path {
+        self.as_ref()
+    }
+}
+
+impl Drop for Test {
+    fn drop(&mut self) {
+        if let Either::Right(path) = &self.test_dir.0 {
+            println!(
+                "{}: \"{}\"",
+                "Keeping test directory at".underline().yellow(),
+                path.to_string_lossy()
+            );
         }
     }
 }
@@ -369,9 +388,9 @@ impl Test {
 
     pub fn get_base_dir(&self, who: &Who) -> PathBuf {
         match who {
-            Who::NonValidator => self.base_dir.path().to_owned(),
+            Who::NonValidator => self.test_dir.path().to_owned(),
             Who::Validator(index) => self
-                .base_dir
+                .test_dir
                 .path()
                 .join(self.net.chain_id.as_str())
                 .join(utils::NET_ACCOUNTS_DIR)
@@ -385,24 +404,37 @@ impl Test {
 pub fn working_dir() -> PathBuf {
     let working_dir = fs::canonicalize("..").unwrap();
 
-    if cfg!(feature = "ABCI") {
-        // Check that tendermint is on $PATH
-        Command::new("which").arg("tendermint").assert().success();
-        std::env::var("TENDERMINT")
-            .expect_err("The env variable TENDERMINT must **not** be set");
-    } else {
-        std::env::var("TENDERMINT").expect(
-            "The env variable TENDERMINT must be set and point to a local \
-             build of the tendermint abci++ branch",
-        );
+    // Check that tendermint is either on $PATH or `TENDERMINT` env var is set
+    if std::env::var("TENDERMINT").is_err() {
+        Command::new("which")
+            .arg("tendermint")
+            .assert()
+            .try_success()
+            .expect(
+                "The env variable TENDERMINT must be set and point to a local \
+                 build of the tendermint abci++ branch, or the tendermint \
+                 binary must be on PATH",
+            );
     }
     working_dir
 }
 
 /// A command under test
 pub struct AnomaCmd {
-    pub session: Session,
+    pub session: Session<UnixProcess, LoggedStream<PtyStream, File>>,
     pub cmd_str: String,
+    pub log_path: PathBuf,
+}
+
+impl Display for AnomaCmd {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\nLogs: {}",
+            self.cmd_str,
+            self.log_path.to_string_lossy()
+        )
+    }
 }
 
 /// A command under test running on a background thread
@@ -447,14 +479,20 @@ impl AnomaCmd {
     }
 
     /// Assert that the process exited with success
-    pub fn assert_success(&self) {
+    pub fn assert_success(&mut self) {
+        // Make sure that there is no unread output first
+        let _ = self.exp_eof().unwrap();
+
         let status = self.session.wait().unwrap();
         assert_eq!(WaitStatus::Exited(self.session.pid(), 0), status);
     }
 
     /// Assert that the process exited with failure
     #[allow(dead_code)]
-    pub fn assert_failure(&self) {
+    pub fn assert_failure(&mut self) {
+        // Make sure that there is no unread output first
+        let _ = self.exp_eof().unwrap();
+
         let status = self.session.wait().unwrap();
         assert_ne!(WaitStatus::Exited(self.session.pid(), 0), status);
     }
@@ -467,13 +505,17 @@ impl AnomaCmd {
     pub fn exp_string(&mut self, needle: &str) -> Result<String> {
         let found = self
             .session
-            .expect_eager(needle)
+            .expect(needle)
             .map_err(|e| eyre!(format!("{}\n Needle: {}", e, needle)))?;
         if found.is_empty() {
-            Err(eyre!(format!("Expected needle not found: {}", needle)))
+            Err(eyre!(
+                "Expected needle not found\nCommand: {}\n Needle: {}",
+                self,
+                needle
+            ))
         } else {
             String::from_utf8(found.before().to_vec())
-                .map_err(|e| eyre!(format!("{}", e)))
+                .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))
         }
     }
 
@@ -487,16 +529,20 @@ impl AnomaCmd {
     pub fn exp_regex(&mut self, regex: &str) -> Result<(String, String)> {
         let found = self
             .session
-            .expect_eager(expectrl::Regex(regex))
+            .expect(expectrl::Regex(regex))
             .map_err(|e| eyre!(format!("{}", e)))?;
         if found.is_empty() {
-            Err(eyre!(format!("Expected regex not found: {}", regex)))
+            Err(eyre!(
+                "Expected regex not found: {}\nCommand: {}",
+                regex,
+                self
+            ))
         } else {
             let unread = String::from_utf8(found.before().to_vec())
-                .map_err(|e| eyre!(format!("{}", e)))?;
+                .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))?;
             let matched =
                 String::from_utf8(found.matches().next().unwrap().to_vec())
-                    .map_err(|e| eyre!(format!("{}", e)))?;
+                    .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))?;
             Ok((unread, matched))
         }
     }
@@ -508,13 +554,12 @@ impl AnomaCmd {
     /// reporting.
     #[allow(dead_code)]
     pub fn exp_eof(&mut self) -> Result<String> {
-        let found =
-            self.session.expect_eager(Eof).map_err(|e| eyre!("{}", e))?;
+        let found = self.session.expect(Eof).map_err(|e| eyre!("{}", e))?;
         if found.is_empty() {
-            Err(eyre!("Expected EOF"))
+            Err(eyre!("Expected EOF\nCommand: {}", self))
         } else {
             String::from_utf8(found.before().to_vec())
-                .map_err(|e| eyre!(format!("{}", e)))
+                .map_err(|e| eyre!(format!("Error: {}\nCommand: {}", e, self)))
         }
     }
 
@@ -529,7 +574,7 @@ impl AnomaCmd {
     pub fn send_control(&mut self, c: char) -> Result<()> {
         self.session
             .send_control(c)
-            .map_err(|e| eyre!(format!("{}", e)))
+            .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))
     }
 
     /// send line to repl (and flush output) and then, if echo_on=true wait for
@@ -541,7 +586,7 @@ impl AnomaCmd {
     pub fn send_line(&mut self, line: &str) -> Result<()> {
         self.session
             .send_line(line)
-            .map_err(|e| eyre!(format!("{}", e)))
+            .map_err(|e| eyre!("Error: {}\nCommand: {}", e, self))
     }
 }
 
@@ -550,7 +595,7 @@ impl Drop for AnomaCmd {
         // attempt to clean up the process
         println!(
             "{}: {}",
-            "Waiting for command to finish".underline().yellow(),
+            "> Sending Ctrl+C to command".underline().yellow(),
             self.cmd_str,
         );
         let _result = self.send_control('c');
@@ -558,7 +603,7 @@ impl Drop for AnomaCmd {
             Err(error) => {
                 eprintln!(
                     "\n{}: {}\n{}: {}",
-                    "Error waiting for command to finish".underline().red(),
+                    "> Error ensuring command is finished".underline().red(),
                     self.cmd_str,
                     "Error".underline().red(),
                     error,
@@ -567,21 +612,21 @@ impl Drop for AnomaCmd {
             Ok(output) => {
                 println!(
                     "\n{}: {}",
-                    "Command finished".underline().green(),
+                    "> Command finished".underline().green(),
                     self.cmd_str,
                 );
                 let output = output.trim();
                 if !output.is_empty() {
                     println!(
                         "\n{}: {}\n\n{}",
-                        "Unread output for command".underline().yellow(),
+                        "> Unread output for command".underline().yellow(),
                         self.cmd_str,
                         output
                     );
                 } else {
                     println!(
                         "\n{}: {}",
-                        "No unread output for command".underline().green(),
+                        "> No unread output for command".underline().green(),
                         self.cmd_str
                     );
                 }
@@ -607,60 +652,21 @@ where
     S: AsRef<OsStr>,
 {
     // Root cargo workspace manifest path
-    let manifest_path = working_dir.as_ref().join("Cargo.toml");
     let bin_name = match bin {
-        Bin::Node => "anoman",
-        Bin::Client => "anomac",
-        Bin::Wallet => "anomaw",
+        Bin::Node => "namadan",
+        Bin::Client => "namadac",
+        Bin::Wallet => "namadaw",
     };
-    // Allow to run in debug
-    let run_debug = match env::var(ENV_VAR_DEBUG) {
-        Ok(val) => val.to_ascii_lowercase() != "false",
-        _ => false,
-    };
-    let build_cmd = if !cfg!(feature = "ABCI") {
-        CargoBuild::new()
-            .package(APPS_PACKAGE)
-            .manifest_path(manifest_path)
-            .no_default_features()
-            .features("ABCI-plus-plus")
-            // Explicitly disable dev, in case it's enabled when a test is
-            // invoked
-            .env("ANOMA_DEV", "false")
-            .bin(bin_name)
-    } else {
-        CargoBuild::new()
-            .package(APPS_PACKAGE)
-            .manifest_path(manifest_path)
-            .features("ABCI")
-            // Explicitly disable dev, in case it's enabled when a test is
-            // invoked
-            .env("ANOMA_DEV", "false")
-            .bin(bin_name)
-    };
-    let build_cmd = if run_debug {
-        build_cmd
-    } else {
-        // Use the same build settings as `make build-release`
-        build_cmd.release()
-    };
-    let now = time::Instant::now();
-    // ideally we would print the compile command here, but escargot doesn't
-    // implement Display or Debug for CargoBuild
-    println!(
-        "\n{}: {}",
-        "`cargo build` starting".underline().bright_blue(),
-        bin_name
-    );
-    let mut run_cmd = build_cmd.run().unwrap().command();
-    println!(
-        "\n{}: {}ms",
-        "`cargo build` finished after".underline().bright_blue(),
-        now.elapsed().as_millis()
+
+    let mut run_cmd = generate_bin_command(
+        bin_name,
+        &working_dir.as_ref().join("Cargo.toml"),
     );
 
     run_cmd
-        .env("ANOMA_LOG", "anoma=info")
+        .env("ANOMA_LOG", "info")
+        .env("TM_LOG_LEVEL", "info")
+        .env("ANOMA_LOG_COLOR", "false")
         .current_dir(working_dir)
         .args(&[
             "--base-dir",
@@ -669,10 +675,13 @@ where
             mode,
         ])
         .args(args);
-    let cmd_str = format!("{:?}", run_cmd);
 
-    println!("{}: {}", "Running".underline().green(), cmd_str);
-    let mut session = Session::spawn(run_cmd).map_err(|e| {
+    let args: String =
+        run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
+    let cmd_str =
+        format!("{} {}", run_cmd.get_program().to_string_lossy(), args);
+
+    let session = Session::spawn(run_cmd).map_err(|e| {
         eyre!(
             "\n\n{}: {}\n{}: {}\n{}: {}",
             "Failed to run".underline().red(),
@@ -683,9 +692,37 @@ where
             e
         )
     })?;
+
+    let log_path = {
+        let mut rng = rand::thread_rng();
+        let log_dir = base_dir.as_ref().join("logs");
+        fs::create_dir_all(&log_dir)?;
+        log_dir.join(&format!(
+            "{}-{}-{}.log",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros(),
+            bin_name,
+            rng.gen::<u64>()
+        ))
+    };
+    let logger = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&log_path)?;
+    let mut session = session.with_log(logger).unwrap();
+
     session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
 
-    let mut cmd_process = AnomaCmd { session, cmd_str };
+    let mut cmd_process = AnomaCmd {
+        session,
+        cmd_str,
+        log_path,
+    };
+
+    println!("{}:\n{}", "> Running".underline().green(), &cmd_process);
+
     if let Bin::Node = &bin {
         // When running a node command, we need to wait a bit before checking
         // status
@@ -710,6 +747,7 @@ where
             }
         }
     }
+
     Ok(cmd_process)
 }
 

@@ -1,16 +1,13 @@
 use std::collections::HashSet;
 use std::io::Write;
 
-use anoma::proto::Signed;
-use anoma::types::intent::{Exchange, FungibleTokenIntent};
 use borsh::BorshSerialize;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_config::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address as TendermintAddress;
+use namada::proto::Signed;
+use namada::types::intent::{Exchange, FungibleTokenIntent};
 
 use super::signing;
 use crate::cli::{self, args, Context};
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::proto::services::rpc_service_client::RpcServiceClient;
 use crate::proto::{services, RpcMessage};
 use crate::wallet::Wallet;
@@ -75,7 +72,7 @@ pub async fn gossip_intent(
 
         match RpcServiceClient::connect(node_addr.clone()).await {
             Ok(mut client) => {
-                let intent = anoma::proto::Intent::new(data_bytes);
+                let intent = namada::proto::Intent::new(data_bytes);
                 let message: services::RpcMessage =
                     RpcMessage::new_intent(intent, topic).into();
                 let response = client.send_message(message).await.expect(

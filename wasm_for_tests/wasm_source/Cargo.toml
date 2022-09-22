@@ -2,9 +2,9 @@
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2021"
 license = "GPL-3.0"
-name = "anoma_wasm_for_tests"
+name = "namada_wasm_for_tests"
 resolver = "2"
-version = "0.6.1"
+version = "0.7.1"
 
 [lib]
 crate-type = ["cdylib"]
@@ -25,9 +25,9 @@ vp_read_storage_key = []
 tx_proposal_code = []
 
 [dependencies]
-anoma_tx_prelude = {path = "../../tx_prelude"}
-anoma_vm_env = {path = "../../vm_env"}
-anoma_vp_prelude = {path = "../../vp_prelude"}
+namada_tx_prelude = {path = "../../tx_prelude"}
+namada_vm_env = {path = "../../vm_env"}
+namada_vp_prelude = {path = "../../vp_prelude"}
 borsh = "0.9.1"
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
@@ -40,7 +40,7 @@ borsh-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev 
 borsh-schema-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 
 [dev-dependencies]
-anoma_tests = {path = "../../tests"}
+namada_tests = {path = "../../tests"}
 
 [profile.release]
 # smaller and faster wasm https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto

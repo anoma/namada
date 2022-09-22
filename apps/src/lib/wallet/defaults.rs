@@ -1,8 +1,5 @@
 //! Default addresses and keys.
 
-use anoma::ledger::{eth_bridge, governance, pos};
-use anoma::types::address::Address;
-use anoma::types::key::*;
 #[cfg(feature = "dev")]
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
@@ -10,6 +7,9 @@ pub use dev::{
     matchmaker_address, matchmaker_keypair, validator_address,
     validator_keypair, validator_keys,
 };
+use namada::ledger::{eth_bridge, governance, pos};
+use namada::types::address::Address;
+use namada::types::key::*;
 
 use crate::config::genesis::genesis_config::GenesisConfig;
 use crate::wallet::alias::Alias;
@@ -21,7 +21,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
         ("pos".into(), pos::ADDRESS),
         ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
         ("governance".into(), governance::vp::ADDRESS),
-        ("eth_bridge".into(), eth_bridge::vp::ADDRESS),
+        ("eth_bridge".into(), eth_bridge::ADDRESS),
     ];
     // Genesis validators
     let validator_addresses =
@@ -73,11 +73,11 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
 
 #[cfg(feature = "dev")]
 mod dev {
-    use anoma::ledger::{governance, pos};
-    use anoma::types::address::{self, Address};
-    use anoma::types::key::dkg_session_keys::DkgKeypair;
-    use anoma::types::key::*;
     use borsh::BorshDeserialize;
+    use namada::ledger::{governance, pos};
+    use namada::types::address::{self, Address};
+    use namada::types::key::dkg_session_keys::DkgKeypair;
+    use namada::types::key::*;
 
     use crate::wallet::alias::Alias;
 
@@ -165,7 +165,7 @@ mod dev {
 
     pub fn albert_keypair() -> common::SecretKey {
         // generated from
-        // [`anoma::types::key::ed25519::gen_keypair`]
+        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
             115, 191, 32, 247, 18, 101, 5, 106, 26, 203, 48, 145, 39, 41, 41,
             196, 252, 190, 245, 222, 96, 209, 34, 36, 40, 214, 169, 156, 235,
@@ -177,7 +177,7 @@ mod dev {
 
     pub fn bertha_keypair() -> common::SecretKey {
         // generated from
-        // [`anoma::types::key::ed25519::gen_keypair`]
+        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
             240, 3, 224, 69, 201, 148, 60, 53, 112, 79, 80, 107, 101, 127, 186,
             6, 176, 162, 113, 224, 62, 8, 183, 187, 124, 234, 244, 251, 92, 36,
@@ -189,7 +189,7 @@ mod dev {
 
     pub fn christel_keypair() -> common::SecretKey {
         // generated from
-        // [`anoma::types::key::ed25519::gen_keypair`]
+        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
             65, 198, 96, 145, 237, 227, 84, 182, 107, 55, 209, 235, 115, 105,
             71, 190, 234, 137, 176, 188, 181, 174, 183, 49, 131, 230, 46, 39,
@@ -201,7 +201,7 @@ mod dev {
 
     pub fn daewon_keypair() -> common::SecretKey {
         // generated from
-        // [`anoma::types::key::ed25519::gen_keypair`]
+        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
             235, 250, 15, 1, 145, 250, 172, 218, 247, 27, 63, 212, 60, 47, 164,
             57, 187, 156, 182, 144, 107, 174, 38, 81, 37, 40, 19, 142, 68, 135,
@@ -213,7 +213,7 @@ mod dev {
 
     pub fn validator_keypair() -> common::SecretKey {
         // generated from
-        // [`anoma::types::key::ed25519::gen_keypair`]
+        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
             80, 110, 166, 33, 135, 254, 34, 138, 253, 44, 214, 71, 50, 230, 39,
             246, 124, 201, 68, 138, 194, 251, 192, 36, 55, 160, 211, 68, 65,
@@ -225,7 +225,7 @@ mod dev {
 
     pub fn matchmaker_keypair() -> common::SecretKey {
         // generated from
-        // [`anoma::types::key::ed25519::gen_keypair`]
+        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
             91, 67, 244, 37, 241, 33, 157, 218, 37, 172, 191, 122, 75, 2, 44,
             219, 28, 123, 44, 34, 9, 240, 244, 49, 112, 192, 180, 98, 142, 160,

@@ -35,6 +35,11 @@ mod protocol_txs {
     use crate::proto::Tx;
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
+    #[cfg(not(feature = "abcipp"))]
+    use crate::types::vote_extensions::VoteExtension;
+    use crate::types::vote_extensions::{
+        ethereum_events, validator_set_update,
+    };
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
 
@@ -76,27 +81,28 @@ mod protocol_txs {
         DKG(DkgMessage),
         /// Tx requesting a new DKG session keypair
         NewDkgKeypair(Tx),
-        /// Aggregation of Ethereum state changes
-        /// voted on by validators in last block
-        EthereumStateUpdate(Tx),
+        /// Ethereum events contained in vote extensions that
+        /// are compressed before being included on chain
+        EthereumEvents(ethereum_events::VextDigest),
+        /// Validator set updates contained in vote extensions
+        ValidatorSetUpdate(validator_set_update::VextDigest),
+        /// Protocol transaction type including Ethereum events
+        /// seen by validators and validator set updates signed
+        /// at the beginning of a new epoch
+        #[cfg(not(feature = "abcipp"))]
+        VoteExtension(VoteExtension),
     }
 
     impl ProtocolTxType {
         /// Sign a ProtocolTxType and wrap it up in a normal Tx
-        pub fn sign(
-            self,
-            pk: &common::PublicKey,
-            signing_key: &common::SecretKey,
-        ) -> Tx {
+        pub fn sign(self, signing_key: &common::SecretKey) -> Tx {
+            let pk = signing_key.ref_to();
             Tx::new(
                 vec![],
                 Some(
-                    TxType::Protocol(ProtocolTx {
-                        pk: pk.clone(),
-                        tx: self,
-                    })
-                    .try_to_vec()
-                    .expect("Could not serialize ProtocolTx"),
+                    TxType::Protocol(ProtocolTx { pk, tx: self })
+                        .try_to_vec()
+                        .expect("Could not serialize ProtocolTx"),
                 ),
             )
             .sign(signing_key)

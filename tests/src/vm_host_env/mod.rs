@@ -20,23 +20,23 @@ mod tests {
 
     use std::panic;
 
-    use anoma::ibc::tx_msg::Msg;
-    use anoma::ledger::ibc::handler::IbcActions;
-    use anoma::ledger::ibc::vp::{
+    use itertools::Itertools;
+    use namada::ibc::tx_msg::Msg;
+    use namada::ledger::ibc::handler::IbcActions;
+    use namada::ledger::ibc::vp::{
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
-    use anoma::proto::{SignedTxData, Tx};
-    use anoma::tendermint_proto::Protobuf;
-    use anoma::types::key::*;
-    use anoma::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
-    use anoma::types::time::DateTimeUtc;
-    use anoma::types::token::{self, Amount};
-    use anoma::types::{address, key};
-    use anoma_vm_env::tx_prelude::{
+    use namada::proto::{SignedTxData, Tx};
+    use namada::tendermint_proto::Protobuf;
+    use namada::types::key::*;
+    use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
+    use namada::types::time::DateTimeUtc;
+    use namada::types::token::{self, Amount};
+    use namada::types::{address, key};
+    use namada_vm_env::tx_prelude::{
         BorshDeserialize, BorshSerialize, KeyValIterator,
     };
-    use anoma_vm_env::vp_prelude::{PostKeyValIterator, PreKeyValIterator};
-    use itertools::Itertools;
+    use namada_vm_env::vp_prelude::{PostKeyValIterator, PreKeyValIterator};
     use prost::Message;
     use test_log::test;
 

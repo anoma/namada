@@ -1,9 +1,9 @@
 //! Anoma client CLI.
 
-use anoma_apps::cli;
-use anoma_apps::cli::cmds::*;
-use anoma_apps::client::{gossip, rpc, tx, utils};
 use color_eyre::eyre::Result;
+use namada_apps::cli;
+use namada_apps::cli::cmds::*;
+use namada_apps::client::{gossip, rpc, tx, utils};
 
 pub async fn main() -> Result<()> {
     match cli::anoma_client_cli() {

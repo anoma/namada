@@ -2,73 +2,73 @@ use core::time::Duration;
 use std::collections::{BTreeSet, HashMap};
 use std::str::FromStr;
 
-use anoma::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-use anoma::ibc::core::ics02_client::client_consensus::ConsensusState;
-use anoma::ibc::core::ics02_client::client_state::{
+use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use namada::ibc::core::ics02_client::client_consensus::ConsensusState;
+use namada::ibc::core::ics02_client::client_state::{
     AnyClientState, ClientState,
 };
-use anoma::ibc::core::ics02_client::header::Header;
-use anoma::ibc::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
-use anoma::ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
-use anoma::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
-use anoma::ibc::core::ics03_connection::connection::Counterparty as ConnCounterparty;
-use anoma::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
-use anoma::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
-use anoma::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-use anoma::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
-use anoma::ibc::core::ics03_connection::version::Version as ConnVersion;
-use anoma::ibc::core::ics04_channel::channel::{
+use namada::ibc::core::ics02_client::header::Header;
+use namada::ibc::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
+use namada::ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
+use namada::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
+use namada::ibc::core::ics03_connection::connection::Counterparty as ConnCounterparty;
+use namada::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
+use namada::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
+use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
+use namada::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
+use namada::ibc::core::ics03_connection::version::Version as ConnVersion;
+use namada::ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
-use anoma::ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
-use anoma::ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
-use anoma::ibc::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
-use anoma::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
-use anoma::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
-use anoma::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
-use anoma::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-use anoma::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
-use anoma::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
-use anoma::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
-use anoma::ibc::core::ics04_channel::packet::{Packet, Sequence};
-use anoma::ibc::core::ics04_channel::Version as ChanVersion;
-use anoma::ibc::core::ics24_host::identifier::{
+use namada::ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
+use namada::ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
+use namada::ibc::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
+use namada::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
+use namada::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
+use namada::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
+use namada::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
+use namada::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
+use namada::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
+use namada::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
+use namada::ibc::core::ics04_channel::packet::{Packet, Sequence};
+use namada::ibc::core::ics04_channel::Version as ChanVersion;
+use namada::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortId,
 };
-use anoma::ibc::mock::client_state::{MockClientState, MockConsensusState};
-use anoma::ibc::mock::header::MockHeader;
-use anoma::ibc::proofs::{ConsensusProof, Proofs};
-use anoma::ibc::signer::Signer;
-use anoma::ibc::timestamp::Timestamp;
-use anoma::ibc::Height;
-use anoma::ibc_proto::cosmos::base::v1beta1::Coin;
-use anoma::ibc_proto::ibc::core::commitment::v1::MerkleProof;
-use anoma::ibc_proto::ics23::CommitmentProof;
-use anoma::ledger::gas::VpGasMeter;
-pub use anoma::ledger::ibc::handler::*;
-use anoma::ledger::ibc::init_genesis_storage;
-pub use anoma::ledger::ibc::storage::{
+use namada::ibc::mock::client_state::{MockClientState, MockConsensusState};
+use namada::ibc::mock::header::MockHeader;
+use namada::ibc::proofs::{ConsensusProof, Proofs};
+use namada::ibc::signer::Signer;
+use namada::ibc::timestamp::Timestamp;
+use namada::ibc::Height;
+use namada::ibc_proto::cosmos::base::v1beta1::Coin;
+use namada::ibc_proto::ibc::core::commitment::v1::MerkleProof;
+use namada::ibc_proto::ics23::CommitmentProof;
+use namada::ledger::gas::VpGasMeter;
+pub use namada::ledger::ibc::handler::*;
+use namada::ledger::ibc::init_genesis_storage;
+pub use namada::ledger::ibc::storage::{
     ack_key, capability_index_key, capability_key, channel_counter_key,
     channel_key, client_counter_key, client_state_key, client_type_key,
     commitment_key, connection_counter_key, connection_key,
     consensus_state_key, next_sequence_ack_key, next_sequence_recv_key,
     next_sequence_send_key, port_key, receipt_key,
 };
-use anoma::ledger::ibc::vp::{
+use namada::ledger::ibc::vp::{
     get_dummy_header as tm_dummy_header, Ibc, IbcToken,
 };
-use anoma::ledger::native_vp::{Ctx, NativeVp};
-use anoma::ledger::storage::mockdb::MockDB;
-use anoma::ledger::storage::Sha256Hasher;
-use anoma::proto::Tx;
-use anoma::tendermint_proto::Protobuf;
-use anoma::types::address::{self, Address, InternalAddress};
-use anoma::types::ibc::data::FungibleTokenPacketData;
-use anoma::types::ibc::IbcEvent;
-use anoma::types::storage::{BlockHash, BlockHeight, Key};
-use anoma::types::time::Rfc3339String;
-use anoma::types::token::{self, Amount};
-use anoma::vm::{wasm, WasmCacheRwAccess};
+use namada::ledger::native_vp::{Ctx, NativeVp};
+use namada::ledger::storage::mockdb::MockDB;
+use namada::ledger::storage::Sha256Hasher;
+use namada::proto::Tx;
+use namada::tendermint_proto::Protobuf;
+use namada::types::address::{self, Address, InternalAddress};
+use namada::types::ibc::data::FungibleTokenPacketData;
+use namada::types::ibc::IbcEvent;
+use namada::types::storage::{BlockHash, BlockHeight, Key};
+use namada::types::time::Rfc3339String;
+use namada::types::token::{self, Amount};
+use namada::vm::{wasm, WasmCacheRwAccess};
 use tempfile::TempDir;
 
 use crate::tx::*;
@@ -84,7 +84,7 @@ impl<'a> TestIbcVp<'a> {
     pub fn validate(
         &self,
         tx_data: &[u8],
-    ) -> std::result::Result<bool, anoma::ledger::ibc::vp::Error> {
+    ) -> std::result::Result<bool, namada::ledger::ibc::vp::Error> {
         self.ibc
             .validate_tx(tx_data, &self.keys_changed, &BTreeSet::new())
     }
@@ -99,7 +99,7 @@ impl<'a> TestIbcTokenVp<'a> {
     pub fn validate(
         &self,
         tx_data: &[u8],
-    ) -> std::result::Result<bool, anoma::ledger::ibc::vp::IbcTokenError> {
+    ) -> std::result::Result<bool, namada::ledger::ibc::vp::IbcTokenError> {
         self.token
             .validate_tx(tx_data, &self.keys_changed, &BTreeSet::new())
     }

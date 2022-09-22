@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::str::FromStr;
 
-use anoma::types::address::Address;
-use anoma::types::chain::ChainId;
-use anoma::types::key::*;
+use namada::types::address::Address;
+use namada::types::chain::ChainId;
+use namada::types::key::*;
 
 use super::args;
 use crate::cli::safe_exit;

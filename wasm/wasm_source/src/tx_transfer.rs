@@ -2,7 +2,7 @@
 //! This tx uses `token::Transfer` wrapped inside `SignedTxData`
 //! as its input as declared in `shared` crate.
 
-use anoma_tx_prelude::*;
+use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(tx_data: Vec<u8>) {
@@ -14,7 +14,8 @@ fn apply_tx(tx_data: Vec<u8>) {
         source,
         target,
         token,
+        sub_prefix,
         amount,
     } = transfer;
-    token::transfer(&source, &target, &token, amount)
+    token::transfer(&source, &target, &token, sub_prefix, amount)
 }

@@ -1,12 +1,12 @@
 [package]
 authors = ["Heliax AG <hello@heliax.dev>"]
-description = "Anoma Proof of Stake system"
+description = "Namada Proof of Stake system"
 edition = "2021"
 license = "GPL-3.0"
-name = "anoma_proof_of_stake"
+name = "namada_proof_of_stake"
 readme = "../README.md"
 resolver = "2"
-version = "0.6.1"
+version = "0.7.1"
 
 [features]
 default = []

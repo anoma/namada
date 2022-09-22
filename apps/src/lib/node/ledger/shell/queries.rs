@@ -1,30 +1,45 @@
 //! Shell methods for querying state
 use std::cmp::max;
 
-use anoma::ledger::parameters::EpochDuration;
-use anoma::ledger::pos::PosParams;
-use anoma::types::address::Address;
-use anoma::types::key;
-use anoma::types::key::dkg_session_keys::DkgPublicKey;
-use anoma::types::storage::{Key, PrefixValue};
-use anoma::types::token::{self, Amount};
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::crypto::{ProofOp, ProofOps};
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::google::protobuf;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::types::EvidenceParams;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::crypto::{ProofOp, ProofOps};
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::google::protobuf;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::types::EvidenceParams;
+use namada::ledger::parameters::EpochDuration;
+use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
+use namada::ledger::pos::types::WeightedValidator;
+use namada::ledger::pos::PosParams;
+use namada::types::address::Address;
+use namada::types::key;
+use namada::types::key::dkg_session_keys::DkgPublicKey;
+use namada::types::storage::{Epoch, Key, PrefixValue};
+use namada::types::token::{self, Amount};
 
 use super::*;
+use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
+use crate::facade::tendermint_proto::google::protobuf;
+use crate::facade::tendermint_proto::types::EvidenceParams;
 use crate::node::ledger::response;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(
+        "The address '{:?}' is not among the active validator set for epoch \
+         {1}"
+    )]
+    NotValidatorAddress(Address, Epoch),
+    #[error(
+        "The public key '{0}' is not among the active validator set for epoch \
+         {1}"
+    )]
+    #[allow(dead_code)]
+    NotValidatorKey(String, Epoch),
+    #[error(
+        "The public key hash '{0}' is not among the active validator set for \
+         epoch {1}"
+    )]
+    NotValidatorKeyHash(String, Epoch),
+    #[error("Invalid validator tendermint address")]
+    InvalidTMAddress,
+}
 
 impl<D, H> Shell<D, H>
 where
@@ -56,7 +71,7 @@ where
                 Path::DryRunTx => self.dry_run_tx(&query.data),
                 Path::Epoch => {
                     let (epoch, _gas) = self.storage.get_last_epoch();
-                    let value = anoma::ledger::storage::types::encode(&epoch);
+                    let value = namada::ledger::storage::types::encode(&epoch);
                     response::Query {
                         value,
                         ..Default::default()
@@ -78,89 +93,13 @@ where
         }
     }
 
-    /// Simple helper function for the ledger to get balances
-    /// of the specified token at the specified address
-    pub fn get_balance(
-        &self,
-        token: &Address,
-        owner: &Address,
-    ) -> std::result::Result<Amount, String> {
-        let height = self.storage.get_block_height().0;
-        let query_resp = self.read_storage_value(
-            &token::balance_key(token, owner),
-            height,
-            false,
-        );
-        if query_resp.code != 0 {
-            Err(format!(
-                "Unable to read token {} balance of the given address {}",
-                token, owner
-            ))
-        } else {
-            BorshDeserialize::try_from_slice(&query_resp.value[..]).map_err(
-                |_| {
-                    "Unable to deserialize the balance of the given address"
-                        .into()
-                },
-            )
-        }
-    }
-
-    /// Query to read a value from storage
-    pub fn read_storage_value(
-        &self,
-        key: &Key,
-        height: BlockHeight,
-        is_proven: bool,
-    ) -> response::Query {
-        match self.storage.read_with_height(key, height) {
-            Ok((Some(value), _gas)) => {
-                let proof_ops = if is_proven {
-                    match self.storage.get_existence_proof(
-                        key,
-                        value.clone(),
-                        height,
-                    ) {
-                        Ok(proof) => Some(proof.into()),
-                        Err(err) => {
-                            return response::Query {
-                                code: 2,
-                                info: format!("Storage error: {}", err),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-                response::Query {
-                    value,
-                    proof_ops,
-                    ..Default::default()
-                }
-            }
-            Ok((None, _gas)) => {
-                let proof_ops = if is_proven {
-                    match self.storage.get_non_existence_proof(key, height) {
-                        Ok(proof) => Some(proof.into()),
-                        Err(err) => {
-                            return response::Query {
-                                code: 2,
-                                info: format!("Storage error: {}", err),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-                response::Query {
-                    code: 1,
-                    info: format!("No value found for key: {}", key),
-                    proof_ops,
-                    ..Default::default()
-                }
-            }
+    /// Query to check if a storage key exists.
+    fn has_storage_key(&self, key: &Key) -> response::Query {
+        match self.storage.has_key(key) {
+            Ok((has_key, _gas)) => response::Query {
+                value: has_key.try_to_vec().unwrap(),
+                ..Default::default()
+            },
             Err(err) => response::Query {
                 code: 2,
                 info: format!("Storage error: {}", err),
@@ -172,7 +111,7 @@ where
     /// Query to read a range of values from storage with a matching prefix. The
     /// value in successful response is a [`Vec<PrefixValue>`] encoded with
     /// [`BorshSerialize`].
-    pub fn read_storage_prefix(
+    fn read_storage_prefix(
         &self,
         key: &Key,
         height: BlockHeight,
@@ -199,7 +138,7 @@ where
         } else {
             let values: std::result::Result<
                 Vec<PrefixValue>,
-                anoma::types::storage::Error,
+                namada::types::storage::Error,
             > = iter
                 .map(|(key, value, _gas)| {
                     let key = Key::parse(key)?;
@@ -220,7 +159,20 @@ where
                                     let mut cur_ops: Vec<ProofOp> = p
                                         .ops
                                         .into_iter()
-                                        .map(|op| op.into())
+                                        .map(|op| {
+                                            #[cfg(feature = "abcipp")]
+                                            {
+                                                ProofOp {
+                                                    r#type: op.field_type,
+                                                    key: op.key,
+                                                    data: op.data,
+                                                }
+                                            }
+                                            #[cfg(not(feature = "abcipp"))]
+                                            {
+                                                op.into()
+                                            }
+                                        })
                                         .collect();
                                     ops.append(&mut cur_ops);
                                 }
@@ -257,13 +209,97 @@ where
         }
     }
 
-    /// Query to check if a storage key exists.
-    fn has_storage_key(&self, key: &Key) -> response::Query {
-        match self.storage.has_key(key) {
-            Ok((has_key, _gas)) => response::Query {
-                value: has_key.try_to_vec().unwrap(),
-                ..Default::default()
-            },
+    /// Query to read a value from storage
+    fn read_storage_value(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_proven: bool,
+    ) -> response::Query {
+        match self.storage.read_with_height(key, height) {
+            Ok((Some(value), _gas)) => {
+                let proof_ops = if is_proven {
+                    match self.storage.get_existence_proof(
+                        key,
+                        value.clone(),
+                        height,
+                    ) {
+                        Ok(proof) => Some({
+                            #[cfg(feature = "abcipp")]
+                            {
+                                let ops = proof
+                                    .ops
+                                    .into_iter()
+                                    .map(|op| ProofOp {
+                                        r#type: op.field_type,
+                                        key: op.key,
+                                        data: op.data,
+                                    })
+                                    .collect();
+                                ProofOps { ops }
+                            }
+                            #[cfg(not(feature = "abcipp"))]
+                            {
+                                proof.into()
+                            }
+                        }),
+                        Err(err) => {
+                            return response::Query {
+                                code: 2,
+                                info: format!("Storage error: {}", err),
+                                ..Default::default()
+                            };
+                        }
+                    }
+                } else {
+                    None
+                };
+                response::Query {
+                    value,
+                    proof_ops,
+                    ..Default::default()
+                }
+            }
+            Ok((None, _gas)) => {
+                let proof_ops = if is_proven {
+                    match self.storage.get_non_existence_proof(key, height) {
+                        Ok(proof) => Some({
+                            #[cfg(feature = "abcipp")]
+                            {
+                                let ops = proof
+                                    .ops
+                                    .into_iter()
+                                    .map(|op| ProofOp {
+                                        r#type: op.field_type,
+                                        key: op.key,
+                                        data: op.data,
+                                    })
+                                    .collect();
+                                ProofOps { ops }
+                            }
+                            #[cfg(not(feature = "abcipp"))]
+                            {
+                                proof.into()
+                            }
+                        }),
+                        Err(err) => {
+                            return response::Query {
+                                code: 2,
+                                info: format!("Storage error: {}", err),
+                                ..Default::default()
+                            };
+                        }
+                    }
+                } else {
+                    None
+                };
+                response::Query {
+                    code: 1,
+                    info: format!("No value found for key: {}", key),
+                    proof_ops,
+                    ..Default::default()
+                }
+            }
             Err(err) => response::Query {
                 code: 2,
                 info: format!("Storage error: {}", err),
@@ -271,8 +307,141 @@ where
             },
         }
     }
+}
 
-    pub fn get_evidence_params(
+/// API for querying the blockchain state.
+pub(crate) trait QueriesExt {
+    /// Get the set of active validators for a given epoch (defaulting to the
+    /// epoch of the current yet-to-be-committed block).
+    fn get_active_validators(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> BTreeSet<WeightedValidator<Address>>;
+
+    /// Lookup the total voting power for an epoch (defaulting to the
+    /// epoch of the current yet-to-be-committed block).
+    fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower;
+
+    /// Simple helper function for the ledger to get balances
+    /// of the specified token at the specified address
+    fn get_balance(
+        &self,
+        token: &Address,
+        owner: &Address,
+    ) -> std::result::Result<Amount, String>;
+
+    fn get_evidence_params(
+        &self,
+        epoch_duration: &EpochDuration,
+        pos_params: &PosParams,
+    ) -> EvidenceParams;
+
+    /// Lookup data about a validator from their protocol signing key
+    fn get_validator_from_protocol_pk(
+        &self,
+        pk: &key::common::PublicKey,
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<TendermintValidator<EllipticCurve>, Error>;
+
+    /// Lookup data about a validator from their address
+    fn get_validator_from_address(
+        &self,
+        address: &Address,
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<(VotingPower, common::PublicKey), Error>;
+
+    /// Given a tendermint validator, the address is the hash
+    /// of the validators public key. We look up the native
+    /// address from storage using this hash.
+    // TODO: We may change how this lookup is done, see
+    // https://github.com/anoma/namada/issues/200
+    fn get_validator_from_tm_address(
+        &self,
+        tm_address: &[u8],
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<Address, Error>;
+
+    /// Determines if it is possible to send a validator set update vote
+    /// extension at the provided [`BlockHeight`].
+    ///
+    /// This is done by checking if we are at the first block of a new epoch,
+    /// or if we are at block height 1 of the first epoch.
+    ///
+    /// The genesis block will not have vote extensions,
+    /// therefore it is a special case, which we account for
+    /// by checking if the block height is 1. Otherwise,
+    /// validator set update votes will always extend
+    /// Tendermint's PreCommit phase of the first block of
+    /// an epoch.
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
+
+    /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
+    fn get_epoch(&self, height: BlockHeight) -> Option<Epoch>;
+
+    /// Retrieves the [`BlockHeight`] that is currently being decided.
+    fn get_current_decision_height(&self) -> BlockHeight;
+}
+
+impl<D, H> QueriesExt for Storage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn get_active_validators(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> BTreeSet<WeightedValidator<Address>> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        let validator_set = self.read_validator_set();
+        validator_set
+            .get(epoch)
+            .expect("Validators for an epoch should be known")
+            .active
+            .clone()
+    }
+
+    #[cfg(not(feature = "ABCI"))]
+    fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
+        self.get_active_validators(epoch)
+            .iter()
+            .map(|validator| u64::from(validator.voting_power))
+            .sum::<u64>()
+            .into()
+    }
+
+    fn get_balance(
+        &self,
+        token: &Address,
+        owner: &Address,
+    ) -> std::result::Result<Amount, String> {
+        let height = self.get_block_height().0;
+        let (balance, _) = self
+            .read_with_height(&token::balance_key(token, owner), height)
+            .map_err(|err| {
+                format!(
+                    "Unable to read token {} balance of the given address {}: \
+                     {:?}",
+                    token, owner, err
+                )
+            })?;
+        let balance = match balance {
+            Some(balance) => balance,
+            None => {
+                return Err(format!(
+                    "Unable to read token {} balance of the given address {}",
+                    token, owner
+                ));
+            }
+        };
+        BorshDeserialize::try_from_slice(&balance[..]).map_err(|err| {
+            format!(
+                "Unable to deserialize the balance of the given address: {:?}",
+                err
+            )
+        })
+    }
+
+    fn get_evidence_params(
         &self,
         epoch_duration: &EpochDuration,
         pos_params: &PosParams,
@@ -294,27 +463,20 @@ where
         }
     }
 
-    /// Lookup data about a validator from their protocol signing key
-    #[allow(dead_code)]
-    pub fn get_validator_from_protocol_pk(
+    fn get_validator_from_protocol_pk(
         &self,
         pk: &key::common::PublicKey,
-    ) -> Option<TendermintValidator<EllipticCurve>> {
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<TendermintValidator<EllipticCurve>, Error> {
         let pk_bytes = pk
             .try_to_vec()
             .expect("Serializing public key should not fail");
-        // get the current epoch
-        let (current_epoch, _) = self.storage.get_current_epoch();
-        // get the active validator set
-        self.storage
-            .read_validator_set()
-            .get(current_epoch)
-            .expect("Validators for the next epoch should be known")
-            .active
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.get_active_validators(Some(epoch))
             .iter()
             .find(|validator| {
                 let pk_key = key::protocol_pk_key(&validator.address);
-                match self.storage.read(&pk_key) {
+                match self.read(&pk_key) {
                     Ok((Some(bytes), _)) => bytes == pk_bytes,
                     _ => false,
                 }
@@ -323,7 +485,6 @@ where
                 let dkg_key =
                     key::dkg_session_keys::dkg_pk_key(&validator.address);
                 let bytes = self
-                    .storage
                     .read(&dkg_key)
                     .expect("Validator should have public dkg key")
                     .0
@@ -341,5 +502,284 @@ where
                     public_key: dkg_publickey.into(),
                 }
             })
+            .ok_or_else(|| Error::NotValidatorKey(pk.to_string(), epoch))
+    }
+
+    #[cfg(not(feature = "ABCI"))]
+    fn get_validator_from_address(
+        &self,
+        address: &Address,
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<(VotingPower, common::PublicKey), Error> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.get_active_validators(Some(epoch))
+            .iter()
+            .find(|validator| address == &validator.address)
+            .map(|validator| {
+                let protocol_pk_key = key::protocol_pk_key(&validator.address);
+                let bytes = self
+                    .read(&protocol_pk_key)
+                    .expect("Validator should have public protocol key")
+                    .0
+                    .expect("Validator should have public protocol key");
+                let protocol_pk: common::PublicKey =
+                    BorshDeserialize::deserialize(&mut bytes.as_ref()).expect(
+                        "Protocol public key in storage should be \
+                         deserializable",
+                    );
+                (validator.voting_power, protocol_pk)
+            })
+            .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))
+    }
+
+    fn get_validator_from_tm_address(
+        &self,
+        tm_address: &[u8],
+        epoch: Option<Epoch>,
+    ) -> std::result::Result<Address, Error> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        let validator_raw_hash = core::str::from_utf8(tm_address)
+            .map_err(|_| Error::InvalidTMAddress)?;
+        self.read_validator_address_raw_hash(&validator_raw_hash)
+            .ok_or_else(|| {
+                Error::NotValidatorKeyHash(
+                    validator_raw_hash.to_string(),
+                    epoch,
+                )
+            })
+    }
+
+    #[cfg(feature = "abcipp")]
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
+        let (check_prev_heights, height) = match can_send {
+            SendValsetUpd::Now => (false, self.get_current_decision_height()),
+            SendValsetUpd::AtPrevHeight => (false, self.last_height),
+            SendValsetUpd::AtFixedHeight(h) => (true, h),
+        };
+
+        // handle genesis block corner case
+        if height == BlockHeight(1) {
+            return true;
+        }
+
+        let fst_heights_of_each_epoch =
+            self.block.pred_epochs.first_block_heights();
+
+        // tentatively check if the last stored height
+        // is the one we are looking for
+        if fst_heights_of_each_epoch
+            .last()
+            .map(|&h| h == height)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+
+        // the values in `fst_block_heights_of_each_epoch` are stored in
+        // ascending order, so we can just do a binary search over them
+        check_prev_heights
+            && fst_heights_of_each_epoch.binary_search(&height).is_ok()
+    }
+
+    #[cfg(not(feature = "abcipp"))]
+    #[inline(always)]
+    fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
+        true
+    }
+
+    #[inline]
+    fn get_epoch(&self, height: BlockHeight) -> Option<Epoch> {
+        self.block.pred_epochs.get_epoch(height)
+    }
+
+    #[inline]
+    fn get_current_decision_height(&self) -> BlockHeight {
+        self.last_height + 1
+    }
+}
+
+/// This enum is used as a parameter to
+/// [`QueriesExt::can_send_validator_set_update`].
+pub enum SendValsetUpd {
+    /// Check if it is possible to send a validator set update
+    /// vote extension at the current block height.
+    Now,
+    /// Check if it is possible to send a validator set update
+    /// vote extension at the previous block height.
+    AtPrevHeight,
+    /// Check if it is possible to send a validator set update
+    /// vote extension at any given block height.
+    #[allow(dead_code)]
+    AtFixedHeight(BlockHeight),
+}
+
+#[cfg(test)]
+mod test_queries {
+    use super::*;
+    use crate::node::ledger::shell::test_utils;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
+
+    macro_rules! test_can_send_validator_set_update {
+        (epoch_assertions: $epoch_assertions:expr $(,)?) => {
+            /// Test if [`QueriesExt::can_send_validator_set_update`] behaves as
+            /// expected.
+            #[test]
+            fn test_can_send_validator_set_update() {
+                let (mut shell, _recv, _) = test_utils::setup_at_height(0u64);
+
+                let epoch_assertions = $epoch_assertions;
+
+                // TODO: switch to `Result::into_ok_or_err` when it becomes
+                // stable
+                const fn extract(
+                    can_send: ::std::result::Result<bool, bool>,
+                ) -> bool {
+                    match can_send {
+                        Ok(x) => x,
+                        Err(x) => x,
+                    }
+                }
+
+                // test `SendValsetUpd::Now`  and `SendValsetUpd::AtPrevHeight`
+                for (idx, (curr_epoch, curr_block_height, can_send)) in
+                    epoch_assertions.iter().copied().enumerate()
+                {
+                    shell.storage.last_height =
+                        BlockHeight(curr_block_height - 1);
+                    assert_eq!(
+                        curr_block_height,
+                        shell.storage.get_current_decision_height().0
+                    );
+                    assert_eq!(
+                        shell.storage.get_epoch(curr_block_height.into()),
+                        Some(Epoch(curr_epoch))
+                    );
+                    assert_eq!(
+                        shell
+                            .storage
+                            .can_send_validator_set_update(SendValsetUpd::Now),
+                        extract(can_send)
+                    );
+                    if let Some((epoch, height, can_send)) =
+                        epoch_assertions.get(idx.wrapping_sub(1)).copied()
+                    {
+                        assert_eq!(
+                            shell.storage.get_epoch(height.into()),
+                            Some(Epoch(epoch))
+                        );
+                        assert_eq!(
+                            shell.storage.can_send_validator_set_update(
+                                SendValsetUpd::AtPrevHeight
+                            ),
+                            extract(can_send)
+                        );
+                    }
+                    if epoch_assertions
+                        .get(idx + 1)
+                        .map(|&(_, _, change_epoch)| change_epoch.is_ok())
+                        .unwrap_or(false)
+                    {
+                        let time = namada::types::time::DateTimeUtc::now();
+                        let mut req = FinalizeBlock::default();
+                        req.header.time = time;
+                        shell.finalize_block(req).expect("Test failed");
+                        shell.commit();
+                        shell.storage.next_epoch_min_start_time = time;
+                    }
+                }
+
+                // test `SendValsetUpd::AtFixedHeight`
+                for (curr_epoch, curr_block_height, can_send) in
+                    epoch_assertions.iter().copied()
+                {
+                    assert_eq!(
+                        shell.storage.get_epoch(curr_block_height.into()),
+                        Some(Epoch(curr_epoch))
+                    );
+                    assert_eq!(
+                        shell.storage.can_send_validator_set_update(
+                            SendValsetUpd::AtFixedHeight(
+                                curr_block_height.into()
+                            )
+                        ),
+                        extract(can_send)
+                    );
+                }
+            }
+        };
+    }
+
+    #[cfg(feature = "abcipp")]
+    test_can_send_validator_set_update! {
+        epoch_assertions: [
+            // (current epoch, current block height, can send valset upd / Ok = change epoch)
+            (0, 1, Ok(true)),
+            (0, 2, Err(false)),
+            (0, 3, Err(false)),
+            (0, 4, Err(false)),
+            (0, 5, Err(false)),
+            (0, 6, Err(false)),
+            (0, 7, Err(false)),
+            (0, 8, Err(false)),
+            (0, 9, Err(false)),
+            (0, 10, Err(false)),
+            (0, 11, Err(false)),
+            // we will change epoch here
+            (1, 12, Ok(true)),
+            (1, 13, Err(false)),
+            (1, 14, Err(false)),
+            (1, 15, Err(false)),
+            (1, 16, Err(false)),
+            (1, 17, Err(false)),
+            (1, 18, Err(false)),
+            (1, 19, Err(false)),
+            (1, 20, Err(false)),
+            (1, 21, Err(false)),
+            (1, 22, Err(false)),
+            (1, 23, Err(false)),
+            (1, 24, Err(false)),
+            // we will change epoch here
+            (2, 25, Ok(true)),
+            (2, 26, Err(false)),
+            (2, 27, Err(false)),
+            (2, 28, Err(false)),
+        ],
+    }
+
+    #[cfg(not(feature = "abcipp"))]
+    test_can_send_validator_set_update! {
+        epoch_assertions: [
+            // (current epoch, current block height, can send valset upd / Ok = change epoch)
+            (0, 1, Ok(true)),
+            (0, 2, Err(true)),
+            (0, 3, Err(true)),
+            (0, 4, Err(true)),
+            (0, 5, Err(true)),
+            (0, 6, Err(true)),
+            (0, 7, Err(true)),
+            (0, 8, Err(true)),
+            (0, 9, Err(true)),
+            (0, 10, Err(true)),
+            (0, 11, Err(true)),
+            // we will change epoch here
+            (1, 12, Ok(true)),
+            (1, 13, Err(true)),
+            (1, 14, Err(true)),
+            (1, 15, Err(true)),
+            (1, 16, Err(true)),
+            (1, 17, Err(true)),
+            (1, 18, Err(true)),
+            (1, 19, Err(true)),
+            (1, 20, Err(true)),
+            (1, 21, Err(true)),
+            (1, 22, Err(true)),
+            (1, 23, Err(true)),
+            (1, 24, Err(true)),
+            // we will change epoch here
+            (2, 25, Ok(true)),
+            (2, 26, Err(true)),
+            (2, 27, Err(true)),
+            (2, 28, Err(true)),
+        ],
     }
 }

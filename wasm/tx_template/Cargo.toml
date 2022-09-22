@@ -4,23 +4,21 @@ edition = "2021"
 license = "GPL-3.0"
 name = "tx_template"
 resolver = "2"
-version = "0.6.1"
+version = "0.7.1"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-anoma_tx_prelude = {path = "../../tx_prelude"}
+namada_tx_prelude = {path = "../../tx_prelude"}
 borsh = "0.9.0"
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
-anoma_tests = {path = "../../tests"}
+namada_tests = {path = "../../tests"}
 
 [patch.crates-io]
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5"}
 # TODO temp patch for <https://github.com/near/borsh-rs/issues/82>, <https://github.com/near/borsh-rs/issues/84> and more tba.
 borsh = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-derive = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}

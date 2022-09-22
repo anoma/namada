@@ -1,10 +1,10 @@
 //! Proof-of-Stake storage keys and storage integration via [`PosBase`] trait.
 
-use anoma_proof_of_stake::parameters::PosParams;
-use anoma_proof_of_stake::types::{
+use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::types::{
     TotalVotingPowers, ValidatorStates, ValidatorVotingPowers,
 };
-use anoma_proof_of_stake::{types, PosBase};
+use namada_proof_of_stake::{types, PosBase};
 
 use super::{
     BondId, Bonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,

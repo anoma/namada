@@ -32,6 +32,7 @@ use crate::{run, run_as};
 /// 1. Check that a gossip node can start and stop cleanly
 /// 2. Check that two peers connected to the same seed node discover each other
 #[test]
+#[ignore] // this is not currently being developed, run with `cargo test -- --ignored`
 fn run_gossip() -> Result<()> {
     let test =
         setup::network(|genesis| setup::add_validators(2, genesis), None)?;
@@ -97,6 +98,7 @@ fn run_gossip() -> Result<()> {
 /// and sends them to the matchmaker. The matchmaker should be able to match
 /// them into a transfer transaction and submit it to the ledger.
 #[test]
+#[ignore] // this is not currently being developed, run with `cargo test -- --ignored`
 fn match_intents() -> Result<()> {
     let test = setup::single_node_net()?;
 
@@ -127,9 +129,9 @@ fn match_intents() -> Result<()> {
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     let bg_ledger = ledger.background();
 
-    let intent_a_path_input = test.base_dir.path().join("intent.A.data");
-    let intent_b_path_input = test.base_dir.path().join("intent.B.data");
-    let intent_c_path_input = test.base_dir.path().join("intent.C.data");
+    let intent_a_path_input = test.test_dir.path().join("intent.A.data");
+    let intent_b_path_input = test.test_dir.path().join("intent.B.data");
+    let intent_c_path_input = test.test_dir.path().join("intent.C.data");
 
     let albert = find_address(&test, ALBERT)?;
     let bertha = find_address(&test, BERTHA)?;
@@ -180,15 +182,8 @@ fn match_intents() -> Result<()> {
     let validator_one_gossiper =
         get_gossiper_mm_server(&test, &Who::Validator(0));
 
-    // The RPC port is either 27660 for ABCI or 28660 for ABCI++ (see
-    // `setup::network`)
-    let rpc_port = (27660
-        + if cfg!(feature = "ABCI") {
-            0
-        } else {
-            setup::ABCI_PLUS_PLUS_PORT_OFFSET
-        })
-    .to_string();
+    // The RPC port starts at 27660 (see `setup::network`)
+    let rpc_port = 27660;
     let rpc_address = format!("127.0.0.1:{}", rpc_port);
 
     // Start intent gossiper node

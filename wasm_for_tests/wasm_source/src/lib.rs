@@ -1,7 +1,7 @@
 /// A tx that doesn't do anything.
 #[cfg(feature = "tx_no_op")]
 pub mod main {
-    use anoma_vm_env::tx_prelude::*;
+    use namada_vm_env::tx_prelude::*;
 
     #[transaction]
     fn apply_tx(_tx_data: Vec<u8>) {}
@@ -10,7 +10,7 @@ pub mod main {
 /// A tx that allocates a memory of size given from the `tx_data: usize`.
 #[cfg(feature = "tx_memory_limit")]
 pub mod main {
-    use anoma_vm_env::tx_prelude::*;
+    use namada_vm_env::tx_prelude::*;
 
     #[transaction]
     fn apply_tx(tx_data: Vec<u8>) {
@@ -25,7 +25,7 @@ pub mod main {
 /// A tx to be used as proposal_code
 #[cfg(feature = "tx_proposal_code")]
 pub mod main {
-    use anoma_vm_env::tx_prelude::*;
+    use namada_vm_env::tx_prelude::*;
 
     #[transaction]
     fn apply_tx(_tx_data: Vec<u8>) {
@@ -46,7 +46,7 @@ pub mod main {
 /// A tx that attempts to read the given key from storage.
 #[cfg(feature = "tx_read_storage_key")]
 pub mod main {
-    use anoma_vm_env::tx_prelude::*;
+    use namada_vm_env::tx_prelude::*;
 
     #[transaction]
     fn apply_tx(tx_data: Vec<u8>) {
@@ -60,7 +60,7 @@ pub mod main {
 /// A tx that attempts to write arbitrary data to the given key
 #[cfg(feature = "tx_write_storage_key")]
 pub mod main {
-    use anoma_vm_env::tx_prelude::*;
+    use namada_vm_env::tx_prelude::*;
 
     const TX_NAME: &str = "tx_write";
 
@@ -128,7 +128,7 @@ pub mod main {
 /// token's VP.
 #[cfg(feature = "tx_mint_tokens")]
 pub mod main {
-    use anoma_vm_env::tx_prelude::*;
+    use namada_vm_env::tx_prelude::*;
 
     #[transaction]
     fn apply_tx(tx_data: Vec<u8>) {
@@ -140,6 +140,7 @@ pub mod main {
             source: _,
             target,
             token,
+            sub_prefix: _,
             amount,
         } = transfer;
         let target_key = token::balance_key(&token, &target);
@@ -153,7 +154,7 @@ pub mod main {
 /// A VP that always returns `true`.
 #[cfg(feature = "vp_always_true")]
 pub mod main {
-    use anoma_vm_env::vp_prelude::*;
+    use namada_vm_env::vp_prelude::*;
 
     #[validity_predicate]
     fn validate_tx(
@@ -169,7 +170,7 @@ pub mod main {
 /// A VP that always returns `false`.
 #[cfg(feature = "vp_always_false")]
 pub mod main {
-    use anoma_vm_env::vp_prelude::*;
+    use namada_vm_env::vp_prelude::*;
 
     #[validity_predicate]
     fn validate_tx(
@@ -186,7 +187,7 @@ pub mod main {
 /// of `eval`.
 #[cfg(feature = "vp_eval")]
 pub mod main {
-    use anoma_vm_env::vp_prelude::*;
+    use namada_vm_env::vp_prelude::*;
 
     #[validity_predicate]
     fn validate_tx(
@@ -206,7 +207,7 @@ pub mod main {
 // Returns `true`, if the allocation is within memory limits.
 #[cfg(feature = "vp_memory_limit")]
 pub mod main {
-    use anoma_vm_env::vp_prelude::*;
+    use namada_vm_env::vp_prelude::*;
 
     #[validity_predicate]
     fn validate_tx(
@@ -228,7 +229,7 @@ pub mod main {
 /// execution). Returns `true`, if the allocation is within memory limits.
 #[cfg(feature = "vp_read_storage_key")]
 pub mod main {
-    use anoma_vm_env::vp_prelude::*;
+    use namada_vm_env::vp_prelude::*;
 
     #[validity_predicate]
     fn validate_tx(

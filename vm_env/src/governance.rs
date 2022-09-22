@@ -1,11 +1,11 @@
 /// Tx imports and functions.
 pub mod tx {
 
-    use anoma::ledger::governance::storage;
-    use anoma::ledger::governance::vp::ADDRESS as governance_address;
-    use anoma::types::address::xan as m1t;
-    use anoma::types::token::Amount;
-    use anoma::types::transaction::governance::{
+    use namada::ledger::governance::storage;
+    use namada::ledger::governance::vp::ADDRESS as governance_address;
+    use namada::types::address::xan as m1t;
+    use namada::types::token::Amount;
+    use namada::types::transaction::governance::{
         InitProposalData, VoteProposalData,
     };
 
@@ -63,6 +63,7 @@ pub mod tx {
             &data.author,
             &governance_address,
             &m1t(),
+            None,
             min_proposal_funds,
         );
     }

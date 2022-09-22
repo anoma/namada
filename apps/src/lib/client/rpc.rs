@@ -7,56 +7,39 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
 
-use anoma::ledger::governance::storage as gov_storage;
-use anoma::ledger::governance::utils::Votes;
-use anoma::ledger::parameters::{storage as param_storage, EpochDuration};
-use anoma::ledger::pos::types::{
-    Epoch as PosEpoch, VotingPower, WeightedValidator,
-};
-use anoma::ledger::pos::{
-    self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
-};
-use anoma::ledger::treasury::storage as treasury_storage;
-use anoma::types::address::Address;
-use anoma::types::governance::{
-    OfflineProposal, OfflineVote, ProposalVote, TallyResult,
-};
-use anoma::types::key::*;
-use anoma::types::storage::{Epoch, PrefixValue};
-use anoma::types::token::{balance_key, Amount};
-use anoma::types::{address, storage, token};
 use async_std::fs::{self};
 use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::BorshDeserialize;
 use itertools::Itertools;
-#[cfg(not(feature = "ABCI"))]
-use tendermint::abci::Code;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_config::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address as TendermintAddress;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::error::Error as TError;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::query::Query;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{Client, HttpClient};
-#[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{Order, SubscriptionClient, WebSocketClient};
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::error::Error as TError;
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::query::Query;
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{Client, HttpClient};
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{Order, SubscriptionClient, WebSocketClient};
-#[cfg(feature = "ABCI")]
-use tendermint_stable::abci::Code;
+use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::governance::utils::Votes;
+use namada::ledger::parameters::{storage as param_storage, EpochDuration};
+use namada::ledger::pos::types::{
+    Epoch as PosEpoch, VotingPower, WeightedValidator,
+};
+use namada::ledger::pos::{
+    self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
+};
+use namada::ledger::treasury::storage as treasury_storage;
+use namada::types::address::Address;
+use namada::types::governance::{
+    OfflineProposal, OfflineVote, ProposalVote, TallyResult,
+};
+use namada::types::key::*;
+use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
+use namada::types::token::{balance_key, Amount};
+use namada::types::{address, storage, token};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
+use crate::facade::tendermint::abci::Code;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_rpc::error::Error as TError;
+use crate::facade::tendermint_rpc::query::Query;
+use crate::facade::tendermint_rpc::{
+    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
+};
 use crate::node::ledger::rpc::Path;
 
 /// Query the epoch of the last committed block
@@ -118,15 +101,29 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
         (Some(token), Some(owner)) => {
             let token = ctx.get(&token);
             let owner = ctx.get(&owner);
-            let key = token::balance_key(&token, &owner);
+            let key = match &args.sub_prefix {
+                Some(sub_prefix) => {
+                    let sub_prefix = Key::parse(sub_prefix).unwrap();
+                    let prefix =
+                        token::multitoken_balance_prefix(&token, &sub_prefix);
+                    token::multitoken_balance_key(&prefix, &owner)
+                }
+                None => token::balance_key(&token, &owner),
+            };
             let currency_code = tokens
                 .get(&token)
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
             match query_storage_value::<token::Amount>(&client, &key).await {
-                Some(balance) => {
-                    println!("{}: {}", currency_code, balance);
-                }
+                Some(balance) => match &args.sub_prefix {
+                    Some(sub_prefix) => {
+                        println!(
+                            "{} with {}: {}",
+                            currency_code, sub_prefix, balance
+                        );
+                    }
+                    None => println!("{}: {}", currency_code, balance),
+                },
                 None => {
                     println!("No {} balance found for {}", currency_code, owner)
                 }
@@ -134,68 +131,90 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
         }
         (None, Some(owner)) => {
             let owner = ctx.get(&owner);
-            let mut found_any = false;
-            for (token, currency_code) in tokens {
-                let key = token::balance_key(&token, &owner);
-                if let Some(balance) =
-                    query_storage_value::<token::Amount>(&client, &key).await
-                {
-                    println!("{}: {}", currency_code, balance);
-                    found_any = true;
+            for (token, _) in tokens {
+                let prefix = token.to_db_key().into();
+                let balances = query_storage_prefix::<token::Amount>(
+                    client.clone(),
+                    prefix,
+                )
+                .await;
+                if let Some(balances) = balances {
+                    print_balances(balances, &token, Some(&owner));
                 }
-            }
-            if !found_any {
-                println!("No balance found for {}", owner);
             }
         }
         (Some(token), None) => {
             let token = ctx.get(&token);
-            let key = token::balance_prefix(&token);
+            let prefix = token.to_db_key().into();
             let balances =
-                query_storage_prefix::<token::Amount>(client, key).await;
-            match balances {
-                Some(balances) => {
-                    let currency_code = tokens
-                        .get(&token)
-                        .map(|c| Cow::Borrowed(*c))
-                        .unwrap_or_else(|| Cow::Owned(token.to_string()));
-                    let stdout = io::stdout();
-                    let mut w = stdout.lock();
-                    writeln!(w, "Token {}:", currency_code).unwrap();
-                    for (key, balance) in balances {
-                        let owner =
-                            token::is_any_token_balance_key(&key).unwrap();
-                        writeln!(w, "  {}, owned by {}", balance, owner)
-                            .unwrap();
-                    }
-                }
-                None => {
-                    println!("No balances for token {}", token.encode())
-                }
+                query_storage_prefix::<token::Amount>(client, prefix).await;
+            if let Some(balances) = balances {
+                print_balances(balances, &token, None);
             }
         }
         (None, None) => {
-            let stdout = io::stdout();
-            let mut w = stdout.lock();
-            for (token, currency_code) in tokens {
+            for (token, _) in tokens {
                 let key = token::balance_prefix(&token);
                 let balances =
                     query_storage_prefix::<token::Amount>(client.clone(), key)
                         .await;
-                match balances {
-                    Some(balances) => {
-                        writeln!(w, "Token {}:", currency_code).unwrap();
-                        for (key, balance) in balances {
-                            let owner =
-                                token::is_any_token_balance_key(&key).unwrap();
-                            writeln!(w, "  {}, owned by {}", balance, owner)
-                                .unwrap();
-                        }
-                    }
-                    None => {
-                        println!("No balances for token {}", token.encode())
-                    }
+                if let Some(balances) = balances {
+                    print_balances(balances, &token, None);
                 }
+            }
+        }
+    }
+}
+
+fn print_balances(
+    balances: impl Iterator<Item = (storage::Key, token::Amount)>,
+    token: &Address,
+    target: Option<&Address>,
+) {
+    let stdout = io::stdout();
+    let mut w = stdout.lock();
+
+    // Token
+    let tokens = address::tokens();
+    let currency_code = tokens
+        .get(token)
+        .map(|c| Cow::Borrowed(*c))
+        .unwrap_or_else(|| Cow::Owned(token.to_string()));
+    writeln!(w, "Token {}", currency_code).unwrap();
+
+    let print_num = balances
+        .filter_map(
+            |(key, balance)| match token::is_any_multitoken_balance_key(&key) {
+                Some((sub_prefix, owner)) => Some((
+                    owner.clone(),
+                    format!(
+                        "with {}: {}, owned by {}",
+                        sub_prefix, balance, owner
+                    ),
+                )),
+                None => token::is_any_token_balance_key(&key).map(|owner| {
+                    (
+                        owner.clone(),
+                        format!(": {}, owned by {}", balance, owner),
+                    )
+                }),
+            },
+        )
+        .filter_map(|(o, s)| match target {
+            Some(t) if o == *t => Some(s),
+            Some(_) => None,
+            None => Some(s),
+        })
+        .map(|s| {
+            writeln!(w, "{}", s).unwrap();
+        })
+        .count();
+
+    if print_num == 0 {
+        match target {
+            Some(t) => writeln!(w, "No balances owned by {}", t).unwrap(),
+            None => {
+                writeln!(w, "No balances for token {}", currency_code).unwrap()
             }
         }
     }
@@ -1349,14 +1368,7 @@ where
                 Ok(values) => {
                     let decode = |PrefixValue { key, value }: PrefixValue| {
                         match T::try_from_slice(&value[..]) {
-                            Err(err) => {
-                                eprintln!(
-                                    "Skipping a value for key {}. Error in \
-                                     decoding: {}",
-                                    key, err
-                                );
-                                None
-                            }
+                            Err(_) => None,
                             Ok(value) => Some((key, value)),
                         }
                     };
@@ -1582,7 +1594,7 @@ pub async fn get_proposal_votes(
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
             let voter_address = gov_storage::get_voter_address(&key)
-                .expect("Vote key should contains the voting address.")
+                .expect("Vote key should contain the voting address.")
                 .clone();
             if vote.is_yay() && validators.contains(&voter_address) {
                 let amount =
@@ -1592,7 +1604,7 @@ pub async fn get_proposal_votes(
                 let validator_address =
                     gov_storage::get_vote_delegation_address(&key)
                         .expect(
-                            "Vote key should contains the delegation address.",
+                            "Vote key should contain the delegation address.",
                         )
                         .clone();
                 let delegator_token_amount = get_bond_amount_at(
@@ -1674,7 +1686,7 @@ pub async fn get_proposal_offline_votes(
                     let bond = epoched_amount
                         .get(proposal.tally_epoch)
                         .expect("Delegation bond should be definied.");
-                    let epoch = anoma::ledger::pos::types::Epoch::from(
+                    let epoch = namada::ledger::pos::types::Epoch::from(
                         proposal.tally_epoch.0,
                     );
                     let amount = *bond

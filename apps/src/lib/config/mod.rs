@@ -1,5 +1,6 @@
 //! Node and client configuration
 
+pub mod ethereum;
 pub mod genesis;
 pub mod global;
 pub mod utils;
@@ -12,24 +13,18 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anoma::types::chain::ChainId;
-use anoma::types::time::Rfc3339String;
 use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::multihash::Multihash;
 use libp2p::PeerId;
+use namada::types::chain::ChainId;
+use namada::types::time::Rfc3339String;
 use regex::Regex;
 use serde::{de, Deserialize, Serialize};
-#[cfg(not(feature = "ABCI"))]
-use tendermint::Timeout;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_config::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::Timeout;
 use thiserror::Error;
 
 use crate::cli;
+use crate::facade::tendermint::Timeout;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
 /// Base directory contains global config and chain directories.
 pub const DEFAULT_BASE_DIR: &str = ".anoma";
@@ -88,6 +83,7 @@ pub struct Ledger {
     pub chain_id: ChainId,
     pub shell: Shell,
     pub tendermint: Tendermint,
+    pub ethereum: ethereum::Config,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -201,6 +197,7 @@ impl Ledger {
                 ),
                 instrumentation_namespace: "anoman_tm".to_string(),
             },
+            ethereum: ethereum::Config::default(),
         }
     }
 

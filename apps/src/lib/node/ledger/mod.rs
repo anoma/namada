@@ -1,5 +1,6 @@
 mod abortable;
 mod broadcaster;
+mod ethereum_node;
 pub mod events;
 pub mod protocol;
 pub mod rpc;
@@ -14,27 +15,20 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::thread;
 
-use anoma::ledger::governance::storage as gov_storage;
-use anoma::types::storage::Key;
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
+use namada::ledger::governance::storage as gov_storage;
+use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::abci::CheckTxType;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::CheckTxType;
-use tokio::task;
 use tower::ServiceBuilder;
-#[cfg(not(feature = "ABCI"))]
-use tower_abci::{response, split, Server};
-#[cfg(feature = "ABCI")]
-use tower_abci_old::{response, split, Server};
 
 use self::abortable::AbortableSpawner;
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
-use crate::config::TendermintMode;
+use crate::config::{ethereum, TendermintMode};
+use crate::facade::tendermint_proto::abci::CheckTxType;
+use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
@@ -96,42 +90,45 @@ impl Shell {
     fn call(&mut self, req: Request) -> Result<Response, Error> {
         match req {
             Request::InitChain(init) => {
+                tracing::debug!("Request InitChain");
                 self.init_chain(init).map(Response::InitChain)
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
-            #[cfg(not(feature = "ABCI"))]
             Request::PrepareProposal(block) => {
+                tracing::debug!("Request PrepareProposal");
                 Ok(Response::PrepareProposal(self.prepare_proposal(block)))
             }
             Request::VerifyHeader(_req) => {
                 Ok(Response::VerifyHeader(self.verify_header(_req)))
             }
-            #[cfg(not(feature = "ABCI"))]
             Request::ProcessProposal(block) => {
+                tracing::debug!("Request ProcessProposal");
                 Ok(Response::ProcessProposal(self.process_proposal(block)))
             }
-            #[cfg(feature = "ABCI")]
-            Request::DeliverTx(deliver_tx) => Ok(Response::DeliverTx(
-                self.process_and_decode_proposal(deliver_tx),
-            )),
-            #[cfg(not(feature = "ABCI"))]
             Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
-            #[cfg(not(feature = "ABCI"))]
+            #[cfg(feature = "abcipp")]
             Request::ExtendVote(_req) => {
                 Ok(Response::ExtendVote(self.extend_vote(_req)))
             }
-            #[cfg(not(feature = "ABCI"))]
-            Request::VerifyVoteExtension(_req) => Ok(
-                Response::VerifyVoteExtension(self.verify_vote_extension(_req)),
-            ),
+            #[cfg(feature = "abcipp")]
+            Request::VerifyVoteExtension(_req) => {
+                tracing::debug!("Request VerifyVoteExtension");
+                Ok(Response::VerifyVoteExtension(
+                    self.verify_vote_extension(_req),
+                ))
+            }
             Request::FinalizeBlock(finalize) => {
+                tracing::debug!("Request FinalizeBlock");
                 self.load_proposals();
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
-            Request::Commit(_) => Ok(Response::Commit(self.commit())),
+            Request::Commit(_) => {
+                tracing::debug!("Request Commit");
+                Ok(Response::Commit(self.commit()))
+            }
             Request::Flush(_) => Ok(Response::Flush(Default::default())),
             Request::Echo(msg) => Ok(Response::Echo(response::Echo {
                 message: msg.message,
@@ -204,10 +201,17 @@ pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
     shell::reset(config)
 }
 
-/// Runs three concurrent tasks: A tendermint node, a shell which contains an
-/// ABCI server for talking to the tendermint node, and a broadcaster so that
-/// the ledger may submit txs to the chain. All must be alive for correct
-/// functioning.
+/// Runs and monitors a few concurrent tasks.
+///
+/// This includes:
+///   - A Tendermint node.
+///   - A shell which contains an ABCI server, for talking to the Tendermint node.
+///   - A broadcaster, for the ledger may submit txs to the chain.
+///   - An Ethereum full node.
+///   - An oracle, to receive events from the Ethereum full node,
+///     and forward them to the ledger.
+///
+/// All must be alive for correct functioning.
 async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let setup_data = run_aux_setup(&config, &wasm_dir).await;
 
@@ -218,10 +222,14 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     // Start Tendermint node
     let tendermint_node = start_tendermint(&mut spawner, &config);
 
+    // Start Ethereum full node and its oracle
+    let (eth_node, eth_receiver, oracle) = start_ethereum_node(&mut spawner, &config);
+
     // Start ABCI server and broadcaster (the latter only if we are a validator
     // node)
     let (abci, broadcaster, shell_handler) = start_abci_broadcaster_shell(
         &mut spawner,
+        eth_receiver,
         wasm_dir,
         setup_data,
         config,
@@ -231,14 +239,17 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let aborted = spawner.wait_for_abort().await.child_terminated();
 
     // Wait for all managed tasks to finish.
-    let res = tokio::try_join!(tendermint_node, abci, broadcaster);
+    let res = tokio::try_join!(tendermint_node, eth_node, abci, oracle, broadcaster);
 
     match res {
-        Ok((tendermint_res, abci_res, _)) => {
+        Ok((tendermint_res, eth_res, abci_res, _, _)) => {
             // we ignore errors on user-initiated shutdown
             if aborted {
                 if let Err(err) = tendermint_res {
                     tracing::error!("Tendermint error: {}", err);
+                }
+                if let Err(err) = eth_res {
+                    tracing::error!("Ethereum error: {}", err);
                 }
                 if let Err(err) = abci_res {
                     tracing::error!("ABCI error: {}", err);
@@ -371,6 +382,7 @@ async fn run_aux_setup(
 /// Lastly, this function executes an ABCI shell on a new OS thread.
 fn start_abci_broadcaster_shell(
     spawner: &mut AbortableSpawner,
+    eth_receiver: (),
     wasm_dir: PathBuf,
     setup_data: RunAuxSetup,
     config: config::Ledger,
@@ -418,17 +430,14 @@ fn start_abci_broadcaster_shell(
         tokio::spawn(async { std::future::ready(()).await })
     };
 
-    // Setup DB cache, it must outlive the DB instance that's in the shell
-    let db_cache =
-        rocksdb::Cache::new_lru_cache(db_block_cache_size_bytes as usize)
-            .unwrap();
-
     // Construct our ABCI application.
+    let tendermint_mode = config.tendermint.tendermint_mode.clone();
     let ledger_address = config.shell.ledger_address;
     let (shell, abci_service) = AbcippShim::new(
         config,
         wasm_dir,
         broadcaster_sender,
+        eth_receiver,
         &db_cache,
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
@@ -455,6 +464,14 @@ fn start_abci_broadcaster_shell(
     let shell_handler = thread_builder
         .spawn(move || {
             tracing::info!("Anoma ledger node started.");
+            match tendermint_mode {
+                TendermintMode::Validator => {
+                    tracing::info!("This node is a validator");
+                }
+                TendermintMode::Full | TendermintMode::Seed => {
+                    tracing::info!("This node is not a validator");
+                }
+            }
             shell.run()
         })
         .expect("Must be able to start a thread for the shell");
@@ -573,4 +590,75 @@ fn start_tendermint(
                 }
             }
         })
+}
+
+//    let (eth_node, eth_receiver, oracle) = start_ethereum_node(&mut spawner, &config);
+fn start_ethereum_node(spawner: (), config: ()) -> ((), (), ()) {
+    let ethereum_url = config.ethereum.oracle_rpc_endpoint.clone();
+    let (eth_node, oracle) = if matches!(
+        config.tendermint.tendermint_mode,
+        TendermintMode::Validator
+    ) {
+        // boot up the ethereum node process and wait for it to finish syncing
+        let (eth_sender, eth_receiver) = unbounded_channel();
+        let url = ethereum_url.clone();
+        let start_managed_eth_node =
+            matches!(config.ethereum.mode, ethereum::Mode::Managed);
+        let (eth_node, abort_sender) =
+            ethereum_node::start(&url, start_managed_eth_node)
+                .await
+                .expect("Unable to start the Ethereum fullnode");
+
+        // Start Ethereum fullnode
+        // Channel for signalling shut down to Tendermint process
+        let (eth_abort_send, eth_abort_recv) =
+            tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>();
+        let abort_send_for_eth = abort_send.clone();
+        // run geth in the background
+        let eth_node = tokio::spawn(async move {
+            // On panic or exit, the `Drop` of `AbortSender` will send abort
+            // message
+            let aborter = Aborter {
+                sender: abort_send_for_eth,
+                who: "Ethereum",
+            };
+
+            let res = ethereum_node::monitor(eth_node, eth_abort_recv)
+                .map_err(Error::Ethereum)
+                .await;
+            tracing::info!("Ethereum fullnode is no longer running.");
+
+            drop(aborter);
+            res
+        });
+
+        let oracle = match config.ethereum.mode {
+            ethereum::Mode::Managed => ethereum_node::oracle::run_oracle(
+                ethereum_url,
+                eth_sender,
+                abort_sender,
+            ),
+            ethereum::Mode::EventsEndpoint => {
+                ethereum_node::test_tools::event_endpoint::start_oracle(
+                    eth_sender,
+                )
+            }
+            ethereum::Mode::Off => {
+                ethereum_node::test_tools::mock_oracle::run_oracle(
+                    ethereum_url,
+                    eth_sender,
+                    abort_sender,
+                )
+            }
+        };
+
+        // Shutdown the Ethereum node subprocess via a message to ensure that
+        // the child process is properly cleaned-up.
+        let (eth_abort_resp_send, eth_abort_resp_recv) =
+            tokio::sync::oneshot::channel::<()>();
+    } else {
+        ((), ())
+    };
+
+	((), (), ())
 }

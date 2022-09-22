@@ -12,11 +12,11 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use anoma_vp_prelude::intent::{
+use namada_vp_prelude::intent::{
     Exchange, FungibleTokenIntent, IntentTransfers,
 };
-use anoma_vp_prelude::storage::KeySeg;
-use anoma_vp_prelude::*;
+use namada_vp_prelude::storage::KeySeg;
+use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 use rust_decimal::prelude::*;
 
@@ -33,6 +33,10 @@ enum KeyType<'a> {
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some(address) = token::is_any_token_balance_key(key) {
+            Self::Token(address)
+        } else if let Some((_, address)) =
+            token::is_any_multitoken_balance_key(key)
+        {
             Self::Token(address)
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
@@ -236,8 +240,8 @@ fn try_decode_intent(
     signed_tx_data: &SignedTxData,
 ) -> Option<(
     Vec<u8>,
-    anoma_vp_prelude::Signed<Exchange>,
-    anoma_vp_prelude::Signed<FungibleTokenIntent>,
+    namada_vp_prelude::Signed<Exchange>,
+    namada_vp_prelude::Signed<FungibleTokenIntent>,
 )> {
     let raw_intent_transfers = signed_tx_data.data.as_ref().cloned()?;
     let mut tx_data =
@@ -260,8 +264,8 @@ fn try_decode_intent(
 
 fn check_intent(
     addr: &Address,
-    exchange: anoma_vp_prelude::Signed<Exchange>,
-    intent: anoma_vp_prelude::Signed<FungibleTokenIntent>,
+    exchange: namada_vp_prelude::Signed<Exchange>,
+    intent: namada_vp_prelude::Signed<FungibleTokenIntent>,
     raw_intent_transfers: Vec<u8>,
 ) -> bool {
     // verify signature
@@ -364,11 +368,11 @@ fn check_intent(
 mod tests {
     use address::testing::arb_non_internal_address;
     // Use this as `#[test]` annotation to enable logging
-    use anoma_tests::log::test;
-    use anoma_tests::tx::{tx_host_env, TestTxEnv};
-    use anoma_tests::vp::vp_host_env::storage::Key;
-    use anoma_tests::vp::*;
-    use anoma_vp_prelude::key::RefTo;
+    use namada_tests::log::test;
+    use namada_tests::tx::{tx_host_env, TestTxEnv};
+    use namada_tests::vp::vp_host_env::storage::Key;
+    use namada_tests::vp::*;
+    use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 
@@ -412,7 +416,9 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(&source, address, &token, amount);
+            tx_host_env::token::transfer(
+                &source, address, &token, None, amount,
+            );
         });
 
         let vp_env = vp_host_env::take();
@@ -445,7 +451,9 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(address, &target, &token, amount);
+            tx_host_env::token::transfer(
+                address, &target, &token, None, amount,
+            );
         });
 
         let vp_env = vp_host_env::take();
@@ -482,7 +490,9 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(address, &target, &token, amount);
+            tx_host_env::token::transfer(
+                address, &target, &token, None, amount,
+            );
         });
 
         let mut vp_env = vp_host_env::take();
@@ -520,7 +530,9 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             tx_host_env::insert_verifier(address);
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(&source, &target, &token, amount);
+            tx_host_env::token::transfer(
+                &source, &target, &token, None, amount,
+            );
         });
 
         let vp_env = vp_host_env::take();

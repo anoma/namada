@@ -128,14 +128,14 @@ pub fn validity_predicate(
 ///
 /// This macro requires that the data structure implements
 /// [`std::default::Default`] that is used to instantiate the matchmaker and
-/// `anoma::types::matchmaker::AddIntent` to implement a custom matchmaker
+/// `namada::types::matchmaker::AddIntent` to implement a custom matchmaker
 /// algorithm.
 ///
 /// # Examples
 ///
 /// ```compiler_fail
-/// use anoma::types::matchmaker::AddIntent;
-/// use anoma_macros::Matchmaker;
+/// use namada::types::matchmaker::AddIntent;
+/// use namada_macros::Matchmaker;
 ///
 /// #[derive(Default, Matchmaker)]
 /// struct Matchmaker;
@@ -152,7 +152,7 @@ pub fn matchmaker(input: TokenStream) -> TokenStream {
 
         /// Add the marker trait
         #[automatically_derived]
-        impl anoma::types::matchmaker::Matchmaker for #ident {}
+        impl namada::types::matchmaker::Matchmaker for #ident {}
 
         /// Instantiate a new matchmaker and return a pointer to it. The caller is
         /// responsible for making sure that the memory of the pointer will be dropped,
@@ -181,7 +181,7 @@ pub fn matchmaker(input: TokenStream) -> TokenStream {
             state_ptr: *mut std::ffi::c_void,
             intent_id: &Vec<u8>,
             intent_data: &Vec<u8>,
-        ) -> anoma::types::matchmaker::AddIntentResult {
+        ) -> namada::types::matchmaker::AddIntentResult {
             let state_ptr = state_ptr as *mut #ident;
             let mut state: #ident = unsafe { std::ptr::read(state_ptr) };
             let result = state.add_intent(intent_id, intent_data);

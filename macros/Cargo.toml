@@ -2,9 +2,9 @@
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2021"
 license = "GPL-3.0"
-name = "anoma_macros"
+name = "namada_macros"
 resolver = "2"
-version = "0.6.1"
+version = "0.7.1"
 
 [lib]
 proc-macro = true

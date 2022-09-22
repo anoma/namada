@@ -1,8 +1,11 @@
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
 
+use borsh::schema::{Declaration, Definition};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -49,61 +52,105 @@ pub struct SignedTxData {
     pub sig: common::Signature,
 }
 
-/// A generic signed data wrapper for Borsh encode-able data.
+/// A serialization method to provide to [`Signed`], such
+/// that we may sign serialized data.
+pub trait SignedSerialize<T> {
+    /// A byte vector containing the serialized data.
+    type Output: AsRef<[u8]>;
+
+    /// Encodes `data` as a byte vector,
+    /// with some arbitrary serialization method.
+    fn serialize(data: &T) -> Self::Output;
+}
+
+/// Tag type that indicates we should use [`BorshSerialize`]
+/// to sign data in a [`Signed`] wrapper.
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct SerializeWithBorsh;
+
+impl<T: BorshSerialize> SignedSerialize<T> for SerializeWithBorsh {
+    type Output = Vec<u8>;
+
+    fn serialize(data: &T) -> Vec<u8> {
+        data.try_to_vec()
+            .expect("Encoding data for signing shouldn't fail")
+    }
+}
+
+/// A generic signed data wrapper for serialize-able types.
+///
+/// The default serialization method is [`BorshSerialize`].
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
-pub struct Signed<T: BorshSerialize + BorshDeserialize> {
+pub struct Signed<T, S = SerializeWithBorsh> {
     /// Arbitrary data to be signed
     pub data: T,
     /// The signature of the data
     pub sig: common::Signature,
+    /// The method to serialize the data with,
+    /// before it being signed
+    _serialization: PhantomData<S>,
 }
 
-impl<T> PartialEq for Signed<T>
-where
-    T: BorshSerialize + BorshDeserialize + PartialEq,
-{
+impl<S, T: Eq> Eq for Signed<T, S> {}
+
+impl<S, T: PartialEq> PartialEq for Signed<T, S> {
     fn eq(&self, other: &Self) -> bool {
         self.data == other.data && self.sig == other.sig
     }
 }
 
-impl<T> Eq for Signed<T> where
-    T: BorshSerialize + BorshDeserialize + Eq + PartialEq
-{
-}
-
-impl<T> Hash for Signed<T>
-where
-    T: BorshSerialize + BorshDeserialize + Hash,
-{
+impl<S, T: Hash> Hash for Signed<T, S> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.data.hash(state);
         self.sig.hash(state);
     }
 }
 
-impl<T> PartialOrd for Signed<T>
-where
-    T: BorshSerialize + BorshDeserialize + PartialOrd,
-{
+impl<S, T: PartialOrd> PartialOrd for Signed<T, S> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.data.partial_cmp(&other.data)
     }
 }
 
-impl<T> Signed<T>
-where
-    T: BorshSerialize + BorshDeserialize,
-{
-    /// Initialize a new signed data.
+impl<S, T: BorshSchema> BorshSchema for Signed<T, S> {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<Declaration, Definition>,
+    ) {
+        let fields = borsh::schema::Fields::NamedFields(borsh::maybestd::vec![
+            ("data".to_string(), T::declaration()),
+            ("sig".to_string(), <common::Signature>::declaration())
+        ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+        T::add_definitions_recursively(definitions);
+        <common::Signature>::add_definitions_recursively(definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        format!("Signed<{}>", T::declaration())
+    }
+}
+
+impl<T, S> Signed<T, S> {
+    /// Initialize a new [`Signed`] instance from an existing signature.
+    #[inline]
+    pub fn new_from(data: T, sig: common::Signature) -> Self {
+        Self {
+            data,
+            sig,
+            _serialization: PhantomData,
+        }
+    }
+}
+
+impl<T, S: SignedSerialize<T>> Signed<T, S> {
+    /// Initialize a new [`Signed`] instance.
     pub fn new(keypair: &common::SecretKey, data: T) -> Self {
-        let to_sign = data
-            .try_to_vec()
-            .expect("Encoding data for signing shouldn't fail");
-        let sig = common::SigScheme::sign(keypair, &to_sign);
-        Self { data, sig }
+        let to_sign = S::serialize(&data);
+        let sig = common::SigScheme::sign(keypair, to_sign.as_ref());
+        Self::new_from(data, sig)
     }
 
     /// Verify that the data has been signed by the secret key
@@ -112,11 +159,8 @@ where
         &self,
         pk: &common::PublicKey,
     ) -> std::result::Result<(), VerifySigError> {
-        let bytes = self
-            .data
-            .try_to_vec()
-            .expect("Encoding data for verifying signature shouldn't fail");
-        common::SigScheme::verify_signature_raw(pk, &bytes, &self.sig)
+        let bytes = S::serialize(&self.data);
+        common::SigScheme::verify_signature_raw(pk, bytes.as_ref(), &self.sig)
     }
 }
 

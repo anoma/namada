@@ -5,7 +5,7 @@ pub mod rpc;
 
 use std::path::Path;
 
-use anoma::proto::Intent;
+use namada::proto::Intent;
 use thiserror::Error;
 use tokio::sync::mpsc;
 

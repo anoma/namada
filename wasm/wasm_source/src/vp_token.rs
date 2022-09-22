@@ -1,7 +1,7 @@
 //! A VP for a fungible token. Enforces that the total supply is unchanged in a
 //! transaction that moves balance(s).
 
-use anoma_vp_prelude::*;
+use namada_vp_prelude::*;
 
 #[validity_predicate]
 fn validate_tx(

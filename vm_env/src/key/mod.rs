@@ -1,8 +1,8 @@
-use anoma::types::address::Address;
+use namada::types::address::Address;
 
 /// Vp imports and functions.
 pub mod vp {
-    pub use anoma::types::key::*;
+    pub use namada::types::key::*;
 
     use super::*;
     use crate::imports::vp;

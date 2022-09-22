@@ -9,10 +9,6 @@ const PROTO_SRC: &str = "./proto";
 const RUSTFMT_TOOLCHAIN_SRC: &str = "../rust-nightly-version";
 
 fn main() {
-    #[cfg(all(feature = "ABCI", feature = "ABCI-plus-plus"))]
-    compile_error!(
-        "`ABCI` and `ABCI-plus-plus` may not be used at the same time"
-    );
     if let Ok(val) = env::var("COMPILE_PROTO") {
         if val.to_ascii_lowercase() == "false" {
             // Skip compiling proto files
@@ -31,6 +27,8 @@ fn main() {
             println!("cargo:rustc-cfg=feature=\"dev\"");
         }
     }
+
+    let mut use_rustfmt = false;
 
     // The version should match the one we use in the `Makefile`
     if let Ok(rustfmt_toolchain) = read_to_string(RUSTFMT_TOOLCHAIN_SRC) {
@@ -51,6 +49,7 @@ fn main() {
                 if !rustfmt.is_empty() {
                     println!("using rustfmt from path \"{}\"", rustfmt);
                     env::set_var("RUSTFMT", rustfmt);
+                    use_rustfmt = true
                 }
             }
         }
@@ -58,7 +57,7 @@ fn main() {
 
     tonic_build::configure()
         .out_dir("src/proto/generated")
-        .format(true)
+        .format(use_rustfmt)
         // TODO try to add json encoding to simplify use for user
         // .type_attribute("types.Intent", "#[derive(serde::Serialize,
         // serde::Deserialize)]")

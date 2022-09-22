@@ -2,29 +2,34 @@
 use std::collections::BTreeSet;
 use std::panic;
 
-use anoma::ledger::eth_bridge::vp::EthBridge;
-use anoma::ledger::gas::{self, BlockGasMeter, VpGasMeter};
-use anoma::ledger::governance::GovernanceVp;
-use anoma::ledger::ibc::vp::{Ibc, IbcToken};
-use anoma::ledger::native_vp::{self, NativeVp};
-use anoma::ledger::parameters::{self, ParametersVp};
-use anoma::ledger::pos::{self, PosVP};
-use anoma::ledger::storage::write_log::WriteLog;
-use anoma::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use anoma::ledger::treasury::TreasuryVp;
-use anoma::proto::{self, Tx};
-use anoma::types::address::{Address, InternalAddress};
-use anoma::types::storage;
-use anoma::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
-use anoma::vm::wasm::{TxCache, VpCache};
-use anoma::vm::{self, wasm, WasmCacheAccess};
+use namada::ledger::eth_bridge::bridge_pool_vp::BridgePoolVp;
+use namada::ledger::eth_bridge::vp::EthBridge;
+use namada::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use namada::ledger::governance::GovernanceVp;
+use namada::ledger::ibc::vp::{Ibc, IbcToken};
+use namada::ledger::native_vp::{self, NativeVp};
+use namada::ledger::parameters::{self, ParametersVp};
+use namada::ledger::pos::{self, PosVP};
+use namada::ledger::storage::write_log::WriteLog;
+use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada::ledger::treasury::TreasuryVp;
+use namada::proto::{self, Tx};
+use namada::types::address::{Address, InternalAddress};
+use namada::types::storage;
+use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+use namada::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
+use namada::types::vote_extensions::ethereum_events;
+use namada::vm::wasm::{TxCache, VpCache};
+use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
+
+use crate::node::ledger::shell::Shell;
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
-    StorageError(anoma::ledger::storage::Error),
+    StorageError(namada::ledger::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
@@ -38,7 +43,7 @@ pub enum Error {
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
     #[error("IBC native VP: {0}")]
-    IbcNativeVpError(anoma::ledger::ibc::vp::Error),
+    IbcNativeVpError(namada::ledger::ibc::vp::Error),
     #[error("PoS native VP: {0}")]
     PosNativeVpError(pos::vp::Error),
     #[error("PoS native VP panicked")]
@@ -46,34 +51,107 @@ pub enum Error {
     #[error("Parameters native VP: {0}")]
     ParametersNativeVpError(parameters::Error),
     #[error("IBC Token native VP: {0}")]
-    IbcTokenNativeVpError(anoma::ledger::ibc::vp::IbcTokenError),
+    IbcTokenNativeVpError(namada::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(anoma::ledger::governance::vp::Error),
+    GovernanceNativeVpError(namada::ledger::governance::vp::Error),
     #[error("Treasury native VP error: {0}")]
-    TreasuryNativeVpError(anoma::ledger::treasury::Error),
+    TreasuryNativeVpError(namada::ledger::treasury::Error),
     #[error("Ethereum bridge native VP error: {0}")]
-    EthBridgeNativeVpError(anoma::ledger::eth_bridge::vp::Error),
+    EthBridgeNativeVpError(namada::ledger::eth_bridge::vp::Error),
+    #[error("Ethereum bridge pool native VP error: {0}")]
+    BridgePoolNativeVpError(namada::ledger::eth_bridge::bridge_pool_vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
 
+pub(crate) struct ShellParams<'a, D, H, CA>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    pub block_gas_meter: &'a mut BlockGasMeter,
+    pub write_log: &'a mut WriteLog,
+    pub storage: &'a Storage<D, H>,
+    pub vp_wasm_cache: &'a mut VpCache<CA>,
+    pub tx_wasm_cache: &'a mut TxCache<CA>,
+}
+
+impl<'a, D, H> From<&'a mut Shell<D, H>>
+    for ShellParams<'a, D, H, namada::vm::WasmCacheRwAccess>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    fn from(shell: &'a mut Shell<D, H>) -> Self {
+        Self {
+            block_gas_meter: &mut shell.gas_meter,
+            write_log: &mut shell.write_log,
+            storage: &shell.storage,
+            vp_wasm_cache: &mut shell.vp_wasm_cache,
+            tx_wasm_cache: &mut shell.tx_wasm_cache,
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Apply a given transaction
-///
-/// The only Tx Types that should be input here are `Decrypted` and `Wrapper`
+/// Dispatch a given transaction to be applied based on its type. Some storage
+/// updates may be derived and applied natively rather than via the wasm
+/// environment, in which case validity predicates will be bypassed.
 ///
 /// If the given tx is a successfully decrypted payload apply the necessary
 /// vps. Otherwise, we include the tx on chain with the gas charge added
 /// but no further validations.
-pub fn apply_tx<D, H, CA>(
-    tx: TxType,
+pub(crate) fn dispatch_tx<'a, D, H, CA>(
+    tx_type: TxType,
     tx_length: usize,
-    block_gas_meter: &mut BlockGasMeter,
-    write_log: &mut WriteLog,
-    storage: &Storage<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    block_gas_meter: &'a mut BlockGasMeter,
+    write_log: &'a mut WriteLog,
+    storage: &'a mut Storage<D, H>,
+    vp_wasm_cache: &'a mut VpCache<CA>,
+    tx_wasm_cache: &'a mut TxCache<CA>,
+) -> Result<TxResult>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    match tx_type {
+        TxType::Raw(_) => Err(Error::TxTypeError),
+        TxType::Decrypted(DecryptedTx::Decrypted(tx)) => apply_wasm_tx(
+            tx,
+            tx_length,
+            ShellParams {
+                block_gas_meter,
+                write_log,
+                storage,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            },
+        ),
+        TxType::Protocol(ProtocolTx { tx, .. }) => {
+            apply_protocol_tx(tx, storage)
+        }
+        _ => {
+            // other transaction types we treat as a noop
+            Ok(TxResult::default())
+        }
+    }
+}
+
+/// Apply a transaction going via the wasm environment. Gas will be metered and
+/// validity predicates will be triggered in the normal way.
+pub(crate) fn apply_wasm_tx<'a, D, H, CA>(
+    tx: Tx,
+    tx_length: usize,
+    ShellParams {
+        block_gas_meter,
+        write_log,
+        storage,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    }: ShellParams<'a, D, H, CA>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -84,50 +162,75 @@ where
     block_gas_meter
         .add_base_transaction_fee(tx_length)
         .map_err(Error::GasError)?;
+    let verifiers = execute_tx(
+        &tx,
+        storage,
+        block_gas_meter,
+        write_log,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    )?;
+
+    let vps_result = check_vps(
+        &tx,
+        storage,
+        block_gas_meter,
+        write_log,
+        &verifiers,
+        vp_wasm_cache,
+    )?;
+
+    let gas_used = block_gas_meter
+        .finalize_transaction()
+        .map_err(Error::GasError)?;
+    let initialized_accounts = write_log.get_initialized_accounts();
+    let changed_keys = write_log.get_keys();
+    let ibc_event = write_log.take_ibc_event();
+
+    Ok(TxResult {
+        gas_used,
+        changed_keys,
+        vps_result,
+        initialized_accounts,
+        ibc_event,
+    })
+}
+
+/// Apply a derived transaction to storage based on some protocol transaction.
+/// The logic here must be completely deterministic and will be executed by all
+/// full nodes every time a protocol transaction is included in a block. Storage
+/// is updated natively rather than via the wasm environment, so gas does not
+/// need to be metered and validity predicates are bypassed. A [`TxResult`]
+/// containing changed keys and the like should be returned in the normal way.
+pub(crate) fn apply_protocol_tx<'a, D, H>(
+    tx: ProtocolTxType,
+    // TODO: eventually this `storage` parameter could be tightened further to
+    // an impl trait of only the subset of [`Storage`] functionality that we
+    // need
+    _storage: &'a mut Storage<D, H>,
+) -> Result<TxResult>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     match tx {
-        TxType::Raw(_) => Err(Error::TxTypeError),
-        TxType::Decrypted(DecryptedTx::Decrypted(tx)) => {
-            let verifiers = execute_tx(
-                &tx,
-                storage,
-                block_gas_meter,
-                write_log,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            )?;
-
-            let vps_result = check_vps(
-                &tx,
-                storage,
-                block_gas_meter,
-                write_log,
-                &verifiers,
-                vp_wasm_cache,
-            )?;
-
-            let gas_used = block_gas_meter
-                .finalize_transaction()
-                .map_err(Error::GasError)?;
-            let initialized_accounts = write_log.get_initialized_accounts();
-            let changed_keys = write_log.get_keys();
-            let ibc_event = write_log.take_ibc_event();
-
-            Ok(TxResult {
-                gas_used,
-                changed_keys,
-                vps_result,
-                initialized_accounts,
-                ibc_event,
-            })
+        ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
+            events,
+            ..
+        }) => {
+            if !events.is_empty() {
+                tracing::debug!(n = events.len(), "Ethereum events received");
+            }
+            Ok(TxResult::default())
         }
+        ProtocolTxType::ValidatorSetUpdate(_) => Ok(TxResult::default()),
         _ => {
-            let gas_used = block_gas_meter
-                .finalize_transaction()
-                .map_err(Error::GasError)?;
-            Ok(TxResult {
-                gas_used,
-                ..Default::default()
-            })
+            tracing::error!(
+                "Attempt made to apply an unsupported protocol transaction! - \
+                 {:#?}",
+                tx
+            );
+            Err(Error::TxTypeError)
         }
     }
 }
@@ -350,6 +453,14 @@ where
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::EthBridgeNativeVpError);
                             gas_meter = bridge.ctx.gas_meter.into_inner();
+                            result
+                        }
+                        InternalAddress::EthBridgePool => {
+                            let bridge_pool = BridgePoolVp { ctx };
+                            let result = bridge_pool
+                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .map_err(Error::BridgePoolNativeVpError);
+                            gas_meter = bridge_pool.ctx.gas_meter.into_inner();
                             result
                         }
                     };

@@ -3,13 +3,13 @@
 use std::fs::File;
 use std::io::{self, Write};
 
-use anoma::types::key::*;
-use anoma_apps::cli;
-use anoma_apps::cli::{args, cmds, Context};
-use anoma_apps::wallet::DecryptionError;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use itertools::sorted;
+use namada::types::key::*;
+use namada_apps::cli;
+use namada_apps::cli::{args, cmds, Context};
+use namada_apps::wallet::DecryptionError;
 
 pub fn main() -> Result<()> {
     let (cmd, ctx) = cli::anoma_wallet_cli();
@@ -45,12 +45,13 @@ pub fn main() -> Result<()> {
 fn key_and_address_gen(
     ctx: Context,
     args::KeyAndAddressGen {
+        scheme,
         alias,
         unsafe_dont_encrypt,
     }: args::KeyAndAddressGen,
 ) {
     let mut wallet = ctx.wallet;
-    let (alias, _key) = wallet.gen_key(alias, unsafe_dont_encrypt);
+    let (alias, _key) = wallet.gen_key(scheme, alias, unsafe_dont_encrypt);
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a key and an address with alias: \"{}\"",

@@ -3,7 +3,7 @@
 //! tx_data. This tx uses an IBC message wrapped inside
 //! `key::ed25519::SignedTxData` as its input as declared in `ibc` crate.
 
-use anoma_tx_prelude::*;
+use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(tx_data: Vec<u8>) {

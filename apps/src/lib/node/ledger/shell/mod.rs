@@ -1,18 +1,17 @@
 //! The ledger shell connects the ABCI++ interface with the Anoma ledger app.
 //!
 //! Any changes applied before [`Shell::finalize_block`] might have to be
-//! reverted, so any changes applied in the methods `Shell::prepare_proposal`
-//! (ABCI++), [`Shell::process_and_decode_proposal`] must be also reverted
-//! (unless we can simply overwrite them in the next block).
-//! More info in <https://github.com/anoma/anoma/issues/362>.
+//! reverted, so any changes applied in the methods [`Shell::prepare_proposal`]
+//! must be also reverted (unless we can simply overwrite them in the next
+//! block). More info in <https://github.com/anoma/anoma/issues/362>.
 mod finalize_block;
 mod init_chain;
-#[cfg(not(feature = "ABCI"))]
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
+mod vote_extensions;
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -20,70 +19,66 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::str::FromStr;
 
-use anoma::ledger::gas::BlockGasMeter;
-use anoma::ledger::pos::anoma_proof_of_stake::types::{
+use borsh::{BorshDeserialize, BorshSerialize};
+use namada::ledger::gas::BlockGasMeter;
+use namada::ledger::pos::namada_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
-use anoma::ledger::pos::anoma_proof_of_stake::PosBase;
-use anoma::ledger::storage::write_log::WriteLog;
-use anoma::ledger::storage::{
+use namada::ledger::pos::namada_proof_of_stake::PosBase;
+use namada::ledger::storage::write_log::WriteLog;
+use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, DB,
 };
-use anoma::ledger::{ibc, parameters, pos};
-use anoma::proto::{self, Tx};
-use anoma::types::chain::ChainId;
-use anoma::types::key::*;
-use anoma::types::storage::{BlockHeight, Key};
-use anoma::types::time::{DateTimeUtc, TimeZone, Utc};
-use anoma::types::transaction::{
+use namada::ledger::{ibc, parameters, pos};
+use namada::proto::{self, Tx};
+use namada::types::chain::ChainId;
+use namada::types::ethereum_events::EthereumEvent;
+use namada::types::key::*;
+use namada::types::storage::{BlockHeight, Key};
+use namada::types::time::{DateTimeUtc, TimeZone, Utc};
+use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
-use anoma::types::{address, token};
-use anoma::vm::wasm::{TxCache, VpCache};
-use anoma::vm::WasmCacheRwAccess;
-use borsh::{BorshDeserialize, BorshSerialize};
+use namada::types::{address, token};
+use namada::vm::wasm::{TxCache, VpCache};
+use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::abci::{
-    Misbehavior as Evidence, MisbehaviorType as EvidenceType,
-    RequestPrepareProposal, ValidatorUpdate,
-};
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::crypto::public_key;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::types::ConsensusParams;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::ConsensusParams;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::{Evidence, EvidenceType, ValidatorUpdate};
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::crypto::public_key;
 use thiserror::Error;
-use tokio::sync::mpsc::UnboundedSender;
-#[cfg(not(feature = "ABCI"))]
-use tower_abci::{request, response};
-#[cfg(feature = "ABCI")]
-use tower_abci_old::{request, response};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
+use super::protocol::ShellParams;
 use super::rpc;
 use crate::config::{genesis, TendermintMode};
+use crate::facade::tendermint_proto::abci::{
+    Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
+};
+use crate::facade::tendermint_proto::crypto::public_key;
+#[cfg(not(feature = "abcipp"))]
+use crate::facade::tendermint_proto::types::ConsensusParams;
+#[cfg(feature = "abcipp")]
+use crate::facade::tendermint_proto::types::ConsensusParams;
+use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
 #[allow(unused_imports)]
-use crate::wallet::ValidatorData;
+use crate::wallet::{ValidatorData, ValidatorKeys};
 use crate::{config, wallet};
 
-fn key_to_tendermint<PK: PublicKey>(
-    pk: &PK,
+fn key_to_tendermint(
+    pk: &common::PublicKey,
 ) -> std::result::Result<public_key::Sum, ParsePublicKeyError> {
-    ed25519::PublicKey::try_from_pk(pk)
-        .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap()))
+    match pk {
+        common::PublicKey::Ed25519(_) => ed25519::PublicKey::try_from_pk(pk)
+            .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap())),
+        common::PublicKey::Secp256k1(_) => {
+            secp256k1::PublicKey::try_from_pk(pk)
+                .map(|pk| public_key::Sum::Secp256k1(pk.try_to_vec().unwrap()))
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -100,6 +95,8 @@ pub enum Error {
     GasOverflow,
     #[error("{0}")]
     Tendermint(tendermint_node::Error),
+    #[error("{0}")]
+    Ethereum(super::ethereum_node::Error),
     #[error("Server error: {0}")]
     TowerServer(String),
     #[error("{0}")]
@@ -120,7 +117,7 @@ impl From<Error> for TxResult {
 /// The different error codes that the ledger may
 /// send back to a client indicating the status
 /// of their submitted tx
-#[derive(Debug, Clone, FromPrimitive, ToPrimitive, PartialEq)]
+#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum ErrorCodes {
     Ok = 0,
     InvalidTx = 1,
@@ -129,6 +126,17 @@ pub enum ErrorCodes {
     InvalidOrder = 4,
     ExtraTxs = 5,
     Undecryptable = 6,
+    InvalidVoteExtension = 7,
+    // NOTE: keep these values in sync with
+    // [`ErrorCodes::is_recoverable`]
+}
+
+impl ErrorCodes {
+    /// Checks if the given [`ErrorCodes`] value is a protocol level error,
+    /// that can be recovered from at the finalize block stage.
+    pub const fn is_recoverable(self) -> bool {
+        (self as u32) <= 3
+    }
 }
 
 impl From<ErrorCodes> for u32 {
@@ -164,9 +172,57 @@ pub(super) enum ShellMode {
     Validator {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
+        ethereum_recv: EthereumReceiver,
     },
     Full,
     Seed,
+}
+
+/// A channel for pulling events from the Ethereum oracle
+/// and queueing them up for inclusion in vote extensions
+#[derive(Debug)]
+pub(super) struct EthereumReceiver {
+    channel: UnboundedReceiver<EthereumEvent>,
+    queue: BTreeSet<EthereumEvent>,
+}
+
+impl EthereumReceiver {
+    /// Create a new [`EthereumReceiver`] from a channel connected
+    /// to an Ethereum oracle
+    pub fn new(channel: UnboundedReceiver<EthereumEvent>) -> Self {
+        Self {
+            channel,
+            queue: BTreeSet::new(),
+        }
+    }
+
+    /// Pull messages from the channel and add to queue
+    /// Since vote extensions require ordering of ethereum
+    /// events, we do that here. We also de-duplicate events
+    pub fn fill_queue(&mut self) {
+        let mut new_events = 0;
+        while let Ok(eth_event) = self.channel.try_recv() {
+            if self.queue.insert(eth_event) {
+                new_events += 1;
+            };
+        }
+        if new_events > 0 {
+            tracing::info!(n = new_events, "received Ethereum events");
+        }
+    }
+
+    /// Get a copy of the queue
+    pub fn get_events(&self) -> Vec<EthereumEvent> {
+        self.queue.iter().cloned().collect()
+    }
+
+    /// Given a list of events, remove them from the queue if present
+    /// Note that this method preserves the sorting and de-duplication
+    /// of events in the queue.
+    #[allow(dead_code)]
+    pub fn remove(&mut self, events: &[EthereumEvent]) {
+        self.queue.retain(|event| !events.contains(event));
+    }
 }
 
 #[allow(dead_code)]
@@ -176,6 +232,48 @@ impl ShellMode {
         match &self {
             ShellMode::Validator { data, .. } => Some(&data.address),
             _ => None,
+        }
+    }
+
+    /// Remove an Ethereum event from the internal queue
+    pub fn deque_eth_event(&mut self, event: &EthereumEvent) {
+        if let ShellMode::Validator {
+            ethereum_recv: EthereumReceiver { ref mut queue, .. },
+            ..
+        } = self
+        {
+            queue.remove(event);
+        }
+    }
+
+    /// Get the protocol keypair for this validator
+    pub fn get_protocol_key(&self) -> Option<&common::SecretKey> {
+        match &self {
+            ShellMode::Validator {
+                data:
+                    ValidatorData {
+                        keys:
+                            ValidatorKeys {
+                                protocol_keypair, ..
+                            },
+                        ..
+                    },
+                ..
+            } => Some(protocol_keypair),
+            _ => None,
+        }
+    }
+
+    /// If this node is a validator, broadcast a tx
+    /// to the mempool using the broadcaster subprocess
+    pub fn broadcast(&self, data: Vec<u8>) {
+        if let Self::Validator {
+            broadcast_sender, ..
+        } = self
+        {
+            broadcast_sender
+                .send(data)
+                .expect("The broadcaster should be running for a validator");
         }
     }
 }
@@ -201,9 +299,9 @@ where
     /// The persistent storage
     pub(super) storage: Storage<D, H>,
     /// Gas meter for the current block
-    gas_meter: BlockGasMeter,
+    pub(super) gas_meter: BlockGasMeter,
     /// Write log for the current block
-    write_log: WriteLog,
+    pub(super) write_log: WriteLog,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
@@ -211,14 +309,14 @@ where
     #[allow(dead_code)]
     base_dir: PathBuf,
     /// Path to the WASM directory for files used in the genesis block.
-    wasm_dir: PathBuf,
+    pub(super) wasm_dir: PathBuf,
     /// Information about the running shell instance
     #[allow(dead_code)]
     mode: ShellMode,
     /// VP WASM compilation cache
-    vp_wasm_cache: VpCache<WasmCacheRwAccess>,
+    pub(super) vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
-    tx_wasm_cache: TxCache<WasmCacheRwAccess>,
+    pub(super) tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     /// Proposal execution tracking
     pub proposal_data: HashSet<u64>,
 }
@@ -234,6 +332,7 @@ where
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
+        eth_receiver: Option<UnboundedReceiver<EthereumEvent>>,
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
@@ -284,6 +383,9 @@ where
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,
+                            ethereum_recv: EthereumReceiver::new(
+                                eth_receiver.unwrap(),
+                            ),
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -302,6 +404,9 @@ where
                             },
                         },
                         broadcast_sender,
+                        ethereum_recv: EthereumReceiver::new(
+                            eth_receiver.unwrap(),
+                        ),
                     }
                 }
             }
@@ -330,22 +435,10 @@ where
         }
     }
 
-    /// Iterate lazily over the wrapper txs in order
-    #[cfg(not(feature = "ABCI"))]
-    fn next_wrapper(&mut self) -> Option<&WrapperTx> {
-        self.storage.tx_queue.lazy_next()
-    }
-
-    /// Iterate lazily over the wrapper txs in order
-    #[cfg(feature = "ABCI")]
-    fn next_wrapper(&mut self) -> Option<WrapperTx> {
-        self.storage.tx_queue.pop()
-    }
-
-    /// If we reject the decrypted txs because they were out of
-    /// order, reset the iterator.
-    pub fn reset_tx_queue_iter(&mut self) {
-        self.storage.tx_queue.rewind()
+    /// Iterate over the wrapper txs in order
+    #[allow(dead_code)]
+    fn iter_tx_queue(&mut self) -> impl Iterator<Item = &WrapperTx> {
+        self.storage.tx_queue.iter()
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
@@ -517,26 +610,6 @@ where
         }
     }
 
-    #[cfg(not(feature = "ABCI"))]
-    /// INVARIANT: This method must be stateless.
-    pub fn extend_vote(
-        &self,
-        _req: request::ExtendVote,
-    ) -> response::ExtendVote {
-        Default::default()
-    }
-
-    #[cfg(not(feature = "ABCI"))]
-    /// INVARIANT: This method must be stateless.
-    pub fn verify_vote_extension(
-        &self,
-        _req: request::VerifyVoteExtension,
-    ) -> response::VerifyVoteExtension {
-        response::VerifyVoteExtension {
-            status: VerifyStatus::Accept as i32,
-        }
-    }
-
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
@@ -560,6 +633,26 @@ where
             self.storage.last_height,
         );
         response.data = root.0;
+
+        #[cfg(not(feature = "abcipp"))]
+        {
+            use namada::types::transaction::protocol::ProtocolTxType;
+
+            if let ShellMode::Validator { .. } = &self.mode {
+                let ext = self.craft_extension();
+                let ext = self
+                    .mode
+                    .get_protocol_key()
+                    .map(|protocol_key| {
+                        ProtocolTxType::VoteExtension(ext)
+                            .sign(protocol_key)
+                            .to_bytes()
+                    })
+                    .expect("Validators should have protocol keys");
+                self.mode.broadcast(ext);
+            }
+        }
+
         response
     }
 
@@ -591,15 +684,16 @@ where
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
         match Tx::try_from(tx_bytes) {
             Ok(tx) => {
-                let tx = TxType::Decrypted(DecryptedTx::Decrypted(tx));
-                match protocol::apply_tx(
+                match protocol::apply_wasm_tx(
                     tx,
                     tx_bytes.len(),
-                    &mut gas_meter,
-                    &mut write_log,
-                    &self.storage,
-                    &mut vp_wasm_cache,
-                    &mut tx_wasm_cache,
+                    ShellParams {
+                        block_gas_meter: &mut gas_meter,
+                        write_log: &mut write_log,
+                        storage: &self.storage,
+                        vp_wasm_cache: &mut vp_wasm_cache,
+                        tx_wasm_cache: &mut tx_wasm_cache,
+                    },
                 )
                 .map_err(Error::TxApply)
                 {
@@ -621,7 +715,6 @@ where
 
     /// Lookup a validator's keypair for their established account from their
     /// wallet. If the node is not validator, this function returns None
-    #[cfg(not(feature = "ABCI"))]
     #[allow(dead_code)]
     fn get_account_keypair(&self) -> Option<Rc<common::SecretKey>> {
         let wallet_path = &self.base_dir.join(self.chain_id.as_str());
@@ -663,26 +756,24 @@ mod test_utils {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
-    use anoma::ledger::storage::mockdb::MockDB;
-    use anoma::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
-    use anoma::types::address::{xan, EstablishedAddressGen};
-    use anoma::types::chain::ChainId;
-    use anoma::types::hash::Hash;
-    use anoma::types::key::*;
-    use anoma::types::storage::{BlockHash, Epoch, Header};
-    use anoma::types::transaction::Fee;
+    #[cfg(not(feature = "abcipp"))]
+    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
+    use namada::ledger::storage::mockdb::MockDB;
+    use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
+    use namada::types::address::{xan, EstablishedAddressGen};
+    use namada::types::chain::ChainId;
+    use namada::types::hash::Hash;
+    use namada::types::key::*;
+    use namada::types::storage::{BlockHash, Epoch, Header};
+    use namada::types::transaction::Fee;
     use tempfile::tempdir;
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_proto::abci::{RequestInitChain, RequestProcessProposal};
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_proto::google::protobuf::Timestamp;
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::abci::{RequestDeliverTx, RequestInitChain};
-    #[cfg(feature = "ABCI")]
-    use tendermint_proto_abci::google::protobuf::Timestamp;
     use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::{
+        RequestInitChain, RequestProcessProposal,
+    };
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
@@ -717,6 +808,20 @@ mod test_utils {
         ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
     }
 
+    /// Invalidate a valid signature `sig`.
+    pub(super) fn invalidate_signature(
+        sig: common::Signature,
+    ) -> common::Signature {
+        let mut sig_bytes = match sig {
+            common::Signature::Ed25519(ed25519::Signature(ref sig)) => {
+                sig.to_bytes()
+            }
+            _ => unreachable!(),
+        };
+        sig_bytes[0] = sig_bytes[0].wrapping_add(1);
+        common::Signature::Ed25519(ed25519::Signature(sig_bytes.into()))
+    }
+
     /// A wrapper around the shell that implements
     /// Drop so as to clean up the files that it
     /// generates. Also allows illegal state
@@ -747,30 +852,50 @@ mod test_utils {
     }
 
     impl TestShell {
-        /// Returns a new shell paired with a broadcast receiver, which will
-        /// receives any protocol txs sent by the shell.
-        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>) {
+        /// Returns a new shell with
+        ///    - A broadcast receiver, which will receive any protocol txs sent
+        ///      by the shell.
+        ///    - A sender that can send Ethereum events into the ledger, mocking
+        ///      the Ethereum fullnode process
+        pub fn new_at_height<H: Into<BlockHeight>>(
+            height: H,
+        ) -> (
+            Self,
+            UnboundedReceiver<Vec<u8>>,
+            UnboundedSender<EthereumEvent>,
+        ) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+            let (eth_sender, eth_receiver) =
+                tokio::sync::mpsc::unbounded_channel();
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-            (
-                Self {
-                    shell: Shell::<MockDB, Sha256Hasher>::new(
-                        config::Ledger::new(
-                            base_dir,
-                            Default::default(),
-                            TendermintMode::Validator,
-                        ),
-                        top_level_directory().join("wasm"),
-                        sender,
-                        None,
-                        vp_wasm_compilation_cache,
-                        tx_wasm_compilation_cache,
-                    ),
-                },
-                receiver,
-            )
+            let mut shell = Shell::<MockDB, Sha256Hasher>::new(
+                config::Ledger::new(
+                    base_dir,
+                    Default::default(),
+                    TendermintMode::Validator,
+                ),
+                top_level_directory().join("wasm"),
+                sender,
+                Some(eth_receiver),
+                None,
+                vp_wasm_compilation_cache,
+                tx_wasm_compilation_cache,
+            );
+            shell.storage.last_height = height.into();
+            (Self { shell }, receiver, eth_sender)
+        }
+
+        /// Same as [`TestShell::new_at_height`], but returns a shell at block
+        /// height 0.
+        #[inline]
+        pub fn new() -> (
+            Self,
+            UnboundedReceiver<Vec<u8>>,
+            UnboundedSender<EthereumEvent>,
+        ) {
+            Self::new_at_height(BlockHeight(1))
         }
 
         /// Forward a InitChain request and expect a success
@@ -786,39 +911,23 @@ mod test_utils {
             &mut self,
             req: ProcessProposal,
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
-            #[cfg(not(feature = "ABCI"))]
-            {
-                let resp =
-                    self.shell.process_proposal(RequestProcessProposal {
-                        txs: req.txs.clone(),
-                        ..Default::default()
-                    });
-                let results = resp
-                    .tx_results
-                    .iter()
-                    .zip(req.txs.into_iter())
-                    .map(|(res, tx_bytes)| ProcessedTx {
-                        result: res.into(),
-                        tx: tx_bytes,
-                    })
-                    .collect();
-                if resp.status != 1 {
-                    Err(TestError::RejectProposal(results))
-                } else {
-                    Ok(results)
-                }
-            }
-            #[cfg(feature = "ABCI")]
-            {
-                Ok(req
-                    .txs
-                    .into_iter()
-                    .map(|tx_bytes| {
-                        self.process_and_decode_proposal(RequestDeliverTx {
-                            tx: tx_bytes,
-                        })
-                    })
-                    .collect())
+            let resp = self.shell.process_proposal(RequestProcessProposal {
+                txs: req.txs.clone(),
+                ..Default::default()
+            });
+            let results = resp
+                .tx_results
+                .into_iter()
+                .zip(req.txs.into_iter())
+                .map(|(res, tx_bytes)| ProcessedTx {
+                    result: res,
+                    tx: tx_bytes,
+                })
+                .collect();
+            if resp.status != 1 {
+                Err(TestError::RejectProposal(results))
+            } else {
+                Ok(results)
             }
         }
 
@@ -839,15 +948,28 @@ mod test_utils {
         #[cfg(test)]
         pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
             self.shell.storage.tx_queue.push(wrapper);
-            self.shell.reset_tx_queue_iter();
         }
+    }
+
+    /// Get the only validator's voting power.
+    #[inline]
+    #[cfg(not(feature = "abcipp"))]
+    pub fn get_validator_voting_power() -> VotingPower {
+        200.into()
     }
 
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup() -> (TestShell, UnboundedReceiver<Vec<u8>>) {
-        let (mut test, receiver) = TestShell::new();
+    pub(super) fn setup_at_height<H: Into<BlockHeight>>(
+        height: H,
+    ) -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        UnboundedSender<EthereumEvent>,
+    ) {
+        let (mut test, receiver, eth_receiver) =
+            TestShell::new_at_height(height);
         test.init_chain(RequestInitChain {
             time: Some(Timestamp {
                 seconds: 0,
@@ -856,7 +978,17 @@ mod test_utils {
             chain_id: ChainId::default().to_string(),
             ..Default::default()
         });
-        (test, receiver)
+        (test, receiver, eth_receiver)
+    }
+
+    /// Same as [`setup`], but returns a shell at block height 0.
+    #[inline]
+    pub(super) fn setup() -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        UnboundedSender<EthereumEvent>,
+    ) {
+        setup_at_height(BlockHeight(0))
     }
 
     /// This is just to be used in testing. It is not
@@ -883,6 +1015,7 @@ mod test_utils {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
         // we have to use RocksDB for this test
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
+        let (_, receiver) = tokio::sync::mpsc::unbounded_channel();
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
@@ -893,6 +1026,7 @@ mod test_utils {
             ),
             top_level_directory().join("wasm"),
             sender.clone(),
+            Some(receiver),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
@@ -941,7 +1075,7 @@ mod test_utils {
 
         // Drop the shell
         std::mem::drop(shell);
-
+        let (_, receiver) = tokio::sync::mpsc::unbounded_channel();
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
@@ -951,6 +1085,7 @@ mod test_utils {
             ),
             top_level_directory().join("wasm"),
             sender,
+            Some(receiver),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,

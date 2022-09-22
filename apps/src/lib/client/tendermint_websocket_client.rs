@@ -6,24 +6,16 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_config::net::Address;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_rpc::{
-    Client, Error as RpcError, Request, Response, SimpleRequest,
-};
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::query::Query;
-#[cfg(feature = "ABCI")]
-use tendermint_rpc_abci::{
-    Client, Error as RpcError, Request, Response, SimpleRequest,
-};
 use thiserror::Error;
 use tokio::time::Instant;
 use websocket::result::WebSocketError;
 use websocket::{ClientBuilder, Message, OwnedMessage};
+
+use crate::facade::tendermint_config::net::Address;
+use crate::facade::tendermint_rpc::query::Query;
+use crate::facade::tendermint_rpc::{
+    Client, Error as RpcError, Request, Response, SimpleRequest,
+};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -47,6 +39,10 @@ pub enum Error {
     MissingId,
     #[error("Connection timed out")]
     ConnectionTimeout,
+    #[error("Received malformed JSON from websocket: {0:?}")]
+    MalformedJson(crate::node::ledger::events::Error),
+    #[error("Event for transaction {0} was not received")]
+    MissingEvent(String),
 }
 
 type Json = serde_json::Value;
@@ -59,20 +55,11 @@ mod rpc_types {
     use std::str::FromStr;
 
     use serde::{de, Deserialize, Serialize, Serializer};
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_rpc::method::Method;
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_rpc::query::{EventType, Query};
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_rpc::{request, response};
-    #[cfg(feature = "ABCI")]
-    use tendermint_rpc_abci::method::Method;
-    #[cfg(feature = "ABCI")]
-    use tendermint_rpc_abci::query::{EventType, Query};
-    #[cfg(feature = "ABCI")]
-    use tendermint_rpc_abci::{request, response};
 
     use super::Json;
+    use crate::facade::tendermint_rpc::method::Method;
+    use crate::facade::tendermint_rpc::query::{EventType, Query};
+    use crate::facade::tendermint_rpc::{request, response};
 
     #[derive(Debug, Deserialize, Serialize)]
     pub struct RpcRequest {
@@ -187,7 +174,7 @@ impl Display for WebSocketAddress {
         write!(f, "ws://{}:{}/websocket", self.host, self.port)
     }
 }
-#[cfg(feature = "ABCI")]
+
 use rpc_types::{RpcResponse, RpcSubscription, SubscribeType};
 
 /// We need interior mutability since the `perform` method of the `Client`
@@ -197,7 +184,6 @@ use rpc_types::{RpcResponse, RpcSubscription, SubscribeType};
 type Websocket = Arc<Mutex<websocket::sync::client::Client<TcpStream>>>;
 type ResponseQueue = Arc<Mutex<HashMap<String, String>>>;
 
-#[cfg(feature = "ABCI")]
 struct Subscription {
     id: String,
     query: Query,
@@ -205,7 +191,6 @@ struct Subscription {
 
 pub struct TendermintWebsocketClient {
     websocket: Websocket,
-    #[cfg(feature = "ABCI")]
     subscribed: Option<Subscription>,
     received_responses: ResponseQueue,
     connection_timeout: Duration,
@@ -224,7 +209,6 @@ impl TendermintWebsocketClient {
         {
             Ok(websocket) => Ok(Self {
                 websocket: Arc::new(Mutex::new(websocket)),
-                #[cfg(feature = "ABCI")]
                 subscribed: None,
                 received_responses: Arc::new(Mutex::new(HashMap::new())),
                 connection_timeout: connection_timeout
@@ -238,15 +222,11 @@ impl TendermintWebsocketClient {
     pub fn close(&mut self) {
         // Even in the case of errors, this will be shutdown
         let _ = self.websocket.lock().unwrap().shutdown();
-        #[cfg(feature = "ABCI")]
-        {
-            self.subscribed = None;
-        }
+        self.subscribed = None;
         self.received_responses.lock().unwrap().clear();
     }
 
     /// Subscribes to an event specified by the query argument.
-    #[cfg(feature = "ABCI")]
     pub fn subscribe(&mut self, query: Query) -> Result<(), Error> {
         // We do not support more than one subscription currently
         // This can be fixed by correlating on ids later
@@ -276,7 +256,6 @@ impl TendermintWebsocketClient {
 
     /// Receive a response from the subscribed event or
     /// process the response if it has already been received
-    #[cfg(feature = "ABCI")]
     pub fn receive_response(&self) -> Result<Json, Error> {
         if let Some(Subscription { id, .. }) = &self.subscribed {
             let response = self.process_response(
@@ -292,7 +271,6 @@ impl TendermintWebsocketClient {
     /// Unsubscribe from the currently subscribed event
     /// Note that even if an error is returned, the client
     /// will return to an unsubscribed state
-    #[cfg(feature = "ABCI")]
     pub fn unsubscribe(&mut self) -> Result<(), Error> {
         match self.subscribed.take() {
             Some(Subscription { query, .. }) => {
@@ -328,7 +306,6 @@ impl TendermintWebsocketClient {
     /// Optionally, the response may have been received earlier while
     /// handling a different request. In that case, we process it
     /// now.
-    #[cfg(feature = "ABCI")]
     fn process_response<F>(
         &self,
         f: F,
@@ -477,26 +454,22 @@ fn get_id(req_json: &str) -> Result<String, Error> {
 /// Furthermore, since a client can handle a subscription and a
 /// simple request simultaneously, we must test that the correct
 /// responses are give for each of the corresponding requests
-#[cfg(all(test, feature = "ABCI"))]
+#[cfg(test)]
 mod test_tendermint_websocket_client {
     use std::time::Duration;
 
-    use anoma::types::transaction::hash_tx as hash_tx_bytes;
+    use namada::types::transaction::hash_tx as hash_tx_bytes;
     use serde::{Deserialize, Serialize};
-    #[cfg(feature = "ABCI")]
-    use tendermint_rpc_abci::endpoint::abci_info::AbciInfo;
-    #[cfg(feature = "ABCI")]
-    use tendermint_rpc_abci::query::{EventType, Query};
-    #[cfg(feature = "ABCI")]
-    use tendermint_rpc_abci::Client;
-    #[cfg(feature = "ABCI")]
-    use tendermint_stable::abci::transaction;
     use websocket::sync::Server;
     use websocket::{Message, OwnedMessage};
 
     use crate::client::tendermint_websocket_client::{
         TendermintWebsocketClient, WebSocketAddress,
     };
+    use crate::facade::tendermint::abci::transaction;
+    use crate::facade::tendermint_rpc::endpoint::abci_info::AbciInfo;
+    use crate::facade::tendermint_rpc::query::{EventType, Query};
+    use crate::facade::tendermint_rpc::Client;
 
     #[derive(Debug, Deserialize, Serialize)]
     #[serde(rename_all = "snake_case")]

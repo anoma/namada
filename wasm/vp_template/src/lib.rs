@@ -1,4 +1,4 @@
-use anoma_vp_prelude::*;
+use namada_vp_prelude::*;
 
 #[validity_predicate]
 fn validate_tx(

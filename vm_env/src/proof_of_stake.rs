@@ -1,21 +1,21 @@
 //! Proof of Stake system integration with functions for transactions
 
-use anoma::ledger::pos::anoma_proof_of_stake::{
+use namada::ledger::pos::namada_proof_of_stake::{
     BecomeValidatorError, BondError, UnbondError, WithdrawError,
 };
-use anoma::ledger::pos::types::Slash;
-pub use anoma::ledger::pos::*;
-use anoma::ledger::pos::{
-    anoma_proof_of_stake, bond_key, params_key, total_voting_power_key,
+use namada::ledger::pos::types::Slash;
+pub use namada::ledger::pos::*;
+use namada::ledger::pos::{
+    bond_key, namada_proof_of_stake, params_key, total_voting_power_key,
     unbond_key, validator_address_raw_hash_key, validator_consensus_key_key,
     validator_set_key, validator_slashes_key,
     validator_staking_reward_address_key, validator_state_key,
     validator_total_deltas_key, validator_voting_power_key,
 };
-use anoma::types::address::{self, Address, InternalAddress};
-use anoma::types::transaction::InitValidator;
-use anoma::types::{key, token};
-pub use anoma_proof_of_stake::{
+use namada::types::address::{self, Address, InternalAddress};
+use namada::types::transaction::InitValidator;
+use namada::types::{key, token};
+pub use namada_proof_of_stake::{
     epoched, parameters, types, PosActions as PosWrite, PosReadOnly as PosRead,
 };
 
@@ -97,7 +97,7 @@ pub fn init_validator(
 /// lower-level PoS functions.
 pub struct PoS;
 
-impl anoma_proof_of_stake::PosReadOnly for PoS {
+impl namada_proof_of_stake::PosReadOnly for PoS {
     type Address = Address;
     type PublicKey = key::common::PublicKey;
     type TokenAmount = token::Amount;
@@ -169,7 +169,7 @@ impl anoma_proof_of_stake::PosReadOnly for PoS {
     }
 }
 
-impl anoma_proof_of_stake::PosActions for PoS {
+impl namada_proof_of_stake::PosActions for PoS {
     fn write_pos_params(&mut self, params: &PosParams) {
         tx::write(params_key().to_string(), params)
     }
@@ -256,6 +256,6 @@ impl anoma_proof_of_stake::PosActions for PoS {
         src: &Self::Address,
         dest: &Self::Address,
     ) {
-        crate::token::tx::transfer(src, dest, token, amount)
+        crate::token::tx::transfer(src, dest, token, None, amount)
     }
 }

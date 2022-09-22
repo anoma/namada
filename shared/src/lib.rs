@@ -6,22 +6,14 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-#[cfg(not(feature = "ABCI"))]
-pub use ibc;
-#[cfg(feature = "ABCI")]
-pub use ibc_abci as ibc;
-#[cfg(not(feature = "ABCI"))]
-pub use ibc_proto;
-#[cfg(feature = "ABCI")]
-pub use ibc_proto_abci as ibc_proto;
-#[cfg(not(feature = "ABCI"))]
-pub use tendermint;
-#[cfg(not(feature = "ABCI"))]
-pub use tendermint_proto;
-#[cfg(feature = "ABCI")]
-pub use tendermint_proto_abci as tendermint_proto;
-#[cfg(feature = "ABCI")]
-pub use tendermint_stable as tendermint;
+#[cfg(not(feature = "abcipp"))]
+pub use {ibc, ibc_proto, tendermint, tendermint_proto};
+#[cfg(feature = "abcipp")]
+pub use {
+    ibc_abcipp as ibc, ibc_proto_abcipp as ibc_proto,
+    tendermint_abcipp as tendermint,
+    tendermint_proto_abcipp as tendermint_proto,
+};
 
 pub mod bytes;
 pub mod ledger;

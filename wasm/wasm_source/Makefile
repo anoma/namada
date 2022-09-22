@@ -6,6 +6,7 @@ nightly := $(shell cat ../../rust-nightly-version)
 # All the wasms that can be built from this source, switched via Cargo features
 # Wasms can be added via the Cargo.toml `[features]` list.
 wasms := tx_bond
+wasms := tx_bridge_pool
 wasms += tx_from_intent
 wasms += tx_ibc
 wasms += tx_init_account
@@ -51,7 +52,7 @@ fmt-check:
 # Linker flag "-s" for stripping (https://github.com/rust-lang/cargo/issues/3483#issuecomment-431209957)
 $(wasms): %:
 	RUSTFLAGS='-C link-arg=-s' $(cargo) build --release --target wasm32-unknown-unknown --features $@ && \
-	cp "./target/wasm32-unknown-unknown/release/anoma_wasm.wasm" ../$@.wasm
+	cp "./target/wasm32-unknown-unknown/release/namada_wasm.wasm" ../$@.wasm
 
 # `cargo check` one of the wasms, e.g. `make check_tx_transfer`
 $(patsubst %,check_%,$(wasms)): check_%:
@@ -59,7 +60,9 @@ $(patsubst %,check_%,$(wasms)): check_%:
 
 # `cargo test` one of the wasms, e.g. `make test_tx_transfer`
 $(patsubst %,test_%,$(wasms)): test_%:
-	$(cargo) test --features $*
+	$(cargo) test --features $* \
+		-- \
+		-Z unstable-options --report-time
 
 # `cargo watch` one of the wasms, e.g. `make watch_tx_transfer`
 $(patsubst %,watch_%,$(wasms)): watch_%:

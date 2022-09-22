@@ -66,7 +66,7 @@ use crate::ibc::core::ics24_host::identifier::{
 };
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ibc::events::IbcEvent;
-#[cfg(any(feature = "ibc-mocks-abci", feature = "ibc-mocks"))]
+#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
 use crate::ibc::mock::client_state::{MockClientState, MockConsensusState};
 use crate::ibc::timestamp::Timestamp;
 use crate::ledger::ibc::storage;
@@ -997,12 +997,12 @@ pub fn update_client(
                 let new_consensus_state = TmConsensusState::from(h).wrap_any();
                 Ok((new_client_state, new_consensus_state))
             }
-            #[cfg(any(feature = "ibc-mocks-abci", feature = "ibc-mocks"))]
+            #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
             _ => Err(Error::ClientUpdate(
                 "The header type is mismatched".to_owned(),
             )),
         },
-        #[cfg(any(feature = "ibc-mocks-abci", feature = "ibc-mocks"))]
+        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
         AnyClientState::Mock(_) => match header {
             AnyHeader::Mock(h) => Ok((
                 MockClientState::new(h).wrap_any(),

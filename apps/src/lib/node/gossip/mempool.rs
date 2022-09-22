@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anoma::proto::{Intent, IntentId};
+use namada::proto::{Intent, IntentId};
 
 /// In-memory intent mempool
 #[derive(Clone, Debug, Default)]

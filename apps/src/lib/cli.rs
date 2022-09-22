@@ -1362,30 +1362,24 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use anoma::types::address::Address;
-    use anoma::types::chain::{ChainId, ChainIdPrefix};
-    use anoma::types::governance::ProposalVote;
-    use anoma::types::intent::{DecimalWrapper, Exchange};
-    use anoma::types::key::*;
-    use anoma::types::storage::{self, Epoch};
-    use anoma::types::token;
-    use anoma::types::transaction::GasLimit;
     use libp2p::Multiaddr;
+    use namada::types::address::Address;
+    use namada::types::chain::{ChainId, ChainIdPrefix};
+    use namada::types::governance::ProposalVote;
+    use namada::types::intent::{DecimalWrapper, Exchange};
+    use namada::types::key::*;
+    use namada::types::storage::{self, Epoch};
+    use namada::types::token;
+    use namada::types::transaction::GasLimit;
     use serde::Deserialize;
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint::Timeout;
-    #[cfg(not(feature = "ABCI"))]
-    use tendermint_config::net::Address as TendermintAddress;
-    #[cfg(feature = "ABCI")]
-    use tendermint_config_abci::net::Address as TendermintAddress;
-    #[cfg(feature = "ABCI")]
-    use tendermint_stable::Timeout;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
     use super::ArgMatches;
     use crate::config;
     use crate::config::TendermintMode;
+    use crate::facade::tendermint::Timeout;
+    use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
     const ADDRESS: Arg<WalletAddress> = arg("address");
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
@@ -1463,12 +1457,15 @@ pub mod args {
     const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
     const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
+    const SCHEME: ArgDefault<SchemeType> =
+        arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
     const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
     const SOURCE: Arg<WalletAddress> = arg("source");
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
+    const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     const TARGET: Arg<WalletAddress> = arg("target");
     const TO_STDOUT: ArgFlag = flag("stdout");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
@@ -1614,6 +1611,8 @@ pub mod args {
         pub target: WalletAddress,
         /// Transferred token address
         pub token: WalletAddress,
+        /// Transferred token address
+        pub sub_prefix: Option<String>,
         /// Transferred token amount
         pub amount: token::Amount,
     }
@@ -1624,12 +1623,14 @@ pub mod args {
             let source = SOURCE.parse(matches);
             let target = TARGET.parse(matches);
             let token = TOKEN.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
             Self {
                 tx,
                 source,
                 target,
                 token,
+                sub_prefix,
                 amount,
             }
         }
@@ -1642,6 +1643,7 @@ pub mod args {
                 ))
                 .arg(TARGET.def().about("The target account address."))
                 .arg(TOKEN.def().about("The transfer token."))
+                .arg(SUB_PREFIX.def().about("The token's sub prefix."))
                 .arg(AMOUNT.def().about("The amount to transfer in decimal."))
         }
     }
@@ -1695,6 +1697,7 @@ pub mod args {
     pub struct TxInitValidator {
         pub tx: Tx,
         pub source: WalletAddress,
+        pub scheme: SchemeType,
         pub account_key: Option<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
         pub rewards_account_key: Option<WalletPublicKey>,
@@ -1708,6 +1711,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
+            let scheme = SCHEME.parse(matches);
             let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let rewards_account_key = REWARDS_KEY.parse(matches);
@@ -1718,6 +1722,7 @@ pub mod args {
             Self {
                 tx,
                 source,
+                scheme,
                 account_key,
                 consensus_key,
                 rewards_account_key,
@@ -1732,6 +1737,10 @@ pub mod args {
             app.add_args::<Tx>()
                 .arg(SOURCE.def().about(
                     "The source account's address that signs the transaction.",
+                ))
+                .arg(SCHEME.def().about(
+                    "The key scheme/type used for the validator keys. \
+                     Currently supports ed25519 and secp256k1.",
                 ))
                 .arg(VALIDATOR_ACCOUNT_KEY.def().about(
                     "A public key for the validator account. A new one will \
@@ -2182,6 +2191,8 @@ pub mod args {
         pub owner: Option<WalletAddress>,
         /// Address of a token
         pub token: Option<WalletAddress>,
+        /// Sub prefix of an account
+        pub sub_prefix: Option<String>,
     }
 
     impl Args for QueryBalance {
@@ -2189,10 +2200,12 @@ pub mod args {
             let query = Query::parse(matches);
             let owner = OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
             Self {
                 query,
                 owner,
                 token,
+                sub_prefix,
             }
         }
 
@@ -2207,6 +2220,11 @@ pub mod args {
                     TOKEN_OPT
                         .def()
                         .about("The token's address whose balance to query."),
+                )
+                .arg(
+                    SUB_PREFIX.def().about(
+                        "The token's sub prefix whose balance to query.",
+                    ),
                 )
         }
     }
@@ -2727,6 +2745,8 @@ pub mod args {
     /// Wallet generate key and implicit address arguments
     #[derive(Clone, Debug)]
     pub struct KeyAndAddressGen {
+        /// Scheme type
+        pub scheme: SchemeType,
         /// Key alias
         pub alias: Option<String>,
         /// Don't encrypt the keypair
@@ -2735,16 +2755,23 @@ pub mod args {
 
     impl Args for KeyAndAddressGen {
         fn parse(matches: &ArgMatches) -> Self {
+            let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
+                scheme,
                 alias,
                 unsafe_dont_encrypt,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS_OPT.def().about(
+            app.arg(SCHEME.def().about(
+                "The type of key that should be generated. Argument must be \
+                 either ed25519 or secp256k1. If none provided, the default \
+                 key scheme is ed25519.",
+            ))
+            .arg(ALIAS_OPT.def().about(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
             ))
@@ -3015,6 +3042,7 @@ pub mod args {
         pub alias: String,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
+        pub key_scheme: SchemeType,
     }
 
     impl Args for InitGenesisValidator {
@@ -3022,10 +3050,12 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let key_scheme = SCHEME.parse(matches);
             Self {
                 alias,
                 net_address,
                 unsafe_dont_encrypt,
+                key_scheme,
             }
         }
 
@@ -3039,6 +3069,10 @@ pub mod args {
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
+                ))
+                .arg(SCHEME.def().about(
+                    "The key scheme/type used for the validator keys. \
+                     Currently supports ed25519 and secp256k1.",
                 ))
         }
     }

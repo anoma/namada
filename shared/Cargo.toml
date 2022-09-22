@@ -2,14 +2,14 @@
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2021"
 license = "GPL-3.0"
-name = "anoma"
+name = "namada"
 resolver = "2"
-version = "0.6.1"
+version = "0.7.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["ABCI", "ibc-vp-abci"]
+default = ["abciplus"]
 # NOTE "dev" features that shouldn't be used in live networks are enabled by default for now
 dev = []
 ferveo-tpke = [
@@ -19,36 +19,19 @@ ferveo-tpke = [
   "rand_core",
   "rand",
 ]
-# for integration tests and test utilies
-ibc-vp = [
-  "ibc",
-]
-ibc-vp-abci = [
-  "ibc-abci",
-]
 ibc-mocks = [
   "ibc/mocks",
 ]
-ibc-mocks-abci = [
-  "ibc-abci/mocks",
+ibc-mocks-abcipp = [
+  "ibc-abcipp/mocks",
 ]
 # for integration tests and test utilies
-ABCI = [
-  "ibc-proto-abci",
-  "tendermint-stable",
-  "tendermint-proto-abci",
-]
-ABCI-plus-plus = [
-  "ibc-proto",
-  "tendermint",
-  "tendermint-proto",
-]
 testing = [
   "proptest",
   "rand",
   "rand_core",
   "tempfile",
-  "anoma_proof_of_stake/testing",
+  "namada_proof_of_stake/testing",
 ]
 wasm-runtime = [
   "loupe",
@@ -61,9 +44,28 @@ wasm-runtime = [
   "wasmer-vm",
   "wasmer",
 ]
+# secp256k1 key signing and verification, disabled in WASM build by default as
+# it bloats the build a lot
+secp256k1-sign-verify = [
+  "libsecp256k1/hmac",
+]
+
+abcipp = [
+  "ibc-proto-abcipp",
+  "ibc-abcipp",
+  "tendermint-abcipp",
+  "tendermint-proto-abcipp"
+]
+
+abciplus = [
+  "ibc",
+  "ibc-proto",
+  "tendermint",
+  "tendermint-proto",
+]
 
 [dependencies]
-anoma_proof_of_stake = {path = "../proof_of_stake"}
+namada_proof_of_stake = {path = "../proof_of_stake"}
 ark-bls12-381 = {version = "0.3"}
 ark-ec = {version = "0.3", optional = true}
 ark-serialize = "0.3"
@@ -74,18 +76,22 @@ chrono = "0.4.19"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
+ethabi = "17.0.0"
+eyre = "0.6.8"
 ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
 ferveo-common = {git = "https://github.com/anoma/ferveo"}
+num-rational = "0.4.1"
 hex = "0.4.3"
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc = {git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false, optional = true}
-ibc-abci = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_tm_v0.23.5", default-features = false, optional = true}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false, optional = true}
-ibc-proto-abci = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", branch = "yuji/v0.12.0_tm_v0.23.5", default-features = false, optional = true}
+ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false, optional = true}
+ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false, optional = true}
+ibc = {git = "https://github.com/heliaxdev/ibc-rs", branch = "bat/abciplus", default-features = false, optional = true}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", branch = "bat/abciplus", default-features = false, optional = true}
 ics23 = "0.6.7"
-itertools = "0.10.0"
+itertools = "0.10.3"
 loupe = {version = "0.1.3", optional = true}
+libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 parity-wasm = {version = "0.42.2", optional = true}
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
@@ -103,11 +109,12 @@ sha2 = "0.9.3"
 sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "yuji/prost-0.9", default-features = false, features = ["std", "borsh"]}
 tempfile = {version = "3.2.0", optional = true}
 # temporarily using fork work-around for https://github.com/informalsystems/tendermint-rs/issues/971
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
-tendermint-proto-abci = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5", optional = true}
-tendermint-stable = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", branch = "yuji/rebase_v0.23.5", optional = true}
+tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abciplus", optional = true}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abciplus", optional = true}
 thiserror = "1.0.30"
+tiny-keccak = "2.0.2"
 tracing = "0.1.30"
 wasmer = {version = "=2.2.0", optional = true}
 wasmer-cache = {version = "=2.2.0", optional = true}
@@ -116,10 +123,12 @@ wasmer-engine-dylib = {version = "=2.2.0", optional = true}
 wasmer-engine-universal = {version = "=2.2.0", optional = true}
 wasmer-vm = {version = "2.2.0", optional = true}
 wasmparser = "0.83.0"
+zeroize = "1.5.5"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
 byte-unit = "4.0.13"
+libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
 pretty_assertions = "0.7.2"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}

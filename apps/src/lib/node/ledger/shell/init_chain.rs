@@ -2,23 +2,15 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use anoma::types::key::*;
+use namada::types::key::*;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::abci;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::google::protobuf;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::crypto::PublicKey as TendermintPublicKey;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::google::protobuf;
 
+use super::queries::QueriesExt;
 use super::*;
+use crate::facade::tendermint_proto::abci;
+use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+use crate::facade::tendermint_proto::google::protobuf;
 use crate::wasm_loader;
 
 impl<D, H> Shell<D, H>
@@ -266,7 +258,7 @@ where
         );
         ibc::init_genesis_storage(&mut self.storage);
 
-        let evidence_params = self.get_evidence_params(
+        let evidence_params = self.storage.get_evidence_params(
             &genesis.parameters.epoch_duration,
             &genesis.pos_params,
         );

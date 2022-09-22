@@ -51,6 +51,7 @@ pub const RESERVED_VP_KEY: &str = "?";
     Copy,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -101,6 +102,12 @@ pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 impl From<Hash> for BlockHash {
     fn from(hash: Hash) -> Self {
         BlockHash(hash.0)
+    }
+}
+
+impl From<u64> for BlockHeight {
+    fn from(height: u64) -> Self {
+        BlockHeight(height)
     }
 }
 
@@ -676,56 +683,41 @@ impl Epochs {
         }
         None
     }
+
+    /// Return all starting block heights for each successive Epoch.
+    ///
+    /// __INVARIANT:__ The returned values are sorted in ascending order.
+    pub fn first_block_heights(&self) -> &[BlockHeight] {
+        &self.first_block_heights
+    }
 }
 
 #[cfg(feature = "ferveo-tpke")]
 #[derive(Default, Debug, Clone, BorshDeserialize, BorshSerialize)]
 /// Wrapper txs to be decrypted in the next block proposal
-pub struct TxQueue {
-    /// Index of next wrapper_tx to fetch from storage
-    next_wrapper: usize,
-    /// The actual wrappers
-    queue: std::collections::VecDeque<WrapperTx>,
-}
+pub struct TxQueue(std::collections::VecDeque<WrapperTx>);
 
 #[cfg(feature = "ferveo-tpke")]
 impl TxQueue {
     /// Add a new wrapper at the back of the queue
     pub fn push(&mut self, wrapper: WrapperTx) {
-        self.queue.push_back(wrapper);
+        self.0.push_back(wrapper);
     }
 
     /// Remove the wrapper at the head of the queue
     pub fn pop(&mut self) -> Option<WrapperTx> {
-        self.queue.pop_front()
-    }
-
-    /// Iterate lazily over the queue. Finds the next value and advances the
-    /// lazy iterator.
-    #[allow(dead_code)]
-    pub fn lazy_next(&mut self) -> Option<&WrapperTx> {
-        let next = self.queue.get(self.next_wrapper);
-        if self.next_wrapper < self.queue.len() {
-            self.next_wrapper += 1;
-        }
-        next
-    }
-
-    /// Reset the iterator to the head of the queue
-    pub fn rewind(&mut self) {
-        self.next_wrapper = 0;
+        self.0.pop_front()
     }
 
     /// Get an iterator over the queue
-    #[allow(dead_code)]
     pub fn iter(&self) -> impl std::iter::Iterator<Item = &WrapperTx> {
-        self.queue.iter()
+        self.0.iter()
     }
 
     /// Check if there are any txs in the queue
     #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
+        self.0.is_empty()
     }
 }
 

@@ -3,13 +3,11 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use anoma::types::address::Address;
-use anoma::types::storage;
-#[cfg(not(feature = "ABCI"))]
-use tendermint::abci::Path as AbciPath;
-#[cfg(feature = "ABCI")]
-use tendermint_stable::abci::Path as AbciPath;
+use namada::types::address::Address;
+use namada::types::storage;
 use thiserror::Error;
+
+use crate::facade::tendermint::abci::Path as AbciPath;
 
 /// RPC query path
 #[derive(Debug, Clone)]

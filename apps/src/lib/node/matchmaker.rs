@@ -4,24 +4,16 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use anoma::proto::Tx;
-use anoma::types::address::{self, Address};
-use anoma::types::dylib;
-use anoma::types::intent::{IntentTransfers, MatchedExchanges};
-use anoma::types::key::*;
-use anoma::types::matchmaker::AddIntentResult;
-use anoma::types::transaction::{hash_tx, Fee, WrapperTx};
 use borsh::{BorshDeserialize, BorshSerialize};
 use libc::c_void;
 use libloading::Library;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_config::net;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_config::net::Address as TendermintAddress;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net;
-#[cfg(feature = "ABCI")]
-use tendermint_config_abci::net::Address as TendermintAddress;
+use namada::proto::Tx;
+use namada::types::address::{self, Address};
+use namada::types::dylib;
+use namada::types::intent::{IntentTransfers, MatchedExchanges};
+use namada::types::key::*;
+use namada::types::matchmaker::AddIntentResult;
+use namada::types::transaction::{hash_tx, Fee, WrapperTx};
 
 use super::gossip::rpc::matchmakers::{
     ClientDialer, ClientListener, MsgFromClient, MsgFromServer,
@@ -30,6 +22,8 @@ use crate::cli::args;
 use crate::client::rpc;
 use crate::client::tendermint_rpc_types::TxBroadcastData;
 use crate::client::tx::broadcast_tx;
+use crate::facade::tendermint_config::net;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::{cli, config, wasm_loader};
 
 /// Run a matchmaker
@@ -331,17 +325,9 @@ impl ResultHandler {
                 // TODO: Actually use the fetched encryption key
                 Default::default(),
             );
-            let wrapper_hash = if !cfg!(feature = "ABCI") {
-                hash_tx(&tx.try_to_vec().unwrap()).to_string()
-            } else {
-                tx.tx_hash.to_string()
-            };
+            let wrapper_hash = hash_tx(&tx.try_to_vec().unwrap()).to_string();
 
-            let decrypted_hash = if !cfg!(feature = "ABCI") {
-                Some(tx.tx_hash.to_string())
-            } else {
-                None
-            };
+            let decrypted_hash = tx.tx_hash.to_string();
             TxBroadcastData::Wrapper {
                 tx: tx
                     .sign(&self.tx_signing_key)

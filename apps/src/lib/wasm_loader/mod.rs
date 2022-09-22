@@ -32,7 +32,7 @@ pub enum Error {
 #[serde(transparent)]
 pub struct Checksums(pub HashMap<String, String>);
 
-const S3_URL: &str = "https://heliax-anoma-wasm-v1.s3.eu-west-1.amazonaws.com";
+const S3_URL: &str = "https://namada-wasm-master.s3.eu-west-1.amazonaws.com";
 
 impl Checksums {
     /// Read WASM checksums from the given path

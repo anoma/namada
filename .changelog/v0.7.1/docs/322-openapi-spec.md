@@ -1,0 +1,1 @@
+- Added OpenAPI spec ([#322](https://github.com/anoma/namada/pull/322))
