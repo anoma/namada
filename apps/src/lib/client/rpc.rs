@@ -12,20 +12,20 @@ use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::BorshDeserialize;
 use itertools::Itertools;
+use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::Votes;
-use namada::types::governance::VotePower;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{
     Epoch as PosEpoch, VotingPower, WeightedValidator,
 };
-use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
 use namada::types::address::Address;
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalVote, TallyResult, ProposalResult,
+    OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
+    VotePower,
 };
 use namada::types::key::*;
 use namada::types::storage::{Epoch, PrefixValue};

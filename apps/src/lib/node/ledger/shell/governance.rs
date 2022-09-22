@@ -3,9 +3,9 @@ use namada::ledger::governance::utils::{
     compute_tally, get_proposal_votes, ProposalEvent,
 };
 use namada::ledger::governance::vp::ADDRESS as gov_address;
+use namada::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
-use namada::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
@@ -14,6 +14,7 @@ use namada::types::token;
 use super::*;
 use crate::node::ledger::events::EventType;
 
+#[derive(Default)]
 pub struct ProposalsResult {
     passed: Vec<u64>,
     rejected: Vec<u64>,
@@ -28,10 +29,7 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    let mut proposals_result = ProposalsResult {
-        passed: Vec::new(),
-        rejected: Vec::new(),
-    };
+    let mut proposals_result = ProposalsResult::default();
 
     if !new_epoch {
         return Ok(proposals_result);
@@ -55,8 +53,7 @@ where
                 )
             })?;
 
-        let votes =
-            get_proposal_votes(&shell.storage, proposal_end_epoch, id);
+        let votes = get_proposal_votes(&shell.storage, proposal_end_epoch, id);
         let tally_result =
             compute_tally(&shell.storage, proposal_end_epoch, votes);
 

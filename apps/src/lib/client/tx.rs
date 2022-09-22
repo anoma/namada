@@ -571,8 +571,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     {
         eprintln!(
             "Invalid proposal end epoch: difference between proposal start \
-             and end epoch must be at least {} and at max {} and end epoch must \
-             be a multiple of {}",
+             and end epoch must be at least {} and at max {} and end epoch \
+             must be a multiple of {}",
             governance_parameters.min_proposal_period,
             governance_parameters.max_proposal_period,
             governance_parameters.min_proposal_period
@@ -634,7 +634,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
             .await
             .unwrap_or_default();
-        if balance < token::Amount::from(governance_parameters.min_proposal_fund)
+        if balance
+            < token::Amount::from(governance_parameters.min_proposal_fund)
         {
             eprintln!(
                 "Address {} doesn't have enough funds.",

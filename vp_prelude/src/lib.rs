@@ -43,14 +43,15 @@ pub fn is_proposal_accepted(proposal_id: u64) -> bool {
 
 /// Checks whether a transaction is valid, which happens in two cases:
 /// - tx is whitelisted, or
-/// - tx is executed by an approved governance proposal (no need to be whitelisted)
+/// - tx is executed by an approved governance proposal (no need to be
+///   whitelisted)
 pub fn is_valid_tx(tx_data: &[u8]) -> bool {
     if is_tx_whitelisted() {
-        return true
+        true
     } else {
         let proposal_id = u64::try_from_slice(tx_data).ok();
 
-        proposal_id.map_or(false, |id| is_proposal_accepted(id))
+        proposal_id.map_or(false, is_proposal_accepted)
     }
 }
 

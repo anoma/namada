@@ -1064,9 +1064,9 @@ fn proposal_submission() -> Result<()> {
                 "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 12 as u64,
-            "voting_end_epoch": 24 as u64,
-            "grace_epoch": 30 as u64,
+            "voting_start_epoch": 12_u64,
+            "voting_end_epoch": 24_u64,
+            "grace_epoch": 30_u64,
             "proposal_code_path": proposal_code.to_str().unwrap()
         }
     );
@@ -1164,9 +1164,9 @@ fn proposal_submission() -> Result<()> {
     eros.",             "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 9999 as u64,
-            "voting_end_epoch": 10000 as u64,
-            "grace_epoch": 10009 as u64,
+            "voting_start_epoch": 9999_u64,
+            "voting_end_epoch": 10000_u64,
+            "grace_epoch": 10009_u64,
         }
     );
     let invalid_proposal_file =
@@ -1186,7 +1186,8 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string(
         "Invalid proposal end epoch: difference between proposal start and \
-         end epoch must be at least 3 and end epoch must be a multiple of 3",
+         end epoch must be at least 3 and at max 27 and end epoch must be a \
+         multiple of 3",
     )?;
     client.assert_failure();
 
@@ -1411,9 +1412,9 @@ fn proposal_offline() -> Result<()> {
                 "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 3 as u64,
-            "voting_end_epoch": 9 as u64,
-            "grace_epoch": 18 as u64
+            "voting_start_epoch": 3_u64,
+            "voting_end_epoch": 9_u64,
+            "grace_epoch": 18_u64
         }
     );
     let proposal_file =

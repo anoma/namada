@@ -18,8 +18,8 @@ pub mod token;
 pub mod tx_prelude {
     pub use namada::ledger::governance::storage;
     pub use namada::ledger::parameters::storage as parameters_storage;
-    pub use namada::ledger::storage::types::encode;
     pub use namada::ledger::slash_fund::storage as slash_fund_storage;
+    pub use namada::ledger::storage::types::encode;
     pub use namada::proto::{Signed, SignedTxData};
     pub use namada::types::address::Address;
     pub use namada::types::storage::Key;
