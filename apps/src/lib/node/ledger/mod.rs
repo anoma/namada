@@ -209,7 +209,7 @@ pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
 ///   - A Tendermint node.
 ///   - A shell which contains an ABCI server, for talking to the Tendermint
 ///     node.
-///   - A broadcaster, for the ledger may submit txs to the chain.
+///   - A [`Broadcaster`], for the ledger to submit txs to Tendermint's mempool.
 ///   - An Ethereum full node.
 ///   - An oracle, to receive events from the Ethereum full node, and forward
 ///     them to the ledger.
