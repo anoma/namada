@@ -597,7 +597,11 @@ fn start_tendermint(
         })
 }
 
-// TODO: add docstring
+/// Launches a new task managing a `geth` process into the asynchronous
+/// runtime, and returns its [`task::JoinHandle`].
+///
+/// An oracle is also returned, along with its associated channel,
+/// for receiving Ethereum events from `geth`.
 async fn start_ethereum_node(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
