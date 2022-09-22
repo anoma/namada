@@ -176,7 +176,7 @@ fn calculate_new_eth_msg(
     tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
 
     let mut seen_by_voting_power = FractionalVotingPower::default();
-    for validator in &update.seen_by {
+    for (validator, _) in &update.seen_by {
         match voting_powers.get(validator) {
             Some(voting_power) => seen_by_voting_power += voting_power,
             None => {
@@ -196,7 +196,11 @@ fn calculate_new_eth_msg(
             voting_power: seen_by_voting_power,
             // the below `.collect()` is deterministic and will result in a
             // sorted vector as `update.seen_by` is a [`BTreeSet`]
-            seen_by: update.seen_by.into_iter().collect(),
+            seen_by: update
+                .seen_by
+                .into_iter()
+                .map(|(validator, _)| validator)
+                .collect(),
             seen: newly_confirmed,
         },
         eth_msg_keys.into_iter().collect(),
@@ -278,6 +282,7 @@ mod tests {
     };
     use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada::types::token::Amount;
+    use storage::BlockHeight;
 
     use super::*;
 
@@ -299,7 +304,10 @@ mod tests {
         };
         let update = EthMsgUpdate {
             body: body.clone(),
-            seen_by: BTreeSet::from_iter(vec![sole_validator.clone()]),
+            seen_by: BTreeSet::from_iter(vec![(
+                sole_validator.clone(),
+                BlockHeight(100),
+            )]),
         };
         let updates = HashSet::from_iter(vec![update]);
         let voting_powers = HashMap::from_iter(vec![(

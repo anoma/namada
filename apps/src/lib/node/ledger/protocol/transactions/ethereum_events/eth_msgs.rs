@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada::types::address::Address;
 use namada::types::ethereum_events::EthereumEvent;
+use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
@@ -26,7 +27,9 @@ pub struct EthMsgUpdate {
     /// we can derive [`Hash`] for [`EthMsgUpdate`]. This also conveniently
     /// orders addresses in the order in which they should be stored in
     /// blockchain storage.
-    pub seen_by: BTreeSet<Address>,
+    // NOTE(feature = "abcipp"): This can just become BTreeSet<Address> because
+    // BlockHeight will always be the previous block
+    pub seen_by: BTreeSet<(Address, BlockHeight)>,
 }
 
 impl From<MultiSignedEthEvent> for EthMsgUpdate {
@@ -35,7 +38,7 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
     ) -> Self {
         Self {
             body: event,
-            seen_by: signers.into_iter().map(|(address, _)| address).collect(),
+            seen_by: signers.into_iter().collect(),
         }
     }
 }
@@ -82,7 +85,10 @@ mod tests {
         };
         let expected = EthMsgUpdate {
             body: event,
-            seen_by: BTreeSet::from_iter(vec![sole_validator]),
+            seen_by: BTreeSet::from_iter(vec![(
+                sole_validator,
+                BlockHeight(100),
+            )]),
         };
 
         let update: EthMsgUpdate = with_signers.into();
