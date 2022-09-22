@@ -189,16 +189,16 @@ $$ R_b^i = (1 - R_p - R_s) \frac{s_i}{s_{cons}}. $$
 
 Thus, as an example, the total fraction of the block reward for the proposer (assuming they include their own signature in the block) would be:
 
-$$ R_{prop} = r_p\Big(f - \frac{2}{3}\Big) + 0.01 + r_s \frac{s_i}{fs_{cons}} + \Big(1 - r_p\Big(f - \frac{2}{3}\Big) - r_s\Big) \frac{s_i}{s_{cons}}. $$
+$$ R_{prop} = r_p\Big(f - \frac{2}{3}\Big) + 0.01 + r_s \frac{s_i}{fs_{cons}} + \Big(1 - r_p\Big(f - \frac{2}{3}\Big) -0.01 - r_s\Big) \frac{s_i}{s_{cons}}. $$
 
 The values of the parameters $r_p$ and $r_s$ are set in the proof-of-stake storage and can only change via governance. The values are chosen relative to each other such that a block proposer is always incentivized to include as much signing stake as possible. These values at genesis are currently:
 
 - $r_s = 0.1$
 - $r_p = 0.125$
 
-These rewards must be determined for every single block, but the inflationary token rewards are only minted at the end of an epoch. Thus, the rewards products are only updated at the end of an epoch as well. In order to maintain a record of the block rewards over the course of an epoch, a reward fraction accumulator is held in a storage key `#{PoS}/validator/{validator_address}/rewards_accumulator` (TODO: THINK ABT THIS!) for each consensus validator.
+These rewards must be determined for every single block, but the inflationary token rewards are only minted at the end of an epoch. Thus, the rewards products are only updated at the end of an epoch as well.
 
-When finalizing each block, the accumulator for each consensus validator is incremented with the fraction of that block's reward owed to the validator. At the end of the epoch when the rewards products are updated, the accumulator value is divided by the number of blocks in that epoch, which yields the fraction of the newly minted inflation tokens owed to the validator. The next entry of the rewards products for each validator can then be created. The accumulator values are then reset to 0 for every validator in preparation for the next epoch.
+In order to maintain a record of the block rewards over the course of an epoch, a reward fraction accumulator is implemented as a `Map<Address, Decimal>` and held in the storage key `#{PoS}/validator_set/consensus/rewards_accumulator`. When finalizing each block, the accumulator value for each consensus validator is incremented with the fraction of that block's reward owed to the validator. At the end of the epoch when the rewards products are updated, the accumulator value is divided by the number of blocks in that epoch, which yields the fraction of the newly minted inflation tokens owed to the validator. The next entry of the rewards products for each validator can then be created. The map is then reset to be empty in preparation for the next epoch and consensus validator set.
 
 
 TODO describe / figure out:
