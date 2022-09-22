@@ -14,12 +14,15 @@ pub enum Mode {
     /// oracle is configured to listen for events from the Ethereum bridge
     /// smart contracts using this endpoint.
     Managed,
+    /// Do not run `geth`. The oracle will listen to the Ethereum JSON-RPC
+    /// endpoint as specified in the `oracle_rpc_endpoint` setting.
+    Remote,
     /// Do not start a managed `geth` subprocess. Instead of the oracle
     /// listening for events using a Ethereum JSON-RPC endpoint, an endpoint
     /// will be exposed by the ledger itself for submission of Borsh-
     /// serialized [`EthereumEvent`]s. Mostly useful for testing purposes.
     EventsEndpoint,
-    /// Do not run any components of the Ethereum bridge
+    /// Do not run any components of the Ethereum bridge.
     Off,
 }
 
