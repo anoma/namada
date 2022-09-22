@@ -98,8 +98,6 @@ pub enum NestedSubKey<K, S> {
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum ValidationError {
-    #[error("Storage error in reading key {0}")]
-    StorageError(storage::Key),
     #[error("Invalid storage key {0}")]
     InvalidSubKey(storage::Key),
     #[error("Invalid nested storage key {0}")]

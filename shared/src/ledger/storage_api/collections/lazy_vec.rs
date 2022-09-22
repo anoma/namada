@@ -75,8 +75,6 @@ pub enum Action<T> {
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum ValidationError {
-    #[error("Storage error in reading key {0}")]
-    StorageError(storage::Key),
     #[error("Incorrect difference in LazyVec's length")]
     InvalidLenDiff,
     #[error("An empty LazyVec must be deleted from storage")]
