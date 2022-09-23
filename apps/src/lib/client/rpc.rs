@@ -1550,45 +1550,15 @@ pub async fn get_proposal_votes(
                 .await;
                 if let Some(amount) = delegator_token_amount {
                     if vote.is_yay() {
-                        match yay_delegators.get_mut(&voter_address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                )]);
-                                yay_delegators
-                                    .insert(voter_address, delegations_map);
-                            }
-                        }
+                        let entry =
+                            yay_delegators.entry(voter_address).or_default();
+                        entry
+                            .insert(validator_address, VotePower::from(amount));
                     } else {
-                        match nay_delegators.get_mut(&voter_address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                )]);
-                                nay_delegators
-                                    .insert(voter_address, delegations_map);
-                            }
-                        }
+                        let entry =
+                            nay_delegators.entry(voter_address).or_default();
+                        entry
+                            .insert(validator_address, VotePower::from(amount));
                     }
                 }
             }
@@ -1670,49 +1640,17 @@ pub async fn get_proposal_offline_votes(
                             "Delegation key should contain validator address.",
                         );
                     if proposal_vote.vote.is_yay() {
-                        match yay_delegators.get_mut(&proposal_vote.address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                )]);
-                                yay_delegators.insert(
-                                    proposal_vote.address.clone(),
-                                    delegations_map,
-                                );
-                            }
-                        }
+                        let entry = yay_delegators
+                            .entry(proposal_vote.address.clone())
+                            .or_default();
+                        entry
+                            .insert(validator_address, VotePower::from(amount));
                     } else {
-                        match nay_delegators.get_mut(&proposal_vote.address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                )]);
-                                nay_delegators.insert(
-                                    proposal_vote.address.clone(),
-                                    delegations_map,
-                                );
-                            }
-                        }
+                        let entry = nay_delegators
+                            .entry(proposal_vote.address.clone())
+                            .or_default();
+                        entry
+                            .insert(validator_address, VotePower::from(amount));
                     }
                 }
             }
@@ -1865,14 +1803,9 @@ async fn get_validator_stake(
     .await
     .expect("Total deltas should be defined");
     let epoched_total_voting_power = total_voting_power.get(epoch);
-    if let Some(epoched_total_voting_power) = epoched_total_voting_power {
-        match VotePower::try_from(epoched_total_voting_power) {
-            Ok(voting_power) => voting_power,
-            Err(_) => VotePower::from(0_u64),
-        }
-    } else {
-        VotePower::from(0_u64)
-    }
+
+    VotePower::try_from(epoched_total_voting_power.unwrap_or_default())
+        .unwrap_or_default()
 }
 
 pub async fn get_delegators_delegation(

@@ -22,7 +22,6 @@ pub struct ProposalsResult {
 
 pub fn execute_governance_proposals<D, H>(
     shell: &mut Shell<D, H>,
-    new_epoch: bool,
     response: &mut shim::response::FinalizeBlock,
 ) -> Result<ProposalsResult>
 where
@@ -30,10 +29,6 @@ where
     H: StorageHasher + Sync + 'static,
 {
     let mut proposals_result = ProposalsResult::default();
-
-    if !new_epoch {
-        return Ok(proposals_result);
-    }
 
     for id in std::mem::take(&mut shell.proposal_data) {
         let proposal_funds_key = gov_storage::get_funds_key(id);
