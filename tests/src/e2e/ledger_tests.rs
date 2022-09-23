@@ -997,7 +997,10 @@ fn proposal_submission() -> Result<()> {
                 min_num_of_blocks: 1,
                 min_duration: 1,
                 max_expected_time_per_block: 1,
-                ..genesis.parameters
+                vp_whitelist: genesis.parameters.vp_whitelist,
+                // Enable tx whitelist to test the execution of a
+                // non-whitelisted tx by governance
+                tx_whitelist: Some(vec![String::from("test")]),
             };
 
             GenesisConfig {
@@ -1046,7 +1049,6 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // 2. Submit valid proposal
-    let test_dir = tempfile::tempdir_in(test.test_dir.path()).unwrap();
     let proposal_code = wasm_abs_path(TX_PROPOSAL_CODE);
 
     let albert = find_address(&test, ALBERT)?;
@@ -1070,18 +1072,19 @@ fn proposal_submission() -> Result<()> {
             "proposal_code_path": proposal_code.to_str().unwrap()
         }
     );
-    let proposal_file =
-        tempfile::NamedTempFile::new_in(test_dir.path()).unwrap();
-    serde_json::to_writer(&proposal_file, &valid_proposal_json).unwrap();
-    let proposal_path = proposal_file.path();
-    let proposal_ref = proposal_path.to_string_lossy();
+    let valid_proposal_json_path =
+        test.test_dir.path().join("valid_proposal.json");
+    generate_proposal_json_file(
+        valid_proposal_json_path.as_path(),
+        &valid_proposal_json,
+    );
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let submit_proposal_args = vec![
         "init-proposal",
         "--data-path",
-        &proposal_ref,
+        valid_proposal_json_path.to_str().unwrap(),
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -1169,17 +1172,17 @@ fn proposal_submission() -> Result<()> {
             "grace_epoch": 10009_u64,
         }
     );
-    let invalid_proposal_file =
-        tempfile::NamedTempFile::new_in(test_dir.path()).unwrap();
-    serde_json::to_writer(&invalid_proposal_file, &invalid_proposal_json)
-        .unwrap();
-    let invalid_proposal_path = invalid_proposal_file.path();
-    let invalid_proposal_ref = invalid_proposal_path.to_string_lossy();
+    let invalid_proposal_json_path =
+        test.test_dir.path().join("invalid_proposal.json");
+    generate_proposal_json_file(
+        invalid_proposal_json_path.as_path(),
+        &invalid_proposal_json,
+    );
 
     let submit_proposal_args = vec![
         "init-proposal",
         "--data-path",
-        &invalid_proposal_ref,
+        invalid_proposal_json_path.to_str().unwrap(),
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -1395,8 +1398,6 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     // 2. Create an offline
-    let test_dir = tempfile::tempdir_in(test.test_dir.path()).unwrap();
-
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json = json!(
         {
@@ -1417,18 +1418,19 @@ fn proposal_offline() -> Result<()> {
             "grace_epoch": 18_u64
         }
     );
-    let proposal_file =
-        tempfile::NamedTempFile::new_in(test_dir.path()).unwrap();
-    serde_json::to_writer(&proposal_file, &valid_proposal_json).unwrap();
-    let proposal_path = proposal_file.path();
-    let proposal_ref = proposal_path.to_string_lossy();
+    let valid_proposal_json_path =
+        test.test_dir.path().join("valid_proposal.json");
+    generate_proposal_json_file(
+        valid_proposal_json_path.as_path(),
+        &valid_proposal_json,
+    );
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let offline_proposal_args = vec![
         "init-proposal",
         "--data-path",
-        &proposal_ref,
+        valid_proposal_json_path.to_str().unwrap(),
         "--offline",
         "--ledger-address",
         &validator_one_rpc,
@@ -1445,12 +1447,10 @@ fn proposal_offline() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    let proposal_path = test_dir.path().join("proposal");
-    let proposal_ref = proposal_path.to_string_lossy();
     let submit_proposal_vote = vec![
         "vote-proposal",
         "--data-path",
-        &proposal_ref,
+        test.test_dir.path().to_str().unwrap(),
         "--vote",
         "yay",
         "--signer",
@@ -1465,17 +1465,14 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     let expected_file_name = format!("proposal-vote-{}", albert);
-    let expected_path_vote = test_dir.path().join(&expected_file_name);
+    let expected_path_vote = test.test_dir.path().join(&expected_file_name);
     assert!(expected_path_vote.exists());
-
-    let expected_path_proposal = test_dir.path().join("proposal");
-    assert!(expected_path_proposal.exists());
 
     // 4. Compute offline tally
     let tally_offline = vec![
         "query-proposal-result",
         "--data-path",
-        test_dir.path().to_str().unwrap(),
+        test.test_dir.path().to_str().unwrap(),
         "--offline",
         "--ledger-address",
         &validator_one_rpc,
@@ -1486,6 +1483,20 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     Ok(())
+}
+
+fn generate_proposal_json_file(
+    proposal_path: &std::path::Path,
+    proposal_content: &serde_json::Value,
+) {
+    let intent_writer = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(proposal_path)
+        .unwrap();
+
+    serde_json::to_writer(intent_writer, proposal_content).unwrap();
 }
 
 /// In this test we:
