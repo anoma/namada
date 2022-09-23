@@ -11,6 +11,8 @@ pub use vm_host_env::{ibc, tx, vp};
 mod e2e;
 pub mod native_vp;
 pub mod storage;
+#[cfg(test)]
+mod storage_api;
 
 /// Using this import requires `tracing` and `tracing-subscriber` dependencies.
 /// Set env var `RUST_LOG=info` to see the logs from a test run (and

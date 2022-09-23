@@ -210,6 +210,13 @@ pub struct Key {
     pub segments: Vec<DbKeySeg>,
 }
 
+/// A [`Key`] made of borrowed key segments [`DbKeySeg`].
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct KeyRef<'a> {
+    /// Reference of key segments
+    pub segments: &'a [DbKeySeg],
+}
+
 impl From<DbKeySeg> for Key {
     fn from(seg: DbKeySeg) -> Self {
         Self {
@@ -278,7 +285,24 @@ impl Key {
         self.len() == 0
     }
 
-    /// Returns a key of the validity predicate of the given address.
+    /// Returns the first segment of the key, or `None` if it is empty.
+    pub fn first(&self) -> Option<&DbKeySeg> {
+        self.segments.first()
+    }
+
+    /// Returns the last segment of the key, or `None` if it is empty.
+    pub fn last(&self) -> Option<&DbKeySeg> {
+        self.segments.last()
+    }
+
+    /// Returns the prefix before the last segment and last segment of the key,
+    /// or `None` if it is empty.
+    pub fn split_last(&self) -> Option<(KeyRef<'_>, &DbKeySeg)> {
+        let (last, prefix) = self.segments.split_last()?;
+        Some((KeyRef { segments: prefix }, last))
+    }
+
+    /// Returns a key of the validity predicate of the given address
     /// Only this function can push "?" segment for validity predicate
     pub fn validity_predicate(addr: &Address) -> Self {
         let mut segments = Self::from(addr.to_db_key()).segments;
@@ -321,8 +345,11 @@ impl Key {
                     .split_off(2)
                     .join(&KEY_SEGMENT_SEPARATOR.to_string()),
             )
-            .map_err(|e| Error::Temporary {
-                error: format!("Cannot parse key segments {}: {}", db_key, e),
+            .map_err(|e| {
+                Error::ParseKeySeg(format!(
+                    "Cannot parse key segments {}: {}",
+                    db_key, e
+                ))
             })?,
         };
         Ok(key)
@@ -350,6 +377,28 @@ impl Key {
             }),
         }
     }
+
+    /// Check if the key begins with the given prefix and returns:
+    ///   - `Some(Some(suffix))` the suffix after the match with, if any, or
+    ///   - `Some(None)` if the prefix is matched, but it has no suffix, or
+    ///   - `None` if it doesn't match
+    pub fn split_prefix(&self, prefix: &Self) -> Option<Option<Self>> {
+        if self.segments.len() < prefix.segments.len() {
+            return None;
+        } else if self == prefix {
+            return Some(None);
+        }
+        // This is safe, because we check that the length of segments in self >=
+        // in prefix above
+        let (self_prefix, rest) = self.segments.split_at(prefix.segments.len());
+        if self_prefix == prefix.segments {
+            Some(Some(Key {
+                segments: rest.to_vec(),
+            }))
+        } else {
+            None
+        }
+    }
 }
 
 impl Display for Key {
@@ -361,6 +410,20 @@ impl Display for Key {
             .collect::<Vec<String>>()
             .join(&KEY_SEGMENT_SEPARATOR.to_string());
         f.write_str(&key)
+    }
+}
+
+impl KeyRef<'_> {
+    /// Check if [`KeyRef`] is equal to a [`Key`].
+    pub fn eq_owned(&self, other: &Key) -> bool {
+        self.segments == other.segments
+    }
+
+    /// Returns the prefix before the last segment and last segment of the key,
+    /// or `None` if it is empty.
+    pub fn split_last(&self) -> Option<(KeyRef<'_>, &DbKeySeg)> {
+        let (last, prefix) = self.segments.split_last()?;
+        Some((KeyRef { segments: prefix }, last))
     }
 }
 
@@ -450,7 +513,12 @@ impl KeySeg for String {
 
 impl KeySeg for BlockHeight {
     fn parse(string: String) -> Result<Self> {
-        let h: u64 = KeySeg::parse(string)?;
+        let h = string.parse::<u64>().map_err(|e| {
+            Error::ParseKeySeg(format!(
+                "Unexpected height value {}, {}",
+                string, e
+            ))
+        })?;
         Ok(BlockHeight(h))
     }
 

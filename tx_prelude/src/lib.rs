@@ -171,7 +171,7 @@ impl StorageRead<'_> for Ctx {
     fn rev_iter_prefix(
         &self,
         prefix: &storage::Key,
-    ) -> storage_api::Result<Self::PrefixIter> {
+    ) -> Result<Self::PrefixIter, Error> {
         let prefix = prefix.to_string();
         let iter_id = unsafe {
             anoma_tx_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
