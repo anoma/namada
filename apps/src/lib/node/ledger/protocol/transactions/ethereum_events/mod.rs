@@ -16,7 +16,7 @@ use namada::ledger::eth_bridge::storage::eth_msgs::Keys;
 use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada::types::address::Address;
 use namada::types::ethereum_events::EthereumEvent;
-use namada::types::storage;
+use namada::types::storage::{self, BlockHeight};
 use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
@@ -52,7 +52,14 @@ where
 
     let (updates, voting_powers) = get_update_data(storage, events)?;
 
-    let changed_keys = apply_updates(storage, updates, voting_powers)?;
+    let changed_keys = apply_updates(
+        storage,
+        updates,
+        voting_powers
+            .into_iter()
+            .map(|((addr, _), voting_power)| (addr, voting_power))
+            .collect(),
+    )?;
 
     Ok(TxResult {
         changed_keys,
@@ -67,16 +74,26 @@ fn get_update_data<D, H>(
     events: Vec<MultiSignedEthEvent>,
 ) -> Result<(
     HashSet<EthMsgUpdate>,
-    HashMap<Address, FractionalVotingPower>,
+    HashMap<(Address, BlockHeight), FractionalVotingPower>,
 )>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let (last_epoch, _) = storage.get_last_epoch();
-    tracing::debug!(?last_epoch, "Got epoch of last block");
+    // TODO: this assumes all events are from the last block height, and ignores
+    // the block height that is actually in them
+    let last_block_height = storage.last_height;
+    let last_block_epoch = storage
+        .get_epoch(last_block_height)
+        .expect("The epoch of the last block height should always be known");
+    tracing::debug!(
+        ?last_block_height,
+        ?last_block_epoch,
+        "Got epoch of last block"
+    );
 
-    let active_validators = storage.get_active_validators(Some(last_epoch));
+    let active_validators =
+        storage.get_active_validators(Some(last_block_epoch));
     tracing::debug!(
         n = active_validators.len(),
         "got active validators - {:#?}",
@@ -95,6 +112,13 @@ where
 
     let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
 
+    // TODO: temporarily using last block height always
+    let voting_powers = voting_powers
+        .into_iter()
+        .map(|(validator, voting_power)| {
+            ((validator, last_block_height), voting_power)
+        })
+        .collect();
     Ok((updates, voting_powers))
 }
 
