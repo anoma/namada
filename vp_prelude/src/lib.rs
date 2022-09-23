@@ -21,8 +21,8 @@ use std::marker::PhantomData;
 pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use namada::ledger::governance::storage as gov_storage;
 pub use namada::ledger::storage_api::{
-    self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
-    StorageRead,
+    self, iter_prefix, iter_prefix_bytes, rev_iter_prefix,
+    rev_iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
 };
 pub use namada::ledger::vp_env::VpEnv;
 pub use namada::ledger::{parameters, pos as proof_of_stake};
@@ -216,6 +216,14 @@ impl<'view> VpEnv<'view> for Ctx {
         iter_prefix_impl(prefix)
     }
 
+    fn rev_iter_prefix(
+        &self,
+        prefix: &storage::Key,
+    ) -> Result<Self::PrefixIter, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        rev_iter_prefix_impl(prefix)
+    }
+
     fn eval(
         &self,
         vp_code: Vec<u8>,
@@ -298,6 +306,13 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
         iter_prefix_impl(prefix)
     }
 
+    fn rev_iter_prefix(
+        &self,
+        prefix: &storage::Key,
+    ) -> storage_api::Result<Self::PrefixIter> {
+        rev_iter_prefix_impl(prefix)
+    }
+
     fn get_chain_id(&self) -> Result<String, Error> {
         get_chain_id()
     }
@@ -352,6 +367,13 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
         iter_prefix_impl(prefix)
     }
 
+    fn rev_iter_prefix(
+        &self,
+        prefix: &storage::Key,
+    ) -> storage_api::Result<Self::PrefixIter> {
+        rev_iter_prefix_impl(prefix)
+    }
+
     fn get_chain_id(&self) -> Result<String, Error> {
         get_chain_id()
     }
@@ -379,7 +401,17 @@ fn iter_prefix_impl(
     Ok(KeyValIterator(iter_id, PhantomData))
 }
 
-fn get_chain_id() -> Result<String, Error> {
+fn rev_iter_prefix_impl(
+    prefix: &storage::Key,
+) -> Result<KeyValIterator<(String, Vec<u8>)>, storage_api::Error> {
+    let prefix = prefix.to_string();
+    let iter_id = unsafe {
+        anoma_vp_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+    };
+    Ok(KeyValIterator(iter_id, PhantomData))
+}
+
+fn get_chain_id() -> Result<String, storage_api::Error> {
     let result = Vec::with_capacity(CHAIN_ID_LENGTH);
     unsafe {
         anoma_vp_get_chain_id(result.as_ptr() as _);

@@ -6,6 +6,7 @@ use std::ops::{Add, Div, Mul, Rem, Sub};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::BASE32HEX_NOPAD;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -27,6 +28,8 @@ pub enum Error {
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
+    #[error("Error parsing key segment {0}")]
+    ParseKeySeg(String),
 }
 
 /// Result for functions that may fail
@@ -193,6 +196,7 @@ impl Header {
     BorshDeserialize,
     BorshSchema,
     Debug,
+    Default,
     Eq,
     PartialEq,
     Ord,
@@ -446,14 +450,12 @@ impl KeySeg for String {
 
 impl KeySeg for BlockHeight {
     fn parse(string: String) -> Result<Self> {
-        let h = string.parse::<u64>().map_err(|e| Error::Temporary {
-            error: format!("Unexpected height value {}, {}", string, e),
-        })?;
+        let h: u64 = KeySeg::parse(string)?;
         Ok(BlockHeight(h))
     }
 
     fn raw(&self) -> String {
-        format!("{}", self.0)
+        self.0.raw()
     }
 
     fn to_db_key(&self) -> DbKeySeg {
@@ -480,6 +482,67 @@ impl KeySeg for Address {
         DbKeySeg::AddressSeg(self.clone())
     }
 }
+
+/// Implement [`KeySeg`] for a type via base32hex of its BE bytes (using
+/// `to_le_bytes()` and `from_le_bytes` methods) that maintains sort order of
+/// the original data.
+// TODO this could be a bit more efficient without the string conversion (atm
+// with base32hex), if we can use bytes for storage key directly (which we can
+// with rockDB, but atm, we're calling `to_string()` using the custom `Display`
+// impl from here)
+macro_rules! impl_int_key_seg {
+    ($unsigned:ty, $signed:ty, $len:literal) => {
+        impl KeySeg for $unsigned {
+            fn parse(string: String) -> Result<Self> {
+                let bytes =
+                    BASE32HEX_NOPAD.decode(string.as_ref()).map_err(|err| {
+                        Error::ParseKeySeg(format!(
+                            "Failed parsing {} with {}",
+                            string, err
+                        ))
+                    })?;
+                let mut fixed_bytes = [0; $len];
+                fixed_bytes.copy_from_slice(&bytes);
+                Ok(<$unsigned>::from_be_bytes(fixed_bytes))
+            }
+
+            fn raw(&self) -> String {
+                BASE32HEX_NOPAD.encode(&self.to_be_bytes())
+            }
+
+            fn to_db_key(&self) -> DbKeySeg {
+                DbKeySeg::StringSeg(self.raw())
+            }
+        }
+
+        impl KeySeg for $signed {
+            fn parse(string: String) -> Result<Self> {
+                // get signed int from a unsigned int complemented with a min
+                // value
+                let complemented = <$unsigned>::parse(string)?;
+                let signed = (complemented as $signed) ^ <$signed>::MIN;
+                Ok(signed)
+            }
+
+            fn raw(&self) -> String {
+                // signed int is converted to unsigned int that preserves the
+                // order by complementing it with a min value
+                let complemented = (*self ^ <$signed>::MIN) as $unsigned;
+                complemented.raw()
+            }
+
+            fn to_db_key(&self) -> DbKeySeg {
+                DbKeySeg::StringSeg(self.raw())
+            }
+        }
+    };
+}
+
+impl_int_key_seg!(u8, i8, 1);
+impl_int_key_seg!(u16, i16, 2);
+impl_int_key_seg!(u32, i32, 4);
+impl_int_key_seg!(u64, i64, 8);
+impl_int_key_seg!(u128, i128, 16);
 
 /// Epoch identifier. Epochs are identified by consecutive numbers.
 #[derive(

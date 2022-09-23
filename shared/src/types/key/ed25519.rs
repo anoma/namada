@@ -6,6 +6,7 @@ use std::io::Write;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::HEXLOWER;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -107,7 +108,7 @@ impl Ord for PublicKey {
 
 impl Display for PublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.0.to_bytes()))
+        write!(f, "{}", HEXLOWER.encode(&self.0.to_bytes()))
     }
 }
 
@@ -115,7 +116,9 @@ impl FromStr for PublicKey {
     type Err = ParsePublicKeyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let vec = hex::decode(s).map_err(ParsePublicKeyError::InvalidHex)?;
+        let vec = HEXLOWER
+            .decode(s.as_ref())
+            .map_err(ParsePublicKeyError::InvalidHex)?;
         BorshDeserialize::try_from_slice(&vec)
             .map_err(ParsePublicKeyError::InvalidEncoding)
     }
@@ -204,7 +207,7 @@ impl BorshSchema for SecretKey {
 
 impl Display for SecretKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.0.to_bytes()))
+        write!(f, "{}", HEXLOWER.encode(&self.0.to_bytes()))
     }
 }
 
@@ -212,7 +215,9 @@ impl FromStr for SecretKey {
     type Err = ParseSecretKeyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let vec = hex::decode(s).map_err(ParseSecretKeyError::InvalidHex)?;
+        let vec = HEXLOWER
+            .decode(s.as_ref())
+            .map_err(ParseSecretKeyError::InvalidHex)?;
         BorshDeserialize::try_from_slice(&vec)
             .map_err(ParseSecretKeyError::InvalidEncoding)
     }

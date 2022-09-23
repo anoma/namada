@@ -52,11 +52,11 @@ borsh = "0.9.0"
 chrono = "0.4.19"
 # Using unreleased commit on top of version 0.5.0 that adds Sync to the CLruCache
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
+data-encoding = "2.3.2"
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
 ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
 ferveo-common = {git = "https://github.com/anoma/ferveo"}
-hex = "0.4.3"
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
 # TODO using the same version of tendermint-rs as we do here.
 ibc = {git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false}

@@ -157,11 +157,14 @@ mod tests {
              should yield an empty iterator."
         );
 
-        // Write some values directly into the storage first
-        let prefix = Key::parse("prefix").unwrap();
+        let prefix = storage::Key::parse("prefix").unwrap();
+        // We'll write sub-key in some random order to check prefix iter's order
+        let sub_keys = [2_i32, 1, i32::MAX, -1, 260, -2, i32::MIN, 5, 0];
+
+        // Write the values directly into the storage first
         tx_host_env::with(|env| {
-            for i in 0..10_i32 {
-                let key = prefix.join(&Key::parse(i.to_string()).unwrap());
+            for i in sub_keys.iter() {
+                let key = prefix.push(i).unwrap();
                 let value = i.try_to_vec().unwrap();
                 env.storage.write(&key, value).unwrap();
             }
@@ -171,11 +174,27 @@ mod tests {
         // Then try to iterate over their prefix
         let iter = namada_tx_prelude::iter_prefix(tx::ctx(), &prefix)
             .unwrap()
-            .map(|item| item.unwrap());
-        let expected = (0..10).map(|i| {
-            (storage::Key::parse(format!("{}/{}", prefix, i)).unwrap(), i)
-        });
-        itertools::assert_equal(iter.sorted(), expected.sorted());
+            .map(Result::unwrap);
+
+        // The order has to be sorted by sub-key value
+        let expected = sub_keys
+            .iter()
+            .sorted()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter, expected);
+
+        // Try to iterate over their prefix in reverse
+        let iter = namada_tx_prelude::rev_iter_prefix(tx::ctx(), &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+
+        // The order has to be reverse sorted by sub-key value
+        let expected = sub_keys
+            .iter()
+            .sorted()
+            .rev()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter, expected);
     }
 
     #[test]
@@ -251,7 +270,7 @@ mod tests {
 
         // We can add some data to the environment
         let key_raw = "key";
-        let key = Key::parse(key_raw).unwrap();
+        let key = storage::Key::parse(key_raw).unwrap();
         let value = "test".to_string();
         let value_raw = value.try_to_vec().unwrap();
         vp_host_env::with(|env| {
@@ -269,7 +288,7 @@ mod tests {
         let mut tx_env = TestTxEnv::default();
 
         let addr = address::testing::established_address_1();
-        let addr_key = Key::from(addr.to_db_key());
+        let addr_key = storage::Key::from(addr.to_db_key());
 
         // Write some value to storage
         let existing_key =
@@ -354,12 +373,15 @@ mod tests {
         let mut tx_env = TestTxEnv::default();
 
         let addr = address::testing::established_address_1();
-        let addr_key = Key::from(addr.to_db_key());
+        let addr_key = storage::Key::from(addr.to_db_key());
 
-        // Write some value to storage
         let prefix = addr_key.join(&Key::parse("prefix").unwrap());
-        for i in 0..10_i32 {
-            let key = prefix.join(&Key::parse(i.to_string()).unwrap());
+        // We'll write sub-key in some random order to check prefix iter's order
+        let sub_keys = [2_i32, 1, i32::MAX, -1, 260, -2, i32::MIN, 5, 0];
+
+        // Write some values to storage
+        for i in sub_keys.iter() {
+            let key = prefix.push(i).unwrap();
             let value = i.try_to_vec().unwrap();
             tx_env.storage.write(&key, value).unwrap();
         }
@@ -367,8 +389,8 @@ mod tests {
 
         // In a transaction, write override the existing key's value and add
         // another key-value
-        let existing_key = prefix.join(&Key::parse(5.to_string()).unwrap());
-        let new_key = prefix.join(&Key::parse(11.to_string()).unwrap());
+        let existing_key = prefix.push(&5).unwrap();
+        let new_key = prefix.push(&11).unwrap();
 
         // Initialize the VP environment via a transaction
         vp_host_env::init_from_tx(addr, tx_env, |_addr| {
@@ -383,23 +405,38 @@ mod tests {
         let iter_pre = namada_vp_prelude::iter_prefix(&ctx_pre, &prefix)
             .unwrap()
             .map(|item| item.unwrap());
-        let expected_pre = (0..10).map(|i| {
-            (storage::Key::parse(format!("{}/{}", prefix, i)).unwrap(), i)
-        });
-        itertools::assert_equal(iter_pre.sorted(), expected_pre.sorted());
+
+        // The order in pre has to be sorted by sub-key value
+        let expected_pre = sub_keys
+            .iter()
+            .sorted()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter_pre, expected_pre);
 
         let ctx_post = vp::CTX.post();
         let iter_post = namada_vp_prelude::iter_prefix(&ctx_post, &prefix)
             .unwrap()
             .map(|item| item.unwrap());
-        let expected_post = (0..10).map(|i| {
-            let val = if i == 5 { 100 } else { i };
-            (
-                storage::Key::parse(format!("{}/{}", prefix, i)).unwrap(),
-                val,
-            )
+
+        // The order in post also has to be sorted
+        let expected_post = sub_keys.iter().sorted().map(|i| {
+            let val = if *i == 5 { 100 } else { *i };
+            (prefix.push(i).unwrap(), val)
         });
-        itertools::assert_equal(iter_post.sorted(), expected_post.sorted());
+        itertools::assert_equal(iter_post, expected_post);
+
+        // Try to iterate over their prefix in reverse
+        let iter_pre = namada_vp_prelude::rev_iter_prefix(&ctx_pre, &prefix)
+            .unwrap()
+            .map(|item| item.unwrap());
+
+        // The order in has to be reverse sorted by sub-key value
+        let expected_pre = sub_keys
+            .iter()
+            .sorted()
+            .rev()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter_pre, expected_pre);
     }
 
     #[test]
