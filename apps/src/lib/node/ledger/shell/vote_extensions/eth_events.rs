@@ -78,20 +78,36 @@ where
         if have_dupes_or_non_sorted {
             tracing::error!(
                 %validator,
-                "Found duplicate or non-sorted Ethereum events in a vote extension from some validator"
+                "Found duplicate or non-sorted Ethereum events in a vote extension from \
+                 some validator"
             );
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }
         // get the public key associated with this validator
-        let epoch = self.storage.get_epoch(last_height);
+        //
+        // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
+        // `last_height` here, instead of `ext.data.block_height`
+        let ext_height_epoch =
+            match self.storage.get_epoch(ext.data.block_height) {
+                Some(epoch) => epoch,
+                _ => {
+                    tracing::error!(
+                        block_height = ?ext.data.block_height,
+                        "The epoch of the Ethereum events vote extension's \
+                         block height should always be known",
+                    );
+                    return Err(VoteExtensionError::UnexpectedSequenceNumber);
+                }
+            };
         let (voting_power, pk) = self
             .storage
-            .get_validator_from_address(validator, epoch)
+            .get_validator_from_address(validator, Some(ext_height_epoch))
             .map_err(|err| {
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Could not get public key from Storage for some validator, while validating Ethereum events vote extension"
+                    "Could not get public key from Storage for some validator, \
+                     while validating Ethereum events vote extension"
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
@@ -101,7 +117,8 @@ where
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Failed to verify the signature of an Ethereum events vote extension issued by some validator"
+                    "Failed to verify the signature of an Ethereum events vote \
+                     extension issued by some validator"
                 );
                 VoteExtensionError::VerifySigFailed
             })

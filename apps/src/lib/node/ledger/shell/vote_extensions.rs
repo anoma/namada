@@ -26,7 +26,6 @@ const VALIDATOR_EXPECT_MSG: &str = "Only validators receive this method call.";
 pub enum VoteExtensionError {
     #[error("The vote extension was issued at block height 0.")]
     IssuedAtGenesis,
-    #[cfg(feature = "abcipp")]
     #[error(
         "The vote extension has an unexpected sequence number (e.g. block \
          height)."
