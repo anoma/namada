@@ -10,6 +10,7 @@ use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::ethereum_events::{
     self, MultiSignedEthEvent,
 };
+#[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
@@ -193,14 +194,16 @@ where
                 "The epoch of the last block height should always be known",
             );
 
+        #[cfg(feature = "abcipp")]
         let total_voting_power =
             u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
+        #[cfg(feature = "abcipp")]
         let mut voting_power = FractionalVotingPower::default();
 
         let mut event_observers = BTreeMap::new();
         let mut signatures = HashMap::new();
 
-        for (validator_voting_power, vote_extension) in
+        for (_validator_voting_power, vote_extension) in
             self.filter_invalid_eth_events_vexts(vote_extensions)
         {
             let validator_addr = vote_extension.data.validator_addr;
@@ -208,15 +211,18 @@ where
             let block_height = vote_extension.data.block_height;
 
             // update voting power
-            let validator_voting_power = u64::from(validator_voting_power);
-            voting_power += FractionalVotingPower::new(
-                validator_voting_power,
-                total_voting_power,
-            )
-            .expect(
-                "The voting power we obtain from storage should always be \
-                 valid",
-            );
+            #[cfg(feature = "abcipp")]
+            {
+                let validator_voting_power = u64::from(validator_voting_power);
+                voting_power += FractionalVotingPower::new(
+                    validator_voting_power,
+                    total_voting_power,
+                )
+                .expect(
+                    "The voting power we obtain from storage should always be \
+                     valid",
+                );
+            }
 
             // register all ethereum events seen by `validator_addr`
             for ev in vote_extension.data.ethereum_events {
