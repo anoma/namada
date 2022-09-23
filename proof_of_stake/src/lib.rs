@@ -193,6 +193,18 @@ pub trait PosActions: PosReadOnly {
         key: &Self::Address,
         value: ValidatorStates,
     ) -> Result<(), Self::Error>;
+    /// Write PoS validator's commission rate for delegator rewards
+    fn write_validator_commission_rate(
+        &mut self,
+        key: &Self::Address,
+        value: Decimal,
+    ) -> Result<(), Self::Error>;
+    /// Write PoS validator's maximum change in the commission rate per epoch
+    fn write_validator_max_commission_rate_change(
+        &mut self,
+        key: &Self::Address,
+        value: Decimal,
+    ) -> Result<(), Self::Error>;
     /// Write PoS validator's total deltas of their bonds (validator self-bonds
     /// and delegations).
     fn write_validator_total_deltas(
@@ -257,6 +269,8 @@ pub trait PosActions: PosReadOnly {
         address: &Self::Address,
         consensus_key: &Self::PublicKey,
         current_epoch: impl Into<Epoch>,
+        commission_rate: Decimal,
+        max_commission_rate_change: Decimal
     ) -> Result<(), Self::BecomeValidatorError> {
         let current_epoch = current_epoch.into();
         let params = self.read_pos_params()?;
@@ -270,12 +284,16 @@ pub trait PosActions: PosReadOnly {
             state,
             total_deltas,
             voting_power,
+            commission_rate,
+            max_commission_rate_change
         } = become_validator(
             &params,
             address,
             consensus_key,
             &mut validator_set,
             current_epoch,
+            commission_rate,
+            max_commission_rate_change
         );
         self.write_validator_consensus_key(address, consensus_key)?;
         self.write_validator_state(address, state)?;
@@ -283,6 +301,10 @@ pub trait PosActions: PosReadOnly {
         self.write_validator_address_raw_hash(address, &consensus_key_clone)?;
         self.write_validator_total_deltas(address, total_deltas)?;
         self.write_validator_voting_power(address, voting_power)?;
+        self.write_validator_commission_rate(address, commission_rate)?;
+        self.write_validator_max_commission_rate_change(address, max_commission_rate_change)?;
+
+        // Do we need to write the total deltas of all validators?
         Ok(())
     }
 
@@ -1328,6 +1350,8 @@ where
     state: ValidatorStates,
     total_deltas: ValidatorTotalDeltas<TokenChange>,
     voting_power: ValidatorVotingPowers,
+    commission_rate: Decimal,
+    max_commission_rate_change: Decimal,
 }
 
 /// A function that initialized data for a new validator.
@@ -1337,6 +1361,8 @@ fn become_validator<Address, PK, TokenChange>(
     consensus_key: &PK,
     validator_set: &mut ValidatorSets<Address>,
     current_epoch: Epoch,
+    commission_rate: Decimal,
+    max_commission_rate_change: Decimal,
 ) -> BecomeValidatorData<PK, TokenChange>
 where
     Address: Debug
@@ -1399,6 +1425,8 @@ where
         state,
         total_deltas,
         voting_power,
+        commission_rate,
+        max_commission_rate_change
     }
 }
 

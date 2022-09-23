@@ -21,6 +21,7 @@ pub use decrypted::*;
 #[cfg(feature = "ferveo-tpke")]
 pub use encrypted::EncryptionKey;
 pub use protocol::UpdateDkgSessionKey;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
@@ -188,6 +189,10 @@ pub struct InitValidator {
     pub protocol_key: common::PublicKey,
     /// Serialization of the public session key used in the DKG
     pub dkg_key: DkgPublicKey,
+    /// The initial commission rate charged for delegation rewards
+    pub commission_rate: Decimal,
+    /// The maximum change allowed per epoch to the commission rate. This is immutable once set here.
+    pub max_commission_rate_change: Decimal,
     /// The VP code for validator account
     pub validator_vp_code: Vec<u8>,
 }
