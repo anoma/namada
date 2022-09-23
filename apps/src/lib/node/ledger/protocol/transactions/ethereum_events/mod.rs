@@ -51,7 +51,9 @@ where
          protocol transaction"
     );
 
-    let (updates, voting_powers) = get_update_data(storage, events)?;
+    let voting_powers = get_voting_powers(storage, &events)?;
+
+    let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
 
     let changed_keys = apply_updates(storage, updates, voting_powers)?;
 
@@ -80,15 +82,12 @@ where
     active_validators
 }
 
-/// Constructs all needed data that may be needed for updating #EthBridge
-/// internal account storage based on `events`.
-fn get_update_data<D, H>(
+/// Constructs a map of all validators who voted for an event to their
+/// fractional voting power for block heights at which they voted for an event
+fn get_voting_powers<D, H>(
     storage: &Storage<D, H>,
-    events: Vec<MultiSignedEthEvent>,
-) -> Result<(
-    HashSet<EthMsgUpdate>,
-    HashMap<(Address, BlockHeight), FractionalVotingPower>,
-)>
+    events: &[MultiSignedEthEvent],
+) -> Result<HashMap<(Address, BlockHeight), FractionalVotingPower>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -113,9 +112,7 @@ where
         "got voting powers for relevant validators"
     );
 
-    let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
-
-    Ok((updates, voting_powers))
+    Ok(voting_powers)
 }
 
 /// Apply an Ethereum state update + act on any events which are confirmed
