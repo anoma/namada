@@ -74,7 +74,8 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // TODO: this assumes all events are from the last block height, and ignores
-    // the block height that is actually in them
+    // the block height that is actually in them, for the purpose of fetching
+    // active validators
     let last_block_height = storage.last_height;
     let last_block_epoch = storage
         .get_epoch(last_block_height)
@@ -96,8 +97,10 @@ where
     let voters = utils::get_voters_for_events(events.iter());
     tracing::debug!(?voters, "Got validators who voted on at least one event");
 
-    let voting_powers =
-        utils::get_voting_powers_for_selected(&active_validators, voters)?;
+    let voting_powers = utils::get_voting_powers_for_selected(
+        &active_validators,
+        voters.into_iter().map(|(addr, _)| addr).collect(),
+    )?;
     tracing::debug!(
         ?voting_powers,
         "got voting powers for relevant validators"

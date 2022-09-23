@@ -3,16 +3,16 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use eyre::eyre;
 use namada::ledger::pos::types::{VotingPower, WeightedValidator};
 use namada::types::address::Address;
+use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
 /// Gets all the voters from the given events.
 pub(super) fn get_voters_for_events<'a>(
     events: impl Iterator<Item = &'a MultiSignedEthEvent>,
-) -> HashSet<Address> {
+) -> HashSet<(Address, BlockHeight)> {
     events.fold(HashSet::new(), |mut validators, event| {
-        validators
-            .extend(event.signers.iter().map(|(addr, _)| addr.to_owned()));
+        validators.extend(event.signers.iter().cloned());
         validators
     })
 }
