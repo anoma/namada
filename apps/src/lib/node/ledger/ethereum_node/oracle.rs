@@ -123,13 +123,12 @@ async fn run_oracle_aux(oracle: Oracle) {
     // Initialize our local state. This includes
     // the latest block height seen and a queue of events
     // awaiting a certain number of confirmations
-    let mut latest_block;
     let mut pending: Vec<PendingEvent> = Vec::new();
     const SLEEP_DUR: std::time::Duration = std::time::Duration::from_secs(1);
     loop {
         tokio::time::sleep(SLEEP_DUR).await;
         // update the latest block height
-        latest_block = loop {
+        let latest_block = loop {
             match oracle.eth_block_number().await {
                 Ok(height) => break height,
                 Err(error) => {
