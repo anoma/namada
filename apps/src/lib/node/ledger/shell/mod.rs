@@ -1,8 +1,8 @@
 //! The ledger shell connects the ABCI++ interface with the Anoma ledger app.
 //!
 //! Any changes applied before [`Shell::finalize_block`] might have to be
-//! reverted, so any changes applied in the methods `Shell::prepare_proposal`
-//! (ABCI++), [`Shell::process_proposal`] must be also reverted
+//! reverted, so any changes applied in the methods [`Shell::prepare_proposal`]
+//! and [`Shell::process_proposal`] must be also reverted
 //! (unless we can simply overwrite them in the next block).
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod finalize_block;
@@ -64,11 +64,22 @@ use crate::node::ledger::{protocol, storage, tendermint_node};
 use crate::wallet::ValidatorData;
 use crate::{config, wallet};
 
-fn key_to_tendermint<PK: PublicKey>(
-    pk: &PK,
+fn key_to_tendermint(
+    pk: &common::PublicKey,
 ) -> std::result::Result<public_key::Sum, ParsePublicKeyError> {
-    ed25519::PublicKey::try_from_pk(pk)
-        .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap()))
+    println!("\nKEY TO TENDERMINT\n");
+    match pk {
+        common::PublicKey::Ed25519(_) => {
+            println!("\nEd25519\n");
+            ed25519::PublicKey::try_from_pk(pk)
+                .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap()))
+        }
+        common::PublicKey::Secp256k1(_) => {
+            println!("\nSecp256k1\n");
+            secp256k1::PublicKey::try_from_pk(pk)
+                .map(|pk| public_key::Sum::Secp256k1(pk.try_to_vec().unwrap()))
+        }
+    }
 }
 
 #[derive(Error, Debug)]

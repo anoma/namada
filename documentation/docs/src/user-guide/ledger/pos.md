@@ -2,12 +2,12 @@
 
 The Namada Proof of Stake system uses the NAM token as the staking token. It features delegation to any number of validators and customizable validator validity predicates.
 
-## PoS Validity Predicate 
+## PoS Validity Predicate
 
 The PoS system is implemented as an account with the [PoS Validity Predicate](https://github.com/anoma/namada/blob/namada/shared/src/ledger/pos/vp.rs) that governs the rules of the system. You can find its address in your wallet:
 
 ```shell
-anoma wallet address find --alias PoS
+namada wallet address find --alias PoS
 ```
 
 ## Epochs
@@ -17,7 +17,7 @@ The system relies on the concept of epochs. An epoch is a range of consecutive b
 To query the current epoch:
 
 ```shell
-anoma client epoch
+namada client epoch
 ```
 
 ## Delegating
@@ -27,7 +27,7 @@ You can delegate to any number of validators at any time. When you delegate toke
 To submit a delegation that bonds tokens from the source address to a validator with alias `validator-1`:
 
 ```shell
-anoma client bond \
+namada client bond \
   --source my-new-acc \
   --validator validator-1 \
   --amount 12.34
@@ -36,7 +36,7 @@ anoma client bond \
 You can query your delegations:
 
 ```shell
-anoma client bonds --owner my-new-acc
+namada client bonds --owner my-new-acc
 ```
 
 The result of this query will inform the epoch from which your delegations will be active.
@@ -44,7 +44,7 @@ The result of this query will inform the epoch from which your delegations will 
 Because the PoS system is just an account, you can query its balance, which is the sum of all staked tokens:
 
 ```shell
-anoma client balance --owner PoS
+namada client balance --owner PoS
 ```
 
 ### Slashes
@@ -52,7 +52,7 @@ anoma client balance --owner PoS
 Should a validator exhibit punishable behavior, the delegations towards this validator are also liable for slashing. Only the delegations that were active in the epoch in which the fault occurred will be slashed by the slash rate of the fault type. If any of your delegations have been slashed, this will be displayed in the `bonds` query. You can also find all the slashes applied with:
 
 ```shell
-anoma client slashes
+namada client slashes
 ```
 
 ### Unbounding
@@ -62,7 +62,7 @@ While your tokens are being delegated, they are locked-in the PoS system and hen
 To submit an unbonding of a delegation of tokens from a source address to the validator:
 
 ```shell
-anoma client unbond \
+namada client unbond \
   --source my-new-acc \
   --validator validator-1 \
   --amount 1.2
@@ -71,13 +71,13 @@ anoma client unbond \
 When you unbond tokens, you won't be able to withdraw them immediately. Instead, tokens unbonded in the epoch `n` will be withdrawable starting from the epoch `n + 6` (the literal `6` is set by PoS parameter `unbonding_len`). After you unbond some tokens, you will be able to see when you can withdraw them via `bonds` query:
 
 ```shell
-anoma client bonds --owner my-new-acc
+namada client bonds --owner my-new-acc
 ```
 
 When the chain reaches the epoch in which you can withdraw the tokens (or anytime after), you can submit a withdrawal of unbonded delegation of tokens back to your account:
 
 ```shell
-anoma client withdraw \
+namada client withdraw \
   --source my-new-acc \
   --validator validator-1
 ```
@@ -89,7 +89,7 @@ Upon success, the withdrawn tokens will be credited back your account and debite
 To see all validators and their voting power, you can query:
 
 ```shell
-anoma client voting-power
+namada client voting-power
 ```
 
 With this command, you can specify `--epoch` to find the voting powers at some future epoch. Note that only the voting powers for the current and the next epoch are final.
@@ -101,7 +101,7 @@ With this command, you can specify `--epoch` to find the voting powers at some f
 To register a new validator account, run:
 
 ```shell
-anoma client init-validator \
+namada client init-validator \
   --alias my-validator \
   --source my-new-acc
 ```
@@ -120,7 +120,7 @@ Then, it submits a transaction to the ledger that generates two new accounts wit
 These keys and aliases of the addresses will be saved in your wallet. Your local ledger node will also be setup to run this validator, you just have to shut it down with e.g. `Ctrl + C`, then start it again with the same command:
 
 ```shell
-anoma ledger
+namada ledger
 ```
 
 The ledger will then use the validator consensus key to sign blocks, should your validator account acquire enough voting power to be included in the active validator set. The size of the active validator set is limited to `128` (the limit is set by the PoS `max_validator_slots` parameter).
@@ -128,22 +128,22 @@ The ledger will then use the validator consensus key to sign blocks, should your
 Note that the balance of NAM tokens that is in your validator account does not count towards your validator's stake and voting power:
 
 ```shell
-anoma client balance --owner my-validator --token NAM
+namada client balance --owner my-validator --token NAM
 ```
 
 That is, the balance of your account's address is a regular liquid balance that you can transfer using your validator account key, depending on the rules of the validator account's validity predicate. The default validity predicate allows you to transfer it with a signed transaction and/or stake it in the PoS system.
 
-### Self-bonding 
+### Self-bonding
 
 You can submit a self-bonding transaction of tokens from a validator account to the PoS system with:
 
 ```shell
-anoma client bond \
+namada client bond \
   --validator my-validator \
   --amount 3.3
 ```
 
-### Determine your voting power 
+### Determine your voting power
 
 A validator's voting power is determined by the sum of all their active self-bonds and delegations of tokens, with slashes applied, if any, divided by `1000` (PoS `votes_per_token` parameter, with the current value set to `10‱` in parts per ten thousand).
 
@@ -151,12 +151,12 @@ The same rules apply to delegations. When you self-bond tokens, the bonded amoun
 
 While your tokens are being self-bonded, they are locked-in the PoS system and hence are not liquid until you withdraw them. To do that, you first need to send a transaction to “unbond” your tokens. You can unbond any amount, up to the sum of all your self-bonds, even before they become active.
 
-### Self-unbounding 
+### Self-unbounding
 
 To submit an unbonding of self-bonded tokens from your validator:
 
 ```shell
-anoma client unbond \
+namada client unbond \
   --validator my-validator \
   --amount 0.3
 ```
@@ -164,11 +164,11 @@ anoma client unbond \
 Again, when you unbond tokens, you won't be able to withdraw them immediately. Instead, tokens unbonded in the epoch `n` will be withdrawable starting from the epoch `n + 6`. After you unbond some tokens, you will be able to see when you can withdraw them via `bonds` query:
 
 ```shell
-anoma client bonds --validator my-validator
+namada client bonds --validator my-validator
 ```
 
 When the chain reaches the epoch in which you can withdraw the tokens (or anytime after), you can submit a withdrawal of unbonded tokens back to your validator account:
 
 ```shell
-anoma client withdraw --validator my-validator
+namada client withdraw --validator my-validator
 ```

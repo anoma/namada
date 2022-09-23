@@ -156,6 +156,7 @@ pub async fn submit_init_validator(
     args::TxInitValidator {
         tx: tx_args,
         source,
+        scheme,
         account_key,
         consensus_key,
         rewards_account_key,
@@ -177,16 +178,33 @@ pub async fn submit_init_validator(
     let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
         println!("Generating validator account key...");
         ctx.wallet
-            .gen_key(Some(validator_key_alias.clone()), unsafe_dont_encrypt)
+            .gen_key(
+                scheme,
+                Some(validator_key_alias.clone()),
+                unsafe_dont_encrypt,
+            )
             .1
             .ref_to()
     });
 
-    let consensus_key =
-        ctx.get_opt_cached(&consensus_key).unwrap_or_else(|| {
+    let consensus_key = ctx
+        .get_opt_cached(&consensus_key)
+        .map(|key| match *key {
+            common::SecretKey::Ed25519(_) => key,
+            common::SecretKey::Secp256k1(_) => {
+                eprintln!("Consensus key can only be ed25519");
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
             println!("Generating consensus key...");
             ctx.wallet
-                .gen_key(Some(consensus_key_alias.clone()), unsafe_dont_encrypt)
+                .gen_key(
+                    // Note that TM only allows ed25519 for consensus key
+                    SchemeType::Ed25519,
+                    Some(consensus_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
                 .1
         });
 
@@ -194,7 +212,11 @@ pub async fn submit_init_validator(
         ctx.get_opt_cached(&rewards_account_key).unwrap_or_else(|| {
             println!("Generating staking reward account key...");
             ctx.wallet
-                .gen_key(Some(rewards_key_alias.clone()), unsafe_dont_encrypt)
+                .gen_key(
+                    scheme,
+                    Some(rewards_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
                 .1
                 .ref_to()
         });
@@ -204,7 +226,8 @@ pub async fn submit_init_validator(
         println!("Generating protocol signing key...");
     }
     // Generate the validator keys
-    let validator_keys = ctx.wallet.gen_validator_keys(protocol_key).unwrap();
+    let validator_keys =
+        ctx.wallet.gen_validator_keys(protocol_key, scheme).unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair

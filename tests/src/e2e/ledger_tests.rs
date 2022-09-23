@@ -1541,7 +1541,8 @@ fn test_genesis_validators() -> Result<()> {
     // the given index
     let get_first_port = |ix: u8| net_address_port_0 + 6 * (ix as u16 + 1);
 
-    // 1. Setup 2 genesis validators
+    // 1. Setup 2 genesis validators, one with ed25519 keys (0) and one with
+    // secp256k1 keys (1)
     let validator_0_alias = "validator-0";
     let validator_1_alias = "validator-1";
 
@@ -1553,6 +1554,8 @@ fn test_genesis_validators() -> Result<()> {
             "--unsafe-dont-encrypt",
             "--alias",
             validator_0_alias,
+            "--scheme",
+            "ed25519",
             "--net-address",
             &format!("127.0.0.1:{}", get_first_port(0)),
         ],
@@ -1589,6 +1592,8 @@ fn test_genesis_validators() -> Result<()> {
             "--unsafe-dont-encrypt",
             "--alias",
             validator_1_alias,
+            "--scheme",
+            "secp256k1",
             "--net-address",
             &format!("127.0.0.1:{}", get_first_port(1)),
         ],
@@ -1861,7 +1866,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     use std::net::SocketAddr;
     use std::str::FromStr;
 
-    use namada::types::key::{ed25519, SigScheme};
+    use namada::types::key::{self, ed25519, SigScheme};
     use namada_apps::client;
     use namada_apps::config::Config;
 
@@ -1928,6 +1933,7 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     let mut rng: ThreadRng = thread_rng();
     let node_sk = ed25519::SigScheme::generate(&mut rng);
+    let node_sk = key::common::SecretKey::Ed25519(node_sk);
     let tm_home_dir = validator_0_base_dir_copy
         .join(test.net.chain_id.as_str())
         .join("tendermint");

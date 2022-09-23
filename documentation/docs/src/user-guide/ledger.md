@@ -3,7 +3,7 @@
 To start a local Namada ledger node, run:
 
 ```shell
-anoma ledger
+namada ledger
 ```
 
 Note that you need to have [joined a network](./getting-started.md) before you start the ledger. It throws an error if no network has been configured.

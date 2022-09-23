@@ -10,6 +10,7 @@ use data_encoding::HEXLOWER;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroize;
 
 use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
@@ -31,11 +32,9 @@ impl super::PublicKey for PublicKey {
         pk: &PK,
     ) -> Result<Self, ParsePublicKeyError> {
         if PK::TYPE == super::common::PublicKey::TYPE {
-            // TODO remove once the wildcard match is used below
-            #[allow(clippy::bind_instead_of_map)]
             super::common::PublicKey::try_from_pk(pk).and_then(|x| match x {
                 super::common::PublicKey::Ed25519(epk) => Ok(epk),
-                // _ => Err(ParsePublicKeyError::MismatchedScheme),
+                _ => Err(ParsePublicKeyError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
             Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
@@ -125,8 +124,8 @@ impl FromStr for PublicKey {
 }
 
 /// Ed25519 secret key
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SecretKey(pub ed25519_consensus::SigningKey);
+#[derive(Debug, Serialize, Deserialize, Zeroize)]
+pub struct SecretKey(pub Box<ed25519_consensus::SigningKey>);
 
 impl super::SecretKey for SecretKey {
     type PublicKey = PublicKey;
@@ -137,11 +136,9 @@ impl super::SecretKey for SecretKey {
         pk: &PK,
     ) -> Result<Self, ParseSecretKeyError> {
         if PK::TYPE == super::common::SecretKey::TYPE {
-            // TODO remove once the wildcard match is used below
-            #[allow(clippy::bind_instead_of_map)]
             super::common::SecretKey::try_from_sk(pk).and_then(|x| match x {
                 super::common::SecretKey::Ed25519(epk) => Ok(epk),
-                // _ => Err(ParseSecretKeyError::MismatchedScheme),
+                _ => Err(ParseSecretKeyError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
             Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
@@ -160,13 +157,15 @@ impl RefTo<PublicKey> for SecretKey {
 
 impl Clone for SecretKey {
     fn clone(&self) -> SecretKey {
-        SecretKey(ed25519_consensus::SigningKey::from(self.0.to_bytes()))
+        SecretKey(Box::new(ed25519_consensus::SigningKey::from(
+            self.0.to_bytes(),
+        )))
     }
 }
 
 impl BorshDeserialize for SecretKey {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        Ok(SecretKey(
+        Ok(SecretKey(Box::new(
             ed25519_consensus::SigningKey::try_from(
                 <[u8; SECRET_KEY_LENGTH] as BorshDeserialize>::deserialize(
                     buf,
@@ -176,7 +175,7 @@ impl BorshDeserialize for SecretKey {
             .map_err(|e| {
                 std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
             })?,
-        ))
+        )))
     }
 }
 
@@ -223,6 +222,12 @@ impl FromStr for SecretKey {
     }
 }
 
+impl Drop for SecretKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
 /// Ed25519 signature
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Signature(pub ed25519_consensus::Signature);
@@ -234,11 +239,9 @@ impl super::Signature for Signature {
         pk: &PK,
     ) -> Result<Self, ParseSignatureError> {
         if PK::TYPE == super::common::Signature::TYPE {
-            // TODO remove once the wildcard match is used below
-            #[allow(clippy::bind_instead_of_map)]
             super::common::Signature::try_from_sig(pk).and_then(|x| match x {
                 super::common::Signature::Ed25519(epk) => Ok(epk),
-                // _ => Err(ParseSignatureError::MismatchedScheme),
+                _ => Err(ParseSignatureError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
             Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
@@ -323,14 +326,14 @@ impl super::SigScheme for SigScheme {
     type SecretKey = SecretKey;
     type Signature = Signature;
 
-    const TYPE: SchemeType = SchemeType::Ed25519Consensus;
+    const TYPE: SchemeType = SchemeType::Ed25519;
 
     #[cfg(feature = "rand")]
     fn generate<R>(csprng: &mut R) -> SecretKey
     where
         R: CryptoRng + RngCore,
     {
-        SecretKey(ed25519_consensus::SigningKey::new(csprng))
+        SecretKey(Box::new(ed25519_consensus::SigningKey::new(csprng)))
     }
 
     fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
