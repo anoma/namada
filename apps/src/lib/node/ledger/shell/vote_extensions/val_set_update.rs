@@ -75,18 +75,20 @@ where
         let validator = &ext.data.validator_addr;
         // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
         // `last_height` here, instead of `ext.data.block_height`
-        let ext_height_epoch =
-            match self.storage.get_epoch(ext.data.block_height) {
-                Some(epoch) => epoch,
-                _ => {
-                    tracing::error!(
-                        block_height = ?ext.data.block_height,
-                        "The epoch of the Ethereum events vote extension's \
-                         block height should always be known",
-                    );
-                    return Err(VoteExtensionError::UnexpectedSequenceNumber);
-                }
-            };
+        let ext_height_epoch = match self
+            .storage
+            .get_epoch(ext.data.block_height)
+        {
+            Some(epoch) => epoch,
+            _ => {
+                tracing::error!(
+                    block_height = ?ext.data.block_height,
+                    "The epoch of the validator set update vote extension's \
+                     block height should always be known",
+                );
+                return Err(VoteExtensionError::UnexpectedSequenceNumber);
+            }
+        };
         let (voting_power, pk) = self
             .storage
             .get_validator_from_address(validator, Some(ext_height_epoch))
