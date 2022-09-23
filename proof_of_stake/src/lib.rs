@@ -1041,8 +1041,8 @@ pub trait PosBase {
 
         // Iterate over validators, calculating their fraction of the block rewards accounting for
         // possible block proposal and signing (voting)
-        let mut validator_accumulators = self.read_consensus_validator_rewards_accumulator().unwrap_or(
-            HashMap::<Self::Address, Decimal>::new()
+        let mut validator_accumulators = self.read_consensus_validator_rewards_accumulator().unwrap_or_else(
+            || HashMap::<Self::Address, Decimal>::new()
         );
         for validator in validators.active.iter() {
             let mut rewards_frac: Decimal = Decimal::default();

@@ -9,7 +9,7 @@ use namada::ledger::governance::utils::{
 use namada::ledger::governance::vp::ADDRESS as gov_address;
 use namada::ledger::inflation::{self, RewardsController};
 use namada::ledger::parameters::storage as params_storage;
-use namada::ledger::pos::staking_token_address;
+use namada::ledger::pos::{staking_token_address, consensus_validator_set_accumulator_key};
 use namada::ledger::pos::types::{decimal_mult_u64, VoteInfo};
 use namada::ledger::storage::types::encode;
 use namada::ledger::treasury::ADDRESS as treasury_address;
@@ -370,9 +370,6 @@ where
         // Get input values needed for the PD controller for PoS and MASP.
         // Run the PD controllers to calculate new rates.
         //
-        // TODO:
-        // Update reward products
-        //
         // MASP is included below just for some completeness.
 
         // read from Parameters storage
@@ -531,14 +528,22 @@ where
             let reward = decimal_mult_u64(fractional_claim, pos_minted_tokens);
 
             let validator_deltas = self.storage.read_validator_deltas(address).unwrap();
-            let stake = validator_deltas.get(current_epoch).map(|sum| Decimal::from(sum)).unwrap();
+            let commission_rate = self.storage.read_validator_commission_rate(address);
             let mut rewards_products = self.storage.read_validator_rewards_products(address);
+            let mut delegation_rewards_products = self.storage.read_validator_delegation_rewards_products(address);
+            
+            let stake = validator_deltas.get(current_epoch).map(|sum| Decimal::from(sum)).unwrap();
             let last_product = *rewards_products.get(&last_epoch).unwrap();
+            let last_delegation_product = *delegation_rewards_products.get(&last_epoch).unwrap();
             let new_product = last_product * (Decimal::ONE + Decimal::from(reward) / stake);
+            let new_delegation_product = last_delegation_product * (Decimal::ONE + (Decimal::ONE - commission_rate)*Decimal::from(reward) / stake);
+
             rewards_products.insert(current_epoch, new_product);
+            delegation_rewards_products.insert(current_epoch, new_delegation_product);
+            self.storage.write_validator_rewards_products(address, &rewards_products);
+            self.storage.write_validator_delegation_rewards_products(address, &delegation_rewards_products);
 
             reward_tokens_remaining -= reward;
-            self.storage.write_validator_rewards_products(address, &rewards_products);
 
             // TODO: Figure out how to deal with round-off to a whole number of tokens. May be tricky.
             // TODO: Storing reward products as a Decimal suggests that no round-off should be done here,
@@ -549,9 +554,7 @@ where
         if reward_tokens_remaining > 0 {
             // TODO: do something here?
         }
-
-        // TODO: need to update delegation_rewards_products here as well?
-        // TODO: clear/reset the accumulator values from storage before we're done here
+        self.storage.delete(&consensus_validator_set_accumulator_key()).unwrap();
 
     }
 }
