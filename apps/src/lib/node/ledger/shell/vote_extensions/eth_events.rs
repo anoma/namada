@@ -23,14 +23,14 @@ where
     H: StorageHasher + Sync + 'static,
 {
     /// Validates an Ethereum events vote extension issued at the provided
-    /// block height
+    /// block height.
     ///
     /// Checks that at epoch of the provided height:
-    ///  * The Tendermint address corresponds to an active validator
-    ///  * The validator correctly signed the extension
-    ///  * The validator signed over the correct height inside of the extension
+    ///  * The Tendermint address corresponds to an active validator.
+    ///  * The validator correctly signed the extension.
+    ///  * The validator signed over the correct height inside of the extension.
     ///  * There are no duplicate Ethereum events in this vote extension, and
-    ///    the events are sorted in ascending order
+    ///    the events are sorted in ascending order.
     #[allow(dead_code)]
     #[inline]
     pub fn validate_eth_events_vext(
@@ -55,10 +55,21 @@ where
     > {
         #[cfg(feature = "abcipp")]
         if ext.data.block_height != last_height {
-            let ext_height = ext.data.block_height;
             tracing::error!(
+                ext_height = ?ext.data.block_height,
+                ?last_height,
                 "Ethereum events vote extension issued for a block height \
-                 {ext_height} different from the expected height {last_height}"
+                 different from the expected last height."
+            );
+            return Err(VoteExtensionError::UnexpectedSequenceNumber);
+        }
+        #[cfg(not(feature = "abcipp"))]
+        if ext.data.block_height > last_height {
+            tracing::error!(
+                ext_height = ?ext.data.block_height,
+                ?last_height,
+                "Ethereum events vote extension issued for a block height \
+                 higher than the chain's last height."
             );
             return Err(VoteExtensionError::UnexpectedSequenceNumber);
         }
