@@ -1,7 +1,7 @@
 //! Proof-of-Stake storage keys and storage integration via [`PosBase`] trait.
 
 use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::types::{ValidatorStates, RewardsProducts};
+use namada_proof_of_stake::types::{ValidatorStates, RewardsProducts, Epoch};
 use namada_proof_of_stake::{types, PosBase};
 
 use super::{
@@ -25,6 +25,7 @@ const VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY: &str =
     "max_commission_rate_change";
 const VALIDATOR_SELF_REWARDS_PRODUCT_KEY: &str = "validator_rewards_product";
 const VALIDATOR_DELEGATION_REWARDS_PRODUCT_KEY: &str = "delegation_rewards_product";
+const VALIDATOR_LAST_KNOWN_PRODUCT_EPOCH_KEY: &str = "last_known_rewards_product_epoch";
 const SLASHES_PREFIX: &str = "slash";
 const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
@@ -216,6 +217,33 @@ pub fn is_validator_delegation_rewards_product_key(
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
             && key == VALIDATOR_DELEGATION_REWARDS_PRODUCT_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Storage key for validator's last known rewards product epoch.
+pub fn validator_last_known_product_epoch_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_LAST_KNOWN_PRODUCT_EPOCH_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's last known rewards product epoch?
+pub fn is_validator_last_known_product_epoch_key(
+    key: &Key,
+) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_LAST_KNOWN_PRODUCT_EPOCH_KEY =>
         {
             Some(validator)
         }
@@ -519,6 +547,11 @@ where
         decode(value.unwrap()).unwrap()
     }
 
+    fn read_validator_last_known_product_epoch(&self, key: &Self::Address) -> Epoch {
+        let (value, _gas) = self.read(&validator_delegation_rewards_product_key(key)).unwrap();
+        decode(value.unwrap()).unwrap()
+    }
+
     fn read_consensus_validator_rewards_accumulator(&self) -> Option<std::collections::HashMap<Self::Address, rust_decimal::Decimal>> {
         let (value, _gas) = self.read(&consensus_validator_set_accumulator_key()).unwrap();
         decode(value.unwrap()).unwrap()
@@ -584,6 +617,15 @@ where
         value: &RewardsProducts,
     ) {
         self.write(&validator_delegation_rewards_product_key(key), encode(value))
+            .unwrap();
+    }
+
+    fn write_validator_last_known_product_epoch(
+            &mut self,
+            key: &Self::Address,
+            value: &Epoch,
+        ) {
+        self.write(&validator_last_known_product_epoch_key(key), encode(value))
             .unwrap();
     }
 
