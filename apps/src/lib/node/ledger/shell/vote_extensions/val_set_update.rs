@@ -94,7 +94,8 @@ where
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Could not get public key from Storage for some validator, while validating validator set update vote extension"
+                    "Could not get public key from Storage for some validator, \
+                     while validating validator set update vote extension"
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
@@ -104,7 +105,8 @@ where
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Failed to verify the signature of a validator set update vote extension issued by some validator"
+                    "Failed to verify the signature of a validator set update vote \
+                     extension issued by some validator"
                 );
                 VoteExtensionError::VerifySigFailed
             })
