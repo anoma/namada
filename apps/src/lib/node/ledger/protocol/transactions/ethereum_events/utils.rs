@@ -144,8 +144,8 @@ mod tests {
             address: present_validator.clone(),
         };
         let validators = HashSet::from_iter(vec![
-            (present_validator.clone(), BlockHeight(100)),
-            (missing_validator.clone(), BlockHeight(100)),
+            (present_validator, BlockHeight(100)),
+            (missing_validator, BlockHeight(100)),
         ]);
         let active_validators = BTreeMap::from_iter(vec![(
             BlockHeight(100),
