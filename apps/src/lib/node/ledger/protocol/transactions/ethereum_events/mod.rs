@@ -52,14 +52,7 @@ where
 
     let (updates, voting_powers) = get_update_data(storage, events)?;
 
-    let changed_keys = apply_updates(
-        storage,
-        updates,
-        voting_powers
-            .into_iter()
-            .map(|((addr, _), voting_power)| (addr, voting_power))
-            .collect(),
-    )?;
+    let changed_keys = apply_updates(storage, updates, voting_powers)?;
 
     Ok(TxResult {
         changed_keys,
@@ -126,7 +119,7 @@ where
 pub(super) fn apply_updates<D, H>(
     storage: &mut Storage<D, H>,
     updates: HashSet<EthMsgUpdate>,
-    voting_powers: HashMap<Address, FractionalVotingPower>,
+    voting_powers: HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<ChangedKeys>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -170,7 +163,7 @@ where
 fn apply_update<D, H>(
     storage: &mut Storage<D, H>,
     update: EthMsgUpdate,
-    voting_powers: &HashMap<Address, FractionalVotingPower>,
+    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<(ChangedKeys, bool)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -194,14 +187,16 @@ where
 
 fn calculate_new_eth_msg(
     update: EthMsgUpdate,
-    voting_powers: &HashMap<Address, FractionalVotingPower>,
+    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<(EthMsg, ChangedKeys)> {
     let eth_msg_keys = Keys::from(&update.body);
     tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
 
     let mut seen_by_voting_power = FractionalVotingPower::default();
-    for (validator, _) in &update.seen_by {
-        match voting_powers.get(validator) {
+    for (validator, block_height) in &update.seen_by {
+        match voting_powers
+            .get(&(validator.to_owned(), block_height.to_owned()))
+        {
             Some(voting_power) => seen_by_voting_power += voting_power,
             None => {
                 return Err(eyre!(
@@ -234,7 +229,7 @@ fn calculate_new_eth_msg(
 fn calculate_updated_eth_msg<D, H>(
     store: &mut Storage<D, H>,
     update: EthMsgUpdate,
-    voting_powers: &HashMap<Address, FractionalVotingPower>,
+    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<(EthMsg, ChangedKeys)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -264,7 +259,7 @@ where
 fn calculate_diff(
     eth_msg: EthMsg,
     _update: EthMsgUpdate,
-    _voting_powers: &HashMap<Address, FractionalVotingPower>,
+    _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> (EthMsg, ChangedKeys) {
     tracing::warn!(
         "Updating Ethereum events is not yet implemented, so this Ethereum \
@@ -335,7 +330,7 @@ mod tests {
         };
         let updates = HashSet::from_iter(vec![update]);
         let voting_powers = HashMap::from_iter(vec![(
-            sole_validator.clone(),
+            (sole_validator.clone(), BlockHeight(100)),
             FractionalVotingPower::new(1, 1).unwrap(),
         )]);
         let mut storage = TestStorage::default();
