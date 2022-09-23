@@ -204,6 +204,7 @@ where
             return None;
         }
 
+        #[cfg(feature = "abcipp")]
         let vexts_epoch =
             self.storage.get_epoch(self.storage.last_height).expect(
                 "The epoch of the last block height should always be known",
