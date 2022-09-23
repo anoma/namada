@@ -303,20 +303,17 @@ pub async fn query_proposal_result(
 
     match args.proposal_id {
         Some(id) => {
-            let start_epoch_key = gov_storage::get_voting_start_epoch_key(id);
             let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
-            let start_epoch =
-                query_storage_value::<Epoch>(&client, &start_epoch_key).await;
             let end_epoch =
                 query_storage_value::<Epoch>(&client, &end_epoch_key).await;
 
-            match (start_epoch, end_epoch) {
-                (Some(start_epoch), Some(end_epoch)) => {
+            match end_epoch {
+                Some(end_epoch) => {
                     if current_epoch > end_epoch {
                         let votes =
-                            get_proposal_votes(&client, start_epoch, id).await;
+                            get_proposal_votes(&client, end_epoch, id).await;
                         let proposal_result =
-                            compute_tally(&client, start_epoch, votes).await;
+                            compute_tally(&client, end_epoch, votes).await;
                         println!("Proposal: {}", id);
                         println!("{:4}Result: {}", "", proposal_result);
                     } else {
@@ -324,7 +321,7 @@ pub async fn query_proposal_result(
                         cli::safe_exit(1)
                     }
                 }
-                _ => {
+                None => {
                     eprintln!("Error while retriving proposal.");
                     cli::safe_exit(1)
                 }
