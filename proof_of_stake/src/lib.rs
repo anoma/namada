@@ -652,6 +652,8 @@ pub trait PosBase {
         &self,
         key: &Address,
     ) -> RewardsProducts;
+    /// Read PoS validator's last known epoch with rewards products
+    fn read_validator_last_known_product_epoch(&self, key: &Address) -> Epoch;
     /// Read PoS consensus validator's rewards accumulator
     fn read_consensus_validator_rewards_accumulator(
         &self,
@@ -709,6 +711,12 @@ pub trait PosBase {
         &mut self,
         key: &Address,
         value: &RewardsProducts,
+    );
+    /// Write PoS validator's last known epoch with rewards products
+    fn write_validator_last_known_product_epoch(
+        &mut self,
+        key: &Address,
+        value: &Epoch,
     );
     /// Write PoS validator's delegation rewards products.
     fn write_consensus_validator_rewards_accumulator(
