@@ -1047,4 +1047,63 @@ mod test_prepare_proposal {
             assert_eq!(received, expected_txs);
         }
     }
+
+    /// Test if we are filtering out duped votes for the
+    /// same Ethereum event at different block heights.
+    #[cfg(not(feature = "abcipp"))]
+    #[test]
+    fn test_prepare_proposal_filter_duped_eth_event_votes() {
+        use assert_matches::assert_matches;
+
+        const LAST_HEIGHT: BlockHeight = BlockHeight(5);
+        const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
+
+        let (mut shell, _recv, _) = test_utils::setup();
+
+        // artificially change the block height
+        shell.storage.last_height = LAST_HEIGHT;
+
+        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let validator_addr = wallet::defaults::validator_address();
+
+        let ethereum_event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let signed_ext_1 = {
+            let ext = ethereum_events::Vext {
+                validator_addr: validator_addr.clone(),
+                block_height: PRED_LAST_HEIGHT,
+                ethereum_events: vec![ethereum_event.clone()],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+            ext
+        };
+        let signed_ext_2 = {
+            let ext = ethereum_events::Vext {
+                validator_addr,
+                block_height: LAST_HEIGHT,
+                ethereum_events: vec![ethereum_event],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+            ext
+        };
+
+        let signatures = shell
+            .compress_ethereum_events(vec![signed_ext_1, signed_ext_2])
+            .expect("Test failed")
+            .signatures;
+
+        assert_eq!(signatures.len(), 1);
+
+        let height = signatures
+            .into_iter()
+            .map(|(_, height)| height)
+            .by_ref()
+            .next();
+
+        assert_matches!(height, BlockHeight(PRED_LAST_HEIGHT
+    }
 }
