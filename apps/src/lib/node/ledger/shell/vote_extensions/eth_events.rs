@@ -1,6 +1,6 @@
 //! Extend Tendermint votes with Ethereum events seen by a quorum of validators.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
@@ -156,9 +156,24 @@ where
             VoteExtensionError,
         >,
     > + 'iter {
-        vote_extensions.into_iter().map(|vote_extension| {
+        // NOTE(not(feature = "abcipp")): we can remove this `BTreeSet`
+        // and its associated code once we purge `abciplus` from the ledger
+        let mut observed = BTreeSet::new();
+        let contains = |set: &mut BTreeSet<_>, elem| !set.insert(elem);
+        vote_extensions.into_iter().map(move |ext| {
+            for event in ext.data.ethereum_events.iter().cloned() {
+                let validator_event = (ext.data.validator_addr.clone(), event);
+                if contains(&mut observed, validator_event) {
+                    tracing::error!(
+                        validator = %ext.data.validator_addr,
+                        "A validator tried voting more than once on the same \
+                         event, at different block heights."
+                    );
+                    return Err(VoteExtensionError::VotedMoreThanOnce);
+                }
+            }
             self.validate_eth_events_vext_and_get_it_back(
-                vote_extension,
+                ext,
                 self.storage.last_height,
             )
         })

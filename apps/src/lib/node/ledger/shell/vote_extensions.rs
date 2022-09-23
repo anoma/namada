@@ -42,6 +42,8 @@ pub enum VoteExtensionError {
     PubKeyNotInStorage,
     #[error("The vote extension's signature is invalid.")]
     VerifySigFailed,
+    #[error("A validator tried voting more than once for the same event.")]
+    VotedMoreThanOnce,
 }
 
 impl<D, H> Shell<D, H>
