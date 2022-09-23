@@ -7,12 +7,13 @@ mod read;
 mod update;
 mod utils;
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use borsh::BorshSerialize;
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::{eyre, Result};
 use namada::ledger::eth_bridge::storage::eth_msgs::Keys;
+use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada::types::address::Address;
 use namada::types::ethereum_events::EthereumEvent;
@@ -60,6 +61,25 @@ where
     })
 }
 
+fn get_active_validators<D, H>(
+    storage: &Storage<D, H>,
+    block_heights: HashSet<BlockHeight>,
+) -> BTreeMap<BlockHeight, BTreeSet<WeightedValidator<Address>>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut active_validators = BTreeMap::default();
+    for height in block_heights.into_iter() {
+        let epoch = storage.get_epoch(height).expect(
+            "The epoch of the last block height should always be known",
+        );
+        _ = active_validators
+            .insert(height, storage.get_active_validators(Some(epoch)));
+    }
+    active_validators
+}
+
 /// Constructs all needed data that may be needed for updating #EthBridge
 /// internal account storage based on `events`.
 fn get_update_data<D, H>(
@@ -73,34 +93,21 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    // TODO: this assumes all events are from the last block height, and ignores
-    // the block height that is actually in them, for the purpose of fetching
-    // active validators
-    let last_block_height = storage.last_height;
-    let last_block_epoch = storage
-        .get_epoch(last_block_height)
-        .expect("The epoch of the last block height should always be known");
-    tracing::debug!(
-        ?last_block_height,
-        ?last_block_epoch,
-        "Got epoch of last block"
-    );
+    let voters = utils::get_votes_for_events(events.iter());
+    tracing::debug!(?voters, "Got validators who voted on at least one event");
 
-    let active_validators =
-        storage.get_active_validators(Some(last_block_epoch));
+    let active_validators = get_active_validators(
+        storage,
+        voters.iter().map(|(_, h)| h.to_owned()).collect(),
+    );
     tracing::debug!(
         n = active_validators.len(),
         "got active validators - {:#?}",
         active_validators,
     );
 
-    let voters = utils::get_voters_for_events(events.iter());
-    tracing::debug!(?voters, "Got validators who voted on at least one event");
-
-    let voting_powers = utils::get_voting_powers_for_selected(
-        &active_validators,
-        voters.into_iter().map(|(addr, _)| addr).collect(),
-    )?;
+    let voting_powers =
+        utils::get_voting_powers_for_selected(&active_validators, voters)?;
     tracing::debug!(
         ?voting_powers,
         "got voting powers for relevant validators"
@@ -108,13 +115,6 @@ where
 
     let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
 
-    // TODO: temporarily using last block height always
-    let voting_powers = voting_powers
-        .into_iter()
-        .map(|(validator, voting_power)| {
-            ((validator, last_block_height), voting_power)
-        })
-        .collect();
     Ok((updates, voting_powers))
 }
 
