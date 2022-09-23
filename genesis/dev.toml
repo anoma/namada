@@ -15,6 +15,10 @@ tokens = 200000
 non_staked_balance = 100000
 # VP for the validator account
 validator_vp = "vp_user"
+# Commission rate for rewards
+commission_rate = 0.05
+# Maximum change per epoch in the commission rate
+max_commission_rate_change = 0.01
 # Public IP:port address
 net_address = "127.0.0.1:26656"
 

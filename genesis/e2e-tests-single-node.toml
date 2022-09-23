@@ -11,6 +11,10 @@ tokens = 200000
 non_staked_balance = 1000000000000
 # VP for the validator account
 validator_vp = "vp_user"
+# Commission rate for rewards
+commission_rate = 0.05
+# Maximum change per epoch in the commission rate
+max_commission_rate_change = 0.01
 # Public IP:port address.
 # We set the port to be the default+1000, so that if a local node was running at 
 # the same time as the E2E tests, it wouldn't affect them.
