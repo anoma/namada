@@ -1278,6 +1278,10 @@ pub mod args {
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
     use namada::types::transaction::GasLimit;
+    use rust_decimal::Decimal;
+    use serde::Deserialize;
+    use tendermint::Timeout;
+    use tendermint_config::net::Address as TendermintAddress;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
@@ -1306,6 +1310,7 @@ pub mod args {
     const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
+    const COMMISSION_RATE: Arg<Decimal> = arg("commission-rate");
     const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
@@ -1337,6 +1342,7 @@ pub mod args {
 
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
+    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> = arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NFT_ADDRESS: Arg<Address> = arg("nft-address");
@@ -1592,6 +1598,8 @@ pub mod args {
         pub consensus_key: Option<WalletKeypair>,
         pub rewards_account_key: Option<WalletPublicKey>,
         pub protocol_key: Option<WalletPublicKey>,
+        pub commission_rate: Decimal,
+        pub max_commission_rate_change: Decimal,
         pub validator_vp_code_path: Option<PathBuf>,
         pub rewards_vp_code_path: Option<PathBuf>,
         pub unsafe_dont_encrypt: bool,
@@ -1606,6 +1614,8 @@ pub mod args {
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let rewards_account_key = REWARDS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
+            let commission_rate = COMMISSION_RATE.parse(matches);
+            let max_commission_rate_change = MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
             let rewards_vp_code_path = REWARDS_CODE_PATH.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
@@ -1617,6 +1627,8 @@ pub mod args {
                 consensus_key,
                 rewards_account_key,
                 protocol_key,
+                commission_rate,
+                max_commission_rate_change,
                 validator_vp_code_path,
                 rewards_vp_code_path,
                 unsafe_dont_encrypt,
@@ -1647,6 +1659,12 @@ pub mod args {
                 .arg(PROTOCOL_KEY.def().about(
                     "A public key for signing protocol transactions. A new \
                      one will be generated if none given.",
+                ))
+                .arg(COMMISSION_RATE.def().about(
+                    "The commission rate charged by the validator for delegation rewards. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                    "The maximum change per epoch in the commission rate charged by the validator for delegation rewards. This is a required parameter.",
                 ))
                 .arg(VALIDATOR_CODE_PATH.def().about(
                     "The path to the validity predicate WASM code to be used \
@@ -2691,6 +2709,8 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
         pub alias: String,
+        pub commission_rate: Decimal,
+        pub max_commission_rate_change: Decimal,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
@@ -2699,6 +2719,8 @@ pub mod args {
     impl Args for InitGenesisValidator {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let commission_rate = COMMISSION_RATE.parse(matches);
+            let max_commission_rate_change = MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let key_scheme = SCHEME.parse(matches);
@@ -2707,6 +2729,8 @@ pub mod args {
                 net_address,
                 unsafe_dont_encrypt,
                 key_scheme,
+                commission_rate,
+                max_commission_rate_change
             }
         }
 
@@ -2716,6 +2740,12 @@ pub mod args {
                     "Static {host:port} of your validator node's P2P address. \
                      Anoma uses port `26656` for P2P connections by default, \
                      but you can configure a different value.",
+                ))
+                .arg(COMMISSION_RATE.def().about(
+                    "The commission rate charged by the validator for delegation rewards. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                    "The maximum change per epoch in the commission rate charged by the validator for delegation rewards. This is a required parameter.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \

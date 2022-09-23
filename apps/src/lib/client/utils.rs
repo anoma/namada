@@ -905,6 +905,8 @@ pub fn init_genesis_validator(
     global_args: args::Global,
     args::InitGenesisValidator {
         alias,
+        commission_rate,
+        max_commission_rate_change,
         net_address,
         unsafe_dont_encrypt,
         key_scheme,
@@ -961,6 +963,8 @@ pub fn init_genesis_validator(
                         .public()
                         .to_string(),
                 )),
+                commission_rate: Some(commission_rate),
+                max_commission_rate_change: Some(max_commission_rate_change),
                 tendermint_node_key: Some(HexString(
                     pre_genesis.tendermint_node_key.ref_to().to_string(),
                 )),

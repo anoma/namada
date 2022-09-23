@@ -176,6 +176,11 @@ pub mod genesis_config {
         // Unstaked balance at genesis.
         // XXX: u64 doesn't work with toml-rs!
         pub non_staked_balance: Option<u64>,
+        /// Commission rate charged on rewards for delegators (bounded inside
+        /// 0-1)
+        pub commission_rate: Option<Decimal>,
+        /// Maximum change in commission rate permitted per epoch
+        pub max_commission_rate_change: Option<Decimal>,
         // Filename of validator VP. (default: default validator VP)
         pub validator_vp: Option<String>,
         // Filename of staking reward account VP. (default: user VP)
@@ -185,11 +190,6 @@ pub mod genesis_config {
         /// Tendermint node key is used to derive Tendermint node ID for node
         /// authentication
         pub tendermint_node_key: Option<HexString>,
-        /// Commission rate charged on rewards for delegators (bounded inside
-        /// 0-1)
-        pub commission_rate: Option<Decimal>,
-        /// Maximum change in commission rate permitted per epoch
-        pub max_commission_rate_change: Option<Decimal>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
