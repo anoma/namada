@@ -214,7 +214,7 @@ pub mod eth_fullnode {
             futures::pin_mut!(child_proc);
 
             match future::select(&mut self.abort_recv, child_proc).await {
-                Either::Left((_abort_received, _)) => Err(Error::Oracle),
+                Either::Left(_) => Err(Error::Oracle),
                 Either::Right((Ok(status), _)) if status.success() => Ok(()),
                 Either::Right((Ok(status), _)) => {
                     Err(Error::Runtime(format!("{status}")))
