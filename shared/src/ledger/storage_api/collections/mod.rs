@@ -14,16 +14,16 @@ use derivative::Derivative;
 use thiserror::Error;
 
 mod hasher;
-// pub mod lazy_hashmap;
-// pub mod lazy_hashset;
+pub mod lazy_hashmap;
+pub mod lazy_hashset;
 pub mod lazy_map;
-// pub mod lazy_set;
+pub mod lazy_set;
 pub mod lazy_vec;
 
-// pub use lazy_hashmap::LazyHashMap;
-// pub use lazy_hashset::LazyHashSet;
+pub use lazy_hashmap::LazyHashMap;
+pub use lazy_hashset::LazyHashSet;
 pub use lazy_map::LazyMap;
-// pub use lazy_set::LazySet;
+pub use lazy_set::LazySet;
 pub use lazy_vec::LazyVec;
 
 use crate::ledger::storage_api;
