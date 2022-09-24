@@ -1358,7 +1358,6 @@ pub mod args {
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
-    const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
@@ -1596,7 +1595,6 @@ pub mod args {
         pub scheme: SchemeType,
         pub account_key: Option<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
-        pub rewards_account_key: Option<WalletPublicKey>,
         pub protocol_key: Option<WalletPublicKey>,
         pub commission_rate: Decimal,
         pub max_commission_rate_change: Decimal,
@@ -1612,7 +1610,6 @@ pub mod args {
             let scheme = SCHEME.parse(matches);
             let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
-            let rewards_account_key = REWARDS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change = MAX_COMMISSION_RATE_CHANGE.parse(matches);
@@ -1625,7 +1622,6 @@ pub mod args {
                 scheme,
                 account_key,
                 consensus_key,
-                rewards_account_key,
                 protocol_key,
                 commission_rate,
                 max_commission_rate_change,
@@ -1650,10 +1646,6 @@ pub mod args {
                 ))
                 .arg(VALIDATOR_CONSENSUS_KEY.def().about(
                     "A consensus key for the validator account. A new one \
-                     will be generated if none given.",
-                ))
-                .arg(REWARDS_KEY.def().about(
-                    "A public key for the staking reward account. A new one \
                      will be generated if none given.",
                 ))
                 .arg(PROTOCOL_KEY.def().about(

@@ -231,7 +231,7 @@ where
         /// Validator's address
         address: Address,
         /// Validator's data update
-        update: ValidatorUpdate<Address, TokenChange, PublicKey>,
+        update: ValidatorUpdate<TokenChange, PublicKey>,
     },
     /// Validator set update
     ValidatorSet(Data<ValidatorSets<Address>>),
@@ -248,9 +248,8 @@ where
 
 /// An update of a validator's data.
 #[derive(Clone, Debug)]
-pub enum ValidatorUpdate<Address, TokenChange, PublicKey>
+pub enum ValidatorUpdate<TokenChange, PublicKey>
 where
-    Address: Clone + Debug,
     TokenChange: Display
         + Debug
         + Default
@@ -269,8 +268,6 @@ where
     State(Data<ValidatorStates>),
     /// Consensus key update
     ConsensusKey(Data<ValidatorConsensusKeys<PublicKey>>),
-    /// Staking reward address update
-    StakingRewardAddress(Data<Address>),
     /// Validator deltas update
     ValidatorDeltas(Data<ValidatorDeltas<TokenChange>>),
 }
@@ -297,7 +294,6 @@ pub struct NewValidator<PublicKey> {
     has_consensus_key: Option<PublicKey>,
     has_total_deltas: bool,
     has_bonded_stake: bool,
-    has_staking_reward_address: bool,
     has_address_raw_hash: Option<String>,
     bonded_stake: u64,
 }
@@ -664,15 +660,13 @@ where
                         has_consensus_key,
                         has_total_deltas,
                         has_bonded_stake,
-                        has_staking_reward_address,
                         has_address_raw_hash,
                         bonded_stake,
                     } = &new_validator;
                     // The new validator must have set all the required fields
                     if !(*has_state
                         && *has_total_deltas
-                        && *has_bonded_stake
-                        && *has_staking_reward_address)
+                        && *has_bonded_stake)
                     {
                         errors.push(Error::InvalidNewValidator(
                             address.clone(),
@@ -982,14 +976,6 @@ where
                         address,
                         data,
                     ),
-                    StakingRewardAddress(data) => {
-                        Self::validator_staking_reward_address(
-                            errors,
-                            new_validators,
-                            address,
-                            data,
-                        )
-                    }
                     ValidatorDeltas(data) => Self::validator_total_deltas(
                         constants,
                         errors,
@@ -1166,32 +1152,6 @@ where
                 errors.push(Error::ValidatorStateIsRequired(address))
             }
             (None, None) => {}
-        }
-    }
-
-    fn validator_staking_reward_address(
-        errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
-        new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
-        address: Address,
-        data: Data<Address>,
-    ) {
-        match (data.pre, data.post) {
-            (Some(_), Some(post)) => {
-                if post == address {
-                    errors
-                        .push(Error::StakingRewardAddressEqValidator(address));
-                }
-            }
-            (None, Some(post)) => {
-                if post == address {
-                    errors.push(Error::StakingRewardAddressEqValidator(
-                        address.clone(),
-                    ));
-                }
-                let validator = new_validators.entry(address).or_default();
-                validator.has_staking_reward_address = true;
-            }
-            _ => errors.push(Error::StakingRewardAddressIsRequired(address)),
         }
     }
 

@@ -15,11 +15,10 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 
     // Register the validator in PoS
     match ctx.init_validator(init_validator) {
-        Ok((validator_address, staking_reward_address)) => {
+        Ok((validator_address)) => {
             debug_log!(
-                "Created validator {} and staking reward account {}",
+                "Created validator {}",
                 validator_address.encode(),
-                staking_reward_address.encode()
             )
         }
         Err(err) => {

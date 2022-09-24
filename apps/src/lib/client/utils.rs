@@ -478,7 +478,6 @@ pub fn init_network(
         let reward_address =
             address::gen_established_address("validator reward account");
         config.address = Some(address.to_string());
-        config.staking_reward_address = Some(reward_address.to_string());
 
         // Generate the consensus, account and reward keys, unless they're
         // pre-defined.

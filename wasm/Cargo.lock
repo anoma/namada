@@ -1419,7 +1419,6 @@ dependencies = [
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",
- "serde",
  "tendermint-proto",
  "thiserror",
 ]
@@ -1451,6 +1450,7 @@ dependencies = [
  "namada",
  "namada_macros",
  "namada_vm_env",
+ "rust_decimal",
  "sha2 0.10.6",
  "thiserror",
 ]

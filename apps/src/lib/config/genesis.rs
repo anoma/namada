@@ -168,8 +168,6 @@ pub mod genesis_config {
         pub dkg_public_key: Option<HexString>,
         // Validator address (default: generate).
         pub address: Option<String>,
-        // Staking reward account address (default: generate).
-        pub staking_reward_address: Option<String>,
         // Total number of tokens held at genesis.
         // XXX: u64 doesn't work with toml-rs!
         pub tokens: Option<u64>,
@@ -307,19 +305,9 @@ pub mod genesis_config {
             pos_data: GenesisValidator {
                 address: Address::decode(&config.address.as_ref().unwrap())
                     .unwrap(),
-                staking_reward_address: Address::decode(
-                    &config.staking_reward_address.as_ref().unwrap(),
-                )
-                .unwrap(),
                 tokens: token::Amount::whole(config.tokens.unwrap_or_default()),
                 consensus_key: config
                     .consensus_public_key
-                    .as_ref()
-                    .unwrap()
-                    .to_public_key()
-                    .unwrap(),
-                staking_reward_key: config
-                    .staking_reward_public_key
                     .as_ref()
                     .unwrap()
                     .to_public_key()
@@ -789,23 +777,13 @@ pub fn genesis() -> Genesis {
     // `tests::gen_genesis_validator` below.
     let consensus_keypair = wallet::defaults::validator_keypair();
     let account_keypair = wallet::defaults::validator_keypair();
-    let ed_staking_reward_keypair = ed25519::SecretKey::try_from_slice(&[
-        61, 198, 87, 204, 44, 94, 234, 228, 217, 72, 245, 27, 40, 2, 151, 174,
-        24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 77, 162, 243, 125, 240, 206,
-    ])
-    .unwrap();
-    let staking_reward_keypair =
-        common::SecretKey::try_from_sk(&ed_staking_reward_keypair).unwrap();
     let address = wallet::defaults::validator_address();
-    let staking_reward_address = Address::decode("atest1v4ehgw36xcersvee8qerxd35x9prsw2xg5erxv6pxfpygd2x89z5xsf5xvmnysejgv6rwd2rnj2avt").unwrap();
     let (protocol_keypair, dkg_keypair) = wallet::defaults::validator_keys();
     let validator = Validator {
         pos_data: GenesisValidator {
             address,
-            staking_reward_address,
             tokens: token::Amount::whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
-            staking_reward_key: staking_reward_keypair.ref_to(),
             commission_rate: dec!(0.05),
             max_commission_rate_change: dec!(0.01),
         },
@@ -917,7 +895,6 @@ pub mod tests {
     #[test]
     fn gen_genesis_validator() {
         let address = gen_established_address();
-        let staking_reward_address = gen_established_address();
         let mut rng: ThreadRng = thread_rng();
         let keypair: common::SecretKey =
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
@@ -928,7 +905,6 @@ pub mod tests {
         let (protocol_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
         println!("address: {}", address);
-        println!("staking_reward_address: {}", staking_reward_address);
         println!("keypair: {:?}", kp_arr);
         println!("staking_reward_keypair: {:?}", srkp_arr);
         println!("protocol_keypair: {:?}", protocol_keypair);

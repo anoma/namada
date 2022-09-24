@@ -71,7 +71,6 @@
 //!       address in Tendermint)
 //!     - `#{PoS}/validator_set`
 //!     - `#{PoS}/validator/#{validator}/consensus_key`
-//!     - `#{PoS}/validator/#{validator}/staking_reward_address`
 //!     - `#{PoS}/validator/#{validator}/state`
 //!     - `#{PoS}/validator/#{validator}/total_deltas`
 //!     - `#{PoS}/validator/#{validator}/voting_power`
@@ -121,10 +120,7 @@ pub fn init_pos(
         // addresses exist
         tx_env.spawn_accounts([&staking_token_address()]);
         for validator in genesis_validators {
-            tx_env.spawn_accounts([
-                &validator.address,
-                &validator.staking_reward_address,
-            ]);
+            tx_env.spawn_accounts([&validator.address]);
         }
         tx_env.storage.block.epoch = start_epoch;
         // Initialize PoS storage
@@ -596,7 +592,6 @@ pub mod testing {
     #[derive(Clone, Debug, Default)]
     pub struct TestValidator {
         pub address: Option<Address>,
-        pub staking_reward_address: Option<Address>,
         pub stake: Option<token::Amount>,
         /// Balance is a pair of token address and its amount
         pub unstaked_balances: Vec<(Address, token::Amount)>,
@@ -677,10 +672,6 @@ pub mod testing {
             validator: Address,
             #[derivative(Debug = "ignore")]
             pk: PublicKey,
-        },
-        ValidatorStakingRewardsAddress {
-            validator: Address,
-            address: Address,
         },
         ValidatorDeltas {
             validator: Address,
@@ -885,10 +876,6 @@ pub mod testing {
                         PosStorageChange::ValidatorConsensusKey {
                             validator: address.clone(),
                             pk: consensus_key,
-                        },
-                        PosStorageChange::ValidatorStakingRewardsAddress {
-                            validator: address.clone(),
-                            address: address::testing::established_address_1(),
                         },
                         PosStorageChange::ValidatorState {
                             validator: address.clone(),
@@ -1257,14 +1244,6 @@ pub mod testing {
                     });
                 tx::ctx()
                     .write_validator_consensus_key(&validator, consensus_key)
-                    .unwrap();
-            }
-            PosStorageChange::ValidatorStakingRewardsAddress {
-                validator,
-                address,
-            } => {
-                tx::ctx()
-                    .write_validator_staking_reward_address(&validator, address)
                     .unwrap();
             }
             PosStorageChange::ValidatorDeltas {

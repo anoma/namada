@@ -188,10 +188,6 @@ pub struct InitValidator {
     pub account_key: common::PublicKey,
     /// A key to be used for signing blocks and votes on blocks.
     pub consensus_key: common::PublicKey,
-    /// Public key to be written into the staking reward account's storage.
-    /// This can be used for signature verification of transactions for the
-    /// newly created account.
-    pub rewards_account_key: common::PublicKey,
     /// Public key used to sign protocol transactions
     pub protocol_key: common::PublicKey,
     /// Serialization of the public session key used in the DKG

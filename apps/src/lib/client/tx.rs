@@ -164,7 +164,6 @@ pub async fn submit_init_validator(
         scheme,
         account_key,
         consensus_key,
-        rewards_account_key,
         protocol_key,
         commission_rate,
         max_commission_rate_change,
@@ -215,18 +214,6 @@ pub async fn submit_init_validator(
                 .1
         });
 
-    let rewards_account_key =
-        ctx.get_opt_cached(&rewards_account_key).unwrap_or_else(|| {
-            println!("Generating staking reward account key...");
-            ctx.wallet
-                .gen_key(
-                    scheme,
-                    Some(rewards_key_alias.clone()),
-                    unsafe_dont_encrypt,
-                )
-                .1
-                .ref_to()
-        });
     let protocol_key = ctx.get_opt_cached(&protocol_key);
 
     if protocol_key.is_none() {
@@ -284,7 +271,6 @@ pub async fn submit_init_validator(
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
-        rewards_account_key,
         protocol_key,
         dkg_key,
         commission_rate,
