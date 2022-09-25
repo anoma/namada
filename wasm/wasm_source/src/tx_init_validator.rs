@@ -16,10 +16,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     // Register the validator in PoS
     match ctx.init_validator(init_validator) {
         Ok((validator_address)) => {
-            debug_log!(
-                "Created validator {}",
-                validator_address.encode(),
-            )
+            debug_log!("Created validator {}", validator_address.encode(),)
         }
         Err(err) => {
             debug_log!("Validator creation failed with: {}", err);

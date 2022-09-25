@@ -264,7 +264,7 @@ pub trait PosActions: PosReadOnly {
         consensus_key: &Self::PublicKey,
         current_epoch: impl Into<Epoch>,
         commission_rate: Decimal,
-        max_commission_rate_change: Decimal
+        max_commission_rate_change: Decimal,
     ) -> Result<(), Self::BecomeValidatorError> {
         let current_epoch = current_epoch.into();
         let params = self.read_pos_params()?;
@@ -278,7 +278,7 @@ pub trait PosActions: PosReadOnly {
             state,
             deltas,
             commission_rate,
-            max_commission_rate_change
+            max_commission_rate_change,
         } = become_validator(
             &params,
             address,
@@ -286,7 +286,7 @@ pub trait PosActions: PosReadOnly {
             &mut validator_set,
             current_epoch,
             commission_rate,
-            max_commission_rate_change
+            max_commission_rate_change,
         );
 
         self.write_validator_consensus_key(address, consensus_key)?;
@@ -595,13 +595,24 @@ pub trait PosBase {
         key: &Self::Address,
     ) -> Decimal;
     /// Read PoS validator's reward products
-    fn read_validator_rewards_products(&self, key: &Self::Address) -> RewardsProducts;
+    fn read_validator_rewards_products(
+        &self,
+        key: &Self::Address,
+    ) -> RewardsProducts;
     /// Read PoS validator's delegation reward products
-    fn read_validator_delegation_rewards_products(&self, key: &Self::Address) -> RewardsProducts;
+    fn read_validator_delegation_rewards_products(
+        &self,
+        key: &Self::Address,
+    ) -> RewardsProducts;
     /// Read PoS validator's last known epoch with rewards products
-    fn read_validator_last_known_product_epoch(&self, key: &Self::Address) -> Epoch;
+    fn read_validator_last_known_product_epoch(
+        &self,
+        key: &Self::Address,
+    ) -> Epoch;
     /// Read PoS consensus validator's rewards accumulator
-    fn read_consensus_validator_rewards_accumulator(&self) -> Option<std::collections::HashMap<Self::Address, Decimal>>;
+    fn read_consensus_validator_rewards_accumulator(
+        &self,
+    ) -> Option<std::collections::HashMap<Self::Address, Decimal>>;
     /// Read PoS validator set (active and inactive).
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total deltas of all validators (active and inactive).
@@ -897,7 +908,6 @@ pub trait PosBase {
         proposer_address: &Self::Address,
         votes: &Vec<VoteInfo>,
     ) -> Result<(), Error> {
-
         let current_epoch: Epoch = current_epoch.into();
         let validator_set = self.read_validator_set();
         let validators = validator_set.get(current_epoch).unwrap();
@@ -916,7 +926,8 @@ pub trait PosBase {
         let mut signer_set: HashSet<Self::Address> = HashSet::new();
         let mut total_signing_stake: u64 = 0;
 
-        // Get set of signing validator addresses and the combined stake of these signers
+        // Get set of signing validator addresses and the combined stake of
+        // these signers
         for vote in votes.iter() {
             if !vote.signed_last_block {
                 continue;
@@ -945,11 +956,12 @@ pub trait PosBase {
 
         rewards_calculator.set_reward_coeffs().unwrap();
 
-        // Iterate over validators, calculating their fraction of the block rewards accounting for
-        // possible block proposal and signing (voting)
-        let mut validator_accumulators = self.read_consensus_validator_rewards_accumulator().unwrap_or_else(
-            || HashMap::<Self::Address, Decimal>::new()
-        );
+        // Iterate over validators, calculating their fraction of the block
+        // rewards accounting for possible block proposal and signing
+        // (voting)
+        let mut validator_accumulators = self
+            .read_consensus_validator_rewards_accumulator()
+            .unwrap_or_else(|| HashMap::<Self::Address, Decimal>::new());
         for validator in validators.active.iter() {
             let mut rewards_frac: Decimal = Decimal::default();
             let stake: Decimal = validator.bonded_stake.into();
@@ -973,12 +985,17 @@ pub trait PosBase {
             let active_val_frac = stake / active_val_stake;
             rewards_frac += active_val_coeff * active_val_frac;
 
-            let prev_val = *validator_accumulators.get(&validator.address).unwrap_or(&Decimal::ZERO);
-            validator_accumulators.insert(validator.address.clone(), prev_val + rewards_frac);
+            let prev_val = *validator_accumulators
+                .get(&validator.address)
+                .unwrap_or(&Decimal::ZERO);
+            validator_accumulators
+                .insert(validator.address.clone(), prev_val + rewards_frac);
         }
 
         // Write the updated map fo reward accumulators back to storage
-        self.write_consensus_validator_rewards_accumulator(&validator_accumulators);
+        self.write_consensus_validator_rewards_accumulator(
+            &validator_accumulators,
+        );
         Ok(())
     }
 
@@ -1514,7 +1531,7 @@ where
         state,
         deltas,
         commission_rate,
-        max_commission_rate_change
+        max_commission_rate_change,
     }
 }
 

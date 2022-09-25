@@ -664,10 +664,7 @@ where
                         bonded_stake,
                     } = &new_validator;
                     // The new validator must have set all the required fields
-                    if !(*has_state
-                        && *has_total_deltas
-                        && *has_bonded_stake)
-                    {
+                    if !(*has_state && *has_total_deltas && *has_bonded_stake) {
                         errors.push(Error::InvalidNewValidator(
                             address.clone(),
                             new_validator.clone(),
