@@ -1,0 +1,1 @@
+- Fix the rustdoc build. ([#419](https://github.com/anoma/namada/issues/419))
