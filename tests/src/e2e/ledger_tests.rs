@@ -1456,10 +1456,12 @@ fn proposal_offline() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
+    let proposal_path = test.test_dir.path().join("proposal");
+
     let submit_proposal_vote = vec![
         "vote-proposal",
         "--data-path",
-        valid_proposal_json_path.to_str().unwrap(),,
+        proposal_path.to_str().unwrap(),
         "--vote",
         "yay",
         "--signer",
