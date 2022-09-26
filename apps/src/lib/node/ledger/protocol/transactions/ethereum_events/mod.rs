@@ -176,13 +176,20 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let (eth_msg_post, changed) = if !exists_in_storage {
-        calculate_new_eth_msg(update, voting_powers)?
+    let (eth_msg_post, changed, confirmed) = if !exists_in_storage {
+        let (eth_msg_post, changed) =
+            calculate_new_eth_msg(update, voting_powers)?;
+        let confirmed = eth_msg_post.seen;
+        (eth_msg_post, changed, confirmed)
     } else {
-        calculate_updated_eth_msg(storage, update, voting_powers)?
+        let (eth_msg_post, changed) =
+            calculate_updated_eth_msg(storage, update, voting_powers)?;
+        let confirmed =
+            eth_msg_post.seen && changed.contains(&eth_msg_keys.seen());
+        (eth_msg_post, changed, confirmed)
     };
     write_eth_msg(storage, &eth_msg_keys, &eth_msg_post)?;
-    Ok((changed, !exists_in_storage))
+    Ok((changed, confirmed))
 }
 
 fn calculate_new_eth_msg(
@@ -475,6 +482,57 @@ mod tests {
         assert!(tx_result.vps_result.errors.is_empty());
         assert!(tx_result.initialized_accounts.is_empty());
         assert!(tx_result.ibc_event.is_none());
+    }
+
+    /// Test calling apply_derived_tx for an event that isn't backed by enough
+    /// voting power to be acted on immediately
+    #[test]
+    fn test_apply_derived_tx_record_event_dont_mint() {
+        let validator_a = address::testing::established_address_2();
+        let validator_b = address::testing::established_address_3();
+        let mut storage = set_up_test_storage(HashSet::from_iter(vec![
+            validator_a.clone(),
+            validator_b.clone(),
+        ]));
+        let receiver = address::testing::established_address_1();
+
+        let original_event = EthereumEvent::TransfersToNamada {
+            nonce: 1.into(),
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver: receiver.clone(),
+            }],
+        };
+
+        let result = apply_derived_tx(
+            &mut storage,
+            vec![MultiSignedEthEvent {
+                event: original_event.clone(),
+                signers: HashSet::from_iter(vec![(
+                    validator_a,
+                    BlockHeight(100),
+                )]),
+            }],
+        );
+        let tx_result = match result {
+            Ok(tx_result) => tx_result,
+            Err(err) => panic!("unexpected error: {:#?}", err),
+        };
+
+        let eth_msg_keys = Keys::from(&original_event);
+        assert_eq!(
+            tx_result.changed_keys,
+            BTreeSet::from_iter(vec![
+                eth_msg_keys.body(),
+                eth_msg_keys.seen(),
+                eth_msg_keys.seen_by(),
+                eth_msg_keys.voting_power(),
+            ]),
+            "The Ethereum event should have been recorded, but no minting \
+             should have happened yet as it has only been seen by 1/2 the \
+             voting power so far"
+        );
     }
 
     /// Test calling apply_derived_tx for an event that isn't backed by enough
