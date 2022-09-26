@@ -10,6 +10,7 @@ pub mod hash;
 pub mod ibc;
 pub mod intent;
 pub mod internal;
+pub mod keccak;
 pub mod key;
 pub mod matchmaker;
 pub mod nft;
