@@ -8,7 +8,8 @@ use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
-/// Gets all the voters from the given events.
+/// Extract all the voters and the block heights at which they voted from the
+/// given events.
 pub(super) fn get_votes_for_events<'a>(
     events: impl Iterator<Item = &'a MultiSignedEthEvent>,
 ) -> HashSet<(Address, BlockHeight)> {
@@ -98,7 +99,9 @@ mod tests {
 
     use assert_matches::assert_matches;
     use namada::types::address;
-    use namada::types::ethereum_events::testing::arbitrary_voting_power;
+    use namada::types::ethereum_events::testing::{
+        arbitrary_single_transfer, arbitrary_voting_power,
+    };
 
     use super::*;
 
@@ -239,5 +242,63 @@ mod tests {
         let total = sum_voting_powers(&validators);
 
         assert_eq!(total, VotingPower::from(300));
+    }
+
+    #[test]
+    /// Assert we don't return anything if we try to get the votes for an empty
+    /// vec of events
+    pub fn test_get_votes_for_events_empty() {
+        let events = vec![];
+        let votes = get_votes_for_events(events.iter());
+        assert!(votes.is_empty());
+    }
+
+    #[test]
+    /// Test that we correctly get the votes from a vec of events
+    pub fn test_get_votes_for_events() {
+        let events = vec![
+            MultiSignedEthEvent {
+                event: arbitrary_single_transfer(
+                    1.into(),
+                    address::testing::established_address_1(),
+                ),
+                signers: HashSet::from_iter(vec![
+                    (
+                        address::testing::established_address_1(),
+                        BlockHeight(100),
+                    ),
+                    (
+                        address::testing::established_address_2(),
+                        BlockHeight(102),
+                    ),
+                ]),
+            },
+            MultiSignedEthEvent {
+                event: arbitrary_single_transfer(
+                    2.into(),
+                    address::testing::established_address_2(),
+                ),
+                signers: HashSet::from_iter(vec![
+                    (
+                        address::testing::established_address_1(),
+                        BlockHeight(101),
+                    ),
+                    (
+                        address::testing::established_address_3(),
+                        BlockHeight(100),
+                    ),
+                ]),
+            },
+        ];
+        let votes = get_votes_for_events(events.iter());
+        assert_eq!(
+            votes,
+            HashSet::from_iter(vec![
+                (address::testing::established_address_1(), BlockHeight(100)),
+                (address::testing::established_address_1(), BlockHeight(101)),
+                (address::testing::established_address_2(), BlockHeight(102)),
+                (address::testing::established_address_3(), BlockHeight(100))
+            ])
+        )
     }
 }
