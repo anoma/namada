@@ -1,6 +1,6 @@
-//! This module is for hashing Anoma types using the keccak
+//! This module is for hashing Namada types using the keccak256
 //! hash function in a way that is compatible with smart contracts
-//! on Ethereum
+//! on Ethereum.
 use std::convert::TryFrom;
 use std::fmt::Display;
 
@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::types::hash::{Hash, HASH_LENGTH};
 
-#[allow(missing_docs)]
+/// Errors for converting / parsing Keccak hashes
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("TEMPORARY error: {error}")]
@@ -21,7 +21,7 @@ pub enum Error {
     FromStringError(hex::FromHexError),
 }
 
-/// A Keccak hash
+/// Represents a Keccak hash.
 #[derive(
     Clone,
     Debug,
@@ -43,8 +43,6 @@ impl Display for KeccakHash {
         Ok(())
     }
 }
-
-
 impl From<KeccakHash> for Hash {
     fn from(hash: KeccakHash) -> Self {
         Hash(hash.0)
@@ -213,7 +211,8 @@ pub mod encode {
         #[test]
         fn test_hex_roundtrip() {
             let original = "1C8AFF950685C2ED4BC3174F3472287B56D9517B9C948127319A09A7A36DEAC8";
-            let keccak_hash: KeccakHash = original.try_into().expect("Test failed");
+            let keccak_hash: KeccakHash =
+                original.try_into().expect("Test failed");
             assert_eq!(keccak_hash.to_string().as_str(), original);
         }
     }
