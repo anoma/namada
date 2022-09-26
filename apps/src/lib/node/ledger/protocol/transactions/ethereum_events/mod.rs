@@ -297,7 +297,9 @@ mod tests {
     use namada::ledger::pos::namada_proof_of_stake::epoched::Epoched;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::types::ValidatorSet;
+    use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::testing::TestStorage;
+    use namada::ledger::storage::Sha256Hasher;
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
@@ -394,21 +396,29 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    /// Test applying a single transfer via `apply_derived_tx`
-    fn test_apply_derived_tx() {
+    /// Set up a `TestStorage` initialized at genesis with a single validator
+    fn set_up_test_storage(
+        sole_validator: Address,
+    ) -> Storage<MockDB, Sha256Hasher> {
         let mut storage = TestStorage::default();
-        let sole_validator = address::testing::established_address_2();
-        let receiver = address::testing::established_address_1();
         let validator_set = ValidatorSet {
             active: BTreeSet::from_iter(vec![WeightedValidator {
                 voting_power: 100.into(),
-                address: sole_validator.to_owned(),
+                address: sole_validator,
             }]),
             inactive: BTreeSet::default(),
         };
         let validator_sets = Epoched::init_at_genesis(validator_set, 1);
         storage.write_validator_set(&validator_sets);
+        storage
+    }
+
+    #[test]
+    /// Test applying a single transfer via `apply_derived_tx`
+    fn test_apply_derived_tx() {
+        let sole_validator = address::testing::established_address_2();
+        let mut storage = set_up_test_storage(sole_validator.clone());
+        let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
