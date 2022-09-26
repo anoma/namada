@@ -19,17 +19,18 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    /// Validates a validator set update vote extension issued for the new
-    /// epoch provided as an argument
+    /// Validates a validator set update vote extension issued for the
+    /// succeeding epoch of the block height provided as an argument.
     ///
     /// Checks that:
-    ///  * The signing validator was active at the preceding epoch
-    ///  * The validator correctly signed the extension
-    ///  * The validator signed over the block height inside of the extension
+    ///  * The signing validator was active at the preceding epoch.
+    ///  * The validator correctly signed the extension, with its Ethereum hot
+    ///    key.
+    ///  * The validator signed over the block height inside of the extension.
     ///  * The voting powers in the vote extension correspond to the voting
-    ///    powers of the validators of the new epoch
+    ///    powers of the validators of the new epoch.
     ///  * The voting powers are normalized to `2^32`, and sorted in descending
-    ///    order
+    ///    order.
     #[inline]
     #[allow(dead_code)]
     pub fn validate_valset_upd_vext(

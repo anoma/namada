@@ -156,6 +156,9 @@ where
     /// and returns another iterator. The latter yields
     /// valid Ethereum events vote extensions, or the reason why these
     /// are invalid, in the form of a [`VoteExtensionError`].
+    ///
+    /// If `abciplus` is enabled, we check if a validator has not voted more
+    /// than once for some Ethereum event, at different block heights.
     #[inline]
     pub fn validate_eth_events_vext_list<'iter>(
         &'iter self,
