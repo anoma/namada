@@ -1,6 +1,6 @@
-//! This module is for hashing Anoma types using the keccak
+//! This module is for hashing Namada types using the keccak256
 //! hash function in a way that is compatible with smart contracts
-//! on Ethereum
+//! on Ethereum.
 use std::convert::TryFrom;
 use std::fmt::Display;
 
