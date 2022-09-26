@@ -396,16 +396,20 @@ mod tests {
         Ok(())
     }
 
-    /// Set up a `TestStorage` initialized at genesis with a single validator
+    /// Set up a `TestStorage` initialized at genesis with validators of equal
+    /// power
     fn set_up_test_storage(
-        sole_validator: Address,
+        active_validators: HashSet<Address>,
     ) -> Storage<MockDB, Sha256Hasher> {
         let mut storage = TestStorage::default();
         let validator_set = ValidatorSet {
-            active: BTreeSet::from_iter(vec![WeightedValidator {
-                voting_power: 100.into(),
-                address: sole_validator,
-            }]),
+            active: active_validators
+                .into_iter()
+                .map(|address| WeightedValidator {
+                    voting_power: 100.into(),
+                    address,
+                })
+                .collect(),
             inactive: BTreeSet::default(),
         };
         let validator_sets = Epoched::init_at_genesis(validator_set, 1);
@@ -417,7 +421,9 @@ mod tests {
     /// Test applying a single transfer via `apply_derived_tx`
     fn test_apply_derived_tx() {
         let sole_validator = address::testing::established_address_2();
-        let mut storage = set_up_test_storage(sole_validator.clone());
+        let mut storage = set_up_test_storage(HashSet::from_iter(vec![
+            sole_validator.clone(),
+        ]));
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
