@@ -230,6 +230,27 @@ where
         let mut event_observers = BTreeMap::new();
         let mut signatures = HashMap::new();
 
+        // we sort these extensions such that we keep exts with lower block
+        // heights when we find repeated events across different block heights
+        // contained within them
+        #[cfg(not(feature = "abcipp"))]
+        let vote_extensions = {
+            use std::cmp::Ordering;
+            let mut vote_extensions = vote_extensions;
+            vote_extensions.sort_by(|ext_1, ext_2| {
+                let ord =
+                    ext_1.data.validator_addr.cmp(&ext_2.data.validator_addr);
+                if let Ordering::Equal = ord {
+                    return ext_1
+                        .data
+                        .block_height
+                        .cmp(&ext_2.data.block_height);
+                }
+                ord
+            });
+            vote_extensions
+        };
+
         for (_validator_voting_power, vote_extension) in
             self.filter_invalid_eth_events_vexts(vote_extensions)
         {
