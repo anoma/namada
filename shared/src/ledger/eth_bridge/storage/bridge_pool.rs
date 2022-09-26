@@ -9,7 +9,8 @@ use eyre::eyre;
 
 use crate::types::address::{Address, InternalAddress};
 use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereum};
-use crate::types::ethereum_events::KeccakHash;
+use crate::types::keccak::{keccak_hash, KeccakHash};
+use crate::types::keccak::encode::Encode;
 use crate::types::hash::{Hash, keccak_hash};
 use crate::types::storage::{DbKeySeg, Key};
 use crate::ledger::storage::{Sha256Hasher, StorageHasher};
@@ -66,10 +67,9 @@ pub struct BridgePoolTree {
     /// Root of the tree
     root: KeccakHash,
     /// The underlying storage
-    store: BTreeMap<KeccakHash, PendingTransfer>
+    store: BTreeMap<KeccakHash, PendingTransfer>,
 }
 
-/// TODO: Hash ABI instead of Borsh
 impl BridgePoolTree {
     /// Create a new merkle tree for the Ethereum bridge pool
     pub fn new(root: KeccakHash, store: BTreeMap<KeccahkHash, PendingTransfer>) -> Self {
@@ -90,7 +90,7 @@ impl BridgePoolTree {
     /// return an error if the key is malformed.
     pub fn update(&mut self, key: &Key, value: PendingTransfer) -> Result<Hash, Error> {
         let hash = Self::parse_key(key)?;
-        if hash != keccak_hash(&value.try_to_vec().unwrap()) {
+        if hash != value.keccak256() {
             return eyre!("Key does not match hash of the value")?;
         }
         _ = self.store.insert(hash, value);
@@ -131,9 +131,28 @@ impl BridgePoolTree {
         &self.store
     }
 
+    /// Create a batched membership proof for the provided keys
     pub fn membership_proof(&self, keys: &[Key]) -> BridgePoolProof {
-        for (key, value) in self.store {
-
+        let mut leaves : std::collections::BTreeSet<KeccakHash> = Default::default();
+        for key in keys {
+            leaves.insert(Self::parse_key(key)?);
+        }
+        let mut proof_leaves = vec![];
+        let mut proof_hashes = vec![];
+        let mut flags = vec![];
+        for (hash, value) in self.store {
+            if leaves.contains(&hash) {
+                flags.push(true);
+                proof_leaves.push(value);
+            } else {
+                flags.push(false);
+                proof_hashes.push(hash);
+            }
+        }
+        BridgePoolProof {
+            proof: proof_hashes,
+            leaves: proof_leaves,
+            flags
         }
     }
 
@@ -180,8 +199,7 @@ impl BridgePoolProof {
         let mut proof_pos = 0usize;
         let mut computed;
         if self.flags[0] {
-            leaf = self.leaves[leaf_pos].clone();
-            computed = keccak_hash(leaf.try_to_vec().unwrap());
+            computed = self.leaves[leaf_pos].keccak256();
             leaf_pos += 1;
         } else {
             computed = self.proof[proof_pos].clone();
@@ -190,8 +208,7 @@ impl BridgePoolProof {
         for flag in 1..self.flages.len() {
             let mut next_hash;
             if self.flags[flag] {
-                leaf = self.leaves[leaf_pos].clone();
-                next_hash = keccak_hash(leaf.try_to_vec().unwrap());
+                next_hash = self.leaves[leaf_pos].keccak256();
                 leaf_pos += 1;
             } else {
                 next_hash = self.proof[proof_pos].clone();
