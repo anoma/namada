@@ -261,7 +261,7 @@ where
             // update voting power
             #[cfg(feature = "abcipp")]
             {
-                let validator_voting_power = u64::from(validator_voting_power);
+                let validator_voting_power = u64::from(_validator_voting_power);
                 voting_power += FractionalVotingPower::new(
                     validator_voting_power,
                     total_voting_power,
