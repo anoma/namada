@@ -35,7 +35,9 @@ use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::query::{EventType, Query};
-use crate::facade::tendermint_rpc::{Client, HttpClient, WebSocketClient};
+use crate::facade::tendermint_rpc::{
+    Client, HttpClient, SubscriptionClient, WebSocketClient,
+};
 use crate::node::ledger::events::EventType as NamadaEventType;
 use crate::node::ledger::tendermint_node;
 
@@ -1138,16 +1140,18 @@ pub async fn broadcast_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    let _websocket_timeout =
-        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
-            if let Ok(timeout) = val.parse::<u64>() {
-                Duration::new(timeout, 0)
-            } else {
-                Duration::new(300, 0)
-            }
-        } else {
-            Duration::new(300, 0)
-        };
+    // ```
+    // let websocket_timeout =
+    //     if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
+    //         if let Ok(timeout) = val.parse::<u64>() {
+    //             Duration::new(timeout, 0)
+    //         } else {
+    //             Duration::new(300, 0)
+    //         }
+    //     } else {
+    //         Duration::new(300, 0)
+    //     };
+    // ```
 
     let wrapper_tx_cli = HttpClient::new(address)?;
 
@@ -1192,42 +1196,45 @@ pub async fn submit_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    let websocket_timeout =
-        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
-            if let Ok(timeout) = val.parse::<u64>() {
-                Duration::new(timeout, 0)
-            } else {
-                Duration::new(300, 0)
-            }
-        } else {
-            Duration::new(300, 0)
-        };
+    // ```
+    // let websocket_timeout =
+    //     if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
+    //         if let Ok(timeout) = val.parse::<u64>() {
+    //             Duration::new(timeout, 0)
+    //         } else {
+    //             Duration::new(300, 0)
+    //         }
+    //     } else {
+    //         Duration::new(300, 0)
+    //     };
+    // ```
     tracing::debug!("Tenderming address: {:?}", address);
-    let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
-        WebSocketAddress::try_from(address.clone())?,
-        Some(websocket_timeout),
-    )?;
+    let (wrapper_tx_cli, driver) =
+        WebSocketClient::new(address.clone()).await?;
+    tokio::spawn(async move {
+        let _ = driver.run().await;
+    });
 
     // It is better to subscribe to the transaction before it is broadcast
     //
     // Note that the `APPLIED_QUERY_KEY` key comes from a custom event
     // created by the shell
-    let query = Query::from(EventType::NewBlock)
+    let wrapper_query = Query::from(EventType::NewBlock)
         .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
-    wrapper_tx_subscription.subscribe(query)?;
+    let mut wrapper_tx_subscription =
+        wrapper_tx_cli.subscribe(wrapper_query.clone()).await?;
 
     // We also subscribe to the event emitted when the encrypted
     // payload makes its way onto the blockchain
-    let mut decrypted_tx_subscription = {
-        let mut decrypted_tx_subscription = TendermintWebsocketClient::open(
-            WebSocketAddress::try_from(address.clone())?,
-            Some(websocket_timeout),
-        )?;
-        let query = Query::from(EventType::NewBlock)
-            .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
-        decrypted_tx_subscription.subscribe(query)?;
-        decrypted_tx_subscription
-    };
+    let (decrypted_tx_cli, driver) =
+        WebSocketClient::new(address.clone()).await?;
+    tokio::spawn(async move {
+        let _ = driver.run().await;
+    });
+    let decrypted_query = Query::from(EventType::NewBlock)
+        .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
+    let mut decrypted_tx_subscription =
+        decrypted_tx_cli.subscribe(decrypted_query.clone()).await?;
 
     // Broadcast the supplied transaction
     broadcast_tx(address, &to_broadcast).await?;
