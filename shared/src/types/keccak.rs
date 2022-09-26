@@ -21,7 +21,7 @@ pub enum Error {
     FromStringError(hex::FromHexError),
 }
 
-/// A Keccak hash
+/// Represents a Keccak hash.
 #[derive(
     Clone,
     Debug,
