@@ -492,7 +492,7 @@ mod tests {
         let validator_b = address::testing::established_address_3();
         let mut storage = set_up_test_storage(HashSet::from_iter(vec![
             validator_a.clone(),
-            validator_b.clone(),
+            validator_b,
         ]));
         let receiver = address::testing::established_address_1();
 
@@ -501,7 +501,7 @@ mod tests {
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
-                receiver: receiver.clone(),
+                receiver,
             }],
         };
 
