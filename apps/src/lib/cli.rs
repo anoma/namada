@@ -42,8 +42,6 @@ pub mod cmds {
 
         // Inlined commands from the node.
         Ledger(Ledger),
-        Gossip(Gossip),
-        Matchmaker(Matchmaker),
 
         // Inlined commands from the client.
         TxCustom(TxCustom),
@@ -53,7 +51,6 @@ pub mod cmds {
         TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
-        Intent(Intent),
     }
 
     impl Cmd for Anoma {
@@ -62,8 +59,6 @@ pub mod cmds {
                 .subcommand(AnomaClient::def())
                 .subcommand(AnomaWallet::def())
                 .subcommand(Ledger::def())
-                .subcommand(Gossip::def())
-                .subcommand(Matchmaker::def())
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxUpdateVp::def())
@@ -71,7 +66,6 @@ pub mod cmds {
                 .subcommand(TxMintNft::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
-                .subcommand(Intent::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -79,8 +73,6 @@ pub mod cmds {
             let client = SubCmd::parse(matches).map(Self::Client);
             let wallet = SubCmd::parse(matches).map(Self::Wallet);
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
-            let gossip = SubCmd::parse(matches).map(Self::Gossip);
-            let matchmaker = SubCmd::parse(matches).map(Self::Matchmaker);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
             let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
@@ -90,12 +82,9 @@ pub mod cmds {
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
                 SubCmd::parse(matches).map(Self::TxVoteProposal);
-            let intent = SubCmd::parse(matches).map(Self::Intent);
             node.or(client)
                 .or(wallet)
                 .or(ledger)
-                .or(gossip)
-                .or(matchmaker)
                 .or(tx_custom)
                 .or(tx_transfer)
                 .or(tx_update_vp)
@@ -103,7 +92,6 @@ pub mod cmds {
                 .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
-                .or(intent)
         }
     }
 
@@ -113,25 +101,18 @@ pub mod cmds {
     #[allow(clippy::large_enum_variant)]
     pub enum AnomaNode {
         Ledger(Ledger),
-        Gossip(Gossip),
-        Matchmaker(Matchmaker),
         Config(Config),
     }
 
     impl Cmd for AnomaNode {
         fn add_sub(app: App) -> App {
-            app.subcommand(Ledger::def())
-                .subcommand(Gossip::def())
-                .subcommand(Matchmaker::def())
-                .subcommand(Config::def())
+            app.subcommand(Ledger::def()).subcommand(Config::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
-            let gossip = SubCmd::parse(matches).map(Self::Gossip);
-            let matchmaker = SubCmd::parse(matches).map(Self::Matchmaker);
             let config = SubCmd::parse(matches).map(Self::Config);
-            ledger.or(gossip).or(matchmaker).or(config)
+            ledger.or(config)
         }
     }
     impl SubCmd for AnomaNode {
@@ -195,9 +176,6 @@ pub mod cmds {
                 .subcommand(QueryProposal::def().display_order(3))
                 .subcommand(QueryProposalResult::def().display_order(3))
                 .subcommand(QueryProtocolParameters::def().display_order(3))
-                // Intents
-                .subcommand(Intent::def().display_order(4))
-                .subcommand(SubscribeTopic::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -232,8 +210,6 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
-            let intent = Self::parse_with_ctx(matches, Intent);
-            let subscribe_topic = Self::parse_with_ctx(matches, SubscribeTopic);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -257,8 +233,6 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
-                .or(intent)
-                .or(subscribe_topic)
                 .or(utils)
         }
     }
@@ -317,9 +291,6 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
-        // Gossip cmds
-        Intent(Intent),
-        SubscribeTopic(SubscribeTopic),
     }
 
     #[derive(Clone, Debug)]
@@ -657,76 +628,6 @@ pub mod cmds {
                 "Delete Anoma ledger node's and Tendermint node's storage \
                  data.",
             )
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub enum Gossip {
-        Run(GossipRun),
-    }
-
-    impl SubCmd for Gossip {
-        const CMD: &'static str = "gossip";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let run = SubCmd::parse(matches).map(Gossip::Run);
-                run
-                    // The `run` command is the default if no sub-command given
-                    .or_else(|| {
-                        Some(Gossip::Run(GossipRun(args::GossipRun::parse(
-                            matches,
-                        ))))
-                    })
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Gossip node sub-commands. If no sub-command specified, \
-                     defaults to run the node.",
-                )
-                .subcommand(GossipRun::def())
-                .add_args::<args::GossipRun>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct Matchmaker(pub args::Matchmaker);
-
-    impl SubCmd for Matchmaker {
-        const CMD: &'static str = "matchmaker";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Matchmaker(args::Matchmaker::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Run a matchmaker.")
-                .add_args::<args::Matchmaker>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct GossipRun(pub args::GossipRun);
-
-    impl SubCmd for GossipRun {
-        const CMD: &'static str = "run";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| GossipRun(args::GossipRun::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Run a gossip node.")
-                .add_args::<args::GossipRun>()
         }
     }
 
@@ -1222,47 +1123,6 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct Intent(pub args::Intent);
-
-    impl SubCmd for Intent {
-        const CMD: &'static str = "intent";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Intent(args::Intent::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Send an intent.")
-                .add_args::<args::Intent>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct SubscribeTopic(pub args::SubscribeTopic);
-
-    impl SubCmd for SubscribeTopic {
-        const CMD: &'static str = "subscribe-topic";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                SubscribeTopic(args::SubscribeTopic::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Subscribe intent gossip node with a matchmaker to a \
-                     topic.",
-                )
-                .add_args::<args::SubscribeTopic>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
         FetchWasms(FetchWasms),
@@ -1383,23 +1243,18 @@ pub mod cmds {
 
 pub mod args {
 
-    use std::convert::TryFrom;
     use std::env;
-    use std::fs::File;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use libp2p::Multiaddr;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::governance::ProposalVote;
-    use namada::types::intent::{DecimalWrapper, Exchange};
     use namada::types::key::*;
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
     use namada::types::transaction::GasLimit;
-    use serde::Deserialize;
     use tendermint::Timeout;
     use tendermint_config::net::Address as TendermintAddress;
 
@@ -1448,13 +1303,6 @@ pub mod args {
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
-    const INTENT_GOSSIPER_ADDR: ArgDefault<SocketAddr> = arg_default(
-        "intent-gossiper",
-        DefaultFn(|| {
-            let raw = "127.0.0.1:26661";
-            SocketAddr::from_str(raw).unwrap()
-        }),
-    );
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -1466,12 +1314,8 @@ pub mod args {
 
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
-    const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MODE: ArgOpt<String> = arg_opt("mode");
-    const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
-    const NODE_OPT: ArgOpt<String> = arg_opt("node");
-    const NODE: Arg<String> = arg("node");
     const NFT_ADDRESS: Arg<Address> = arg("nft-address");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
     const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
@@ -1486,7 +1330,6 @@ pub mod args {
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
     const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
-    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
@@ -1497,12 +1340,8 @@ pub mod args {
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     const TARGET: Arg<WalletAddress> = arg("target");
-    const TO_STDOUT: ArgFlag = flag("stdout");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     const TOKEN: Arg<WalletAddress> = arg("token");
-    const TOPIC_OPT: ArgOpt<String> = arg_opt("topic");
-    const TOPIC: Arg<String> = arg("topic");
-    const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
     const TX_HASH: Arg<String> = arg("tx-hash");
     const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
@@ -1554,9 +1393,9 @@ pub mod args {
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
-                     transactions and matchmaker files. This value can also \
-                     be set via `ANOMA_WASM_DIR` environment variable, but \
-                     the argument takes precedence, if specified.",
+                     transactions. This value can also be set via \
+                     `ANOMA_WASM_DIR` environment variable, but the argument \
+                     takes precedence, if specified.",
                 ))
                 .arg(MODE.def().about(
                     "The mode in which to run Anoma. Options are \n\t * \
@@ -2257,67 +2096,6 @@ pub mod args {
         }
     }
 
-    /// Helper struct for generating intents
-    #[derive(Debug, Clone, Deserialize)]
-    pub struct ExchangeDefinition {
-        /// The source address
-        pub addr: String,
-        /// The token to be sold
-        pub token_sell: String,
-        /// The minimum rate
-        pub rate_min: String,
-        /// The maximum amount of token to be sold
-        pub max_sell: String,
-        /// The token to be bought
-        pub token_buy: String,
-        /// The amount of token to be bought
-        pub min_buy: String,
-        /// The path to the wasm vp code
-        pub vp_path: Option<String>,
-    }
-
-    impl TryFrom<ExchangeDefinition> for Exchange {
-        type Error = &'static str;
-
-        fn try_from(
-            value: ExchangeDefinition,
-        ) -> Result<Exchange, Self::Error> {
-            let vp = if let Some(path) = value.vp_path {
-                if let Ok(wasm) = std::fs::read(path.clone()) {
-                    Some(wasm)
-                } else {
-                    eprintln!("File {} was not found.", path);
-                    None
-                }
-            } else {
-                None
-            };
-
-            let addr = Address::decode(value.addr)
-                .expect("Addr should be a valid address");
-            let token_buy = Address::decode(value.token_buy)
-                .expect("Token_buy should be a valid address");
-            let token_sell = Address::decode(value.token_sell)
-                .expect("Token_sell should be a valid address");
-            let min_buy = token::Amount::from_str(&value.min_buy)
-                .expect("Min_buy must be convertible to number");
-            let max_sell = token::Amount::from_str(&value.max_sell)
-                .expect("Max_sell must be convertible to number");
-            let rate_min = DecimalWrapper::from_str(&value.rate_min)
-                .expect("Max_sell must be convertible to decimal.");
-
-            Ok(Exchange {
-                addr,
-                token_sell,
-                rate_min,
-                max_sell,
-                token_buy,
-                min_buy,
-                vp,
-            })
-        }
-    }
-
     /// Query PoS bond(s)
     #[derive(Clone, Debug)]
     pub struct QueryBonds {
@@ -2436,218 +2214,6 @@ pub mod args {
                 .arg(STORAGE_KEY.def().about("Storage key"))
         }
     }
-    /// Intent arguments
-    #[derive(Clone, Debug)]
-    pub struct Intent {
-        /// Gossip node address
-        pub node_addr: Option<String>,
-        /// Intent topic
-        pub topic: Option<String>,
-        /// Source address
-        pub source: Option<WalletAddress>,
-        /// Signing key
-        pub signing_key: Option<WalletKeypair>,
-        /// Exchanges description
-        pub exchanges: Vec<Exchange>,
-        /// The address of the ledger node as host:port
-        pub ledger_address: TendermintAddress,
-        /// Print output to stdout
-        pub to_stdout: bool,
-    }
-
-    impl Args for Intent {
-        fn parse(matches: &ArgMatches) -> Self {
-            let node_addr = NODE_OPT.parse(matches);
-            let data_path = DATA_PATH.parse(matches);
-            let source = SOURCE_OPT.parse(matches);
-            let signing_key = SIGNING_KEY_OPT.parse(matches);
-            let to_stdout = TO_STDOUT.parse(matches);
-            let topic = TOPIC_OPT.parse(matches);
-
-            let file = File::open(&data_path).expect("File must exist.");
-            let exchange_definitions: Vec<ExchangeDefinition> =
-                serde_json::from_reader(file)
-                    .expect("JSON was not well-formatted");
-
-            let exchanges: Vec<Exchange> = exchange_definitions
-                .iter()
-                .map(|item| {
-                    Exchange::try_from(item.clone()).expect(
-                        "Conversion from ExchangeDefinition to Exchange \
-                         should not fail.",
-                    )
-                })
-                .collect();
-            let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
-
-            Self {
-                node_addr,
-                topic,
-                source,
-                signing_key,
-                exchanges,
-                ledger_address,
-                to_stdout,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                NODE_OPT
-                    .def()
-                    .about("The gossip node address.")
-                    .conflicts_with(TO_STDOUT.name),
-            )
-            .arg(DATA_PATH.def().about(
-                "The data of the intent, that contains all value necessary \
-                 for the matchmaker.",
-            ))
-            .arg(
-                SOURCE_OPT
-                    .def()
-                    .about(
-                        "Sign the intent with the key of a given address or \
-                         address alias from your wallet.",
-                    )
-                    .conflicts_with(SIGNING_KEY_OPT.name),
-            )
-            .arg(
-                SIGNING_KEY_OPT
-                    .def()
-                    .about(
-                        "Sign the intent with the key for the given public \
-                         key, public key hash or alias from your wallet.",
-                    )
-                    .conflicts_with(SOURCE_OPT.name),
-            )
-            .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
-            .arg(
-                TOPIC_OPT
-                    .def()
-                    .about("The subnetwork where the intent should be sent to.")
-                    .conflicts_with(TO_STDOUT.name),
-            )
-            .arg(
-                TO_STDOUT
-                    .def()
-                    .about(
-                        "Echo the serialized intent to stdout. Note that with \
-                         this option, the intent won't be submitted to the \
-                         intent gossiper RPC.",
-                    )
-                    .conflicts_with_all(&[NODE_OPT.name, TOPIC.name]),
-            )
-        }
-    }
-
-    /// Subscribe intent topic arguments
-    #[derive(Clone, Debug)]
-    pub struct SubscribeTopic {
-        /// Gossip node address
-        pub node_addr: String,
-        /// Intent topic
-        pub topic: String,
-    }
-
-    impl Args for SubscribeTopic {
-        fn parse(matches: &ArgMatches) -> Self {
-            let node_addr = NODE.parse(matches);
-            let topic = TOPIC.parse(matches);
-            Self { node_addr, topic }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(NODE.def().about("The gossip node address.")).arg(
-                TOPIC
-                    .def()
-                    .about("The new topic of interest for that node."),
-            )
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct GossipRun {
-        pub addr: Option<Multiaddr>,
-        pub rpc: Option<SocketAddr>,
-    }
-
-    impl Args for GossipRun {
-        fn parse(matches: &ArgMatches) -> Self {
-            let addr = MULTIADDR_OPT.parse(matches);
-            let rpc = RPC_SOCKET_ADDR.parse(matches);
-            Self { addr, rpc }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                MULTIADDR_OPT
-                    .def()
-                    .about("Gossip service address as host:port."),
-            )
-            .arg(RPC_SOCKET_ADDR.def().about("Enable RPC service."))
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct Matchmaker {
-        pub matchmaker_path: Option<PathBuf>,
-        pub tx_code_path: Option<PathBuf>,
-        pub intent_gossiper_addr: SocketAddr,
-        pub ledger_addr: TendermintAddress,
-        pub tx_signing_key: WalletKeypair,
-        pub tx_source_address: WalletAddress,
-    }
-
-    impl Args for Matchmaker {
-        fn parse(matches: &ArgMatches) -> Self {
-            let intent_gossiper_addr = INTENT_GOSSIPER_ADDR.parse(matches);
-            let matchmaker_path = MATCHMAKER_PATH.parse(matches);
-            let tx_code_path = TX_CODE_PATH.parse(matches);
-            let ledger_addr = LEDGER_ADDRESS_DEFAULT.parse(matches);
-            let tx_signing_key = SIGNING_KEY.parse(matches);
-            let tx_source_address = SOURCE.parse(matches);
-            Self {
-                intent_gossiper_addr,
-                matchmaker_path,
-                tx_code_path,
-                ledger_addr,
-                tx_signing_key,
-                tx_source_address,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(INTENT_GOSSIPER_ADDR.def().about(
-                "Intent Gossiper endpoint for matchmaker connections as \
-                 \"{host}:{port}\".",
-            ))
-            .arg(MATCHMAKER_PATH.def().about(
-                "The file name of the matchmaker compiled to a dynamic \
-                 library (the filename extension is optional).",
-            ))
-            .arg(
-                TX_CODE_PATH
-                    .def()
-                    .about("The transaction code to use with the matchmaker."),
-            )
-            .arg(LEDGER_ADDRESS_DEFAULT.def().about(
-                "The address of the ledger as \"{scheme}://{host}:{port}\" \
-                 that the matchmaker must send transactions to. If the scheme \
-                 is not supplied, it is assumed to be TCP.",
-            ))
-            .arg(SIGNING_KEY.def().about(
-                "Sign the transactions created by the matchmaker with the key \
-                 for the given public key, public key hash or alias from your \
-                 wallet.",
-            ))
-            .arg(SOURCE.def().about(
-                "Source address or alias of an address of the transactions \
-                 created by the matchmaker. This must be matching the signing \
-                 key.",
-            ))
-        }
-    }
-
     /// Common transaction arguments
     #[derive(Clone, Debug)]
     pub struct Tx {
@@ -3081,7 +2647,7 @@ pub mod args {
             ))
             .arg(LOCALHOST.def().about(
                 "Use localhost address for P2P and RPC connections for the \
-                 validators ledger and intent gossip nodes",
+                 validators ledger",
             ))
             .arg(ALLOW_DUPLICATE_IP.def().about(
                 "Toggle to disable guard against peers connecting from the \

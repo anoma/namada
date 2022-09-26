@@ -3,9 +3,7 @@
 pub mod generated;
 mod types;
 
-pub use types::{
-    Dkg, Error, Intent, IntentGossipMessage, IntentId, Signed, SignedTxData, Tx,
-};
+pub use types::{Dkg, Error, Signed, SignedTxData, Tx};
 
 #[cfg(test)]
 mod tests {

@@ -12,7 +12,6 @@
 //! `ANOMA_E2E_KEEP_TEMP=true`.
 
 pub mod eth_bridge_tests;
-pub mod gossip_tests;
 pub mod helpers;
 pub mod ledger_tests;
 pub mod setup;

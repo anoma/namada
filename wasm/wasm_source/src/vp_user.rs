@@ -6,24 +6,15 @@
 //! It allows to bond, unbond and withdraw tokens to and from PoS system with a
 //! valid signature.
 //!
-//! It allows to fulfil intents that were signed by this account's key if they
-//! haven't already been fulfilled (fulfilled intents are added to the owner's
-//! invalid intent set).
-//!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use namada_vp_prelude::intent::{
-    Exchange, FungibleTokenIntent, IntentTransfers,
-};
 use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
-use rust_decimal::prelude::*;
 
 enum KeyType<'a> {
     Token(&'a Address),
     PoS,
-    InvalidIntentSet(&'a Address),
     Nft(&'a Address),
     Vp(&'a Address),
     GovernanceVote(&'a Address),
@@ -40,8 +31,6 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::Token(address)
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
-        } else if let Some(address) = intent::is_invalid_intent_key(key) {
-            Self::InvalidIntentSet(address)
         } else if let Some(address) = nft::is_nft_key(key) {
             Self::Nft(address)
         } else if gov_storage::is_vote_key(key) {
@@ -93,16 +82,6 @@ fn validate_tx(
         _ => false,
     });
 
-    let valid_intent = Lazy::new(|| match &*signed_tx_data {
-        Ok(signed_tx_data) => {
-            matches!(
-                check_intent_transfers(ctx, &addr, signed_tx_data),
-                Ok(true)
-            )
-        }
-        _ => false,
-    });
-
     if !is_tx_whitelisted(ctx)? {
         return reject();
     }
@@ -118,14 +97,13 @@ fn validate_tx(
                         ctx.read_post(key)?.unwrap_or_default();
                     let change = post.change() - pre.change();
                     // debit has to signed, credit doesn't
-                    let valid = change >= 0 || *valid_sig || *valid_intent;
+                    let valid = change >= 0 || *valid_sig;
                     debug_log!(
-                        "token key: {}, change: {}, valid_sig: {}, \
-                         valid_intent: {}, valid modification: {}",
+                        "token key: {}, change: {}, valid_sig: {}, valid \
+                         modification: {}",
                         key,
                         change,
                         *valid_sig,
-                        *valid_intent,
                         valid
                     );
                     valid
@@ -162,26 +140,6 @@ fn validate_tx(
                     if valid { "accepted" } else { "rejected" }
                 );
                 valid
-            }
-            KeyType::InvalidIntentSet(owner) => {
-                if owner == &addr {
-                    let pre: HashSet<key::common::Signature> =
-                        ctx.read_pre(key)?.unwrap_or_default();
-                    let post: HashSet<key::common::Signature> =
-                        ctx.read_post(key)?.unwrap_or_default();
-                    // A new invalid intent must have been added
-                    pre.len() + 1 == post.len()
-                } else {
-                    debug_log!(
-                        "This address ({}) is not of owner ({}) of \
-                         InvalidIntentSet key: {}",
-                        addr,
-                        owner,
-                        key
-                    );
-                    // If this is not the owner, allow any change
-                    true
-                }
             }
             KeyType::Nft(owner) => {
                 if owner == &addr {
@@ -229,151 +187,6 @@ fn validate_tx(
     }
 
     accept()
-}
-
-fn check_intent_transfers(
-    ctx: &Ctx,
-    addr: &Address,
-    signed_tx_data: &SignedTxData,
-) -> EnvResult<bool> {
-    if let Some((raw_intent_transfers, exchange, intent)) =
-        try_decode_intent(addr, signed_tx_data)
-    {
-        log_string("check intent");
-        return check_intent(ctx, addr, exchange, intent, raw_intent_transfers);
-    }
-    reject()
-}
-
-fn try_decode_intent(
-    addr: &Address,
-    signed_tx_data: &SignedTxData,
-) -> Option<(
-    Vec<u8>,
-    namada_vp_prelude::Signed<Exchange>,
-    namada_vp_prelude::Signed<FungibleTokenIntent>,
-)> {
-    let raw_intent_transfers = signed_tx_data.data.as_ref().cloned()?;
-    let mut tx_data =
-        IntentTransfers::try_from_slice(&raw_intent_transfers[..]).ok()?;
-    debug_log!(
-        "tx_data.matches.exchanges: {:?}, {}",
-        tx_data.matches.exchanges,
-        &addr
-    );
-    if let (Some(exchange), Some(intent)) = (
-        tx_data.matches.exchanges.remove(addr),
-        tx_data.matches.intents.remove(addr),
-    ) {
-        return Some((raw_intent_transfers, exchange, intent));
-    } else {
-        log_string("no intent with a matching address");
-    }
-    None
-}
-
-fn check_intent(
-    ctx: &Ctx,
-    addr: &Address,
-    exchange: namada_vp_prelude::Signed<Exchange>,
-    intent: namada_vp_prelude::Signed<FungibleTokenIntent>,
-    raw_intent_transfers: Vec<u8>,
-) -> EnvResult<bool> {
-    // verify signature
-    let pk = key::get(ctx, addr)?;
-    if let Some(pk) = pk {
-        if intent.verify(&pk).is_err() {
-            log_string("invalid sig");
-            return reject();
-        }
-    } else {
-        return reject();
-    }
-
-    // verify the intent have not been already used
-    if !intent::vp_exchange(ctx, &exchange)? {
-        return reject();
-    }
-
-    // verify the intent is fulfilled
-    let Exchange {
-        addr,
-        token_sell,
-        rate_min,
-        token_buy,
-        min_buy,
-        max_sell,
-        vp,
-    } = &exchange.data;
-
-    debug_log!("vp is: {}", vp.is_some());
-
-    if let Some(code) = vp {
-        let eval_result = ctx.eval(code.to_vec(), raw_intent_transfers)?;
-        debug_log!("eval result: {}", eval_result);
-        if !eval_result {
-            return reject();
-        }
-    }
-
-    debug_log!(
-        "exchange description: {}, {}, {}, {}, {}",
-        token_sell,
-        token_buy,
-        max_sell.change(),
-        min_buy.change(),
-        rate_min.0
-    );
-
-    let token_sell_key = token::balance_key(token_sell, addr);
-    let mut sell_difference: token::Amount =
-        ctx.read_pre(&token_sell_key)?.unwrap_or_default();
-    let sell_post: token::Amount =
-        ctx.read_post(&token_sell_key)?.unwrap_or_default();
-
-    sell_difference.spend(&sell_post);
-
-    let token_buy_key = token::balance_key(token_buy, addr);
-    let buy_pre: token::Amount =
-        ctx.read_pre(&token_buy_key)?.unwrap_or_default();
-    let mut buy_difference: token::Amount =
-        ctx.read_post(&token_buy_key)?.unwrap_or_default();
-
-    buy_difference.spend(&buy_pre);
-
-    let sell_diff: Decimal = sell_difference.change().into(); // -> how many token I sold
-    let buy_diff: Decimal = buy_difference.change().into(); // -> how many token I got
-
-    debug_log!(
-        "buy_diff > 0: {}, rate check: {}, max_sell > sell_diff: {}, buy_diff \
-         > min_buy: {}",
-        buy_difference.change() > 0,
-        buy_diff / sell_diff >= rate_min.0,
-        max_sell.change() >= sell_difference.change(),
-        buy_diff >= min_buy.change().into()
-    );
-
-    if !(buy_difference.change() > 0
-        && (buy_diff / sell_diff >= rate_min.0)
-        && max_sell.change() >= sell_difference.change()
-        && buy_diff >= min_buy.change().into())
-    {
-        debug_log!(
-            "invalid exchange, {} / {}, sell diff: {}, buy diff: {}, \
-             max_sell: {}, rate_min: {}, min_buy: {}, buy_diff / sell_diff: {}",
-            token_sell,
-            token_buy,
-            sell_difference.change(),
-            buy_difference.change(),
-            max_sell.change(),
-            rate_min.0,
-            min_buy.change(),
-            buy_diff / sell_diff
-        );
-        reject()
-    } else {
-        accept()
-    }
 }
 
 #[cfg(test)]

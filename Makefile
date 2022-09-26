@@ -143,7 +143,7 @@ build-wasm-scripts-docker: build-wasm-image-docker
 debug-wasm-scripts-docker: build-wasm-image-docker
 	docker run --rm -v ${PWD}:/usr/local/rust/wasm anoma-wasm make debug-wasm-scripts
 
-# Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
+# Build the validity predicate and transactions wasm
 build-wasm-scripts:
 	make -C $(wasms)
 	make opt-wasm

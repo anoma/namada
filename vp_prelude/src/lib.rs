@@ -6,7 +6,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-pub mod intent;
 pub mod key;
 pub mod nft;
 pub mod token;

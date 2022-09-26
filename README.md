@@ -20,9 +20,9 @@ interaction with the protocol.
 
 ## 📓 Docs
 
-- user docs: built from [docs mdBook](./documentation/docs/)
-- dev docs: built from [dev mdBook](./documentation/dev/)
-- specifications: built from [specs mdBook](./documentation/specs/)
+* user docs: built from [docs mdBook](./documentation/docs/)
+* dev docs: built from [dev mdBook](./documentation/dev/)
+* specifications: built from [specs mdBook](./documentation/specs/)
 
 ## Warning
 
@@ -47,7 +47,7 @@ Guide.
 ## ⚙️ Development
 
 ```shell
-# Build the provided validity predicate, transaction and matchmaker wasm modules
+# Build the provided validity predicate and transaction wasm modules
 make build-wasm-scripts-docker
 
 # Development (debug) build Anoma, which includes a validator and some default 
@@ -69,11 +69,11 @@ make clippy
 
 To change the log level, set `ANOMA_LOG` environment variable to one of:
 
-- `error`
-- `warn`
-- `info`
-- `debug`
-- `trace`
+* `error`
+* `warn`
+* `info`
+* `debug`
+* `trace`
 
 The default is set to `info` for all the modules, expect for Tendermint ABCI, which has a lot of `debug` logging.
 

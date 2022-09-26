@@ -20,7 +20,6 @@ where
     /// Create a new genesis for the chain with specified id. This includes
     /// 1. A set of initial users and tokens
     /// 2. Setting up the validity predicates for both users and tokens
-    /// 3. A matchmaker
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
