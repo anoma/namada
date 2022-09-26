@@ -1103,6 +1103,8 @@ mod test_prepare_proposal {
             .by_ref()
             .next();
 
+        let _ = height;
+
         // ```
         // use assert_matches::assert_matches;
         // assert_matches!(height, BlockHeight(PRED_LAST_HEIGHT
