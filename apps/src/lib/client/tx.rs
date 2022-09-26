@@ -1,11 +1,9 @@
 use std::borrow::Cow;
-use std::convert::TryFrom;
-use std::env;
 use std::fs::File;
-use std::time::Duration;
 
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
+use futures::stream::StreamExt;
 use itertools::Either::*;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
@@ -1222,7 +1220,7 @@ pub async fn submit_tx(
     let wrapper_query = Query::from(EventType::NewBlock)
         .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
     let mut wrapper_tx_subscription =
-        wrapper_tx_cli.subscribe(wrapper_query.clone()).await?;
+        wrapper_tx_cli.subscribe(wrapper_query).await?;
 
     // We also subscribe to the event emitted when the encrypted
     // payload makes its way onto the blockchain
@@ -1234,17 +1232,18 @@ pub async fn submit_tx(
     let decrypted_query = Query::from(EventType::NewBlock)
         .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
     let mut decrypted_tx_subscription =
-        decrypted_tx_cli.subscribe(decrypted_query.clone()).await?;
+        decrypted_tx_cli.subscribe(decrypted_query).await?;
 
     // Broadcast the supplied transaction
     broadcast_tx(address, &to_broadcast).await?;
 
     let parsed = {
-        let parsed = TxResponse::parse(
-            wrapper_tx_subscription.receive_response()?,
-            NamadaEventType::Accepted,
-            wrapper_hash,
-        );
+        let event = wrapper_tx_subscription.next().await.transpose()?;
+        let event = event.ok_or_else(|| {
+            RpcError::server("failed to get wrapper tx event".to_string())
+        })?;
+        let parsed =
+            TxResponse::parse(event, NamadaEventType::Accepted, wrapper_hash);
 
         println!(
             "Transaction accepted with result: {}",
@@ -1253,8 +1252,12 @@ pub async fn submit_tx(
         // The transaction is now on chain. We wait for it to be decrypted
         // and applied
         if parsed.code == 0.to_string() {
+            let event = decrypted_tx_subscription.next().await.transpose()?;
+            let event = event.ok_or_else(|| {
+                RpcError::server("failed to get decrypted tx event".to_string())
+            })?;
             let parsed = TxResponse::parse(
-                decrypted_tx_subscription.receive_response()?,
+                event,
                 NamadaEventType::Applied,
                 decrypted_hash.as_str(),
             );
@@ -1268,9 +1271,17 @@ pub async fn submit_tx(
         }
     };
 
-    wrapper_tx_subscription.unsubscribe()?;
-    wrapper_tx_subscription.close();
-    decrypted_tx_subscription.unsubscribe()?;
-    decrypted_tx_subscription.close();
+    wrapper_tx_cli
+        .unsubscribe(wrapper_tx_subscription.query().clone())
+        .await?;
+    drop(wrapper_tx_subscription);
+    drop(wrapper_tx_cli);
+
+    decrypted_tx_cli
+        .unsubscribe(decrypted_tx_subscription.query().clone())
+        .await?;
+    drop(decrypted_tx_subscription);
+    drop(decrypted_tx_cli);
+
     parsed
 }
