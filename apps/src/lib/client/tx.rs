@@ -31,13 +31,11 @@ use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::signing::{find_keypair, sign_tx};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
-use crate::client::tendermint_websocket_client::{
-    Error as WsError, TendermintWebsocketClient, WebSocketAddress,
-};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::query::{EventType, Query};
-use crate::facade::tendermint_rpc::{Client, HttpClient};
+use crate::facade::tendermint_rpc::{Client, HttpClient, WebSocketClient};
 use crate::node::ledger::events::EventType as NamadaEventType;
 use crate::node::ledger::tendermint_node;
 
@@ -1130,7 +1128,7 @@ async fn save_initialized_accounts(
 pub async fn broadcast_tx(
     address: TendermintAddress,
     to_broadcast: &TxBroadcastData,
-) -> Result<Response, WsError> {
+) -> Result<Response, RpcError> {
     let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
@@ -1140,7 +1138,7 @@ pub async fn broadcast_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    let websocket_timeout =
+    let _websocket_timeout =
         if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
             if let Ok(timeout) = val.parse::<u64>() {
                 Duration::new(timeout, 0)
@@ -1151,17 +1149,13 @@ pub async fn broadcast_tx(
             Duration::new(300, 0)
         };
 
-    let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
-        WebSocketAddress::try_from(address.clone())?,
-        Some(websocket_timeout),
-    )?;
+    let wrapper_tx_cli = HttpClient::new(address)?;
 
-    let response = wrapper_tx_subscription
+    let response = wrapper_tx_cli
         .broadcast_tx_sync(tx.to_bytes().into())
-        .await
-        .map_err(|err| WsError::Response(format!("{:?}", err)))?;
+        .await?;
 
-    wrapper_tx_subscription.close();
+    drop(wrapper_tx_cli);
 
     if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
@@ -1173,7 +1167,7 @@ pub async fn broadcast_tx(
         }
         Ok(response)
     } else {
-        Err(WsError::Response(serde_json::to_string(&response).unwrap()))
+        Err(RpcError::server(serde_json::to_string(&response).unwrap()))
     }
 }
 
@@ -1188,7 +1182,7 @@ pub async fn broadcast_tx(
 pub async fn submit_tx(
     address: TendermintAddress,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, WsError> {
+) -> Result<TxResponse, RpcError> {
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
