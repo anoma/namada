@@ -162,6 +162,21 @@ mod tests {
     }
 
     #[test]
+    /// Assert we error if we are passed an `(Address, BlockHeight)` but are not
+    /// given a corrseponding set of validators for the block height
+    fn test_get_voting_powers_for_selected_no_active_validators_for_height() {
+        let all_active = BTreeMap::default();
+        let selected = HashSet::from_iter(vec![(
+            address::testing::established_address_1(),
+            BlockHeight(100),
+        )]);
+
+        let result = get_voting_powers_for_selected(&all_active, selected);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
     /// Test getting the voting powers for two active validators from the set of
     /// active validators
     fn test_get_voting_powers_for_selected_two_validators() {
