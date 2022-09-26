@@ -9,7 +9,6 @@ pub mod traits;
 
 use core::fmt::Debug;
 
-use tendermint::merkle::proof::Proof;
 use thiserror::Error;
 
 use super::parameters;
@@ -23,6 +22,7 @@ pub use crate::ledger::storage::merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, Sha256Hasher,
     StorageHasher, StoreType,
 };
+use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 #[cfg(feature = "ferveo-tpke")]

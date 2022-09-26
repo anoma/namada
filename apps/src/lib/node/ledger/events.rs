@@ -7,8 +7,9 @@ use borsh::BorshSerialize;
 use namada::ledger::governance::utils::ProposalEvent;
 use namada::types::ibc::IbcEvent;
 use namada::types::transaction::{hash_tx, TxType};
-use tendermint_proto::abci::EventAttribute;
 use thiserror::Error;
+
+use crate::facade::tendermint_proto::abci::EventAttribute;
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
@@ -150,7 +151,7 @@ impl From<ProposalEvent> for Event {
 }
 
 /// Convert our custom event into the necessary tendermint proto type
-impl From<Event> for tendermint_proto::abci::Event {
+impl From<Event> for crate::facade::tendermint_proto::abci::Event {
     fn from(event: Event) -> Self {
         Self {
             r#type: event.event_type.to_string(),

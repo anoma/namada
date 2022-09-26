@@ -30,6 +30,7 @@ where
     ///  * The voting powers are normalized to `2^32`, and sorted in descending
     ///    order
     #[inline]
+    #[allow(dead_code)]
     pub fn validate_valset_upd_vext(
         &self,
         ext: validator_set_update::SignedVext,
@@ -56,6 +57,7 @@ where
         (VotingPower, validator_set_update::SignedVext),
         VoteExtensionError,
     > {
+        #[cfg(feature = "abcipp")]
         if ext.data.block_height != last_height {
             let ext_height = ext.data.block_height;
             tracing::error!(
@@ -142,6 +144,11 @@ where
         &self,
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
+        #[cfg(not(feature = "abcipp"))]
+        if self.storage.last_height == BlockHeight(0) {
+            return None;
+        }
+
         let vexts_epoch =
             self.storage.get_epoch(self.storage.last_height).expect(
                 "The epoch of the last block height should always be known",
@@ -164,6 +171,8 @@ where
             }
 
             let validator_addr = vote_extension.data.validator_addr;
+            #[cfg(not(feature = "abcipp"))]
+            let block_height = vote_extension.data.block_height;
 
             // update voting power
             let validator_voting_power = u64::from(validator_voting_power);
@@ -180,7 +189,18 @@ where
             let addr = validator_addr.clone();
             let sig = vote_extension.sig;
 
+            #[cfg(feature = "abcipp")]
             if let Some(sig) = signatures.insert(addr, sig) {
+                tracing::warn!(
+                    ?sig,
+                    ?validator_addr,
+                    "Overwrote old signature from validator while \
+                     constructing validator_set_update::VextDigest"
+                );
+            }
+
+            #[cfg(not(feature = "abcipp"))]
+            if let Some(sig) = signatures.insert((addr, block_height), sig) {
                 tracing::warn!(
                     ?sig,
                     ?validator_addr,
@@ -190,6 +210,7 @@ where
             }
         }
 
+        #[cfg(feature = "abcipp")]
         if voting_power <= FractionalVotingPower::TWO_THIRDS {
             tracing::error!(
                 "Tendermint has decided on a block including validator set \
@@ -198,10 +219,14 @@ where
             return None;
         }
 
+        #[cfg(feature = "abcipp")]
         let voting_powers = voting_powers.expect(
             "We have enough voting power, so at least one validator set \
              update vote extension must have been validated.",
         );
+
+        #[cfg(not(feature = "abcipp"))]
+        let voting_powers = voting_powers.unwrap_or_default();
 
         Some(validator_set_update::VextDigest {
             signatures,
@@ -214,106 +239,133 @@ where
 mod test_vote_extensions {
     use std::default::Default;
 
+    #[cfg(feature = "abcipp")]
+    #[cfg(feature = "abcipp")]
     use borsh::BorshSerialize;
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::types::key::RefTo;
-    use namada::types::vote_extensions::{
-        ethereum_events, validator_set_update, VoteExtension,
-    };
-    use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
-    use tower_abci::request;
+    #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::ethereum_events;
+    use namada::types::vote_extensions::validator_set_update;
+    #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::VoteExtension;
 
+    #[cfg(feature = "abcipp")]
+    use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
+    #[cfg(feature = "abcipp")]
+    use crate::facade::tower_abci::request;
     use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
     /// Test if a [`validator_set_update::Vext`] that incorrectly labels what
-    /// block height it was included on in a vote extension is rejected
+    /// block height it was included on in a vote extension is rejected if
+    /// vote extensions are enabled. Else, it accepts.
     // TODO:
     // - sign with secp key
     // - add validator voting powers from storage
     #[test]
     fn test_reject_incorrect_block_height() {
-        let (shell, _, _) = test_utils::setup();
+        let (shell, _recv, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
 
-        let ethereum_events = ethereum_events::Vext::empty(
-            shell.storage.get_current_decision_height(),
-            validator_addr.clone(),
-        )
-        .sign(protocol_key);
-
+        #[allow(clippy::redundant_clone)]
         let validator_set_update = Some(
             validator_set_update::Vext {
                 // TODO: get voting powers from storage, associated with eth
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
-                validator_addr,
+                validator_addr: validator_addr.clone(),
                 // invalid height
                 block_height: shell.storage.get_current_decision_height() + 1,
             }
             // TODO: sign with secp key
             .sign(protocol_key),
         );
+        #[cfg(feature = "abcipp")]
+        {
+            let ethereum_events = ethereum_events::Vext::empty(
+                shell.storage.get_current_decision_height(),
+                validator_addr,
+            )
+            .sign(protocol_key);
+            let req = request::VerifyVoteExtension {
+                vote_extension: VoteExtension {
+                    ethereum_events,
+                    validator_set_update,
+                }
+                .try_to_vec()
+                .expect("Test failed"),
+                ..Default::default()
+            };
 
-        let req = request::VerifyVoteExtension {
-            vote_extension: VoteExtension {
-                ethereum_events,
-                validator_set_update,
-            }
-            .try_to_vec()
-            .expect("Test failed"),
-            ..Default::default()
-        };
-        assert_eq!(
-            shell.verify_vote_extension(req).status,
-            i32::from(VerifyStatus::Reject)
-        );
+            assert_eq!(
+                shell.verify_vote_extension(req).status,
+                i32::from(VerifyStatus::Reject)
+            );
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            assert!(shell.validate_valset_upd_vext(
+                validator_set_update.unwrap(),
+                shell.storage.get_current_decision_height()
+            ))
+        }
     }
 
     /// Test that validator set update vote extensions signed by
     /// a non-validator are rejected
     #[test]
     fn test_valset_upd_must_be_signed_by_validator() {
-        let (shell, _, _) = test_utils::setup();
+        let (shell, _recv, _) = test_utils::setup();
         let (protocol_key, validator_addr) = {
             let bertha_key = wallet::defaults::bertha_keypair();
             let bertha_addr = wallet::defaults::bertha_address();
             (bertha_key, bertha_addr)
         };
-        let ethereum_events = ethereum_events::Vext::empty(
-            shell.storage.get_current_decision_height(),
-            validator_addr.clone(),
-        )
-        .sign(&protocol_key);
+
+        #[allow(clippy::redundant_clone)]
         let validator_set_update = Some(
             validator_set_update::Vext {
                 // TODO: get voting powers from storage, associated with eth
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
                 block_height: shell.storage.get_current_decision_height(),
-                validator_addr,
+                validator_addr: validator_addr.clone(),
             }
             .sign(&protocol_key),
         );
-        let req = request::VerifyVoteExtension {
-            vote_extension: VoteExtension {
-                ethereum_events,
-                validator_set_update,
-            }
-            .try_to_vec()
-            .expect("Test failed"),
-            ..Default::default()
-        };
-        assert_eq!(
-            shell.verify_vote_extension(req).status,
-            i32::from(VerifyStatus::Reject)
-        );
+        #[cfg(feature = "abcipp")]
+        {
+            let ethereum_events = ethereum_events::Vext::empty(
+                shell.storage.get_current_decision_height(),
+                validator_addr,
+            )
+            .sign(&protocol_key);
+            let req = request::VerifyVoteExtension {
+                vote_extension: VoteExtension {
+                    ethereum_events,
+                    validator_set_update,
+                }
+                .try_to_vec()
+                .expect("Test failed"),
+                ..Default::default()
+            };
+            assert_eq!(
+                shell.verify_vote_extension(req).status,
+                i32::from(VerifyStatus::Reject)
+            );
+        }
+        #[cfg(not(feature = "abcipp"))]
+        assert!(!shell.validate_valset_upd_vext(
+            validator_set_update.unwrap(),
+            shell.storage.get_current_decision_height()
+        ));
     }
 
     /// Test the validation of a validator set update emitted for
@@ -322,7 +374,7 @@ mod test_vote_extensions {
     /// change to the validator set.
     #[test]
     fn test_validate_valset_upd_vexts() {
-        let (mut shell, _, _) = test_utils::setup();
+        let (mut shell, _recv, _) = test_utils::setup();
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let validator_addr = shell
@@ -390,45 +442,51 @@ mod test_vote_extensions {
     // - add validator voting powers from storage
     #[test]
     fn test_reject_bad_signatures() {
-        let (shell, _, _) = test_utils::setup();
+        let (shell, _recv, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
 
-        let ethereum_events = ethereum_events::Vext::empty(
-            shell.storage.get_current_decision_height(),
-            validator_addr.clone(),
-        )
-        .sign(protocol_key);
-
+        #[allow(clippy::redundant_clone)]
         let validator_set_update = {
             let mut ext = validator_set_update::Vext {
                 // TODO: get voting powers from storage, associated with eth
                 // addrs
                 voting_powers: std::collections::HashMap::new(),
                 block_height: shell.storage.get_current_decision_height(),
-                validator_addr,
+                validator_addr: validator_addr.clone(),
             }
             // TODO: sign with secp key
             .sign(protocol_key);
             ext.sig = test_utils::invalidate_signature(ext.sig);
             Some(ext)
         };
-
-        let req = request::VerifyVoteExtension {
-            vote_extension: VoteExtension {
-                ethereum_events,
-                validator_set_update,
-            }
-            .try_to_vec()
-            .expect("Test failed"),
-            ..Default::default()
-        };
-        assert_eq!(
-            shell.verify_vote_extension(req).status,
-            i32::from(VerifyStatus::Reject)
-        );
+        #[cfg(feature = "abcipp")]
+        {
+            let ethereum_events = ethereum_events::Vext::empty(
+                shell.storage.get_current_decision_height(),
+                validator_addr,
+            )
+            .sign(protocol_key);
+            let req = request::VerifyVoteExtension {
+                vote_extension: VoteExtension {
+                    ethereum_events,
+                    validator_set_update: validator_set_update.clone(),
+                }
+                .try_to_vec()
+                .expect("Test failed"),
+                ..Default::default()
+            };
+            assert_eq!(
+                shell.verify_vote_extension(req).status,
+                i32::from(VerifyStatus::Reject)
+            );
+        }
+        assert!(!shell.validate_valset_upd_vext(
+            validator_set_update.unwrap(),
+            shell.storage.get_current_decision_height()
+        ));
     }
 
     /// Test if a [`validator_set_update::Vext`] is signed with a secp key

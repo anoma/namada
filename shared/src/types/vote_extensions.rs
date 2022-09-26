@@ -9,7 +9,9 @@ use crate::proto::Signed;
 
 /// This type represents the data we pass to the extension of
 /// a vote at the PreCommit phase of Tendermint.
-#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct VoteExtension {
     /// Vote extension data related with Ethereum events.
     pub ethereum_events: Signed<ethereum_events::Vext>,

@@ -2,12 +2,13 @@
 //! hash function in a way that is compatible with smart contracts
 //! on Ethereum
 use std::convert::TryFrom;
+use std::fmt::Display;
 
-use borsh::{BorshDeserialize, BorshSerialize, BorshSchema};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use hex::FromHex;
-use tiny_keccak::{Hasher, Keccak};
+use thiserror::Error;
 
-use crate::types::hash::{HASH_LENGTH, Hash, HashResult};
+use crate::types::hash::{Hash, HASH_LENGTH};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -17,7 +18,7 @@ pub enum Error {
     #[error("Failed trying to convert slice to a hash: {0}")]
     ConversionFailed(std::array::TryFromSliceError),
     #[error("Failed to convert string into a hash: {0}")]
-    FromStringError(hex::FromHexError)
+    FromStringError(hex::FromHexError),
 }
 
 /// A Keccak hash
@@ -33,6 +34,16 @@ pub enum Error {
     BorshSchema,
 )]
 pub struct KeccakHash(pub [u8; 32]);
+
+impl Display for KeccakHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for byte in &self.0 {
+            write!(f, "{:02X}", byte)?;
+        }
+        Ok(())
+    }
+}
+
 
 impl From<KeccakHash> for Hash {
     fn from(hash: KeccakHash) -> Self {
@@ -66,23 +77,24 @@ impl TryFrom<&[u8]> for KeccakHash {
 }
 
 impl TryFrom<String> for KeccakHash {
-    type Error = self::Error;
+    type Error = Error;
 
-    fn try_from(string: String) -> HashResult<Self> {
-        let bytes: Vec<u8> = Vec::from_hex(string).map_err(Error::FromStringError)?;
-        Self::try_from(&bytes)
+    fn try_from(string: String) -> Result<Self, Error> {
+        let bytes: Vec<u8> =
+            Vec::from_hex(string).map_err(Error::FromStringError)?;
+        Self::try_from(bytes.as_slice())
     }
 }
 
 impl TryFrom<&str> for KeccakHash {
-    type Error = self::Error;
+    type Error = Error;
 
-    fn try_from(string: &str) -> HashResult<Self> {
-        let bytes: Vec<u8> = Vec::from_hex(string).map_err(Error::FromStringError)?;
-        Self::try_from(&bytes).into()
+    fn try_from(string: &str) -> Result<Self, Error> {
+        let bytes: Vec<u8> =
+            Vec::from_hex(string).map_err(Error::FromStringError)?;
+        Self::try_from(bytes.as_slice())
     }
 }
-
 
 /// This module defines encoding methods compatible with Ethereum
 /// smart contracts.
@@ -91,11 +103,10 @@ pub mod encode {
     pub use ethabi::token::Token;
     use tiny_keccak::{Hasher, Keccak};
 
-    use crate::types::ethereum_events::KeccakHash;
+    use super::*;
 
     /// Contains a method to encode data to a format compatible with Ethereum.
     pub trait Encode {
-
         /// Encodes a struct into a sequence of ABI
         /// [`Token`] instances.
         fn tokenize(&self) -> Vec<Token>;
@@ -105,7 +116,6 @@ pub mod encode {
             let tokens = self.tokenize();
             ethabi::encode(&tokens)
         }
-
 
         /// Encodes a slice of [`Token`] instances, and returns the
         /// keccak hash of the encoded string.
@@ -150,13 +160,15 @@ pub mod encode {
     impl<const N: usize> Encode for AbiEncode<N> {
         #[inline]
         fn tokenize(&self) -> Vec<Token> {
-            return self.to_vec()
+            self.to_vec()
         }
     }
 
     // TODO: test signatures here once we merge secp keys
     #[cfg(test)]
     mod tests {
+        use std::convert::TryInto;
+
         use ethabi::ethereum_types::U256;
 
         use super::*;
@@ -189,6 +201,15 @@ pub mod encode {
                     output
                 })
             );
+        }
+
+        /// Test that the methods for converting a keccak hash to/from
+        /// a string type are inverses.
+        #[test]
+        fn test_hex_roundtrip() {
+            let original = "1C8AFF950685C2ED4BC3174F3472287B56D9517B9C948127319A09A7A36DEAC8";
+            let keccak_hash: KeccakHash = original.try_into().expect("Test failed");
+            assert_eq!(keccak_hash.to_string().as_str(), original);
         }
     }
 }

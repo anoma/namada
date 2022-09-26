@@ -6,10 +6,10 @@ use std::ops::{Add, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
-use tendermint_proto::google::protobuf;
 
 use crate::tendermint::time::Time;
 use crate::tendermint::Error as TendermintError;
+use crate::tendermint_proto::google::protobuf;
 
 /// Check if the given `duration` has passed since the given `start.
 pub fn duration_passed(

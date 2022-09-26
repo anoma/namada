@@ -30,16 +30,16 @@ use namada::types::key::*;
 use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
-use tendermint::abci::Code;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::error::Error as TError;
-use tendermint_rpc::query::Query;
-use tendermint_rpc::{
-    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
-};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
+use crate::facade::tendermint::abci::Code;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_rpc::error::Error as TError;
+use crate::facade::tendermint_rpc::query::Query;
+use crate::facade::tendermint_rpc::{
+    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
+};
 use crate::node::ledger::rpc::Path;
 
 /// Query the epoch of the last committed block
