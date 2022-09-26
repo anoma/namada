@@ -43,7 +43,6 @@ impl Display for KeccakHash {
         Ok(())
     }
 }
-
 impl From<KeccakHash> for Hash {
     fn from(hash: KeccakHash) -> Self {
         Hash(hash.0)
