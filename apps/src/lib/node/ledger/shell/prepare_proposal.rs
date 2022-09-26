@@ -1052,7 +1052,6 @@ mod test_prepare_proposal {
     /// same Ethereum event at different block heights.
     #[cfg(not(feature = "abcipp"))]
     #[test]
-    #[ignore]
     fn test_prepare_proposal_filter_duped_eth_event_votes() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(5);
         const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
@@ -1099,15 +1098,11 @@ mod test_prepare_proposal {
 
         let height = signatures
             .into_iter()
-            .map(|(_, height)| height)
+            .map(|((_, height), _)| height)
             .by_ref()
-            .next();
+            .next()
+            .unwrap();
 
-        let _ = height;
-
-        // ```
-        // use assert_matches::assert_matches;
-        // assert_matches!(height, BlockHeight(PRED_LAST_HEIGHT
-        // ```
+        assert_eq!(height, PRED_LAST_HEIGHT);
     }
 }
