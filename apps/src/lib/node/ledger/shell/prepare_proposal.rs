@@ -1090,7 +1090,7 @@ mod test_prepare_proposal {
         };
 
         let signatures = shell
-            .compress_ethereum_events(vec![signed_ext_1, signed_ext_2])
+            .compress_ethereum_events(vec![signed_ext_2, signed_ext_1])
             .expect("Test failed")
             .signatures;
 
