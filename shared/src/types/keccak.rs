@@ -44,7 +44,6 @@ impl Display for KeccakHash {
     }
 }
 
-
 impl From<KeccakHash> for Hash {
     fn from(hash: KeccakHash) -> Self {
         Hash(hash.0)
@@ -208,7 +207,8 @@ pub mod encode {
         #[test]
         fn test_hex_roundtrip() {
             let original = "1C8AFF950685C2ED4BC3174F3472287B56D9517B9C948127319A09A7A36DEAC8";
-            let keccak_hash: KeccakHash = original.try_into().expect("Test failed");
+            let keccak_hash: KeccakHash =
+                original.try_into().expect("Test failed");
             assert_eq!(keccak_hash.to_string().as_str(), original);
         }
     }
