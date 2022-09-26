@@ -277,9 +277,7 @@ pub mod testing {
     use namada_proof_of_stake::types::VotingPower;
 
     use super::*;
-    use crate::types::storage::Epoch;
     use crate::types::token::Amount;
-    use crate::types::voting_power::FractionalVotingPower;
 
     pub const DAI_ERC20_ETH_ADDRESS_CHECKSUMMED: &str =
         "0x6B175474E89094C44Da98b954EedeAC495271d0F";
@@ -298,10 +296,6 @@ pub mod testing {
         DAI_ERC20_ETH_ADDRESS
     }
 
-    pub fn arbitrary_fractional_voting_power() -> FractionalVotingPower {
-        FractionalVotingPower::new(1, 3).unwrap()
-    }
-
     pub fn arbitrary_nonce() -> Uint {
         123.into()
     }
@@ -316,10 +310,6 @@ pub mod testing {
 
     pub fn arbitrary_voting_power() -> VotingPower {
         VotingPower::from(1_000)
-    }
-
-    pub fn arbitrary_epoch() -> Epoch {
-        Epoch(100)
     }
 
     /// A [`EthereumEvent::TransfersToNamada`] containing a single transfer of
