@@ -294,10 +294,14 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use namada::ledger::eth_bridge::storage::wrapped_erc20s;
+    use namada::ledger::pos::namada_proof_of_stake::epoched::Epoched;
+    use namada::ledger::pos::namada_proof_of_stake::PosBase;
+    use namada::ledger::pos::types::ValidatorSet;
     use namada::ledger::storage::testing::TestStorage;
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
+        DAI_ERC20_ETH_ADDRESS,
     };
     use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada::types::token::Amount;
@@ -388,5 +392,70 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    /// Test applying a single transfer via `apply_derived_tx`
+    fn test_apply_derived_tx() {
+        let mut storage = TestStorage::default();
+        let sole_validator = address::testing::established_address_2();
+        let receiver = address::testing::established_address_1();
+        let validator_set = ValidatorSet {
+            active: BTreeSet::from_iter(vec![WeightedValidator {
+                voting_power: 100.into(),
+                address: sole_validator.to_owned(),
+            }]),
+            inactive: BTreeSet::default(),
+        };
+        let validator_sets = Epoched::init_at_genesis(validator_set, 1);
+        storage.write_validator_set(&validator_sets);
+
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1.into(),
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver: receiver.clone(),
+            }],
+        };
+
+        let result = apply_derived_tx(
+            &mut storage,
+            vec![MultiSignedEthEvent {
+                event: event.clone(),
+                signers: HashSet::from_iter(vec![(
+                    sole_validator,
+                    BlockHeight(100),
+                )]),
+            }],
+        );
+
+        let tx_result = match result {
+            Ok(tx_result) => tx_result,
+            Err(err) => panic!("unexpected error: {:#?}", err),
+        };
+
+        assert_eq!(
+            tx_result.gas_used, 0,
+            "No gas should be used for a derived transaction"
+        );
+        let eth_msg_keys = Keys::from(&event);
+        let dai_keys = wrapped_erc20s::Keys::from(&DAI_ERC20_ETH_ADDRESS);
+        assert_eq!(
+            tx_result.changed_keys,
+            BTreeSet::from_iter(vec![
+                eth_msg_keys.body(),
+                eth_msg_keys.seen(),
+                eth_msg_keys.seen_by(),
+                eth_msg_keys.voting_power(),
+                dai_keys.balance(&receiver),
+                dai_keys.supply(),
+            ])
+        );
+        assert!(tx_result.vps_result.accepted_vps.is_empty());
+        assert!(tx_result.vps_result.rejected_vps.is_empty());
+        assert!(tx_result.vps_result.errors.is_empty());
+        assert!(tx_result.initialized_accounts.is_empty());
+        assert!(tx_result.ibc_event.is_none());
     }
 }
