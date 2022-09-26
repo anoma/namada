@@ -6,6 +6,7 @@ use std::ops::Deref;
 use arse_merkle_tree::traits::Value;
 use arse_merkle_tree::{Hash as TreeHash, H256};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tendermint::abci::transaction;
@@ -22,6 +23,8 @@ pub enum Error {
     Temporary { error: String },
     #[error("Failed trying to convert slice to a hash: {0}")]
     ConversionFailed(std::array::TryFromSliceError),
+    #[error("Failed to convert string into a hash: {0}")]
+    FromStringError(hex::FromHexError)
 }
 
 /// Result for functions that may fail
@@ -82,6 +85,24 @@ impl TryFrom<&[u8]> for Hash {
         let hash: [u8; 32] =
             TryFrom::try_from(value).map_err(Error::ConversionFailed)?;
         Ok(Hash(hash))
+    }
+}
+
+impl TryFrom<String> for Hash {
+    type Error = self::Error;
+
+    fn try_from(string: String) -> HashResult<Self> {
+        let bytes: Vec<u8> = Vec::from_hex(string).map_err(Error::FromStringError)?;
+        Self::try_from(&bytes)
+    }
+}
+
+impl TryFrom<&str> for Hash {
+    type Error = self::Error;
+
+    fn try_from(string: &str) -> HashResult<Self> {
+        let bytes: Vec<u8> = Vec::from_hex(string).map_err(Error::FromStringError)?;
+        Self::try_from(&bytes)
     }
 }
 

@@ -11,12 +11,15 @@ use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use variant_access_derive::*;
+use variant_access_traits::*;
 
 #[cfg(feature = "ferveo-tpke")]
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
 use crate::ledger::storage::{StorageHasher, IBC_KEY_LIMIT};
 use crate::types::address::{self, Address};
+use crate::types::eth_bridge_pool::{TransferToEthereum, PendingTransfer};
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
 
@@ -31,6 +34,8 @@ pub enum Error {
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
+    #[error("Could not parse string: '{0}' into requested type: {1}")]
+    ParseError((String, String))
 }
 
 /// Result for functions that may fail
@@ -233,14 +238,35 @@ impl FromStr for Key {
     }
 }
 
-/// A type for converting an Anoma storage key
-/// to that of the right type for the different
-/// merkle trees used.
-pub enum MerkleKey<H: StorageHasher> {
-    /// A key that needs to be hashed
-    Sha256(Key, PhantomData<H>),
-    /// A key that can be given as raw bytes
-    Raw(Key),
+/// An enum representing the different types of values
+/// that can be passed into Anoma's storage.
+///
+/// This is a multi-store organized as
+/// several Merkle trees, each of which is
+/// responsible for understanding how to parse
+/// this value.
+pub enum MerkleValue<T: AsRef<[u8]>> {
+    /// raw bytes
+    Bytes(T),
+    /// a transfer to be put in the Ethereum bridge pool
+    /// We actually only need the key (which is the hash
+    /// of the transfer). So this variant contains no data.
+    Transfer(PendingTransfer),
+}
+
+impl<T> From<T> for MerkleValue<T>
+where
+    T: AsRef<[u8]>
+{
+    fn from(bytes: T) -> Self {
+        Self::Bytes(bytes)
+    }
+}
+
+impl<T: AsRef<[u8]>> From<PendingTransfer> for MerkleValue<T> {
+    fn from(transfer: PendingTransfer) -> Self {
+        Self::Transfer(transfer)
+    }
 }
 
 /// Storage keys that are utf8 encoded strings
@@ -581,6 +607,20 @@ impl KeySeg for Address {
     }
 }
 
+impl KeySeg for Hash {
+    fn parse(seg: String) -> Result<Self> {
+        seg.try_into().map_error(Error::ParseError((seg, "Hash".into())))
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
 /// Epoch identifier. Epochs are identified by consecutive numbers.
 #[derive(
     Clone,
@@ -629,6 +669,7 @@ impl Add<u64> for Epoch {
         Self(self.0 + rhs)
     }
 }
+
 
 impl Sub<u64> for Epoch {
     type Output = Epoch;

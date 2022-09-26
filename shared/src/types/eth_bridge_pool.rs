@@ -1,9 +1,11 @@
 //! The necessary type definitions for the contents of the
 //! Ethereum bridge pool
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize, BorshSchema};
+use ethabi::token::Token;
 
 use crate::types::address::Address;
-use crate::types::ethereum_events::{EthAddress, Uint};
+use crate::types::ethereum_events::{EthAddress, Uint, KeccakHash};
+use crate::types::keccak;
 use crate::types::token::Amount;
 
 /// A transfer message to be submitted to Ethereum
@@ -17,6 +19,7 @@ use crate::types::token::Amount;
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
 )]
 pub struct TransferToEthereum {
     /// The type of token
@@ -40,6 +43,7 @@ pub struct TransferToEthereum {
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
 )]
 pub struct PendingTransfer {
     /// The message to send to Ethereum to
@@ -48,6 +52,25 @@ pub struct PendingTransfer {
     /// paid by the user sending this transfer
     pub gas_fee: GasFee,
 }
+
+impl keccak::encode::Encode for PendingTransfer {
+
+    fn tokenize(&self) -> Vec<Token> {
+        let from = Token::String(self.gas_fee.payer.to_string());
+        let fee = Token::Uint(u64::from(self.gas_fee.amount).into());
+        let to = Token::Address(self.transfer.recipient.0.into());
+        let amount = Token::Uint(u64::from(self.transfer.amount).into());
+        let nonce = Token::Uint(self.transfer.nonce.into());
+        vec![
+            from,
+            fee,
+            to,
+            amount,
+            nonce,
+        ]
+    }
+}
+
 
 /// The amount of NAM to be payed to the relayer of
 /// a transfer across the Ethereum Bridge to compensate
@@ -61,6 +84,7 @@ pub struct PendingTransfer {
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
 )]
 pub struct GasFee {
     /// The amount of fees (in NAM)

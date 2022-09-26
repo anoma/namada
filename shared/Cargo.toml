@@ -96,6 +96,8 @@ tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "9
 thiserror = "1.0.30"
 tiny-keccak = "2.0.2"
 tracing = "0.1.30"
+variant_access_derive = "0.4.1"
+variant_access_traits = "0.4.1"
 wasmer = {version = "=2.2.0", optional = true}
 wasmer-cache = {version = "=2.2.0", optional = true}
 wasmer-compiler-singlepass = {version = "=2.2.0", optional = true}
