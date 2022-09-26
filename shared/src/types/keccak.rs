@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::types::hash::{Hash, HASH_LENGTH};
 
-#[allow(missing_docs)]
+/// Errors for converting / parsing Keccak hashes
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("TEMPORARY error: {error}")]
