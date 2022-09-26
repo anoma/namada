@@ -22,6 +22,7 @@ use namada_apps::config::genesis::genesis_config::{
 use serde_json::json;
 use setup::constants::*;
 
+use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     find_address, find_voting_power, get_actor_rpc, get_epoch,
 };
@@ -991,16 +992,24 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 /// 13. Check governance address funds are 0
 #[test]
 fn proposal_submission() -> Result<()> {
+    let working_dir = setup::working_dir();
+
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 1,
                 min_duration: 1,
                 max_expected_time_per_block: 1,
-                vp_whitelist: genesis.parameters.vp_whitelist,
+                vp_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("vp_"),
+                )),
                 // Enable tx whitelist to test the execution of a
                 // non-whitelisted tx by governance
-                tx_whitelist: Some(vec![String::from("test")]),
+                tx_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("tx_"),
+                )),
             };
 
             GenesisConfig {
@@ -1450,7 +1459,7 @@ fn proposal_offline() -> Result<()> {
     let submit_proposal_vote = vec![
         "vote-proposal",
         "--data-path",
-        test.test_dir.path().to_str().unwrap(),
+        valid_proposal_json_path.to_str().unwrap(),,
         "--vote",
         "yay",
         "--signer",

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
@@ -23,6 +24,7 @@ use namada_apps::client::utils;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
 use rand::Rng;
+use serde_json;
 use tempfile::{tempdir, TempDir};
 
 use crate::e2e::helpers::generate_bin_command;
@@ -859,4 +861,29 @@ pub fn copy_wasm_to_chain_dir<'a>(
             .unwrap();
         }
     }
+}
+
+pub fn get_all_wasms_hashes(
+    working_dir: &Path,
+    filter: Option<&str>,
+) -> Vec<String> {
+    let checksums_path = working_dir.join("wasm/checksums.json");
+    let checksums_content = fs::read_to_string(checksums_path).unwrap();
+    let checksums: HashMap<String, String> =
+        serde_json::from_str(&checksums_content).unwrap();
+    let filter_prefix = filter.unwrap_or_default();
+    checksums
+        .values()
+        .filter_map(|wasm| {
+            if wasm.contains(&filter_prefix) {
+                Some(
+                    wasm.split('.').collect::<Vec<&str>>()[1]
+                        .to_owned()
+                        .to_uppercase(),
+                )
+            } else {
+                None
+            }
+        })
+        .collect()
 }
