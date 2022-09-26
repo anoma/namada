@@ -7,6 +7,7 @@ use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::validator_set_update;
+#[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
@@ -164,19 +165,22 @@ where
             return None;
         }
 
+        #[cfg(feature = "abcipp")]
         let vexts_epoch =
             self.storage.get_epoch(self.storage.last_height).expect(
                 "The epoch of the last block height should always be known",
             );
 
+        #[cfg(feature = "abcipp")]
         let total_voting_power =
             u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
+        #[cfg(feature = "abcipp")]
         let mut voting_power = FractionalVotingPower::default();
 
         let mut voting_powers = None;
         let mut signatures = HashMap::new();
 
-        for (validator_voting_power, mut vote_extension) in
+        for (_validator_voting_power, mut vote_extension) in
             self.filter_invalid_valset_upd_vexts(vote_extensions)
         {
             if voting_powers.is_none() {
@@ -190,15 +194,18 @@ where
             let block_height = vote_extension.data.block_height;
 
             // update voting power
-            let validator_voting_power = u64::from(validator_voting_power);
-            voting_power += FractionalVotingPower::new(
-                validator_voting_power,
-                total_voting_power,
-            )
-            .expect(
-                "The voting power we obtain from storage should always be \
-                 valid",
-            );
+            #[cfg(feature = "abcipp")]
+            {
+                let validator_voting_power = u64::from(_validator_voting_power);
+                voting_power += FractionalVotingPower::new(
+                    validator_voting_power,
+                    total_voting_power,
+                )
+                .expect(
+                    "The voting power we obtain from storage should always be \
+                     valid",
+                );
+            }
 
             // register the signature of `validator_addr`
             let addr = validator_addr.clone();
