@@ -49,53 +49,54 @@ impl TxResponse {
         );
         let evt_key = event_type.to_string();
         // Find the tx with a matching hash
-        let tx_error = || {
-            eprintln!(
-                "Couldn't find tx with hash {tx_hash} in events {events:?}",
-            );
-            safe_exit(1)
-        };
+        macro_rules! tx_error {
+            () => {
+                || {
+                    eprintln!(
+                        "Couldn't find tx with hash {tx_hash} in events \
+                         {events:?}",
+                    );
+                    safe_exit(1)
+                }
+            };
+        }
         let (index, _) = events
             .get(&format!("{evt_key}.hash"))
-            .unwrap_or_else(tx_error)
+            .unwrap_or_else(tx_error!())
             .iter()
             .enumerate()
-            .find(|(_, hash)| hash == tx_hash)
-            .unwrap_or_else(tx_error);
-        let info = events.get(&format!("{evt_key}.info")).unwrap()[index];
-        let log = events.get(&format!("{evt_key}.log")).unwrap()[index];
-        let height = events.get(&format!("{evt_key}.height")).unwrap()[index];
-        let code = events.get(&format!("{evt_key}.code")).unwrap()[index];
+            .find(|(_, hash)| hash == &tx_hash)
+            .unwrap_or_else(tx_error!());
+        let info = &events.get(&format!("{evt_key}.info")).unwrap()[index];
+        let log = &events.get(&format!("{evt_key}.log")).unwrap()[index];
+        let height = &events.get(&format!("{evt_key}.height")).unwrap()[index];
+        let code = &events.get(&format!("{evt_key}.code")).unwrap()[index];
         let gas_used =
-            events.get(&format!("{evt_key}.gas_used")).unwrap()[index];
-        let initialized_accounts = events
-            .get(&format!("{evt_key}.initialized_accounts"))
-            .unwrap()[index];
-        let initialized_accounts = match initialized_accounts {
-            Ok(values) if !values.is_empty() => {
-                // In a response, the initialized accounts are encoded as e.g.:
-                // ```
-                // "applied.initialized_accounts": Array([
-                //   String(
-                //     "[\"atest1...\"]",
-                //   ),
-                // ]),
-                // ...
-                // So we need to decode the inner string first ...
-                let raw: String =
-                    serde_json::from_value(values[0].clone()).unwrap();
-                // ... and then decode the vec from the array inside the string
-                serde_json::from_str(&raw).unwrap()
-            }
-            _ => vec![],
+            &events.get(&format!("{evt_key}.gas_used")).unwrap()[index];
+        let initialized_accounts = {
+            // In a response, the initialized accounts are encoded as e.g.:
+            // ```
+            // "applied.initialized_accounts": Array([
+            //   String(
+            //     "[\"atest1...\"]",
+            //   ),
+            // ]),
+            // ...
+            // So we need to decode the inner string first ...
+            let initialized_accounts = &events
+                .get(&format!("{evt_key}.initialized_accounts"))
+                .unwrap()[index];
+            let initialized_accounts: String =
+                serde_json::from_str(initialized_accounts).unwrap();
+            serde_json::from_str(&initialized_accounts).unwrap()
         };
         TxResponse {
-            info: serde_json::from_value(info[0].clone()).unwrap(),
-            log: serde_json::from_value(log[0].clone()).unwrap(),
-            height: serde_json::from_value(height[0].clone()).unwrap(),
+            info: serde_json::from_str(info).unwrap(),
+            log: serde_json::from_str(log).unwrap(),
+            height: serde_json::from_str(height).unwrap(),
             hash: tx_hash.to_string(),
-            code: serde_json::from_value(code[0].clone()).unwrap(),
-            gas_used: serde_json::from_value(gas_used[0].clone()).unwrap(),
+            code: serde_json::from_str(code).unwrap(),
+            gas_used: serde_json::from_str(gas_used).unwrap(),
             initialized_accounts,
         }
     }

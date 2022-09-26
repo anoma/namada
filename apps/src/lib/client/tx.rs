@@ -55,8 +55,10 @@ const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const VP_NFT: &str = "vp_nft.wasm";
 
-const ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: &str =
-    "ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT";
+// ```
+// const ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: &str =
+//     "ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT";
+// ```
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
