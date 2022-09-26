@@ -3227,17 +3227,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jsonpath_lib"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaa63191d68230cccb81c5aa23abd53ed64d83337cacbb25a7b8c7979523774f"
-dependencies = [
- "log 0.4.17",
- "serde 1.0.144",
- "serde_json",
-]
-
-[[package]]
 name = "keccak"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4387,7 +4376,6 @@ dependencies = [
  "git2",
  "hex",
  "itertools 0.10.3",
- "jsonpath_lib",
  "libc",
  "libloading",
  "libp2p",
@@ -6469,7 +6457,6 @@ version = "1.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e55a28e3aaef9d5ce0506d0a14dbba8054ddc7e499ef522dd8b26859ec9d4a44"
 dependencies = [
- "indexmap",
  "itoa",
  "ryu",
  "serde 1.0.144",
