@@ -555,35 +555,33 @@ fn transaction_history() -> Result<()> {
     }
 
     for (tx_args, tx_result) in &txs_args {
-        for &dry_run in &[false] {
-            let tx_args = if dry_run && tx_args[0] == "transfer" {
-                vec![tx_args.clone(), vec!["--dry-run"]].concat()
-            } else {
-                tx_args.clone()
-            };
-            let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
-
-            if *tx_result == "Transaction is valid" && !dry_run {
-                if !cfg!(feature = "ABCI") {
-                    client.exp_string("Transaction accepted")?;
-                }
-                client.exp_string("Transaction applied")?;
+        let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
+        if *tx_result == "Transaction is valid" {
+            if !cfg!(feature = "ABCI") {
+                client.exp_string("Transaction accepted")?;
             }
-            client.exp_string(tx_result)?;
+            client.exp_string("Transaction applied")?;
         }
+        client.exp_string(tx_result)?;
     }
 
     let mut wallet_cmd = run!(test, Bin::Wallet, vec!["address", "find", "--alias", ALBERT], Some(300))?;
     let wallet_output = wallet_cmd.exp_regex(r"Found address Established: .*")?;
     let albert_address = &wallet_output.1[27..wallet_output.1.len()-1];
 
-    let mut client = run!(test, Bin::Client, vec!["show-transfers", "--ledger-address", &validator_one_rpc], Some(300))?;
-    client.exp_string(&format!("{}: -20 BTC", albert_address))?;
-    client.exp_string(&format!("{}: +20 BTC", AA_VIEWING_KEY))?;
-    client.exp_string(&format!("{}: -7 BTC", AA_VIEWING_KEY))?;
-    client.exp_string(&format!("{}: +7 BTC", AB_VIEWING_KEY))?;
-    client.exp_string(&format!("{}: +5 BTC", AC_VIEWING_KEY))?;
-    client.exp_string(&format!("{}: -5 BTC", AB_VIEWING_KEY))?;
+    let expected_transfers = vec![
+        format!("{}: -20 BTC", albert_address),
+        format!("{}: +20 BTC", AA_VIEWING_KEY),
+        format!("{}: -7 BTC", AA_VIEWING_KEY),
+        format!("{}: +7 BTC", AB_VIEWING_KEY),
+        format!("{}: +5 BTC", AC_VIEWING_KEY),
+        format!("{}: -5 BTC", AB_VIEWING_KEY),
+    ];
+
+    for exp in &expected_transfers {
+        let mut client = run!(test, Bin::Client, vec!["show-transfers", "--ledger-address", &validator_one_rpc], Some(300))?;
+        client.exp_string(exp)?;
+    }
     Ok(())
 }
 
