@@ -58,6 +58,55 @@ fn run_ledger() -> Result<()> {
     Ok(())
 }
 
+#[test]
+/// In this test we:
+/// 1. Run a single genesis validator node
+/// 2. Submit a valid token transfer tx
+/// 3. Check that the transfer was processed
+fn test_simple_transfer() -> Result<()> {
+    let test =
+        setup::network(|genesis| setup::add_validators(0, genesis), None)?;
+
+    let args = ["ledger"];
+    let mut validator =
+        run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
+    validator.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+
+    let bg_validator = validator.background();
+
+    // 2. Submit a valid token transfer tx
+    let tendermint_rpc_addr = get_actor_rpc(&test, &Who::Validator(0));
+    let tx_args = [
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        XAN,
+        "--amount",
+        "10.1",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        XAN,
+        "--ledger-address",
+        &tendermint_rpc_addr,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // // 3. Check that the transfer was processed
+    let mut validator = bg_validator.foreground();
+    let expected_result = "all VPs accepted transaction";
+    validator.exp_string(expected_result)?;
+
+    Ok(())
+}
+
 /// In this test we:
 /// 1. Run 2 genesis validator ledger nodes and 1 non-validator node
 /// 2. Submit a valid token transfer tx
