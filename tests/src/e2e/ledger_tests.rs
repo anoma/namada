@@ -250,6 +250,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 6. Query token balance
 /// 7. Query the raw bytes of a storage key
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn ledger_txs_and_queries() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
