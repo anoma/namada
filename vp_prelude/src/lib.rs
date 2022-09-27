@@ -69,6 +69,28 @@ pub fn log_string<T: AsRef<str>>(msg: T) {
     }
 }
 
+/// Checks if a proposal id is being executed
+pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
+    let proposal_execution_key =
+        gov_storage::get_proposal_execution_key(proposal_id);
+
+    ctx.has_key_pre(&proposal_execution_key)
+}
+
+/// Checks whether a transaction is valid, which happens in two cases:
+/// - tx is whitelisted, or
+/// - tx is executed by an approved governance proposal (no need to be
+///   whitelisted)
+pub fn is_valid_tx(ctx: &Ctx, tx_data: &[u8]) -> VpResult {
+    if is_tx_whitelisted(ctx)? {
+        accept()
+    } else {
+        let proposal_id = u64::try_from_slice(tx_data).ok();
+
+        proposal_id.map_or(reject(), |id| is_proposal_accepted(ctx, id))
+    }
+}
+
 /// Format and log a string in a debug build.
 ///
 /// In WASM target debug build, the message will be printed at the

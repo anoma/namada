@@ -59,7 +59,6 @@ where
 
         genesis.parameters.init_storage(&mut self.storage);
         genesis.gov_params.init_storage(&mut self.storage);
-        genesis.treasury_params.init_storage(&mut self.storage);
 
         // Depends on parameters being initialized
         self.storage

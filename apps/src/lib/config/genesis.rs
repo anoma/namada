@@ -9,7 +9,6 @@ use derivative::Derivative;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::{GenesisValidator, PosParams};
-use namada::ledger::treasury::parameters::TreasuryParams;
 use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
@@ -32,7 +31,6 @@ pub mod genesis_config {
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::pos::types::BasisPoints;
     use namada::ledger::pos::{GenesisValidator, PosParams};
-    use namada::ledger::treasury::parameters::TreasuryParams;
     use namada::types::address::Address;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
@@ -120,8 +118,6 @@ pub mod genesis_config {
         pub pos_params: PosParamsConfig,
         // Governance parameters
         pub gov_params: GovernanceParamsConfig,
-        // Treasury parameters
-        pub treasury_params: TreasuryParamasConfig,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }
@@ -134,22 +130,18 @@ pub mod genesis_config {
         // Maximum size of proposal in kibibytes (KiB)
         // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_code_size: u64,
-        // Proposal period length in epoch
+        // Minimum proposal period length in epochs
         // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_period: u64,
+        // Maximum proposal period length in epochs
+        // XXX: u64 doesn't work with toml-rs!
+        pub max_proposal_period: u64,
         // Maximum number of characters in the proposal content
         // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_content_size: u64,
         // Minimum number of epoch between end and grace epoch
         // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_grace_epochs: u64,
-    }
-
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct TreasuryParamasConfig {
-        // Maximum funds that can be moved from treasury in a single transfer
-        // XXX: u64 doesn't work with toml-rs!
-        pub max_proposal_fund_transfer: u64,
     }
 
     /// Validator pre-genesis configuration can be created with client utils
@@ -541,16 +533,13 @@ pub mod genesis_config {
             min_proposal_fund: config.gov_params.min_proposal_fund,
             max_proposal_code_size: config.gov_params.max_proposal_code_size,
             min_proposal_period: config.gov_params.min_proposal_period,
+            max_proposal_period: config.gov_params.max_proposal_period,
             max_proposal_content_size: config
                 .gov_params
                 .max_proposal_content_size,
             min_proposal_grace_epochs: config
                 .gov_params
                 .min_proposal_grace_epochs,
-        };
-
-        let treasury_params = TreasuryParams {
-            max_proposal_fund_transfer: 10_000,
         };
 
         let pos_params = PosParams {
@@ -579,7 +568,6 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
-            treasury_params,
         };
         genesis.init();
         genesis
@@ -627,7 +615,6 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
-    pub treasury_params: TreasuryParams,
 }
 
 impl Genesis {
@@ -852,7 +839,6 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
-        treasury_params: TreasuryParams::default(),
     }
 }
 

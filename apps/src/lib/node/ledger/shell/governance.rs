@@ -3,9 +3,9 @@ use namada::ledger::governance::utils::{
     compute_tally, get_proposal_votes, ProposalEvent,
 };
 use namada::ledger::governance::vp::ADDRESS as gov_address;
+use namada::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
-use namada::ledger::treasury::ADDRESS as treasury_address;
 use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
@@ -14,6 +14,7 @@ use namada::types::token;
 use super::*;
 use crate::node::ledger::events::EventType;
 
+#[derive(Default)]
 pub struct ProposalsResult {
     passed: Vec<u64>,
     rejected: Vec<u64>,
@@ -21,45 +22,35 @@ pub struct ProposalsResult {
 
 pub fn execute_governance_proposals<D, H>(
     shell: &mut Shell<D, H>,
-    new_epoch: bool,
     response: &mut shim::response::FinalizeBlock,
 ) -> Result<ProposalsResult>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    let mut proposals_result = ProposalsResult {
-        passed: Vec::new(),
-        rejected: Vec::new(),
-    };
-
-    if !new_epoch {
-        return Ok(proposals_result);
-    }
+    let mut proposals_result = ProposalsResult::default();
 
     for id in std::mem::take(&mut shell.proposal_data) {
         let proposal_funds_key = gov_storage::get_funds_key(id);
-        let proposal_start_epoch_key =
-            gov_storage::get_voting_start_epoch_key(id);
+        let proposal_end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
 
         let funds = shell
             .read_storage_key::<token::Amount>(&proposal_funds_key)
             .ok_or_else(|| {
                 Error::BadProposal(id, "Invalid proposal funds.".to_string())
             })?;
-        let proposal_start_epoch = shell
-            .read_storage_key::<Epoch>(&proposal_start_epoch_key)
+        let proposal_end_epoch = shell
+            .read_storage_key::<Epoch>(&proposal_end_epoch_key)
             .ok_or_else(|| {
                 Error::BadProposal(
                     id,
-                    "Invalid proposal start_epoch.".to_string(),
+                    "Invalid proposal end_epoch.".to_string(),
                 )
             })?;
 
-        let votes =
-            get_proposal_votes(&shell.storage, proposal_start_epoch, id);
+        let votes = get_proposal_votes(&shell.storage, proposal_end_epoch, id);
         let tally_result =
-            compute_tally(&shell.storage, proposal_start_epoch, votes);
+            compute_tally(&shell.storage, proposal_end_epoch, votes);
 
         let transfer_address = match tally_result {
             TallyResult::Passed => {
@@ -133,7 +124,7 @@ where
                                     response.events.push(proposal_event);
                                     proposals_result.rejected.push(id);
 
-                                    treasury_address
+                                    slash_fund_address
                                 }
                             }
                             Err(_e) => {
@@ -149,7 +140,7 @@ where
                                 response.events.push(proposal_event);
                                 proposals_result.rejected.push(id);
 
-                                treasury_address
+                                slash_fund_address
                             }
                         }
                     }
@@ -181,7 +172,7 @@ where
                 response.events.push(proposal_event);
                 proposals_result.rejected.push(id);
 
-                treasury_address
+                slash_fund_address
             }
         };
 

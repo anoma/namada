@@ -23,7 +23,6 @@ use namada::ledger::pos::types::{
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
-use namada::ledger::treasury::storage as treasury_storage;
 use namada::types::address::Address;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
@@ -351,20 +350,17 @@ pub async fn query_proposal_result(
 
     match args.proposal_id {
         Some(id) => {
-            let start_epoch_key = gov_storage::get_voting_start_epoch_key(id);
             let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
-            let start_epoch =
-                query_storage_value::<Epoch>(&client, &start_epoch_key).await;
             let end_epoch =
                 query_storage_value::<Epoch>(&client, &end_epoch_key).await;
 
-            match (start_epoch, end_epoch) {
-                (Some(start_epoch), Some(end_epoch)) => {
+            match end_epoch {
+                Some(end_epoch) => {
                     if current_epoch > end_epoch {
                         let votes =
-                            get_proposal_votes(&client, start_epoch, id).await;
+                            get_proposal_votes(&client, end_epoch, id).await;
                         let proposal_result =
-                            compute_tally(&client, start_epoch, votes).await;
+                            compute_tally(&client, end_epoch, votes).await;
                         println!("Proposal: {}", id);
                         println!("{:4}Result: {}", "", proposal_result);
                     } else {
@@ -372,7 +368,7 @@ pub async fn query_proposal_result(
                         cli::safe_exit(1)
                     }
                 }
-                _ => {
+                None => {
                     eprintln!("Error while retriving proposal.");
                     cli::safe_exit(1)
                 }
@@ -520,16 +516,6 @@ pub async fn query_protocol_parameters(
         .await
         .expect("Parameter should be definied.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
-
-    println!("Treasury parameters");
-    let key = treasury_storage::get_max_transferable_fund_key();
-    let max_transferable_amount = query_storage_value::<Amount>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Max. transferable amount: {}",
-        "", max_transferable_amount
-    );
 
     println!("PoS parameters");
     let key = pos::params_key();
@@ -1604,45 +1590,15 @@ pub async fn get_proposal_votes(
                 .await;
                 if let Some(amount) = delegator_token_amount {
                     if vote.is_yay() {
-                        match yay_delegators.get_mut(&voter_address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                )]);
-                                yay_delegators
-                                    .insert(voter_address, delegations_map);
-                            }
-                        }
+                        let entry =
+                            yay_delegators.entry(voter_address).or_default();
+                        entry
+                            .insert(validator_address, VotePower::from(amount));
                     } else {
-                        match nay_delegators.get_mut(&voter_address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                )]);
-                                nay_delegators
-                                    .insert(voter_address, delegations_map);
-                            }
-                        }
+                        let entry =
+                            nay_delegators.entry(voter_address).or_default();
+                        entry
+                            .insert(validator_address, VotePower::from(amount));
                     }
                 }
             }
@@ -1759,49 +1715,21 @@ pub async fn get_proposal_offline_votes(
                             "Delegation key should contain validator address.",
                         );
                     if proposal_vote.vote.is_yay() {
-                        match yay_delegators.get_mut(&proposal_vote.address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(delegated_amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(delegated_amount),
-                                )]);
-                                yay_delegators.insert(
-                                    proposal_vote.address.clone(),
-                                    delegations_map,
-                                );
-                            }
-                        }
+                        let entry = yay_delegators
+                            .entry(proposal_vote.address.clone())
+                            .or_default();
+                        entry.insert(
+                            validator_address,
+                            VotePower::from(delegated_amount),
+                        );
                     } else {
-                        match nay_delegators.get_mut(&proposal_vote.address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(delegated_amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(delegated_amount),
-                                )]);
-                                nay_delegators.insert(
-                                    proposal_vote.address.clone(),
-                                    delegations_map,
-                                );
-                            }
-                        }
+                        let entry = nay_delegators
+                            .entry(proposal_vote.address.clone())
+                            .or_default();
+                        entry.insert(
+                            validator_address,
+                            VotePower::from(delegated_amount),
+                        );
                     }
                 }
             }
@@ -1968,14 +1896,9 @@ async fn get_validator_stake(
     .await
     .expect("Total deltas should be defined");
     let epoched_total_voting_power = total_voting_power.get(epoch);
-    if let Some(epoched_total_voting_power) = epoched_total_voting_power {
-        match VotePower::try_from(epoched_total_voting_power) {
-            Ok(voting_power) => voting_power,
-            Err(_) => VotePower::from(0_u64),
-        }
-    } else {
-        VotePower::from(0_u64)
-    }
+
+    VotePower::try_from(epoched_total_voting_power.unwrap_or_default())
+        .unwrap_or_default()
 }
 
 pub async fn get_delegators_delegation(
@@ -2024,10 +1947,16 @@ pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
         .await
         .expect("Parameter should be definied.");
 
+    let key = gov_storage::get_max_proposal_period_key();
+    let max_proposal_period = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
     GovParams {
         min_proposal_fund: u64::from(min_proposal_fund),
         max_proposal_code_size,
         min_proposal_period,
+        max_proposal_period,
         max_proposal_content_size,
         min_proposal_grace_epochs,
     }

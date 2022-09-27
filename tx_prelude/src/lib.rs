@@ -18,13 +18,13 @@ use std::marker::PhantomData;
 pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use namada::ledger::governance::storage as gov_storage;
 pub use namada::ledger::parameters::storage as parameters_storage;
+pub use namada::ledger::slash_fund::storage as slash_fund_storage;
 pub use namada::ledger::storage::types::encode;
 pub use namada::ledger::storage_api::{
     self, iter_prefix, iter_prefix_bytes, rev_iter_prefix,
     rev_iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
     StorageWrite,
 };
-pub use namada::ledger::treasury::storage as treasury_storage;
 pub use namada::ledger::tx_env::TxEnv;
 pub use namada::proto::{Signed, SignedTxData};
 pub use namada::types::address::Address;

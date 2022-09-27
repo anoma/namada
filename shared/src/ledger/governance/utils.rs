@@ -256,57 +256,21 @@ where
                                     );
                                     if let Some(amount) = amount {
                                         if vote.is_yay() {
-                                            match yay_delegators
-                                                .get_mut(voter_address)
-                                            {
-                                                Some(map) => {
-                                                    map.insert(
-                                                        validator_address
-                                                            .clone(),
-                                                        VotePower::from(amount),
-                                                    );
-                                                }
-                                                None => {
-                                                    let delegations_map =
-                                                        HashMap::from([(
-                                                            validator_address
-                                                                .clone(),
-                                                            VotePower::from(
-                                                                amount,
-                                                            ),
-                                                        )]);
-                                                    yay_delegators.insert(
-                                                        voter_address.clone(),
-                                                        delegations_map,
-                                                    );
-                                                }
-                                            }
+                                            let entry = yay_delegators
+                                                .entry(voter_address.to_owned())
+                                                .or_default();
+                                            entry.insert(
+                                                validator_address.to_owned(),
+                                                VotePower::from(amount),
+                                            );
                                         } else {
-                                            match nay_delegators
-                                                .get_mut(&voter_address.clone())
-                                            {
-                                                Some(map) => {
-                                                    map.insert(
-                                                        validator_address
-                                                            .clone(),
-                                                        VotePower::from(amount),
-                                                    );
-                                                }
-                                                None => {
-                                                    let delegations_map =
-                                                        HashMap::from([(
-                                                            validator_address
-                                                                .clone(),
-                                                            VotePower::from(
-                                                                amount,
-                                                            ),
-                                                        )]);
-                                                    nay_delegators.insert(
-                                                        voter_address.clone(),
-                                                        delegations_map,
-                                                    );
-                                                }
-                                            }
+                                            let entry = nay_delegators
+                                                .entry(voter_address.to_owned())
+                                                .or_default();
+                                            entry.insert(
+                                                validator_address.to_owned(),
+                                                VotePower::from(amount),
+                                            );
                                         }
                                     }
                                 }
@@ -395,10 +359,8 @@ where
         if let Some(total_delta) = total_delta {
             let epoched_total_delta = total_delta.get(epoch);
             if let Some(epoched_total_delta) = epoched_total_delta {
-                match VotePower::try_from(epoched_total_delta) {
-                    Ok(voting_power) => return voting_power,
-                    Err(_) => return VotePower::from(0_u64),
-                }
+                return VotePower::try_from(epoched_total_delta)
+                    .unwrap_or_default();
             }
         }
     }

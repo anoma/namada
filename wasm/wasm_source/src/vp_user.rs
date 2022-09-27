@@ -82,7 +82,7 @@ fn validate_tx(
         _ => false,
     });
 
-    if !is_tx_whitelisted(ctx)? {
+    if !is_valid_tx(ctx, &tx_data)? {
         return reject();
     }
 

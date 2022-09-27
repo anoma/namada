@@ -36,10 +36,6 @@ pub mod main {
         let target_key = gov_storage::get_min_proposal_grace_epoch_key();
         ctx.write(&target_key, 9_u64)?;
 
-        // treasury
-        let target_key = treasury_storage::get_max_transferable_fund_key();
-        ctx.write(&target_key, token::Amount::whole(20_000))?;
-
         // parameters
         let target_key = parameters_storage::get_tx_whitelist_storage_key();
         ctx.write(&target_key, vec!["hash"])?;

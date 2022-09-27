@@ -172,12 +172,11 @@ light_client_attack_slash_rate = 500
 min_proposal_fund = 500
 # proposal code size in bytes
 max_proposal_code_size = 300000
-# proposal period length in epoch
+# min proposal period length in epochs
 min_proposal_period = 3
+# max proposal period length in epochs
+max_proposal_period = 27
 # maximum number of characters in the proposal content
 max_proposal_content_size = 10000
 # minimum epochs between end and grace epoch
 min_proposal_grace_epochs = 6
-
-[treasury_params]
-max_proposal_fund_transfer = 10000
