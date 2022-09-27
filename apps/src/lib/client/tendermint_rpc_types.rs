@@ -73,23 +73,9 @@ impl TxResponse {
         let code = &events.get(&format!("{evt_key}.code")).unwrap()[index];
         let gas_used =
             &events.get(&format!("{evt_key}.gas_used")).unwrap()[index];
-        let initialized_accounts = {
-            // In a response, the initialized accounts are encoded as e.g.:
-            // ```
-            // "applied.initialized_accounts": Array([
-            //   String(
-            //     "[\"atest1...\"]",
-            //   ),
-            // ]),
-            // ...
-            // So we need to decode the inner string first ...
-            let initialized_accounts = &events
-                .get(&format!("{evt_key}.initialized_accounts"))
-                .unwrap()[index];
-            let initialized_accounts: String =
-                serde_json::from_str(initialized_accounts).unwrap();
-            serde_json::from_str(&initialized_accounts).unwrap()
-        };
+        let initialized_accounts = &events
+            .get(&format!("{evt_key}.initialized_accounts"))
+            .unwrap()[index];
         TxResponse {
             info: serde_json::from_str(info).unwrap(),
             log: serde_json::from_str(log).unwrap(),
@@ -97,7 +83,8 @@ impl TxResponse {
             hash: tx_hash.to_string(),
             code: serde_json::from_str(code).unwrap(),
             gas_used: serde_json::from_str(gas_used).unwrap(),
-            initialized_accounts,
+            initialized_accounts: serde_json::from_str(initialized_accounts)
+                .unwrap(),
         }
     }
 }
