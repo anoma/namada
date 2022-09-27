@@ -288,11 +288,11 @@ pub fn deserialize_vote_extensions(
 #[cfg(not(feature = "abcipp"))]
 pub fn deserialize_vote_extensions(
     txs: &[TxBytes],
-) -> impl Iterator<Item = VoteExtension> + '_ {
+) -> impl Iterator<Item = (TxBytes, VoteExtension)> + '_ {
     use namada::types::transaction::protocol::ProtocolTx;
 
-    txs.iter().filter_map(|tx| {
-        let tx = match Tx::try_from(tx.as_slice()) {
+    txs.iter().filter_map(|tx_bytes| {
+        let tx = match Tx::try_from(tx_bytes.as_slice()) {
             Ok(tx) => tx,
             Err(err) => {
                 tracing::warn!(
@@ -306,7 +306,7 @@ pub fn deserialize_vote_extensions(
             TxType::Protocol(ProtocolTx {
                 tx: ProtocolTxType::VoteExtension(ext),
                 ..
-            }) => Some(ext),
+            }) => Some((tx_bytes.clone(), ext)),
             _ => None,
         }
     })
@@ -330,9 +330,9 @@ pub fn iter_protocol_txs(
 /// Deserializes `vote_extensions` as [`VoteExtension`] instances, filtering
 /// out invalid data, and splits these into [`ethereum_events::Vext`]
 /// and [`validator_set_update::Vext`] instances.
+#[cfg(feature = "abcipp")]
 pub fn split_vote_extensions(
-    #[cfg(feature = "abcipp")] vote_extensions: Vec<ExtendedVoteInfo>,
-    #[cfg(not(feature = "abcipp"))] vote_extensions: &[TxBytes],
+    vote_extensions: Vec<ExtendedVoteInfo>,
 ) -> (
     Vec<Signed<ethereum_events::Vext>>,
     Vec<validator_set_update::SignedVext>,
@@ -348,4 +348,33 @@ pub fn split_vote_extensions(
     }
 
     (eth_evs, valset_upds)
+}
+
+/// Deserializes [`VoteExtension`] instances from mempool protocol txs,
+/// filtering out non-protocol txs, and splits these into
+/// [`ethereum_events::Vext`] and [`validator_set_update::Vext`] instances.
+///
+/// The original [`TxBytes`] are also returned, such that we can remove
+/// them from Tendermint's mempool.
+#[cfg(not(feature = "abcipp"))]
+pub fn split_vote_extensions(
+    mempool_txs: &[TxBytes],
+) -> (
+    Vec<TxBytes>,
+    Vec<Signed<ethereum_events::Vext>>,
+    Vec<validator_set_update::SignedVext>,
+) {
+    let mut txs = vec![];
+    let mut eth_evs = vec![];
+    let mut valset_upds = vec![];
+
+    for (tx, ext) in deserialize_vote_extensions(mempool_txs) {
+        if let Some(validator_set_update) = ext.validator_set_update {
+            valset_upds.push(validator_set_update);
+        }
+        eth_evs.push(ext.ethereum_events);
+        txs.push(tx);
+    }
+
+    (txs, eth_evs, valset_upds)
 }

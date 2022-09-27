@@ -1,19 +1,17 @@
 //! Contains types necessary for processing validator set updates
 //! in vote extensions.
-
-pub mod encoding;
-
 use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use encoding::{AbiEncode, Encode, Token};
 use ethabi::ethereum_types as ethereum;
 use num_rational::Ratio;
 
 use crate::ledger::pos::types::VotingPower;
 use crate::proto::Signed;
 use crate::types::address::Address;
-use crate::types::ethereum_events::{EthAddress, KeccakHash};
+use crate::types::ethereum_events::EthAddress;
+use crate::types::keccak::encode::{AbiEncode, Encode, Token};
+use crate::types::keccak::KeccakHash;
 use crate::types::key::common::{self, Signature};
 use crate::types::storage::BlockHeight;
 #[allow(unused_imports)]
@@ -308,10 +306,10 @@ fn compute_hash(
 mod tag {
     use serde::{Deserialize, Serialize};
 
-    use super::encoding::{AbiEncode, Encode, Token};
     use super::{bheight_to_token, Vext, VotingPowersMapExt};
     use crate::proto::SignedSerialize;
-    use crate::types::ethereum_events::KeccakHash;
+    use crate::types::keccak::encode::{AbiEncode, Encode, Token};
+    use crate::types::keccak::KeccakHash;
 
     /// Tag type that indicates we should use [`AbiEncode`]
     /// to sign data in a [`crate::proto::Signed`] wrapper.
