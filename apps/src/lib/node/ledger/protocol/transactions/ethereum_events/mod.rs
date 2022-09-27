@@ -302,7 +302,7 @@ mod tests {
     use namada::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada::ledger::pos::namada_proof_of_stake::epoched::Epoched;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::pos::types::ValidatorSet;
+    use namada::ledger::pos::types::{ValidatorSet, VotingPower};
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::testing::TestStorage;
     use namada::ledger::storage::Sha256Hasher;
@@ -402,17 +402,16 @@ mod tests {
         Ok(())
     }
 
-    /// Set up a `TestStorage` initialized at genesis with validators of equal
-    /// power
+    /// Set up a `TestStorage` initialized at genesis
     fn set_up_test_storage(
-        active_validators: HashSet<Address>,
+        active_validators: HashMap<Address, VotingPower>,
     ) -> Storage<MockDB, Sha256Hasher> {
         let mut storage = TestStorage::default();
         let validator_set = ValidatorSet {
             active: active_validators
                 .into_iter()
-                .map(|address| WeightedValidator {
-                    voting_power: 100.into(),
+                .map(|(address, voting_power)| WeightedValidator {
+                    voting_power,
                     address,
                 })
                 .collect(),
@@ -429,9 +428,10 @@ mod tests {
     /// that it is recorded in storage
     fn test_apply_derived_tx_new_event_mint_immediately() {
         let sole_validator = address::testing::established_address_2();
-        let mut storage = set_up_test_storage(HashSet::from_iter(vec![
+        let mut storage = set_up_test_storage(HashMap::from_iter(vec![(
             sole_validator.clone(),
-        ]));
+            VotingPower::from(100),
+        )]));
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
@@ -486,9 +486,9 @@ mod tests {
     fn test_apply_derived_tx_new_event_dont_mint() {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
-        let mut storage = set_up_test_storage(HashSet::from_iter(vec![
-            validator_a.clone(),
-            validator_b,
+        let mut storage = set_up_test_storage(HashMap::from_iter(vec![
+            (validator_a.clone(), VotingPower::from(100)),
+            (validator_b, VotingPower::from(100)),
         ]));
         let receiver = address::testing::established_address_1();
 
