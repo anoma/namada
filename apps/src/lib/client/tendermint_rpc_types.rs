@@ -67,24 +67,23 @@ impl TxResponse {
             .enumerate()
             .find(|(_, hash)| hash == &tx_hash)
             .unwrap_or_else(tx_error!());
-        let info = &events.get(&format!("{evt_key}.info")).unwrap()[index];
-        let log = &events.get(&format!("{evt_key}.log")).unwrap()[index];
-        let height = &events.get(&format!("{evt_key}.height")).unwrap()[index];
-        let code = &events.get(&format!("{evt_key}.code")).unwrap()[index];
-        let gas_used =
-            &events.get(&format!("{evt_key}.gas_used")).unwrap()[index];
-        let initialized_accounts = &events
-            .get(&format!("{evt_key}.initialized_accounts"))
-            .unwrap()[index];
+        let info = events[&format!("{evt_key}.info")][index].clone();
+        let log = events[&format!("{evt_key}.log")][index].clone();
+        let height = events[&format!("{evt_key}.height")][index].clone();
+        let code = events[&format!("{evt_key}.code")][index].clone();
+        let gas_used = events[&format!("{evt_key}.gas_used")][index].clone();
+        let initialized_accounts = serde_json::from_str(
+            &events[&format!("{evt_key}.initialized_accounts")][index],
+        )
+        .unwrap();
         TxResponse {
-            info: serde_json::from_str(info).unwrap(),
-            log: serde_json::from_str(log).unwrap(),
-            height: serde_json::from_str(height).unwrap(),
+            info,
+            log,
+            height,
+            code,
+            gas_used,
+            initialized_accounts,
             hash: tx_hash.to_string(),
-            code: serde_json::from_str(code).unwrap(),
-            gas_used: serde_json::from_str(gas_used).unwrap(),
-            initialized_accounts: serde_json::from_str(initialized_accounts)
-                .unwrap(),
         }
     }
 }
