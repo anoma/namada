@@ -9,7 +9,7 @@ use namada::types::token::Amount;
 pub(super) fn amount<D, H>(
     store: &mut Storage<D, H>,
     key: &storage::Key,
-    update: impl Fn(&mut Amount),
+    update: impl FnOnce(&mut Amount),
 ) -> Result<Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
