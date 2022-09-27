@@ -177,11 +177,18 @@ build-wasm-image-docker:
 build-wasm-scripts-docker: build-wasm-image-docker
 	docker run --rm -v ${PWD}:/__w/namada/namada namada-wasm make build-wasm-scripts
 
+build-wasm-test-scripts-docker: build-wasm-image-docker
+	docker run --rm -v ${PWD}:/__w/namada/namada namada-wasm make build-wasm-scripts
+
 # Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
 build-wasm-scripts:
 	make -C $(wasms)
 	make opt-wasm
 	make checksum-wasm
+
+build-wasm-test-scripts:
+	make -C $(wasms)
+	make opt-wasm-test
 
 # need python
 checksum-wasm:
@@ -190,6 +197,9 @@ checksum-wasm:
 # this command needs wasm-opt installed
 opt-wasm:
 	@for file in $(shell ls wasm/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
+
+opt-wasm-test:
+	@for file in $(shell ls wasm_for_tests/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
 
 clean-wasm-scripts:
 	make -C $(wasms) clean
