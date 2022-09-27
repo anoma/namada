@@ -49,9 +49,10 @@ pub mod eth_events {
     use ethabi::token::Token;
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
-        EthAddress, EthereumEvent, KeccakHash, TokenWhitelist,
-        TransferToEthereum, TransferToNamada, Uint,
+        EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
+        TransferToNamada, Uint,
     };
+    use namada::types::keccak::KeccakHash;
     use namada::types::token::Amount;
     use num256::Uint256;
     use thiserror::Error;
