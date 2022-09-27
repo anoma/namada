@@ -51,9 +51,36 @@ where
          protocol transaction"
     );
 
-    let voting_powers = get_voting_powers(storage, &events)?;
+    // TODO: put into a fn and add tests
+    let deduped: Vec<MultiSignedEthEvent> = events
+        .into_iter()
+        .map(|MultiSignedEthEvent { event, signers }| {
+            let voters: HashSet<Address> =
+                signers.iter().map(|(addr, _)| addr.to_owned()).collect();
+            let mut votes = HashSet::with_capacity(voters.len());
+            for voter in voters {
+                let earliest_vote_height = signers
+                    .iter()
+                    .filter(|(addr, _)| *addr == voter)
+                    .map(|(_, height)| *height)
+                    .min()
+                    .expect("every voter must have at least one vote");
+                // TODO: remove the above expect!
+                _ = votes.insert((voter, earliest_vote_height));
+            }
+            MultiSignedEthEvent {
+                event,
+                signers: votes,
+            }
+        })
+        .collect();
 
-    let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
+    let voting_powers = get_voting_powers(storage, &deduped)?;
+
+    let updates = deduped
+        .into_iter()
+        .map(Into::<EthMsgUpdate>::into)
+        .collect();
 
     let changed_keys = apply_updates(storage, updates, voting_powers)?;
 
