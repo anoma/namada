@@ -1,7 +1,7 @@
 //! This module is for hashing Namada types using the keccak256
 //! hash function in a way that is compatible with smart contracts
 //! on Ethereum.
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -12,9 +12,9 @@ use crate::types::hash::{Hash, HASH_LENGTH};
 
 /// Errors for converting / parsing Keccak hashes
 #[derive(Error, Debug)]
-pub enum Error {
-    #[error("TEMPORARY error: {error}")]
-    Temporary { error: String },
+pub enum TryFromError {
+    #[error("Unexpected tx hash length {0}, expected {1}")]
+    WrongLength(usize, usize),
     #[error("Failed trying to convert slice to a hash: {0}")]
     ConversionFailed(std::array::TryFromSliceError),
     #[error("Failed to convert string into a hash: {0}")]
@@ -56,17 +56,11 @@ impl From<Hash> for KeccakHash {
 }
 
 impl TryFrom<&[u8]> for KeccakHash {
-    type Error = Error;
+    type Error = TryFromError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() != HASH_LENGTH {
-            return Err(Error::Temporary {
-                error: format!(
-                    "Unexpected tx hash length {}, expected {}",
-                    value.len(),
-                    HASH_LENGTH
-                ),
-            });
+            return Err(TryFromError::WrongLength(value.len(),HASH_LENGTH));
         }
         let hash: [u8; HASH_LENGTH] =
             TryFrom::try_from(value).map_err(Error::ConversionFailed)?;
@@ -75,19 +69,19 @@ impl TryFrom<&[u8]> for KeccakHash {
 }
 
 impl TryFrom<String> for KeccakHash {
-    type Error = Error;
+    type Error = TryFromError;
 
-    fn try_from(string: String) -> Result<Self, Error> {
+    fn try_from(string: String) -> Result<Self, TryFromError> {
         string.as_str().try_into()
     }
 }
 
 impl TryFrom<&str> for KeccakHash {
-    type Error = Error;
+    type Error = TryFromError;;
 
-    fn try_from(string: &str) -> Result<Self, Error> {
+    fn try_from(string: &str) -> Result<Self, TryFromError> {
         let bytes: Vec<u8> =
-            Vec::from_hex(string).map_err(Error::FromStringError)?;
+            Vec::from_hex(string).map_err(TryFromError::FromStringError)?;
         Self::try_from(bytes.as_slice())
     }
 }
