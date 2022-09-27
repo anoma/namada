@@ -35,20 +35,15 @@ pub(super) fn get_voting_powers_for_selected(
             )> {
                 let active_validators =
                     all_active.get(&height).ok_or_else(|| {
-                        eyre!(
-                            "No active validators found for height {}",
-                            height
-                        )
+                        eyre!("No active validators found for height {height}")
                     })?;
                 let individual_voting_power = active_validators
                     .iter()
                     .find(|&v| v.address == addr)
                     .ok_or_else(|| {
                         eyre!(
-                            "No active validator found with address {} for \
-                             height {}",
-                            addr,
-                            height
+                            "No active validator found with address {addr} \
+                             for height {height}"
                         )
                     })?
                     .voting_power;
@@ -56,8 +51,8 @@ pub(super) fn get_voting_powers_for_selected(
                     .get(&height)
                     .ok_or_else(|| {
                         eyre!(
-                            "No total voting power provided for height {}",
-                            height
+                            "No total voting power provided for height \
+                             {height}"
                         )
                     })?
                     .to_owned();
