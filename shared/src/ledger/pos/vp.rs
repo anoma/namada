@@ -13,6 +13,7 @@ pub use namada_proof_of_stake::types::{
 };
 use namada_proof_of_stake::validation::validate;
 use namada_proof_of_stake::{validation, PosReadOnly};
+use rust_decimal::Decimal;
 use thiserror::Error;
 
 use super::{
@@ -22,7 +23,7 @@ use super::{
     total_voting_power_key, unbond_key, validator_consensus_key_key,
     validator_set_key, validator_slashes_key, validator_state_key,
     validator_total_deltas_key, validator_voting_power_key, BondId, Bonds,
-    Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
+    Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas, validator_commission_rate_key, max_commission_rate_change_key,
 };
 use crate::impl_pos_read_only;
 use crate::ledger::governance::vp::is_proposal_accepted;

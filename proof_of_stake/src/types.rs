@@ -37,6 +37,8 @@ pub type ValidatorSets<Address> =
     Epoched<ValidatorSet<Address>, OffsetUnbondingLen>;
 /// Epoched total voting power.
 pub type TotalVotingPowers = EpochedDelta<VotingPowerDelta, OffsetUnbondingLen>;
+/// Epoched validator commission rate
+pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
 
 /// Epoch identifier. Epochs are identified by consecutive natural numbers.
 ///

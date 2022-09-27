@@ -8,7 +8,7 @@ use namada_proof_of_stake::{types, PosBase};
 
 use super::{
     BondId, Bonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
-    ADDRESS,
+    ADDRESS, CommissionRates
 };
 use crate::ledger::storage::types::{decode, encode};
 use crate::ledger::storage::{self, Storage, StorageHasher};
@@ -471,7 +471,7 @@ where
     fn read_validator_commission_rate(
         &self,
         key: &Self::Address,
-    ) -> rust_decimal::Decimal {
+    ) -> CommissionRates {
         let (value, _gas) =
             self.read(&validator_commission_rate_key(key)).unwrap();
         value.map(|value| decode(value).unwrap()).unwrap()
@@ -510,10 +510,10 @@ where
     }
 
     fn write_validator_commission_rate(
-            &mut self,
-            key: &Self::Address,
-            value: &rust_decimal::Decimal,
-        ) {
+        &mut self,
+        key: &Self::Address,
+        value: &CommissionRates,
+    ) {
         self.write(&validator_commission_rate_key(key), encode(value))
             .unwrap();
     }
