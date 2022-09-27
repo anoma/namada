@@ -318,6 +318,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_get_voting_powers_one_validator() {
+        let voter = address::testing::established_address_1();
+        let voting_height = BlockHeight(100);
+        let storage = set_up_test_storage(HashMap::from_iter(vec![(
+            voter.clone(),
+            VotingPower::from(100),
+        )]));
+
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1.into(),
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver: address::testing::established_address_1(),
+            }],
+        };
+        let signers = HashSet::from_iter(vec![(voter.clone(), voting_height)]);
+
+        let events = vec![MultiSignedEthEvent { event, signers }];
+
+        let result = get_voting_powers(&storage, &events);
+
+        assert_eq!(
+            result.unwrap(),
+            HashMap::from_iter(vec![(
+                (voter, voting_height),
+                FractionalVotingPower::new(1, 1).unwrap()
+            )])
+        );
+    }
+
+    #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer
     fn test_apply_single_transfer() -> Result<()> {
         let sole_validator = address::testing::gen_established_address();
