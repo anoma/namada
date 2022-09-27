@@ -154,10 +154,10 @@ impl namada_proof_of_stake::PosActions for Ctx {
     }
 
     fn write_validator_commission_rate(
-            &mut self,
-            key: &Self::Address,
-            value: Decimal,
-        ) -> Result<(), Self::Error> {
+        &mut self,
+        key: &Self::Address,
+        value: CommissionRates,
+    ) -> Result<(), Self::Error> {
         self.write(&validator_commission_rate_key(key), &value)
             .into_env_result()
     }
