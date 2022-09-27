@@ -169,8 +169,6 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 /// 5. Reset the ledger's state
 /// 6. Run the ledger again, it should start from fresh state
 #[test]
-#[ignore]
-// TODO(namada#418): re-enable once working again
 fn run_ledger_load_state_and_reset() -> Result<()> {
     let test = setup::single_node_net()?;
 
