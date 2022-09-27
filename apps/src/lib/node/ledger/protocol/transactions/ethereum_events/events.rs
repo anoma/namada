@@ -26,7 +26,7 @@ where
             act_on_transfers_to_namada(storage, transfers)
         }
         _ => {
-            tracing::debug!("No actions taken for event");
+            tracing::debug!(?event, "No actions taken for Ethereum event");
             Ok(BTreeSet::default())
         }
     }
