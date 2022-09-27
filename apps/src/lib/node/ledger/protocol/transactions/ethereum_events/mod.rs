@@ -318,6 +318,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_get_voting_powers_empty() {
+        let storage = TestStorage::default();
+
+        let result = get_voting_powers(&storage, &vec![]);
+
+        assert!(result.unwrap().is_empty())
+    }
+
+    #[test]
     fn test_get_voting_powers_one_validator() {
         let voter = address::testing::established_address_1();
         let voting_height = BlockHeight(100);
