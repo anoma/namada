@@ -72,10 +72,19 @@ impl TxResponse {
         let height = events[&format!("{evt_key}.height")][index].clone();
         let code = events[&format!("{evt_key}.code")][index].clone();
         let gas_used = events[&format!("{evt_key}.gas_used")][index].clone();
-        let initialized_accounts = serde_json::from_str(
-            &events[&format!("{evt_key}.initialized_accounts")][index],
-        )
-        .unwrap();
+        let initialized_accounts = events
+            [&format!("{evt_key}.initialized_accounts")]
+            .get(index)
+            .as_ref()
+            .map(|initialized_accounts| {
+                serde_json::from_str(initialized_accounts).unwrap()
+            })
+            .unwrap_or_else(|| {
+                eprintln!(
+                    "Tendermint omitted one of the expected indices in events"
+                );
+                Vec::new()
+            });
         TxResponse {
             info,
             log,
