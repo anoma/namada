@@ -88,7 +88,7 @@ impl Ctx {
             validator_vp_code,
             rewards_vp_code,
         }: InitValidator,
-    ) -> EnvResult<(Address)> {
+    ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
         // Init validator account
         let validator_address = self.init_account(&validator_vp_code)?;
@@ -107,7 +107,7 @@ impl Ctx {
             max_commission_rate_change,
         )?;
 
-        Ok((validator_address))
+        Ok(validator_address)
     }
 }
 
@@ -160,7 +160,6 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: CommissionRates,
     ) -> Result<(), Self::Error> {
         self.write(&validator_commission_rate_key(key), &value)
-            .into_env_result()
     }
 
     fn write_validator_max_commission_rate_change(
@@ -169,7 +168,6 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: Decimal,
     ) -> Result<(), Self::Error> {
         self.write(&validator_max_commission_rate_change_key(key), &value)
-            .into_env_result()
     }
 
     fn write_validator_deltas(
@@ -177,7 +175,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         key: &Self::Address,
         value: ValidatorDeltas,
     ) -> Result<(), Self::Error> {
-        self.write(&validator_total_deltas_key(key), &value)
+        self.write(&validator_deltas_key(key), &value)
     }
 
     fn write_bond(
