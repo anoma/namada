@@ -121,7 +121,7 @@ pub trait PosReadOnly {
         &self,
         key: &Self::Address,
     ) -> Result<Option<ValidatorStates>, Self::Error>;
-    /// Read PoS validator's total deltas of their bonds (validator self-bonds
+    /// Read PoS validator's deltas of their bonds (validator self-bonds
     /// and delegations).
     fn read_validator_deltas(
         &self,

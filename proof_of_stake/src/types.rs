@@ -33,7 +33,7 @@ pub type Unbonds<TokenAmount> =
 /// Epoched validator set.
 pub type ValidatorSets<Address> =
     Epoched<ValidatorSet<Address>, OffsetUnbondingLen>;
-/// Epoched total total deltas.
+/// Epoched total deltas.
 pub type TotalDeltas<TokenChange> =
     EpochedDelta<TokenChange, OffsetUnbondingLen>;
 /// Epoched rewards products
