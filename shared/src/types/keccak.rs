@@ -68,7 +68,7 @@ impl TryFrom<&[u8]> for KeccakHash {
                 ),
             });
         }
-        let hash: [u8; 32] =
+        let hash: [u8; HASH_LENGTH] =
             TryFrom::try_from(value).map_err(Error::ConversionFailed)?;
         Ok(KeccakHash(hash))
     }
