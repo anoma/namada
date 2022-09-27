@@ -11,6 +11,7 @@ use thiserror::Error;
 use crate::types::hash::{Hash, HASH_LENGTH};
 
 /// Errors for converting / parsing Keccak hashes
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum TryFromError {
     #[error("Unexpected tx hash length {0}, expected {1}")]
@@ -60,10 +61,10 @@ impl TryFrom<&[u8]> for KeccakHash {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() != HASH_LENGTH {
-            return Err(TryFromError::WrongLength(value.len(),HASH_LENGTH));
+            return Err(TryFromError::WrongLength(value.len(), HASH_LENGTH));
         }
         let hash: [u8; HASH_LENGTH] =
-            TryFrom::try_from(value).map_err(Error::ConversionFailed)?;
+            TryFrom::try_from(value).map_err(TryFromError::ConversionFailed)?;
         Ok(KeccakHash(hash))
     }
 }
@@ -77,7 +78,7 @@ impl TryFrom<String> for KeccakHash {
 }
 
 impl TryFrom<&str> for KeccakHash {
-    type Error = TryFromError;;
+    type Error = TryFromError;
 
     fn try_from(string: &str) -> Result<Self, TryFromError> {
         let bytes: Vec<u8> =
