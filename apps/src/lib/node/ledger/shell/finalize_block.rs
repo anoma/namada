@@ -551,7 +551,7 @@ where
 
             let validator_deltas =
                 self.storage.read_validator_deltas(address).unwrap();
-            let commission_rate =
+            let commission_rates =
                 self.storage.read_validator_commission_rate(address);
             let mut rewards_products =
                 self.storage.read_validator_rewards_products(address);
@@ -568,6 +568,7 @@ where
                 *delegation_rewards_products.get(&last_epoch).unwrap();
             let new_product =
                 last_product * (Decimal::ONE + Decimal::from(reward) / stake);
+            let commission_rate = *commission_rates.get(current_epoch).unwrap();
             let new_delegation_product = last_delegation_product
                 * (Decimal::ONE
                     + (Decimal::ONE - commission_rate) * Decimal::from(reward)

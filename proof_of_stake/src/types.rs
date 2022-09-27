@@ -38,6 +38,8 @@ pub type TotalDeltas<TokenChange> =
     EpochedDelta<TokenChange, OffsetUnbondingLen>;
 /// Epoched rewards products
 pub type RewardsProducts = std::collections::HashMap<Epoch, Decimal>;
+/// Epoched validator commission rate
+pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
 
 /// Epoch identifier. Epochs are identified by consecutive natural numbers.
 ///

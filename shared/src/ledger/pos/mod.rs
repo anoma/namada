@@ -88,6 +88,9 @@ pub type GenesisValidator = namada_proof_of_stake::types::GenesisValidator<
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type TotalDeltas = namada_proof_of_stake::types::TotalDeltas<token::Change>;
 
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type CommissionRates = namada_proof_of_stake::types::CommissionRates;
+
 impl From<Epoch> for namada_proof_of_stake::types::Epoch {
     fn from(epoch: Epoch) -> Self {
         let epoch: u64 = epoch.into();
@@ -185,6 +188,24 @@ mod macros {
             ) -> std::result::Result<Option<ValidatorConsensusKeys>, Self::Error> {
                 let value =
                     $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_consensus_key_key(key))?;
+                Ok(value.map(|value| $crate::ledger::storage::types::decode(value).unwrap()))
+            }
+
+            fn read_validator_commission_rate(
+                &self,
+                key: &Self::Address,
+            ) -> std::result::Result<Option<CommissionRates>, Self::Error> {
+                let value =
+                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_commission_rate_key(key))?;
+                Ok(value.map(|value| $crate::ledger::storage::types::decode(value).unwrap()))
+            }
+
+            fn read_validator_max_commission_rate_change(
+                &self,
+                key: &Self::Address,
+            ) -> std::result::Result<Option<Decimal>, Self::Error> {
+                let value =
+                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_max_commission_rate_change_key(key))?;
                 Ok(value.map(|value| $crate::ledger::storage::types::decode(value).unwrap()))
             }
 
