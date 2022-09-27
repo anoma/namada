@@ -335,14 +335,14 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
     fn iter_prefix(
         &self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
+    ) -> Result<Self::PrefixIter, Error> {
         iter_prefix_impl(prefix)
     }
 
     fn rev_iter_prefix(
         &self,
         prefix: &storage::Key,
-    ) -> storage_api::Result<Self::PrefixIter> {
+    ) -> Result<Self::PrefixIter, Error> {
         rev_iter_prefix_impl(prefix)
     }
 
@@ -396,7 +396,7 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
     fn iter_prefix(
         &self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
+    ) -> Result<Self::PrefixIter, Error> {
         iter_prefix_impl(prefix)
     }
 
@@ -436,7 +436,7 @@ fn iter_prefix_impl(
 
 fn rev_iter_prefix_impl(
     prefix: &storage::Key,
-) -> Result<KeyValIterator<(String, Vec<u8>)>, storage_api::Error> {
+) -> Result<KeyValIterator<(String, Vec<u8>)>, Error> {
     let prefix = prefix.to_string();
     let iter_id = unsafe {
         anoma_vp_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
@@ -444,7 +444,7 @@ fn rev_iter_prefix_impl(
     Ok(KeyValIterator(iter_id, PhantomData))
 }
 
-fn get_chain_id() -> Result<String, storage_api::Error> {
+fn get_chain_id() -> Result<String, Error> {
     let result = Vec::with_capacity(CHAIN_ID_LENGTH);
     unsafe {
         anoma_vp_get_chain_id(result.as_ptr() as _);
