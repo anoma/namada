@@ -1209,8 +1209,7 @@ pub async fn submit_tx(
     //     };
     // ```
     tracing::debug!("Tenderming address: {:?}", address);
-    let (wrapper_tx_cli, driver) =
-        WebSocketClient::new(address.clone()).await?;
+    let (ws_cli, driver) = WebSocketClient::new(address.clone()).await?;
     tokio::spawn(async move {
         let _ = driver.run().await;
     });
@@ -1221,20 +1220,14 @@ pub async fn submit_tx(
     // created by the shell
     let wrapper_query = Query::from(EventType::NewBlock)
         .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
-    let mut wrapper_tx_subscription =
-        wrapper_tx_cli.subscribe(wrapper_query).await?;
+    let mut wrapper_tx_subscription = ws_cli.subscribe(wrapper_query).await?;
 
     // We also subscribe to the event emitted when the encrypted
     // payload makes its way onto the blockchain
-    let (decrypted_tx_cli, driver) =
-        WebSocketClient::new(address.clone()).await?;
-    tokio::spawn(async move {
-        let _ = driver.run().await;
-    });
     let decrypted_query = Query::from(EventType::NewBlock)
         .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
     let mut decrypted_tx_subscription =
-        decrypted_tx_cli.subscribe(decrypted_query).await?;
+        ws_cli.subscribe(decrypted_query).await?;
 
     // Broadcast the supplied transaction
     broadcast_tx(address, &to_broadcast).await?;
@@ -1273,17 +1266,16 @@ pub async fn submit_tx(
         }
     };
 
-    wrapper_tx_cli
+    ws_cli
         .unsubscribe(wrapper_tx_subscription.query().clone())
         .await?;
     drop(wrapper_tx_subscription);
-    drop(wrapper_tx_cli);
 
-    decrypted_tx_cli
+    ws_cli
         .unsubscribe(decrypted_tx_subscription.query().clone())
         .await?;
     drop(decrypted_tx_subscription);
-    drop(decrypted_tx_cli);
 
+    drop(ws_cli);
     parsed
 }
