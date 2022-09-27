@@ -26,7 +26,7 @@ where
 pub(super) fn value<D, H, T: BorshSerialize + BorshDeserialize>(
     store: &mut Storage<D, H>,
     key: &storage::Key,
-    update: impl Fn(&mut T),
+    update: impl FnOnce(&mut T),
 ) -> Result<T>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
