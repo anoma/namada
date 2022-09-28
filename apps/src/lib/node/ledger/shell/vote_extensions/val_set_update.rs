@@ -67,7 +67,7 @@ where
                 "Validator set update vote extension issued for a block \
                  height different from the expected last height.",
             );
-            return Err(VoteExtensionError::UnexpectedSequenceNumber);
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
         #[cfg(not(feature = "abcipp"))]
         if ext.data.block_height > last_height {
@@ -77,7 +77,7 @@ where
                 "Validator set update vote extension issued for a block \
                  height higher than the chain's last height.",
             );
-            return Err(VoteExtensionError::UnexpectedSequenceNumber);
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
         if last_height.0 == 0 {
             tracing::error!("Dropping vote extension issued at genesis");
@@ -98,7 +98,7 @@ where
                     "The epoch of the validator set update vote extension's \
                      block height should always be known",
                 );
-                return Err(VoteExtensionError::UnexpectedSequenceNumber);
+                return Err(VoteExtensionError::UnexpectedEpoch);
             }
         };
         let (voting_power, pk) = self
