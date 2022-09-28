@@ -419,6 +419,18 @@ fn ledger_txs_and_queries() -> Result<()> {
     Ok(())
 }
 
+/// In this test we:
+/// 1. Run the ledger node
+/// 2. Add viewing keys for SK(A), SK(B) and SK(C) to wallet
+/// 3. Send 20 BTC from Albert to PA(A)
+/// 4. Spend 7 BTC at SK(A) to PA(B)
+/// 5. Spend 5 BTC at SK(B) to PA(C)
+/// 6. Send 10 ETH from Bertha to PA(B)
+/// 7. Assert all transfers are displayed in transfer history
+/// 8. Assert only BTC transfers are displayed when filtering by token
+/// 9. Assert only Albert's transfers are displayed when filtering by address
+/// 10. Assert only VK(B) transfers are displayed when filtering by viewing key
+
 #[test]
 fn transaction_history() -> Result<()> {
     // Download the shielded pool parameters before starting node
@@ -544,6 +556,23 @@ fn transaction_history() -> Result<()> {
             ],
             "Transaction is valid",
         ),
+        // 6. Send 10 ETH from Bertha to PA(B)
+        (
+            vec![
+                "transfer",
+                "--source",
+                BERTHA,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                ETH,
+                "--amount",
+                "10",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
     ];
 
     // Wait till epoch boundary
@@ -565,23 +594,100 @@ fn transaction_history() -> Result<()> {
         client.exp_string(tx_result)?;
     }
 
+    // Get Albert's address from Wallet
     let mut wallet_cmd = run!(test, Bin::Wallet, vec!["address", "find", "--alias", ALBERT], Some(300))?;
     let wallet_output = wallet_cmd.exp_regex(r"Found address Established: .*")?;
     let albert_address = &wallet_output.1[27..wallet_output.1.len()-1];
 
-    let expected_transfers = vec![
-        format!("{}: -20 BTC", albert_address),
-        format!("{}: +20 BTC", AA_VIEWING_KEY),
-        format!("{}: -7 BTC", AA_VIEWING_KEY),
-        format!("{}: +7 BTC", AB_VIEWING_KEY),
-        format!("{}: +5 BTC", AC_VIEWING_KEY),
-        format!("{}: -5 BTC", AB_VIEWING_KEY),
+    // Get Bertha's address from wallet
+    let mut wallet_cmd = run!(test, Bin::Wallet, vec!["address", "find", "--alias", BERTHA], Some(300))?;
+    let wallet_output = wallet_cmd.exp_regex(r"Found address Established: .*")?;
+    let bertha_address = &wallet_output.1[27..wallet_output.1.len()-1];
+
+    // 7. Assert all transfers are displayed in transfer history
+    let unfiltered_transfers = vec![
+        (format!("{}: -20 BTC", albert_address), true),
+        (format!("{}: -10 ETH", bertha_address), true),
+        (format!("{}: +20 BTC", AA_VIEWING_KEY), true),
+        (format!("{}: -7 BTC", AA_VIEWING_KEY), true),
+        (format!("{}: +7 BTC", AB_VIEWING_KEY), true),
+        (format!("{}: +10 ETH", AB_VIEWING_KEY), true),
+        (format!("{}: +5 BTC", AC_VIEWING_KEY), true),
+        (format!("{}: -5 BTC", AB_VIEWING_KEY), true),
     ];
 
-    for exp in &expected_transfers {
+    for (exp, displayed) in &unfiltered_transfers {
         let mut client = run!(test, Bin::Client, vec!["show-transfers", "--ledger-address", &validator_one_rpc], Some(300))?;
-        client.exp_string(exp)?;
+        if *displayed {
+            client.exp_string(exp)?;
+        } else {
+            assert!(client.exp_string(exp).is_err());
+        }
     }
+
+    // 8. Assert only BTC transfers are displayed when filtering by token
+    let token_filtered_transfers = vec![
+        (format!("{}: -20 BTC", albert_address), true),
+        (format!("{}: -10 ETH", bertha_address), false),
+        (format!("{}: +20 BTC", AA_VIEWING_KEY), true),
+        (format!("{}: -7 BTC", AA_VIEWING_KEY), true),
+        (format!("{}: +7 BTC", AB_VIEWING_KEY), true),
+        (format!("{}: +10 ETH", AB_VIEWING_KEY), false),
+        (format!("{}: +5 BTC", AC_VIEWING_KEY), true),
+        (format!("{}: -5 BTC", AB_VIEWING_KEY), true),
+    ];
+    
+    for (exp, displayed) in &token_filtered_transfers {
+        let mut client = run!(test, Bin::Client, vec!["show-transfers", "--token", BTC, "--ledger-address", &validator_one_rpc], Some(300))?;
+        if *displayed {
+            client.exp_string(exp)?;
+        } else {
+            assert!(client.exp_string(exp).is_err());
+        }
+    }
+
+    // 9. Assert only Albert's transfers are displayed when filtering by address
+    let address_filtered_transfers = vec![
+        (format!("{}: -20 BTC", albert_address), true),
+        (format!("{}: -10 ETH", bertha_address), false),
+        (format!("{}: +20 BTC", AA_VIEWING_KEY), true),
+        (format!("{}: -7 BTC", AA_VIEWING_KEY), false),
+        (format!("{}: +7 BTC", AB_VIEWING_KEY), false),
+        (format!("{}: +10 ETH", AB_VIEWING_KEY), false),
+        (format!("{}: +5 BTC", AC_VIEWING_KEY), false),
+        (format!("{}: -5 BTC", AB_VIEWING_KEY), false),
+    ];
+    
+    for (exp, displayed) in &address_filtered_transfers {
+        let mut client = run!(test, Bin::Client, vec!["show-transfers", "--owner", ALBERT, "--ledger-address", &validator_one_rpc], Some(300))?;
+        if *displayed {
+            client.exp_string(exp)?;
+        } else {
+            assert!(client.exp_string(exp).is_err());
+        }
+    }
+
+    // 10. Assert only VK(B) transfers are displayed when filtering by viewing key
+    let key_filtered_transfers = vec![
+        (format!("{}: -20 BTC", albert_address), false),
+        (format!("{}: -10 ETH", bertha_address), true),
+        (format!("{}: +20 BTC", AA_VIEWING_KEY), false),
+        (format!("{}: -7 BTC", AA_VIEWING_KEY), true),
+        (format!("{}: +7 BTC", AB_VIEWING_KEY), true),
+        (format!("{}: +10 ETH", AB_VIEWING_KEY), true),
+        (format!("{}: +5 BTC", AC_VIEWING_KEY), true),
+        (format!("{}: -5 BTC", AB_VIEWING_KEY), true),
+    ];
+
+    for (exp, displayed) in &key_filtered_transfers {
+        let mut client = run!(test, Bin::Client, vec!["show-transfers", "--owner", AB_VIEWING_KEY, "--ledger-address", &validator_one_rpc], Some(300))?;
+        if *displayed {
+            client.exp_string(exp)?;
+        } else {
+            assert!(client.exp_string(exp).is_err());
+        }
+    }
+    
     Ok(())
 }
 
