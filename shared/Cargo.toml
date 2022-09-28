@@ -86,10 +86,10 @@ num-rational = "0.4.1"
 hex = "0.4.3"
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false, optional = true}
-ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false, optional = true}
-ibc = {git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
+ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
+ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
+ibc = {git = "https://github.com/heliaxdev/ibc-rs", rev = "6255c4e01db11781e5a8cdb89737f55a8ad81d63", default-features = false, optional = true}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", rev = "6255c4e01db11781e5a8cdb89737f55a8ad81d63", default-features = false, optional = true}
 ics23 = "0.7.0"
 itertools = "0.10.3"
 loupe = {version = "0.1.3", optional = true}
