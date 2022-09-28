@@ -534,9 +534,15 @@ pub trait PosActions: PosReadOnly {
         &mut self,
         params: &PosParams,
         validator: &Self::Address,
-        change: Decimal,
+        new_rate: Decimal,
         current_epoch: impl Into<Epoch>,
     ) -> Result<(), CommissionRateChangeError<Self::Address>> {
+        if new_rate < Decimal::ZERO {
+            return Err(CommissionRateChangeError::NegativeRate(
+                new_rate,
+                validator.clone(),
+            ));
+        }
         let current_epoch = current_epoch.into();
         let max_change = self
             .read_validator_max_commission_rate_change(validator)
@@ -545,57 +551,57 @@ pub trait PosActions: PosReadOnly {
             })
             .unwrap()
             .unwrap();
-
-        if change == Decimal::ZERO {
+        let mut commission_rates =
+            match self.read_validator_commission_rate(validator) {
+                Ok(Some(rates)) => rates,
+                _ => {
+                    return Err(CommissionRateChangeError::CannotRead(
+                        validator.clone(),
+                    ));
+                }
+            };
+        let rate_at_pipeline = *commission_rates
+            .get_at_offset(
+                current_epoch,
+                DynEpochOffset::PipelineLen,
+                params,
+            )
+            .expect("Could not find a rate in given epoch");
+        if new_rate == rate_at_pipeline {
             return Err(CommissionRateChangeError::ChangeIsZero(
-                change,
                 validator.clone(),
             ));
-        } else if change.abs() > max_change {
-            return Err(CommissionRateChangeError::RateChangeTooLarge(
-                change,
-                validator.clone(),
-            ));
-        } else {
-            let mut commission_rates =
-                match self.read_validator_commission_rate(validator) {
-                    Ok(Some(rates)) => rates,
-                    _ => {
-                        return Err(CommissionRateChangeError::ChangeIsZero(
-                            change,
-                            validator.clone(),
-                        ));
-                    }
-                };
-            let commission_rate = *commission_rates
-                .get_at_offset(
-                    current_epoch,
-                    DynEpochOffset::PipelineLen,
-                    params,
-                )
-                .expect("Could not find a rate in given epoch");
-            if commission_rate + change < Decimal::ZERO {
-                return Err(CommissionRateChangeError::NegativeRate(
-                    change,
-                    validator.clone(),
-                ));
-            } else {
-                commission_rates.update_from_offset(
-                    |val, _epoch| {
-                        *val += commission_rate;
-                    },
-                    current_epoch,
-                    DynEpochOffset::PipelineLen,
-                    params,
-                );
-                self.write_validator_commission_rate(
-                    validator,
-                    commission_rates,
-                )
-                .map_err(|_| CommissionRateChangeError::CannotWrite(validator))
-                .unwrap();
-            }
         }
+
+        let rate_before_pipeline = *commission_rates
+            .get_at_offset(
+                current_epoch-1,
+                DynEpochOffset::PipelineLen,
+                params,
+            )
+            .expect("Could not find a rate in given epoch");
+        let change_from_prev = new_rate - rate_before_pipeline;
+        if change_from_prev.abs() > max_change {
+            return Err(CommissionRateChangeError::RateChangeTooLarge(
+                change_from_prev,
+                validator.clone(),
+            ));
+        }
+        commission_rates.update_from_offset(
+            |val, _epoch| {
+                *val = new_rate;
+            },
+            current_epoch,
+            DynEpochOffset::PipelineLen,
+            params,
+        );
+        self.write_validator_commission_rate(
+            validator,
+            commission_rates,
+        )
+        .map_err(|_| CommissionRateChangeError::CannotWrite(validator))
+        .unwrap();
+        
         Ok(())
     }
 }
@@ -1128,14 +1134,16 @@ where
     NegativeRate(Decimal, Address),
     #[error("Rate change of {0} is too large for validator {1}")]
     RateChangeTooLarge(Decimal, Address),
-    #[error("The rate change is {0} for validator {1}")]
-    ChangeIsZero(Decimal, Address),
+    #[error("The rate change is 0 for validator {0}")]
+    ChangeIsZero(Address),
     #[error(
         "There is no maximum rate change written in storage for validator {0}"
     )]
     NoMaxSetInStorage(Address),
     #[error("Cannot write to storage for validator {0}")]
     CannotWrite(Address),
+    #[error("Cannot read storage for validator {0}")]
+    CannotRead(Address),
 }
 
 struct GenesisData<Validators, Address, TokenAmount, TokenChange, PK>

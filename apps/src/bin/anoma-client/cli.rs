@@ -58,6 +58,9 @@ pub async fn main() -> Result<()> {
                 Sub::QueryVotingPower(QueryVotingPower(args)) => {
                     rpc::query_voting_power(ctx, args).await;
                 }
+                Sub::QueryCommissionRate(QueryCommissionRate(args)) => {
+                    rpc::query_commission_rate(ctx, args).await;
+                }
                 Sub::QuerySlashes(QuerySlashes(args)) => {
                     rpc::query_slashes(ctx, args).await;
                 }
