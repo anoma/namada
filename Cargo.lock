@@ -2868,14 +2868,14 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.12.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?rev=30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc#30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc"
+version = "0.14.0"
+source = "git+https://github.com/heliaxdev/ibc-rs?rev=6255c4e01db11781e5a8cdb89737f55a8ad81d63#6255c4e01db11781e5a8cdb89737f55a8ad81d63"
 dependencies = [
  "bytes 1.1.0",
  "derive_more",
  "flex-error",
- "ibc-proto 0.16.0",
- "ics23 0.6.7",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=6255c4e01db11781e5a8cdb89737f55a8ad81d63)",
+ "ics23",
  "num-traits 0.2.15",
  "prost 0.9.0",
  "prost-types 0.9.0",
@@ -2885,10 +2885,10 @@ dependencies = [
  "serde_json",
  "sha2 0.10.2",
  "subtle-encoding",
- "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "tendermint-light-client-verifier",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "tendermint-testgen",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-light-client-verifier 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-testgen 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
  "time 0.3.9",
  "tracing 0.1.35",
 ]
@@ -2901,8 +2901,8 @@ dependencies = [
  "bytes 1.1.0",
  "derive_more",
  "flex-error",
- "ibc-proto 0.17.1",
- "ics23 0.7.0",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
+ "ics23",
  "num-traits 0.2.15",
  "prost 0.9.0",
  "prost-types 0.9.0",
@@ -2913,24 +2913,24 @@ dependencies = [
  "sha2 0.10.2",
  "subtle-encoding",
  "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "tendermint-light-client-verifier",
+ "tendermint-light-client-verifier 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
  "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "tendermint-testgen",
+ "tendermint-testgen 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
  "time 0.3.9",
  "tracing 0.1.35",
 ]
 
 [[package]]
 name = "ibc-proto"
-version = "0.16.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?rev=30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc#30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc"
+version = "0.17.1"
+source = "git+https://github.com/heliaxdev/ibc-rs?rev=6255c4e01db11781e5a8cdb89737f55a8ad81d63#6255c4e01db11781e5a8cdb89737f55a8ad81d63"
 dependencies = [
+ "base64 0.13.0",
  "bytes 1.1.0",
  "prost 0.9.0",
  "prost-types 0.9.0",
  "serde 1.0.137",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "tonic",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
 ]
 
 [[package]]
@@ -2944,22 +2944,6 @@ dependencies = [
  "prost-types 0.9.0",
  "serde 1.0.137",
  "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
-]
-
-[[package]]
-name = "ics23"
-version = "0.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce15e4758c46a0453bdf4b3b1dfcce70c43f79d1943c2ee0635b77eb2e7aa233"
-dependencies = [
- "anyhow",
- "bytes 1.1.0",
- "hex",
- "prost 0.9.0",
- "ripemd160",
- "sha2 0.9.9",
- "sha3 0.9.1",
- "sp-std",
 ]
 
 [[package]]
@@ -4303,11 +4287,11 @@ dependencies = [
  "ferveo-common",
  "group-threshold-cryptography",
  "hex",
- "ibc 0.12.0",
- "ibc 0.14.0",
- "ibc-proto 0.16.0",
- "ibc-proto 0.17.1",
- "ics23 0.7.0",
+ "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=6255c4e01db11781e5a8cdb89737f55a8ad81d63)",
+ "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=6255c4e01db11781e5a8cdb89737f55a8ad81d63)",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
+ "ics23",
  "itertools 0.10.3",
  "libsecp256k1 0.7.0",
  "loupe",
@@ -6716,7 +6700,7 @@ dependencies = [
  "blake2b-rs",
  "borsh",
  "cfg-if 1.0.0",
- "ics23 0.7.0",
+ "ics23",
  "sha2 0.9.9",
 ]
 
@@ -6984,6 +6968,19 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.5"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
+dependencies = [
+ "derive_more",
+ "flex-error",
+ "serde 1.0.137",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-rpc 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "time 0.3.9",
+]
+
+[[package]]
+name = "tendermint-light-client-verifier"
+version = "0.23.5"
 source = "git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9#95c52476bc37927218374f94ac8e2a19bd35bec9"
 dependencies = [
  "derive_more",
@@ -7092,6 +7089,21 @@ dependencies = [
  "url 2.2.2",
  "uuid",
  "walkdir",
+]
+
+[[package]]
+name = "tendermint-testgen"
+version = "0.23.5"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
+dependencies = [
+ "ed25519-dalek",
+ "gumdrop",
+ "serde 1.0.137",
+ "serde_json",
+ "simple-error",
+ "tempfile",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "time 0.3.9",
 ]
 
 [[package]]
