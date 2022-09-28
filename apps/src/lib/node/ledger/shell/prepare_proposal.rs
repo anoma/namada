@@ -1,4 +1,4 @@
-//! Implementation of the `PrepareProposal` ABCI++ method for the Shell
+//! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proto::Tx;

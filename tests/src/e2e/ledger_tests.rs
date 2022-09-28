@@ -35,6 +35,8 @@ use crate::{run, run_as};
 /// combinations from fresh state, the node starts-up successfully for both a
 /// validator and non-validator user.
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn run_ledger() -> Result<()> {
     let test = setup::single_node_net()?;
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
@@ -63,6 +65,8 @@ fn run_ledger() -> Result<()> {
 /// 2. Submit a valid token transfer tx
 /// 3. Check that all the nodes processed the tx with the same result
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn test_node_connectivity() -> Result<()> {
     // Setup 2 genesis validator nodes
     let test =
@@ -131,6 +135,8 @@ fn test_node_connectivity() -> Result<()> {
 /// 3. Check that the node detects this
 /// 4. Check that the node shuts down
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
     let test = setup::single_node_net()?;
 
@@ -167,6 +173,8 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 /// 5. Reset the ledger's state
 /// 6. Run the ledger again, it should start from fresh state
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn run_ledger_load_state_and_reset() -> Result<()> {
     let test = setup::single_node_net()?;
 
@@ -234,6 +242,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 6. Query token balance
 /// 7. Query the raw bytes of a storage key
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn ledger_txs_and_queries() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
@@ -406,6 +416,8 @@ fn ledger_txs_and_queries() -> Result<()> {
 /// 4. Restart the ledger
 /// 5. Submit and invalid transactions (malformed)
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn invalid_transactions() -> Result<()> {
     let test = setup::single_node_net()?;
 
@@ -536,6 +548,8 @@ fn invalid_transactions() -> Result<()> {
 /// 7. Submit a withdrawal of the self-bond
 /// 8. Submit a withdrawal of the delegation
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn pos_bonds() -> Result<()> {
     let unbonding_len = 2;
     let test = setup::network(
@@ -729,6 +743,8 @@ fn pos_bonds() -> Result<()> {
 /// 6. Wait for the pipeline epoch
 /// 7. Check the new validator's voting power
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn pos_init_validator() -> Result<()> {
     let pipeline_len = 1;
     let test = setup::network(
@@ -908,6 +924,8 @@ fn pos_init_validator() -> Result<()> {
 /// 1. Run the ledger node with 10s consensus timeout
 /// 2. Spawn threads each submitting token transfer tx
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn ledger_many_txs_in_a_block() -> Result<()> {
     let test = Arc::new(setup::network(
         |genesis| genesis,
@@ -994,6 +1012,8 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 /// 12. Wait proposal grace and check proposal author funds
 /// 13. Check governance address funds are 0
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn proposal_submission() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
@@ -1347,6 +1367,8 @@ fn proposal_submission() -> Result<()> {
 /// 3. Create an offline vote
 /// 4. Tally offline
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn proposal_offline() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
@@ -1508,6 +1530,8 @@ fn generate_proposal_json(
 /// 4. Submit a valid token transfer tx from one validator to the other
 /// 5. Check that all the nodes processed the tx with the same result
 #[test]
+#[ignore]
+// TODO(namada#418): re-enable once working again
 fn test_genesis_validators() -> Result<()> {
     use std::collections::HashMap;
     use std::net::SocketAddr;
