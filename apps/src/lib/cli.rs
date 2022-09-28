@@ -290,6 +290,7 @@ pub mod cmds {
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
         QueryVotingPower(QueryVotingPower),
+        QueryCommissionRate(QueryCommissionRate),
         QuerySlashes(QuerySlashes),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
@@ -1013,6 +1014,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query PoS voting power.")
                 .add_args::<args::QueryVotingPower>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryCommissionRate(pub args::QueryCommissionRate);
+
+    impl SubCmd for QueryCommissionRate {
+        const CMD: &'static str = "commission-rate";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryCommissionRate(args::QueryCommissionRate::parse(matches))
+            }) 
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query commission rate.")
+                .add_args::<args::QueryCommissionRate>()
         }
     }
 
@@ -2193,6 +2213,41 @@ pub mod args {
         }
     }
 
+    /// Query PoS commission rate
+    #[derive(Clone, Debug)]
+    pub struct QueryCommissionRate {
+        /// Common query args
+        pub query: Query,
+        /// Address of a validator
+        pub validator: Option<WalletAddress>,
+        /// Epoch in which to find commission rate
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for QueryCommissionRate {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let validator = VALIDATOR_OPT.parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self {
+                query,
+                validator,
+                epoch,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(VALIDATOR_OPT.def().about(
+                    "The validator's address whose commission rate to query.",
+                ))
+                .arg(EPOCH.def().about(
+                    "The epoch at which to query (last committed, if not \
+                     specified).",
+                ))
+        }
+    }
+    
     /// Query PoS slashes
     #[derive(Clone, Debug)]
     pub struct QuerySlashes {
