@@ -132,7 +132,7 @@ pub async fn run(
             %tendermint_path,
             %version,
             %version_reqs,
-            "Running with a Tendermint version which is not supported"
+            "Running with a Tendermint version which may not be supported - run at your own risk!",
         );
     }
 
