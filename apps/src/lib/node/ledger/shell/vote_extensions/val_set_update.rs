@@ -344,7 +344,7 @@ mod test_vote_extensions {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            assert!(shell.validate_valset_upd_vext(
+            assert!(!shell.validate_valset_upd_vext(
                 validator_set_update.unwrap(),
                 shell.storage.get_current_decision_height()
             ))
