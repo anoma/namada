@@ -24,8 +24,8 @@ use thiserror::Error;
 use super::IBC_KEY_LIMIT;
 use crate::bytes::ByteBuf;
 use crate::ledger::storage::types;
-use crate::types::address::{Address, InternalAddress};
 use crate::tendermint::merkle::proof::{Proof, ProofOp};
+use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::storage::{
     DbKeySeg, Error as StorageError, Key, MerkleKey, StringKey, TreeBytes,
