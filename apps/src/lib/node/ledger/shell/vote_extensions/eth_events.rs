@@ -1,6 +1,6 @@
 //! Extend Tendermint votes with Ethereum events seen by a quorum of validators.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
@@ -156,9 +156,6 @@ where
     /// and returns another iterator. The latter yields
     /// valid Ethereum events vote extensions, or the reason why these
     /// are invalid, in the form of a [`VoteExtensionError`].
-    ///
-    /// If `abciplus` is enabled, we check if a validator has not voted more
-    /// than once for some Ethereum event, at different block heights.
     #[inline]
     pub fn validate_eth_events_vext_list<'iter>(
         &'iter self,
@@ -170,24 +167,9 @@ where
             VoteExtensionError,
         >,
     > + 'iter {
-        // NOTE(not(feature = "abcipp")): we can remove this `BTreeSet`
-        // and its associated code once we purge `abciplus` from the ledger
-        let mut observed = BTreeSet::new();
-        let contains = |set: &mut BTreeSet<_>, elem| !set.insert(elem);
-        vote_extensions.into_iter().map(move |ext| {
-            for event in ext.data.ethereum_events.iter().cloned() {
-                let validator_event = (ext.data.validator_addr.clone(), event);
-                if contains(&mut observed, validator_event) {
-                    tracing::error!(
-                        validator = %ext.data.validator_addr,
-                        "A validator tried voting more than once on the same \
-                         event, at different block heights."
-                    );
-                    return Err(VoteExtensionError::VotedMoreThanOnce);
-                }
-            }
+        vote_extensions.into_iter().map(move |vote_extension| {
             self.validate_eth_events_vext_and_get_it_back(
-                ext,
+                vote_extension,
                 self.storage.last_height,
             )
         })
@@ -232,27 +214,6 @@ where
 
         let mut event_observers = BTreeMap::new();
         let mut signatures = HashMap::new();
-
-        // we sort these extensions such that we keep exts with lower block
-        // heights when we find repeated events across different block heights
-        // contained within them
-        #[cfg(not(feature = "abcipp"))]
-        let vote_extensions = {
-            use std::cmp::Ordering;
-            let mut vote_extensions = vote_extensions;
-            vote_extensions.sort_by(|ext_1, ext_2| {
-                let ord =
-                    ext_1.data.validator_addr.cmp(&ext_2.data.validator_addr);
-                if let Ordering::Equal = ord {
-                    return ext_1
-                        .data
-                        .block_height
-                        .cmp(&ext_2.data.block_height);
-                }
-                ord
-            });
-            vote_extensions
-        };
 
         for (_validator_voting_power, vote_extension) in
             self.filter_invalid_eth_events_vexts(vote_extensions)
