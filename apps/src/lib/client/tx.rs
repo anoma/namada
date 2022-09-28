@@ -1,9 +1,10 @@
 use std::borrow::Cow;
+use std::env;
 use std::fs::File;
+use std::time::Duration;
 
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
-use futures::stream::StreamExt;
 use itertools::Either::*;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
@@ -33,9 +34,7 @@ use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::query::{EventType, Query};
-use crate::facade::tendermint_rpc::{
-    Client, HttpClient, SubscriptionClient, WebSocketClient,
-};
+use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::events::EventType as NamadaEventType;
 use crate::node::ledger::tendermint_node;
 
@@ -55,10 +54,13 @@ const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const VP_NFT: &str = "vp_nft.wasm";
 
-// ```
-// const ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: &str =
-//     "ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT";
-// ```
+/// Timeout for jsonrpc requests to the `/events` endpoint in Tendermint.
+const ENV_VAR_ANOMA_TENDERMINT_RPC_TIMEOUT: &str =
+    "ANOMA_TENDERMINT_RPC_TIMEOUT";
+
+/// Default timeout in seconds for jsonrpc requests to the `/events` endpoint in
+/// Tendermint.
+const DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT: u64 = 30;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
@@ -1140,26 +1142,12 @@ pub async fn broadcast_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    // ```
-    // let websocket_timeout =
-    //     if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
-    //         if let Ok(timeout) = val.parse::<u64>() {
-    //             Duration::new(timeout, 0)
-    //         } else {
-    //             Duration::new(300, 0)
-    //         }
-    //     } else {
-    //         Duration::new(300, 0)
-    //     };
-    // ```
+    let rpc_cli = HttpClient::new(address)?;
 
-    let wrapper_tx_cli = HttpClient::new(address)?;
+    // TODO: timeout?
+    let response = rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await?;
 
-    let response = wrapper_tx_cli
-        .broadcast_tx_sync(tx.to_bytes().into())
-        .await?;
-
-    drop(wrapper_tx_cli);
+    drop(rpc_cli);
 
     if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
@@ -1196,47 +1184,26 @@ pub async fn submit_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    // ```
-    // let websocket_timeout =
-    //     if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
-    //         if let Ok(timeout) = val.parse::<u64>() {
-    //             Duration::new(timeout, 0)
-    //         } else {
-    //             Duration::new(300, 0)
-    //         }
-    //     } else {
-    //         Duration::new(300, 0)
-    //     };
-    // ```
+    let rpc_timeout =
+        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_RPC_TIMEOUT) {
+            if let Ok(timeout) = val.parse::<u64>() {
+                Duration::from_secs(timeout)
+            } else {
+                Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT)
+            }
+        } else {
+            Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT)
+        };
     tracing::debug!("Tenderming address: {:?}", address);
-    let (ws_cli, driver) = WebSocketClient::new(address.clone()).await?;
-    tokio::spawn(async move {
-        let _ = driver.run().await;
-    });
-
-    // It is better to subscribe to the transaction before it is broadcast
-    //
-    // Note that the `APPLIED_QUERY_KEY` key comes from a custom event
-    // created by the shell
-    let wrapper_query = Query::from(EventType::NewBlock)
-        .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
-    let mut wrapper_tx_subscription = ws_cli.subscribe(wrapper_query).await?;
-
-    // We also subscribe to the event emitted when the encrypted
-    // payload makes its way onto the blockchain
-    let decrypted_query = Query::from(EventType::NewBlock)
-        .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
-    let mut decrypted_tx_subscription =
-        ws_cli.subscribe(decrypted_query).await?;
+    let rpc_cli = HttpClient::new(address.clone())?;
 
     // Broadcast the supplied transaction
     broadcast_tx(address, &to_broadcast).await?;
 
     let parsed = {
-        let event = wrapper_tx_subscription.next().await.transpose()?;
-        let event = event.ok_or_else(|| {
-            RpcError::server("failed to get wrapper tx event".to_string())
-        })?;
+        let wrapper_query = Query::from(EventType::NewBlock)
+            .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
+        let event = rpc_cli.events(wrapper_query, rpc_timeout).await?.into();
         let parsed =
             TxResponse::parse(event, NamadaEventType::Accepted, wrapper_hash);
 
@@ -1247,10 +1214,12 @@ pub async fn submit_tx(
         // The transaction is now on chain. We wait for it to be decrypted
         // and applied
         if parsed.code == 0.to_string() {
-            let event = decrypted_tx_subscription.next().await.transpose()?;
-            let event = event.ok_or_else(|| {
-                RpcError::server("failed to get decrypted tx event".to_string())
-            })?;
+            // We also listen to the event emitted when the encrypted
+            // payload makes its way onto the blockchain
+            let decrypted_query = Query::from(EventType::NewBlock)
+                .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
+            let event =
+                rpc_cli.events(decrypted_query, rpc_timeout).await?.into();
             let parsed = TxResponse::parse(
                 event,
                 NamadaEventType::Applied,
@@ -1266,16 +1235,5 @@ pub async fn submit_tx(
         }
     };
 
-    ws_cli
-        .unsubscribe(wrapper_tx_subscription.query().clone())
-        .await?;
-    drop(wrapper_tx_subscription);
-
-    ws_cli
-        .unsubscribe(decrypted_tx_subscription.query().clone())
-        .await?;
-    drop(decrypted_tx_subscription);
-
-    drop(ws_cli);
     parsed
 }
