@@ -8,9 +8,10 @@ use arse_merkle_tree::{Hash as TreeHash, H256};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tendermint::abci::transaction;
-use tendermint::Hash as TmHash;
 use thiserror::Error;
+
+use crate::tendermint::abci::transaction;
+use crate::tendermint::Hash as TmHash;
 
 /// The length of the transaction hash string
 pub const HASH_LENGTH: usize = 32;

@@ -19,13 +19,13 @@ use ics23::{
 use itertools::Either;
 use prost::Message;
 use sha2::{Digest, Sha256};
-use tendermint::merkle::proof::{Proof, ProofOp};
 use thiserror::Error;
 
 use super::IBC_KEY_LIMIT;
 use crate::bytes::ByteBuf;
 use crate::ledger::storage::types;
 use crate::types::address::{Address, InternalAddress};
+use crate::tendermint::merkle::proof::{Proof, ProofOp};
 use crate::types::hash::Hash;
 use crate::types::storage::{
     DbKeySeg, Error as StorageError, Key, MerkleKey, StringKey, TreeBytes,

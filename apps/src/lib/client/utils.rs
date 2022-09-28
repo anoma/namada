@@ -18,8 +18,6 @@ use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tendermint::node::Id as TendermintNodeId;
-use tendermint_config::net::Address as TendermintAddress;
 
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::cli::{self, args};
@@ -30,6 +28,8 @@ use crate::config::global::GlobalConfig;
 use crate::config::{
     self, Config, IntentGossiper, PeerAddress, TendermintMode,
 };
+use crate::facade::tendermint::node::Id as TendermintNodeId;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::gossip;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{pre_genesis, Wallet};

@@ -47,8 +47,30 @@ impl Vext {
     }
 }
 
+impl BorshSchema for Vext {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                BlockHeight::declaration(),
+                Address::declaration(),
+                Vec::<EthereumEvent>::declaration(),
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "ethereum_events::Vext".into()
+    }
+}
+
 /// Aggregates an Ethereum event with the corresponding
-// validators who saw this event.
+/// validators who saw this event.
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
@@ -56,33 +78,71 @@ pub struct MultiSignedEthEvent {
     /// The Ethereum event that was signed.
     pub event: EthereumEvent,
     /// List of addresses of validators who signed this event
+    #[cfg(feature = "abcipp")]
     pub signers: HashSet<Address>,
+    /// List of addresses of validators who signed this event
+    /// and block height at which they signed it
+    #[cfg(not(feature = "abcipp"))]
+    pub signers: HashSet<(Address, BlockHeight)>,
 }
 
 /// Compresses a set of signed [`Vext`] instances, to save
 /// space on a block.
-#[derive(
-    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct VextDigest {
     /// The signatures and signing address of each [`Vext`]
+    #[cfg(feature = "abcipp")]
     pub signatures: HashMap<Address, Signature>,
+    /// The signatures, signing address, and signing block height
+    /// of each [`Vext`]
+    #[cfg(not(feature = "abcipp"))]
+    pub signatures: HashMap<(Address, BlockHeight), Signature>,
     /// The events that were reported
     pub events: Vec<MultiSignedEthEvent>,
+}
+
+impl BorshSchema for VextDigest {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                HashMap::<Address, Signature>::declaration(),
+                Vec::<MultiSignedEthEvent>::declaration()
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "ethereum_events::VextDigest".into()
+    }
 }
 
 impl VextDigest {
     /// Decompresses a set of signed [`Vext`] instances.
     pub fn decompress(self, last_height: BlockHeight) -> Vec<Signed<Vext>> {
+        #[cfg(not(feature = "abcipp"))]
+        {
+            #[allow(clippy::drop_copy)]
+            drop(last_height);
+        }
+
         let VextDigest { signatures, events } = self;
 
         let mut extensions = vec![];
 
-        for (addr, sig) in signatures.into_iter() {
-            let mut ext = Vext::empty(last_height, addr.clone());
+        for (validator, sig) in signatures.into_iter() {
+            #[cfg(feature = "abcipp")]
+            let mut ext = Vext::empty(last_height, validator.clone());
+            #[cfg(not(feature = "abcipp"))]
+            let mut ext = Vext::empty(validator.1, validator.0.clone());
 
             for event in events.iter() {
-                if event.signers.contains(&addr) {
+                if event.signers.contains(&validator) {
                     ext.ethereum_events.push(event.event.clone());
                 }
             }
@@ -111,6 +171,7 @@ mod tests {
     use crate::types::hash::Hash;
     use crate::types::key;
     use crate::types::key::RefTo;
+    #[cfg(feature = "abcipp")]
     use crate::types::storage::BlockHeight;
 
     /// Test the hashing of an Ethereum event
@@ -168,21 +229,60 @@ mod tests {
         // so each of them signs `ext` with their respective sk
         let ext_1 = Signed::new(&sk_1, ext(validator_1.clone()));
         let ext_2 = Signed::new(&sk_2, ext(validator_2.clone()));
+        #[cfg(not(feature = "abcipp"))]
+        let ext_3 = Signed::new(&sk_1, {
+            let mut ext = Vext::empty(
+                BlockHeight(last_block_height.0 - 1),
+                validator_1.clone(),
+            );
+            ext.ethereum_events.push(ev_1.clone());
+            ext.ethereum_events.push(ev_2.clone());
+            ext.ethereum_events.sort();
+            ext
+        });
 
+        #[cfg(feature = "abcipp")]
         let ext = vec![ext_1, ext_2];
+        #[cfg(not(feature = "abcipp"))]
+        let ext = vec![ext_1, ext_2, ext_3];
 
         // we have the `Signed<Vext>` instances we need,
         // let us now compress them into a single `VextDigest`
+        #[cfg(feature = "abcipp")]
         let signatures: HashMap<_, _> = [
             (validator_1.clone(), ext[0].sig.clone()),
             (validator_2.clone(), ext[1].sig.clone()),
         ]
         .into_iter()
         .collect();
+        #[cfg(not(feature = "abcipp"))]
+        let signatures: HashMap<_, _> = [
+            ((validator_1.clone(), last_block_height), ext[0].sig.clone()),
+            ((validator_2.clone(), last_block_height), ext[1].sig.clone()),
+            (
+                (validator_1.clone(), BlockHeight(last_block_height.0 - 1)),
+                ext[2].sig.clone(),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        #[cfg(feature = "abcipp")]
         let signers = {
             let mut s = HashSet::new();
-            s.insert(validator_1);
+            s.insert(validator_1.clone());
             s.insert(validator_2);
+            s
+        };
+
+        #[cfg(not(feature = "abcipp"))]
+        let signers = {
+            let mut s = HashSet::new();
+            s.insert((validator_1.clone(), last_block_height));
+            s.insert((
+                validator_1.clone(),
+                BlockHeight(last_block_height.0 - 1),
+            ));
+            s.insert((validator_2, last_block_height));
             s
         };
         let events = vec![
@@ -200,19 +300,19 @@ mod tests {
 
         // finally, decompress the `VextDigest` back into a
         // `Vec<Signed<Vext>>`
-        let mut decompressed = digest
+        let decompressed = digest
             .decompress(last_block_height)
             .into_iter()
             .collect::<Vec<Signed<Vext>>>();
 
-        // decompressing yields an arbitrary ordering of `Vext`
-        // instances, which is fine
-        if decompressed[0].data.validator_addr != ext[0].data.validator_addr {
-            decompressed.swap(0, 1);
+        assert_eq!(decompressed.len(), ext.len());
+        for vext in decompressed.into_iter() {
+            assert!(ext.contains(&vext));
+            if vext.data.validator_addr == validator_1 {
+                assert!(vext.verify(&sk_1.ref_to()).is_ok())
+            } else {
+                assert!(vext.verify(&sk_2.ref_to()).is_ok())
+            }
         }
-
-        assert_eq!(ext, decompressed);
-        assert!(decompressed[0].verify(&sk_1.ref_to()).is_ok());
-        assert!(decompressed[1].verify(&sk_2.ref_to()).is_ok());
     }
 }
