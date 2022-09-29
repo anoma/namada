@@ -204,9 +204,6 @@ where
 /// containing changed keys and the like should be returned in the normal way.
 pub(crate) fn apply_protocol_tx<'a, D, H>(
     tx: ProtocolTxType,
-    // TODO: eventually this `storage` parameter could be tightened further to
-    // an impl trait of only the subset of [`Storage`] functionality that we
-    // need
     _storage: &'a mut Storage<D, H>,
 ) -> Result<TxResult>
 where

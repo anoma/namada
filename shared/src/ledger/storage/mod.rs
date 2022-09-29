@@ -5,6 +5,7 @@ mod merkle_tree;
 pub mod mockdb;
 pub mod types;
 pub mod write_log;
+pub mod traits;
 
 use core::fmt::Debug;
 
