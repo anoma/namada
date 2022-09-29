@@ -77,9 +77,9 @@ impl Wallet {
     /// addresses loaded from the genesis file, if not found.
     pub fn load_or_new_from_genesis(
         store_dir: &Path,
-        load_genesis: impl FnOnce() -> GenesisConfig,
+        genesis_cfg: GenesisConfig,
     ) -> Self {
-        let store = Store::load_or_new_from_genesis(store_dir, load_genesis)
+        let store = Store::load_or_new_from_genesis(store_dir, genesis_cfg)
             .unwrap_or_else(|err| {
                 eprintln!("Unable to load the wallet: {}", err);
                 cli::safe_exit(1)
@@ -135,11 +135,12 @@ impl Wallet {
     /// key.
     pub fn gen_key(
         &mut self,
+        scheme: SchemeType,
         alias: Option<String>,
         unsafe_dont_encrypt: bool,
     ) -> (String, common::SecretKey) {
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-        let (alias, key) = self.store.gen_key(alias, password);
+        let (alias, key) = self.store.gen_key(scheme, alias, password);
         // Cache the newly added key
         self.decrypted_key_cache.insert(alias.clone(), key.clone());
         (alias.into(), key)
@@ -164,6 +165,7 @@ impl Wallet {
     pub fn gen_validator_keys(
         &mut self,
         protocol_pk: Option<common::PublicKey>,
+        scheme: SchemeType,
     ) -> Result<ValidatorKeys, FindKeyError> {
         let protocol_keypair = protocol_pk.map(|pk| {
             self.find_key_by_pkh(&PublicKeyHash::from(&pk))
@@ -178,9 +180,10 @@ impl Wallet {
         });
         match protocol_keypair {
             Some(Err(err)) => Err(err),
-            other => {
-                Ok(Store::gen_validator_keys(other.map(|res| res.unwrap())))
-            }
+            other => Ok(Store::gen_validator_keys(
+                other.map(|res| res.unwrap()),
+                scheme,
+            )),
         }
     }
 
@@ -375,6 +378,11 @@ impl Wallet {
     /// Find the stored address by an alias.
     pub fn find_address(&self, alias: impl AsRef<str>) -> Option<&Address> {
         self.store.find_address(alias)
+    }
+
+    /// Find an alias by the address if it's in the wallet.
+    pub fn find_alias(&self, address: &Address) -> Option<&Alias> {
+        self.store.find_alias(address)
     }
 
     /// Get all known addresses by their alias, paired with PKH, if known.

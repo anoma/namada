@@ -9,7 +9,8 @@
 pub mod context;
 mod utils;
 
-use clap::{crate_authors, AppSettings, ArgMatches};
+use clap::{crate_authors, AppSettings, ArgGroup, ArgMatches};
+use color_eyre::eyre::Result;
 pub use utils::safe_exit;
 use utils::*;
 
@@ -653,7 +654,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
         Gen(AddressGen),
-        Find(AddressFind),
+        Find(AddressOrAliasFind),
         List(AddressList),
         Add(AddressAdd),
     }
@@ -679,7 +680,7 @@ pub mod cmds {
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(AddressGen::def())
-                .subcommand(AddressFind::def())
+                .subcommand(AddressOrAliasFind::def())
                 .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
         }
@@ -711,21 +712,23 @@ pub mod cmds {
 
     /// Find an address by its alias
     #[derive(Clone, Debug)]
-    pub struct AddressFind(pub args::AddressFind);
+    pub struct AddressOrAliasFind(pub args::AddressOrAliasFind);
 
-    impl SubCmd for AddressFind {
+    impl SubCmd for AddressOrAliasFind {
         const CMD: &'static str = "find";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| AddressFind(args::AddressFind::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                AddressOrAliasFind(args::AddressOrAliasFind::parse(matches))
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Find an address by its alias.")
-                .add_args::<args::AddressFind>()
+                .about(
+                    "Find an address by its alias or an alias by its address.",
+                )
+                .add_args::<args::AddressOrAliasFind>()
         }
     }
 
@@ -1454,6 +1457,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
+        FetchWasms(FetchWasms),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
     }
@@ -1465,11 +1469,15 @@ pub mod cmds {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let join_network =
                     SubCmd::parse(matches).map(Self::JoinNetwork);
+                let fetch_wasms = SubCmd::parse(matches).map(Self::FetchWasms);
                 let init_network =
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
-                join_network.or(init_network).or(init_genesis)
+                join_network
+                    .or(fetch_wasms)
+                    .or(init_network)
+                    .or(init_genesis)
             })
         }
 
@@ -1477,6 +1485,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Utilities.")
                 .subcommand(JoinNetwork::def())
+                .subcommand(FetchWasms::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -1499,6 +1508,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Configure Anoma to join an existing network.")
                 .add_args::<args::JoinNetwork>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FetchWasms(pub args::FetchWasms);
+
+    impl SubCmd for FetchWasms {
+        const CMD: &'static str = "fetch-wasms";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::FetchWasms::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Ensure pre-built wasms are present")
+                .add_args::<args::FetchWasms>()
         }
     }
 
@@ -1570,7 +1598,7 @@ pub mod args {
 
     use super::context::*;
     use super::utils::*;
-    use super::ArgMatches;
+    use super::{ArgGroup, ArgMatches};
     use crate::client::types::{ParsedTxArgs, ParsedTxTransferArgs};
     use crate::config;
     use crate::config::TendermintMode;
@@ -1610,6 +1638,7 @@ pub mod args {
     const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("fee-token", DefaultFn(|| "XAN".into()));
     const FORCE: ArgFlag = flag("force");
+    const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_LIMIT: ArgDefault<token::Amount> =
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
@@ -1650,10 +1679,13 @@ pub mod args {
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
+    const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
     const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
+    const SCHEME: ArgDefault<SchemeType> =
+        arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
     const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
@@ -1720,11 +1752,9 @@ pub mod args {
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
-                     transactions and matchmaker files. This must not be an \
-                     absolute path as the directory is nested inside the \
-                     chain directory. This value can also be set via \
-                     `ANOMA_WASM_DIR` environment variable, but the argument \
-                     takes precedence, if specified.",
+                     transactions and matchmaker files. This value can also \
+                     be set via `ANOMA_WASM_DIR` environment variable, but \
+                     the argument takes precedence, if specified.",
                 ))
                 .arg(MODE.def().about(
                     "The mode in which to run Anoma. Options are \n\t * \
@@ -1906,6 +1936,7 @@ pub mod args {
     pub struct TxInitValidator {
         pub tx: Tx,
         pub source: WalletAddress,
+        pub scheme: SchemeType,
         pub account_key: Option<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
         pub rewards_account_key: Option<WalletPublicKey>,
@@ -1919,6 +1950,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
+            let scheme = SCHEME.parse(matches);
             let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let rewards_account_key = REWARDS_KEY.parse(matches);
@@ -1929,6 +1961,7 @@ pub mod args {
             Self {
                 tx,
                 source,
+                scheme,
                 account_key,
                 consensus_key,
                 rewards_account_key,
@@ -1943,6 +1976,10 @@ pub mod args {
             app.add_args::<Tx>()
                 .arg(SOURCE.def().about(
                     "The source account's address that signs the transaction.",
+                ))
+                .arg(SCHEME.def().about(
+                    "The key scheme/type used for the validator keys. \
+                     Currently supports ed25519 and secp256k1.",
                 ))
                 .arg(VALIDATOR_ACCOUNT_KEY.def().about(
                     "A public key for the validator account. A new one will \
@@ -2874,7 +2911,7 @@ pub mod args {
     }
 
     impl Tx {
-        pub fn parse_from_context(&self,ctx: &mut Context) -> ParsedTxArgs {
+        pub fn parse_from_context(&self, ctx: &mut Context) -> ParsedTxArgs {
             ParsedTxArgs {
                 dry_run: self.dry_run,
                 force: self.force,
@@ -3104,6 +3141,8 @@ pub mod args {
     /// Wallet generate key and implicit address arguments
     #[derive(Clone, Debug)]
     pub struct KeyAndAddressGen {
+        /// Scheme type
+        pub scheme: SchemeType,
         /// Key alias
         pub alias: Option<String>,
         /// Don't encrypt the keypair
@@ -3112,16 +3151,23 @@ pub mod args {
 
     impl Args for KeyAndAddressGen {
         fn parse(matches: &ArgMatches) -> Self {
+            let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
+                scheme,
                 alias,
                 unsafe_dont_encrypt,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS_OPT.def().about(
+            app.arg(SCHEME.def().about(
+                "The type of key that should be generated. Argument must be \
+                 either ed25519 or secp256k1. If none provided, the default \
+                 key scheme is ed25519.",
+            ))
+            .arg(ALIAS_OPT.def().about(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
             ))
@@ -3287,14 +3333,16 @@ pub mod args {
 
     /// Wallet address lookup arguments
     #[derive(Clone, Debug)]
-    pub struct AddressFind {
-        pub alias: String,
+    pub struct AddressOrAliasFind {
+        pub alias: Option<String>,
+        pub address: Option<Address>,
     }
 
-    impl Args for AddressFind {
+    impl Args for AddressOrAliasFind {
         fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
-            Self { alias }
+            let alias = ALIAS_OPT.parse(matches);
+            let address = RAW_ADDRESS_OPT.parse(matches);
+            Self { alias, address }
         }
 
         fn def(app: App) -> App {
@@ -3302,6 +3350,16 @@ pub mod args {
                 ALIAS_OPT
                     .def()
                     .about("An alias associated with the address."),
+            )
+            .arg(
+                RAW_ADDRESS_OPT
+                    .def()
+                    .about("The bech32m encoded address string."),
+            )
+            .group(
+                ArgGroup::new("find_flags")
+                    .args(&[ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
+                    .required(true),
             )
         }
     }
@@ -3339,6 +3397,7 @@ pub mod args {
         pub chain_id: ChainId,
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
+        pub dont_prefetch_wasm: bool,
     }
 
     impl Args for JoinNetwork {
@@ -3346,10 +3405,12 @@ pub mod args {
             let chain_id = CHAIN_ID.parse(matches);
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
+            let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
+                dont_prefetch_wasm,
             }
         }
 
@@ -3357,6 +3418,25 @@ pub mod args {
             app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
                 .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
+            .arg(DONT_PREFETCH_WASM.def().about(
+                "Do not pre-fetch WASM.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FetchWasms {
+        pub chain_id: ChainId,
+    }
+
+    impl Args for FetchWasms {
+        fn parse(matches: &ArgMatches) -> Self {
+            let chain_id = CHAIN_ID.parse(matches);
+            Self { chain_id }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository, in which case it should have pre-built wasms available for download."))
         }
     }
 
@@ -3446,6 +3526,7 @@ pub mod args {
         pub alias: String,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
+        pub key_scheme: SchemeType,
     }
 
     impl Args for InitGenesisValidator {
@@ -3453,10 +3534,12 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let key_scheme = SCHEME.parse(matches);
             Self {
                 alias,
                 net_address,
                 unsafe_dont_encrypt,
+                key_scheme,
             }
         }
 
@@ -3470,6 +3553,10 @@ pub mod args {
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
+                ))
+                .arg(SCHEME.def().about(
+                    "The key scheme/type used for the validator keys. \
+                     Currently supports ed25519 and secp256k1.",
                 ))
         }
     }
@@ -3490,7 +3577,7 @@ pub fn anoma_cli() -> (cmds::Anoma, String) {
     safe_exit(2);
 }
 
-pub fn anoma_node_cli() -> (cmds::AnomaNode, Context) {
+pub fn anoma_node_cli() -> Result<(cmds::AnomaNode, Context)> {
     let app = anoma_node_app();
     cmds::AnomaNode::parse_or_print_help(app)
 }
@@ -3500,7 +3587,7 @@ pub enum AnomaClient {
     WithContext(Box<(cmds::AnomaClientWithContext, Context)>),
 }
 
-pub fn anoma_client_cli() -> AnomaClient {
+pub fn anoma_client_cli() -> Result<AnomaClient> {
     let app = anoma_client_app();
     let mut app = cmds::AnomaClient::add_sub(app);
     let matches = app.clone().get_matches();
@@ -3509,11 +3596,11 @@ pub fn anoma_client_cli() -> AnomaClient {
             let global_args = args::Global::parse(&matches);
             match cmd {
                 cmds::AnomaClient::WithContext(sub_cmd) => {
-                    let context = Context::new(global_args);
-                    AnomaClient::WithContext(Box::new((sub_cmd, context)))
+                    let context = Context::new(global_args)?;
+                    Ok(AnomaClient::WithContext(Box::new((sub_cmd, context))))
                 }
                 cmds::AnomaClient::WithoutContext(sub_cmd) => {
-                    AnomaClient::WithoutContext(sub_cmd, global_args)
+                    Ok(AnomaClient::WithoutContext(sub_cmd, global_args))
                 }
             }
         }
@@ -3524,7 +3611,7 @@ pub fn anoma_client_cli() -> AnomaClient {
     }
 }
 
-pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, Context) {
+pub fn anoma_wallet_cli() -> Result<(cmds::AnomaWallet, Context)> {
     let app = anoma_wallet_app();
     cmds::AnomaWallet::parse_or_print_help(app)
 }

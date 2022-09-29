@@ -6,7 +6,7 @@ use namada_apps::cli::cmds::*;
 use namada_apps::client::{gossip, rpc, tx, utils};
 
 pub async fn main() -> Result<()> {
-    match cli::anoma_client_cli() {
+    match cli::anoma_client_cli()? {
         cli::AnomaClient::WithContext(cmd_box) => {
             let (cmd, ctx) = *cmd_box;
             use AnomaClientWithContext as Sub;
@@ -96,6 +96,9 @@ pub async fn main() -> Result<()> {
             // Utils cmds
             Utils::JoinNetwork(JoinNetwork(args)) => {
                 utils::join_network(global_args, args).await
+            }
+            Utils::FetchWasms(FetchWasms(args)) => {
+                utils::fetch_wasms(global_args, args).await
             }
             Utils::InitNetwork(InitNetwork(args)) => {
                 utils::init_network(global_args, args)

@@ -1,17 +1,18 @@
 //! MASP verification wrappers.
 
-use std::{fs::File, ops::Deref};
+use std::fs::File;
+use std::ops::Deref;
 
 use bellman::groth16::{prepare_verifying_key, PreparedVerifyingKey};
 use bls12_381::Bls12;
-use masp_primitives::{
-    asset_type::AssetType,
-    consensus::BranchId::Sapling,
-    redjubjub::PublicKey,
-    transaction::{
-        components::{OutputDescription, SpendDescription},
-        signature_hash_data, Transaction, SIGHASH_ALL,
-    },
+use masp_primitives::asset_type::AssetType;
+use masp_primitives::consensus::BranchId::Sapling;
+use masp_primitives::redjubjub::PublicKey;
+use masp_primitives::transaction::components::{
+    OutputDescription, SpendDescription,
+};
+use masp_primitives::transaction::{
+    signature_hash_data, Transaction, SIGHASH_ALL,
 };
 use masp_proofs::sapling::SaplingVerificationContext;
 
@@ -24,12 +25,12 @@ pub fn load_spend_params() -> (
     let spend_path = params_dir.join("masp-spend.params");
     if !spend_path.exists() {
         #[cfg(feature = "masp_proofs/download-params")]
-        masp_proofs::download_parameters().expect("MASP parameters not present or downloadable");
+        masp_proofs::download_parameters()
+            .expect("MASP parameters not present or downloadable");
         #[cfg(not(feature = "masp_proofs/download-params"))]
         panic!("MASP parameters not present or downloadable");
     }
-    let param_f =
-        File::open(spend_path).unwrap();
+    let param_f = File::open(spend_path).unwrap();
     let params = bellman::groth16::Parameters::read(&param_f, false).unwrap();
     let vk = prepare_verifying_key(&params.vk);
     (params, vk)
@@ -44,12 +45,12 @@ pub fn load_output_params() -> (
     let output_path = params_dir.join("masp-output.params");
     if !output_path.exists() {
         #[cfg(feature = "masp_proofs/download-params")]
-        masp_proofs::download_parameters().expect("MASP parameters not present or downloadable");
+        masp_proofs::download_parameters()
+            .expect("MASP parameters not present or downloadable");
         #[cfg(not(feature = "masp_proofs/download-params"))]
         panic!("MASP parameters not present or downloadable");
     }
-    let param_f =
-        File::open(output_path).unwrap();
+    let param_f = File::open(output_path).unwrap();
     let params = bellman::groth16::Parameters::read(&param_f, false).unwrap();
     let vk = prepare_verifying_key(&params.vk);
     (params, vk)
@@ -134,12 +135,10 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 
     tracing::info!("accumulated {} assets/values", assets_and_values.len());
 
-    /*
-    ctx.final_check(
-        assets_and_values.as_slice(),
-        &sighash,
-        tx_data.binding_sig.unwrap(),
-    )
-    */
+    // ctx.final_check(
+    // assets_and_values.as_slice(),
+    // &sighash,
+    // tx_data.binding_sig.unwrap(),
+    // )
     true
 }

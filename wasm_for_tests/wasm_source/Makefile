@@ -46,7 +46,7 @@ fmt-check:
 
 # Build a selected wasm
 $(wasms): %:
-	$(cargo) build --release --target wasm32-unknown-unknown --features $@ && \
+	$(cargo) build --release --target wasm32-unknown-unknown --target-dir 'target' --features $@ && \
 	cp "./target/wasm32-unknown-unknown/release/namada_wasm_for_tests.wasm" ../$@.wasm
 
 # `cargo check` one of the wasms, e.g. `make check_tx_no_op`

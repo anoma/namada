@@ -53,6 +53,7 @@ pub async fn join_network(
         chain_id,
         genesis_validator,
         pre_genesis_path,
+        dont_prefetch_wasm,
     }: args::JoinNetwork,
 ) {
     use tokio::fs;
@@ -125,15 +126,6 @@ pub async fn join_network(
             None
         }
     });
-    if let Some(wasm_dir) = wasm_dir.as_ref() {
-        if wasm_dir.is_absolute() {
-            eprintln!(
-                "The arg `--wasm-dir` cannot be an absolute path. It is \
-                 nested inside the chain directory."
-            );
-            cli::safe_exit(1);
-        }
-    }
 
     let release_filename = format!("{}.tar.gz", chain_id);
     let release_url = format!(
@@ -257,20 +249,22 @@ pub async fn join_network(
     if let Some((validator_alias, pre_genesis_wallet)) =
         validator_alias_and_pre_genesis_wallet
     {
-        let tendermint_node_key: ed25519::SecretKey = pre_genesis_wallet
+        let tendermint_node_key: common::SecretKey = pre_genesis_wallet
             .tendermint_node_key
             .try_to_sk()
             .unwrap_or_else(|_err| {
-                eprintln!("Tendermint node key must be ed25519");
+                eprintln!(
+                    "Tendermint node key must be common (need to change?)"
+                );
                 cli::safe_exit(1)
             });
 
         let genesis_file_path =
             base_dir.join(format!("{}.toml", chain_id.as_str()));
-        let mut wallet =
-            Wallet::load_or_new_from_genesis(&chain_dir, move || {
-                genesis_config::open_genesis_config(genesis_file_path)
-            });
+        let mut wallet = Wallet::load_or_new_from_genesis(
+            &chain_dir,
+            genesis_config::open_genesis_config(genesis_file_path).unwrap(),
+        );
 
         let address = wallet
             .find_address(&validator_alias)
@@ -288,7 +282,6 @@ pub async fn join_network(
         // Write consensus key to tendermint home
         tendermint_node::write_validator_key(
             &tm_home_dir,
-            &address,
             &pre_genesis_wallet.consensus_key,
         );
 
@@ -343,18 +336,50 @@ pub async fn join_network(
         .await
         .unwrap();
     }
+    if !dont_prefetch_wasm {
+        fetch_wasms_aux(&base_dir, &chain_id).await;
+    }
 
     println!("Successfully configured for chain ID {}", chain_id);
+}
+
+pub async fn fetch_wasms(
+    global_args: args::Global,
+    args::FetchWasms { chain_id }: args::FetchWasms,
+) {
+    fetch_wasms_aux(&global_args.base_dir, &chain_id).await;
+}
+
+pub async fn fetch_wasms_aux(base_dir: &Path, chain_id: &ChainId) {
+    println!("Fetching wasms for chain ID {}...", chain_id);
+    let wasm_dir = {
+        let mut path = base_dir.to_owned();
+        path.push(chain_id.as_str());
+        path.push("wasm");
+        path
+    };
+    wasm_loader::pre_fetch_wasm(&wasm_dir).await;
 }
 
 /// Length of a Tendermint Node ID in bytes
 const TENDERMINT_NODE_ID_LENGTH: usize = 20;
 
 /// Derive Tendermint node ID from public key
-fn id_from_pk(pk: &ed25519::PublicKey) -> TendermintNodeId {
-    let digest = Sha256::digest(pk.try_to_vec().unwrap().as_slice());
+fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
     let mut bytes = [0u8; TENDERMINT_NODE_ID_LENGTH];
-    bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
+
+    match pk {
+        common::PublicKey::Ed25519(_) => {
+            let _pk: ed25519::PublicKey = pk.try_to_pk().unwrap();
+            let digest = Sha256::digest(_pk.try_to_vec().unwrap().as_slice());
+            bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
+        }
+        common::PublicKey::Secp256k1(_) => {
+            let _pk: secp256k1::PublicKey = pk.try_to_pk().unwrap();
+            let digest = Sha256::digest(_pk.try_to_vec().unwrap().as_slice());
+            bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
+        }
+    }
     TendermintNodeId::new(bytes)
 }
 
@@ -378,7 +403,8 @@ pub fn init_network(
         archive_dir,
     }: args::InitNetwork,
 ) {
-    let mut config = genesis_config::open_genesis_config(&genesis_path);
+    let mut config =
+        genesis_config::open_genesis_config(&genesis_path).unwrap();
 
     // Update the WASM checksums
     let checksums =
@@ -440,10 +466,11 @@ pub fn init_network(
             format!("validator {name} Tendermint node key"),
             &config.tendermint_node_key,
         )
-        .map(|pk| ed25519::PublicKey::try_from_pk(&pk).unwrap())
         .unwrap_or_else(|| {
-            // Generate a node key
-            let node_sk = ed25519::SigScheme::generate(&mut rng);
+            // Generate a node key with ed25519 as default
+            let node_sk = common::SecretKey::Ed25519(
+                ed25519::SigScheme::generate(&mut rng),
+            );
 
             let node_pk = write_tendermint_node_key(&tm_home_dir, node_sk);
 
@@ -512,15 +539,14 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-consensus-key", name);
             println!("Generating validator {} consensus key...", name);
-            let (_alias, keypair) =
-                wallet.gen_key(Some(alias), unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Ed25519,
+                Some(alias),
+                unsafe_dont_encrypt,
+            );
 
             // Write consensus key for Tendermint
-            tendermint_node::write_validator_key(
-                &tm_home_dir,
-                &address,
-                &keypair,
-            );
+            tendermint_node::write_validator_key(&tm_home_dir, &keypair);
 
             keypair.ref_to()
         });
@@ -532,8 +558,11 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-account-key", name);
             println!("Generating validator {} account key...", name);
-            let (_alias, keypair) =
-                wallet.gen_key(Some(alias), unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Ed25519,
+                Some(alias),
+                unsafe_dont_encrypt,
+            );
             keypair.ref_to()
         });
 
@@ -547,8 +576,11 @@ pub fn init_network(
                 "Generating validator {} staking reward account key...",
                 name
             );
-            let (_alias, keypair) =
-                wallet.gen_key(Some(alias), unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Ed25519,
+                Some(alias),
+                unsafe_dont_encrypt,
+            );
             keypair.ref_to()
         });
 
@@ -559,8 +591,11 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-protocol-key", name);
             println!("Generating validator {} protocol signing key...", name);
-            let (_alias, keypair) =
-                wallet.gen_key(Some(alias), unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet.gen_key(
+                SchemeType::Ed25519,
+                Some(alias),
+                unsafe_dont_encrypt,
+            );
             keypair.ref_to()
         });
 
@@ -581,7 +616,10 @@ pub fn init_network(
                 );
 
                 let validator_keys = wallet
-                    .gen_validator_keys(Some(protocol_pk.clone()))
+                    .gen_validator_keys(
+                        Some(protocol_pk.clone()),
+                        SchemeType::Ed25519,
+                    )
                     .expect("Generating new validator keys should not fail");
                 let pk = validator_keys.dkg_keypair.as_ref().unwrap().public();
                 wallet.add_validator_data(address.clone(), validator_keys);
@@ -715,8 +753,11 @@ pub fn init_network(
                     "Generating implicit account {} key and address ...",
                     name
                 );
-                let (_alias, keypair) =
-                    wallet.gen_key(Some(name.clone()), unsafe_dont_encrypt);
+                let (_alias, keypair) = wallet.gen_key(
+                    SchemeType::Ed25519,
+                    Some(name.clone()),
+                    unsafe_dont_encrypt,
+                );
                 let public_key =
                     genesis_config::HexString(keypair.ref_to().to_string());
                 config.public_key = Some(public_key);
@@ -743,26 +784,6 @@ pub fn init_network(
     let genesis_path = global_args
         .base_dir
         .join(format!("{}.toml", chain_id.as_str()));
-    let wasm_dir = global_args
-        .wasm_dir
-        .as_ref()
-        .cloned()
-        .or_else(|| {
-            if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
-                let wasm_dir: PathBuf = wasm_dir.into();
-                Some(wasm_dir)
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| config::DEFAULT_WASM_DIR.into());
-    if wasm_dir.is_absolute() {
-        eprintln!(
-            "The arg `--wasm-dir` cannot be an absolute path. It is nested \
-             inside the chain directory."
-        );
-        cli::safe_exit(1);
-    }
 
     // Write the genesis file
     genesis_config::write_genesis_config(&config_clean, &genesis_path);
@@ -779,7 +800,7 @@ pub fn init_network(
     fs::rename(&temp_dir, &chain_dir).unwrap();
 
     // Copy the WASM checksums
-    let wasm_dir_full = chain_dir.join(&wasm_dir);
+    let wasm_dir_full = chain_dir.join(&config::DEFAULT_WASM_DIR);
     fs::create_dir_all(&wasm_dir_full).unwrap();
     fs::copy(
         &wasm_checksums_path,
@@ -805,7 +826,7 @@ pub fn init_network(
             .unwrap();
 
         // Copy the WASM checksums
-        let wasm_dir_full = validator_chain_dir.join(&wasm_dir);
+        let wasm_dir_full = validator_chain_dir.join(&config::DEFAULT_WASM_DIR);
         fs::create_dir_all(&wasm_dir_full).unwrap();
         fs::copy(
             &wasm_checksums_path,
@@ -861,6 +882,7 @@ pub fn init_network(
                 consensus_timeout_commit;
             config.ledger.tendermint.p2p_allow_duplicate_ip =
                 allow_duplicate_ip;
+            config.ledger.tendermint.p2p_addr_book_strict = !localhost;
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
             let first_port = SocketAddr::from_str(&net_address).unwrap().port();
@@ -1005,6 +1027,7 @@ fn init_established_account(
     if config.public_key.is_none() {
         println!("Generating established account {} key...", name.as_ref());
         let (_alias, keypair) = wallet.gen_key(
+            SchemeType::Ed25519,
             Some(format!("{}-key", name.as_ref())),
             unsafe_dont_encrypt,
         );
@@ -1026,12 +1049,14 @@ pub fn init_genesis_validator(
         alias,
         net_address,
         unsafe_dont_encrypt,
+        key_scheme,
     }: args::InitGenesisValidator,
 ) {
     let pre_genesis_dir =
         validator_pre_genesis_dir(&global_args.base_dir, &alias);
     println!("Generating validator keys...");
     let pre_genesis = pre_genesis::ValidatorWallet::gen_and_store(
+        key_scheme,
         unsafe_dont_encrypt,
         &pre_genesis_dir,
     )
@@ -1134,18 +1159,30 @@ fn network_configs_url_prefix(chain_id: &ChainId) -> String {
     })
 }
 
-fn write_tendermint_node_key(
+/// Write the node key into tendermint config dir.
+pub fn write_tendermint_node_key(
     tm_home_dir: &Path,
-    node_sk: ed25519::SecretKey,
-) -> ed25519::PublicKey {
-    let node_pk: ed25519::PublicKey = node_sk.ref_to();
-    // Convert and write the keypair into Tendermint
-    // node_key.json file
-    let node_keypair =
-        [node_sk.try_to_vec().unwrap(), node_pk.try_to_vec().unwrap()].concat();
+    node_sk: common::SecretKey,
+) -> common::PublicKey {
+    let node_pk: common::PublicKey = node_sk.ref_to();
+
+    // Convert and write the keypair into Tendermint node_key.json file.
+    // Tendermint requires concatenating the private-public keys for ed25519
+    // but does not for secp256k1.
+    let (node_keypair, key_str) = match node_sk {
+        common::SecretKey::Ed25519(sk) => (
+            [sk.try_to_vec().unwrap(), sk.ref_to().try_to_vec().unwrap()]
+                .concat(),
+            "Ed25519",
+        ),
+        common::SecretKey::Secp256k1(sk) => {
+            (sk.try_to_vec().unwrap(), "Secp256k1")
+        }
+    };
+
     let tm_node_keypair_json = json!({
         "priv_key": {
-            "type": "tendermint/PrivKeyEd25519",
+            "type": format!("tendermint/PrivKey{}",key_str),
             "value": base64::encode(node_keypair),
         }
     });

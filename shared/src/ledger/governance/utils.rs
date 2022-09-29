@@ -11,7 +11,7 @@ use crate::ledger::pos;
 use crate::ledger::pos::{BondId, Bonds, ValidatorSets, ValidatorTotalDeltas};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::types::address::Address;
-use crate::types::governance::{ProposalVote, TallyResult};
+use crate::types::governance::{ProposalVote, TallyResult, VotePower};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
 
@@ -19,11 +19,11 @@ use crate::types::token;
 /// outcome
 pub struct Votes {
     /// Map from validators who votes yay to their total stake amount
-    pub yay_validators: HashMap<Address, token::Amount>,
+    pub yay_validators: HashMap<Address, VotePower>,
     /// Map from delegation who votes yay to their bond amount
-    pub yay_delegators: HashMap<Address, token::Amount>,
+    pub yay_delegators: HashMap<Address, HashMap<Address, VotePower>>,
     /// Map from delegation who votes nay to their bond amount
-    pub nay_delegators: HashMap<Address, token::Amount>,
+    pub nay_delegators: HashMap<Address, HashMap<Address, VotePower>>,
 }
 
 /// Proposal errors
@@ -93,26 +93,30 @@ where
         nay_delegators,
     } = votes;
 
-    let mut total_yay_stacked_tokens = token::Amount::from(0);
+    let mut total_yay_stacked_tokens = VotePower::from(0_u64);
     for (_, amount) in yay_validators.clone().into_iter() {
         total_yay_stacked_tokens += amount;
     }
 
     // YAY: Add delegator amount whose validator didn't vote / voted nay
-    for (validator_address, amount) in yay_delegators.into_iter() {
-        if !yay_validators.contains_key(&validator_address) {
-            total_yay_stacked_tokens += amount;
+    for (_, vote_map) in yay_delegators.iter() {
+        for (validator_address, vote_power) in vote_map.iter() {
+            if !yay_validators.contains_key(validator_address) {
+                total_yay_stacked_tokens += vote_power;
+            }
         }
     }
 
     // NAY: Remove delegator amount whose validator validator vote yay
-    for (validator_address, amount) in nay_delegators.into_iter() {
-        if yay_validators.contains_key(&validator_address) {
-            total_yay_stacked_tokens -= amount;
+    for (_, vote_map) in nay_delegators.iter() {
+        for (validator_address, vote_power) in vote_map.iter() {
+            if yay_validators.contains_key(validator_address) {
+                total_yay_stacked_tokens -= vote_power;
+            }
         }
     }
 
-    if 3 * total_yay_stacked_tokens >= 2 * total_stacked_tokens {
+    if total_yay_stacked_tokens >= (total_stacked_tokens / 3) * 2 {
         TallyResult::Passed
     } else {
         TallyResult::Rejected
@@ -155,9 +159,21 @@ where
                 (Some(epoched_bonds), Some(slashes)) => {
                     let mut delegated_amount: token::Amount = 0.into();
                     for bond in epoched_bonds.iter() {
+                        let mut to_deduct = bond.neg_deltas;
                         for (start_epoch, &(mut delta)) in
-                            bond.deltas.iter().sorted()
+                            bond.pos_deltas.iter().sorted()
                         {
+                            // deduct bond's neg_deltas
+                            if to_deduct > delta {
+                                to_deduct -= delta;
+                                // If the whole bond was deducted, continue to
+                                // the next one
+                                continue;
+                            } else {
+                                delta -= to_deduct;
+                                to_deduct = token::Amount::default();
+                            }
+
                             let start_epoch = Epoch::from(*start_epoch);
                             delta = apply_slashes(&slashes, delta, start_epoch);
                             if epoch >= start_epoch {
@@ -205,9 +221,11 @@ where
         gov_storage::get_proposal_vote_prefix_key(proposal_id);
     let (vote_iter, _) = storage.iter_prefix(&vote_prefix_key);
 
-    let mut yay_validators: HashMap<Address, token::Amount> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, token::Amount> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, token::Amount> = HashMap::new();
+    let mut yay_validators = HashMap::new();
+    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
+    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
 
     for (key, vote_bytes, _) in vote_iter {
         let vote_key = Key::from_str(key.as_str()).ok();
@@ -216,33 +234,79 @@ where
             (Some(key), Some(vote)) => {
                 let voter_address = gov_storage::get_voter_address(&key);
                 match voter_address {
-                    Some(address) => {
-                        if vote.is_yay() && validators.contains(address) {
-                            let amount =
-                                get_validator_stake(storage, epoch, address);
-                            yay_validators.insert(address.clone(), amount);
-                        } else if !validators.contains(address) {
+                    Some(voter_address) => {
+                        if vote.is_yay() && validators.contains(voter_address) {
+                            let amount = get_validator_stake(
+                                storage,
+                                epoch,
+                                voter_address,
+                            );
+                            yay_validators
+                                .insert(voter_address.clone(), amount);
+                        } else if !validators.contains(voter_address) {
                             let validator_address =
                                 gov_storage::get_vote_delegation_address(&key);
                             match validator_address {
                                 Some(validator_address) => {
                                     let amount = get_bond_amount_at(
                                         storage,
-                                        address,
+                                        voter_address,
                                         validator_address,
                                         epoch,
                                     );
                                     if let Some(amount) = amount {
                                         if vote.is_yay() {
-                                            yay_delegators.insert(
-                                                address.clone(),
-                                                amount,
-                                            );
+                                            match yay_delegators
+                                                .get_mut(voter_address)
+                                            {
+                                                Some(map) => {
+                                                    map.insert(
+                                                        validator_address
+                                                            .clone(),
+                                                        VotePower::from(amount),
+                                                    );
+                                                }
+                                                None => {
+                                                    let delegations_map =
+                                                        HashMap::from([(
+                                                            validator_address
+                                                                .clone(),
+                                                            VotePower::from(
+                                                                amount,
+                                                            ),
+                                                        )]);
+                                                    yay_delegators.insert(
+                                                        voter_address.clone(),
+                                                        delegations_map,
+                                                    );
+                                                }
+                                            }
                                         } else {
-                                            nay_delegators.insert(
-                                                address.clone(),
-                                                amount,
-                                            );
+                                            match nay_delegators
+                                                .get_mut(&voter_address.clone())
+                                            {
+                                                Some(map) => {
+                                                    map.insert(
+                                                        validator_address
+                                                            .clone(),
+                                                        VotePower::from(amount),
+                                                    );
+                                                }
+                                                None => {
+                                                    let delegations_map =
+                                                        HashMap::from([(
+                                                            validator_address
+                                                                .clone(),
+                                                            VotePower::from(
+                                                                amount,
+                                                            ),
+                                                        )]);
+                                                    nay_delegators.insert(
+                                                        voter_address.clone(),
+                                                        delegations_map,
+                                                    );
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -300,14 +364,14 @@ fn get_total_stacked_tokens<D, H>(
     storage: &Storage<D, H>,
     epoch: Epoch,
     validators: &[Address],
-) -> token::Amount
+) -> VotePower
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
     return validators
         .iter()
-        .fold(token::Amount::from(0), |acc, validator| {
+        .fold(VotePower::from(0_u64), |acc, validator| {
             acc + get_validator_stake(storage, epoch, validator)
         });
 }
@@ -316,7 +380,7 @@ fn get_validator_stake<D, H>(
     storage: &Storage<D, H>,
     epoch: Epoch,
     validator: &Address,
-) -> token::Amount
+) -> VotePower
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -331,9 +395,12 @@ where
         if let Some(total_delta) = total_delta {
             let epoched_total_delta = total_delta.get(epoch);
             if let Some(epoched_total_delta) = epoched_total_delta {
-                return token::Amount::from_change(epoched_total_delta);
+                match VotePower::try_from(epoched_total_delta) {
+                    Ok(voting_power) => return voting_power,
+                    Err(_) => return VotePower::from(0_u64),
+                }
             }
         }
     }
-    token::Amount::from(0)
+    VotePower::from(0_u64)
 }

@@ -7,6 +7,7 @@ use super::storage as gov_storage;
 use crate::ledger::native_vp::{self, Ctx};
 use crate::ledger::pos::{self as pos_storage, BondId, Bonds};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::vp_env::VpEnv;
 use crate::types::address::{xan as m1t, Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
@@ -87,18 +88,23 @@ where
     let author = read(ctx, &author_key, ReadType::POST).ok();
     let has_pre_author = ctx.has_key_pre(&author_key).ok();
     match (has_pre_author, author) {
-        (Some(has_pre_author), Some(author)) => {
-            // TODO: if author is an implicit address, we should asssume its
-            // existence we should reuse the same logic as in
-            // check_address_existence in shared/src/vm/host_env.rs
-            let address_exist_key = Key::validity_predicate(&author);
-            let address_exist = ctx.has_key_post(&address_exist_key).ok();
-            if let Some(address_exist) = address_exist {
-                !has_pre_author && verifiers.contains(&author) && address_exist
-            } else {
-                false
+        (Some(has_pre_author), Some(author)) => match author {
+            Address::Established(_) => {
+                let address_exist_key = Key::validity_predicate(&author);
+                let address_exist = ctx.has_key_post(&address_exist_key).ok();
+                if let Some(address_exist) = address_exist {
+                    !has_pre_author
+                        && verifiers.contains(&author)
+                        && address_exist
+                } else {
+                    false
+                }
             }
-        }
+            Address::Implicit(_) => {
+                !has_pre_author && verifiers.contains(&author)
+            }
+            Address::Internal(_) => false,
+        },
         _ => false,
     }
 }
@@ -350,7 +356,7 @@ where
     let max_content_length =
         read(ctx, &max_content_length_parameter_key, ReadType::PRE).ok();
     let has_pre_content = ctx.has_key_pre(&content_key).ok();
-    let post_content = ctx.read_post(&content_key).unwrap();
+    let post_content = ctx.read_bytes_post(&content_key).unwrap();
     match (has_pre_content, post_content, max_content_length) {
         (
             Some(has_pre_content),
@@ -377,7 +383,7 @@ where
     let max_content_length =
         read(ctx, &max_content_length_parameter_key, ReadType::PRE).ok();
     let has_pre_content = ctx.has_key_pre(&content_key).ok();
-    let post_content = ctx.read_post(&content_key).unwrap();
+    let post_content = ctx.read_bytes_post(&content_key).unwrap();
     match (has_pre_content, post_content, max_content_length) {
         (
             Some(has_pre_content),
@@ -504,8 +510,8 @@ where
     T: Clone + BorshDeserialize,
 {
     let storage_result = match read_type {
-        ReadType::PRE => context.read_pre(key),
-        ReadType::POST => context.read_post(key),
+        ReadType::PRE => context.read_bytes_pre(key),
+        ReadType::POST => context.read_bytes_post(key),
     };
 
     match storage_result {

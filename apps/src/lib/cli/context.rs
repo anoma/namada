@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use color_eyre::eyre::Result;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
@@ -76,7 +77,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(global_args: args::Global) -> Self {
+    pub fn new(global_args: args::Global) -> Result<Self> {
         let global_config = read_or_try_new_global_config(&global_args);
         tracing::info!("Chain ID: {}", global_config.default_chain_id);
 
@@ -92,44 +93,30 @@ impl Context {
         let genesis_file_path = global_args
             .base_dir
             .join(format!("{}.toml", global_config.default_chain_id.as_str()));
-        let wallet = Wallet::load_or_new_from_genesis(&chain_dir, move || {
-            genesis_config::open_genesis_config(genesis_file_path)
-        });
+        let wallet = Wallet::load_or_new_from_genesis(
+            &chain_dir,
+            genesis_config::open_genesis_config(&genesis_file_path)?,
+        );
 
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {
             Some(wasm_dir) => {
-                if wasm_dir.is_absolute() {
-                    eprintln!(
-                        "The arg `--wasm-dir` cannot be an absolute path. It \
-                         is nested inside the chain directory."
-                    );
-                    safe_exit(1);
-                }
                 config.wasm_dir = wasm_dir.clone();
             }
             None => {
                 if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
                     let wasm_dir: PathBuf = wasm_dir.into();
-                    if wasm_dir.is_absolute() {
-                        eprintln!(
-                            "The env var `{}` cannot be an absolute path. It \
-                             is nested inside the chain directory.",
-                            ENV_VAR_WASM_DIR
-                        );
-                        safe_exit(1);
-                    }
                     config.wasm_dir = wasm_dir;
                 }
             }
         }
-        Self {
+        Ok(Self {
             global_args,
             wallet,
             global_config,
             config,
             shielded: ShieldedContext::new(chain_dir),
-        }
+        })
     }
 
     /// Parse and/or look-up the value from the context.
@@ -194,7 +181,7 @@ impl Context {
 
     /// Read the given WASM file from the WASM directory or an absolute path.
     pub fn read_wasm(&self, file_name: impl AsRef<Path>) -> Vec<u8> {
-        wasm_loader::read_wasm(self.wasm_dir(), file_name)
+        wasm_loader::read_wasm_or_exit(self.wasm_dir(), file_name)
     }
 }
 

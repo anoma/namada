@@ -26,7 +26,7 @@ use masp_primitives::merkle_tree::{
 use masp_primitives::note_encryption::*;
 use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
 use masp_primitives::sapling::Node;
-use masp_primitives::transaction::builder::{self, *};
+use masp_primitives::transaction::builder::{self, secp256k1, *};
 use masp_primitives::transaction::components::{Amount, OutPoint, TxOut};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
@@ -200,6 +200,7 @@ pub async fn submit_init_validator(
     args::TxInitValidator {
         tx: tx_args,
         source,
+        scheme,
         account_key,
         consensus_key,
         rewards_account_key,
@@ -221,16 +222,33 @@ pub async fn submit_init_validator(
     let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
         println!("Generating validator account key...");
         ctx.wallet
-            .gen_key(Some(validator_key_alias.clone()), unsafe_dont_encrypt)
+            .gen_key(
+                scheme,
+                Some(validator_key_alias.clone()),
+                unsafe_dont_encrypt,
+            )
             .1
             .ref_to()
     });
 
-    let consensus_key =
-        ctx.get_opt_cached(&consensus_key).unwrap_or_else(|| {
+    let consensus_key = ctx
+        .get_opt_cached(&consensus_key)
+        .map(|key| match key {
+            common::SecretKey::Ed25519(_) => key,
+            common::SecretKey::Secp256k1(_) => {
+                eprintln!("Consensus key can only be ed25519");
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
             println!("Generating consensus key...");
             ctx.wallet
-                .gen_key(Some(consensus_key_alias.clone()), unsafe_dont_encrypt)
+                .gen_key(
+                    // Note that TM only allows ed25519 for consensus key
+                    SchemeType::Ed25519,
+                    Some(consensus_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
                 .1
         });
 
@@ -238,7 +256,11 @@ pub async fn submit_init_validator(
         ctx.get_opt_cached(&rewards_account_key).unwrap_or_else(|| {
             println!("Generating staking reward account key...");
             ctx.wallet
-                .gen_key(Some(rewards_key_alias.clone()), unsafe_dont_encrypt)
+                .gen_key(
+                    scheme,
+                    Some(rewards_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
                 .1
                 .ref_to()
         });
@@ -248,7 +270,8 @@ pub async fn submit_init_validator(
         println!("Generating protocol signing key...");
     }
     // Generate the validator keys
-    let validator_keys = ctx.wallet.gen_validator_keys(protocol_key).unwrap();
+    let validator_keys =
+        ctx.wallet.gen_validator_keys(protocol_key, scheme).unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair
@@ -376,15 +399,11 @@ pub async fn submit_init_validator(
             };
         // add validator address and keys to the wallet
         ctx.wallet
-            .add_validator_data(validator_address.clone(), validator_keys);
+            .add_validator_data(validator_address, validator_keys);
         ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 
         let tendermint_home = ctx.config.ledger.tendermint_dir();
-        tendermint_node::write_validator_key(
-            &tendermint_home,
-            &validator_address,
-            &consensus_key,
-        );
+        tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
         tendermint_node::write_validator_state(tendermint_home);
 
         println!();
@@ -1309,7 +1328,7 @@ where
     if let Some(sk) = spending_key {
         // Transaction fees need to match the amount in the wrapper Transfer
         // when MASP source is used
-        let (_, fee) = 
+        let (_, fee) =
             convert_amount(epoch, &args.tx.fee_token, args.tx.fee_amount);
         builder.set_fee(fee.clone())?;
         // If the gas is coming from the shielded pool, then our shielded inputs
@@ -1426,9 +1445,10 @@ where
                 memo,
             )?;
 
-            let secp_sk =
-                secp256k1::SecretKey::from_slice(&[0xcd; 32]).expect("secret key");
-            let secp_ctx = secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
+            let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
+                .expect("secret key");
+            let secp_ctx =
+                secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
             let secp_pk =
                 secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
                     .serialize();
@@ -1450,7 +1470,8 @@ where
             tx = tx.map(|(t, tm)| {
                 let mut temp = t.deref().clone();
                 temp.shielded_outputs = replay_tx.shielded_outputs.clone();
-                temp.value_balance = temp.value_balance.reject(asset_type) - Amount::from_pair(new_asset_type, amt).unwrap();
+                temp.value_balance = temp.value_balance.reject(asset_type)
+                    - Amount::from_pair(new_asset_type, amt).unwrap();
                 (temp.freeze().unwrap(), tm)
             });
         }
@@ -1678,7 +1699,65 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     let proposal: Proposal =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
 
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+
     let signer = WalletAddress::new(proposal.clone().author.to_string());
+    let goverance_parameters = rpc::get_governance_parameters(&client).await;
+    let current_epoch = rpc::query_epoch(args::Query {
+        ledger_address: args.tx.ledger_address.clone(),
+    })
+    .await;
+
+    if proposal.voting_start_epoch <= current_epoch
+        || proposal.voting_start_epoch.0
+            % goverance_parameters.min_proposal_period
+            != 0
+    {
+        println!("{}", proposal.voting_start_epoch <= current_epoch);
+        println!(
+            "{}",
+            proposal.voting_start_epoch.0
+                % goverance_parameters.min_proposal_period
+                == 0
+        );
+        eprintln!(
+            "Invalid proposal start epoch: {} must be greater than current \
+             epoch {} and a multiple of {}",
+            proposal.voting_start_epoch,
+            current_epoch,
+            goverance_parameters.min_proposal_period
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
+        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
+            < goverance_parameters.min_proposal_period
+        || proposal.voting_end_epoch.0 % 3 != 0
+    {
+        eprintln!(
+            "Invalid proposal end epoch: difference between proposal start \
+             and end epoch must be at least {} and end epoch must be a \
+             multiple of {}",
+            goverance_parameters.min_proposal_period,
+            goverance_parameters.min_proposal_period
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    } else if proposal.grace_epoch <= proposal.voting_end_epoch
+        || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
+            < goverance_parameters.min_proposal_grace_epochs
+    {
+        eprintln!(
+            "Invalid proposal grace epoch: difference between proposal grace \
+             and end epoch must be at least {}",
+            goverance_parameters.min_proposal_grace_epochs
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
 
     if args.offline {
         let signer = ctx.get(&signer);
@@ -1690,11 +1769,18 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         .await;
         let offline_proposal =
             OfflineProposal::new(proposal, signer, &signing_key);
-        let proposal_filename = "proposal".to_string();
+        let proposal_filename = args
+            .proposal_data
+            .parent()
+            .expect("No parent found")
+            .join("proposal");
         let out = File::create(&proposal_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_proposal) {
             Ok(_) => {
-                println!("Proposal created: {}.", proposal_filename);
+                println!(
+                    "Proposal created: {}.",
+                    proposal_filename.to_string_lossy()
+                );
             }
             Err(e) => {
                 eprintln!("Error while creating proposal file: {}.", e);
@@ -1702,8 +1788,6 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             }
         }
     } else {
-        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-
         let tx_data: Result<InitProposalData, _> = proposal.clone().try_into();
         let init_proposal_data = if let Ok(data) = tx_data {
             data
@@ -1712,35 +1796,22 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1)
         };
 
-        let min_proposal_funds_key = gov_storage::get_min_proposal_fund_key();
-        let min_proposal_funds: token::Amount =
-            rpc::query_storage_value(&client, &min_proposal_funds_key)
-                .await
-                .unwrap();
         let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
             .await
             .unwrap_or_default();
-        if balance < min_proposal_funds {
+        if balance < token::Amount::from(goverance_parameters.min_proposal_fund)
+        {
             eprintln!(
                 "Address {} doesn't have enough funds.",
                 &proposal.author
             );
             safe_exit(1);
         }
-        let min_proposal_funds_key = gov_storage::get_min_proposal_fund_key();
-        let min_proposal_funds: token::Amount =
-            rpc::query_storage_value(&client, &min_proposal_funds_key)
-                .await
-                .unwrap();
 
-        let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
-            .await
-            .unwrap_or_default();
-        if balance < min_proposal_funds {
-            eprintln!(
-                "Address {} doesn't have enough funds.",
-                &proposal.author
-            );
+        if init_proposal_data.content.len()
+            > goverance_parameters.max_proposal_content_size as usize
+        {
+            eprintln!("Proposal content size too big.",);
             safe_exit(1);
         }
 
@@ -1795,12 +1866,17 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             &signing_key,
         );
 
-        let proposal_vote_filename =
-            format!("proposal-vote-{}", &signer.to_string());
+        let proposal_vote_filename = proposal_file_path
+            .parent()
+            .expect("No parent found")
+            .join(format!("proposal-vote-{}", &signer.to_string()));
         let out = File::create(&proposal_vote_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_vote) {
             Ok(_) => {
-                println!("Proposal vote created: {}.", proposal_vote_filename);
+                println!(
+                    "Proposal vote created: {}.",
+                    proposal_vote_filename.to_string_lossy()
+                );
             }
             Err(e) => {
                 eprintln!("Error while creating proposal vote file: {}.", e);
@@ -1809,6 +1885,10 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         }
     } else {
         let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+        let current_epoch = rpc::query_epoch(args::Query {
+            ledger_address: args.tx.ledger_address.clone(),
+        })
+        .await;
 
         let voter_address = ctx.get(signer);
         let proposal_id = args.proposal_id.unwrap();
@@ -1822,6 +1902,17 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
 
         match proposal_start_epoch {
             Some(epoch) => {
+                if current_epoch < epoch {
+                    eprintln!(
+                        "Current epoch {} is not greater than proposal start \
+                         epoch {}",
+                        current_epoch, epoch
+                    );
+
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
                 let mut delegation_addresses = rpc::get_delegators_delegation(
                     &client,
                     &voter_address,
@@ -1853,6 +1944,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     .await;
                 }
 
+                println!("{:?}", delegation_addresses);
+
                 let tx_data = VoteProposalData {
                     id: proposal_id,
                     vote: args.vote,
@@ -1875,7 +1968,13 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 .await;
             }
             None => {
-                eprintln!("Proposal start epoch is not in the storage.")
+                eprintln!(
+                    "Proposal start epoch for proposal id {} is not definied.",
+                    proposal_id
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
             }
         }
     }
@@ -2049,7 +2148,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         Some(bonds) => {
             let mut bond_amount: token::Amount = 0.into();
             for bond in bonds.iter() {
-                for delta in bond.deltas.values() {
+                for delta in bond.pos_deltas.values() {
                     bond_amount += *delta;
                 }
             }
