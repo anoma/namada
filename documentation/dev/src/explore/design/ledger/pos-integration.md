@@ -10,8 +10,7 @@ The `votes_per_token` PoS system parameter must be chosen to satisfy the [Tender
 
 All [the data relevant to the PoS system](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html#storage) are stored under the PoS account's storage sub-space, with the following key schema (the PoS address prefix is omitted for clarity):
 
-- `params` (required): the system parameters
-- for any validator, all the following fields are required:
+- For any validator, all the following fields are required:
   - `validator/{validator_address}/consensus_key`
   - `validator/{validator_address}/state`
   - `validator/{validator_address}/deltas`: the change in the amount of self-bonds and delegations to this validator per epoch, may contain negative delta values due to unbonding
@@ -21,17 +20,20 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
   - `validator/{validator_address}/last_known_product_epoch`: optionally set when a validator crosses from `consensus` or `below_capacity` validator set into `below_threshold` set, at which point the protocol will stop updating their rewards products during epoch change
   - `validator/{validator_address}/commissions`: the total amount of delegations commissions collected by this validator - this doesn't need to be epoched data, just an accumulator of the total
   - `validator/{validator_address}/commission_rate`: a validator-chosen commission rate that is some fraction of the delegation rewards charged by this validator
-- `slash/{validator_address}` (optional): a list of slashes, where each record contains epoch and slash rate
-- `bond/{bond_source}/{bond_validator} (optional)`
-- `unbond/{unbond_source}/{unbond_validator} (optional)`
-- `validator_set/consensus (required)`: the set of up to `max_validator_slots` (parameter) validators, ordered by their bonded stake
-- `validator_set/below_capacity (required)`: the set of validators below consensus capacity, but with bonded stake above the `min_validator_stake` parameter, also ordered by their bonded stake
-- `total_deltas (required)`
-
-- standard validator metadata (these are regular storage values, not epoched data):
-  - `validator/{validator_address}/address_raw_hash` (required): raw hash of validator's address associated with the address is used for look-up of validator address from a raw hash
   - `validator/{validator_address}/max_commission_rate_change` (required): a validator-chosen maximum commission rate change per epoch, set when the validator account is created and cannot be changed
-  - TBA (e.g. alias, website, description, etc.)
+  - `validator/{validator_address}/address_raw_hash` (required): raw hash of validator's address associated with the address is used for look-up of validator address from a raw hash
+- For the validator sets, there are several required storage sub-keys:
+  - `validator_set/consensus/rewards_accumulator` (required): a map of the current epoch's consensus validator addresses to their individual rewards fractions accumulated over all blocks seen in the current epoch. This is reset to an empty map at the very end of each epoch.
+  - `validator_set/consensus/consensus_set` (required): the set of up to `max_validator_slots` (parameter) validators, ordered by their bonded stake
+  - `validator_set/below_capacity` (required): the set of validators with bonded stake below that of the top `max_validator_slots` validators, but with bonded stake above the `min_validator_stake` parameter, also ordered by their bonded stake
+  - `validator_set/below_threshold` (required): the set of validators with bonded stake below the `min_validator_stake` value
+- Other PoS storage keys:
+  - `params` (required): the system parameters
+  - `slash/{validator_address}` (optional): a list of slashes, where each record contains epoch and slash rate
+  - `bond/{bond_source}/{bond_validator}` (optional)
+  - `unbond/{unbond_source}/{unbond_validator}` (optional)
+  - `total_deltas (required)`
+  - (TODO) other standard validator metadata TBA (e.g. alias, website, description, etc.)
 
 Only NAM tokens can be staked in bonds. The tokens being staked (amounts in the bonds and unbonds) are kept in the PoS account under `{nam_address}/balance/{pos_address}` until they are withdrawn.
 
@@ -47,7 +49,7 @@ For slashing tokens, we implement a [PoS slash pool account](vp.md#pos-slash-poo
 
 ### Validator transactions
 
-The validator transactions are assumed to be applied with an account address `validator_address`.
+The validator transactions are assumed to be applied with an account address `validator_address` and the the current epoch `n`.
 
 - `become_validator(consensus_key, commission_rate, max_commission_rate_change)`:
   - creates a record in `validator/{validator_address}/consensus_key` in epoch `n + pipeline_length`
@@ -59,25 +61,25 @@ The validator transactions are assumed to be applied with an account address `va
 - `reactivate`:
   - sets `validator/{validator_address}/state` to `candidate` in epoch `n + pipeline_length`
 - `self_bond(amount)`:
-  - let `bond = read(bond/{validator_address}/{validator_address}/deltas)`
+  - let `bond = read(bond/{validator_address}/{validator_address})`
   - if `bond` exists, update it with the new bond amount in epoch `n + pipeline_length`
   - else, create a new record with bond amount in epoch `n + pipeline_length`
   - debit the token `amount` from the `validator_address` and credit it to the PoS account
-  - add the `amount` to `validator/{validator_address}/deltas` in epoch `n + pipeline_length`
-  - update the `total_deltas` in epoch `n + pipeline_length`
+  - update the `validator/{validator_address}/deltas` with `amount` in epoch `n + pipeline_length`
+  - update the `total_deltas` with `amount` in epoch `n + pipeline_length`
   - update `validator_set` in epoch `n + pipeline_length`
 - `unbond(amount)`:
-  - let `bond = read(bond/{validator_address}/{validator_address}/delta)`
+  - let `bond = read(bond/{validator_address}/{validator_address}/)`
   - if `bond` doesn't exist, panic
-  - let `pre_unbond = read(unbond/{validator_address}/{validator_address}/delta)`
-  - if `total(bond) - total(pre_unbond) < amount`, panic
+  - let `existing_unbond = read(unbond/{validator_address}/{validator_address}/)`
+  - if `total(bond) - total(existing_unbond) < amount`, panic
   - decrement the `bond` deltas starting from the rightmost value (a bond in a future-most epoch at the unbonding offset) until whole `amount` is decremented
   - for each decremented `bond` value write a new `unbond` in epoch `n + pipeline_length + unbonding_length` with the start epoch set to the epoch of the source value and end epoch `n + pipeline_length + unbonding_length`
   - decrement the `amount` from `validator/{validator_address}/deltas` in epoch `n + pipeline_length`
-  - update the `total_deltas` in epoch `n + pipeline_length`
+  - decrement the `amount` from `total_deltas` in epoch `n + pipeline_length`
   - update `validator_set` in epoch `n + pipeline_length`
 - `withdraw_unbonds`:
-  - let `unbond = read(unbond/{validator_address}/{validator_address}/delta)`
+  - let `unbond = read(unbond/{validator_address}/{validator_address}/)`
   - if `unbond` doesn't exist, panic
   - if no `unbond` value is found for epochs <= `n`, panic
   - for each `((bond_start, bond_end), amount) in unbond where unbond.epoch <= n`:
@@ -135,7 +137,7 @@ The delegator transactions are assumed to be applied with an account address `de
       - credit the `amount_after_slash` to the `delegator_address` and debit the whole `amount` (before slash, if any) from the PoS account
       - burn the slashed tokens (`amount - amount_after_slash`), if not zero
 
-For `delegate`, `undelegate`, `redelegate` and `withdraw_unbonds` the transaction must be signed with the delegator's public key. Note that for `delegate`, signature verification is also performed because there are tokens debited from the delegator's account.
+For `delegate`, `undelegate`, `redelegate` and `withdraw_unbonds`, the transaction must be signed with the delegator's public key. Note that for `delegate`, signature verification is also performed because there are tokens debited from the delegator's account.
 
 ## Slashing
 
