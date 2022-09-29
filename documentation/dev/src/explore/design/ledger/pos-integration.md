@@ -18,7 +18,6 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
   - `validator/{validator_address}/validator_rewards_product`: a rewards product that is used to find the updated amount for self-bonds with staking rewards added to this validator - the past epoched data has to be kept indefinitely
   - `validator/{validator_address}/delegation_rewards_product`: similar to `validator_rewards_product`, but for delegations with commissions subtracted - the past epoched data also has to be kept indefinitely
   - `validator/{validator_address}/last_known_product_epoch`: optionally set when a validator crosses from `consensus` or `below_capacity` validator set into `below_threshold` set, at which point the protocol will stop updating their rewards products during epoch change
-  - `validator/{validator_address}/commissions`: the total amount of delegations commissions collected by this validator - this doesn't need to be epoched data, just an accumulator of the total
   - `validator/{validator_address}/commission_rate`: a validator-chosen commission rate that is some fraction of the delegation rewards charged by this validator
   - `validator/{validator_address}/max_commission_rate_change` (required): a validator-chosen maximum commission rate change per epoch, set when the validator account is created and cannot be changed
   - `validator/{validator_address}/address_raw_hash` (required): raw hash of validator's address associated with the address is used for look-up of validator address from a raw hash
