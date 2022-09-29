@@ -88,8 +88,14 @@ The validator transactions are assumed to be applied with an account address `va
     - burn the slashed tokens (`amount - amount_after_slash`), if not zero
 - `change_consensus_key`:
   - creates a record in `validator/{validator_address}/consensus_key` in epoch `n + pipeline_length`
-- `change_commission_rate`:
-  - creates a record in `validator/{validator_address}/commission_rate` in epoch `n + pipeline_length`
+- `change_commission_rate(new_rate)`:
+  - let `max_change = read(validator/{validator_address}/max_commission_rate_change)`
+  - let `rates = read(validator/{validator_address}/commission_rate)`
+  - let `rate_at_pipeline = rates[n + pipeline_length]`
+  - let `rate_before_pipeline = rates[n + pipeline_length - 1]`
+  - if `new_rate = rate_at_pipeline` or `new_rate < 0`, panic
+  - if `abs(new_rate - rate_before_pipeline) > max_change`, panic
+  - update `validator/{validator_address}/commission_rate` with `new_rate` at epochs `n + pipeline_length` and beyond  
 
 For `self_bond`, `unbond`, `withdraw_unbonds`, `become_validator`, `change_consensus_key`, and `change_commission_rate`, the transaction must be signed with the validator's public key. Additionally, for `become_validator` and `change_consensus_key`, we must attach a signature with the validator's consensus key to verify its ownership. Note that for `self_bond`, signature verification is also performed because there are tokens debited from the validator's account.
 
