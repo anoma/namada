@@ -13,7 +13,11 @@ use super::hash::Hash;
 use super::key::common::{self, Signature};
 use super::key::SigScheme;
 use super::storage::Epoch;
+use super::token::SCALE;
 use super::transaction::governance::InitProposalData;
+
+/// Type alias for vote power
+pub type VotePower = u128;
 
 #[derive(
     Debug,
@@ -83,7 +87,32 @@ pub enum TallyResult {
     Unknown,
 }
 
-impl fmt::Display for TallyResult {
+/// The result with votes of a proposal
+pub struct ProposalResult {
+    /// The result of a proposal
+    pub result: TallyResult,
+    /// The total voting power during the proposal tally
+    pub total_voting_power: VotePower,
+    /// The total voting power from yay votes
+    pub total_yay_power: VotePower,
+    /// The total voting power from nay votes (unused at the moment)
+    pub total_nay_power: VotePower,
+}
+
+impl Display for ProposalResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} with {} yay votes over {} ({:.2}%)",
+            self.result,
+            self.total_yay_power / SCALE as u128,
+            self.total_voting_power / SCALE as u128,
+            (self.total_yay_power / self.total_voting_power) * 100
+        )
+    }
+}
+
+impl Display for TallyResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TallyResult::Passed => write!(f, "passed"),

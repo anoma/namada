@@ -11,7 +11,17 @@ use crate::PosParams;
 
 /// Data that may have values set for future epochs, up to an epoch at offset as
 /// set via the `Offset` type parameter.
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 pub struct Epoched<Data, Offset>
 where
     Data: Clone + BorshDeserialize + BorshSerialize + BorshSchema,
@@ -27,7 +37,17 @@ where
 /// Data that may have delta values (a difference from the predecessor epoch)
 /// set for future epochs, up to an epoch at offset as set via the `Offset` type
 /// parameter.
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 pub struct EpochedDelta<Data, Offset>
 where
     Data: Clone
@@ -56,7 +76,17 @@ pub trait EpochOffset:
 }
 
 /// Offset at pipeline length.
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 pub struct OffsetPipelineLen;
 impl EpochOffset for OffsetPipelineLen {
     fn value(params: &PosParams) -> u64 {
@@ -69,9 +99,19 @@ impl EpochOffset for OffsetPipelineLen {
 }
 
 /// Offset at unbonding length.
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
-pub struct OffsetUnboundingLen;
-impl EpochOffset for OffsetUnboundingLen {
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetUnbondingLen;
+impl EpochOffset for OffsetUnbondingLen {
     fn value(params: &PosParams) -> u64 {
         params.unbonding_len
     }
@@ -82,7 +122,7 @@ impl EpochOffset for OffsetUnboundingLen {
 }
 
 /// Offset length dynamic choice.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DynEpochOffset {
     /// Offset at pipeline length.
     PipelineLen,
@@ -522,21 +562,20 @@ where
         );
     }
 
-    /// Update the delta values in reverse order (starting from the future-most
-    /// epoch) while the update function returns `true`.
-    pub fn rev_update_while(
-        &mut self,
-        mut update_value: impl FnMut(&mut Data, Epoch) -> bool,
+    /// Apply the given `f` function on each delta value in reverse order
+    /// (starting from the future-most epoch) while the given function returns
+    /// `true`.
+    pub fn rev_while(
+        &self,
+        mut f: impl FnMut(&Data, Epoch) -> bool,
         current_epoch: impl Into<Epoch>,
         params: &PosParams,
     ) {
         let epoch = current_epoch.into();
-        self.update_data(epoch, params);
-
         let offset = Offset::value(params) as usize;
         for ix in (0..offset + 1).rev() {
-            if let Some(Some(current)) = self.data.get_mut(ix) {
-                let keep_going = update_value(current, epoch + ix);
+            if let Some(Some(current)) = self.data.get(ix) {
+                let keep_going = f(current, epoch + ix);
                 if !keep_going {
                     break;
                 }
@@ -569,16 +608,16 @@ mod tests {
             sequential 1..20 => EpochedAbstractStateMachine<OffsetPipelineLen>);
 
         #[test]
-        fn epoched_state_machine_with_unbounding_offset(
-            sequential 1..20 => EpochedAbstractStateMachine<OffsetUnboundingLen>);
+        fn epoched_state_machine_with_unbonding_offset(
+            sequential 1..20 => EpochedAbstractStateMachine<OffsetUnbondingLen>);
 
         #[test]
         fn epoched_delta_state_machine_with_pipeline_offset(
             sequential 1..20 => EpochedDeltaAbstractStateMachine<OffsetPipelineLen>);
 
         #[test]
-        fn epoched_delta_state_machine_with_unbounding_offset(
-            sequential 1..20 => EpochedDeltaAbstractStateMachine<OffsetUnboundingLen>);
+        fn epoched_delta_state_machine_with_unbonding_offset(
+            sequential 1..20 => EpochedDeltaAbstractStateMachine<OffsetUnbondingLen>);
     }
 
     /// Abstract representation of [`Epoched`].

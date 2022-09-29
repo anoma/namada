@@ -15,16 +15,25 @@ use namada::types::{key, token};
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
-use namada_vm_env::tx_prelude::BorshSerialize;
+use namada_tx_prelude::{BorshSerialize, Ctx};
 use tempfile::TempDir;
+
+/// Tx execution context provides access to host env functions
+static mut CTX: Ctx = unsafe { Ctx::new() };
+
+/// Tx execution context provides access to host env functions
+pub fn ctx() -> &'static mut Ctx {
+    unsafe { &mut CTX }
+}
 
 /// This module combines the native host function implementations from
 /// `native_tx_host_env` with the functions exposed to the tx wasm
 /// that will call to the native functions, instead of interfacing via a
 /// wasm runtime. It can be used for host environment integration tests.
 pub mod tx_host_env {
-    pub use namada_vm_env::tx_prelude::*;
+    pub use namada_tx_prelude::*;
 
+    pub use super::ctx;
     pub use super::native_tx_host_env::*;
 }
 
@@ -103,7 +112,7 @@ impl TestTxEnv {
     }
 
     /// Fake accounts existence by initializating their VP storage.
-    /// This is needed for accounts that are being modified by a tx test to be
+    /// This is needed for accounts that are being modified by a tx test to
     /// pass account existence check in `tx_write` function.
     pub fn spawn_accounts(
         &mut self,

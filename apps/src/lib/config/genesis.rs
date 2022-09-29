@@ -26,6 +26,7 @@ pub mod genesis_config {
     use std::path::Path;
     use std::str::FromStr;
 
+    use eyre::Context;
     use hex;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::{EpochDuration, Parameters};
@@ -594,9 +595,22 @@ pub mod genesis_config {
         genesis
     }
 
-    pub fn open_genesis_config(path: impl AsRef<Path>) -> GenesisConfig {
-        let config_file = std::fs::read_to_string(path).unwrap();
-        toml::from_str(&config_file).unwrap()
+    pub fn open_genesis_config(
+        path: impl AsRef<Path>,
+    ) -> color_eyre::eyre::Result<GenesisConfig> {
+        let config_file =
+            std::fs::read_to_string(&path).wrap_err_with(|| {
+                format!(
+                    "couldn't read genesis config file from {}",
+                    path.as_ref().to_string_lossy()
+                )
+            })?;
+        toml::from_str(&config_file).wrap_err_with(|| {
+            format!(
+                "couldn't parse TOML from {}",
+                path.as_ref().to_string_lossy()
+            )
+        })
     }
 
     pub fn write_genesis_config(
@@ -608,7 +622,7 @@ pub mod genesis_config {
     }
 
     pub fn read_genesis_config(path: impl AsRef<Path>) -> Genesis {
-        load_genesis_config(open_genesis_config(path))
+        load_genesis_config(open_genesis_config(path).unwrap())
     }
 }
 

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use ark_serialize::{Read, Write};
 use file_lock::{FileLock, FileOptions};
-use namada::types::key::common;
+use namada::types::key::{common, SchemeType};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -65,10 +65,11 @@ impl ValidatorWallet {
     /// Generate a new [`ValidatorWallet`] with required pre-genesis keys and
     /// store it as TOML at the given path.
     pub fn gen_and_store(
+        scheme: SchemeType,
         unsafe_dont_encrypt: bool,
         store_dir: &Path,
     ) -> std::io::Result<Self> {
-        let validator = Self::gen(unsafe_dont_encrypt);
+        let validator = Self::gen(scheme, unsafe_dont_encrypt);
         let data = validator.store.encode();
         let wallet_path = validator_file_name(store_dir);
         // Make sure the dir exists
@@ -139,14 +140,21 @@ impl ValidatorWallet {
 
     /// Generate a new [`Validator`] with required pre-genesis keys. Will prompt
     /// for password when `!unsafe_dont_encrypt`.
-    fn gen(unsafe_dont_encrypt: bool) -> Self {
+    fn gen(scheme: SchemeType, unsafe_dont_encrypt: bool) -> Self {
         let password = wallet::read_and_confirm_pwd(unsafe_dont_encrypt);
-        let (account_key, account_sk) = gen_key_to_store(&password);
-        let (consensus_key, consensus_sk) = gen_key_to_store(&password);
-        let (rewards_key, rewards_sk) = gen_key_to_store(&password);
-        let (tendermint_node_key, tendermint_node_sk) =
-            gen_key_to_store(&password);
-        let validator_keys = store::Store::gen_validator_keys(None);
+        let (account_key, account_sk) = gen_key_to_store(scheme, &password);
+        let (consensus_key, consensus_sk) = gen_key_to_store(
+            // Note that TM only allows ed25519 for consensus key
+            SchemeType::Ed25519,
+            &password,
+        );
+        let (rewards_key, rewards_sk) = gen_key_to_store(scheme, &password);
+        let (tendermint_node_key, tendermint_node_sk) = gen_key_to_store(
+            // Note that TM only allows ed25519 for node IDs
+            SchemeType::Ed25519,
+            &password,
+        );
+        let validator_keys = store::Store::gen_validator_keys(None, scheme);
         let store = ValidatorStore {
             account_key,
             consensus_key,
@@ -179,9 +187,10 @@ impl ValidatorStore {
 }
 
 fn gen_key_to_store(
+    scheme: SchemeType,
     password: &Option<String>,
 ) -> (StoredKeypair<common::SecretKey>, common::SecretKey) {
-    let sk = store::gen_sk();
+    let sk = store::gen_sk(scheme);
     StoredKeypair::new(sk, password.clone())
 }
 

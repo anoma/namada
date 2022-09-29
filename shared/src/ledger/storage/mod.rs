@@ -23,8 +23,9 @@ use rayon::prelude::ParallelSlice;
 use tendermint::merkle::proof::Proof;
 use thiserror::Error;
 
-use super::parameters;
 use super::parameters::Parameters;
+use super::storage_api::{ResultExt, StorageRead, StorageWrite};
+use super::{parameters, storage_api};
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::EpochDuration;
 use crate::ledger::storage::merkle_tree::{
@@ -42,7 +43,7 @@ use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use crate::types::storage::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    BLOCK_HASH_LENGTH,
+    TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 use crate::types::token;
@@ -59,6 +60,8 @@ pub struct ConversionState {
     /// Map assets to their latest conversion and position in Merkle tree
     pub assets: BTreeMap<AssetType, (Address, Epoch, AllowedConversion, usize)>,
 }
+/// The maximum size of an IBC key (in bytes) allowed in merkle-ized storage
+pub const IBC_KEY_LIMIT: usize = 120;
 
 /// The storage data
 #[derive(Debug)]
@@ -85,6 +88,8 @@ where
     pub next_epoch_min_start_time: DateTimeUtc,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
+    /// The shielded transaction index
+    pub tx_index: TxIndex,
     /// The currently saved conversion state
     pub conversion_state: ConversionState,
     /// Wrapper txs to be decrypted in the next block proposal
@@ -326,6 +331,7 @@ where
             address_gen: EstablishedAddressGen::new(
                 "Privacy is a function of liberty.",
             ),
+            tx_index: TxIndex::default(),
             conversion_state: ConversionState::default(),
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
@@ -416,6 +422,7 @@ where
         };
         self.db.write_block(state)?;
         self.last_height = self.block.height;
+        self.last_epoch = self.block.epoch;
         self.header = None;
         Ok(())
     }
@@ -486,12 +493,15 @@ where
     pub fn write(
         &mut self,
         key: &Key,
-        value: impl AsRef<[u8]> + Clone,
+        value: impl AsRef<[u8]>,
     ) -> Result<(u64, i64)> {
+        // Note that this method is the same as `StorageWrite::write_bytes`,
+        // but with gas and storage bytes len diff accounting
         tracing::debug!("storage write key {}", key,);
-        self.block.tree.update(key, value.clone())?;
+        let value = value.as_ref();
+        self.block.tree.update(key, &value)?;
 
-        let len = value.as_ref().len();
+        let len = value.len();
         let gas = key.len() + len;
         let size_diff =
             self.db.write_subspace_val(self.last_height, key, value)?;
@@ -501,6 +511,8 @@ where
     /// Delete the specified subspace and returns the gas cost and the size
     /// difference
     pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
+        // Note that this method is the same as `StorageWrite::delete`,
+        // but with gas and storage bytes len diff accounting
         let mut deleted_bytes_len = 0;
         if self.has_key(key)?.0 {
             self.block.tree.delete(key)?;
@@ -660,8 +672,6 @@ where
         if new_epoch {
             // Begin a new epoch
             self.block.epoch = self.block.epoch.next();
-            self.last_epoch = self.last_epoch.next();
-            debug_assert_eq!(self.block.epoch, self.last_epoch);
             let EpochDuration {
                 min_num_of_blocks,
                 min_duration,
@@ -673,7 +683,7 @@ where
             let evidence_max_age_num_blocks: u64 = 100000;
             self.block
                 .pred_epochs
-                .new_epoch(height, evidence_max_age_num_blocks);
+                .new_epoch(height + 1, evidence_max_age_num_blocks);
             tracing::info!("Began a new epoch {}", self.block.epoch);
             self.update_allowed_conversions()?;
         }
@@ -697,6 +707,10 @@ where
 
     /// Update the MASP's allowed conversions
     fn update_allowed_conversions(&mut self) -> Result<()> {
+        // No conversions exist yet on the first epoch
+        if self.last_epoch == Epoch(0) {
+            return Ok(());
+        }
         // The derived conversions will be placed in MASP address space
         let masp_addr = masp();
         let key_prefix: Key = masp_addr.to_db_key().into();
@@ -918,6 +932,107 @@ where
     }
 }
 
+impl<'iter, D, H> StorageRead<'iter> for Storage<D, H>
+where
+    D: DB + for<'iter_> DBIter<'iter_>,
+    H: StorageHasher,
+{
+    type PrefixIter = <D as DBIter<'iter>>::PrefixIter;
+
+    fn read_bytes(
+        &self,
+        key: &crate::types::storage::Key,
+    ) -> std::result::Result<Option<Vec<u8>>, storage_api::Error> {
+        self.db.read_subspace_val(key).into_storage_result()
+    }
+
+    fn has_key(
+        &self,
+        key: &crate::types::storage::Key,
+    ) -> std::result::Result<bool, storage_api::Error> {
+        self.block.tree.has_key(key).into_storage_result()
+    }
+
+    fn iter_prefix(
+        &'iter self,
+        prefix: &crate::types::storage::Key,
+    ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
+        Ok(self.db.iter_prefix(prefix))
+    }
+
+    fn iter_next(
+        &self,
+        iter: &mut Self::PrefixIter,
+    ) -> std::result::Result<Option<(String, Vec<u8>)>, storage_api::Error>
+    {
+        Ok(iter.next().map(|(key, val, _gas)| (key, val)))
+    }
+
+    fn get_chain_id(&self) -> std::result::Result<String, storage_api::Error> {
+        Ok(self.chain_id.to_string())
+    }
+
+    fn get_block_height(
+        &self,
+    ) -> std::result::Result<BlockHeight, storage_api::Error> {
+        Ok(self.block.height)
+    }
+
+    fn get_block_hash(
+        &self,
+    ) -> std::result::Result<BlockHash, storage_api::Error> {
+        Ok(self.block.hash.clone())
+    }
+
+    fn get_block_epoch(
+        &self,
+    ) -> std::result::Result<Epoch, storage_api::Error> {
+        Ok(self.block.epoch)
+    }
+
+    fn get_tx_index(&self) -> std::result::Result<TxIndex, storage_api::Error> {
+        Ok(self.tx_index)
+    }
+}
+
+impl<D, H> StorageWrite for Storage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn write_bytes(
+        &mut self,
+        key: &crate::types::storage::Key,
+        val: impl AsRef<[u8]>,
+    ) -> storage_api::Result<()> {
+        // Note that this method is the same as `Storage::write`, but without
+        // gas and storage bytes len diff accounting, because it can only be
+        // used by the protocol that has a direct mutable access to storage
+        let val = val.as_ref();
+        self.block.tree.update(key, &val).into_storage_result()?;
+        let _ = self
+            .db
+            .write_subspace_val(self.block.height, key, val)
+            .into_storage_result()?;
+        Ok(())
+    }
+
+    fn delete(
+        &mut self,
+        key: &crate::types::storage::Key,
+    ) -> storage_api::Result<()> {
+        // Note that this method is the same as `Storage::delete`, but without
+        // gas and storage bytes len diff accounting, because it can only be
+        // used by the protocol that has a direct mutable access to storage
+        self.block.tree.delete(key).into_storage_result()?;
+        let _ = self
+            .db
+            .delete_subspace_val(self.block.height, key)
+            .into_storage_result()?;
+        Ok(())
+    }
+}
+
 impl From<MerkleTreeError> for Error {
     fn from(error: MerkleTreeError) -> Self {
         Self::MerkleTreeError(error)
@@ -959,6 +1074,7 @@ pub mod testing {
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),
+                tx_index: TxIndex::default(),
                 conversion_state: ConversionState::default(),
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
@@ -1061,17 +1177,19 @@ mod tests {
                 )
             {
                 assert_eq!(storage.block.epoch, epoch_before.next());
-                assert_eq!(storage.last_epoch, epoch_before.next());
                 assert_eq!(storage.next_epoch_min_start_height,
                     block_height + epoch_duration.min_num_of_blocks);
                 assert_eq!(storage.next_epoch_min_start_time,
                     block_time + epoch_duration.min_duration);
-                assert_eq!(storage.block.pred_epochs.get_epoch(block_height), Some(epoch_before.next()));
+                assert_eq!(storage.block.pred_epochs.get_epoch(block_height), Some(epoch_before));
+                assert_eq!(storage.block.pred_epochs.get_epoch(block_height + 1), Some(epoch_before.next()));
             } else {
                 assert_eq!(storage.block.epoch, epoch_before);
-                assert_eq!(storage.last_epoch, epoch_before);
                 assert_eq!(storage.block.pred_epochs.get_epoch(block_height), Some(epoch_before));
+                assert_eq!(storage.block.pred_epochs.get_epoch(block_height + 1), Some(epoch_before));
             }
+            // Last epoch should only change when the block is committed
+            assert_eq!(storage.last_epoch, epoch_before);
 
             // Update the epoch duration parameters
             parameters.epoch_duration.min_num_of_blocks =
@@ -1085,7 +1203,7 @@ mod tests {
             parameters::update_epoch_parameter(&mut storage, &parameters.epoch_duration).unwrap();
 
             // Test for 2.
-            let epoch_before = storage.last_epoch;
+            let epoch_before = storage.block.epoch;
             let height_of_update = storage.next_epoch_min_start_height.0 ;
             let time_of_update = storage.next_epoch_min_start_time;
             let height_before_update = BlockHeight(height_of_update - 1);
@@ -1096,18 +1214,14 @@ mod tests {
             // satisfied
             storage.update_epoch(height_before_update, time_before_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert_eq!(storage.last_epoch, epoch_before);
             storage.update_epoch(height_of_update, time_before_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert_eq!(storage.last_epoch, epoch_before);
             storage.update_epoch(height_before_update, time_of_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert_eq!(storage.last_epoch, epoch_before);
 
             // Update should happen at this or after this height and time
             storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before.next());
-            assert_eq!(storage.last_epoch, epoch_before.next());
             // The next epoch's minimum duration should change
             assert_eq!(storage.next_epoch_min_start_height,
                 height_of_update + parameters.epoch_duration.min_num_of_blocks);

@@ -7,6 +7,7 @@ use std::str::FromStr;
 
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
+use bimap::BiHashMap;
 use file_lock::{FileLock, FileOptions};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::address::{Address, ImplicitAddress};
@@ -62,7 +63,7 @@ pub struct Store {
     /// Cryptographic keypairs
     keys: HashMap<Alias, StoredKeypair<common::SecretKey>>,
     /// Anoma address book
-    addresses: HashMap<Alias, Address>,
+    addresses: BiHashMap<Alias, Address>,
     /// Known mappings of public key hashes to their aliases in the `keys`
     /// field. Used for look-up by a public key.
     pkhs: HashMap<PublicKeyHash, Alias>,
@@ -144,15 +145,15 @@ impl Store {
     /// the genesis file, if not found.
     pub fn load_or_new_from_genesis(
         store_dir: &Path,
-        load_genesis: impl FnOnce() -> GenesisConfig,
+        genesis_cfg: GenesisConfig,
     ) -> Result<Self, LoadStoreError> {
         Self::load(store_dir).or_else(|_| {
             #[cfg(not(feature = "dev"))]
-            let store = Self::new(load_genesis());
+            let store = Self::new(genesis_cfg);
             #[cfg(feature = "dev")]
             let store = {
                 // The function is unused in dev
-                let _ = load_genesis;
+                let _ = genesis_cfg;
                 Self::new()
             };
             store.save(store_dir).map_err(|err| {
@@ -254,7 +255,12 @@ impl Store {
 
     /// Find the stored address by an alias.
     pub fn find_address(&self, alias: impl AsRef<str>) -> Option<&Address> {
-        self.addresses.get(&alias.into())
+        self.addresses.get_by_left(&alias.into())
+    }
+
+    /// Find an alias by the address if it's in the wallet.
+    pub fn find_alias(&self, address: &Address) -> Option<&Alias> {
+        self.addresses.get_by_right(address)
     }
 
     /// Get all known keys by their alias, paired with PKH, if known.
@@ -284,7 +290,7 @@ impl Store {
     }
 
     /// Get all known addresses by their alias, paired with PKH, if known.
-    pub fn get_addresses(&self) -> &HashMap<Alias, Address> {
+    pub fn get_addresses(&self) -> &BiHashMap<Alias, Address> {
         &self.addresses
     }
 
@@ -320,10 +326,11 @@ impl Store {
     /// pointer to the key.
     pub fn gen_key(
         &mut self,
+        scheme: SchemeType,
         alias: Option<String>,
         password: Option<String>,
     ) -> (Alias, common::SecretKey) {
-        let sk = gen_sk();
+        let sk = gen_sk(scheme);
         let pkh: PublicKeyHash = PublicKeyHash::from(&sk.ref_to());
         let (keypair_to_store, raw_keypair) = StoredKeypair::new(sk, password);
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));
@@ -369,8 +376,10 @@ impl Store {
     /// Note that this removes the validator data.
     pub fn gen_validator_keys(
         protocol_keypair: Option<common::SecretKey>,
+        scheme: SchemeType,
     ) -> ValidatorKeys {
-        let protocol_keypair = protocol_keypair.unwrap_or_else(gen_sk);
+        let protocol_keypair =
+            protocol_keypair.unwrap_or_else(|| gen_sk(scheme));
         let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
             &mut StdRng::from_entropy(),
         );
@@ -418,7 +427,7 @@ impl Store {
         // Addresses and keypairs can share aliases, so first remove any
         // addresses sharing the same namesake before checking if alias has been
         // used.
-        let counterpart_address = self.addresses.remove(&alias);
+        let counterpart_address = self.addresses.remove_by_left(&alias);
         if self.contains_alias(&alias) {
             match show_overwrite_confirmation(&alias, "a key") {
                 ConfirmationResponse::Replace => {}
@@ -426,14 +435,14 @@ impl Store {
                     // Restore the removed address in case the recursive prompt
                     // terminates with a cancellation
                     counterpart_address
-                        .map(|x| self.addresses.insert(alias.clone(), x));
+                        .map(|x| self.addresses.insert(alias.clone(), x.1));
                     return self.insert_keypair(new_alias, keypair, pkh);
                 }
                 ConfirmationResponse::Skip => {
                     // Restore the removed address since this insertion action
                     // has now been cancelled
                     counterpart_address
-                        .map(|x| self.addresses.insert(alias.clone(), x));
+                        .map(|x| self.addresses.insert(alias.clone(), x.1));
                     return None;
                 }
             }
@@ -443,7 +452,7 @@ impl Store {
         self.pkhs.insert(pkh, alias.clone());
         // Since it is intended for the inserted keypair to share its namesake
         // with the pre-existing address
-        counterpart_address.map(|x| self.addresses.insert(alias.clone(), x));
+        counterpart_address.map(|x| self.addresses.insert(alias.clone(), x.1));
         Some(alias)
     }
 
@@ -505,7 +514,7 @@ impl Store {
             || self.view_keys.contains_key(alias)
             || self.spend_keys.contains_key(alias)
             || self.keys.contains_key(alias)
-            || self.addresses.contains_key(alias)
+            || self.addresses.contains_left(alias)
     }
 
     /// Completely remove the given alias from all maps in the wallet
@@ -514,7 +523,7 @@ impl Store {
         self.view_keys.remove(alias);
         self.spend_keys.remove(alias);
         self.keys.remove(alias);
-        self.addresses.remove(alias);
+        self.addresses.remove_by_left(alias);
         self.pkhs.retain(|_key, val| val != alias);
     }
 
@@ -581,7 +590,7 @@ impl Store {
                 true
             }
         });
-        if self.contains_alias(&alias) {
+        if self.addresses.contains_left(&alias) {
             match show_overwrite_confirmation(&alias, "an address") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
@@ -739,12 +748,20 @@ pub fn wallet_file(store_dir: impl AsRef<Path>) -> PathBuf {
 }
 
 /// Generate a new secret key.
-pub fn gen_sk() -> common::SecretKey {
+pub fn gen_sk(scheme: SchemeType) -> common::SecretKey {
     use rand::rngs::OsRng;
     let mut csprng = OsRng {};
-    ed25519::SigScheme::generate(&mut csprng)
-        .try_to_sk()
-        .unwrap()
+    match scheme {
+        SchemeType::Ed25519 => ed25519::SigScheme::generate(&mut csprng)
+            .try_to_sk()
+            .unwrap(),
+        SchemeType::Secp256k1 => secp256k1::SigScheme::generate(&mut csprng)
+            .try_to_sk()
+            .unwrap(),
+        SchemeType::Common => common::SigScheme::generate(&mut csprng)
+            .try_to_sk()
+            .unwrap(),
+    }
 }
 
 #[cfg(all(test, feature = "dev"))]
@@ -752,9 +769,23 @@ mod test_wallet {
     use super::*;
 
     #[test]
-    fn test_toml_roundtrip() {
+    fn test_toml_roundtrip_ed25519() {
         let mut store = Store::new();
-        let validator_keys = Store::gen_validator_keys(None);
+        let validator_keys =
+            Store::gen_validator_keys(None, SchemeType::Ed25519);
+        store.add_validator_data(
+            Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
+            validator_keys
+        );
+        let data = store.encode();
+        let _ = Store::decode(data).expect("Test failed");
+    }
+
+    #[test]
+    fn test_toml_roundtrip_secp256k1() {
+        let mut store = Store::new();
+        let validator_keys =
+            Store::gen_validator_keys(None, SchemeType::Secp256k1);
         store.add_validator_data(
             Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
             validator_keys

@@ -5,7 +5,7 @@ use namada_apps::cli::{self, args, cmds};
 use namada_apps::node::{gossip, ledger, matchmaker};
 
 pub fn main() -> Result<()> {
-    let (cmd, mut ctx) = cli::anoma_node_cli();
+    let (cmd, mut ctx) = cli::anoma_node_cli()?;
     if let Some(mode) = ctx.global_args.mode.clone() {
         ctx.config.ledger.tendermint.tendermint_mode = mode;
     }

@@ -16,7 +16,7 @@ use expectrl::process::unix::{PtyStream, UnixProcess};
 use expectrl::session::Session;
 use expectrl::stream::log::LoggedStream;
 use expectrl::{Eof, WaitStatus};
-use eyre::eyre;
+use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
@@ -112,7 +112,7 @@ pub fn network(
     // Open the source genesis file
     let genesis = genesis_config::open_genesis_config(
         working_dir.join(SINGLE_NODE_NET_GENESIS),
-    );
+    )?;
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);
@@ -488,7 +488,6 @@ impl AnomaCmd {
     }
 
     /// Assert that the process exited with failure
-    #[allow(dead_code)]
     pub fn assert_failure(&mut self) {
         // Make sure that there is no unread output first
         let _ = self.exp_eof().unwrap();
@@ -872,11 +871,17 @@ pub fn copy_wasm_to_chain_dir<'a>(
             .join(chain_id.as_str())
             .join(config::DEFAULT_WASM_DIR);
         for file in &wasm_files {
-            std::fs::copy(
-                working_dir.join("wasm").join(&file),
-                target_wasm_dir.join(&file),
-            )
-            .unwrap();
+            let src = working_dir.join("wasm").join(&file);
+            let dst = target_wasm_dir.join(&file);
+            std::fs::copy(&src, &dst)
+                .wrap_err_with(|| {
+                    format!(
+                        "copying {} to {}",
+                        &src.to_string_lossy(),
+                        &dst.to_string_lossy(),
+                    )
+                })
+                .unwrap();
         }
     }
 }

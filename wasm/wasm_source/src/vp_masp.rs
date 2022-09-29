@@ -4,11 +4,15 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::Amount;
 /// Multi-asset shielded pool VP.
 use namada_vp_prelude::address::masp;
+use namada_vp_prelude::storage::Epoch;
 use namada_vp_prelude::*;
 
 /// Convert Anoma amount and token type to MASP equivalents
-fn convert_amount(token: &Address, val: token::Amount) -> (AssetType, Amount) {
-    let epoch = get_block_epoch();
+fn convert_amount(
+    epoch: Epoch,
+    token: &Address,
+    val: token::Amount,
+) -> (AssetType, Amount) {
     // Timestamp the chosen token with the current epoch
     let token_bytes = (token, epoch.0)
         .try_to_vec()
@@ -24,11 +28,12 @@ fn convert_amount(token: &Address, val: token::Amount) -> (AssetType, Amount) {
 
 #[validity_predicate]
 fn validate_tx(
+    ctx: &Ctx,
     tx_data: Vec<u8>,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
-) -> bool {
+) -> VpResult {
     debug_log!(
         "vp_masp called with {} bytes data, address {}, keys_changed {:?}, \
          verifiers {:?}",
@@ -54,8 +59,11 @@ fn validate_tx(
             // Note that the asset type is timestamped so shields
             // where the shielded value has an incorrect timestamp
             // are automatically rejected
-            let (_transp_asset, transp_amt) =
-                convert_amount(&transfer.token, transfer.amount);
+            let (_transp_asset, transp_amt) = convert_amount(
+                ctx.get_block_epoch().unwrap(),
+                &transfer.token,
+                transfer.amount,
+            );
 
             // Non-masp sources add to transparent tx pool
             transparent_tx_pool += transp_amt;
@@ -64,13 +72,12 @@ fn validate_tx(
         // Handle unshielding/transparent output
         if transfer.target != masp() {
             // Timestamp is derived to allow unshields for older tokens
-            let atype = shielded_tx.value_balance.components()
-                .next()
-                .unwrap()
-                .0;
+            let atype =
+                shielded_tx.value_balance.components().next().unwrap().0;
 
-            let transp_amt = Amount::from_nonnegative(*atype, u64::from(transfer.amount))
-                .expect("invalid value or asset type for amount");
+            let transp_amt =
+                Amount::from_nonnegative(*atype, u64::from(transfer.amount))
+                    .expect("invalid value or asset type for amount");
 
             // Non-masp destinations subtract from transparent tx pool
             transparent_tx_pool -= transp_amt;
@@ -85,12 +92,12 @@ fn validate_tx(
                 );
                 // Section 3.4: The remaining value in the transparent
                 // transaction value pool MUST be nonnegative.
-                return false;
+                return reject();
             }
             _ => {}
         }
     }
 
     // Do the expensive proof verification in the VM at the end.
-    verify_masp(data)
+    ctx.verify_masp(data)
 }

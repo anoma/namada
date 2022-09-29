@@ -83,10 +83,16 @@ where
             storage,
         } in genesis.established_accounts
         {
-            let vp_code = vp_code_cache
-                .get_or_insert_with(vp_code_path.clone(), || {
-                    wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
-                });
+            let vp_code = match vp_code_cache.get(&vp_code_path).cloned() {
+                Some(vp_code) => vp_code,
+                None => {
+                    let wasm =
+                        wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
+                            .map_err(Error::ReadingWasm)?;
+                    vp_code_cache.insert(vp_code_path.clone(), wasm.clone());
+                    wasm
+                }
+            };
 
             // In dev, we don't check the hash
             #[cfg(feature = "dev")]
@@ -138,9 +144,10 @@ where
             balances,
         } in genesis.token_accounts
         {
-            let vp_code = vp_code_cache
-                .get_or_insert_with(vp_code_path.clone(), || {
+            let vp_code =
+                vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
                     wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
+                        .unwrap()
                 });
 
             // In dev, we don't check the hash
@@ -182,6 +189,7 @@ where
                         &self.wasm_dir,
                         &validator.validator_vp_code_path,
                     )
+                    .unwrap()
                 },
             );
 
@@ -256,15 +264,6 @@ where
             current_epoch,
         );
         ibc::init_genesis_storage(&mut self.storage);
-
-        let evidence_params = self.get_evidence_params(
-            &genesis.parameters.epoch_duration,
-            &genesis.pos_params,
-        );
-        response.consensus_params = Some(ConsensusParams {
-            evidence: Some(evidence_params),
-            ..response.consensus_params.unwrap_or_default()
-        });
 
         // Set the initial validator set
         for validator in genesis.validators {

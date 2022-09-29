@@ -34,7 +34,7 @@
 //! the modifications of its predecessor transition).
 //!
 //! The PoS storage modifications are modelled using
-//! [`testing::PosStorageChange`].
+//! `testing::PosStorageChange`.
 //!
 //! - Bond: Requires a validator account in the state (the `#{validator}`
 //!   segments in the keys below). Some of the storage change are optional,
@@ -50,7 +50,7 @@
 //! - Unbond: Requires a bond in the state (the `#{owner}` and `#{validator}`
 //!   segments in the keys below must be the owner and a validator of an
 //!   existing bond). The bond's total amount must be greater or equal to the
-//!   amount that' being unbonded. Some of the storage changes are optional,
+//!   amount that is being unbonded. Some of the storage changes are optional,
 //!   which depends on whether the unbonding decreases voting power of the
 //!   validator.
 //!     - `#{PoS}/bond/#{owner}/#{validator}`
@@ -99,16 +99,56 @@
 //! - add arb invalid storage changes
 //! - add slashes
 
+use namada::ledger::pos::namada_proof_of_stake::PosBase;
+use namada::types::storage::Epoch;
+use namada_tx_prelude::proof_of_stake::{
+    staking_token_address, GenesisValidator, PosParams,
+};
+
+use crate::tx::tx_host_env;
+
+/// initialize proof-of-stake genesis with the given list of validators and
+/// parameters.
+pub fn init_pos(
+    genesis_validators: &[GenesisValidator],
+    params: &PosParams,
+    start_epoch: Epoch,
+) {
+    tx_host_env::init();
+
+    tx_host_env::with(|tx_env| {
+        // Ensure that all the used
+        // addresses exist
+        tx_env.spawn_accounts([&staking_token_address()]);
+        for validator in genesis_validators {
+            tx_env.spawn_accounts([
+                &validator.address,
+                &validator.staking_reward_address,
+            ]);
+        }
+        tx_env.storage.block.epoch = start_epoch;
+        // Initialize PoS storage
+        tx_env
+            .storage
+            .init_genesis(
+                params,
+                genesis_validators.iter(),
+                u64::from(start_epoch),
+            )
+            .unwrap();
+    });
+}
+
 #[cfg(test)]
 mod tests {
 
-    use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosParams;
+    use namada::types::key::common::PublicKey;
     use namada::types::storage::Epoch;
-    use namada::types::token;
-    use namada_vm_env::proof_of_stake::parameters::testing::arb_pos_params;
-    use namada_vm_env::proof_of_stake::{staking_token_address, PosVP};
-    use namada_vm_env::tx_prelude::Address;
+    use namada::types::{address, token};
+    use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
+    use namada_tx_prelude::proof_of_stake::PosVP;
+    use namada_tx_prelude::Address;
     use proptest::prelude::*;
     use proptest::prop_state_machine;
     use proptest::state_machine::{AbstractStateMachine, StateMachineTest};
@@ -119,8 +159,9 @@ mod tests {
         arb_invalid_pos_action, arb_valid_pos_action, InvalidPosAction,
         ValidPosAction,
     };
+    use super::*;
     use crate::native_vp::TestNativeVpEnv;
-    use crate::tx::{tx_host_env, TestTxEnv};
+    use crate::tx::tx_host_env;
 
     prop_state_machine! {
         #![proptest_config(Config {
@@ -163,6 +204,7 @@ mod tests {
     }
 
     /// State machine transitions
+    #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
     enum Transition {
         /// Commit all the tx changes already applied in the tx env
@@ -189,28 +231,8 @@ mod tests {
         ) -> Self::ConcreteState {
             println!();
             println!("New test case");
-
             // Initialize the transaction env
-            let mut tx_env = TestTxEnv::default();
-
-            // Set the epoch
-            let storage = &mut tx_env.storage;
-            storage.block.epoch = initial_state.epoch;
-
-            // Initialize PoS storage
-            storage
-                .init_genesis(
-                    &initial_state.params,
-                    [].into_iter(),
-                    initial_state.epoch,
-                )
-                .unwrap();
-
-            // Make sure that the staking token account exist
-            tx_env.spawn_accounts([staking_token_address()]);
-
-            // Use the `tx_env` for host env calls
-            tx_host_env::set(tx_env);
+            init_pos(&[], &initial_state.params, initial_state.epoch);
 
             // The "genesis" block state
             for change in initial_state.committed_valid_actions {
@@ -379,8 +401,12 @@ mod tests {
                 Transition::CommitTx => true,
                 Transition::NextEpoch => true,
                 Transition::Valid(action) => match action {
-                    ValidPosAction::InitValidator(address) => {
+                    ValidPosAction::InitValidator {
+                        address,
+                        consensus_key,
+                    } => {
                         !state.is_validator(address)
+                            && !state.is_used_key(consensus_key)
                     }
                     ValidPosAction::Bond {
                         amount: _,
@@ -410,10 +436,13 @@ mod tests {
         fn validate_transitions(&self) {
             // Use the tx_env to run PoS VP
             let tx_env = tx_host_env::take();
-            let vp_env = TestNativeVpEnv::new(tx_env);
-            let result = vp_env.validate_tx(PosVP::new, |_tx_data| {});
+
+            let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
+            let result = vp_env.validate_tx(PosVP::new);
+
             // Put the tx_env back before checking the result
             tx_host_env::set(vp_env.tx_env);
+
             let result =
                 result.expect("Validation of valid changes must not fail!");
 
@@ -457,7 +486,19 @@ mod tests {
         /// Find if the given address is a validator
         fn is_validator(&self, addr: &Address) -> bool {
             self.all_valid_actions().iter().any(|action| match action {
-                ValidPosAction::InitValidator(validator) => validator == addr,
+                ValidPosAction::InitValidator { address, .. } => {
+                    address == addr
+                }
+                _ => false,
+            })
+        }
+
+        /// Find if the given consensus key is already used by any validators
+        fn is_used_key(&self, given_consensus_key: &PublicKey) -> bool {
+            self.all_valid_actions().iter().any(|action| match action {
+                ValidPosAction::InitValidator { consensus_key, .. } => {
+                    consensus_key == given_consensus_key
+                }
                 _ => false,
             })
         }
@@ -538,20 +579,20 @@ pub mod testing {
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;
     use namada::types::{address, key, token};
-    use namada_vm_env::proof_of_stake::epoched::{
+    use namada_tx_prelude::proof_of_stake::epoched::{
         DynEpochOffset, Epoched, EpochedDelta,
     };
-    use namada_vm_env::proof_of_stake::types::{
+    use namada_tx_prelude::proof_of_stake::types::{
         Bond, Unbond, ValidatorState, VotingPower, VotingPowerDelta,
         WeightedValidator,
     };
-    use namada_vm_env::proof_of_stake::{
+    use namada_tx_prelude::proof_of_stake::{
         staking_token_address, BondId, Bonds, PosParams, Unbonds,
     };
-    use namada_vm_env::tx_prelude::{Address, PoS};
+    use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
 
-    use crate::tx::tx_host_env;
+    use crate::tx::{self, tx_host_env};
 
     #[derive(Clone, Debug, Default)]
     pub struct TestValidator {
@@ -568,7 +609,10 @@ pub mod testing {
 
     #[derive(Clone, Debug)]
     pub enum ValidPosAction {
-        InitValidator(Address),
+        InitValidator {
+            address: Address,
+            consensus_key: PublicKey,
+        },
         Bond {
             amount: token::Amount,
             owner: Address,
@@ -596,11 +640,14 @@ pub mod testing {
     #[derivative(Debug)]
 
     pub enum PosStorageChange {
-        /// Ensure that the account exists when initialing a valid new
+        /// Ensure that the account exists when initializing a valid new
         /// validator or delegation from a new owner
         SpawnAccount {
             address: Address,
         },
+        /// Add tokens included in a new bond at given offset. Bonded tokens
+        /// are added at pipeline offset and unbonded tokens are added as
+        /// negative values at unbonding offset.
         Bond {
             owner: Address,
             validator: Address,
@@ -655,6 +702,8 @@ pub mod testing {
         },
         ValidatorAddressRawHash {
             address: Address,
+            #[derivative(Debug = "ignore")]
+            consensus_key: PublicKey,
         },
     }
 
@@ -664,13 +713,21 @@ pub mod testing {
         let validators: Vec<Address> = valid_actions
             .iter()
             .filter_map(|action| match action {
-                ValidPosAction::InitValidator(addr) => Some(addr.clone()),
+                ValidPosAction::InitValidator { address, .. } => {
+                    Some(address.clone())
+                }
                 _ => None,
             })
             .collect();
-        let init_validator = address::testing::arb_established_address()
-            .prop_map(|addr| {
-                ValidPosAction::InitValidator(Address::Established(addr))
+        let init_validator = (
+            address::testing::arb_established_address(),
+            key::testing::arb_common_keypair(),
+        )
+            .prop_map(|(addr, consensus_key)| {
+                ValidPosAction::InitValidator {
+                    address: Address::Established(addr),
+                    consensus_key: consensus_key.ref_to(),
+                }
             });
 
         if validators.is_empty() {
@@ -783,8 +840,8 @@ pub mod testing {
         /// the VP.
         pub fn apply(self, is_current_tx_valid: bool) {
             // Read the PoS parameters
-            use namada_vm_env::tx_prelude::PosRead;
-            let params = PoS.read_pos_params();
+            use namada_tx_prelude::PosRead;
+            let params = tx::ctx().read_pos_params().unwrap();
 
             let current_epoch = tx_host_env::with(|env| {
                 // Reset the gas meter on each change, so that we never run
@@ -811,46 +868,50 @@ pub mod testing {
             params: &PosParams,
             current_epoch: Epoch,
         ) -> PosStorageChanges {
-            use namada_vm_env::tx_prelude::PosRead;
+            use namada_tx_prelude::PosRead;
 
             match self {
-                ValidPosAction::InitValidator(addr) => {
+                ValidPosAction::InitValidator {
+                    address,
+                    consensus_key,
+                } => {
                     let offset = DynEpochOffset::PipelineLen;
                     vec![
                         PosStorageChange::SpawnAccount {
-                            address: addr.clone(),
+                            address: address.clone(),
                         },
                         PosStorageChange::ValidatorAddressRawHash {
-                            address: addr.clone(),
+                            address: address.clone(),
+                            consensus_key: consensus_key.clone(),
                         },
                         PosStorageChange::ValidatorSet {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             token_delta: 0,
                             offset,
                         },
                         PosStorageChange::ValidatorConsensusKey {
-                            validator: addr.clone(),
-                            pk: key::testing::keypair_1().ref_to(),
+                            validator: address.clone(),
+                            pk: consensus_key,
                         },
                         PosStorageChange::ValidatorStakingRewardsAddress {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             address: address::testing::established_address_1(),
                         },
                         PosStorageChange::ValidatorState {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             state: ValidatorState::Pending,
                         },
                         PosStorageChange::ValidatorState {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             state: ValidatorState::Candidate,
                         },
                         PosStorageChange::ValidatorTotalDeltas {
-                            validator: addr.clone(),
+                            validator: address.clone(),
                             delta: 0,
                             offset,
                         },
                         PosStorageChange::ValidatorVotingPower {
-                            validator: addr,
+                            validator: address,
                             vp_delta: 0,
                             offset: Either::Left(offset),
                         },
@@ -869,8 +930,10 @@ pub mod testing {
                     // Read the validator's current total deltas (this may be
                     // updated by previous transition(s) within the same
                     // transaction via write log)
-                    let validator_total_deltas =
-                        PoS.read_validator_total_deltas(&validator).unwrap();
+                    let validator_total_deltas = tx::ctx()
+                        .read_validator_total_deltas(&validator)
+                        .unwrap()
+                        .unwrap();
                     let total_delta = validator_total_deltas
                         .get_at_offset(current_epoch, offset, params)
                         .unwrap_or_default();
@@ -1007,8 +1070,10 @@ pub mod testing {
                     // Read the validator's current total deltas (this may be
                     // updated by previous transition(s) within the same
                     // transaction via write log)
-                    let validator_total_deltas_cur =
-                        PoS.read_validator_total_deltas(&validator).unwrap();
+                    let validator_total_deltas_cur = tx::ctx()
+                        .read_validator_total_deltas(&validator)
+                        .unwrap()
+                        .unwrap();
                     let total_delta_cur = validator_total_deltas_cur
                         .get_at_offset(current_epoch, offset, params)
                         .unwrap_or_default();
@@ -1073,10 +1138,12 @@ pub mod testing {
                     changes
                 }
                 ValidPosAction::Withdraw { owner, validator } => {
-                    let unbonds = PoS.read_unbond(&BondId {
-                        source: owner.clone(),
-                        validator: validator.clone(),
-                    });
+                    let unbonds = tx::ctx()
+                        .read_unbond(&BondId {
+                            source: owner.clone(),
+                            validator: validator.clone(),
+                        })
+                        .unwrap();
 
                     let token_delta: i128 = unbonds
                         .and_then(|unbonds| unbonds.get(current_epoch))
@@ -1108,7 +1175,7 @@ pub mod testing {
         // invalid changes
         is_current_tx_valid: bool,
     ) {
-        use namada_vm_env::tx_prelude::{PosRead, PosWrite};
+        use namada_tx_prelude::{PosRead, PosWrite};
 
         match change {
             PosStorageChange::SpawnAccount { address } => {
@@ -1126,14 +1193,15 @@ pub mod testing {
                     source: owner,
                     validator,
                 };
-                let bonds = PoS.read_bond(&bond_id);
+                let bonds = tx::ctx().read_bond(&bond_id).unwrap();
                 let bonds = if delta >= 0 {
                     let amount: u64 = delta.try_into().unwrap();
                     let amount: token::Amount = amount.into();
                     let mut value = Bond {
-                        deltas: HashMap::default(),
+                        pos_deltas: HashMap::default(),
+                        neg_deltas: Default::default(),
                     };
-                    value.deltas.insert(
+                    value.pos_deltas.insert(
                         (current_epoch + offset.value(params)).into(),
                         amount,
                     );
@@ -1158,39 +1226,32 @@ pub mod testing {
                             );
                             bonds
                         }
-                        None => Bonds::init(value, current_epoch, params),
+                        None => Bonds::init_at_offset(
+                            value,
+                            current_epoch,
+                            offset,
+                            params,
+                        ),
                     }
                 } else {
                     let mut bonds = bonds.unwrap_or_else(|| {
                         Bonds::init(Default::default(), current_epoch, params)
                     });
                     let to_unbond: u64 = (-delta).try_into().unwrap();
-                    let mut to_unbond: token::Amount = to_unbond.into();
-                    let to_unbond = &mut to_unbond;
-                    bonds.rev_update_while(
-                        |bonds, _epoch| {
-                            bonds.deltas.retain(|_epoch_start, bond_delta| {
-                                if *to_unbond == 0.into() {
-                                    return true;
-                                }
-                                if to_unbond > bond_delta {
-                                    *to_unbond -= *bond_delta;
-                                    *bond_delta = 0.into();
-                                } else {
-                                    *bond_delta -= *to_unbond;
-                                    *to_unbond = 0.into();
-                                }
-                                // Remove bonds with no tokens left
-                                *bond_delta != 0.into()
-                            });
-                            *to_unbond != 0.into()
+                    let to_unbond: token::Amount = to_unbond.into();
+
+                    bonds.add_at_offset(
+                        Bond {
+                            pos_deltas: Default::default(),
+                            neg_deltas: to_unbond,
                         },
                         current_epoch,
+                        offset,
                         params,
                     );
                     bonds
                 };
-                PoS.write_bond(&bond_id, bonds);
+                tx::ctx().write_bond(&bond_id, bonds).unwrap();
             }
             PosStorageChange::Unbond {
                 owner,
@@ -1202,8 +1263,8 @@ pub mod testing {
                     source: owner,
                     validator,
                 };
-                let bonds = PoS.read_bond(&bond_id).unwrap();
-                let unbonds = PoS.read_unbond(&bond_id);
+                let bonds = tx::ctx().read_bond(&bond_id).unwrap().unwrap();
+                let unbonds = tx::ctx().read_unbond(&bond_id).unwrap();
                 let amount: u64 = delta.try_into().unwrap();
                 let mut to_unbond: token::Amount = amount.into();
                 let mut value = Unbond {
@@ -1217,7 +1278,7 @@ pub mod testing {
                     && bond_epoch >= bonds.last_update().into()
                 {
                     if let Some(bond) = bonds.get_delta_at_epoch(bond_epoch) {
-                        for (start_epoch, delta) in &bond.deltas {
+                        for (start_epoch, delta) in &bond.pos_deltas {
                             if delta >= &to_unbond {
                                 value.deltas.insert(
                                     (
@@ -1260,10 +1321,11 @@ pub mod testing {
                     }
                     None => Unbonds::init(value, current_epoch, params),
                 };
-                PoS.write_unbond(&bond_id, unbonds);
+                tx::ctx().write_unbond(&bond_id, unbonds).unwrap();
             }
             PosStorageChange::TotalVotingPower { vp_delta, offset } => {
-                let mut total_voting_powers = PoS.read_total_voting_power();
+                let mut total_voting_powers =
+                    tx::ctx().read_total_voting_power().unwrap();
                 let vp_delta: i64 = vp_delta.try_into().unwrap();
                 match offset {
                     Either::Left(offset) => {
@@ -1283,10 +1345,17 @@ pub mod testing {
                         );
                     }
                 }
-                PoS.write_total_voting_power(total_voting_powers)
+                tx::ctx()
+                    .write_total_voting_power(total_voting_powers)
+                    .unwrap()
             }
-            PosStorageChange::ValidatorAddressRawHash { address } => {
-                PoS.write_validator_address_raw_hash(&address);
+            PosStorageChange::ValidatorAddressRawHash {
+                address,
+                consensus_key,
+            } => {
+                tx::ctx()
+                    .write_validator_address_raw_hash(&address, &consensus_key)
+                    .unwrap();
             }
             PosStorageChange::ValidatorSet {
                 validator,
@@ -1302,8 +1371,9 @@ pub mod testing {
                 );
             }
             PosStorageChange::ValidatorConsensusKey { validator, pk } => {
-                let consensus_key = PoS
+                let consensus_key = tx::ctx()
                     .read_validator_consensus_key(&validator)
+                    .unwrap()
                     .map(|mut consensus_keys| {
                         consensus_keys.set(pk.clone(), current_epoch, params);
                         consensus_keys
@@ -1311,21 +1381,26 @@ pub mod testing {
                     .unwrap_or_else(|| {
                         Epoched::init(pk, current_epoch, params)
                     });
-                PoS.write_validator_consensus_key(&validator, consensus_key);
+                tx::ctx()
+                    .write_validator_consensus_key(&validator, consensus_key)
+                    .unwrap();
             }
             PosStorageChange::ValidatorStakingRewardsAddress {
                 validator,
                 address,
             } => {
-                PoS.write_validator_staking_reward_address(&validator, address);
+                tx::ctx()
+                    .write_validator_staking_reward_address(&validator, address)
+                    .unwrap();
             }
             PosStorageChange::ValidatorTotalDeltas {
                 validator,
                 delta,
                 offset,
             } => {
-                let total_deltas = PoS
+                let total_deltas = tx::ctx()
                     .read_validator_total_deltas(&validator)
+                    .unwrap()
                     .map(|mut total_deltas| {
                         total_deltas.add_at_offset(
                             delta,
@@ -1343,15 +1418,18 @@ pub mod testing {
                             params,
                         )
                     });
-                PoS.write_validator_total_deltas(&validator, total_deltas);
+                tx::ctx()
+                    .write_validator_total_deltas(&validator, total_deltas)
+                    .unwrap();
             }
             PosStorageChange::ValidatorVotingPower {
                 validator,
                 vp_delta: delta,
                 offset,
             } => {
-                let voting_power = PoS
+                let voting_power = tx::ctx()
                     .read_validator_voting_power(&validator)
+                    .unwrap()
                     .map(|mut voting_powers| {
                         match offset {
                             Either::Left(offset) => {
@@ -1381,11 +1459,14 @@ pub mod testing {
                             params,
                         )
                     });
-                PoS.write_validator_voting_power(&validator, voting_power);
+                tx::ctx()
+                    .write_validator_voting_power(&validator, voting_power)
+                    .unwrap();
             }
             PosStorageChange::ValidatorState { validator, state } => {
-                let state = PoS
+                let state = tx::ctx()
                     .read_validator_state(&validator)
+                    .unwrap()
                     .map(|mut states| {
                         states.set(state, current_epoch, params);
                         states
@@ -1393,16 +1474,15 @@ pub mod testing {
                     .unwrap_or_else(|| {
                         Epoched::init_at_genesis(state, current_epoch)
                     });
-                PoS.write_validator_state(&validator, state);
+                tx::ctx().write_validator_state(&validator, state).unwrap();
             }
             PosStorageChange::StakingTokenPosBalance { delta } => {
                 let balance_key = token::balance_key(
                     &staking_token_address(),
-                    &<PoS as PosRead>::POS_ADDRESS,
-                )
-                .to_string();
+                    &<namada_tx_prelude::Ctx as PosRead>::POS_ADDRESS,
+                );
                 let mut balance: token::Amount =
-                    tx_host_env::read(&balance_key).unwrap_or_default();
+                    tx::ctx().read(&balance_key).unwrap().unwrap_or_default();
                 if delta < 0 {
                     let to_spend: u64 = (-delta).try_into().unwrap();
                     let to_spend: token::Amount = to_spend.into();
@@ -1412,16 +1492,17 @@ pub mod testing {
                     let to_recv: token::Amount = to_recv.into();
                     balance.receive(&to_recv);
                 }
-                tx_host_env::write(&balance_key, balance);
+                tx::ctx().write(&balance_key, balance).unwrap();
             }
             PosStorageChange::WithdrawUnbond { owner, validator } => {
                 let bond_id = BondId {
                     source: owner,
                     validator,
                 };
-                let mut unbonds = PoS.read_unbond(&bond_id).unwrap();
+                let mut unbonds =
+                    tx::ctx().read_unbond(&bond_id).unwrap().unwrap();
                 unbonds.delete_current(current_epoch, params);
-                PoS.write_unbond(&bond_id, unbonds);
+                tx::ctx().write_unbond(&bond_id, unbonds).unwrap();
             }
         }
     }
@@ -1433,12 +1514,12 @@ pub mod testing {
         current_epoch: Epoch,
         params: &PosParams,
     ) {
-        use namada_vm_env::tx_prelude::{PosRead, PosWrite};
+        use namada_tx_prelude::{PosRead, PosWrite};
 
         let validator_total_deltas =
-            PoS.read_validator_total_deltas(&validator);
+            tx::ctx().read_validator_total_deltas(&validator).unwrap();
         // println!("Read validator set");
-        let mut validator_set = PoS.read_validator_set();
+        let mut validator_set = tx::ctx().read_validator_set().unwrap();
         // println!("Read validator set: {:#?}", validator_set);
         validator_set.update_from_offset(
             |validator_set, epoch| {
@@ -1545,7 +1626,7 @@ pub mod testing {
             params,
         );
         // println!("Write validator set {:#?}", validator_set);
-        PoS.write_validator_set(validator_set);
+        tx::ctx().write_validator_set(validator_set).unwrap();
     }
 
     pub fn arb_invalid_pos_action(
@@ -1570,7 +1651,9 @@ pub mod testing {
         let validators: Vec<Address> = valid_actions
             .iter()
             .filter_map(|action| match action {
-                ValidPosAction::InitValidator(addr) => Some(addr.clone()),
+                ValidPosAction::InitValidator { address, .. } => {
+                    Some(address.clone())
+                }
                 _ => None,
             })
             .collect();
@@ -1592,7 +1675,7 @@ pub mod testing {
 
         // any u64 but `0`
         let arb_delta =
-            prop_oneof![(-(u64::MAX as i128)..0), (1..=u64::MAX as i128),];
+            prop_oneof![(-(u32::MAX as i128)..0), (1..=u32::MAX as i128),];
 
         prop_oneof![
             (
@@ -1625,8 +1708,8 @@ pub mod testing {
         /// Apply an invalid PoS storage action.
         pub fn apply(self) {
             // Read the PoS parameters
-            use namada_vm_env::tx_prelude::PosRead;
-            let params = PoS.read_pos_params();
+            use namada_tx_prelude::PosRead;
+            let params = tx::ctx().read_pos_params().unwrap();
 
             for (epoch, changes) in self.changes {
                 for change in changes {
@@ -1641,9 +1724,9 @@ pub mod testing {
         params: &PosParams,
         current_epoch: Epoch,
     ) -> bool {
-        use namada_vm_env::tx_prelude::PosRead;
+        use namada_tx_prelude::PosRead;
 
-        let validator_sets = PoS.read_validator_set();
+        let validator_sets = tx::ctx().read_validator_set().unwrap();
         let validator_set = validator_sets
             .get_at_offset(current_epoch, DynEpochOffset::PipelineLen, params)
             .unwrap();
