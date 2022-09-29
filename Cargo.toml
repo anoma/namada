@@ -37,6 +37,11 @@ tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c5247
 tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
+tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
+tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
+
+ibc = {git = "https://github.com/heliaxdev/ibc-rs", rev = "5259cf6a86710608e28e51e2a39cafa93d993591"}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", rev = "5259cf6a86710608e28e51e2a39cafa93d993591"}
 
 [profile.release]
 lto = true

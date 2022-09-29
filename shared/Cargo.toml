@@ -63,9 +63,8 @@ ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
 ferveo-common = {git = "https://github.com/anoma/ferveo"}
 hex = "0.4.3"
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
-# TODO using the same version of tendermint-rs as we do here.
-ibc = {git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", rev = "30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc", default-features = false}
+ibc = {version = "0.12.0", default-features = false}
+ibc-proto = {version = "0.16.0", default-features = false}
 ics23 = "0.6.7"
 itertools = "0.10.0"
 loupe = {version = "0.1.3", optional = true}
