@@ -25,7 +25,7 @@ pub enum Error {
     #[error("Failed trying to convert slice to a hash: {0}")]
     ConversionFailed(std::array::TryFromSliceError),
     #[error("Failed to convert string into a hash: {0}")]
-    FromStringError(hex::FromHexError)
+    FromStringError(hex::FromHexError),
 }
 
 /// Result for functions that may fail
@@ -93,7 +93,8 @@ impl TryFrom<String> for Hash {
     type Error = self::Error;
 
     fn try_from(string: String) -> HashResult<Self> {
-        let bytes: Vec<u8> = Vec::from_hex(string).map_err(Error::FromStringError)?;
+        let bytes: Vec<u8> =
+            Vec::from_hex(string).map_err(Error::FromStringError)?;
         Self::try_from(&bytes)
     }
 }
@@ -102,7 +103,8 @@ impl TryFrom<&str> for Hash {
     type Error = self::Error;
 
     fn try_from(string: &str) -> HashResult<Self> {
-        let bytes: Vec<u8> = Vec::from_hex(string).map_err(Error::FromStringError)?;
+        let bytes: Vec<u8> =
+            Vec::from_hex(string).map_err(Error::FromStringError)?;
         Self::try_from(&bytes)
     }
 }

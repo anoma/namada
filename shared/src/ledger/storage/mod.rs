@@ -1,11 +1,12 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
+mod ics23_specs;
 mod merkle_tree;
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
+pub mod traits;
 pub mod types;
 pub mod write_log;
-pub mod traits;
 
 use core::fmt::Debug;
 

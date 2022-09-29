@@ -18,7 +18,8 @@ use crate::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_protected_storage, BRIDGE_POOL_ADDRESS,
 };
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
-use crate::ledger::storage::{DBIter, StorageHasher, DB};
+use crate::ledger::storage::{DBIter, DB};
+use crate::ledger::storage::traits::StorageHasher;
 use crate::proto::SignedTxData;
 use crate::types::address::{xan, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
