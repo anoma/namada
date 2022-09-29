@@ -43,6 +43,9 @@ tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermi
 ibc = {git = "https://github.com/heliaxdev/ibc-rs", rev = "5259cf6a86710608e28e51e2a39cafa93d993591"}
 ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs", rev = "5259cf6a86710608e28e51e2a39cafa93d993591"}
 
+# Has a patch for https://github.com/penumbra-zone/tower-abci/issues/7.
+tower-abci = {git = "https://github.com/heliaxdev/tower-abci", rev = "ffcabb5d605d1e30fd16cc36b78415b813619089"}
+
 [profile.release]
 lto = true
 opt-level = 3
