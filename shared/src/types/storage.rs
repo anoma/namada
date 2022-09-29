@@ -9,17 +9,17 @@ use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use ics23::CommitmentProof;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use variant_access_derive::*;
-use variant_access_traits::*;
 
 #[cfg(feature = "ferveo-tpke")]
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
+use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::ledger::storage::{StorageHasher, IBC_KEY_LIMIT};
 use crate::types::address::{self, Address};
-use crate::types::eth_bridge_pool::{TransferToEthereum, PendingTransfer};
+use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereum};
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
 
@@ -35,7 +35,7 @@ pub enum Error {
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
     #[error("Could not parse string: '{0}' into requested type: {1}")]
-    ParseError((String, String))
+    ParseError(String, String),
 }
 
 /// Result for functions that may fail
@@ -248,15 +248,13 @@ impl FromStr for Key {
 pub enum MerkleValue<T: AsRef<[u8]>> {
     /// raw bytes
     Bytes(T),
-    /// a transfer to be put in the Ethereum bridge pool
-    /// We actually only need the key (which is the hash
-    /// of the transfer). So this variant contains no data.
+    /// A transfer to be put in the Ethereum bridge pool.
     Transfer(PendingTransfer),
 }
 
 impl<T> From<T> for MerkleValue<T>
 where
-    T: AsRef<[u8]>
+    T: AsRef<[u8]>,
 {
     fn from(bytes: T) -> Self {
         Self::Bytes(bytes)
@@ -345,6 +343,26 @@ impl From<Vec<u8>> for TreeBytes {
 impl From<TreeBytes> for Vec<u8> {
     fn from(bytes: TreeBytes) -> Self {
         bytes.0
+    }
+}
+
+/// Type of membership proof from a merkle tree
+pub enum MembershipProof {
+    /// ICS23 compliant membership proof
+    ICS23(CommitmentProof),
+    /// Bespoke membership proof for the Ethereum bridge pool
+    BridgePool(BridgePoolProof),
+}
+
+impl From<CommitmenProof> for MembershipProof {
+    fn from(proof: CommitmenProof) -> Self {
+        Self::ICS23(proof)
+    }
+}
+
+impl From<BridgePoolProof> for MembershipProof {
+    fn from(proof: BridgePoolProof) -> Self {
+        Self::BridgePool(proof)
     }
 }
 
@@ -609,7 +627,8 @@ impl KeySeg for Address {
 
 impl KeySeg for Hash {
     fn parse(seg: String) -> Result<Self> {
-        seg.try_into().map_error(Error::ParseError((seg, "Hash".into())))
+        seg.try_into()
+            .map_error(Error::ParseError((seg, "Hash".into())))
     }
 
     fn raw(&self) -> String {
@@ -669,7 +688,6 @@ impl Add<u64> for Epoch {
         Self(self.0 + rhs)
     }
 }
-
 
 impl Sub<u64> for Epoch {
     type Output = Epoch;

@@ -1,19 +1,19 @@
 //! Tools for accessing the storage subspaces of the Ethereum
 //! bridge pool
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::convert::TryInto;
 use std::ops::Deref;
 
-use borsh::{BorshDeserialize, BorshSerialize, BorshSchema};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::eyre;
 
+use crate::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereum};
-use crate::types::keccak::{keccak_hash, KeccakHash};
+use crate::types::hash::Hash;
 use crate::types::keccak::encode::Encode;
-use crate::types::hash::{Hash, keccak_hash};
+use crate::types::keccak::{keccak_hash, KeccakHash};
 use crate::types::storage::{DbKeySeg, Key};
-use crate::ledger::storage::{Sha256Hasher, StorageHasher};
 
 /// The main address of the Ethereum bridge pool
 pub const BRIDGE_POOL_ADDRESS: Address =
@@ -67,13 +67,13 @@ pub struct BridgePoolTree {
     /// Root of the tree
     root: KeccakHash,
     /// The underlying storage
-    store: BTreeMap<KeccakHash, PendingTransfer>,
+    store: BTreeSet<KeccakHash>,
 }
 
 impl BridgePoolTree {
     /// Create a new merkle tree for the Ethereum bridge pool
-    pub fn new(root: KeccakHash, store: BTreeMap<KeccahkHash, PendingTransfer>) -> Self {
-        Self{ root, store }
+    pub fn new(root: KeccakHash, store: BTreeSet<KeccahkHash>) -> Self {
+        Self { root, store }
     }
 
     /// Parse the key to ensure it is of the correct type.
@@ -81,25 +81,22 @@ impl BridgePoolTree {
     /// If it is, it can be converted to a hash.
     /// Checks if the hash is in the tree.
     pub fn has_key(&self, key: &Key) -> Result<bool, Error> {
-        Ok(self.store.contains_key(&Self::parse_key(key)?))
+        Ok(self.store.contains(&Self::parse_key(key)?))
     }
 
     /// Update the tree with a new value.
     ///
     /// Returns the new root if successful. Will
     /// return an error if the key is malformed.
-    pub fn update(&mut self, key: &Key, value: PendingTransfer) -> Result<Hash, Error> {
+    pub fn update(&mut self, key: &Key) -> Result<Hash, Error> {
         let hash = Self::parse_key(key)?;
-        if hash != value.keccak256() {
-            return eyre!("Key does not match hash of the value")?;
-        }
-        _ = self.store.insert(hash, value);
+        _ = self.store.insert(hash);
         self.root = self.compute_root();
         Ok(self.root())
     }
 
     /// Delete a key from storage and update the root
-    pub fn delete(&mut self, key: &Key) -> Result<(), Error>{
+    pub fn delete(&mut self, key: &Key) -> Result<(), Error> {
         let hash = Self::parse_key(key)?;
         _ = self.store.remove(&hash);
         self.root = self.compute_root();
@@ -109,13 +106,12 @@ impl BridgePoolTree {
     /// Compute the root of the merkle tree
     pub fn compute_root(&self) -> KeccakHash {
         let mut leaves = self.store.iter();
-        let mut root = if let Some((hash, _)) = leaves.next() {
+        let mut root = if let Some(hash) = leaves.next() {
             hash.clone()
         } else {
             return Default::default();
         };
-
-        for (leaf, _) in leaves {
+        for leaf in leaves {
             root = keccak_hash([root.0, leaf.0].concat());
         }
         root
@@ -127,33 +123,43 @@ impl BridgePoolTree {
     }
 
     /// Get a reference to the backing store
-    pub fn store(&self) -> &BTreeMap<KeccakHash, PendingTransfer> {
+    pub fn store(&self) -> &BTreeSet<KeccakHash> {
         &self.store
     }
 
     /// Create a batched membership proof for the provided keys
-    pub fn membership_proof(&self, keys: &[Key]) -> BridgePoolProof {
-        let mut leaves : std::collections::BTreeSet<KeccakHash> = Default::default();
+    pub fn membership_proof(
+        &self,
+        keys: &[Key],
+        mut values: Vec<PendingTransfer>,
+    ) -> Result<BridgePoolProof, Error> {
+        if values.len() != keys.len() {
+            return eyre!(
+                "The number of leaves and leaf hashes must be equal."
+            )?;
+        }
+        values.sort();
+        let mut leaves: std::collections::BTreeSet<KeccakHash> =
+            Default::default();
         for key in keys {
             leaves.insert(Self::parse_key(key)?);
         }
-        let mut proof_leaves = vec![];
+
         let mut proof_hashes = vec![];
         let mut flags = vec![];
-        for (hash, value) in self.store {
+        for hash in self.store {
             if leaves.contains(&hash) {
                 flags.push(true);
-                proof_leaves.push(value);
             } else {
                 flags.push(false);
                 proof_hashes.push(hash);
             }
         }
-        BridgePoolProof {
+        Ok(BridgePoolProof {
             proof: proof_hashes,
-            leaves: proof_leaves,
-            flags
-        }
+            leaves: values,
+            flags,
+        })
     }
 
     /// Parse a db key to see if it is valid for the
@@ -164,13 +170,18 @@ impl BridgePoolTree {
     fn parse_key(key: &Key) -> Result<KeccakHash, Error> {
         if key.segments.len() == 1 {
             match &key.segments[0] {
-                DbKeySeg::StringSeg(str) => str.as_str().try_into().ok_or(
-                    eyre!("Could not parse key segment as a hash")?
-                ),
-                _ =>  eyre!("Bridge pool keys should be strings, not addresses")?
+                DbKeySeg::StringSeg(str) => str
+                    .as_str()
+                    .try_into()
+                    .ok_or(eyre!("Could not parse key segment as a hash")?),
+                _ => {
+                    eyre!("Bridge pool keys should be strings, not addresses")?
+                }
             }
         } else {
-            eyre!("Key for the bridge pool should not have more than one segment")?
+            eyre!(
+                "Key for the bridge pool should not have more than one segment"
+            )?
         }
     }
 }
@@ -186,7 +197,6 @@ pub struct BridgePoolProof {
 }
 
 impl BridgePoolProof {
-
     /// Verify a membership proof matches the provided root
     pub fn verify(&self, root: KeccakHash) -> bool {
         if self.proof.len() + self.leaves.len() != self.flags.len() {
