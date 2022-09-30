@@ -18,10 +18,10 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use namada::types::token;
-use namada_apps::config::ethereum;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
+use namada_apps::config::{ethereum, Config};
 use serde_json::json;
 use setup::constants::*;
 
@@ -36,10 +36,25 @@ use crate::{run, run_as};
 /// combinations from fresh state, the node starts-up successfully for both a
 /// validator and non-validator user.
 #[test]
-#[ignore]
-// TODO(namada#418): re-enable once working again
 fn run_ledger() -> Result<()> {
     let test = setup::single_node_net()?;
+
+    let update_config = |mut config: Config| {
+        // disable eth full node
+        config.ledger.ethereum.mode = ethereum::Mode::Off;
+        config
+    };
+
+    let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
+    let validator_0_config = update_config(Config::load(
+        &validator_0_base_dir,
+        &test.net.chain_id,
+        None,
+    ));
+    validator_0_config
+        .write(&validator_0_base_dir, &test.net.chain_id, true)
+        .unwrap();
+
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
     // Start the ledger as a validator
@@ -244,8 +259,6 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 7. Query the raw bytes of a storage key
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
-    use namada_apps::config::Config;
-
     let test = setup::network(|genesis| genesis, None)?;
 
     let update_config = |mut config: Config| {
