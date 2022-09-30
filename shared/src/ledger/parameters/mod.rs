@@ -198,6 +198,44 @@ impl Parameters {
                 "Max expected time per block parameters must be initialized \
                  in the genesis block",
             );
+
+        let epochs_per_year_key = storage::get_epochs_per_year_key();
+        let epochs_per_year_value = encode(&self.epochs_per_year);
+        storage
+            .write(&epochs_per_year_key, epochs_per_year_value)
+            .expect(
+                "Epochs per year parameter must be initialized in the genesis \
+                 block",
+            );
+
+        let pos_gain_p_key = storage::get_pos_gain_p_key();
+        let pos_gain_p_value = encode(&self.pos_gain_p);
+        storage.write(&pos_gain_p_key, pos_gain_p_value).expect(
+            "PoS P-gain parameter must be initialized in the genesis block",
+        );
+
+        let pos_gain_d_key = storage::get_pos_gain_d_key();
+        let pos_gain_d_value = encode(&self.pos_gain_d);
+        storage.write(&pos_gain_d_key, pos_gain_d_value).expect(
+            "PoS D-gain parameter must be initialized in the genesis block",
+        );
+
+        let staked_ratio_key = storage::get_staked_ratio_key();
+        let staked_ratio_val = encode(&self.staked_ratio);
+        storage.write(&staked_ratio_key, staked_ratio_val).expect(
+            "PoS staked ratio parameter must be initialized in the genesis \
+             block",
+        );
+
+        let pos_inflation_rate_key = storage::get_pos_inflation_rate_key();
+        let pos_inflation_val = encode(&self.pos_inflation_rate);
+        storage
+            .write(&pos_inflation_rate_key, pos_inflation_val)
+            .expect(
+                "PoS inflation rate parameter must be initialized in the \
+                 genesis block",
+            );
+
     }
 }
 
@@ -254,6 +292,76 @@ where
     H: ledger_storage::StorageHasher,
 {
     let key = storage::get_epoch_duration_storage_key();
+    update(storage, value, key)
+}
+
+/// Update the epochs_per_year parameter in storage. Returns the parameters and gas
+/// cost.
+pub fn update_epochs_per_year_parameter<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &EpochDuration,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_epochs_per_year_key();
+    update(storage, value, key)
+}
+
+/// Update the PoS P-gain parameter in storage. Returns the parameters and gas
+/// cost.
+pub fn update_pos_gain_p_parameter<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &EpochDuration,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_pos_gain_p_key();
+    update(storage, value, key)
+}
+
+/// Update the PoS D-gain parameter in storage. Returns the parameters and gas
+/// cost.
+pub fn update_pos_gain_d_parameter<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &EpochDuration,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_pos_gain_d_key();
+    update(storage, value, key)
+}
+
+/// Update the PoS staked ratio parameter in storage. Returns the parameters and gas
+/// cost.
+pub fn update_staked_ratio_parameter<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &EpochDuration,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_staked_ratio_key();
+    update(storage, value, key)
+}
+
+/// Update the PoS inflation rate parameter in storage. Returns the parameters and gas
+/// cost.
+pub fn update_pos_inflation_rate_parameter<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &EpochDuration,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_pos_inflation_rate_key();
     update(storage, value, key)
 }
 
