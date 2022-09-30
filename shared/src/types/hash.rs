@@ -95,7 +95,7 @@ impl TryFrom<String> for Hash {
     fn try_from(string: String) -> HashResult<Self> {
         let bytes: Vec<u8> =
             Vec::from_hex(string).map_err(Error::FromStringError)?;
-        Self::try_from(&bytes)
+        Self::try_from(bytes.as_slice())
     }
 }
 
@@ -105,7 +105,7 @@ impl TryFrom<&str> for Hash {
     fn try_from(string: &str) -> HashResult<Self> {
         let bytes: Vec<u8> =
             Vec::from_hex(string).map_err(Error::FromStringError)?;
-        Self::try_from(&bytes)
+        Self::try_from(bytes.as_slice())
     }
 }
 

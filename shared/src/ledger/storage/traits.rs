@@ -4,7 +4,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
 use arse_merkle_tree::traits::{Hasher, Value};
-use arse_merkle_tree::{Hash as SmtHash, Key as TreeKey, H256};
+use arse_merkle_tree::{Key as TreeKey, H256};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof};
 use sha2::{Digest, Sha256};
@@ -12,71 +12,55 @@ use sha2::{Digest, Sha256};
 use super::merkle_tree::{Amt, Error, Smt};
 use super::{ics23_specs, IBC_KEY_LIMIT};
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolTree;
-use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::hash::Hash;
 use crate::types::storage::{
     Key, MembershipProof, MerkleValue, StringKey, TreeBytes,
 };
 
-pub trait MerkleTree {
-    type Error;
-
-    fn has_key(&self, key: &Key) -> Result<bool, Error>;
-    fn update<T: AsRef<[u8]>>(
-        &mut self,
-        key: &Key,
-        value: MerkleValue<T>,
-    ) -> Result<Hash, Self::Error>;
-    fn delete(&mut self, key: &Key) -> Result<(), Self::Error>;
-    fn membership_proof<T: AsRef<[u8]>>(
+/// Trait for reading from a merkle tree that is a sub-tree
+/// of the global merkle tree.
+pub trait SubTreeRead {
+    /// Check if a key is present in the sub-tree
+    fn subtree_has_key(&self, key: &Key) -> Result<bool, Error>;
+    /// Get a membership proof for various key-value pairs
+    fn subtree_membership_proof(
         &self,
         keys: &[Key],
-        values: Vec<MerkleValue<T>>,
-    ) -> Result<MembershipProof, Self::Error>;
+        values: Vec<MerkleValue>,
+    ) -> Result<MembershipProof, Error>;
 }
 
-impl<H: StorageHasher + Default> MerkleTree for Smt<H> {
-    type Error = Error;
-
-    fn has_key(&self, key: &Key) -> Result<bool, Error> {
-        self.get(&H::hash(key.to_string()).into())
-            .and(Ok(true))
-            .map_error(|err| Error::MerkleTree(err.to_string()))
-    }
-
-    fn update<T: AsRef<[u8]>>(
+/// Trait for updating a merkle tree that is a sub-tree
+/// of the global merkle tree
+pub trait SubTreeWrite {
+    /// Add a key-value pair to the sub-tree
+    fn subtree_update(
         &mut self,
         key: &Key,
-        value: MerkleValue<T>,
-    ) -> Result<Hash, Self::Error> {
-        let value = match value {
-            MerkleValue::Bytes(bytes) => Hash::try_from(bytes.as_ref())
-                .map_err(|| Error::InvalidValue)?,
-            _ => return Err(Error::InvalidValue),
-        };
-        self.update(H::hash(key.to_string()).into(), value)
-            .map(Hash::into)
+        value: MerkleValue,
+    ) -> Result<Hash, Error>;
+    /// Delete a key from the sub-tree
+    fn subtree_delete(&mut self, key: &Key) -> Result<(), Error>;
+}
+
+impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
+    fn subtree_has_key(&self, key: &Key) -> Result<bool, Error> {
+        self.get(&H::hash(key.to_string()).into())
+            .and(Ok(true))
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }
 
-    fn delete(&mut self, key: &Key) -> Result<(), Self::Error> {
-        let value = Hash::zero();
-        self.update(H::hash(key.to_string()).into(), value)
-            .and(Ok(()))
-            .map_err(|err| Error::MerkleTree(err.to_string()))
-    }
-
-    fn membership_proof<T: AsRef<[u8]>>(
+    fn subtree_membership_proof(
         &self,
         keys: &[Key],
-        mut values: Vec<MerkleValue<T>>,
-    ) -> Result<MembershipProof, Self::Error> {
+        mut values: Vec<MerkleValue>,
+    ) -> Result<MembershipProof, Error> {
         if keys.len() != 1 || values.len() != 1 {
             return Err(Error::Ics23MultiLeaf);
         }
         let key: &Key = &keys[0];
         let value = match values.remove(0) {
-            MerkleValue::Bytes(b) => b.as_ref().to_vec(),
+            MerkleValue::Bytes(b) => b,
             _ => return Err(Error::InvalidValue),
         };
         let cp = self.membership_proof(&H::hash(key.to_string()).into())?;
@@ -97,51 +81,48 @@ impl<H: StorageHasher + Default> MerkleTree for Smt<H> {
     }
 }
 
-impl<H: StorageHasher + Default> MerkleTree for Amt<H> {
-    type Error = Error;
-
-    fn has_key(&self, key: &Key) -> Result<bool, Error> {
-        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
-        self.get(&key)
-            .and(Ok(bool))
-            .map_err(|err| Error::MerkleTree(err.to_string()))
-    }
-
-    fn update<T: AsRef<[u8]>>(
+impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
+    fn subtree_update(
         &mut self,
-        key: MerkleKey<H>,
-        value: MerkleValue<T>,
-    ) -> Result<Hash, Self::Error> {
-        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
+        key: &Key,
+        value: MerkleValue,
+    ) -> Result<Hash, Error> {
         let value = match value {
-            MerkleValue::Bytes(bytes) => {
-                TreeBytes::from(bytes.as_ref().to_vec())
-            }
+            MerkleValue::Bytes(bytes) => Hash::try_from(bytes.as_slice())
+                .map_err(|_| Error::InvalidValue)?,
             _ => return Err(Error::InvalidValue),
         };
-        self.update(key, value)
-            .map(Into::into)
+        self.update(H::hash(key.to_string()).into(), value)
+            .map(Hash::from)
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }
 
-    fn delete(&mut self, key: &Key) -> Result<(), Self::Error> {
-        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
-        let value = TreeBytes::zero();
-        self.update(key, value)
+    fn subtree_delete(&mut self, key: &Key) -> Result<(), Error> {
+        let value = Hash::zero();
+        self.update(H::hash(key.to_string()).into(), value)
             .and(Ok(()))
-            .map_err(|err| Error::MerkleTree(format!("{:?}", err)))
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+}
+
+impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
+    fn subtree_has_key(&self, key: &Key) -> Result<bool, Error> {
+        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
+        self.get(&key)
+            .and(Ok(true))
+            .map_err(|err| Error::MerkleTree(err.to_string()))
     }
 
-    fn membership_proof<T: AsRef<[u8]>>(
+    fn subtree_membership_proof(
         &self,
         keys: &[Key],
-        _: Vec<MerkleValue<T>>,
-    ) -> Result<MembershipProof, Self::Error> {
-        if keys.len() != 1 || values.len() != 1 {
+        _: Vec<MerkleValue>,
+    ) -> Result<MembershipProof, Error> {
+        if keys.len() != 1 {
             return Err(Error::Ics23MultiLeaf);
         }
 
-        let key = StringKey::try_from_bytes(&keys[0].to_string().as_bytes())?;
+        let key = StringKey::try_from_bytes(keys[0].to_string().as_bytes())?;
         let cp = self.membership_proof(&key)?;
         // Replace the values and the leaf op for the verification
         match cp.proof.expect("The proof should exist") {
@@ -158,37 +139,42 @@ impl<H: StorageHasher + Default> MerkleTree for Amt<H> {
     }
 }
 
-impl MerkleTree for BridgePoolTree {
-    type Error = Error;
-
-    fn has_key(&self, key: &Key) -> Result<bool, Error> {
-        self.has_key(key)
-            .map_err(|err| Error::MerkleTree(err.to_string()))
-    }
-
-    fn update<T: AsRef<[u8]>>(
+impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
+    fn subtree_update(
         &mut self,
         key: &Key,
-        value: MerkleValue<T>,
-    ) -> Result<Hash, Self::Error> {
-        if let MerkleValue::Transfer(_) = value {
-            self.update(key)
-                .map_err(|err| Error::MerkleTree(err.to_string()))
-        } else {
-            Err(Error::InvalidValue)
-        }
-    }
-
-    fn delete(&mut self, key: &Key) -> Result<(), Self::Error> {
-        self.delete(key)
+        value: MerkleValue,
+    ) -> Result<Hash, Error> {
+        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
+        let value = match value {
+            MerkleValue::Bytes(bytes) => TreeBytes::from(bytes),
+            _ => return Err(Error::InvalidValue),
+        };
+        self.update(key, value)
+            .map(Into::into)
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }
 
-    fn membership_proof<T: AsRef<[u8]>>(
+    fn subtree_delete(&mut self, key: &Key) -> Result<(), Error> {
+        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
+        let value = TreeBytes::zero();
+        self.update(key, value)
+            .and(Ok(()))
+            .map_err(|err| Error::MerkleTree(format!("{:?}", err)))
+    }
+}
+
+impl<'a> SubTreeRead for &'a BridgePoolTree {
+    fn subtree_has_key(&self, key: &Key) -> Result<bool, Error> {
+        self.contains_key(key)
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+
+    fn subtree_membership_proof(
         &self,
         keys: &[Key],
-        values: Vec<MerkleValue<T>>,
-    ) -> Result<MembershipProof, Self::Error> {
+        values: Vec<MerkleValue>,
+    ) -> Result<MembershipProof, Error> {
         let values = values
             .into_iter()
             .filter_map(|val| match val {
@@ -196,8 +182,28 @@ impl MerkleTree for BridgePoolTree {
                 _ => None,
             })
             .collect();
-        self.membership_proof(keys, values)
+        self.get_membership_proof(keys, values)
             .map(Into::into)
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+}
+
+impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
+    fn subtree_update(
+        &mut self,
+        key: &Key,
+        value: MerkleValue,
+    ) -> Result<Hash, Error> {
+        if let MerkleValue::Transfer(_) = value {
+            self.update_key(key)
+                .map_err(|err| Error::MerkleTree(err.to_string()))
+        } else {
+            Err(Error::InvalidValue)
+        }
+    }
+
+    fn subtree_delete(&mut self, key: &Key) -> Result<(), Error> {
+        self.delete_key(key)
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }
 }

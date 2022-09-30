@@ -7,6 +7,7 @@ use std::fmt::Display;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use hex::FromHex;
 use thiserror::Error;
+use tiny_keccak::{Hasher, Keccak};
 
 use crate::types::hash::{Hash, HASH_LENGTH};
 
@@ -26,6 +27,7 @@ pub enum TryFromError {
 #[derive(
     Clone,
     Debug,
+    Default,
     PartialEq,
     Eq,
     PartialOrd,

@@ -2,14 +2,12 @@
 //! bridge pool
 use std::collections::BTreeSet;
 use std::convert::TryInto;
-use std::ops::Deref;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::eyre;
 
-use crate::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereum};
+use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::hash::Hash;
 use crate::types::keccak::encode::Encode;
 use crate::types::keccak::{keccak_hash, KeccakHash};
@@ -62,7 +60,9 @@ pub fn is_protected_storage(key: &Key) -> bool {
 }
 
 /// A simple Merkle tree for the Ethereum bridge pool
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Debug, Default, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct BridgePoolTree {
     /// Root of the tree
     root: KeccakHash,
@@ -72,7 +72,7 @@ pub struct BridgePoolTree {
 
 impl BridgePoolTree {
     /// Create a new merkle tree for the Ethereum bridge pool
-    pub fn new(root: KeccakHash, store: BTreeSet<KeccahkHash>) -> Self {
+    pub fn new(root: KeccakHash, store: BTreeSet<KeccakHash>) -> Self {
         Self { root, store }
     }
 
@@ -80,7 +80,7 @@ impl BridgePoolTree {
     ///
     /// If it is, it can be converted to a hash.
     /// Checks if the hash is in the tree.
-    pub fn has_key(&self, key: &Key) -> Result<bool, Error> {
+    pub fn contains_key(&self, key: &Key) -> Result<bool, Error> {
         Ok(self.store.contains(&Self::parse_key(key)?))
     }
 
@@ -88,7 +88,7 @@ impl BridgePoolTree {
     ///
     /// Returns the new root if successful. Will
     /// return an error if the key is malformed.
-    pub fn update(&mut self, key: &Key) -> Result<Hash, Error> {
+    pub fn update_key(&mut self, key: &Key) -> Result<Hash, Error> {
         let hash = Self::parse_key(key)?;
         _ = self.store.insert(hash);
         self.root = self.compute_root();
@@ -96,7 +96,7 @@ impl BridgePoolTree {
     }
 
     /// Delete a key from storage and update the root
-    pub fn delete(&mut self, key: &Key) -> Result<(), Error> {
+    pub fn delete_key(&mut self, key: &Key) -> Result<(), Error> {
         let hash = Self::parse_key(key)?;
         _ = self.store.remove(&hash);
         self.root = self.compute_root();
@@ -105,16 +105,26 @@ impl BridgePoolTree {
 
     /// Compute the root of the merkle tree
     pub fn compute_root(&self) -> KeccakHash {
-        let mut leaves = self.store.iter();
-        let mut root = if let Some(hash) = leaves.next() {
-            hash.clone()
-        } else {
-            return Default::default();
-        };
-        for leaf in leaves {
-            root = keccak_hash([root.0, leaf.0].concat());
+        let mut hashes: Vec<KeccakHash> = self.store.iter().cloned().collect();
+        while hashes.len() > 1 {
+            let mut next_hashes = vec![];
+            let left_leaves = hashes.iter().step_by(2);
+            let mut right_leaves = hashes.iter();
+            _ = right_leaves.next();
+            let mut right_leaves = right_leaves.step_by(2);
+
+            for left in left_leaves {
+                let right = right_leaves.next().cloned().unwrap_or_default();
+                next_hashes.push(hash_pair(left.clone(), right));
+            }
+            hashes = next_hashes;
         }
-        root
+
+        if hashes.is_empty() {
+            Default::default()
+        } else {
+            hashes.remove(0)
+        }
     }
 
     /// Return the root as a [`Hash`] type.
@@ -128,33 +138,87 @@ impl BridgePoolTree {
     }
 
     /// Create a batched membership proof for the provided keys
-    pub fn membership_proof(
+    pub fn get_membership_proof(
         &self,
         keys: &[Key],
         mut values: Vec<PendingTransfer>,
     ) -> Result<BridgePoolProof, Error> {
         if values.len() != keys.len() {
-            return eyre!(
+            return Err(eyre!(
                 "The number of leaves and leaf hashes must be equal."
-            )?;
+            )
+            .into());
         }
-        values.sort();
-        let mut leaves: std::collections::BTreeSet<KeccakHash> =
-            Default::default();
-        for key in keys {
-            leaves.insert(Self::parse_key(key)?);
+        // sort the values according to their hash values
+        values.sort_by_key(|transfer| transfer.keccak256());
+
+        // get the leaf hashes
+        let mut leaves: BTreeSet<KeccakHash> = Default::default();
+        for (key, value) in keys.iter().zip(values.iter()) {
+            let hash = Self::parse_key(key)?;
+            if hash != value.keccak256() {
+                return Err(eyre!("Hashes of keys did not match hashes of values.").into());
+            }
+            leaves.insert(hash);
         }
 
         let mut proof_hashes = vec![];
         let mut flags = vec![];
-        for hash in self.store {
-            if leaves.contains(&hash) {
-                flags.push(true);
-            } else {
-                flags.push(false);
-                proof_hashes.push(hash);
+        let mut hashes: Vec<_> = self
+            .store
+            .iter()
+            .cloned()
+            .map(|hash| {
+                if leaves.contains(&hash) {
+                    Node::OnPath(hash)
+                } else {
+                    Node::Sibling(hash)
+                }
+            })
+            .collect();
+
+        while hashes.len() > 1 {
+            let mut next_hashes = vec![];
+            let left_leaves = hashes.iter().step_by(2);
+            let mut right_leaves = hashes.iter();
+            _ = right_leaves.next();
+            let mut right_leaves = right_leaves.step_by(2);
+
+            for left in left_leaves {
+                let right = right_leaves.next().cloned().unwrap_or_default();
+                match (left, right) {
+                    (Node::OnPath(left), Node::OnPath(right)) => {
+                        flags.push(true);
+                        next_hashes
+                            .push(Node::OnPath(hash_pair(left.clone(), right)));
+                    }
+                    (Node::OnPath(hash), Node::Sibling(sib)) => {
+                        flags.push(false);
+                        proof_hashes.push(sib.clone());
+                        next_hashes
+                            .push(Node::OnPath(hash_pair(hash.clone(), sib)));
+                    }
+                    (Node::Sibling(sib), Node::OnPath(hash)) => {
+                        flags.push(false);
+                        proof_hashes.push(sib.clone());
+                        next_hashes
+                            .push(Node::OnPath(hash_pair(hash, sib.clone())));
+                    }
+                    (Node::Sibling(left), Node::Sibling(right)) => {
+                        next_hashes.push(Node::Sibling(hash_pair(
+                            left.clone(),
+                            right,
+                        )));
+                    }
+                }
             }
+            hashes = next_hashes;
         }
+        // add the root to the proof
+        if proof_hashes.is_empty() {
+            proof_hashes.push(self.root.clone());
+        }
+
         Ok(BridgePoolProof {
             proof: proof_hashes,
             leaves: values,
@@ -170,19 +234,49 @@ impl BridgePoolTree {
     fn parse_key(key: &Key) -> Result<KeccakHash, Error> {
         if key.segments.len() == 1 {
             match &key.segments[0] {
-                DbKeySeg::StringSeg(str) => str
-                    .as_str()
-                    .try_into()
-                    .ok_or(eyre!("Could not parse key segment as a hash")?),
-                _ => {
-                    eyre!("Bridge pool keys should be strings, not addresses")?
+                DbKeySeg::StringSeg(str) => {
+                    str.as_str().try_into().map_err(|_| {
+                        eyre!("Could not parse key segment as a hash").into()
+                    })
                 }
+                _ => Err(eyre!(
+                    "Bridge pool keys should be strings, not addresses"
+                )
+                .into()),
             }
         } else {
-            eyre!(
+            Err(eyre!(
                 "Key for the bridge pool should not have more than one segment"
-            )?
+            )
+            .into())
         }
+    }
+}
+
+/// Concatenate two keccak hashes and hash the result
+#[inline]
+fn hash_pair(left: KeccakHash, right: KeccakHash) -> KeccakHash {
+    if left.0 < right.0 {
+        keccak_hash([left.0, right.0].concat().as_slice())
+    } else {
+        keccak_hash([right.0, left.0].concat().as_slice())
+    }
+}
+
+/// Keeps track if a node is on a path from the
+/// root of the merkle tree to one of the leaves
+/// being included in a multi-proof.
+#[derive(Debug, Clone)]
+enum Node {
+    /// Node is on a path from root to leaf in proof
+    OnPath(KeccakHash),
+    /// Node is not on a path from root to leaf in proof
+    Sibling(KeccakHash),
+}
+
+impl Default for Node {
+    fn default() -> Self {
+        Self::Sibling(Default::default())
     }
 }
 
@@ -199,33 +293,447 @@ pub struct BridgePoolProof {
 impl BridgePoolProof {
     /// Verify a membership proof matches the provided root
     pub fn verify(&self, root: KeccakHash) -> bool {
-        if self.proof.len() + self.leaves.len() != self.flags.len() {
+        if self.proof.len() + self.leaves.len() != self.flags.len() + 1 {
             return false;
         }
-        if self.flags.len() == 0 {
-            return true;
+        if self.flags.is_empty() {
+            return match self.proof.last() {
+                Some(proof_root) => &root == proof_root,
+                None => false,
+            };
         }
+        let total_hashes = self.flags.len();
+        let leaf_len = self.leaves.len();
+
+        let mut hashes = vec![KeccakHash::default(); self.flags.len()];
+        let mut hash_pos = 0usize;
         let mut leaf_pos = 0usize;
         let mut proof_pos = 0usize;
-        let mut computed;
-        if self.flags[0] {
-            computed = self.leaves[leaf_pos].keccak256();
-            leaf_pos += 1;
-        } else {
-            computed = self.proof[proof_pos].clone();
-            proof_pos += 1;
-        }
-        for flag in 1..self.flages.len() {
-            let mut next_hash;
-            if self.flags[flag] {
-                next_hash = self.leaves[leaf_pos].keccak256();
+
+        for i in 0..total_hashes {
+            let left = if leaf_pos < leaf_len {
+                let next = self.leaves[leaf_pos].keccak256();
                 leaf_pos += 1;
+                next
             } else {
-                next_hash = self.proof[proof_pos].clone();
+                let next = hashes[hash_pos].clone();
+                hash_pos += 1;
+                next
+            };
+            let right = if self.flags[i] {
+                if leaf_pos < leaf_len {
+                    let next = self.leaves[leaf_pos].keccak256();
+                    leaf_pos += 1;
+                    next
+                } else {
+                    let next = hashes[hash_pos].clone();
+                    hash_pos += 1;
+                    next
+                }
+            } else {
+                let next = self.proof[proof_pos].clone();
                 proof_pos += 1;
-            }
-            computed = keccak_hash([computed, next_hash].concat());
+                next
+            };
+            hashes[i] = hash_pair(left, right);
         }
-        computed == root
+
+        if let Some(computed) = hashes.last() {
+            *computed == root
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_bridge_pool_tree {
+    use std::array;
+    use super::*;
+    use crate::types::ethereum_events::EthAddress;
+    use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
+
+    /// An established user address for testing & development
+    fn bertha_address() -> Address {
+        Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
+            .expect("The token address decoding shouldn't fail")
+    }
+
+    /// Test that if tree has a single leaf, its root is the hash
+    /// of that leaf
+    #[test]
+    fn test_update_single_key() {
+        let mut tree = BridgePoolTree::default();
+        assert_eq!(tree.root().0, [0; 32]);
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([1;20]),
+                recipient: EthAddress([2; 20]),
+                amount: 1.into(),
+                nonce: 42u64.into(),
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address(),
+            }
+        };
+        let key = Key::from(&transfer);
+        let root = KeccakHash::from(tree.update_key(&key).expect("Test failed"));
+        assert_eq!(root, transfer.keccak256());
+    }
+
+    #[test]
+    fn test_two_keys() {
+        let mut tree = BridgePoolTree::default();
+        let mut transfers = vec![];
+        for i in 0..2 {
+            let transfer = PendingTransfer {
+                transfer: TransferToEthereum {
+                    asset: EthAddress([i;20]),
+                    recipient: EthAddress([i+1; 20]),
+                    amount: (i as u64).into(),
+                    nonce: 42u64.into(),
+                },
+                gas_fee: GasFee {
+                    amount: 0.into(),
+                    payer: bertha_address(),
+                }
+            };
+            let key = Key::from(&transfer);
+            transfers.push(transfer);
+            let _ = tree.update_key(&key).expect("Test failed");
+        }
+        let expected: Hash = hash_pair(transfers[0].keccak256(), transfers[1].keccak256()).into();
+        assert_eq!(tree.root(), expected);
+    }
+
+    /// This is the first number of keys to use dummy leaves
+    #[test]
+    fn test_three_leaves() {
+        let mut tree = BridgePoolTree::default();
+        let mut transfers = vec![];
+        for i in 0..3 {
+            let transfer = PendingTransfer {
+                transfer: TransferToEthereum {
+                    asset: EthAddress([i;20]),
+                    recipient: EthAddress([i+1; 20]),
+                    amount: (i as u64).into(),
+                    nonce: 42u64.into(),
+                },
+                gas_fee: GasFee {
+                    amount: 0.into(),
+                    payer: bertha_address(),
+                }
+            };
+            let key = Key::from(&transfer);
+            transfers.push(transfer);
+            let _ = tree.update_key(&key).expect("Test failed");
+        }
+        transfers.sort_by_key(|t| t.keccak256());
+        let hashes: BTreeSet<KeccakHash> = transfers.iter().map(|t| t.keccak256()).collect();
+        assert_eq!(hashes, tree.store);
+
+        let left_hash = hash_pair(transfers[0].keccak256(), transfers[1].keccak256());
+        let right_hash = hash_pair(transfers[2].keccak256(), Default::default());
+        let expected: Hash = hash_pair(left_hash, right_hash).into();
+        assert_eq!(tree.root(), expected);
+    }
+
+    /// Test removing all keys
+    #[test]
+    fn test_delete_all_keys() {
+        let mut tree = BridgePoolTree::default();
+
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([1;20]),
+                recipient: EthAddress([2; 20]),
+                amount: 1.into(),
+                nonce: 42u64.into(),
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address(),
+            }
+        };
+        let key = Key::from(&transfer);
+        let root = KeccakHash::from(tree.update_key(&key).expect("Test failed"));
+        assert_eq!(root, transfer.keccak256());
+        tree.delete_key(&key).expect("Test failed");
+        assert_eq!(tree.root().0, [0; 32]);
+    }
+
+    /// Test deleting a key
+    #[test]
+    fn test_delete_key() {
+        let mut tree = BridgePoolTree::default();
+        let mut transfers = vec![];
+        for i in 0..3 {
+            let transfer = PendingTransfer {
+                transfer: TransferToEthereum {
+                    asset: EthAddress([i;20]),
+                    recipient: EthAddress([i+1; 20]),
+                    amount: (i as u64).into(),
+                    nonce: 42u64.into(),
+                },
+                gas_fee: GasFee {
+                    amount: 0.into(),
+                    payer: bertha_address(),
+                }
+            };
+
+            let key = Key::from(&transfer);
+            transfers.push(transfer);
+            let _ = tree.update_key(&key).expect("Test failed");
+        }
+        transfers.sort_by_key(|t| t.keccak256());
+        tree.delete_key(&Key::from(&transfers[1]))
+            .expect("Test failed");
+
+        let expected: Hash = hash_pair(transfers[0].keccak256(), transfers[2].keccak256()).into();
+        assert_eq!(tree.root(), expected);
+    }
+
+    /// Test that parse key works correctly
+    #[test]
+    fn test_parse_key() {
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([1; 20]),
+                recipient: EthAddress([2; 20]),
+                amount: (1 as u64).into(),
+                nonce: 42u64.into(),
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address(),
+            }
+        };
+        let expected = transfer.keccak256();
+        let key = Key::from(&transfer);
+        assert_eq!(BridgePoolTree::parse_key(&key).expect("Test failed"), expected);
+    }
+
+    /// Test that parsing a key with multiple segments fails
+    #[test]
+    fn test_key_multiple_segments() {
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([1; 20]),
+                recipient: EthAddress([2; 20]),
+                amount: (1 as u64).into(),
+                nonce: 42u64.into(),
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address(),
+            }
+        };
+        let hash = transfer.keccak256().to_string();
+        let key = Key{segments: vec![DbKeySeg::AddressSeg(bertha_address()), DbKeySeg::StringSeg(hash)]};
+        assert!(BridgePoolTree::parse_key(&key).is_err());
+    }
+
+    /// Test that parsing a key that is not a hash fails
+    #[test]
+    fn test_key_not_hash() {
+        let key = Key{segments: vec![DbKeySeg::StringSeg("bloop".into())]};
+        assert!(BridgePoolTree::parse_key(&key).is_err());
+    }
+
+    /// Test that [`contains_key`] works correctly
+    #[test]
+    fn test_contains_key() {
+        let mut  tree = BridgePoolTree::default();
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([1; 20]),
+                recipient: EthAddress([2; 20]),
+                amount: (1 as u64).into(),
+                nonce: 42u64.into(),
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address(),
+            }
+        };
+        tree.update_key(&Key::from(&transfer)).expect("Test failed");
+        assert!(tree.contains_key(&Key::from(&transfer)).expect("Test failed"));
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([1; 20]),
+                recipient: EthAddress([0; 20]),
+                amount: (1 as u64).into(),
+                nonce: 42u64.into(),
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address(),
+            }
+        };
+        assert!(!tree.contains_key(&Key::from(&transfer)).expect("Test failed"));
+    }
+
+    /// Test that the empty proof works
+    #[test]
+    fn test_empty_proof() {
+        let tree = BridgePoolTree::default();
+        let keys = vec![];
+        let values = vec![];
+        let proof = tree.get_membership_proof(&keys, values).expect("Test failed");
+        assert!(proof.verify(Default::default()));
+    }
+
+    #[test]
+    fn test_one_leaf_of_two_proof() {
+        let mut tree = BridgePoolTree::default();
+        let mut transfers = vec![];
+        for i in 0..2 {
+            let transfer = PendingTransfer {
+                transfer: TransferToEthereum {
+                    asset: EthAddress([i;20]),
+                    recipient: EthAddress([i+1; 20]),
+                    amount: (i as u64).into(),
+                    nonce: 42u64.into(),
+                },
+                gas_fee: GasFee {
+                    amount: 0.into(),
+                    payer: bertha_address(),
+                }
+            };
+
+            let key = Key::from(&transfer);
+            transfers.push(transfer);
+            let _ = tree.update_key(&key).expect("Test failed");
+        }
+        let key = Key::from(&transfers[0]);
+        let proof = tree.get_membership_proof(
+            array::from_ref(&key),
+            vec![transfers.remove(0)]
+        )
+        .expect("Test failed");
+        assert!(proof.verify(tree.root().into()));
+    }
+
+    /// Test that a multiproof works for leaves who are siblings
+    #[test]
+    fn test_proof_two_out_of_three_leaves() {
+        let mut tree = BridgePoolTree::default();
+        let mut transfers = vec![];
+        for i in 0..3 {
+            let transfer = PendingTransfer {
+                transfer: TransferToEthereum {
+                    asset: EthAddress([i;20]),
+                    recipient: EthAddress([i+1; 20]),
+                    amount: (i as u64).into(),
+                    nonce: 42u64.into(),
+                },
+                gas_fee: GasFee {
+                    amount: 0.into(),
+                    payer: bertha_address(),
+                }
+            };
+
+            let key = Key::from(&transfer);
+            transfers.push(transfer);
+            let _ = tree.update_key(&key).expect("Test failed");
+        }
+        transfers.sort_by_key(|t| t.keccak256());
+        let keys = vec![Key::from(&transfers[0]), Key::from(&transfers[1])];
+        let values = vec![transfers[0].clone(), transfers[1].clone()];
+        let proof = tree.get_membership_proof(&keys, values).expect("Test failed");
+        assert!(proof.verify(tree.root().into()));
+    }
+
+    #[test]
+    fn test_proof_no_leaves() {
+        let mut tree = BridgePoolTree::default();
+        let mut transfers = vec![];
+        for i in 0..3 {
+            let transfer = PendingTransfer {
+                transfer: TransferToEthereum {
+                    asset: EthAddress([i;20]),
+                    recipient: EthAddress([i+1; 20]),
+                    amount: (i as u64).into(),
+                    nonce: 42u64.into(),
+                },
+                gas_fee: GasFee {
+                    amount: 0.into(),
+                    payer: bertha_address(),
+                }
+            };
+            let key = Key::from(&transfer);
+            transfers.push(transfer);
+            let _ = tree.update_key(&key).expect("Test failed");
+        }
+        let keys = vec![];
+        let values = vec![];
+        let proof = tree.get_membership_proof(&keys, values).expect("Test failed");
+        assert!(proof.verify(tree.root().into()))
+    }
+
+    /// Test a proof for all the leaves
+    #[test]
+    fn test_proof_all_leaves() {
+        let mut tree = BridgePoolTree::default();
+        let mut transfers = vec![];
+        for i in 0..3 {
+            let transfer = PendingTransfer {
+                transfer: TransferToEthereum {
+                    asset: EthAddress([i;20]),
+                    recipient: EthAddress([i+1; 20]),
+                    amount: (i as u64).into(),
+                    nonce: 42u64.into(),
+                },
+                gas_fee: GasFee {
+                    amount: 0.into(),
+                    payer: bertha_address(),
+                }
+            };
+            let key = Key::from(&transfer);
+            transfers.push(transfer);
+            let _ = tree.update_key(&key).expect("Test failed");
+        }
+        transfers.sort_by_key(|t| t.keccak256());
+        let keys: Vec<_> = transfers.iter().map(Key::from).collect();
+        let proof = tree.get_membership_proof(&keys, transfers).expect("Test failed");
+        assert!(proof.verify(tree.root().into()));
+    }
+
+    /// Test proofs of large trees
+    #[test]
+    fn test_large_proof() {
+        let mut tree = BridgePoolTree::default();
+        let mut transfers = vec![];
+        for i in 0..5 {
+            let transfer = PendingTransfer {
+                transfer: TransferToEthereum {
+                    asset: EthAddress([i;20]),
+                    recipient: EthAddress([i+1; 20]),
+                    amount: (i as u64).into(),
+                    nonce: 42u64.into(),
+                },
+                gas_fee: GasFee {
+                    amount: 0.into(),
+                    payer: bertha_address(),
+                }
+            };
+            let key = Key::from(&transfer);
+            transfers.push(transfer);
+            let _ = tree.update_key(&key).expect("Test failed");
+        }
+        transfers.sort_by_key(|t| t.keccak256());
+        let keys: Vec<_> = transfers
+            .iter()
+            .step_by(2)
+            .map(Key::from)
+            .collect();
+        let values: Vec<_> = transfers
+            .iter()
+            .step_by(2)
+            .cloned()
+            .collect();
+        let proof = tree.get_membership_proof(&keys, values).expect("Test failed");
+        assert!(proof.verify(tree.root().into()));
     }
 }

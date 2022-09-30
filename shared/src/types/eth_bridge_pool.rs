@@ -4,8 +4,10 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::token::Token;
 
 use crate::types::address::Address;
-use crate::types::ethereum_events::{EthAddress, KeccakHash, Uint};
+use crate::types::ethereum_events::{EthAddress, Uint};
 use crate::types::keccak;
+use crate::types::keccak::encode::Encode;
+use crate::types::storage::{DbKeySeg, Key};
 use crate::types::token::Amount;
 
 /// A transfer message to be submitted to Ethereum
@@ -59,8 +61,14 @@ impl keccak::encode::Encode for PendingTransfer {
         let fee = Token::Uint(u64::from(self.gas_fee.amount).into());
         let to = Token::Address(self.transfer.recipient.0.into());
         let amount = Token::Uint(u64::from(self.transfer.amount).into());
-        let nonce = Token::Uint(self.transfer.nonce.into());
+        let nonce = Token::Uint(self.transfer.nonce.clone().into());
         vec![from, fee, to, amount, nonce]
+    }
+}
+
+impl From<&PendingTransfer> for Key {
+    fn from(transfer: &PendingTransfer) -> Self {
+        Key{segments: vec![DbKeySeg::StringSeg(transfer.keccak256().to_string())]}
     }
 }
 

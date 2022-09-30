@@ -2,7 +2,6 @@
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::Write;
-use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
@@ -17,9 +16,9 @@ use thiserror::Error;
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
-use crate::ledger::storage::{StorageHasher, IBC_KEY_LIMIT};
+use crate::ledger::storage::IBC_KEY_LIMIT;
 use crate::types::address::{self, Address};
-use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereum};
+use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
 
@@ -245,23 +244,23 @@ impl FromStr for Key {
 /// several Merkle trees, each of which is
 /// responsible for understanding how to parse
 /// this value.
-pub enum MerkleValue<T: AsRef<[u8]>> {
+pub enum MerkleValue {
     /// raw bytes
-    Bytes(T),
+    Bytes(Vec<u8>),
     /// A transfer to be put in the Ethereum bridge pool.
     Transfer(PendingTransfer),
 }
 
-impl<T> From<T> for MerkleValue<T>
+impl<T> From<T> for MerkleValue
 where
     T: AsRef<[u8]>,
 {
     fn from(bytes: T) -> Self {
-        Self::Bytes(bytes)
+        Self::Bytes(bytes.as_ref().to_owned())
     }
 }
 
-impl<T: AsRef<[u8]>> From<PendingTransfer> for MerkleValue<T> {
+impl From<PendingTransfer> for MerkleValue {
     fn from(transfer: PendingTransfer) -> Self {
         Self::Transfer(transfer)
     }
@@ -354,8 +353,8 @@ pub enum MembershipProof {
     BridgePool(BridgePoolProof),
 }
 
-impl From<CommitmenProof> for MembershipProof {
-    fn from(proof: CommitmenProof) -> Self {
+impl From<CommitmentProof> for MembershipProof {
+    fn from(proof: CommitmentProof) -> Self {
         Self::ICS23(proof)
     }
 }
@@ -627,8 +626,9 @@ impl KeySeg for Address {
 
 impl KeySeg for Hash {
     fn parse(seg: String) -> Result<Self> {
-        seg.try_into()
-            .map_error(Error::ParseError((seg, "Hash".into())))
+        seg.clone()
+            .try_into()
+            .map_err(|_| Error::ParseError(seg, "Hash".into()))
     }
 
     fn raw(&self) -> String {

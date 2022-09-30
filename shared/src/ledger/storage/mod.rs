@@ -9,6 +9,7 @@ pub mod types;
 pub mod write_log;
 
 use core::fmt::Debug;
+use std::array;
 
 use thiserror::Error;
 
@@ -20,9 +21,9 @@ use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
 pub use crate::ledger::storage::merkle_tree::{
-    MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, Sha256Hasher,
-    StorageHasher, StoreType,
+    MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
+use crate::ledger::storage::traits::StorageHasher;
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
@@ -30,7 +31,7 @@ use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use crate::types::storage::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, KeySeg,
-    BLOCK_HASH_LENGTH,
+    MembershipProof, MerkleValue, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 
@@ -509,15 +510,21 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: Vec<u8>,
+        value: MerkleValue,
         height: BlockHeight,
-    ) -> Result<Proof> {
+    ) -> Result<MembershipProof> {
         if height >= self.get_block_height().0 {
-            Ok(self.block.tree.get_existence_proof(key, value)?)
+            Ok(self.block.tree.get_sub_tree_existence_proof(
+                array::from_ref(key),
+                vec![value],
+            )?)
         } else {
             match self.db.read_merkle_tree_stores(height)? {
                 Some(stores) => Ok(MerkleTree::<H>::new(stores)
-                    .get_existence_proof(key, value)?),
+                    .get_sub_tree_existence_proof(
+                        array::from_ref(key),
+                        vec![value],
+                    )?),
                 None => Err(Error::NoMerkleTree { height }),
             }
         }
@@ -696,11 +703,9 @@ impl From<MerkleTreeError> for Error {
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use merkle_tree::Sha256Hasher;
-
     use super::mockdb::MockDB;
     use super::*;
-
+    use crate::ledger::storage::traits::Sha256Hasher;
     /// Storage with a mock DB for testing
     pub type TestStorage = Storage<MockDB, Sha256Hasher>;
 

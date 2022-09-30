@@ -1,37 +1,28 @@
 //! The merkle tree in the storage
-use std::convert::{TryFrom, TryInto};
 use std::fmt;
-use std::marker::PhantomData;
-use std::slice::from_ref;
 use std::str::FromStr;
 
 use arse_merkle_tree::default_store::DefaultStore;
 use arse_merkle_tree::error::Error as MtError;
-use arse_merkle_tree::traits::{Hasher, Value};
 use arse_merkle_tree::{
     Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree, H256,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use ics23::commitment_proof::Proof as Ics23Proof;
-use ics23::{
-    CommitmentProof, ExistenceProof, HashOp, LeafOp, LengthOp,
-    NonExistenceProof, ProofSpec,
-};
-use itertools::{Either, Itertools};
+use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
 use prost::Message;
-use sha2::{Digest, Sha256};
 use tendermint::merkle::proof::{Proof, ProofOp};
 use thiserror::Error;
 
-use super::traits::{self, Sha256Hasher, StorageHasher};
+use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
 use super::IBC_KEY_LIMIT;
 use crate::bytes::ByteBuf;
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolTree;
+use crate::ledger::storage::ics23_specs::ibc_leaf_spec;
 use crate::ledger::storage::{ics23_specs, types};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereum};
-use crate::types::ethereum_events::KeccakHash;
 use crate::types::hash::Hash;
+use crate::types::keccak::KeccakHash;
 use crate::types::storage::{
     DbKeySeg, Error as StorageError, Key, MembershipProof, MerkleValue,
     StringKey, TreeBytes,
@@ -107,7 +98,7 @@ pub enum Store {
     /// For PoS-related data
     PoS(SmtStore),
     /// For the Ethereum bridge Pool transfers
-    BridgePool(BTreeSetStore),
+    BridgePool(BridgePoolStore),
 }
 
 impl Store {
@@ -133,7 +124,7 @@ pub enum StoreRef<'a> {
     /// For PoS-related data
     PoS(&'a SmtStore),
     /// For the Ethereum bridge Pool transfers
-    BridgePool(&'a BTreeSetStore),
+    BridgePool(&'a BridgePoolStore),
 }
 
 impl<'a> StoreRef<'a> {
@@ -287,40 +278,40 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         }
     }
 
-    fn tree(&self, store_type: &StoreType) -> &impl traits::MerkleTree {
+    fn tree(&self, store_type: &StoreType) -> Box<dyn SubTreeRead + '_> {
         match store_type {
-            StoreType::Base => &self.base,
-            StoreType::Account => &self.account,
-            StoreType::Ibc => &self.ibc,
-            StoreType::PoS => &self.pos,
-            StoreType::BridgePool => &self.bridge_pool,
+            StoreType::Base => Box::new(&self.base),
+            StoreType::Account => Box::new(&self.account),
+            StoreType::Ibc => Box::new(&self.ibc),
+            StoreType::PoS => Box::new(&self.pos),
+            StoreType::BridgePool => Box::new(&self.bridge_pool),
         }
     }
 
     fn tree_mut(
         &mut self,
         store_type: &StoreType,
-    ) -> &mut impl traits::MerkleTree {
+    ) -> Box<dyn SubTreeWrite + '_> {
         match store_type {
-            StoreType::Base => &mut self.base,
-            StoreType::Account => &mut self.account,
-            StoreType::Ibc => &mut self.ibc,
-            StoreType::PoS => &mut self.pos,
-            StoreType::BridgePool => &mut self.bridge_pool,
+            StoreType::Base => Box::new(&mut self.base),
+            StoreType::Account => Box::new(&mut self.account),
+            StoreType::Ibc => Box::new(&mut self.ibc),
+            StoreType::PoS => Box::new(&mut self.pos),
+            StoreType::BridgePool => Box::new(&mut self.bridge_pool),
         }
     }
 
-    fn update_tree<T: AsRef<[u8]>>(
+    fn update_tree(
         &mut self,
         store_type: &StoreType,
         key: &Key,
-        value: MerkleValue<T>,
+        value: MerkleValue,
     ) -> Result<()> {
-        let sub_root = self.tree_mut(store_type).update(key, value)?;
+        let sub_root = self.tree_mut(store_type).subtree_update(key, value)?;
         // update the base tree with the updated sub root without hashing
         if *store_type != StoreType::Base {
             let base_key = H::hash(&store_type.to_string());
-            self.base.update(base_key.into(), Hash::from(sub_root))?;
+            self.base.update(base_key.into(), sub_root)?;
         }
         Ok(())
     }
@@ -328,23 +319,23 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     /// Check if the key exists in the tree
     pub fn has_key(&self, key: &Key) -> Result<bool> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        self.tree(&store_type).has_key(&sub_key)
+        self.tree(&store_type).subtree_has_key(&sub_key)
     }
 
     /// Update the tree with the given key and value
-    pub fn update<T: AsRef<[u8]>>(
+    pub fn update(
         &mut self,
         key: &Key,
-        value: impl Into<MerkleValue<T>>,
+        value: impl Into<MerkleValue>,
     ) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        self.update_tree(&store_type, sub_key.into(), value.into())
+        self.update_tree(&store_type, &sub_key, value.into())
     }
 
     /// Delete the value corresponding to the given key
     pub fn delete(&mut self, key: &Key) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        self.tree_mut(&store_type).delete(&sub_key)
+        self.tree_mut(&store_type).subtree_delete(&sub_key)
     }
 
     /// Get the root
@@ -364,14 +355,16 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     }
 
     /// Get the existence proof from a sub-tree
-    pub fn get_sub_tree_existence_proof<T: AsRef<[u8]>>(
+    pub fn get_sub_tree_existence_proof(
         &self,
         keys: &[Key],
-        values: Vec<MerkleValue<T>>,
+        values: Vec<MerkleValue>,
     ) -> Result<MembershipProof> {
-        let first_key = keys.iter().next().ok_or(Error::InvalidMerkleKey(
-            "No keys provided for existence proof.".into(),
-        ))?;
+        let first_key = keys.iter().next().ok_or_else(|| {
+            Error::InvalidMerkleKey(
+                "No keys provided for existence proof.".into(),
+            )
+        })?;
         let (store_type, _) = StoreType::sub_key(first_key)?;
         if !keys.iter().all(|k| {
             if let Ok((s, _)) = StoreType::sub_key(k) {
@@ -386,7 +379,8 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
                     .into(),
             ));
         }
-        self.tree(&store_type).membership_proof(keys, values)
+        self.tree(&store_type)
+            .subtree_membership_proof(keys, values)
     }
 
     /// Get the non-existence proof
@@ -396,8 +390,9 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             return Err(Error::NonExistenceProof(store_type.to_string()));
         }
 
-        let key = StringKey::try_from_bytes(sub_key.to_string().as_bytes())?;
-        let mut nep = self.ibc.non_membership_proof(&key)?;
+        let string_key =
+            StringKey::try_from_bytes(sub_key.to_string().as_bytes())?;
+        let mut nep = self.ibc.non_membership_proof(&string_key)?;
         // Replace the values and the leaf op for the verification
         if let Some(ref mut nep) = nep.proof {
             match nep {
@@ -410,19 +405,20 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
                     let ep = left.as_mut().or(right.as_mut()).expect(
                         "A left or right existence proof should exist.",
                     );
-                    ep.leaf = Some(self.ibc_leaf_spec());
+                    ep.leaf = Some(ibc_leaf_spec::<H>());
                 }
                 _ => unreachable!(),
             }
         }
 
         // Get a proof of the sub tree
-        self.get_proof(key, sub_proof)
+        self.get_tendermint_proof(key, nep)
     }
 
     /// Get the Tendermint proof with the base proof
-    pub fn get_tendermint_proof<T: AsRef<[u8]>>(
+    pub fn get_tendermint_proof(
         &self,
+        key: &Key,
         sub_proof: CommitmentProof,
     ) -> Result<Proof> {
         let mut data = vec![];
@@ -499,7 +495,7 @@ pub struct MerkleTreeStoresRead {
     account: (Hash, SmtStore),
     ibc: (Hash, AmtStore),
     pos: (Hash, SmtStore),
-    bridge_pool: (KeccakHash, BTreeSetStore),
+    bridge_pool: (KeccakHash, BridgePoolStore),
 }
 
 impl MerkleTreeStoresRead {
@@ -532,7 +528,7 @@ pub struct MerkleTreeStoresWrite<'a> {
     account: (Hash, &'a SmtStore),
     ibc: (Hash, &'a AmtStore),
     pos: (Hash, &'a SmtStore),
-    bridge_pool: (Hash, &'a BTreeSetStore),
+    bridge_pool: (Hash, &'a BridgePoolStore),
 }
 
 impl<'a> MerkleTreeStoresWrite<'a> {
@@ -567,228 +563,228 @@ impl From<StorageError> for Error {
 
 impl From<MtError> for Error {
     fn from(error: MtError) -> Self {
-        Error::MerkleTree(error)
+        Error::MerkleTree(error.to_string())
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::types::storage::KeySeg;
-
-    #[test]
-    fn test_crud_value() {
-        let mut tree = MerkleTree::<Sha256Hasher>::default();
-        let key_prefix: Key =
-            Address::Internal(InternalAddress::Ibc).to_db_key().into();
-        let ibc_key = key_prefix.push(&"test".to_string()).unwrap();
-        let key_prefix: Key =
-            Address::Internal(InternalAddress::PoS).to_db_key().into();
-        let pos_key = key_prefix.push(&"test".to_string()).unwrap();
-
-        assert!(!tree.has_key(&ibc_key).unwrap());
-        assert!(!tree.has_key(&pos_key).unwrap());
-
-        // update IBC tree
-        tree.update(&ibc_key, [1u8; 8]).unwrap();
-        assert!(tree.has_key(&ibc_key).unwrap());
-        assert!(!tree.has_key(&pos_key).unwrap());
-        // update another tree
-        tree.update(&pos_key, [2u8; 8]).unwrap();
-        assert!(tree.has_key(&pos_key).unwrap());
-
-        // delete a value on IBC tree
-        tree.delete(&ibc_key).unwrap();
-        assert!(!tree.has_key(&ibc_key).unwrap());
-        assert!(tree.has_key(&pos_key).unwrap());
-    }
-
-    #[test]
-    fn test_restore_tree() {
-        let mut tree = MerkleTree::<Sha256Hasher>::default();
-
-        let key_prefix: Key =
-            Address::Internal(InternalAddress::Ibc).to_db_key().into();
-        let ibc_key = key_prefix.push(&"test".to_string()).unwrap();
-        let key_prefix: Key =
-            Address::Internal(InternalAddress::PoS).to_db_key().into();
-        let pos_key = key_prefix.push(&"test".to_string()).unwrap();
-
-        tree.update(&ibc_key, [1u8; 8]).unwrap();
-        tree.update(&pos_key, [2u8; 8]).unwrap();
-
-        let stores_write = tree.stores();
-        let mut stores_read = MerkleTreeStoresRead::default();
-        for st in StoreType::iter() {
-            stores_read.set_root(st, stores_write.root(st).clone());
-            stores_read.set_store(stores_write.store(st).to_owned());
-        }
-        let restored_tree = MerkleTree::<Sha256Hasher>::new(stores_read);
-        assert!(restored_tree.has_key(&ibc_key).unwrap());
-        assert!(restored_tree.has_key(&pos_key).unwrap());
-    }
-
-    #[test]
-    fn test_ibc_existence_proof() {
-        let mut tree = MerkleTree::<Sha256Hasher>::default();
-
-        let key_prefix: Key =
-            Address::Internal(InternalAddress::Ibc).to_db_key().into();
-        let ibc_key = key_prefix.push(&"test".to_string()).unwrap();
-        let key_prefix: Key =
-            Address::Internal(InternalAddress::PoS).to_db_key().into();
-        let pos_key = key_prefix.push(&"test".to_string()).unwrap();
-
-        let ibc_val = [1u8; 8].to_vec();
-        tree.update(&ibc_key, ibc_val.clone()).unwrap();
-        let pos_val = [2u8; 8].to_vec();
-        tree.update(&pos_key, pos_val).unwrap();
-
-        let specs = tree.ibc_proof_specs();
-        let proof =
-            tree.get_existence_proof(&ibc_key, ibc_val.clone()).unwrap();
-        let (store_type, sub_key) = StoreType::sub_key(&ibc_key).unwrap();
-        let paths = vec![sub_key.to_string(), store_type.to_string()];
-        let mut sub_root = ibc_val.clone();
-        let mut value = ibc_val;
-        // First, the sub proof is verified. Next the base proof is verified
-        // with the sub root
-        for ((p, spec), key) in
-            proof.ops.iter().zip(specs.iter()).zip(paths.iter())
-        {
-            let commitment_proof = CommitmentProof::decode(&*p.data).unwrap();
-            let existence_proof = match commitment_proof.clone().proof.unwrap()
-            {
-                Ics23Proof::Exist(ep) => ep,
-                _ => unreachable!(),
-            };
-            sub_root =
-                ics23::calculate_existence_root(&existence_proof).unwrap();
-            assert!(ics23::verify_membership(
-                &commitment_proof,
-                spec,
-                &sub_root,
-                key.as_bytes(),
-                &value,
-            ));
-            // for the verification of the base tree
-            value = sub_root.clone();
-        }
-        // Check the base root
-        assert_eq!(sub_root, tree.root().0);
-    }
-
-    #[test]
-    fn test_non_ibc_existence_proof() {
-        let mut tree = MerkleTree::<Sha256Hasher>::default();
-
-        let key_prefix: Key =
-            Address::Internal(InternalAddress::Ibc).to_db_key().into();
-        let ibc_key = key_prefix.push(&"test".to_string()).unwrap();
-        let key_prefix: Key =
-            Address::Internal(InternalAddress::PoS).to_db_key().into();
-        let pos_key = key_prefix.push(&"test".to_string()).unwrap();
-
-        let ibc_val = [1u8; 8].to_vec();
-        tree.update(&ibc_key, ibc_val).unwrap();
-        let pos_val = [2u8; 8].to_vec();
-        tree.update(&pos_key, pos_val.clone()).unwrap();
-
-        let specs = tree.proof_specs();
-        let proof =
-            tree.get_existence_proof(&pos_key, pos_val.clone()).unwrap();
-        let (store_type, sub_key) = StoreType::sub_key(&pos_key).unwrap();
-        let paths = vec![sub_key.to_string(), store_type.to_string()];
-        let mut sub_root = pos_val.clone();
-        let mut value = pos_val;
-        // First, the sub proof is verified. Next the base proof is verified
-        // with the sub root
-        for ((p, spec), key) in
-            proof.ops.iter().zip(specs.iter()).zip(paths.iter())
-        {
-            let commitment_proof = CommitmentProof::decode(&*p.data).unwrap();
-            let existence_proof = match commitment_proof.clone().proof.unwrap()
-            {
-                Ics23Proof::Exist(ep) => ep,
-                _ => unreachable!(),
-            };
-            sub_root =
-                ics23::calculate_existence_root(&existence_proof).unwrap();
-            assert!(ics23::verify_membership(
-                &commitment_proof,
-                spec,
-                &sub_root,
-                key.as_bytes(),
-                &value,
-            ));
-            // for the verification of the base tree
-            value = sub_root.clone();
-        }
-        // Check the base root
-        assert_eq!(sub_root, tree.root().0);
-    }
-
-    #[test]
-    fn test_ibc_non_existence_proof() {
-        let mut tree = MerkleTree::<Sha256Hasher>::default();
-
-        let key_prefix: Key =
-            Address::Internal(InternalAddress::Ibc).to_db_key().into();
-        let ibc_non_key =
-            key_prefix.push(&"test".to_string()).expect("Test failed");
-        let key_prefix: Key =
-            Address::Internal(InternalAddress::Ibc).to_db_key().into();
-        let ibc_key =
-            key_prefix.push(&"test2".to_string()).expect("Test failed");
-        let ibc_val = [2u8; 8].to_vec();
-        tree.update(&ibc_key, ibc_val).expect("Test failed");
-
-        let nep = tree
-            .get_non_existence_proof(&ibc_non_key)
-            .expect("Test failed");
-        let subtree_nep = nep.ops.get(0).expect("Test failed");
-        let nep_commitment_proof =
-            CommitmentProof::decode(&*subtree_nep.data).expect("Test failed");
-        let non_existence_proof =
-            match nep_commitment_proof.clone().proof.expect("Test failed") {
-                Ics23Proof::Nonexist(nep) => nep,
-                _ => unreachable!(),
-            };
-        let subtree_root = if let Some(left) = &non_existence_proof.left {
-            ics23::calculate_existence_root(left).unwrap()
-        } else if let Some(right) = &non_existence_proof.right {
-            ics23::calculate_existence_root(right).unwrap()
-        } else {
-            unreachable!()
-        };
-        let (store_type, sub_key) =
-            StoreType::sub_key(&ibc_non_key).expect("Test failed");
-        let specs = tree.ibc_proof_specs();
-
-        let nep_verification_res = ics23::verify_non_membership(
-            &nep_commitment_proof,
-            &specs[0],
-            &subtree_root,
-            sub_key.to_string().as_bytes(),
-        );
-        assert!(nep_verification_res);
-        let basetree_ep = nep.ops.get(1).unwrap();
-        let basetree_ep_commitment_proof =
-            CommitmentProof::decode(&*basetree_ep.data).unwrap();
-        let basetree_ics23_ep =
-            match basetree_ep_commitment_proof.clone().proof.unwrap() {
-                Ics23Proof::Exist(ep) => ep,
-                _ => unreachable!(),
-            };
-        let basetree_root =
-            ics23::calculate_existence_root(&basetree_ics23_ep).unwrap();
-        let basetree_verification_res = ics23::verify_membership(
-            &basetree_ep_commitment_proof,
-            &specs[1],
-            &basetree_root,
-            store_type.to_string().as_bytes(),
-            &subtree_root,
-        );
-        assert!(basetree_verification_res);
-    }
-}
+// #[cfg(test)]
+// mod test {
+// use super::*;
+// use crate::types::storage::KeySeg;
+//
+// #[test]
+// fn test_crud_value() {
+// let mut tree = MerkleTree::<Sha256Hasher>::default();
+// let key_prefix: Key =
+// Address::Internal(InternalAddress::Ibc).to_db_key().into();
+// let ibc_key = key_prefix.push(&"test".to_string()).unwrap();
+// let key_prefix: Key =
+// Address::Internal(InternalAddress::PoS).to_db_key().into();
+// let pos_key = key_prefix.push(&"test".to_string()).unwrap();
+//
+// assert!(!tree.has_key(&ibc_key).unwrap());
+// assert!(!tree.has_key(&pos_key).unwrap());
+//
+// update IBC tree
+// tree.update(&ibc_key, [1u8; 8]).unwrap();
+// assert!(tree.has_key(&ibc_key).unwrap());
+// assert!(!tree.has_key(&pos_key).unwrap());
+// update another tree
+// tree.update(&pos_key, [2u8; 8]).unwrap();
+// assert!(tree.has_key(&pos_key).unwrap());
+//
+// delete a value on IBC tree
+// tree.delete(&ibc_key).unwrap();
+// assert!(!tree.has_key(&ibc_key).unwrap());
+// assert!(tree.has_key(&pos_key).unwrap());
+// }
+//
+// #[test]
+// fn test_restore_tree() {
+// let mut tree = MerkleTree::<Sha256Hasher>::default();
+//
+// let key_prefix: Key =
+// Address::Internal(InternalAddress::Ibc).to_db_key().into();
+// let ibc_key = key_prefix.push(&"test".to_string()).unwrap();
+// let key_prefix: Key =
+// Address::Internal(InternalAddress::PoS).to_db_key().into();
+// let pos_key = key_prefix.push(&"test".to_string()).unwrap();
+//
+// tree.update(&ibc_key, [1u8; 8]).unwrap();
+// tree.update(&pos_key, [2u8; 8]).unwrap();
+//
+// let stores_write = tree.stores();
+// let mut stores_read = MerkleTreeStoresRead::default();
+// for st in StoreType::iter() {
+// stores_read.set_root(st, stores_write.root(st).clone());
+// stores_read.set_store(stores_write.store(st).to_owned());
+// }
+// let restored_tree = MerkleTree::<Sha256Hasher>::new(stores_read);
+// assert!(restored_tree.has_key(&ibc_key).unwrap());
+// assert!(restored_tree.has_key(&pos_key).unwrap());
+// }
+//
+// #[test]
+// fn test_ibc_existence_proof() {
+// let mut tree = MerkleTree::<Sha256Hasher>::default();
+//
+// let key_prefix: Key =
+// Address::Internal(InternalAddress::Ibc).to_db_key().into();
+// let ibc_key = key_prefix.push(&"test".to_string()).unwrap();
+// let key_prefix: Key =
+// Address::Internal(InternalAddress::PoS).to_db_key().into();
+// let pos_key = key_prefix.push(&"test".to_string()).unwrap();
+//
+// let ibc_val = [1u8; 8].to_vec();
+// tree.update(&ibc_key, ibc_val.clone()).unwrap();
+// let pos_val = [2u8; 8].to_vec();
+// tree.update(&pos_key, pos_val).unwrap();
+//
+// let specs = tree.ibc_proof_specs();
+// let proof =
+// tree.get_existence_proof(&ibc_key, ibc_val.clone()).unwrap();
+// let (store_type, sub_key) = StoreType::sub_key(&ibc_key).unwrap();
+// let paths = vec![sub_key.to_string(), store_type.to_string()];
+// let mut sub_root = ibc_val.clone();
+// let mut value = ibc_val;
+// First, the sub proof is verified. Next the base proof is verified
+// with the sub root
+// for ((p, spec), key) in
+// proof.ops.iter().zip(specs.iter()).zip(paths.iter())
+// {
+// let commitment_proof = CommitmentProof::decode(&*p.data).unwrap();
+// let existence_proof = match commitment_proof.clone().proof.unwrap()
+// {
+// Ics23Proof::Exist(ep) => ep,
+// _ => unreachable!(),
+// };
+// sub_root =
+// ics23::calculate_existence_root(&existence_proof).unwrap();
+// assert!(ics23::verify_membership(
+// &commitment_proof,
+// spec,
+// &sub_root,
+// key.as_bytes(),
+// &value,
+// ));
+// for the verification of the base tree
+// value = sub_root.clone();
+// }
+// Check the base root
+// assert_eq!(sub_root, tree.root().0);
+// }
+//
+// #[test]
+// fn test_non_ibc_existence_proof() {
+// let mut tree = MerkleTree::<Sha256Hasher>::default();
+//
+// let key_prefix: Key =
+// Address::Internal(InternalAddress::Ibc).to_db_key().into();
+// let ibc_key = key_prefix.push(&"test".to_string()).unwrap();
+// let key_prefix: Key =
+// Address::Internal(InternalAddress::PoS).to_db_key().into();
+// let pos_key = key_prefix.push(&"test".to_string()).unwrap();
+//
+// let ibc_val = [1u8; 8].to_vec();
+// tree.update(&ibc_key, ibc_val).unwrap();
+// let pos_val = [2u8; 8].to_vec();
+// tree.update(&pos_key, pos_val.clone()).unwrap();
+//
+// let specs = tree.proof_specs();
+// let proof =
+// tree.get_existence_proof(&pos_key, pos_val.clone()).unwrap();
+// let (store_type, sub_key) = StoreType::sub_key(&pos_key).unwrap();
+// let paths = vec![sub_key.to_string(), store_type.to_string()];
+// let mut sub_root = pos_val.clone();
+// let mut value = pos_val;
+// First, the sub proof is verified. Next the base proof is verified
+// with the sub root
+// for ((p, spec), key) in
+// proof.ops.iter().zip(specs.iter()).zip(paths.iter())
+// {
+// let commitment_proof = CommitmentProof::decode(&*p.data).unwrap();
+// let existence_proof = match commitment_proof.clone().proof.unwrap()
+// {
+// Ics23Proof::Exist(ep) => ep,
+// _ => unreachable!(),
+// };
+// sub_root =
+// ics23::calculate_existence_root(&existence_proof).unwrap();
+// assert!(ics23::verify_membership(
+// &commitment_proof,
+// spec,
+// &sub_root,
+// key.as_bytes(),
+// &value,
+// ));
+// for the verification of the base tree
+// value = sub_root.clone();
+// }
+// Check the base root
+// assert_eq!(sub_root, tree.root().0);
+// }
+//
+// #[test]
+// fn test_ibc_non_existence_proof() {
+// let mut tree = MerkleTree::<Sha256Hasher>::default();
+//
+// let key_prefix: Key =
+// Address::Internal(InternalAddress::Ibc).to_db_key().into();
+// let ibc_non_key =
+// key_prefix.push(&"test".to_string()).expect("Test failed");
+// let key_prefix: Key =
+// Address::Internal(InternalAddress::Ibc).to_db_key().into();
+// let ibc_key =
+// key_prefix.push(&"test2".to_string()).expect("Test failed");
+// let ibc_val = [2u8; 8].to_vec();
+// tree.update(&ibc_key, ibc_val).expect("Test failed");
+//
+// let nep = tree
+// .get_non_existence_proof(&ibc_non_key)
+// .expect("Test failed");
+// let subtree_nep = nep.ops.get(0).expect("Test failed");
+// let nep_commitment_proof =
+// CommitmentProof::decode(&*subtree_nep.data).expect("Test failed");
+// let non_existence_proof =
+// match nep_commitment_proof.clone().proof.expect("Test failed") {
+// Ics23Proof::Nonexist(nep) => nep,
+// _ => unreachable!(),
+// };
+// let subtree_root = if let Some(left) = &non_existence_proof.left {
+// ics23::calculate_existence_root(left).unwrap()
+// } else if let Some(right) = &non_existence_proof.right {
+// ics23::calculate_existence_root(right).unwrap()
+// } else {
+// unreachable!()
+// };
+// let (store_type, sub_key) =
+// StoreType::sub_key(&ibc_non_key).expect("Test failed");
+// let specs = tree.ibc_proof_specs();
+//
+// let nep_verification_res = ics23::verify_non_membership(
+// &nep_commitment_proof,
+// &specs[0],
+// &subtree_root,
+// sub_key.to_string().as_bytes(),
+// );
+// assert!(nep_verification_res);
+// let basetree_ep = nep.ops.get(1).unwrap();
+// let basetree_ep_commitment_proof =
+// CommitmentProof::decode(&*basetree_ep.data).unwrap();
+// let basetree_ics23_ep =
+// match basetree_ep_commitment_proof.clone().proof.unwrap() {
+// Ics23Proof::Exist(ep) => ep,
+// _ => unreachable!(),
+// };
+// let basetree_root =
+// ics23::calculate_existence_root(&basetree_ics23_ep).unwrap();
+// let basetree_verification_res = ics23::verify_membership(
+// &basetree_ep_commitment_proof,
+// &specs[1],
+// &basetree_root,
+// store_type.to_string().as_bytes(),
+// &subtree_root,
+// );
+// assert!(basetree_verification_res);
+// }
+// }
