@@ -4391,7 +4391,7 @@ dependencies = [
  "rocksdb",
  "rpassword",
  "semver 1.0.14",
- "serde 1.0.144",
+ "serde 1.0.137",
  "serde_bytes",
  "serde_json",
  "serde_regex",
