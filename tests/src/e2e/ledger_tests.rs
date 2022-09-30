@@ -243,7 +243,6 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 6. Query token balance
 /// 7. Query the raw bytes of a storage key
 #[test]
-#[ignore]
 // TODO(namada#418): re-enable once working again
 fn ledger_txs_and_queries() -> Result<()> {
     use namada_apps::config::Config;
@@ -257,9 +256,11 @@ fn ledger_txs_and_queries() -> Result<()> {
     };
 
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
-    let validator_0_config = update_config(
-        Config::load(&validator_0_base_dir, &test.net.chain_id, None),
-    );
+    let validator_0_config = update_config(Config::load(
+        &validator_0_base_dir,
+        &test.net.chain_id,
+        None,
+    ));
     validator_0_config
         .write(&validator_0_base_dir, &test.net.chain_id, true)
         .unwrap();
