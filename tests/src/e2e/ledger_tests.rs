@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
+use namada::types::chain::ChainId;
 use namada::types::token;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
@@ -32,28 +33,32 @@ use crate::e2e::helpers::{
 use crate::e2e::setup::{self, sleep, Bin, Who};
 use crate::{run, run_as};
 
+fn update_actor_config<F>(test: &Test, chain_id: &ChainId, who: &Who, update: F)
+where
+    F: FnOnce(&mut Config),
+{
+    let validator_base_dir = test.get_base_dir(who);
+    let mut validator_config =
+        Config::load(&validator_base_dir, chain_id, None);
+    update(&mut validator_config);
+    validator_config
+        .write(&validator_base_dir, chain_id, true)
+        .unwrap();
+}
+
+fn disable_eth_fullnode(test: &Test, chain_id: &ChainId, who: &Who) {
+    update_actor_config(test, chain_id, who, |config| {
+        config.ledger.ethereum.mode = ethereum::Mode::Off;
+    });
+}
+
 /// Test that when we "run-ledger" with all the possible command
 /// combinations from fresh state, the node starts-up successfully for both a
 /// validator and non-validator user.
 #[test]
 fn run_ledger() -> Result<()> {
     let test = setup::single_node_net()?;
-
-    let update_config = |mut config: Config| {
-        // disable eth full node
-        config.ledger.ethereum.mode = ethereum::Mode::Off;
-        config
-    };
-
-    let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
-    let validator_0_config = update_config(Config::load(
-        &validator_0_base_dir,
-        &test.net.chain_id,
-        None,
-    ));
-    validator_0_config
-        .write(&validator_0_base_dir, &test.net.chain_id, true)
-        .unwrap();
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
 
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
