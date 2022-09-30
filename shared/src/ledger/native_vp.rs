@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
+use eyre::Context;
 use thiserror::Error;
 
 use crate::ledger::gas::VpGasMeter;
@@ -130,32 +131,6 @@ where
             key,
         )
         .map_err(Error::ContextError)
-    }
-
-    /// Helper function. After reading posterior state,
-    /// borsh deserialize to specified type
-    pub fn read_post_value<T>(&self, key: &Key) -> Option<T>
-    where
-        T: BorshDeserialize,
-    {
-        if let Ok(Some(bytes)) = self.read_post(key) {
-            <T as BorshDeserialize>::try_from_slice(bytes.as_slice()).ok()
-        } else {
-            None
-        }
-    }
-
-    /// Helper function. After reading prior state,
-    /// borsh deserialize to specified type
-    pub fn read_pre_value<T>(&self, key: &Key) -> Option<T>
-    where
-        T: BorshDeserialize,
-    {
-        if let Ok(Some(bytes)) = self.read_pre(key) {
-            <T as BorshDeserialize>::try_from_slice(bytes.as_slice()).ok()
-        } else {
-            None
-        }
     }
 
     /// Storage read temporary state (after tx execution). It will try to read
@@ -323,6 +298,104 @@ where
                 "The \"wasm-runtime\" feature must be enabled to use the \
                  `eval` function."
             )
+        }
+    }
+}
+
+/// A convenience trait for reading and automatically deserializing a value from
+/// storage
+pub trait StorageReader {
+    /// If `maybe_bytes` is not empty, return an `Option<T>` containing the
+    /// deserialization of the bytes inside `maybe_bytes`.
+    fn deserialize_if_present<T: BorshDeserialize>(
+        maybe_bytes: Option<Vec<u8>>,
+    ) -> eyre::Result<Option<T>> {
+        maybe_bytes
+            .map(|ref bytes| {
+                T::try_from_slice(bytes)
+                    .wrap_err_with(|| "couldn't deserialize".to_string())
+            })
+            .transpose()
+    }
+
+    /// Storage read prior state (before tx execution). It will try to read from
+    /// the storage.
+    fn read_pre_value<T: BorshDeserialize>(
+        &self,
+        key: &Key,
+    ) -> eyre::Result<Option<T>>;
+
+    /// Storage read posterior state (after tx execution). It will try to read
+    /// from the write log first and if no entry found then from the
+    /// storage.
+    fn read_post_value<T: BorshDeserialize>(
+        &self,
+        key: &Key,
+    ) -> eyre::Result<Option<T>>;
+}
+
+impl<'a, DB, H, CA> StorageReader for &Ctx<'a, DB, H, CA>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    /// Helper function. After reading posterior state,
+    /// borsh deserialize to specified type
+    fn read_post_value<T>(&self, key: &Key) -> eyre::Result<Option<T>>
+    where
+        T: BorshDeserialize,
+    {
+        let maybe_bytes = Ctx::read_post(self, key)
+            .wrap_err_with(|| format!("couldn't read_post {}", key))?;
+        Self::deserialize_if_present(maybe_bytes)
+    }
+
+    /// Helper function. After reading prior state,
+    /// borsh deserialize to specified type
+    fn read_pre_value<T>(&self, key: &Key) -> eyre::Result<Option<T>>
+    where
+        T: BorshDeserialize,
+    {
+        let maybe_bytes = Ctx::read_pre(self, key)
+            .wrap_err_with(|| format!("couldn't read_pre {}", key))?;
+        Self::deserialize_if_present(maybe_bytes)
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+pub(super) mod testing {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[derive(Debug, Default)]
+    pub(in super::super) struct FakeStorageReader {
+        pre: HashMap<Key, Vec<u8>>,
+        post: HashMap<Key, Vec<u8>>,
+    }
+
+    impl StorageReader for FakeStorageReader {
+        fn read_pre_value<T: BorshDeserialize>(
+            &self,
+            key: &Key,
+        ) -> eyre::Result<Option<T>> {
+            let bytes = match self.pre.get(key) {
+                Some(bytes) => bytes.to_owned(),
+                None => return Ok(None),
+            };
+            Self::deserialize_if_present(Some(bytes))
+        }
+
+        fn read_post_value<T: BorshDeserialize>(
+            &self,
+            key: &Key,
+        ) -> eyre::Result<Option<T>> {
+            let bytes = match self.post.get(key) {
+                Some(bytes) => bytes.to_owned(),
+                None => return Ok(None),
+            };
+            Self::deserialize_if_present(Some(bytes))
         }
     }
 }

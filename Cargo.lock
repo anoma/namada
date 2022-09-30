@@ -2897,12 +2897,12 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.12.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus#99a761657a51f6e5f074f3217426903e53632934"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=tiago/abciplus#1e572fdc00df9470ec6298af00ff8f88685a1ca4"
 dependencies = [
  "bytes 1.2.1",
  "derive_more",
  "flex-error",
- "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus)",
+ "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?branch=tiago/abciplus)",
  "ics23",
  "num-traits 0.2.15",
  "prost 0.9.0",
@@ -2913,10 +2913,10 @@ dependencies = [
  "serde_json",
  "sha2 0.10.5",
  "subtle-encoding",
- "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
- "tendermint-light-client-verifier 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
- "tendermint-testgen 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
+ "tendermint-light-client-verifier 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
+ "tendermint-testgen 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "time 0.3.14",
  "tracing 0.1.36",
 ]
@@ -2951,13 +2951,13 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.16.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus#99a761657a51f6e5f074f3217426903e53632934"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=tiago/abciplus#1e572fdc00df9470ec6298af00ff8f88685a1ca4"
 dependencies = [
  "bytes 1.2.1",
  "prost 0.9.0",
  "prost-types 0.9.0",
  "serde 1.0.144",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "tonic",
 ]
 
@@ -3224,17 +3224,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "258451ab10b34f8af53416d1fdab72c22e805f0c92a1136d59470ec0b11138b2"
 dependencies = [
  "wasm-bindgen",
-]
-
-[[package]]
-name = "jsonpath_lib"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaa63191d68230cccb81c5aa23abd53ed64d83337cacbb25a7b8c7979523774f"
-dependencies = [
- "log 0.4.17",
- "serde 1.0.144",
- "serde_json",
 ]
 
 [[package]]
@@ -4308,9 +4297,9 @@ dependencies = [
  "ferveo-common",
  "group-threshold-cryptography",
  "hex",
- "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus)",
+ "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?branch=tiago/abciplus)",
  "ibc 0.12.0 (git+https://github.com/heliaxdev/ibc-rs?rev=30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc)",
- "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus)",
+ "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?branch=tiago/abciplus)",
  "ibc-proto 0.16.0 (git+https://github.com/heliaxdev/ibc-rs?rev=30b3495ac56c6c37c99bc69ef9f2e84c3309c6cc)",
  "ics23",
  "itertools 0.10.3",
@@ -4332,9 +4321,9 @@ dependencies = [
  "sha2 0.9.9",
  "sparse-merkle-tree",
  "tempfile",
- "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
  "test-log",
  "thiserror",
@@ -4387,7 +4376,6 @@ dependencies = [
  "git2",
  "hex",
  "itertools 0.10.3",
- "jsonpath_lib",
  "libc",
  "libloading",
  "libp2p",
@@ -4421,13 +4409,13 @@ dependencies = [
  "sysinfo",
  "tar",
  "tempfile",
- "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "tendermint-config 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-config 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "tendermint-config 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
- "tendermint-rpc 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-rpc 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "tendermint-rpc 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
  "test-log",
  "thiserror",
@@ -4437,7 +4425,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tower",
- "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci?branch=bat/abciplus)",
+ "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci?branch=tiago/abciplus)",
  "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci?rev=f6463388fc319b6e210503b43b3aecf6faf6b200)",
  "tracing 0.1.36",
  "tracing-log",
@@ -6469,7 +6457,6 @@ version = "1.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e55a28e3aaef9d5ce0506d0a14dbba8054ddc7e499ef522dd8b26859ec9d4a44"
 dependencies = [
- "indexmap",
  "itoa",
  "ryu",
  "serde 1.0.144",
@@ -6962,7 +6949,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#d035949ce7129cf54b3d15f29f339de3b643ea24"
 dependencies = [
  "async-trait",
  "bytes 1.2.1",
@@ -6982,7 +6969,7 @@ dependencies = [
  "signature",
  "subtle 2.4.1",
  "subtle-encoding",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "time 0.3.14",
  "zeroize",
 ]
@@ -7018,12 +7005,12 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#d035949ce7129cf54b3d15f29f339de3b643ea24"
 dependencies = [
  "flex-error",
  "serde 1.0.144",
  "serde_json",
- "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "toml",
  "url 2.3.0",
 ]
@@ -7044,13 +7031,13 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#d035949ce7129cf54b3d15f29f339de3b643ea24"
 dependencies = [
  "derive_more",
  "flex-error",
  "serde 1.0.144",
- "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
- "tendermint-rpc 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
+ "tendermint-rpc 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "time 0.3.14",
 ]
 
@@ -7070,7 +7057,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#d035949ce7129cf54b3d15f29f339de3b643ea24"
 dependencies = [
  "bytes 1.2.1",
  "flex-error",
@@ -7104,7 +7091,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#d035949ce7129cf54b3d15f29f339de3b643ea24"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -7122,9 +7109,9 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "subtle-encoding",
- "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
- "tendermint-config 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
+ "tendermint-config 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "thiserror",
  "time 0.3.14",
  "tokio",
@@ -7170,7 +7157,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#2e9e0d058a68e2534974ff7d22b9058d4ebda3be"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#d035949ce7129cf54b3d15f29f339de3b643ea24"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",
@@ -7178,7 +7165,7 @@ dependencies = [
  "serde_json",
  "simple-error",
  "tempfile",
- "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "time 0.3.14",
 ]
 
@@ -7651,13 +7638,13 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci?branch=bat/abciplus#21623a99bdca5b006d53752a1967849bef3b89ea"
+source = "git+https://github.com/heliaxdev/tower-abci?branch=tiago/abciplus#c8d75d9d8e6668de8cc593ab57621651aae2f7f7"
 dependencies = [
  "bytes 1.2.1",
  "futures 0.3.24",
  "pin-project 1.0.12",
  "prost 0.9.0",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus)",
+ "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus)",
  "tokio",
  "tokio-stream",
  "tokio-util 0.6.10",

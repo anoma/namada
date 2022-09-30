@@ -1,9 +1,9 @@
-use jsonpath_lib as jsonpath;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use serde::Serialize;
 
 use crate::cli::safe_exit;
+use crate::facade::tendermint_rpc::event::Event;
 use crate::node::ledger::events::EventType as NamadaEventType;
 
 /// Data needed for broadcasting a tx and
@@ -40,77 +40,59 @@ impl TxResponse {
     /// Searches for custom events emitted from the ledger and converts
     /// them back to thin wrapper around a hashmap for further parsing.
     pub fn parse(
-        json: serde_json::Value,
+        event: Event,
         event_type: NamadaEventType,
         tx_hash: &str,
     ) -> Self {
-        let tx_hash_json = serde_json::Value::String(tx_hash.to_string());
-        let mut selector = jsonpath::selector(&json);
-        let mut index = 0;
+        let events = event.events.expect(
+            "We should have obtained Tx events from the websocket subscription",
+        );
         let evt_key = event_type.to_string();
         // Find the tx with a matching hash
-        let hash = loop {
-            if let Ok(hash) =
-                selector(&format!("$.events.['{}.hash'][{}]", evt_key, index))
-            {
-                let hash = hash[0].clone();
-                if hash == tx_hash_json {
-                    break hash;
-                } else {
-                    index += 1;
+        macro_rules! tx_error {
+            () => {
+                || {
+                    eprintln!(
+                        "Couldn't find tx with hash {tx_hash} in events \
+                         {events:?}",
+                    );
+                    safe_exit(1)
                 }
-            } else {
+            };
+        }
+        let (index, _) = events
+            .get(&format!("{evt_key}.hash"))
+            .unwrap_or_else(tx_error!())
+            .iter()
+            .enumerate()
+            .find(|(_, hash)| hash == &tx_hash)
+            .unwrap_or_else(tx_error!());
+        let info = events[&format!("{evt_key}.info")][index].clone();
+        let log = events[&format!("{evt_key}.log")][index].clone();
+        let height = events[&format!("{evt_key}.height")][index].clone();
+        let code = events[&format!("{evt_key}.code")][index].clone();
+        let gas_used = events[&format!("{evt_key}.gas_used")][index].clone();
+        let initialized_accounts = events
+            [&format!("{evt_key}.initialized_accounts")]
+            .get(index)
+            .as_ref()
+            .map(|initialized_accounts| {
+                serde_json::from_str(initialized_accounts).unwrap()
+            })
+            .unwrap_or_else(|| {
                 eprintln!(
-                    "Couldn't find tx with hash {} in the event string {}",
-                    tx_hash, json
+                    "Tendermint omitted one of the expected indices in events"
                 );
-                safe_exit(1)
-            }
-        };
-        let info =
-            selector(&format!("$.events.['{}.info'][{}]", evt_key, index))
-                .unwrap();
-        let log = selector(&format!("$.events.['{}.log'][{}]", evt_key, index))
-            .unwrap();
-        let height =
-            selector(&format!("$.events.['{}.height'][{}]", evt_key, index))
-                .unwrap();
-        let code =
-            selector(&format!("$.events.['{}.code'][{}]", evt_key, index))
-                .unwrap();
-        let gas_used =
-            selector(&format!("$.events.['{}.gas_used'][{}]", evt_key, index))
-                .unwrap();
-        let initialized_accounts = selector(&format!(
-            "$.events.['{}.initialized_accounts'][{}]",
-            evt_key, index
-        ));
-        let initialized_accounts = match initialized_accounts {
-            Ok(values) if !values.is_empty() => {
-                // In a response, the initialized accounts are encoded as e.g.:
-                // ```
-                // "applied.initialized_accounts": Array([
-                //   String(
-                //     "[\"atest1...\"]",
-                //   ),
-                // ]),
-                // ...
-                // So we need to decode the inner string first ...
-                let raw: String =
-                    serde_json::from_value(values[0].clone()).unwrap();
-                // ... and then decode the vec from the array inside the string
-                serde_json::from_str(&raw).unwrap()
-            }
-            _ => vec![],
-        };
+                Vec::new()
+            });
         TxResponse {
-            info: serde_json::from_value(info[0].clone()).unwrap(),
-            log: serde_json::from_value(log[0].clone()).unwrap(),
-            height: serde_json::from_value(height[0].clone()).unwrap(),
-            hash: serde_json::from_value(hash).unwrap(),
-            code: serde_json::from_value(code[0].clone()).unwrap(),
-            gas_used: serde_json::from_value(gas_used[0].clone()).unwrap(),
+            info,
+            log,
+            height,
+            code,
+            gas_used,
             initialized_accounts,
+            hash: tx_hash.to_string(),
         }
     }
 }

@@ -17,7 +17,7 @@ use eyre::eyre;
 use crate::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_protected_storage, BRIDGE_POOL_ADDRESS,
 };
-use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::proto::SignedTxData;
 use crate::types::address::{xan, Address, InternalAddress};
@@ -58,8 +58,18 @@ where
     /// associated with an address
     fn account_balance_delta(&self, address: &Address) -> Option<SignedAmount> {
         let account_key = balance_key(&xan(), address);
-        let before: Amount = self.ctx.read_pre_value(&account_key)?;
-        let after: Amount = self.ctx.read_post_value(&account_key)?;
+        let before: Amount = (&self.ctx)
+            .read_pre_value(&account_key)
+            .unwrap_or_else(|error| {
+                tracing::warn!(?error, %account_key, "reading pre value");
+                None
+            })?;
+        let after: Amount = (&self.ctx)
+            .read_post_value(&account_key)
+            .unwrap_or_else(|error| {
+                tracing::warn!(?error, %account_key, "reading post value");
+                None
+            })?;
         if before > after {
             Some(SignedAmount::Negative(before - after))
         } else {
@@ -117,11 +127,11 @@ where
         // but that will be a separate PR.
         let pending_key = get_pending_key();
         let pending_pre: HashSet<PendingTransfer> =
-            self.ctx.read_pre_value(&pending_key).ok_or(eyre!(
+            (&self.ctx).read_pre_value(&pending_key)?.ok_or(eyre!(
                 "The bridge pool transfers are missing from storage"
             ))?;
         let pending_post: HashSet<PendingTransfer> =
-            self.ctx.read_post_value(&pending_key).ok_or(eyre!(
+            (&self.ctx).read_post_value(&pending_key)?.ok_or(eyre!(
                 "The bridge pool transfers are missing from storage"
             ))?;
         if !pending_post.contains(&transfer) {

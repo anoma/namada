@@ -8,6 +8,7 @@ use eyre::{eyre, Context};
 
 use crate::types::address::Address;
 use crate::types::hash::Hash;
+use crate::types::keccak::KeccakHash;
 use crate::types::token::Amount;
 
 /// Anoma native type to replace the ethabi::Uint type
@@ -79,20 +80,6 @@ impl FromStr for EthAddress {
         Ok(Self(h160.into()))
     }
 }
-
-/// A Keccak hash
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-)]
-pub struct KeccakHash(pub [u8; 32]);
 
 /// An Ethereum event to be processed by the Anoma ledger
 #[derive(
@@ -290,5 +277,11 @@ pub mod testing {
     pub const DAI_ERC20_ETH_ADDRESS: EthAddress = EthAddress([
         107, 23, 84, 116, 232, 144, 148, 196, 77, 169, 139, 149, 78, 237, 234,
         196, 149, 39, 29, 15,
+    ]);
+    pub const USDC_ERC20_ETH_ADDRESS_CHECKSUMMED: &str =
+        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+    pub const USDC_ERC20_ETH_ADDRESS: EthAddress = EthAddress([
+        160, 184, 105, 145, 198, 33, 139, 54, 193, 209, 157, 74, 46, 158, 176,
+        206, 54, 6, 235, 72,
     ]);
 }

@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::convert::TryFrom;
 use std::env;
 use std::fs::File;
 use std::time::Duration;
@@ -31,11 +30,9 @@ use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::signing::{find_keypair, sign_tx};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
-use crate::client::tendermint_websocket_client::{
-    Error as WsError, TendermintWebsocketClient, WebSocketAddress,
-};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::query::{EventType, Query};
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::events::EventType as NamadaEventType;
@@ -57,8 +54,13 @@ const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const VP_NFT: &str = "vp_nft.wasm";
 
-const ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: &str =
-    "ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT";
+/// Timeout for jsonrpc requests to the `/events` endpoint in Tendermint.
+const ENV_VAR_ANOMA_TENDERMINT_RPC_TIMEOUT: &str =
+    "ANOMA_TENDERMINT_RPC_TIMEOUT";
+
+/// Default timeout in seconds for jsonrpc requests to the `/events` endpoint in
+/// Tendermint.
+const DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT: u64 = 30;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
@@ -1130,7 +1132,7 @@ async fn save_initialized_accounts(
 pub async fn broadcast_tx(
     address: TendermintAddress,
     to_broadcast: &TxBroadcastData,
-) -> Result<Response, WsError> {
+) -> Result<Response, RpcError> {
     let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
@@ -1140,28 +1142,12 @@ pub async fn broadcast_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    let websocket_timeout =
-        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
-            if let Ok(timeout) = val.parse::<u64>() {
-                Duration::new(timeout, 0)
-            } else {
-                Duration::new(300, 0)
-            }
-        } else {
-            Duration::new(300, 0)
-        };
+    let rpc_cli = HttpClient::new(address)?;
 
-    let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
-        WebSocketAddress::try_from(address.clone())?,
-        Some(websocket_timeout),
-    )?;
+    // TODO: timeout?
+    let response = rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await?;
 
-    let response = wrapper_tx_subscription
-        .broadcast_tx_sync(tx.to_bytes().into())
-        .await
-        .map_err(|err| WsError::Response(format!("{:?}", err)))?;
-
-    wrapper_tx_subscription.close();
+    drop(rpc_cli);
 
     if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
@@ -1173,7 +1159,7 @@ pub async fn broadcast_tx(
         }
         Ok(response)
     } else {
-        Err(WsError::Response(serde_json::to_string(&response).unwrap()))
+        Err(RpcError::server(serde_json::to_string(&response).unwrap()))
     }
 }
 
@@ -1188,7 +1174,7 @@ pub async fn broadcast_tx(
 pub async fn submit_tx(
     address: TendermintAddress,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, WsError> {
+) -> Result<TxResponse, RpcError> {
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
@@ -1198,52 +1184,28 @@ pub async fn submit_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    let websocket_timeout =
-        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
+    let rpc_timeout =
+        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_RPC_TIMEOUT) {
             if let Ok(timeout) = val.parse::<u64>() {
-                Duration::new(timeout, 0)
+                Duration::from_secs(timeout)
             } else {
-                Duration::new(300, 0)
+                Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT)
             }
         } else {
-            Duration::new(300, 0)
+            Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT)
         };
     tracing::debug!("Tenderming address: {:?}", address);
-    let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
-        WebSocketAddress::try_from(address.clone())?,
-        Some(websocket_timeout),
-    )?;
-
-    // It is better to subscribe to the transaction before it is broadcast
-    //
-    // Note that the `APPLIED_QUERY_KEY` key comes from a custom event
-    // created by the shell
-    let query = Query::from(EventType::NewBlock)
-        .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
-    wrapper_tx_subscription.subscribe(query)?;
-
-    // We also subscribe to the event emitted when the encrypted
-    // payload makes its way onto the blockchain
-    let mut decrypted_tx_subscription = {
-        let mut decrypted_tx_subscription = TendermintWebsocketClient::open(
-            WebSocketAddress::try_from(address.clone())?,
-            Some(websocket_timeout),
-        )?;
-        let query = Query::from(EventType::NewBlock)
-            .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
-        decrypted_tx_subscription.subscribe(query)?;
-        decrypted_tx_subscription
-    };
+    let rpc_cli = HttpClient::new(address.clone())?;
 
     // Broadcast the supplied transaction
     broadcast_tx(address, &to_broadcast).await?;
 
     let parsed = {
-        let parsed = TxResponse::parse(
-            wrapper_tx_subscription.receive_response()?,
-            NamadaEventType::Accepted,
-            wrapper_hash,
-        );
+        let wrapper_query = Query::from(EventType::NewBlock)
+            .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
+        let event = rpc_cli.events(wrapper_query, rpc_timeout).await?.into();
+        let parsed =
+            TxResponse::parse(event, NamadaEventType::Accepted, wrapper_hash);
 
         println!(
             "Transaction accepted with result: {}",
@@ -1252,8 +1214,14 @@ pub async fn submit_tx(
         // The transaction is now on chain. We wait for it to be decrypted
         // and applied
         if parsed.code == 0.to_string() {
+            // We also listen to the event emitted when the encrypted
+            // payload makes its way onto the blockchain
+            let decrypted_query = Query::from(EventType::NewBlock)
+                .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
+            let event =
+                rpc_cli.events(decrypted_query, rpc_timeout).await?.into();
             let parsed = TxResponse::parse(
-                decrypted_tx_subscription.receive_response()?,
+                event,
                 NamadaEventType::Applied,
                 decrypted_hash.as_str(),
             );
@@ -1267,9 +1235,5 @@ pub async fn submit_tx(
         }
     };
 
-    wrapper_tx_subscription.unsubscribe()?;
-    wrapper_tx_subscription.close();
-    decrypted_tx_subscription.unsubscribe()?;
-    decrypted_tx_subscription.close();
     parsed
 }
