@@ -30,7 +30,7 @@ use super::setup::working_dir;
 use crate::e2e::helpers::{
     find_address, find_voting_power, get_actor_rpc, get_epoch,
 };
-use crate::e2e::setup::{self, sleep, Bin, Who};
+use crate::e2e::setup::{self, sleep, Bin, Test, Who};
 use crate::{run, run_as};
 
 fn update_actor_config<F>(test: &Test, chain_id: &ChainId, who: &Who, update: F)
