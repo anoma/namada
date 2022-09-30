@@ -829,22 +829,6 @@ where
         self.write(&total_deltas_key(), encode(value)).unwrap();
     }
 
-    fn init_staking_reward_account(
-        &mut self,
-        address: &Self::Address,
-        pk: &Self::PublicKey,
-    ) {
-        // let user_vp =
-        //     std::fs::read("wasm/vp_user.wasm").expect("cannot load user VP");
-        // // The staking reward accounts are setup with a user VP
-        // self.write(&Key::validity_predicate(address), user_vp.to_vec())
-        //     .unwrap();
-
-        // Write the public key
-        let pk_key = key::pk_key(address);
-        self.write(&pk_key, encode(pk)).unwrap();
-    }
-
     fn credit_tokens(
         &mut self,
         token: &Self::Address,

@@ -794,12 +794,6 @@ pub trait PosBase {
     fn write_validator_set(&mut self, value: &ValidatorSets<Self::Address>);
     /// Write total deltas in PoS for all validators (active and inactive)
     fn write_total_deltas(&mut self, value: &TotalDeltas<Self::TokenChange>);
-    /// Initialize staking reward account with the given public key.
-    fn init_staking_reward_account(
-        &mut self,
-        address: &Self::Address,
-        pk: &Self::PublicKey,
-    );
     /// Credit tokens to the `target` account. This should only be used at
     /// genesis.
     fn credit_tokens(

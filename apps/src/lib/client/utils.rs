@@ -517,24 +517,6 @@ pub fn init_network(
             keypair.ref_to()
         });
 
-        let staking_reward_pk = try_parse_public_key(
-            format!("validator {name} staking reward key"),
-            &config.staking_reward_public_key,
-        )
-        .unwrap_or_else(|| {
-            let alias = format!("{}-reward-key", name);
-            println!(
-                "Generating validator {} staking reward account key...",
-                name
-            );
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                unsafe_dont_encrypt,
-            );
-            keypair.ref_to()
-        });
-
         let protocol_pk = try_parse_public_key(
             format!("validator {name} protocol key"),
             &config.protocol_public_key,
@@ -582,8 +564,6 @@ pub fn init_network(
             Some(genesis_config::HexString(consensus_pk.to_string()));
         config.account_public_key =
             Some(genesis_config::HexString(account_pk.to_string()));
-        config.staking_reward_public_key =
-            Some(genesis_config::HexString(staking_reward_pk.to_string()));
 
         config.protocol_public_key =
             Some(genesis_config::HexString(protocol_pk.to_string()));
@@ -940,9 +920,6 @@ pub fn init_genesis_validator(
                 )),
                 account_public_key: Some(HexString(
                     pre_genesis.account_key.ref_to().to_string(),
-                )),
-                staking_reward_public_key: Some(HexString(
-                    pre_genesis.rewards_key.ref_to().to_string(),
                 )),
                 protocol_public_key: Some(HexString(
                     pre_genesis

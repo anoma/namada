@@ -1674,7 +1674,6 @@ fn test_genesis_validators() -> Result<()> {
             config.tokens = Some(200000);
             config.non_staked_balance = Some(1000000000000);
             config.validator_vp = Some("vp_user".into());
-            config.staking_reward_vp = Some("vp_user".into());
             // Setup the validator ports same as what
             // `setup::add_validators` would do
             let mut net_address = net_address_0;

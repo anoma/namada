@@ -159,8 +159,6 @@ pub mod genesis_config {
         pub consensus_public_key: Option<HexString>,
         // Public key for validator account. (default: generate)
         pub account_public_key: Option<HexString>,
-        // Public key for staking reward account. (default: generate)
-        pub staking_reward_public_key: Option<HexString>,
         // Public protocol signing key for validator account. (default:
         // generate)
         pub protocol_public_key: Option<HexString>,
@@ -181,8 +179,6 @@ pub mod genesis_config {
         pub max_commission_rate_change: Option<Decimal>,
         // Filename of validator VP. (default: default validator VP)
         pub validator_vp: Option<String>,
-        // Filename of staking reward account VP. (default: user VP)
-        pub staking_reward_vp: Option<String>,
         // IP:port of the validator. (used in generation only)
         pub net_address: Option<String>,
         /// Tendermint node key is used to derive Tendermint node ID for node
@@ -298,8 +294,6 @@ pub mod genesis_config {
     ) -> Validator {
         let validator_vp_name = config.validator_vp.as_ref().unwrap();
         let validator_vp_config = wasm.get(validator_vp_name).unwrap();
-        let reward_vp_name = config.staking_reward_vp.as_ref().unwrap();
-        let reward_vp_config = wasm.get(reward_vp_name).unwrap();
 
         Validator {
             pos_data: GenesisValidator {
@@ -362,16 +356,6 @@ pub mod genesis_config {
                 .sha256
                 .clone()
                 .unwrap()
-                .to_sha256_bytes()
-                .unwrap(),
-            reward_vp_code_path: reward_vp_config.filename.to_owned(),
-            reward_vp_sha256: reward_vp_config
-                .sha256
-                .clone()
-                .unwrap_or_else(|| {
-                    eprintln!("Unknown validator VP WASM sha256");
-                    cli::safe_exit(1);
-                })
                 .to_sha256_bytes()
                 .unwrap(),
         }
@@ -698,10 +682,6 @@ pub struct Validator {
     pub validator_vp_code_path: String,
     /// Expected SHA-256 hash of the validator VP
     pub validator_vp_sha256: [u8; 32],
-    /// Staking reward account code WASM
-    pub reward_vp_code_path: String,
-    /// Expected SHA-256 hash of the staking reward VP
-    pub reward_vp_sha256: [u8; 32],
 }
 
 #[derive(
@@ -794,8 +774,6 @@ pub fn genesis() -> Genesis {
         // TODO replace with https://github.com/anoma/anoma/issues/25)
         validator_vp_code_path: vp_user_path.into(),
         validator_vp_sha256: Default::default(),
-        reward_vp_code_path: vp_user_path.into(),
-        reward_vp_sha256: Default::default(),
     };
     let parameters = Parameters {
         epoch_duration: EpochDuration {
@@ -899,14 +877,10 @@ pub mod tests {
         let keypair: common::SecretKey =
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
         let kp_arr = keypair.try_to_vec().unwrap();
-        let staking_reward_keypair: common::SecretKey =
-            ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
-        let srkp_arr = staking_reward_keypair.try_to_vec().unwrap();
         let (protocol_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
         println!("address: {}", address);
         println!("keypair: {:?}", kp_arr);
-        println!("staking_reward_keypair: {:?}", srkp_arr);
         println!("protocol_keypair: {:?}", protocol_keypair);
         println!("dkg_keypair: {:?}", dkg_keypair.try_to_vec().unwrap());
     }
