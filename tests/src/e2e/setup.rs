@@ -652,10 +652,10 @@ where
     S: AsRef<OsStr>,
 {
     // Root cargo workspace manifest path
-    let bin_name = match bin {
-        Bin::Node => "namadan",
-        Bin::Client => "namadac",
-        Bin::Wallet => "namadaw",
+    let (bin_name, log_level) = match bin {
+        Bin::Node => ("namadan", "info"),
+        Bin::Client => ("namadac", "tendermint_rpc=debug"),
+        Bin::Wallet => ("namadaw", "info"),
     };
 
     let mut run_cmd = generate_bin_command(
@@ -664,7 +664,7 @@ where
     );
 
     run_cmd
-        .env("ANOMA_LOG", "info")
+        .env("ANOMA_LOG", log_level)
         .env("TM_LOG_LEVEL", "info")
         .env("ANOMA_LOG_COLOR", "false")
         .current_dir(working_dir)
