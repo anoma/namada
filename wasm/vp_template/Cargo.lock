@@ -1153,7 +1153,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.12.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus#c3bdd9100094ad80e259617184e813a7c2e2db76"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=tiago/abciplus#90a02f8b350bef86bd67ce613e94405eb3594e94"
 dependencies = [
  "bytes",
  "derive_more",
@@ -1180,7 +1180,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.16.0"
-source = "git+https://github.com/heliaxdev/ibc-rs?branch=bat/abciplus#c3bdd9100094ad80e259617184e813a7c2e2db76"
+source = "git+https://github.com/heliaxdev/ibc-rs?branch=tiago/abciplus#90a02f8b350bef86bd67ce613e94405eb3594e94"
 dependencies = [
  "bytes",
  "prost",
@@ -2647,7 +2647,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#4b64103c372c67c1969c3a681f2746f115d1a5ca"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2675,7 +2675,7 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#4b64103c372c67c1969c3a681f2746f115d1a5ca"
 dependencies = [
  "flex-error",
  "serde",
@@ -2688,7 +2688,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#4b64103c372c67c1969c3a681f2746f115d1a5ca"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -2701,7 +2701,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#4b64103c372c67c1969c3a681f2746f115d1a5ca"
 dependencies = [
  "bytes",
  "flex-error",
@@ -2718,7 +2718,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#4b64103c372c67c1969c3a681f2746f115d1a5ca"
 dependencies = [
  "bytes",
  "flex-error",
@@ -2742,7 +2742,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?branch=bat/abciplus#4c7ba08825559cdac12c9acae2bf63b396d8b0ca"
+source = "git+https://github.com/heliaxdev/tendermint-rs?branch=tiago/abciplus#4b64103c372c67c1969c3a681f2746f115d1a5ca"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",
