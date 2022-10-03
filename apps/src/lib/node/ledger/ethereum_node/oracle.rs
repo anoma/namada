@@ -3,7 +3,7 @@ use std::ops::Deref;
 use clarity::Address;
 use namada::types::ethereum_events::{EthAddress, EthereumEvent};
 use num256::Uint256;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{Sender as BoundedSender};
 use tokio::sync::oneshot::Sender;
 use tokio::task::LocalSet;
 #[cfg(not(test))]
@@ -14,7 +14,7 @@ use super::events::{signatures, PendingEvent};
 use super::test_tools::mock_web3_client::Web3;
 
 /// Minimum number of confirmations needed to trust an Ethereum branch
-pub(crate) const MIN_CONFIRMATIONS: u64 = 50;
+pub(crate) const MIN_CONFIRMATIONS: u64 = 100;
 
 /// Dummy addresses for smart contracts
 const MINT_CONTRACT: EthAddress = EthAddress([0; 20]);
@@ -28,7 +28,7 @@ pub struct Oracle {
     client: Web3,
     /// A channel for sending processed and confirmed
     /// events to the ledger process
-    sender: UnboundedSender<EthereumEvent>,
+    sender: BoundedSender<EthereumEvent>,
     /// A channel to signal that the ledger should shut down
     /// because the Oracle has stopped
     abort: Option<Sender<()>>,
@@ -55,7 +55,7 @@ impl Oracle {
     /// Initialize a new [`Oracle`]
     pub fn new(
         url: &str,
-        sender: UnboundedSender<EthereumEvent>,
+        sender: BoundedSender<EthereumEvent>,
         abort: Sender<()>,
     ) -> Self {
         Self {
@@ -69,12 +69,16 @@ impl Oracle {
     /// ledger. Returns a boolean indicating that all sent
     /// successfully. If false is returned, the receiver
     /// has hung up.
-    fn send(&self, events: Vec<EthereumEvent>) -> bool {
-        events
-            .into_iter()
-            .map(|event| self.sender.send(event))
-            .all(|res| res.is_ok())
-            && !self.sender.is_closed()
+    ///
+    /// N.B. this will block if the internal channel buffer
+    /// is full.
+    async fn send(&self, events: Vec<EthereumEvent>) -> bool {
+        for event in events.into_iter() {
+            if self.sender.send(event).await.is_err() {
+                return false;
+            }
+        }
+        !self.sender.is_closed()
     }
 
     /// Check if the receiver in the ledger has hung up.
@@ -88,7 +92,7 @@ impl Oracle {
 /// processes and forwards Ethereum events to the ledger
 pub fn run_oracle(
     url: impl AsRef<str>,
-    sender: UnboundedSender<EthereumEvent>,
+    sender: BoundedSender<EthereumEvent>,
     abort_sender: Sender<()>,
 ) -> tokio::task::JoinHandle<()> {
     let url = url.as_ref().to_owned();
@@ -192,7 +196,7 @@ async fn run_oracle_aux(oracle: Oracle) {
                 }
             };
             pending.append(&mut events);
-            if !oracle.send(process_queue(&latest_block, &mut pending)) {
+            if !oracle.send(process_queue(&latest_block, &mut pending)).await {
                 tracing::info!(
                     "Ethereum oracle could not send events to the ledger; the \
                      receiver has hung up. Shutting down"
@@ -240,14 +244,14 @@ mod test_oracle {
     struct TestPackage {
         oracle: Oracle,
         admin_channel: tokio::sync::mpsc::UnboundedSender<TestCmd>,
-        eth_recv: tokio::sync::mpsc::UnboundedReceiver<EthereumEvent>,
+        eth_recv: tokio::sync::mpsc::Receiver<EthereumEvent>,
         abort_recv: Receiver<()>,
     }
 
     /// Set up an oracle with a mock web3 client that we can contr
     fn setup() -> TestPackage {
         let (admin_channel, client) = Web3::setup();
-        let (eth_sender, eth_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
         let (abort, abort_recv) = channel();
         TestPackage {
             oracle: Oracle {
@@ -474,7 +478,7 @@ mod test_oracle {
         // increase block height so first event is confirmed but second is
         // not.
         admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(102u32)))
+            .send(TestCmd::NewHeight(Uint256::from(105u32)))
             .expect("Test failed");
         // check the correct event is received
         let event = eth_recv.blocking_recv().expect("Test failed");
