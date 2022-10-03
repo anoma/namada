@@ -215,7 +215,7 @@ mod tests {
             Some(v) if *v == FractionalVotingPower::new(100, 300).unwrap()
         );
         assert_matches!(
-            voting_powers.get(&(validator_2, BlockHeight(100))), 
+            voting_powers.get(&(validator_2, BlockHeight(100))),
             Some(v) if *v == FractionalVotingPower::new(200, 300).unwrap()
         );
     }
