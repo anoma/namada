@@ -14,11 +14,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let amount = match maybe_value(storage, key)? {
-        Some(amount) => amount,
-        None => Amount::from(0),
-    };
-    Ok(amount)
+    Ok(maybe_value(storage, key)?.unwrap_or_default())
 }
 
 /// Read some arbitrary value from storage, erroring if it's not found
