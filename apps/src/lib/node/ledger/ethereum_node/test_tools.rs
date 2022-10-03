@@ -32,12 +32,12 @@ pub mod mock_oracle {
 
     use namada::types::ethereum_events::EthereumEvent;
     use tokio::macros::support::poll_fn;
-    use tokio::sync::mpsc::UnboundedSender;
+    use tokio::sync::mpsc::Sender as BoundedSender;
     use tokio::sync::oneshot::Sender;
 
     pub fn run_oracle(
         _: impl AsRef<str>,
-        _: UnboundedSender<EthereumEvent>,
+        _: BoundedSender<EthereumEvent>,
         mut abort: Sender<()>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
@@ -53,7 +53,7 @@ pub mod mock_oracle {
 pub mod event_endpoint {
     use borsh::BorshDeserialize;
     use namada::types::ethereum_events::EthereumEvent;
-    use tokio::sync::mpsc::UnboundedSender;
+    use tokio::sync::mpsc::Sender as BoundedSender;
 
     const ETHEREUM_EVENTS_ENDPOINT: ([u8; 4], u16) = ([127, 0, 0, 1], 3030);
 
@@ -61,7 +61,7 @@ pub mod event_endpoint {
     const PATH: &str = "eth_events";
 
     pub fn start_oracle(
-        sender: UnboundedSender<EthereumEvent>,
+        sender: BoundedSender<EthereumEvent>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             use warp::Filter;
@@ -87,7 +87,7 @@ pub mod event_endpoint {
                         }
                     };
                     tracing::debug!("Serialized event - {:#?}", event);
-                    match sender.send(event) {
+                    match sender.try_send(event) {
                         Ok(()) => warp::reply::with_status(
                             "OK",
                             warp::http::StatusCode::OK,
