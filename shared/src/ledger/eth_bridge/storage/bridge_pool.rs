@@ -215,7 +215,7 @@ impl BridgePoolTree {
             hashes = next_hashes;
         }
         // add the root to the proof
-        if proof_hashes.is_empty() {
+        if flags.is_empty() && proof_hashes.is_empty() && leaves.is_empty() {
             proof_hashes.push(self.root.clone());
         }
 
@@ -297,9 +297,13 @@ impl BridgePoolProof {
             return false;
         }
         if self.flags.is_empty() {
-            return match self.proof.last() {
-                Some(proof_root) => &root == proof_root,
-                None => false,
+            return if let Some(leaf) = self.leaves.last() {
+                root == leaf.keccak256()
+            } else {
+                match self.proof.last() {
+                    Some(proof_root) => &root == proof_root,
+                    None => false,
+                }
             };
         }
         let total_hashes = self.flags.len();
@@ -349,6 +353,10 @@ impl BridgePoolProof {
 #[cfg(test)]
 mod test_bridge_pool_tree {
     use std::array;
+
+    use itertools::Itertools;
+    use proptest::prelude::*;
+
     use super::*;
     use crate::types::ethereum_events::EthAddress;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
@@ -574,7 +582,7 @@ mod test_bridge_pool_tree {
         assert!(!tree.contains_key(&Key::from(&transfer)).expect("Test failed"));
     }
 
-    /// Test that the empty proof works
+    /// Test that the empty proof works.
     #[test]
     fn test_empty_proof() {
         let tree = BridgePoolTree::default();
@@ -584,6 +592,30 @@ mod test_bridge_pool_tree {
         assert!(proof.verify(Default::default()));
     }
 
+    /// Test that the proof works for proving the only leaf in the tree
+    #[test]
+    fn test_single_leaf() {
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([0; 20]),
+                recipient: EthAddress([0; 20]),
+                amount: 0.into(),
+                nonce: 0.into()
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address()
+            }
+        };
+        let mut tree = BridgePoolTree::default();
+        let key = Key::from(&transfer);
+        let _ = tree.update_key(&key).expect("Test failed");
+        let proof = tree.get_membership_proof(array::from_ref(&key), vec![transfer]).expect("Test failed");
+        assert!(proof.verify(tree.root().into()));
+    }
+
+    /// Check proofs for membership of single transfer
+    /// in a tree with two leaves.
     #[test]
     fn test_one_leaf_of_two_proof() {
         let mut tree = BridgePoolTree::default();
@@ -645,6 +677,7 @@ mod test_bridge_pool_tree {
         assert!(proof.verify(tree.root().into()));
     }
 
+    /// Test that proving an empty subset of leaves always works
     #[test]
     fn test_proof_no_leaves() {
         let mut tree = BridgePoolTree::default();
@@ -675,6 +708,34 @@ mod test_bridge_pool_tree {
     /// Test a proof for all the leaves
     #[test]
     fn test_proof_all_leaves() {
+        let mut tree = BridgePoolTree::default();
+        let mut transfers = vec![];
+        for i in 0..2 {
+            let transfer = PendingTransfer {
+                transfer: TransferToEthereum {
+                    asset: EthAddress([i;20]),
+                    recipient: EthAddress([i+1; 20]),
+                    amount: (i as u64).into(),
+                    nonce: 42u64.into(),
+                },
+                gas_fee: GasFee {
+                    amount: 0.into(),
+                    payer: bertha_address(),
+                }
+            };
+            let key = Key::from(&transfer);
+            transfers.push(transfer);
+            let _ = tree.update_key(&key).expect("Test failed");
+        }
+        transfers.sort_by_key(|t| t.keccak256());
+        let keys: Vec<_> = transfers.iter().map(Key::from).collect();
+        let proof = tree.get_membership_proof(&keys, transfers).expect("Test failed");
+        assert!(proof.verify(tree.root().into()));
+    }
+
+    /// Test a proof for all the leaves when the number of leaves is odd
+    #[test]
+    fn test_proof_all_leaves_odd() {
         let mut tree = BridgePoolTree::default();
         let mut transfers = vec![];
         for i in 0..3 {
@@ -735,5 +796,74 @@ mod test_bridge_pool_tree {
             .collect();
         let proof = tree.get_membership_proof(&keys, values).expect("Test failed");
         assert!(proof.verify(tree.root().into()));
+    }
+
+    /// Create a random set of transfers.
+    fn random_transfers(number: usize) -> impl Strategy<Value=Vec<PendingTransfer>> {
+        prop::collection::vec(
+            (
+                prop::array::uniform20(0u8..),
+                prop::num::u64::ANY,
+            ),
+            0..=number,
+        )
+        .prop_flat_map( | addrs |
+            Just(
+                addrs.into_iter().map(| (addr, nonce)|
+                    PendingTransfer {
+                        transfer: TransferToEthereum {
+                            asset: EthAddress(addr.clone()),
+                            recipient: EthAddress(addr),
+                            amount: Default::default(),
+                            nonce: nonce.into()
+                        },
+                        gas_fee: GasFee {
+                            amount: Default::default(),
+                            payer: bertha_address()
+                        }
+                    },
+                )
+                .dedup()
+                .collect::<Vec<PendingTransfer>>()
+            )
+        )
+    }
+
+    prop_compose! {
+        /// Creates a random set of transfers and
+        /// then returns them along with a chosen subset.
+        fn arb_transfers_and_subset()
+        (transfers in random_transfers(50))
+        (
+            transfers in Just(transfers.clone()),
+            to_prove in proptest::sample::subsequence(transfers.clone(), 0..=transfers.len()),
+        )
+        -> (Vec<PendingTransfer>, Vec<PendingTransfer>) {
+            (transfers, to_prove)
+        }
+    }
+
+    proptest!{
+        /// Given a random tree and a subset of leaves,
+        /// verify that the constructed multi-proof correctly
+        /// verifies.
+        #[test]
+        fn test_verify_proof((transfers, mut to_prove) in arb_transfers_and_subset()) {
+            let mut tree = BridgePoolTree::default();
+            for transfer in &transfers {
+                let key = Key::from(transfer);
+                let _ = tree.update_key(&key).expect("Test failed");
+            }
+
+            to_prove.sort_by_key(|t| t.keccak256());
+            let mut keys = vec![];
+            let mut values = vec![];
+            for transfer in to_prove.into_iter() {
+                keys.push(Key::from(&transfer));
+                values.push(transfer);
+            }
+            let proof = tree.get_membership_proof(&keys, values).expect("Test failed");
+            assert!(proof.verify(tree.root().into()));
+        }
     }
 }
