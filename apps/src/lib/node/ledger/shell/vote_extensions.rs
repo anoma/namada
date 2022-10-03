@@ -267,7 +267,7 @@ pub fn deserialize_vote_extensions(
     })
 }
 
-/// Given a `Vec` of [`ExtendedVoteInfo`], return an iterator over the
+/// Given a slice of [`TxBytes`], return an iterator over the
 /// ones we could deserialize to [`VoteExtension`]
 /// instances.
 #[cfg(not(feature = "abcipp"))]
