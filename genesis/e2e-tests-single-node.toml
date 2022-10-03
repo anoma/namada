@@ -146,7 +146,7 @@ max_expected_time_per_block = 30
 vp_whitelist = []
 # tx whitelist
 tx_whitelist = []
-# Expect number of epochs per year
+# Expected number of epochs per year
 epochs_per_year = 365
 # The P gain factor in the Proof of Stake rewards controller
 pos_gain_p = 0.1

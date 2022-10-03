@@ -22,7 +22,7 @@ pub mod validation;
 use core::fmt::Debug;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
-use std::fmt::{Display, Error};
+use std::fmt::Display;
 use std::hash::Hash;
 use std::num::TryFromIntError;
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
@@ -357,6 +357,7 @@ pub trait PosActions: PosReadOnly {
         let mut total_deltas = self.read_total_deltas()?;
         let mut validator_set = self.read_validator_set()?;
 
+        // Update/initialize and then write the bond data to storage
         let BondData {
             bond,
             validator_deltas,
@@ -541,11 +542,7 @@ pub trait PosActions: PosReadOnly {
                 }
             };
         let rate_at_pipeline = *commission_rates
-            .get_at_offset(
-                current_epoch,
-                DynEpochOffset::PipelineLen,
-                params,
-            )
+            .get_at_offset(current_epoch, DynEpochOffset::PipelineLen, params)
             .expect("Could not find a rate in given epoch");
         if new_rate == rate_at_pipeline {
             return Err(CommissionRateChangeError::ChangeIsZero(
@@ -555,7 +552,7 @@ pub trait PosActions: PosReadOnly {
 
         let rate_before_pipeline = *commission_rates
             .get_at_offset(
-                current_epoch-1,
+                current_epoch - 1,
                 DynEpochOffset::PipelineLen,
                 params,
             )
@@ -575,13 +572,10 @@ pub trait PosActions: PosReadOnly {
             DynEpochOffset::PipelineLen,
             params,
         );
-        self.write_validator_commission_rate(
-            validator,
-            commission_rates,
-        )
-        .map_err(|_| CommissionRateChangeError::CannotWrite(validator))
-        .unwrap();
-        
+        self.write_validator_commission_rate(validator, commission_rates)
+            .map_err(|_| CommissionRateChangeError::CannotWrite(validator))
+            .unwrap();
+
         Ok(())
     }
 }
@@ -998,7 +992,8 @@ pub trait PosBase {
         current_epoch: impl Into<Epoch>,
         proposer_address: &Self::Address,
         votes: &Vec<VoteInfo>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), InflationError> {
+        println!("\nInside PosBase::log_block_rewards()");
         let current_epoch: Epoch = current_epoch.into();
         let validator_set = self.read_validator_set();
         let validators = validator_set.get(current_epoch).unwrap();
@@ -1013,6 +1008,9 @@ pub trait PosBase {
                  address: _,
              }| { sum + *bonded_stake },
         );
+
+        dbg!(total_active_stake);
+        dbg!(votes.len());
 
         let mut signer_set: HashSet<Self::Address> = HashSet::new();
         let mut total_signing_stake: u64 = 0;
@@ -1034,6 +1032,8 @@ pub trait PosBase {
             signer_set.insert(native_address);
             total_signing_stake += vote.validator_vp;
         }
+        dbg!(total_signing_stake.clone());
+        dbg!(signer_set.clone());
 
         let active_val_stake: Decimal = total_active_stake.into();
         let signing_stake: Decimal = total_signing_stake.into();
@@ -1045,7 +1045,6 @@ pub trait PosBase {
             total_active_stake,
         );
 
-        rewards_calculator.set_reward_coeffs().unwrap();
 
         // Iterate over validators, calculating their fraction of the block
         // rewards accounting for possible block proposal and signing
@@ -1087,6 +1086,7 @@ pub trait PosBase {
         self.write_consensus_validator_rewards_accumulator(
             &validator_accumulators,
         );
+
         Ok(())
     }
 
@@ -1136,8 +1136,6 @@ pub trait PosBase {
         self.write_validator_set(&validator_set);
         self.write_total_deltas(&total_deltas);
 
-        // TODO: write total staked tokens (Amount) to storage?
-
         // Transfer the slashed tokens to the PoS slash pool
         self.transfer(
             &Self::staking_token_address(),
@@ -1154,6 +1152,13 @@ pub trait PosBase {
 pub enum GenesisError {
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum InflationError {
+    #[error("Error")]
+    Error,
 }
 
 #[allow(missing_docs)]
@@ -1757,11 +1762,13 @@ where
         pos_deltas: HashMap::default(),
         neg_deltas: TokenAmount::default(),
     };
-    // Initialize the bond at the pipeline offset
+    // Initialize the new bond at the pipeline offset
     let update_offset = DynEpochOffset::PipelineLen;
     value
         .pos_deltas
         .insert(current_epoch + update_offset.value(params), amount);
+    // If bond deltas do not exist, initialize them; otherwise, add to existing
+    // ones
     let bond = match current_bond {
         None => EpochedDelta::init_at_offset(
             value,
@@ -1775,9 +1782,7 @@ where
         }
     };
 
-    // Update validator set. This has to be done before we update the
-    // `validator_deltas`, because we need to look-up the validator with
-    // its voting power before the change.
+    // Update validator set.
     let token_change = TokenChange::from(amount);
     update_validator_set(
         params,
@@ -1912,7 +1917,7 @@ where
     let to_unbond = &mut to_unbond;
     let mut slashed_amount = TokenAmount::default();
     // Decrement the bond deltas starting from the rightmost value (a bond in a
-    // future-most epoch) until whole amount is decremented
+    // future-most epoch) until the entire amount is decremented
     bond.rev_while(
         |bonds, _epoch| {
             for (epoch_start, bond_delta) in bonds.pos_deltas.iter() {

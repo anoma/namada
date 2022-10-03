@@ -85,7 +85,9 @@ impl AbcippShim {
     /// Run the shell's blocking loop that receives messages from the
     /// [`AbciService`].
     pub fn run(mut self) {
+        println!("\nStarting AbcippShim::run\n");
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
+            println!("REQUEST RECEIVED");
             let resp = match req {
                 Req::ProcessProposal(proposal) => self
                     .service

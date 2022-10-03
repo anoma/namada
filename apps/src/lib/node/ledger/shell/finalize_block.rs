@@ -53,14 +53,22 @@ where
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
-        // reset gas meter before we start
+        // Reset the gas meter before we start
         self.gas_meter.reset();
 
         let mut response = shim::response::FinalizeBlock::default();
-        // begin the next block and check if a new epoch began
+
+        // Begin the next block and check if a new epoch began
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
         let (current_epoch, _gas) = self.storage.get_current_epoch();
+
+        dbg!(self.storage.last_height);
+        dbg!(self.storage.last_epoch);
+        dbg!(self.storage.block.height);
+        dbg!(self.storage.block.epoch);
+        dbg!(height);
+        dbg!(current_epoch);
 
         if new_epoch {
             let _proposals_result =
@@ -249,17 +257,6 @@ where
 
         if new_epoch {
             self.update_epoch(&mut response);
-            self.apply_inflation(
-                &current_epoch,
-                &req.proposer_address,
-                &req.votes,
-            );
-        } else {
-            self.apply_block_rewards(
-                &current_epoch,
-                &req.proposer_address,
-                &req.votes,
-            );
         }
 
         let _ = self
@@ -361,7 +358,7 @@ where
                 "Unable to find native validator address of block proposer \
                  from tendermint raw hash",
             );
-
+        
         self.storage
             .log_block_rewards(*current_epoch, &native_proposer_address, votes)
             .unwrap();
@@ -381,7 +378,7 @@ where
         //
         // MASP is included below just for some completeness.
 
-        // read from Parameters storage
+        // Read from Parameters storage
         let epochs_per_year: u64 = self
             .read_storage_key(&params_storage::get_epochs_per_year_key())
             .unwrap();
@@ -398,7 +395,7 @@ where
             .read_storage_key(&params_storage::get_pos_gain_d_key())
             .unwrap();
 
-        // read from PoS storage
+        // Read from PoS storage
         let total_tokens = self
             .read_storage_key(&total_supply_key(&staking_token_address()))
             .unwrap();
@@ -507,17 +504,19 @@ where
                  from tendermint raw hash",
             );
 
-        // Calculate the fraction block rewards and update the accumulator
+        // Calculate the fractional block rewards and update the accumulator
         // amounts for each of the consensus validators
         self.storage
             .log_block_rewards(*current_epoch, &native_proposer_address, votes)
             .unwrap();
-
+        
         // Calculate the reward token amount for each consensus validator and
         // update the rewards products
         //
         // TODO: update implementation using lazy DS and be more
         // memory-efficient
+
+        // Get the number of blocks in this past epoch
         let first_block_of_this_epoch: u64 = self
             .storage
             .block
@@ -594,6 +593,7 @@ where
 
         if reward_tokens_remaining > 0 {
             // TODO: do something here?
+            dbg!(reward_tokens_remaining.clone());
         }
         self.storage
             .delete(&consensus_validator_set_accumulator_key())

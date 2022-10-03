@@ -33,7 +33,6 @@ pub struct PosRewardsCalculator {
     signer_param: Decimal,
     signing_stake: u64,
     total_stake: u64,
-    pos_rewards: Option<PosRewards>,
 }
 
 impl PosRewardsCalculator {
@@ -49,14 +48,16 @@ impl PosRewardsCalculator {
             signer_param,
             signing_stake,
             total_stake,
-            pos_rewards: None,
         }
     }
 
     /// Calculate the reward coefficients
-    pub fn set_reward_coeffs(&mut self) -> Result<(), RewardsError> {
+    pub fn get_reward_coeffs(&self) -> Result<PosRewards, RewardsError> {
         // TODO: think about possibility of u64 overflow
         let votes_needed = self.get_min_required_votes();
+        dbg!(votes_needed);
+        dbg!(self.signing_stake.clone());
+        println!("\n");
         if self.signing_stake < votes_needed.into() {
             return Err(RewardsError::InsufficentVotes);
         }
@@ -70,13 +71,17 @@ impl PosRewardsCalculator {
         let signer_coeff = self.signer_param;
         let active_val_coeff = dec!(1.0) - proposer_coeff - signer_coeff;
 
-        self.pos_rewards = Some(PosRewards {
+        // let proposer_coeff = dec!(0.2);
+        // let signer_coeff = dec!(0.1);
+        // let active_val_coeff = dec!(0.7);
+
+        let coeffs = PosRewards {
             proposer_coeff,
             signer_coeff,
             active_val_coeff,
-        });
+        };
 
-        Ok(())
+        Ok(coeffs)
     }
 
     /// Implement as ceiling (2/3) * validator set stake
@@ -84,35 +89,35 @@ impl PosRewardsCalculator {
         ((2 * self.total_stake) + 3 - 1) / 3
     }
 
-    /// get struct of the reward coefficients
-    pub fn get_reward_coeffs(&self) -> Result<PosRewards, RewardsError> {
-        match self.pos_rewards {
-            Some(rewards) => Ok(rewards),
-            None => Err(RewardsError::CoeffsNotSet),
-        }
-    }
+    // /// get struct of the reward coefficients
+    // pub fn get_reward_coeffs(&self) -> Result<PosRewards, RewardsError> {
+    //     match self.pos_rewards {
+    //         Some(rewards) => Ok(rewards),
+    //         None => Err(RewardsError::CoeffsNotSet),
+    //     }
+    // }
 
-    /// proposer reward
-    pub fn get_proposer_coeff(&self) -> Result<Decimal, RewardsError> {
-        match self.pos_rewards {
-            Some(rewards) => Ok(rewards.proposer_coeff),
-            None => Err(RewardsError::CoeffsNotSet),
-        }
-    }
+    // /// proposer reward
+    // pub fn get_proposer_coeff(&self) -> Result<Decimal, RewardsError> {
+    //     match self.pos_rewards {
+    //         Some(rewards) => Ok(rewards.proposer_coeff),
+    //         None => Err(RewardsError::CoeffsNotSet),
+    //     }
+    // }
 
-    /// signer reward
-    pub fn get_signer_coeff(&self) -> Result<Decimal, RewardsError> {
-        match self.pos_rewards {
-            Some(rewards) => Ok(rewards.signer_coeff),
-            None => Err(RewardsError::CoeffsNotSet),
-        }
-    }
+    // /// signer reward
+    // pub fn get_signer_coeff(&self) -> Result<Decimal, RewardsError> {
+    //     match self.pos_rewards {
+    //         Some(rewards) => Ok(rewards.signer_coeff),
+    //         None => Err(RewardsError::CoeffsNotSet),
+    //     }
+    // }
 
-    /// active validator reward
-    pub fn get_active_val_coeff(&self) -> Result<Decimal, RewardsError> {
-        match self.pos_rewards {
-            Some(rewards) => Ok(rewards.active_val_coeff),
-            None => Err(RewardsError::CoeffsNotSet),
-        }
-    }
+    // /// active validator reward
+    // pub fn get_active_val_coeff(&self) -> Result<Decimal, RewardsError> {
+    //     match self.pos_rewards {
+    //         Some(rewards) => Ok(rewards.active_val_coeff),
+    //         None => Err(RewardsError::CoeffsNotSet),
+    //     }
+    // }
 }
