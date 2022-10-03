@@ -244,7 +244,7 @@ mod test_oracle {
         abort_recv: Receiver<()>,
     }
 
-    /// Set up an oracle with a mock web3 client that we can contr
+    /// Set up an oracle with a mock web3 client that we can control
     fn setup() -> TestPackage {
         let (admin_channel, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -474,7 +474,7 @@ mod test_oracle {
         // increase block height so first event is confirmed but second is
         // not.
         admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(102u32)))
+            .send(TestCmd::NewHeight(Uint256::from(105u32)))
             .expect("Test failed");
         // check the correct event is received
         let event = eth_recv.blocking_recv().expect("Test failed");
