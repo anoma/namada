@@ -3,7 +3,6 @@ use std::convert::TryFrom;
 use std::fmt::{self, Display, Formatter};
 
 use prost::Message;
-use prost_types::Any;
 use thiserror::Error;
 
 use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
@@ -32,6 +31,7 @@ use crate::ibc::core::ics04_channel::packet::Receipt;
 use crate::ibc::core::ics26_routing::error::Error as Ics26Error;
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ibc::downcast;
+use crate::ibc_proto::google::protobuf::Any;
 use crate::ibc_proto::ibc::core::channel::v1::acknowledgement::Response;
 use crate::ibc_proto::ibc::core::channel::v1::Acknowledgement;
 
@@ -333,8 +333,8 @@ pub struct PacketAck(pub Acknowledgement);
 impl PacketAck {
     /// Encode the ack
     pub fn encode_to_vec(&self) -> Vec<u8> {
-        // TODO encode as ibc-go
-        self.to_string().as_bytes().to_vec()
+        serde_json::to_vec(&self.0)
+            .expect("Encoding acknowledgement shouldn't fail")
     }
 }
 
@@ -349,7 +349,7 @@ impl Default for PacketAck {
 // for the string to be used by the current reader
 impl Display for PacketAck {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "ack")
+        write!(f, "{}", serde_json::to_string(&self.0).unwrap())
     }
 }
 

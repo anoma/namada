@@ -25,6 +25,10 @@ borsh-derive = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223
 borsh-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-schema-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 
+# patched to a commit on the `eth-bridge-integration` branch of our fork
+ibc = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "5b4dce005958364baa21872d02b5e8feed1a3cf5"}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "5b4dce005958364baa21872d02b5e8feed1a3cf5"}
+
 [profile.release]
 # smaller and faster wasm (https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto)
 lto = true
