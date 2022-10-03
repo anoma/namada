@@ -127,7 +127,10 @@ mod tests {
             Err(error) => panic!("error: {:?}", error),
         };
         assert_eq!(voting_powers.len(), 1);
-        assert_matches!(voting_powers.get(&(sole_validator, BlockHeight(100))), Some(v) if *v == FractionalVotingPower::new(1, 1).unwrap());
+        assert_matches!(
+            voting_powers.get(&(sole_validator, BlockHeight(100))),
+            Some(v) if *v == FractionalVotingPower::new(1, 1).unwrap()
+        );
     }
 
     #[test]
