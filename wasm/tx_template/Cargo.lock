@@ -1060,7 +1060,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.14.0"
-source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=451ff75591d9de48b7147a651858c3daeb5e2436#451ff75591d9de48b7147a651858c3daeb5e2436"
+source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=5b4dce005958364baa21872d02b5e8feed1a3cf5#5b4dce005958364baa21872d02b5e8feed1a3cf5"
 dependencies = [
  "bytes",
  "derive_more",
@@ -1087,7 +1087,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.17.1"
-source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=451ff75591d9de48b7147a651858c3daeb5e2436#451ff75591d9de48b7147a651858c3daeb5e2436"
+source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=5b4dce005958364baa21872d02b5e8feed1a3cf5#5b4dce005958364baa21872d02b5e8feed1a3cf5"
 dependencies = [
  "base64",
  "bytes",

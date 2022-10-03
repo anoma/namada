@@ -33,16 +33,16 @@ borsh-schema-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git
 # borsh-schema-derive-internal = {path = "../borsh-rs/borsh-schema-derive-internal"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "bc0b6ac47b3bfc1ee8b944341b654b867b3b5d0b"}
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "bc0b6ac47b3bfc1ee8b944341b654b867b3b5d0b"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "bc0b6ac47b3bfc1ee8b944341b654b867b3b5d0b"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "bc0b6ac47b3bfc1ee8b944341b654b867b3b5d0b"}
-tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "bc0b6ac47b3bfc1ee8b944341b654b867b3b5d0b"}
-tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "bc0b6ac47b3bfc1ee8b944341b654b867b3b5d0b"}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "8c8935e9b3d901b5f9229e34e5b7f90248397b5d"}
+tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "8c8935e9b3d901b5f9229e34e5b7f90248397b5d"}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "8c8935e9b3d901b5f9229e34e5b7f90248397b5d"}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "8c8935e9b3d901b5f9229e34e5b7f90248397b5d"}
+tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "8c8935e9b3d901b5f9229e34e5b7f90248397b5d"}
+tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "8c8935e9b3d901b5f9229e34e5b7f90248397b5d"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
-ibc = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "451ff75591d9de48b7147a651858c3daeb5e2436"}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "451ff75591d9de48b7147a651858c3daeb5e2436"}
+ibc = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "5b4dce005958364baa21872d02b5e8feed1a3cf5"}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "5b4dce005958364baa21872d02b5e8feed1a3cf5"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
 tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "fcc0014d0bda707109901abfa1b2f782d242f082"}
