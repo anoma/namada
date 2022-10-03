@@ -167,7 +167,7 @@ where
             VoteExtensionError,
         >,
     > + 'iter {
-        vote_extensions.into_iter().map(move |vote_extension| {
+        vote_extensions.into_iter().map(|vote_extension| {
             self.validate_eth_events_vext_and_get_it_back(
                 vote_extension,
                 self.storage.last_height,
