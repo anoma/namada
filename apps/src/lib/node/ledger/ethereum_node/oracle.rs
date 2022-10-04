@@ -14,7 +14,7 @@ use super::events::{signatures, PendingEvent};
 use super::test_tools::mock_web3_client::Web3;
 
 /// Minimum number of confirmations needed to trust an Ethereum branch
-pub(crate) const MIN_CONFIRMATIONS: u64 = 50;
+pub(crate) const MIN_CONFIRMATIONS: u64 = 100;
 
 /// Dummy addresses for smart contracts
 const MINT_CONTRACT: EthAddress = EthAddress([0; 20]);
@@ -244,7 +244,7 @@ mod test_oracle {
         abort_recv: Receiver<()>,
     }
 
-    /// Set up an oracle with a mock web3 client that we can contr
+    /// Set up an oracle with a mock web3 client that we can control
     fn setup() -> TestPackage {
         let (admin_channel, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -308,8 +308,9 @@ mod test_oracle {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
         admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(100u32)))
+            .send(TestCmd::NewHeight(Uint256::from(150u32)))
             .expect("Test failed");
+
         let mut time = std::time::Duration::from_secs(1);
         while time > std::time::Duration::from_millis(10) {
             assert!(eth_recv.try_recv().is_err());
@@ -335,7 +336,7 @@ mod test_oracle {
         });
         // Increase height above [`MIN_CONFIRMATIONS`]
         admin_channel
-            .send(TestCmd::NewHeight(50u32.into()))
+            .send(TestCmd::NewHeight(100u32.into()))
             .expect("Test failed");
 
         let new_event = ChangedContract {
@@ -343,11 +344,13 @@ mod test_oracle {
             address: EthAddress([0; 20]),
         }
         .encode();
+        let (sender, _) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
                 event_type: MockEventType::NewContract,
                 data: new_event,
-                height: 51,
+                height: 101,
+                seen: sender,
             })
             .expect("Test failed");
         // since height is not updating, we should not receive events
@@ -366,7 +369,7 @@ mod test_oracle {
     fn test_wait_on_new_logs() {
         let TestPackage {
             oracle,
-            mut eth_recv,
+            eth_recv,
             admin_channel,
             ..
         } = setup();
@@ -375,45 +378,43 @@ mod test_oracle {
         });
         // Increase height above [`MIN_CONFIRMATIONS`]
         admin_channel
-            .send(TestCmd::NewHeight(50u32.into()))
+            .send(TestCmd::NewHeight(100u32.into()))
             .expect("Test failed");
 
+        // set the oracle to be unresponsive
+        admin_channel
+            .send(TestCmd::Unresponsive)
+            .expect("Test failed");
+        // send a new event to the oracle
         let new_event = ChangedContract {
             name: "Test".to_string(),
             address: EthAddress([0; 20]),
         }
         .encode();
+        let (sender, mut seen) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
                 event_type: MockEventType::NewContract,
                 data: new_event,
-                height: 100,
+                height: 150,
+                seen: sender,
             })
             .expect("Test failed");
+        // set the height high enough to emit the event
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(251u32)))
+            .expect("Test failed");
 
-        // we should not receive events even though the height is large
+        // the event should not be emitted even though the height is large
         // enough
-        admin_channel
-            .send(TestCmd::Unresponsive)
-            .expect("Test failed");
-        admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(101u32)))
-            .expect("Test failed");
-
         let mut time = std::time::Duration::from_secs(1);
         while time > std::time::Duration::from_millis(10) {
-            assert!(eth_recv.try_recv().is_err());
+            assert!(seen.try_recv().is_err());
             time -= std::time::Duration::from_millis(10);
         }
         // check that when web3 becomes responsive, oracle sends event
         admin_channel.send(TestCmd::Normal).expect("Test failed");
-        let event = eth_recv.blocking_recv().expect("Test failed");
-        if let EthereumEvent::NewContract { name, address } = event {
-            assert_eq!(name.as_str(), "Test");
-            assert_eq!(address.0, [0; 20]);
-        } else {
-            panic!("Test failed");
-        }
+        seen.blocking_recv().expect("Test failed");
         drop(eth_recv);
         oracle.join().expect("Test failed");
     }
@@ -433,17 +434,17 @@ mod test_oracle {
         });
         // Increase height above [`MIN_CONFIRMATIONS`]
         admin_channel
-            .send(TestCmd::NewHeight(50u32.into()))
+            .send(TestCmd::NewHeight(100u32.into()))
             .expect("Test failed");
 
-        // confirmed after 50 blocks
+        // confirmed after 100 blocks
         let first_event = ChangedContract {
             name: "Test".to_string(),
             address: EthAddress([0; 20]),
         }
         .encode();
 
-        // confirmed after 75 blocks
+        // confirmed after 125 blocks
         let second_event = RawTransfersToEthereum {
             transfers: vec![TransferToEthereum {
                 amount: Default::default(),
@@ -451,30 +452,34 @@ mod test_oracle {
                 receiver: EthAddress([1; 20]),
             }],
             nonce: 1.into(),
-            confirmations: 75,
+            confirmations: 125,
         }
         .encode();
 
         // send in the events to the logs
+        let (sender, seen_second) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
                 event_type: MockEventType::TransferToEthereum,
                 data: second_event,
                 height: 125,
+                seen: sender,
             })
             .expect("Test failed");
+        let (sender, _recv) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
                 event_type: MockEventType::NewContract,
                 data: first_event,
                 height: 100,
+                seen: sender,
             })
             .expect("Test failed");
 
         // increase block height so first event is confirmed but second is
         // not.
         admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(102u32)))
+            .send(TestCmd::NewHeight(Uint256::from(200u32)))
             .expect("Test failed");
         // check the correct event is received
         let event = eth_recv.blocking_recv().expect("Test failed");
@@ -492,9 +497,15 @@ mod test_oracle {
             time -= std::time::Duration::from_millis(10);
         }
 
+        // increase block height so second event is emitted
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(225u32)))
+            .expect("Test failed");
+        // wait until event is emitted
+        seen_second.blocking_recv().expect("Test failed");
         // increase block height so second event is confirmed
         admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(130u32)))
+            .send(TestCmd::NewHeight(Uint256::from(250u32)))
             .expect("Test failed");
         // check correct event is received
         let event = eth_recv.blocking_recv().expect("Test failed");

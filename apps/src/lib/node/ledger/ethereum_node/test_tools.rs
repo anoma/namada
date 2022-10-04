@@ -121,6 +121,7 @@ pub mod mock_web3_client {
     use tokio::sync::mpsc::{
         unbounded_channel, UnboundedReceiver, UnboundedSender,
     };
+    use tokio::sync::oneshot::Sender;
     use web30::types::Log;
 
     use super::super::events::signatures::*;
@@ -136,6 +137,7 @@ pub mod mock_web3_client {
             event_type: MockEventType,
             data: Vec<u8>,
             height: u32,
+            seen: Sender<()>,
         },
     }
 
@@ -162,7 +164,7 @@ pub mod mock_web3_client {
         cmd_channel: UnboundedReceiver<TestCmd>,
         active: bool,
         latest_block_height: Uint256,
-        events: Vec<(MockEventType, Vec<u8>, u32)>,
+        events: Vec<(MockEventType, Vec<u8>, u32, Sender<()>)>,
     }
 
     impl Web3 {
@@ -210,7 +212,8 @@ pub mod mock_web3_client {
                     event_type: ty,
                     data,
                     height,
-                } => self.0.borrow_mut().events.push((ty, data, height)),
+                    seen,
+                } => self.0.borrow_mut().events.push((ty, data, height, seen)),
             }
         }
 
@@ -227,7 +230,7 @@ pub mod mock_web3_client {
         /// client has not been set to act unresponsive.
         pub async fn check_for_events(
             &self,
-            _: Uint256,
+            block_to_check: Uint256,
             _: Option<Uint256>,
             _: impl Debug,
             mut events: Vec<&str>,
@@ -251,16 +254,16 @@ pub mod mock_web3_client {
                 let mut events = vec![];
                 let mut client = self.0.borrow_mut();
                 std::mem::swap(&mut client.events, &mut events);
-                for (event_ty, data, height) in events.into_iter() {
-                    if event_ty == ty
-                        && client.latest_block_height >= Uint256::from(height)
+                for (event_ty, data, height, seen) in events.into_iter() {
+                    if event_ty == ty && block_to_check >= Uint256::from(height)
                     {
+                        seen.send(()).unwrap();
                         logs.push(Log {
                             data: data.into(),
                             ..Default::default()
                         });
                     } else {
-                        client.events.push((event_ty, data, height));
+                        client.events.push((event_ty, data, height, seen));
                     }
                 }
                 Ok(logs)
