@@ -1184,7 +1184,7 @@ pub async fn submit_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    let rpc_timeout =
+    let max_wait_time =
         if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_RPC_TIMEOUT) {
             if let Ok(timeout) = val.parse::<u64>() {
                 Duration::from_secs(timeout)
@@ -1203,7 +1203,7 @@ pub async fn submit_tx(
     let parsed = {
         let wrapper_query = Query::from(EventType::NewBlock)
             .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
-        let event = rpc_cli.events(wrapper_query, rpc_timeout).await?.into();
+        let event = rpc_cli.events(wrapper_query, max_wait_time).await?.into();
         let parsed =
             TxResponse::parse(event, NamadaEventType::Accepted, wrapper_hash);
 
@@ -1219,7 +1219,7 @@ pub async fn submit_tx(
             let decrypted_query = Query::from(EventType::NewBlock)
                 .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
             let event =
-                rpc_cli.events(decrypted_query, rpc_timeout).await?.into();
+                rpc_cli.events(decrypted_query, max_wait_time).await?.into();
             let parsed = TxResponse::parse(
                 event,
                 NamadaEventType::Applied,
