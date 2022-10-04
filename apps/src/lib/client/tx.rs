@@ -1184,17 +1184,12 @@ pub async fn submit_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    let max_wait_time = if let Ok(val) =
+    let max_wait_time = Duration::from_secs(
         env::var(ENV_VAR_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME)
-    {
-        if let Ok(timeout) = val.parse::<u64>() {
-            Duration::from_secs(timeout)
-        } else {
-            Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME)
-        }
-    } else {
-        Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME)
-    };
+            .ok()
+            .and_then(|val| val.parse().ok())
+            .unwrap_or(DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME),
+    );
     tracing::debug!("Tenderming address: {:?}", address);
     let rpc_cli = HttpClient::new(address.clone())?;
 
