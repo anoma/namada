@@ -4,12 +4,34 @@ Welcome to Namada's docs!
 
 ## About Namada
 
-[Namada](https://namada.net/) is a sovereign proof-of-stake blockchain, using Tendermint BFT consensus, that enables multi-asset private transfers for any native or non-native asset using a multi-asset shielded pool derived from the Sapling circuit.
+[Namada](https://namada.net/) is a Proof-of-Stake layer 1 protocol for asset-agnostic, interchain privacy. Namada is also Anoma's first fractal intance. 
 
-To learn more about the protocol, we recommend the following resources:
+Key innovations include:
+- ZCash-like transfers for any assets (fungible and non-fungible)
+- Rewarded usage of privacy as a public good
+- Interoperability with Ethereum via a custom bridge with trust-minimisation
+- Vertically integrated user interfaces
 
-- [Introducing Namada: Shielded Transfers with Any Assets](https://medium.com/anomanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
+To learn more, we recommend:
+- Article: [Introducing Namada: Shielded Transfers with Any Assets](https://medium.com/anomanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
+
+## Overview of features
+- PoS with governance to secure and evolve Namada
+- Fast-finality BFT with 4 second blocks
+- Near-zero fees
+- Trustless 2-way Ethereum bridge via IBC implementation on ETH
+- IBC bridges to chains that already speak IBC (all Cosmos chains)
+- MASP
+- Convert Circuit (shielded set rewards)
+- A reference interface
+- Ledger application
+
+To learn more about the protocol, we recommend the following in-depth resources:
+- Talk at ZK8 [Namada: asset-agnostic interchain privacy](https://youtu.be/5K6YxmZPFkE)
 - [Namada's specifications](https://specs.namada.net)
+- [Codebase](https://github.com/anoma/namada)
+
+## About this documentation
 
 This book is written using [mdBook](https://rust-lang.github.io/mdBook/), the source can be found in the [Namada repository](https://github.com/anoma/namada/tree/main/documentation/docs).
 
