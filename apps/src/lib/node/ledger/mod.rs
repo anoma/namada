@@ -672,7 +672,7 @@ async fn start_ethereum_node(
             abort_sender,
         ),
         ethereum::Mode::EventsEndpoint => {
-            ethereum_node::test_tools::event_endpoint::start_oracle(eth_sender)
+            ethereum_node::test_tools::events_endpoint::serve(eth_sender)
         }
         ethereum::Mode::Off => {
             ethereum_node::test_tools::mock_oracle::run_oracle(

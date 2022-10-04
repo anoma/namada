@@ -1,3 +1,5 @@
+pub mod events_endpoint;
+
 /// tools for running a mock ethereum fullnode process
 pub mod mock_eth_fullnode {
     use async_trait::async_trait;
@@ -47,73 +49,6 @@ pub mod mock_oracle {
 
             tracing::info!("Mock Ethereum event oracle is no longer running");
         })
-    }
-}
-
-pub mod event_endpoint {
-    use borsh::BorshDeserialize;
-    use namada::types::ethereum_events::EthereumEvent;
-    use tokio::sync::mpsc::Sender as BoundedSender;
-    use warp::reply::WithStatus;
-
-    const ETHEREUM_EVENTS_ENDPOINT: ([u8; 4], u16) = ([127, 0, 0, 1], 3030);
-
-    /// The path to which Borsh-serialized Ethereum events should be submitted
-    const PATH: &str = "eth_events";
-
-    pub fn start_oracle(
-        sender: BoundedSender<EthereumEvent>,
-    ) -> tokio::task::JoinHandle<()> {
-        tokio::task::spawn_local(async move {
-            use warp::Filter;
-
-            tracing::info!(
-                ?ETHEREUM_EVENTS_ENDPOINT,
-                "Ethereum event endpoint is starting"
-            );
-            let eth_events = warp::post()
-                .and(warp::path(PATH))
-                .and(warp::body::bytes())
-                .then(move |bytes: bytes::Bytes| send(bytes, sender.clone()));
-
-            warp::serve(eth_events).run(ETHEREUM_EVENTS_ENDPOINT).await;
-
-            tracing::info!(
-                ?ETHEREUM_EVENTS_ENDPOINT,
-                "Ethereum event endpoint is no longer running"
-            );
-        })
-    }
-
-    /// Callback to send out events from the oracle
-    async fn send(
-        bytes: bytes::Bytes,
-        sender: BoundedSender<EthereumEvent>,
-    ) -> WithStatus<&'static str> {
-        tracing::info!(len = bytes.len(), "Received request");
-        let event = match EthereumEvent::try_from_slice(&bytes) {
-            Ok(event) => event,
-            Err(error) => {
-                tracing::warn!(?error, "Couldn't handle request");
-                return warp::reply::with_status(
-                    "Bad request",
-                    warp::http::StatusCode::BAD_REQUEST,
-                );
-            }
-        };
-        tracing::debug!("Serialized event - {:#?}", event);
-        match sender.send(event).await {
-            Ok(()) => {
-                warp::reply::with_status("OK", warp::http::StatusCode::OK)
-            }
-            Err(error) => {
-                tracing::warn!(?error, "Couldn't send event");
-                warp::reply::with_status(
-                    "Internal server error",
-                    warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-                )
-            }
-        }
     }
 }
 
