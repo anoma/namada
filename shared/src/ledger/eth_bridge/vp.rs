@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage as ledger_storage;
-use crate::ledger::storage::StorageHasher;
+use crate::ledger::storage::traits::StorageHasher;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;

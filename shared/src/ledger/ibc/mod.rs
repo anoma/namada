@@ -9,7 +9,8 @@ use storage::{
     connection_counter_key,
 };
 
-use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{self as ledger_storage, Storage};
 
 /// Initialize storage in the genesis block.
 pub fn init_genesis_storage<DB, H>(storage: &mut Storage<DB, H>)

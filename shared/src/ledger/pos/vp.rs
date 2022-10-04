@@ -32,8 +32,9 @@ use crate::ledger::pos::{
     is_validator_address_raw_hash_key, is_validator_consensus_key_key,
     is_validator_state_key,
 };
+use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::types::decode;
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::types::{key, token};

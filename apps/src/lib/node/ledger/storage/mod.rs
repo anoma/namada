@@ -5,11 +5,12 @@ mod rocksdb;
 
 use std::fmt;
 
+use arse_merkle_tree::blake2b::Blake2bHasher;
+use arse_merkle_tree::traits::Hasher;
+use arse_merkle_tree::H256;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
-use namada::ledger::storage::{Storage, StorageHasher};
-use sparse_merkle_tree::blake2b::Blake2bHasher;
-use sparse_merkle_tree::traits::Hasher;
-use sparse_merkle_tree::H256;
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::Storage;
 
 #[derive(Default)]
 pub struct PersistentStorageHasher(Blake2bHasher);
@@ -19,8 +20,8 @@ pub type PersistentDB = rocksdb::RocksDB;
 pub type PersistentStorage = Storage<PersistentDB, PersistentStorageHasher>;
 
 impl Hasher for PersistentStorageHasher {
-    fn write_h256(&mut self, h: &H256) {
-        self.0.write_h256(h)
+    fn write_bytes(&mut self, h: &[u8]) {
+        self.0.write_bytes(h)
     }
 
     fn finish(self) -> H256 {

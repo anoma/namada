@@ -47,7 +47,7 @@ impl GovParams {
     pub fn init_storage<DB, H>(&self, storage: &mut Storage<DB, H>)
     where
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: storage::StorageHasher,
+        H: storage::traits::StorageHasher,
     {
         let Self {
             min_proposal_fund,
