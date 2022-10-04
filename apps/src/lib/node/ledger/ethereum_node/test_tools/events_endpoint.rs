@@ -4,11 +4,12 @@ use tokio::macros::support::poll_fn;
 use tokio::sync::mpsc::UnboundedSender;
 use warp::Filter;
 
-/// The default IP address and port on which the events endpoint will listen
-const DEFAULT_ENDPOINT: ([u8; 4], u16) = ([0, 0, 0, 0], 3030);
+/// The default IP address and port on which the events endpoint will listen.
+const DEFAULT_LISTEN_ADDR: ([u8; 4], u16) = ([0, 0, 0, 0], 3030);
 
-/// The path to which Borsh-serialized Ethereum events should be POSTed
-const PATH: &str = "eth_events";
+/// The endpoint to which Borsh-serialized Ethereum events should be sent to,
+/// via an HTTP POST request.
+const EVENTS_POST_ENDPOINT: &str = "eth_events";
 
 /// Starts a [`warp::Server`] that listens for Borsh-serialized Ethereum events
 /// and then forwards them to `sender`. It shuts down if `abort_sender` is
@@ -18,7 +19,7 @@ pub fn serve(
     mut abort_sender: tokio::sync::oneshot::Sender<()>,
 ) -> tokio::task::JoinHandle<()> {
     let eth_events = warp::post()
-        .and(warp::path(PATH))
+        .and(warp::path(EVENTS_POST_ENDPOINT))
         .and(warp::body::bytes())
         .map(move |bytes: bytes::Bytes| {
             tracing::info!(len = bytes.len(), "Received request");
@@ -48,15 +49,15 @@ pub fn serve(
         });
 
     let (_, server) = warp::serve(eth_events).bind_with_graceful_shutdown(
-        DEFAULT_ENDPOINT,
+        DEFAULT_LISTEN_ADDR,
         async move {
             tracing::info!(
-                ?DEFAULT_ENDPOINT,
+                ?DEFAULT_LISTEN_ADDR,
                 "Starting to listen for Borsh-serialized Ethereum events"
             );
             poll_fn(|cx| abort_sender.poll_closed(cx)).await;
             tracing::info!(
-                ?DEFAULT_ENDPOINT,
+                ?DEFAULT_LISTEN_ADDR,
                 "Stopping listening for Borsh-serialized Ethereum events"
             );
         },
