@@ -5,9 +5,8 @@
 ## Overview
 
 [Namada](http://namada.net) is a sovereign proof-of-stake blockchain, using Tendermint BFT
-consensus, that enables multi-asset private transfers for any native
-or non-native asset using a multi-asset shielded pool derived from
-the Sapling circuit. Namada features full IBC protocol support,
+consensus, that enables multi-asset shielded transfers for any native
+or non-native asset. Namada features full IBC protocol support,
 a natively integrated Ethereum bridge, a modern proof-of-stake
 system with automatic reward compounding and cubic slashing, and a
 stake-weighted governance signalling mechanism. Users of shielded
