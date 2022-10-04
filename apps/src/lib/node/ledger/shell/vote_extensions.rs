@@ -82,7 +82,10 @@ where
             .to_owned();
 
         let ext = ethereum_events::Vext {
+            #[cfg(feature = "abcipp")]
             block_height: self.storage.get_current_decision_height(),
+            #[cfg(not(feature = "abcipp"))]
+            block_height: self.storage.last_height,
             ethereum_events: self.new_ethereum_events(),
             validator_addr,
         };
@@ -118,7 +121,10 @@ where
                     // TODO: we need a way to map ethereum addresses to
                     // namada validator addresses
                     voting_powers: std::collections::HashMap::new(),
+                    #[cfg(feature = "abcipp")]
                     block_height: self.storage.get_current_decision_height(),
+                    #[cfg(not(feature = "abcipp"))]
+                    block_height: self.storage.last_height,
                 };
 
                 let protocol_key = match &self.mode {
