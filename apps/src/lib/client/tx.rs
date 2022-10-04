@@ -1147,8 +1147,6 @@ pub async fn broadcast_tx(
     // TODO: timeout?
     let response = rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await?;
 
-    drop(rpc_cli);
-
     if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
         // Print the transaction identifiers to enable the extraction of
