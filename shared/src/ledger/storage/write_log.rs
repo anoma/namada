@@ -6,7 +6,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use thiserror::Error;
 
 use crate::ledger;
-use crate::ledger::storage::{Storage, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::Storage;
 use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;

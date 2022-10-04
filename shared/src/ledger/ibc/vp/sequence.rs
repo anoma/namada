@@ -8,7 +8,8 @@ use crate::ibc::core::ics04_channel::channel::Order;
 use crate::ibc::core::ics04_channel::context::ChannelReader;
 use crate::ibc::core::ics24_host::identifier::PortChannelId;
 use crate::ledger::ibc::handler::packet_from_message;
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{self as ledger_storage};
 use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -53,7 +54,7 @@ where
         let channel = self
             .channel_end(&(
                 port_channel_id.port_id.clone(),
-                port_channel_id.channel_id.clone(),
+                port_channel_id.channel_id,
             ))
             .map_err(|e| Error::InvalidChannel(e.to_string()))?;
         let next_seq_pre = self
@@ -64,7 +65,7 @@ where
         let next_seq = self
             .get_next_sequence_send(&(
                 port_channel_id.port_id.clone(),
-                port_channel_id.channel_id.clone(),
+                port_channel_id.channel_id,
             ))
             .map_err(|_| {
                 Error::InvalidSequence(
@@ -116,7 +117,7 @@ where
         let next_seq = self
             .get_next_sequence_recv(&(
                 port_channel_id.port_id.clone(),
-                port_channel_id.channel_id.clone(),
+                port_channel_id.channel_id,
             ))
             .map_err(|_| {
                 Error::InvalidSequence(
@@ -174,7 +175,7 @@ where
         let next_seq = self
             .get_next_sequence_ack(&(
                 port_channel_id.port_id.clone(),
-                port_channel_id.channel_id.clone(),
+                port_channel_id.channel_id,
             ))
             .map_err(|_| {
                 Error::InvalidSequence(
@@ -218,7 +219,7 @@ where
         let channel = self
             .channel_end(&(
                 port_channel_id.port_id.clone(),
-                port_channel_id.channel_id.clone(),
+                port_channel_id.channel_id,
             ))
             .map_err(|_| {
                 Error::InvalidChannel(format!(

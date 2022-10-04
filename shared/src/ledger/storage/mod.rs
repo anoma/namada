@@ -1,12 +1,15 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
+mod ics23_specs;
 mod merkle_tree;
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
+pub mod traits;
 pub mod types;
 pub mod write_log;
 
 use core::fmt::Debug;
+use std::array;
 
 use tendermint::merkle::proof::Proof;
 use thiserror::Error;
@@ -19,21 +22,23 @@ use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
 pub use crate::ledger::storage::merkle_tree::{
-    MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, Sha256Hasher,
-    StorageHasher, StoreType,
+    MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
+use crate::ledger::storage::traits::StorageHasher;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::storage::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, KeySeg,
-    BLOCK_HASH_LENGTH,
+    MembershipProof, MerkleValue, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
+/// The maximum size of an IBC key (in bytes) allowed in merkle-ized storage
+pub const IBC_KEY_LIMIT: usize = 120;
 
 /// The storage data
 #[derive(Debug)]
@@ -504,15 +509,32 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: Vec<u8>,
+        value: MerkleValue,
         height: BlockHeight,
     ) -> Result<Proof> {
         if height >= self.get_block_height().0 {
-            Ok(self.block.tree.get_existence_proof(key, value)?)
+            let MembershipProof::ICS23(proof) = self
+                .block
+                .tree
+                .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
+                .map_err(Error::MerkleTreeError)?;
+            self.block
+                .tree
+                .get_tendermint_proof(key, proof)
+                .map_err(Error::MerkleTreeError)
         } else {
             match self.db.read_merkle_tree_stores(height)? {
-                Some(stores) => Ok(MerkleTree::<H>::new(stores)
-                    .get_existence_proof(key, value)?),
+                Some(stores) => {
+                    let tree = MerkleTree::<H>::new(stores);
+                    let MembershipProof::ICS23(proof) = tree
+                        .get_sub_tree_existence_proof(
+                            array::from_ref(key),
+                            vec![value],
+                        )
+                        .map_err(Error::MerkleTreeError)?;
+                    tree.get_tendermint_proof(key, proof)
+                        .map_err(Error::MerkleTreeError)
+                }
                 None => Err(Error::NoMerkleTree { height }),
             }
         }
@@ -693,11 +715,9 @@ impl From<MerkleTreeError> for Error {
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use merkle_tree::Sha256Hasher;
-
     use super::mockdb::MockDB;
     use super::*;
-
+    use crate::ledger::storage::traits::Sha256Hasher;
     /// Storage with a mock DB for testing
     pub type TestStorage = Storage<MockDB, Sha256Hasher>;
 

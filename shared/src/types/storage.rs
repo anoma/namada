@@ -1,17 +1,21 @@
 //! Storage types
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
+use std::io::Write;
 use std::num::ParseIntError;
-use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
 
+use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use ics23::CommitmentProof;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[cfg(feature = "ferveo-tpke")]
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
+use crate::ledger::storage::IBC_KEY_LIMIT;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
@@ -27,6 +31,8 @@ pub enum Error {
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
+    #[error("Could not parse string: '{0}' into requested type: {1}")]
+    ParseError(String, String),
 }
 
 /// Result for functions that may fail
@@ -51,6 +57,7 @@ pub const RESERVED_VP_KEY: &str = "?";
     Copy,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -101,6 +108,12 @@ pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 impl From<Hash> for BlockHash {
     fn from(hash: Hash) -> Self {
         BlockHash(hash.0)
+    }
+}
+
+impl From<u64> for BlockHeight {
+    fn from(height: u64) -> Self {
+        BlockHeight(height)
     }
 }
 
@@ -219,6 +232,118 @@ impl FromStr for Key {
 
     fn from_str(s: &str) -> Result<Self> {
         Key::parse(s)
+    }
+}
+
+/// An enum representing the different types of values
+/// that can be passed into Anoma's storage.
+///
+/// This is a multi-store organized as
+/// several Merkle trees, each of which is
+/// responsible for understanding how to parse
+/// this value.
+pub enum MerkleValue {
+    /// raw bytes
+    Bytes(Vec<u8>),
+}
+
+impl<T> From<T> for MerkleValue
+where
+    T: AsRef<[u8]>,
+{
+    fn from(bytes: T) -> Self {
+        Self::Bytes(bytes.as_ref().to_owned())
+    }
+}
+
+/// Storage keys that are utf8 encoded strings
+#[derive(Eq, PartialEq, Copy, Clone, Hash)]
+pub struct StringKey {
+    /// The original key string, in bytes
+    pub original: [u8; IBC_KEY_LIMIT],
+    /// The utf8 bytes representation of the key to be
+    /// used internally in the merkle tree
+    pub tree_key: InternalKey<IBC_KEY_LIMIT>,
+    /// The length of the input (without the padding)
+    pub length: usize,
+}
+
+impl Deref for StringKey {
+    type Target = InternalKey<IBC_KEY_LIMIT>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.tree_key
+    }
+}
+
+impl BorshSerialize for StringKey {
+    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        let to_serialize = (self.original.to_vec(), self.tree_key, self.length);
+        BorshSerialize::serialize(&to_serialize, writer)
+    }
+}
+
+impl BorshDeserialize for StringKey {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        use std::io::ErrorKind;
+        let (original, tree_key, length): (
+            Vec<u8>,
+            InternalKey<IBC_KEY_LIMIT>,
+            usize,
+        ) = BorshDeserialize::deserialize(buf)?;
+        let original: [u8; IBC_KEY_LIMIT] =
+            original.try_into().map_err(|_| {
+                std::io::Error::new(
+                    ErrorKind::InvalidData,
+                    "Input byte vector is too large",
+                )
+            })?;
+        Ok(Self {
+            original,
+            tree_key,
+            length,
+        })
+    }
+}
+
+/// A wrapper around raw bytes to be stored as values
+/// in a merkle tree
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct TreeBytes(pub Vec<u8>);
+
+impl TreeBytes {
+    /// The value indicating that a leaf should be deleted
+    pub fn zero() -> Self {
+        Self(vec![])
+    }
+
+    /// Check if an instance is the zero value
+    pub fn is_zero(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl From<Vec<u8>> for TreeBytes {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+}
+
+impl From<TreeBytes> for Vec<u8> {
+    fn from(bytes: TreeBytes) -> Self {
+        bytes.0
+    }
+}
+
+/// Type of membership proof from a merkle tree
+pub enum MembershipProof {
+    /// ICS23 compliant membership proof
+    ICS23(CommitmentProof),
+}
+
+impl From<CommitmentProof> for MembershipProof {
+    fn from(proof: CommitmentProof) -> Self {
+        Self::ICS23(proof)
     }
 }
 

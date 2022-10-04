@@ -13,7 +13,8 @@ use namada_proof_of_stake::PosBase;
 pub use storage::*;
 pub use vp::PosVP;
 
-use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{self as ledger_storage, Storage};
 use crate::types::address::{self, Address, InternalAddress};
 use crate::types::storage::Epoch;
 use crate::types::{key, token};

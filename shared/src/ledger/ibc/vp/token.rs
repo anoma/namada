@@ -11,7 +11,8 @@ use crate::ibc::core::ics04_channel::msgs::PacketMsg;
 use crate::ibc::core::ics04_channel::packet::Packet;
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{self as ledger_storage};
 use crate::proto::SignedTxData;
 use crate::types::address::{Address, Error as AddressError, InternalAddress};
 use crate::types::ibc::data::{
