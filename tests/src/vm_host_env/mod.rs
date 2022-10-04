@@ -885,7 +885,7 @@ mod tests {
             .expect("getting the counter failed");
         // channel
         let channel_id = ibc::channel_id(counter);
-        let port_channel_id = ibc::port_channel_id(port_id, channel_id.clone());
+        let port_channel_id = ibc::port_channel_id(port_id, channel_id);
         let channel_key = ibc::channel_key(&port_channel_id).to_string();
         tx_host_env::write_bytes(
             &channel_key,
@@ -932,7 +932,7 @@ mod tests {
             .expect("getting the counter failed");
         // insert a opened channel
         let channel_id = ibc::channel_id(counter);
-        let port_channel_id = ibc::port_channel_id(port_id, channel_id.clone());
+        let port_channel_id = ibc::port_channel_id(port_id, channel_id);
         let channel_key = ibc::channel_key(&port_channel_id).to_string();
         let mut channel = msg.channel.clone();
         ibc::open_channel(&mut channel);
@@ -1617,7 +1617,7 @@ mod tests {
         // Start a transaction to send a packet
         let mut msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        ibc::set_timeout_height(&mut msg);
+        ibc::set_timeout_timestamp(&mut msg);
         let mut tx_data = vec![];
         msg.clone()
             .to_any()
