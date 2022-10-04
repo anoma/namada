@@ -14,7 +14,7 @@ use super::events::{signatures, PendingEvent};
 use super::test_tools::mock_web3_client::Web3;
 
 /// Minimum number of confirmations needed to trust an Ethereum branch
-pub(crate) const MIN_CONFIRMATIONS: u64 = 100;
+pub(crate) const MIN_CONFIRMATIONS: u64 = 50;
 
 /// Dummy addresses for smart contracts
 const MINT_CONTRACT: EthAddress = EthAddress([0; 20]);
@@ -481,7 +481,7 @@ mod test_oracle {
         // increase block height so first event is confirmed but second is
         // not.
         admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(105u32)))
+            .send(TestCmd::NewHeight(Uint256::from(102u32)))
             .expect("Test failed");
         // check the correct event is received
         let event = eth_recv.blocking_recv().expect("Test failed");
