@@ -2,7 +2,7 @@ use borsh::BorshDeserialize;
 use namada::types::ethereum_events::EthereumEvent;
 use tokio::sync::mpsc::UnboundedSender;
 
-const DEFAULT_ENDPOINT: ([u8; 4], u16) = ([127, 0, 0, 1], 3030);
+const DEFAULT_ENDPOINT: ([u8; 4], u16) = ([0, 0, 0, 0], 3030);
 
 /// The path to which Borsh-serialized Ethereum events should be submitted
 const PATH: &str = "eth_events";
