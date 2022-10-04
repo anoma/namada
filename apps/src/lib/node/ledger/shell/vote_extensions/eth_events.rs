@@ -309,16 +309,20 @@ mod test_vote_extensions {
             address: EthAddress([0; 20]),
         };
 
-        tokio_test::block_on(oracle.send(event_1.clone())).expect("Test failed");
-        tokio_test::block_on(oracle.send(event_3.clone())).expect("Test failed");
+        tokio_test::block_on(oracle.send(event_1.clone()))
+            .expect("Test failed");
+        tokio_test::block_on(oracle.send(event_3.clone()))
+            .expect("Test failed");
         let [event_first, event_second]: [EthereumEvent; 2] =
             shell.new_ethereum_events().try_into().expect("Test failed");
 
         assert_eq!(event_first, event_1);
         assert_eq!(event_second, event_3);
         // check that we queue and de-duplicate events
-        tokio_test::block_on(oracle.send(event_2.clone())).expect("Test failed");
-        tokio_test::block_on(oracle.send(event_3.clone())).expect("Test failed");
+        tokio_test::block_on(oracle.send(event_2.clone()))
+            .expect("Test failed");
+        tokio_test::block_on(oracle.send(event_3.clone()))
+            .expect("Test failed");
         let [event_first, event_second, event_third]: [EthereumEvent; 3] =
             shell.new_ethereum_events().try_into().expect("Test failed");
 
