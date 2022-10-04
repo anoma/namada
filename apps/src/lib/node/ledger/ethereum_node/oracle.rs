@@ -78,7 +78,7 @@ impl Oracle {
                 return false;
             }
         }
-        !self.sender.is_closed()
+        true
     }
 
     /// Check if the receiver in the ledger has hung up.
