@@ -8,7 +8,7 @@ use futures::future::FutureExt;
 use namada::types::ethereum_events::EthereumEvent;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
-use tokio::sync::mpsc::{Receiver as BoundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{Receiver, UnboundedSender};
 use tower::Service;
 
 use super::super::Shell;
