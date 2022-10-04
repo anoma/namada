@@ -10,6 +10,7 @@ use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::ethereum_events::{
     self, MultiSignedEthEvent,
 };
+#[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
@@ -22,14 +23,14 @@ where
     H: StorageHasher + Sync + 'static,
 {
     /// Validates an Ethereum events vote extension issued at the provided
-    /// block height
+    /// block height.
     ///
     /// Checks that at epoch of the provided height:
-    ///  * The Tendermint address corresponds to an active validator
-    ///  * The validator correctly signed the extension
-    ///  * The validator signed over the correct height inside of the extension
+    ///  * The Tendermint address corresponds to an active validator.
+    ///  * The validator correctly signed the extension.
+    ///  * The validator signed over the correct height inside of the extension.
     ///  * There are no duplicate Ethereum events in this vote extension, and
-    ///    the events are sorted in ascending order
+    ///    the events are sorted in ascending order.
     #[allow(dead_code)]
     #[inline]
     pub fn validate_eth_events_vext(
@@ -54,12 +55,23 @@ where
     > {
         #[cfg(feature = "abcipp")]
         if ext.data.block_height != last_height {
-            let ext_height = ext.data.block_height;
             tracing::error!(
+                ext_height = ?ext.data.block_height,
+                ?last_height,
                 "Ethereum events vote extension issued for a block height \
-                 {ext_height} different from the expected height {last_height}"
+                 different from the expected last height."
             );
-            return Err(VoteExtensionError::UnexpectedSequenceNumber);
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
+        }
+        #[cfg(not(feature = "abcipp"))]
+        if ext.data.block_height > last_height {
+            tracing::error!(
+                ext_height = ?ext.data.block_height,
+                ?last_height,
+                "Ethereum events vote extension issued for a block height \
+                 higher than the chain's last height."
+            );
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
         if last_height.0 == 0 {
             tracing::error!("Dropping vote extension issued at genesis");
@@ -78,20 +90,36 @@ where
         if have_dupes_or_non_sorted {
             tracing::error!(
                 %validator,
-                "Found duplicate or non-sorted Ethereum events in a vote extension from some validator"
+                "Found duplicate or non-sorted Ethereum events in a vote extension from \
+                 some validator"
             );
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }
         // get the public key associated with this validator
-        let epoch = self.storage.get_epoch(last_height);
+        //
+        // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
+        // `last_height` here, instead of `ext.data.block_height`
+        let ext_height_epoch =
+            match self.storage.get_epoch(ext.data.block_height) {
+                Some(epoch) => epoch,
+                _ => {
+                    tracing::error!(
+                        block_height = ?ext.data.block_height,
+                        "The epoch of the Ethereum events vote extension's \
+                         block height should always be known",
+                    );
+                    return Err(VoteExtensionError::UnexpectedEpoch);
+                }
+            };
         let (voting_power, pk) = self
             .storage
-            .get_validator_from_address(validator, epoch)
+            .get_validator_from_address(validator, Some(ext_height_epoch))
             .map_err(|err| {
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Could not get public key from Storage for some validator, while validating Ethereum events vote extension"
+                    "Could not get public key from Storage for some validator, \
+                     while validating Ethereum events vote extension"
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
@@ -101,7 +129,8 @@ where
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Failed to verify the signature of an Ethereum events vote extension issued by some validator"
+                    "Failed to verify the signature of an Ethereum events vote \
+                     extension issued by some validator"
                 );
                 VoteExtensionError::VerifySigFailed
             })
@@ -171,19 +200,22 @@ where
             return None;
         }
 
+        #[cfg(feature = "abcipp")]
         let vexts_epoch =
             self.storage.get_epoch(self.storage.last_height).expect(
                 "The epoch of the last block height should always be known",
             );
 
+        #[cfg(feature = "abcipp")]
         let total_voting_power =
             u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
+        #[cfg(feature = "abcipp")]
         let mut voting_power = FractionalVotingPower::default();
 
         let mut event_observers = BTreeMap::new();
         let mut signatures = HashMap::new();
 
-        for (validator_voting_power, vote_extension) in
+        for (_validator_voting_power, vote_extension) in
             self.filter_invalid_eth_events_vexts(vote_extensions)
         {
             let validator_addr = vote_extension.data.validator_addr;
@@ -191,15 +223,18 @@ where
             let block_height = vote_extension.data.block_height;
 
             // update voting power
-            let validator_voting_power = u64::from(validator_voting_power);
-            voting_power += FractionalVotingPower::new(
-                validator_voting_power,
-                total_voting_power,
-            )
-            .expect(
-                "The voting power we obtain from storage should always be \
-                 valid",
-            );
+            #[cfg(feature = "abcipp")]
+            {
+                let validator_voting_power = u64::from(_validator_voting_power);
+                voting_power += FractionalVotingPower::new(
+                    validator_voting_power,
+                    total_voting_power,
+                )
+                .expect(
+                    "The voting power we obtain from storage should always be \
+                     valid",
+                );
+            }
 
             // register all ethereum events seen by `validator_addr`
             for ev in vote_extension.data.ethereum_events {
