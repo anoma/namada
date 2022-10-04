@@ -1144,7 +1144,9 @@ pub async fn broadcast_tx(
 
     let rpc_cli = HttpClient::new(address)?;
 
-    // TODO: timeout?
+    // TODO: configure an explicit timeout value? we need to hack away at
+    // `tendermint-rs` for this, which is currently using a hard-coded 30s
+    // timeout.
     let response = rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await?;
 
     if response.code == 0.into() {
