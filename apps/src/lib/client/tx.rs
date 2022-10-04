@@ -55,12 +55,12 @@ const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const VP_NFT: &str = "vp_nft.wasm";
 
 /// Timeout for jsonrpc requests to the `/events` endpoint in Tendermint.
-const ENV_VAR_ANOMA_TENDERMINT_RPC_TIMEOUT: &str =
-    "ANOMA_TENDERMINT_RPC_TIMEOUT";
+const ENV_VAR_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME: &str =
+    "ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME";
 
 /// Default timeout in seconds for jsonrpc requests to the `/events` endpoint in
 /// Tendermint.
-const DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT: u64 = 30;
+const DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME: u64 = 30;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
@@ -1184,16 +1184,17 @@ pub async fn submit_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    let max_wait_time =
-        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_RPC_TIMEOUT) {
-            if let Ok(timeout) = val.parse::<u64>() {
-                Duration::from_secs(timeout)
-            } else {
-                Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT)
-            }
+    let max_wait_time = if let Ok(val) =
+        env::var(ENV_VAR_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME)
+    {
+        if let Ok(timeout) = val.parse::<u64>() {
+            Duration::from_secs(timeout)
         } else {
-            Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT)
-        };
+            Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME)
+        }
+    } else {
+        Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME)
+    };
     tracing::debug!("Tenderming address: {:?}", address);
     let rpc_cli = HttpClient::new(address.clone())?;
 
