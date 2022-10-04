@@ -4,11 +4,15 @@ use tokio::macros::support::poll_fn;
 use tokio::sync::mpsc::UnboundedSender;
 use warp::Filter;
 
+/// The default IP address and port on which the events endpoint will listen
 const DEFAULT_ENDPOINT: ([u8; 4], u16) = ([0, 0, 0, 0], 3030);
 
-/// The path to which Borsh-serialized Ethereum events should be submitted
+/// The path to which Borsh-serialized Ethereum events should be POSTed
 const PATH: &str = "eth_events";
 
+/// Starts a [`warp::Server`] that listens for Borsh-serialized Ethereum events
+/// and then forwards them to `sender`. It shuts down if `abort_sender` is
+/// closed.
 pub fn serve(
     sender: UnboundedSender<EthereumEvent>,
     mut abort_sender: tokio::sync::oneshot::Sender<()>,
