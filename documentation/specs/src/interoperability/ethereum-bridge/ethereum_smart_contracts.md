@@ -66,8 +66,8 @@ secp256k1 keys:
   withdrawal from the bridge
 
 These keys are used to control the bridge smart contracts, via signing of
-messages. Validators may be challenged periodically to prove they still retain
-knowledge of these keys.
+messages. Validators should be challenged periodically to prove they still retain
+knowledge of their governance key, which is not regularly used.
 
 ## Deployment
 
