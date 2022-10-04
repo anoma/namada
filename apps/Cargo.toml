@@ -51,7 +51,7 @@ ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
 arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "04ad1eeb28901b57a7599bbe433b3822965dabe8", features = ["std", "borsh"]}
-async-std = {version = "1.9.0", features = ["unstable"]}
+async-std = {version = "=1.9.0", features = ["unstable"]}
 async-trait = "0.1.51"
 base64 = "0.13.0"
 bech32 = "0.8.0"
@@ -97,7 +97,6 @@ serde_bytes = "0.11.5"
 serde_json = {version = "1.0.62", features = ["raw_value"]}
 sha2 = "0.9.3"
 signal-hook = "0.3.9"
-sparse-merkle-tree = {git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "121c79424646cc3e917f8616e549fbddee775a0a", features = ["borsh"]}
 # sysinfo with disabled multithread feature
 sysinfo = {version = "=0.21.1", default-features = false}
 tar = "0.4.37"

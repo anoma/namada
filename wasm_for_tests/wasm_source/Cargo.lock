@@ -1519,8 +1519,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.9.9",
- "sparse-merkle-tree 0.3.1-pre (git+https://github.com/heliaxdev/sparse-merkle-tree?rev=04ad1eeb28901b57a7599bbe433b3822965dabe8)",
- "sparse-merkle-tree 0.3.1-pre (git+https://github.com/heliaxdev/sparse-merkle-tree?rev=121c79424646cc3e917f8616e549fbddee775a0a)",
+ "sparse-merkle-tree",
  "tempfile",
  "tendermint",
  "tendermint-proto",
@@ -2460,17 +2459,6 @@ checksum = "35391ea974fa5ee869cb094d5b437688fbf3d8127d64d1b9fed5822a1ed39b12"
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
 source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=04ad1eeb28901b57a7599bbe433b3822965dabe8#04ad1eeb28901b57a7599bbe433b3822965dabe8"
-dependencies = [
- "borsh",
- "cfg-if 1.0.0",
- "ics23",
- "sha2 0.9.9",
-]
-
-[[package]]
-name = "sparse-merkle-tree"
-version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=121c79424646cc3e917f8616e549fbddee775a0a#121c79424646cc3e917f8616e549fbddee775a0a"
 dependencies = [
  "borsh",
  "cfg-if 1.0.0",
