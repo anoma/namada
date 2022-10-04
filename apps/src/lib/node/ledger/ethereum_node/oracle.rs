@@ -3,7 +3,7 @@ use std::ops::Deref;
 use clarity::Address;
 use namada::types::ethereum_events::{EthAddress, EthereumEvent};
 use num256::Uint256;
-use tokio::sync::mpsc::{Sender as BoundedSender};
+use tokio::sync::mpsc::Sender as BoundedSender;
 use tokio::sync::oneshot::Sender;
 use tokio::task::LocalSet;
 #[cfg(not(test))]
@@ -196,7 +196,10 @@ async fn run_oracle_aux(oracle: Oracle) {
                 }
             };
             pending.append(&mut events);
-            if !oracle.send(process_queue(&latest_block, &mut pending)).await {
+            if !oracle
+                .send(process_queue(&latest_block, &mut pending))
+                .await
+            {
                 tracing::info!(
                     "Ethereum oracle could not send events to the ledger; the \
                      receiver has hung up. Shutting down"

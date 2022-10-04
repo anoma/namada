@@ -775,11 +775,11 @@ mod test_utils {
         RequestInitChain, RequestProcessProposal,
     };
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-    use crate::node::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
+    use crate::node::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
 
     #[derive(Error, Debug)]
     pub enum TestError {
@@ -861,11 +861,7 @@ mod test_utils {
         ///      the Ethereum fullnode process
         pub fn new_at_height<H: Into<BlockHeight>>(
             height: H,
-        ) -> (
-            Self,
-            UnboundedReceiver<Vec<u8>>,
-            Sender<EthereumEvent>,
-        ) {
+        ) -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
@@ -892,11 +888,8 @@ mod test_utils {
         /// Same as [`TestShell::new_at_height`], but returns a shell at block
         /// height 0.
         #[inline]
-        pub fn new() -> (
-            Self,
-            UnboundedReceiver<Vec<u8>>,
-            Sender<EthereumEvent>,
-        ) {
+        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>)
+        {
             Self::new_at_height(BlockHeight(1))
         }
 
@@ -965,11 +958,7 @@ mod test_utils {
     /// shell.
     pub(super) fn setup_at_height<H: Into<BlockHeight>>(
         height: H,
-    ) -> (
-        TestShell,
-        UnboundedReceiver<Vec<u8>>,
-        Sender<EthereumEvent>,
-    ) {
+    ) -> (TestShell, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
         let (mut test, receiver, eth_receiver) =
             TestShell::new_at_height(height);
         test.init_chain(RequestInitChain {
@@ -985,11 +974,8 @@ mod test_utils {
 
     /// Same as [`setup`], but returns a shell at block height 0.
     #[inline]
-    pub(super) fn setup() -> (
-        TestShell,
-        UnboundedReceiver<Vec<u8>>,
-        Sender<EthereumEvent>,
-    ) {
+    pub(super) fn setup()
+    -> (TestShell, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
         setup_at_height(BlockHeight(0))
     }
 
@@ -1017,7 +1003,8 @@ mod test_utils {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
         // we have to use RocksDB for this test
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
-        let (_, receiver) = tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+        let (_, receiver) =
+            tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
@@ -1077,7 +1064,8 @@ mod test_utils {
 
         // Drop the shell
         std::mem::drop(shell);
-        let (_, receiver) = tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+        let (_, receiver) =
+            tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
