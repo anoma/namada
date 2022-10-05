@@ -1,6 +1,6 @@
 //! Traits needed to provide a uniform interface over
 //! all the different Merkle trees used for storage
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 use std::fmt;
 
 use arse_merkle_tree::traits::{Hasher, Value};
@@ -44,9 +44,10 @@ pub trait SubTreeWrite {
 
 impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
     fn subtree_has_key(&self, key: &Key) -> Result<bool, Error> {
-        self.get(&H::hash(key.to_string()).into())
-            .and(Ok(true))
-            .map_err(|err| Error::MerkleTree(err.to_string()))
+        match self.get(&H::hash(key.to_string()).into()) {
+            Ok(hash) => Ok(!hash.is_zero()),
+            Err(e) => Err(Error::MerkleTree(e.to_string())),
+        }
     }
 
     fn subtree_membership_proof(
@@ -84,10 +85,9 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
         value: MerkleValue,
     ) -> Result<Hash, Error> {
         let value = match value {
-            MerkleValue::Bytes(bytes) => Hash::try_from(bytes.as_slice())
-                .map_err(|_| Error::InvalidValue)?,
+            MerkleValue::Bytes(bytes) => H::hash(bytes.as_slice())
         };
-        self.update(H::hash(key.to_string()).into(), value)
+        self.update(H::hash(key.to_string()).into(), value.into())
             .map(Hash::from)
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }
@@ -103,9 +103,10 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
 impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
     fn subtree_has_key(&self, key: &Key) -> Result<bool, Error> {
         let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
-        self.get(&key)
-            .and(Ok(true))
-            .map_err(|err| Error::MerkleTree(err.to_string()))
+        match self.get(&key) {
+            Ok(hash) => Ok(!hash.is_zero()),
+            Err(e) => Err(Error::MerkleTree(e.to_string()))
+        }
     }
 
     fn subtree_membership_proof(
