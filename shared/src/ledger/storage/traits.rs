@@ -85,7 +85,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
         value: MerkleValue,
     ) -> Result<Hash, Error> {
         let value = match value {
-            MerkleValue::Bytes(bytes) => H::hash(bytes.as_slice())
+            MerkleValue::Bytes(bytes) => H::hash(bytes.as_slice()),
         };
         self.update(H::hash(key.to_string()).into(), value.into())
             .map(Hash::from)
@@ -105,7 +105,7 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
         let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
         match self.get(&key) {
             Ok(hash) => Ok(!hash.is_zero()),
-            Err(e) => Err(Error::MerkleTree(e.to_string()))
+            Err(e) => Err(Error::MerkleTree(e.to_string())),
         }
     }
 
