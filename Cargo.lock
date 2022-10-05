@@ -4121,7 +4121,6 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "orion",
- "pathdiff",
  "proptest",
  "prost 0.9.0",
  "prost-types 0.9.0",
@@ -4160,7 +4159,6 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber 0.3.11",
  "websocket",
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -4727,12 +4725,6 @@ name = "paste"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
-
-[[package]]
-name = "pathdiff"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
 
 [[package]]
 name = "peeking_take_while"
