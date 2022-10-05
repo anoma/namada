@@ -337,7 +337,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
                 "No keys provided for existence proof.".into(),
             )
         })?;
-        let (store_type, _) = StoreType::sub_key(first_key)?;
+        let (store_type, sub_key) = StoreType::sub_key(first_key)?;
         if !keys.iter().all(|k| {
             if let Ok((s, _)) = StoreType::sub_key(k) {
                 s == store_type
@@ -352,7 +352,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             ));
         }
         self.tree(&store_type)
-            .subtree_membership_proof(keys, values)
+            .subtree_membership_proof(std::array::from_ref(&sub_key), values)
     }
 
     /// Get the non-existence proof
