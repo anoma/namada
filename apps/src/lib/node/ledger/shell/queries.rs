@@ -2,11 +2,11 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
+use namada::ledger::queries::{RequestCtx, ResponseQuery};
+use namada::ledger::storage_api;
 use namada::types::address::Address;
-use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::storage::{Key, PrefixValue};
-use namada::types::token::{self, Amount};
+use namada::types::{key, token};
 
 use super::*;
 use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
@@ -70,7 +70,7 @@ where
         &self,
         token: &Address,
         owner: &Address,
-    ) -> std::result::Result<Amount, String> {
+    ) -> std::result::Result<token::Amount, String> {
         let height = self.storage.get_block_height().0;
         let query_resp = self.read_storage_value(
             &token::balance_key(token, owner),
