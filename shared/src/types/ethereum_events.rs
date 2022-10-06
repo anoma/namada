@@ -86,6 +86,7 @@ impl FromStr for EthAddress {
     PartialEq,
     Eq,
     PartialOrd,
+    Hash,
     Ord,
     Clone,
     Debug,
@@ -160,8 +161,7 @@ pub enum EthereumEvent {
 
 impl EthereumEvent {
     /// SHA256 of the Borsh serialization of the [`EthereumEvent`].
-    #[allow(dead_code)]
-    pub(crate) fn hash(&self) -> Result<Hash, std::io::Error> {
+    pub fn hash(&self) -> Result<Hash, std::io::Error> {
         let bytes = self.try_to_vec()?;
         Ok(Hash::sha256(&bytes))
     }
@@ -174,6 +174,7 @@ impl EthereumEvent {
     PartialEq,
     Eq,
     PartialOrd,
+    Hash,
     Ord,
     BorshSerialize,
     BorshDeserialize,
@@ -194,6 +195,7 @@ pub struct TransferToNamada {
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -218,6 +220,7 @@ pub struct TransferToEthereum {
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,
@@ -268,9 +271,13 @@ pub mod tests {
 }
 
 #[allow(missing_docs)]
+/// Test helpers
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use namada_proof_of_stake::types::VotingPower;
+
     use super::*;
+    use crate::types::token::Amount;
 
     pub const DAI_ERC20_ETH_ADDRESS_CHECKSUMMED: &str =
         "0x6B175474E89094C44Da98b954EedeAC495271d0F";
@@ -284,4 +291,40 @@ pub mod testing {
         160, 184, 105, 145, 198, 33, 139, 54, 193, 209, 157, 74, 46, 158, 176,
         206, 54, 6, 235, 72,
     ]);
+
+    pub fn arbitrary_eth_address() -> EthAddress {
+        DAI_ERC20_ETH_ADDRESS
+    }
+
+    pub fn arbitrary_nonce() -> Uint {
+        123.into()
+    }
+
+    pub fn arbitrary_keccak_hash() -> KeccakHash {
+        KeccakHash([0; 32])
+    }
+
+    pub fn arbitrary_amount() -> Amount {
+        Amount::from(1_000)
+    }
+
+    pub fn arbitrary_voting_power() -> VotingPower {
+        VotingPower::from(1_000)
+    }
+
+    /// A [`EthereumEvent::TransfersToNamada`] containing a single transfer of
+    /// some arbitrary ERC20
+    pub fn arbitrary_single_transfer(
+        nonce: Uint,
+        receiver: Address,
+    ) -> EthereumEvent {
+        EthereumEvent::TransfersToNamada {
+            nonce,
+            transfers: vec![TransferToNamada {
+                amount: arbitrary_amount(),
+                asset: arbitrary_eth_address(),
+                receiver,
+            }],
+        }
+    }
 }

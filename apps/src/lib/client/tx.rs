@@ -55,12 +55,12 @@ const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const VP_NFT: &str = "vp_nft.wasm";
 
 /// Timeout for jsonrpc requests to the `/events` endpoint in Tendermint.
-const ENV_VAR_ANOMA_TENDERMINT_RPC_TIMEOUT: &str =
-    "ANOMA_TENDERMINT_RPC_TIMEOUT";
+const ENV_VAR_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME: &str =
+    "ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME";
 
 /// Default timeout in seconds for jsonrpc requests to the `/events` endpoint in
 /// Tendermint.
-const DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT: u64 = 30;
+const DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME: u64 = 30;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
@@ -1144,10 +1144,10 @@ pub async fn broadcast_tx(
 
     let rpc_cli = HttpClient::new(address)?;
 
-    // TODO: timeout?
+    // TODO: configure an explicit timeout value? we need to hack away at
+    // `tendermint-rs` for this, which is currently using a hard-coded 30s
+    // timeout.
     let response = rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await?;
-
-    drop(rpc_cli);
 
     if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
@@ -1184,16 +1184,12 @@ pub async fn submit_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    let rpc_timeout =
-        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_RPC_TIMEOUT) {
-            if let Ok(timeout) = val.parse::<u64>() {
-                Duration::from_secs(timeout)
-            } else {
-                Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT)
-            }
-        } else {
-            Duration::from_secs(DEFAULT_ANOMA_TENDERMINT_RPC_TIMEOUT)
-        };
+    let max_wait_time = Duration::from_secs(
+        env::var(ENV_VAR_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME)
+            .ok()
+            .and_then(|val| val.parse().ok())
+            .unwrap_or(DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME),
+    );
     tracing::debug!("Tenderming address: {:?}", address);
     let rpc_cli = HttpClient::new(address.clone())?;
 
@@ -1203,7 +1199,7 @@ pub async fn submit_tx(
     let parsed = {
         let wrapper_query = Query::from(EventType::NewBlock)
             .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
-        let event = rpc_cli.events(wrapper_query, rpc_timeout).await?.into();
+        let event = rpc_cli.events(wrapper_query, max_wait_time).await?.into();
         let parsed =
             TxResponse::parse(event, NamadaEventType::Accepted, wrapper_hash);
 
@@ -1219,7 +1215,7 @@ pub async fn submit_tx(
             let decrypted_query = Query::from(EventType::NewBlock)
                 .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
             let event =
-                rpc_cli.events(decrypted_query, rpc_timeout).await?.into();
+                rpc_cli.events(decrypted_query, max_wait_time).await?.into();
             let parsed = TxResponse::parse(
                 event,
                 NamadaEventType::Applied,

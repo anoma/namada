@@ -8,7 +8,7 @@ use futures::future::FutureExt;
 use namada::types::ethereum_events::EthereumEvent;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{Receiver, UnboundedSender};
 use tower::Service;
 
 use super::super::Shell;
@@ -41,7 +41,7 @@ impl AbcippShim {
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        eth_receiver: Option<UnboundedReceiver<EthereumEvent>>,
+        eth_receiver: Option<Receiver<EthereumEvent>>,
         db_cache: &rocksdb::Cache,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,

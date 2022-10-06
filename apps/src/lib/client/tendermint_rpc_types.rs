@@ -44,9 +44,9 @@ impl TxResponse {
         event_type: NamadaEventType,
         tx_hash: &str,
     ) -> Self {
-        let events = event.events.expect(
-            "We should have obtained Tx events from the websocket subscription",
-        );
+        let events = event
+            .events
+            .expect("We should have obtained Tx events from the RPC");
         let evt_key = event_type.to_string();
         // Find the tx with a matching hash
         macro_rules! tx_error {
