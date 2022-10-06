@@ -32,12 +32,12 @@ pub mod mock_oracle {
 
     use namada::types::ethereum_events::EthereumEvent;
     use tokio::macros::support::poll_fn;
-    use tokio::sync::mpsc::UnboundedSender;
+    use tokio::sync::mpsc::Sender as BoundedSender;
     use tokio::sync::oneshot::Sender;
 
     pub fn run_oracle(
         _: impl AsRef<str>,
-        _: UnboundedSender<EthereumEvent>,
+        _: BoundedSender<EthereumEvent>,
         mut abort: Sender<()>,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
@@ -53,7 +53,8 @@ pub mod mock_oracle {
 pub mod event_endpoint {
     use borsh::BorshDeserialize;
     use namada::types::ethereum_events::EthereumEvent;
-    use tokio::sync::mpsc::UnboundedSender;
+    use tokio::sync::mpsc::Sender as BoundedSender;
+    use warp::reply::WithStatus;
 
     const ETHEREUM_EVENTS_ENDPOINT: ([u8; 4], u16) = ([127, 0, 0, 1], 3030);
 
@@ -61,46 +62,19 @@ pub mod event_endpoint {
     const PATH: &str = "eth_events";
 
     pub fn start_oracle(
-        sender: UnboundedSender<EthereumEvent>,
+        sender: BoundedSender<EthereumEvent>,
     ) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(async move {
+        tokio::task::spawn_local(async move {
             use warp::Filter;
 
             tracing::info!(
                 ?ETHEREUM_EVENTS_ENDPOINT,
                 "Ethereum event endpoint is starting"
             );
-
             let eth_events = warp::post()
                 .and(warp::path(PATH))
                 .and(warp::body::bytes())
-                .map(move |bytes: bytes::Bytes| {
-                    tracing::info!(len = bytes.len(), "Received request");
-                    let event = match EthereumEvent::try_from_slice(&bytes) {
-                        Ok(event) => event,
-                        Err(error) => {
-                            tracing::warn!(?error, "Couldn't handle request");
-                            return warp::reply::with_status(
-                                "Bad request",
-                                warp::http::StatusCode::BAD_REQUEST,
-                            );
-                        }
-                    };
-                    tracing::debug!("Serialized event - {:#?}", event);
-                    match sender.send(event) {
-                        Ok(()) => warp::reply::with_status(
-                            "OK",
-                            warp::http::StatusCode::OK,
-                        ),
-                        Err(error) => {
-                            tracing::warn!(?error, "Couldn't send event");
-                            warp::reply::with_status(
-                                "Internal server error",
-                                warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-                            )
-                        }
-                    }
-                });
+                .then(move |bytes: bytes::Bytes| send(bytes, sender.clone()));
 
             warp::serve(eth_events).run(ETHEREUM_EVENTS_ENDPOINT).await;
 
@@ -109,6 +83,37 @@ pub mod event_endpoint {
                 "Ethereum event endpoint is no longer running"
             );
         })
+    }
+
+    /// Callback to send out events from the oracle
+    async fn send(
+        bytes: bytes::Bytes,
+        sender: BoundedSender<EthereumEvent>,
+    ) -> WithStatus<&'static str> {
+        tracing::info!(len = bytes.len(), "Received request");
+        let event = match EthereumEvent::try_from_slice(&bytes) {
+            Ok(event) => event,
+            Err(error) => {
+                tracing::warn!(?error, "Couldn't handle request");
+                return warp::reply::with_status(
+                    "Bad request",
+                    warp::http::StatusCode::BAD_REQUEST,
+                );
+            }
+        };
+        tracing::debug!("Serialized event - {:#?}", event);
+        match sender.send(event).await {
+            Ok(()) => {
+                warp::reply::with_status("OK", warp::http::StatusCode::OK)
+            }
+            Err(error) => {
+                tracing::warn!(?error, "Couldn't send event");
+                warp::reply::with_status(
+                    "Internal server error",
+                    warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            }
+        }
     }
 }
 
@@ -121,6 +126,7 @@ pub mod mock_web3_client {
     use tokio::sync::mpsc::{
         unbounded_channel, UnboundedReceiver, UnboundedSender,
     };
+    use tokio::sync::oneshot::Sender;
     use web30::types::Log;
 
     use super::super::events::signatures::*;
@@ -136,6 +142,7 @@ pub mod mock_web3_client {
             event_type: MockEventType,
             data: Vec<u8>,
             height: u32,
+            seen: Sender<()>,
         },
     }
 
@@ -162,7 +169,7 @@ pub mod mock_web3_client {
         cmd_channel: UnboundedReceiver<TestCmd>,
         active: bool,
         latest_block_height: Uint256,
-        events: Vec<(MockEventType, Vec<u8>, u32)>,
+        events: Vec<(MockEventType, Vec<u8>, u32, Sender<()>)>,
     }
 
     impl Web3 {
@@ -210,7 +217,8 @@ pub mod mock_web3_client {
                     event_type: ty,
                     data,
                     height,
-                } => self.0.borrow_mut().events.push((ty, data, height)),
+                    seen,
+                } => self.0.borrow_mut().events.push((ty, data, height, seen)),
             }
         }
 
@@ -227,7 +235,7 @@ pub mod mock_web3_client {
         /// client has not been set to act unresponsive.
         pub async fn check_for_events(
             &self,
-            _: Uint256,
+            block_to_check: Uint256,
             _: Option<Uint256>,
             _: impl Debug,
             mut events: Vec<&str>,
@@ -251,16 +259,16 @@ pub mod mock_web3_client {
                 let mut events = vec![];
                 let mut client = self.0.borrow_mut();
                 std::mem::swap(&mut client.events, &mut events);
-                for (event_ty, data, height) in events.into_iter() {
-                    if event_ty == ty
-                        && client.latest_block_height >= Uint256::from(height)
+                for (event_ty, data, height, seen) in events.into_iter() {
+                    if event_ty == ty && block_to_check >= Uint256::from(height)
                     {
+                        seen.send(()).unwrap();
                         logs.push(Log {
                             data: data.into(),
                             ..Default::default()
                         });
                     } else {
-                        client.events.push((event_ty, data, height));
+                        client.events.push((event_ty, data, height, seen));
                     }
                 }
                 Ok(logs)
