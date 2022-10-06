@@ -1,7 +1,6 @@
 mod abortable;
 mod broadcaster;
 pub mod events;
-pub mod rpc;
 mod shell;
 mod shims;
 pub mod storage;
