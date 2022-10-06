@@ -28,6 +28,8 @@ pub mod signatures {
         Governance,
     }
 
+    // TODO: this should TryFrom and return an error if the &str is not
+    // recognized
     impl From<&str> for SigType {
         fn from(sig: &str) -> Self {
             match sig {
