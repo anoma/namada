@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     container: 
-      image: ghcr.io/anoma/namada:wasm-0.6.1
+      image: ghcr.io/anoma/namada:wasm-0.8.0
     strategy:
       fail-fast: false
       matrix:
