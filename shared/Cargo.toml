@@ -24,6 +24,7 @@ ibc-mocks = [
 ]
 # for integration tests and test utilies
 testing = [
+  "async-client",
   "proptest",
   "rand",
   "rand_core",
@@ -47,6 +48,15 @@ wasm-runtime = [
 secp256k1-sign-verify = [
   "libsecp256k1/hmac",
 ]
+# Enable queries support for an async client
+async-client = [
+  "async-trait",
+]
+# tendermint-rpc support
+tendermint-rpc = [
+  "async-client",
+  "dep:tendermint-rpc",
+]
 
 [dependencies]
 namada_proof_of_stake = {path = "../proof_of_stake"}
@@ -56,6 +66,7 @@ ark-serialize = "0.3"
 # We switch off "blake2b" because it cannot be compiled to wasm
 # branch = "bat/arse-merkle-tree"
 arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "04ad1eeb28901b57a7599bbe433b3822965dabe8", default-features = false, features = ["std", "borsh"]}
+async-trait = {version = "0.1.51", optional = true}
 bech32 = "0.8.0"
 borsh = "0.9.0"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
@@ -75,6 +86,7 @@ itertools = "0.10.0"
 loupe = {version = "0.1.3", optional = true}
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 parity-wasm = {version = "0.42.2", optional = true}
+paste = "1.0.9"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 prost = "0.9.0"
@@ -92,6 +104,7 @@ sha2 = "0.9.3"
 tempfile = {version = "3.2.0", optional = true}
 # temporarily using fork work-around for https://github.com/informalsystems/tendermint-rs/issues/971
 tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["secp256k1"]}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["http-client"], optional = true}
 tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 thiserror = "1.0.30"
 tracing = "0.1.30"
@@ -106,12 +119,14 @@ zeroize = "1.5.5"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
+async-trait = {version = "0.1.51"}
 byte-unit = "4.0.13"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
 pretty_assertions = "0.7.2"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
+tokio = {version = "1.8.2", default-features = false, features = ["rt", "macros"]}
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 
 [build-dependencies]
