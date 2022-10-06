@@ -2,12 +2,11 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
+use namada::ledger::queries::{RequestCtx, ResponseQuery};
+use namada::ledger::storage_api;
 use namada::types::address::Address;
-use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::storage::{Key, PrefixValue};
-use namada::types::token::{self, Amount};
-use tendermint_proto::crypto::{ProofOp, ProofOps};
+use namada::types::{key, token};
 
 use super::*;
 use crate::node::ledger::response;

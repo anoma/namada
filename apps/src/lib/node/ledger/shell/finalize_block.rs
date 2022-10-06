@@ -1,5 +1,6 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
+use namada::ledger::protocol;
 use namada::types::storage::{BlockHash, Header};
 use tendermint_proto::abci::Misbehavior as Evidence;
 use tendermint_proto::crypto::PublicKey as TendermintPublicKey;

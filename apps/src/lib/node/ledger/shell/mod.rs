@@ -30,7 +30,7 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, DB,
 };
-use namada::ledger::{ibc, pos};
+use namada::ledger::{ibc, pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::chain::ChainId;
 use namada::types::key::*;
@@ -60,7 +60,7 @@ use crate::config::{genesis, TendermintMode};
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
-use crate::node::ledger::{protocol, storage, tendermint_node};
+use crate::node::ledger::{storage, tendermint_node};
 #[allow(unused_imports)]
 use crate::wallet::ValidatorData;
 use crate::{config, wallet};
