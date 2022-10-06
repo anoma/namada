@@ -1,14 +1,13 @@
-name: Build and Test
+name: Build and Test Ethereum Bridge
 
 on:
   push:
     branches:
-      - main
-      - "!eth-bridge-integration"
+      - eth-bridge-integration
   # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
   pull_request_target:
     branches:
-      - "!eth-bridge-integration"
+      - eth-bridge-integration
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
@@ -102,7 +101,7 @@ jobs:
           BUCKET_NAME: namada-wasm-master
           AWS_REGION: eu-west-1
 
-  anoma:
+  anoma-eth:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 80
     strategy:
@@ -115,8 +114,8 @@ jobs:
             suffix: ''
             cache_key: anoma
             cache_version: v1
-            wait_for: anoma-release (ubuntu-latest, ABCI Release build, anoma-e2e-release, v1)
-            tendermint_artifact: tendermint-unreleased-559fb33ff9b27503ce7ac1c7d8589fe1d8b3e900
+            wait_for: anoma-release-eth (ubuntu-latest, ABCI Release build, anoma-e2e-release, v1)
+            tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
 
     env:
       CARGO_INCREMENTAL: 0
@@ -249,7 +248,7 @@ jobs:
         if: always()
         run: sccache --stop-server || true
 
-  anoma-release:
+  anoma-release-eth:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
