@@ -73,6 +73,9 @@ impl Oracle {
     /// N.B. this will block if the internal channel buffer
     /// is full.
     async fn send(&self, events: Vec<EthereumEvent>) -> bool {
+        if self.sender.is_closed() {
+            return false;
+        }
         for event in events.into_iter() {
             if self.sender.send(event).await.is_err() {
                 return false;
