@@ -1,16 +1,19 @@
 pub mod signatures {
     pub const TRANSFER_TO_NAMADA_SIG: &str =
         "TransferToNamada(uint256,(address,uint256,string)[],uint256)";
+    pub const INVALID_TRANSFER_TO_NAMADA_SIG: &str =
+        "InvalidTransferToNamada(address,string,uint256)";
     pub const TRANSFER_TO_ETHEREUM_SIG: &str =
-        "TransferToErc(uint256,address[],address[],uint256[],uint32)";
+        "TransferToErc(uint256,ERC20Transfer[])";
     pub const VALIDATOR_SET_UPDATE_SIG: &str =
         "ValidatorSetUpdate(uint256,bytes32,bytes32)";
     pub const NEW_CONTRACT_SIG: &str = "NewContract(string,address)";
     pub const UPGRADED_CONTRACT_SIG: &str = "UpgradedContract(string,address)";
     pub const UPDATE_BRIDGE_WHITELIST_SIG: &str =
         "UpdateBridgeWhiteList(uint256,address[],uint256[])";
-    pub const SIGNATURES: [&str; 6] = [
+    pub const SIGNATURES: [&str; 7] = [
         TRANSFER_TO_NAMADA_SIG,
+        INVALID_TRANSFER_TO_NAMADA_SIG,
         TRANSFER_TO_ETHEREUM_SIG,
         VALIDATOR_SET_UPDATE_SIG,
         NEW_CONTRACT_SIG,
@@ -28,9 +31,9 @@ pub mod signatures {
     impl From<&str> for SigType {
         fn from(sig: &str) -> Self {
             match sig {
-                TRANSFER_TO_NAMADA_SIG | TRANSFER_TO_ETHEREUM_SIG => {
-                    SigType::Bridge
-                }
+                TRANSFER_TO_NAMADA_SIG
+                | INVALID_TRANSFER_TO_NAMADA_SIG
+                | TRANSFER_TO_ETHEREUM_SIG => SigType::Bridge,
                 _ => SigType::Governance,
             }
         }
@@ -69,6 +72,7 @@ pub mod eth_events {
 
     /// An event waiting for a certain number of confirmations
     /// before being sent to the ledger
+    #[derive(Debug)]
     pub(in super::super) struct PendingEvent {
         /// number of confirmations to consider this event finalized
         confirmations: Uint256,
