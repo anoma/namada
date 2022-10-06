@@ -47,7 +47,7 @@ use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::protocol::ShellParams;
 use super::rpc;
@@ -183,14 +183,14 @@ pub(super) enum ShellMode {
 /// and queueing them up for inclusion in vote extensions
 #[derive(Debug)]
 pub(super) struct EthereumReceiver {
-    channel: UnboundedReceiver<EthereumEvent>,
+    channel: Receiver<EthereumEvent>,
     queue: BTreeSet<EthereumEvent>,
 }
 
 impl EthereumReceiver {
     /// Create a new [`EthereumReceiver`] from a channel connected
     /// to an Ethereum oracle
-    pub fn new(channel: UnboundedReceiver<EthereumEvent>) -> Self {
+    pub fn new(channel: Receiver<EthereumEvent>) -> Self {
         Self {
             channel,
             queue: BTreeSet::new(),
@@ -333,7 +333,7 @@ where
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        eth_receiver: Option<UnboundedReceiver<EthereumEvent>>,
+        eth_receiver: Option<Receiver<EthereumEvent>>,
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
@@ -768,7 +768,7 @@ mod test_utils {
     use namada::types::storage::{BlockHash, Epoch, Header};
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
-    use tokio::sync::mpsc::UnboundedReceiver;
+    use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
     use crate::facade::tendermint_proto::abci::{
@@ -779,6 +779,7 @@ mod test_utils {
         FinalizeBlock, ProcessedTx,
     };
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
+    use crate::node::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
 
     #[derive(Error, Debug)]
     pub enum TestError {
@@ -860,14 +861,10 @@ mod test_utils {
         ///      the Ethereum fullnode process
         pub fn new_at_height<H: Into<BlockHeight>>(
             height: H,
-        ) -> (
-            Self,
-            UnboundedReceiver<Vec<u8>>,
-            UnboundedSender<EthereumEvent>,
-        ) {
+        ) -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let (eth_sender, eth_receiver) =
-                tokio::sync::mpsc::unbounded_channel();
+                tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
@@ -891,11 +888,8 @@ mod test_utils {
         /// Same as [`TestShell::new_at_height`], but returns a shell at block
         /// height 0.
         #[inline]
-        pub fn new() -> (
-            Self,
-            UnboundedReceiver<Vec<u8>>,
-            UnboundedSender<EthereumEvent>,
-        ) {
+        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>)
+        {
             Self::new_at_height(BlockHeight(1))
         }
 
@@ -964,11 +958,7 @@ mod test_utils {
     /// shell.
     pub(super) fn setup_at_height<H: Into<BlockHeight>>(
         height: H,
-    ) -> (
-        TestShell,
-        UnboundedReceiver<Vec<u8>>,
-        UnboundedSender<EthereumEvent>,
-    ) {
+    ) -> (TestShell, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
         let (mut test, receiver, eth_receiver) =
             TestShell::new_at_height(height);
         test.init_chain(RequestInitChain {
@@ -984,11 +974,8 @@ mod test_utils {
 
     /// Same as [`setup`], but returns a shell at block height 0.
     #[inline]
-    pub(super) fn setup() -> (
-        TestShell,
-        UnboundedReceiver<Vec<u8>>,
-        UnboundedSender<EthereumEvent>,
-    ) {
+    pub(super) fn setup()
+    -> (TestShell, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
         setup_at_height(BlockHeight(0))
     }
 
@@ -1016,7 +1003,8 @@ mod test_utils {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
         // we have to use RocksDB for this test
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
-        let (_, receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (_, receiver) =
+            tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
@@ -1076,7 +1064,8 @@ mod test_utils {
 
         // Drop the shell
         std::mem::drop(shell);
-        let (_, receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (_, receiver) =
+            tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
