@@ -241,6 +241,7 @@ pub mod eth_events {
     impl RawTransfersToNamada {
         /// Parse ABI serialized data from an Ethereum event into
         /// an instance of [`RawTransfersToNamada`]
+        /// "TransferToNamada(uint256,(address,uint256,string)[],uint256)
         fn decode(data: &[u8]) -> Result<Self> {
             let [nonce, transfers, confs]: [Token; 3] = decode(
                 &[
