@@ -888,7 +888,7 @@ mod test_finalize_block {
             name: "Test".to_string(),
             address: EthAddress([0; 20]),
         };
-        oracle.send(event.clone()).expect("Test failed");
+        tokio_test::block_on(oracle.send(event.clone())).expect("Test failed");
         let [queued_event]: [EthereumEvent; 1] =
             shell.new_ethereum_events().try_into().expect("Test failed");
         assert_eq!(queued_event, event);
