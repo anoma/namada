@@ -8,11 +8,10 @@ use std::sync::{Arc, RwLock, RwLockReadGuard};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task;
 
-use crate::facade::tendermint_rpc::query::Query;
 use crate::node::ledger::events::Event;
 
 /// Instantiates a new event log and its associated machinery.
-pub fn new_log() -> (EventLog, EventLogger, EventSender) {
+pub fn new() -> (EventLog, EventLogger, EventSender) {
     let (tx, rx) = mpsc::unbounded_channel();
 
     let log = EventLog::new();
@@ -43,10 +42,10 @@ pub struct EventLog {
 /// An iterator over the [`Event`] instances in the
 /// event log, matching a given [`Query`].
 #[allow(dead_code)]
-pub struct EventLogIterator<'it> {
+pub struct EventLogIterator<'a> {
     index: usize,
-    guard: RwLockReadGuard<'it, Vec<Event>>,
-    query: Query,
+    guard: RwLockReadGuard<'a, Vec<Event>>,
+    query: dumb_queries::QueryMatcher<'a>,
 }
 
 impl EventLog {
@@ -104,5 +103,59 @@ impl EventSender {
     #[inline]
     pub fn send_events(&self, events: Vec<Event>) -> Option<()> {
         self.sender.send(events).ok()
+    }
+}
+
+mod dumb_queries {
+    //! Silly simple Tendermint query parser.
+    //!
+    //! This parser will only work with simple queries of the form:
+    //!
+    //! ```
+    //! tm.event='NewBlock' AND applied.<attr>='<value>'
+    //! ```
+
+    use lazy_static::lazy_static;
+    use regex::Regex;
+
+    use crate::node::ledger::events::EventType;
+
+    lazy_static! {
+        static ref REGEX: Regex = Regex::new(
+            r"^tm\.event='NewBlock' AND (accepted|applied).([a-z]+)='([^']+)'$"
+        )
+        .unwrap();
+    }
+
+    /// A [`QueryMatcher`] verifies if a Namada event matches a
+    /// given Tendermint query.
+    #[allow(dead_code)]
+    pub struct QueryMatcher<'q> {
+        event_type: EventType,
+        attr: &'q str,
+        value: &'q str,
+    }
+
+    impl<'q> QueryMatcher<'q> {
+        #[allow(dead_code)]
+        pub fn parse(query: &'q str) -> Option<Self> {
+            let captures = REGEX.captures(query)?;
+
+            let event_type = match captures.get(1)?.as_str() {
+                "accepted" => EventType::Accepted,
+                "applied" => EventType::Applied,
+                // NOTE: the regex only matches `accepted`
+                // and `applied`
+                _ => unreachable!(),
+            };
+            let attr = captures.get(2)?.as_str();
+            let value = captures.get(3)?.as_str();
+
+            Some(Self {
+                event_type,
+                attr,
+                value,
+            })
+        }
     }
 }
