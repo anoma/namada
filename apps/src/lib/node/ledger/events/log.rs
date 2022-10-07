@@ -143,7 +143,7 @@ mod dumb_queries {
 
     lazy_static! {
         static ref REGEX: Regex = Regex::new(
-            r"^tm\.event='NewBlock' AND (accepted|applied).([a-z]+)='([^']+)'$"
+            r"^tm\.event='NewBlock' AND (accepted|applied)\.([a-z]+)='([^']+)'$"
         )
         .unwrap();
     }
