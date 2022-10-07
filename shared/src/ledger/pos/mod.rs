@@ -9,7 +9,7 @@ pub use namada_proof_of_stake::types::{
     self, Slash, Slashes, TotalVotingPowers, ValidatorStates,
     ValidatorVotingPowers,
 };
-use namada_proof_of_stake::PosBase;
+use namada_proof_of_stake::{PosBase, PosReadOnly};
 pub use storage::*;
 pub use vp::PosVP;
 
@@ -256,4 +256,12 @@ mod macros {
         }
     }
 }
+}
+
+impl_pos_read_only! {
+    type Error = storage_api::Error;
+    impl<DB, H> PosReadOnly for Storage<DB, H>
+        where
+            DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
+            H: StorageHasher +'static,
 }
