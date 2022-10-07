@@ -494,7 +494,7 @@ macro_rules! router_type {
 
             impl $name {
                 #[doc = "Construct this router as a root router"]
-                const fn new() -> Self {
+                pub const fn new() -> Self {
                     Self {
                         prefix: String::new(),
                     }
@@ -502,7 +502,7 @@ macro_rules! router_type {
 
                 #[allow(dead_code)]
                 #[doc = "Construct this router as a sub-router at the given prefix path"]
-                const fn sub(prefix: String) -> Self {
+                pub const fn sub(prefix: String) -> Self {
                     Self {
                         prefix,
                     }
