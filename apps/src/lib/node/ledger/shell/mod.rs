@@ -173,6 +173,7 @@ pub(super) enum ShellMode {
     Validator {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
+        event_log_sender: UnboundedSender<Vec<Event>>,
         ethereum_recv: EthereumReceiver,
     },
     Full,
@@ -277,6 +278,25 @@ impl ShellMode {
                 .expect("The broadcaster should be running for a validator");
         }
     }
+
+    /// If this node is a validator, send a vector of [`Event`] instances
+    /// to its event log.
+    ///
+    /// These events can then be queried from this node's `/events` RPC
+    /// endpoint, until they are ejected fron the event log some time later.
+    /// Ejecting events from a node's log happens after they have expired,
+    /// which is configured on a per-node basis based on a specific number
+    /// of block heights parameter.
+    pub fn log_events(&self, events: Vec<Event>) {
+        if let Self::Validator {
+            event_log_sender, ..
+        } = self
+        {
+            event_log_sender.send(events).expect(
+                "An events RPC endpoint should be running for a validator",
+            );
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -333,6 +353,7 @@ where
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
+        event_log_sender: Option<UnboundedSender<Vec<Event>>>,
         eth_receiver: Option<Receiver<EthereumEvent>>,
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
@@ -405,6 +426,7 @@ where
                             },
                         },
                         broadcast_sender,
+                        event_log_sender: event_log_sender.unwrap(),
                         ethereum_recv: EthereumReceiver::new(
                             eth_receiver.unwrap(),
                         ),
@@ -1002,7 +1024,8 @@ mod test_utils {
     fn test_tx_queue_persistence() {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
         // we have to use RocksDB for this test
-        let (sender, _) = tokio::sync::mpsc::unbounded_channel();
+        let (broadcast_sender, _) = tokio::sync::mpsc::unbounded_channel();
+        let (event_log_sender, _) = tokio::sync::mpsc::unbounded_channel();
         let (_, receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
@@ -1014,7 +1037,8 @@ mod test_utils {
                 TendermintMode::Validator,
             ),
             top_level_directory().join("wasm"),
-            sender.clone(),
+            broadcast_sender.clone(),
+            event_log_sender.clone(),
             Some(receiver),
             None,
             vp_wasm_compilation_cache,
@@ -1074,7 +1098,8 @@ mod test_utils {
                 TendermintMode::Validator,
             ),
             top_level_directory().join("wasm"),
-            sender,
+            broadcast_sender,
+            event_log_sender,
             Some(receiver),
             None,
             vp_wasm_compilation_cache,
