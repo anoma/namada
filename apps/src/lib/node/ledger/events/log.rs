@@ -106,11 +106,30 @@ pub struct EventLogger {
 
 impl EventLogger {
     /// Receive new events from a `FinalizeBlock` call, and log them.
-    pub async fn log_events(&mut self) -> Option<()> {
+    ///
+    /// We should use this method in a loop, such as:
+    ///
+    /// ```ignore
+    /// let mut logger: EventLogger = /* ... */;
+    ///
+    /// loop {
+    ///     if logger.log_new_events_batch().await.is_none() {
+    ///         /* handle errors */
+    ///     }
+    /// }
+    /// ```
+    pub async fn log_new_events_batch(&mut self) -> Option<()> {
         task::block_in_place(|| self.log.prune());
         let events = self.receiver.recv().await?;
         task::block_in_place(move || self.log.add(events));
         Some(())
+    }
+
+    /// Call [`Self::log_new_events_batch`] repeatedly.
+    pub async fn run(&mut self) -> Option<()> {
+        loop {
+            self.log_new_events_batch().await?;
+        }
     }
 }
 
