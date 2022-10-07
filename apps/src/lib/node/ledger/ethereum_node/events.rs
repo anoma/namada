@@ -258,29 +258,8 @@ pub mod eth_events {
                 ))
             })?;
 
-            let transfers = transfers.parse_namada_transfer_array()?;
-
-            let mut assets = vec![];
-            let mut amounts = vec![];
-            let mut receivers = vec![];
-
-            for (asset, amount, receiver) in transfers.into_iter() {
-                assets.push(asset);
-                amounts.push(amount);
-                receivers.push(receiver);
-            }
-
             Ok(Self {
-                transfers: assets
-                    .into_iter()
-                    .zip(receivers.into_iter())
-                    .zip(amounts.into_iter())
-                    .map(|((asset, receiver), amount)| TransferToNamada {
-                        amount,
-                        asset,
-                        receiver,
-                    })
-                    .collect(),
+                transfers: transfers.parse_transfer_to_namada_array()?,
                 nonce: nonce.parse_uint256()?,
                 confirmations: confs.parse_u32()?,
             })
@@ -575,11 +554,10 @@ pub mod eth_events {
         fn parse_eth_address_array(self) -> Result<Vec<EthAddress>>;
         fn parse_address_array(self) -> Result<Vec<Address>>;
         fn parse_string_array(self) -> Result<Vec<String>>;
-        fn parse_namada_transfer_array(
+        fn parse_transfer_to_namada_array(
             self,
-        ) -> Result<Vec<(EthAddress, Amount, Address)>>;
-        fn parse_namada_transfer(self)
-        -> Result<(EthAddress, Amount, Address)>;
+        ) -> Result<Vec<TransferToNamada>>;
+        fn parse_transfer_to_namada(self) -> Result<TransferToNamada>;
     }
 
     impl Parse for Token {
@@ -709,9 +687,9 @@ pub mod eth_events {
             Ok(addrs)
         }
 
-        fn parse_namada_transfer_array(
+        fn parse_transfer_to_namada_array(
             self,
-        ) -> Result<Vec<(EthAddress, Amount, Address)>> {
+        ) -> Result<Vec<TransferToNamada>> {
             let array = if let Token::Array(array) = self {
                 array
             } else {
@@ -722,20 +700,22 @@ pub mod eth_events {
             };
             let mut transfers = vec![];
             for token in array.into_iter() {
-                let transfer = token.parse_namada_transfer()?;
+                let transfer = token.parse_transfer_to_namada()?;
                 transfers.push(transfer);
             }
             Ok(transfers)
         }
 
-        fn parse_namada_transfer(
-            self,
-        ) -> Result<(EthAddress, Amount, Address)> {
+        fn parse_transfer_to_namada(self) -> Result<TransferToNamada> {
             if let Token::Tuple(tuple) = self {
                 let asset = tuple[0].clone().parse_eth_address()?;
                 let amount = tuple[1].clone().parse_amount()?;
                 let receiver = tuple[2].clone().parse_address()?;
-                Ok((asset, amount, receiver))
+                Ok(TransferToNamada {
+                    asset,
+                    amount,
+                    receiver,
+                })
             } else {
                 Err(Error::Decode(format!(
                     "Expected type `Tuple`, got {:?}",
