@@ -809,7 +809,29 @@ pub mod eth_events {
 
     #[cfg(test)]
     mod test_events {
+        use assert_matches::assert_matches;
+        use enum_iterator::all;
+
         use super::*;
+
+        /// Check that trying to parse an [`EventType`] from its signature
+        /// always gives it back
+        #[test]
+        fn test_event_type_try_from_signature() {
+            for ty in all::<EventType>() {
+                let sig = ty.signature();
+
+                assert_eq!(EventType::try_from(sig), Ok(ty));
+            }
+        }
+
+        #[test]
+        fn test_event_type_try_from_invalid() {
+            assert_matches!(
+                EventType::try_from("not a valid signature"),
+                Err(_)
+            );
+        }
 
         /// For each of the basic types, test that roundtrip
         /// encoding - decoding is a no-op
