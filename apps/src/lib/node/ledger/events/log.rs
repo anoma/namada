@@ -6,6 +6,7 @@
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::task;
 
 use crate::facade::tendermint_rpc::query::Query;
 use crate::node::ledger::events::Event;
@@ -76,9 +77,9 @@ pub struct EventLogger {
 impl EventLogger {
     /// Receive new events from a `FinalizeBlock` call, and log them.
     pub async fn log_events(&mut self) -> Option<()> {
-        self.log.prune();
+        task::block_in_place(|| self.log.prune());
         let events = self.receiver.recv().await?;
-        self.log.add(events);
+        task::block_in_place(move || self.log.add(events));
         Some(())
     }
 }
