@@ -11,21 +11,26 @@ use crate::node::ledger::events::Event;
 pub fn new_log() -> (EventLog, EventLogger, EventSender) {
     let (tx, rx) = mpsc::unbounded_channel();
 
-    let logger = EventLogger { receiver: rx };
+    let log = EventLog;
+    let logger = EventLogger {
+        receiver: rx,
+        log: log.clone(),
+    };
     let sender = EventSender { sender: tx };
 
-    (todo!(), logger, sender)
+    (log, logger, sender)
 }
 
 /// A log of [`Event`] instances emitted by `FinalizeBlock` calls,
 /// in the ledger.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EventLog;
 
 /// Receives events from an [`EventSender`], and logs them to the
 /// [`EventLog`].
 #[derive(Debug)]
 pub struct EventLogger {
+    #[allow(dead_code)]
     log: EventLog,
     receiver: UnboundedReceiver<Vec<Event>>,
 }
