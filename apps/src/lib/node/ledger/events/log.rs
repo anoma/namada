@@ -133,7 +133,7 @@ mod dumb_queries {
     //! This parser will only work with simple queries of the form:
     //!
     //! ```
-    //! tm.event='NewBlock' AND applied.<attr>='<value>'
+    //! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
     //! ```
 
     use lazy_static::lazy_static;
