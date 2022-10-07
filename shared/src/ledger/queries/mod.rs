@@ -7,6 +7,7 @@ pub use types::Client;
 pub use types::{
     EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
 };
+use vp::{Vp, VP};
 
 use super::storage::{DBIter, StorageHasher, DB};
 use super::storage_api;
@@ -15,11 +16,15 @@ use super::storage_api;
 mod router;
 mod shell;
 mod types;
+mod vp;
 
 // Most commonly expected patterns should be declared first
 router! {RPC,
     // Shell provides storage read access, block metadata and can dry-run a tx
     ( "shell" ) = (sub SHELL),
+
+    // Validity-predicate's specific storage queries
+    ( "vp" ) = (sub VP),
 }
 
 /// Handle RPC query request in the ledger. On success, returns response with

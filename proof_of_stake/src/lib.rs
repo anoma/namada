@@ -156,6 +156,30 @@ pub trait PosReadOnly {
     /// Read PoS total voting power of all validators (active and inactive).
     fn read_total_voting_power(&self)
     -> Result<TotalVotingPowers, Self::Error>;
+
+    /// Check if the given address is a validator by checking that it has some
+    /// state.
+    fn is_validator(
+        &self,
+        address: &Self::Address,
+    ) -> Result<bool, Self::Error> {
+        let state = self.read_validator_state(address)?;
+        Ok(state.is_some())
+    }
+
+    /// Get the total bond amount for the given bond ID at the given epoch.
+    fn get_bond_amount(
+        &self,
+        bond_id: &BondId<Self::Address>,
+        epoch: impl Into<Epoch>,
+    ) -> Result<Self::TokenAmount, Self::Error> {
+        // TODO apply slashes, if any
+        // TODO apply rewards, if any
+        let bonds = self.read_bond(&bond_id)?;
+        Ok(bonds
+            .and_then(|bonds| bonds.get(epoch.into()).map(|bond| bond.sum()))
+            .unwrap_or_default())
+    }
 }
 
 /// PoS system trait to be implemented in integration that can read and write
@@ -308,16 +332,6 @@ pub trait PosActions: PosReadOnly {
         self.write_validator_total_deltas(address, total_deltas)?;
         self.write_validator_voting_power(address, voting_power)?;
         Ok(())
-    }
-
-    /// Check if the given address is a validator by checking that it has some
-    /// state.
-    fn is_validator(
-        &self,
-        address: &Self::Address,
-    ) -> Result<bool, Self::Error> {
-        let state = self.read_validator_state(address)?;
-        Ok(state.is_some())
     }
 
     /// Self-bond tokens to a validator when `source` is `None` or equal to
