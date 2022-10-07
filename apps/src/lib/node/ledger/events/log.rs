@@ -48,7 +48,28 @@ pub struct EventLogIterator<'a> {
     query: dumb_queries::QueryMatcher<'a>,
 }
 
+impl<'a> Iterator for EventLogIterator<'a> {
+    type Item = Event;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let event = self.guard.get(self.index).cloned()?;
+        self.index += 1;
+        Some(event)
+    }
+}
+
 impl EventLog {
+    /// Returns a new iterator over this [`EventLog`], if the
+    /// given `query` is valid.
+    pub fn iter<'a>(&'a self, query: &'a str) -> Option<EventLogIterator<'a>> {
+        let query = dumb_queries::QueryMatcher::parse(query)?;
+        Some(EventLogIterator {
+            query,
+            index: 0,
+            guard: self.inner.read().unwrap(),
+        })
+    }
+
     /// Creates a new event log.
     fn new() -> Self {
         Self {
@@ -137,7 +158,6 @@ mod dumb_queries {
     }
 
     impl<'q> QueryMatcher<'q> {
-        #[allow(dead_code)]
         pub fn parse(query: &'q str) -> Option<Self> {
             let captures = REGEX.captures(query)?;
 
