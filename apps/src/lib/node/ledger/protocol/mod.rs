@@ -11,7 +11,7 @@ use namada::ledger::native_vp::{self, NativeVp};
 use namada::ledger::parameters::{self, ParametersVp};
 use namada::ledger::pos::{self, PosVP};
 use namada::ledger::storage::write_log::WriteLog;
-use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada::ledger::storage::{DB, DBIter, Storage, traits::StorageHasher};
 use namada::ledger::treasury::TreasuryVp;
 use namada::proto::{self, Tx};
 use namada::types::address::{Address, InternalAddress};

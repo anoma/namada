@@ -506,25 +506,47 @@ where
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
     }
 
-    /// Get the existence proof
+    /// Get a Tendermint-compatible existence proof.
+    ///
+    /// Proofs from the Ethereum bridge pool are not
+    /// Tendermint-compatible. Requesting for a key
+    /// belonging to the bridge pool will cause this
+    /// method to error.
     pub fn get_existence_proof(
         &self,
         key: &Key,
         value: MerkleValue,
         height: BlockHeight,
-    ) -> Result<MembershipProof> {
+    ) -> Result<Proof> {
         if height >= self.get_block_height().0 {
-            Ok(self.block.tree.get_sub_tree_existence_proof(
-                array::from_ref(key),
-                vec![value],
-            )?)
+            if let MembershipProof::ICS23(proof) = self
+                .block
+                .tree
+                .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
+                .map_err(Error::MerkleTreeError)? {
+                self.block
+                    .tree
+                    .get_tendermint_proof(key, proof)
+                    .map_err(Error::MerkleTreeError)
+            } else {
+                Err(Error::MerkleTreeError(MerkleTreeError::TendermintProof))
+            }
         } else {
             match self.db.read_merkle_tree_stores(height)? {
-                Some(stores) => Ok(MerkleTree::<H>::new(stores)
-                    .get_sub_tree_existence_proof(
-                        array::from_ref(key),
-                        vec![value],
-                    )?),
+                Some(stores) => {
+                    let tree = MerkleTree::<H>::new(stores);
+                    if let MembershipProof::ICS23(proof) = tree
+                        .get_sub_tree_existence_proof(
+                            array::from_ref(key),
+                            vec![value],
+                        )
+                        .map_err(Error::MerkleTreeError)? {
+                        tree.get_tendermint_proof(key, proof)
+                            .map_err(Error::MerkleTreeError)
+                    } else {
+                        Err(Error::MerkleTreeError(MerkleTreeError::TendermintProof))
+                    }
+                }
                 None => Err(Error::NoMerkleTree { height }),
             }
         }

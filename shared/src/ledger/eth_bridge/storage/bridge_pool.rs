@@ -509,7 +509,7 @@ mod test_bridge_pool_tree {
             transfer: TransferToEthereum {
                 asset: EthAddress([1; 20]),
                 recipient: EthAddress([2; 20]),
-                amount: (1 as u64).into(),
+                amount: 1u64.into(),
                 nonce: 42u64.into(),
             },
             gas_fee: GasFee {
@@ -529,7 +529,7 @@ mod test_bridge_pool_tree {
             transfer: TransferToEthereum {
                 asset: EthAddress([1; 20]),
                 recipient: EthAddress([2; 20]),
-                amount: (1 as u64).into(),
+                amount: 1u64.into(),
                 nonce: 42u64.into(),
             },
             gas_fee: GasFee {
@@ -557,7 +557,7 @@ mod test_bridge_pool_tree {
             transfer: TransferToEthereum {
                 asset: EthAddress([1; 20]),
                 recipient: EthAddress([2; 20]),
-                amount: (1 as u64).into(),
+                amount: 1.into(),
                 nonce: 42u64.into(),
             },
             gas_fee: GasFee {
@@ -571,7 +571,7 @@ mod test_bridge_pool_tree {
             transfer: TransferToEthereum {
                 asset: EthAddress([1; 20]),
                 recipient: EthAddress([0; 20]),
-                amount: (1 as u64).into(),
+                amount: 1u64.into(),
                 nonce: 42u64.into(),
             },
             gas_fee: GasFee {
@@ -812,7 +812,7 @@ mod test_bridge_pool_tree {
                 addrs.into_iter().map(| (addr, nonce)|
                     PendingTransfer {
                         transfer: TransferToEthereum {
-                            asset: EthAddress(addr.clone()),
+                            asset: EthAddress(addr),
                             recipient: EthAddress(addr),
                             amount: Default::default(),
                             nonce: nonce.into()

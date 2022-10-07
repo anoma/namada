@@ -9,7 +9,7 @@ use arse_merkle_tree::blake2b::Blake2bHasher;
 use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::H256;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
-use namada::ledger::storage::{Storage, StorageHasher};
+use namada::ledger::storage::{Storage, traits::StorageHasher};
 
 #[derive(Default)]
 pub struct PersistentStorageHasher(Blake2bHasher);

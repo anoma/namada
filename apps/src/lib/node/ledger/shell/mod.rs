@@ -28,7 +28,7 @@ use namada::ledger::pos::namada_proof_of_stake::types::{
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
-    DBIter, Sha256Hasher, Storage, StorageHasher, DB,
+    DBIter, traits::Sha256Hasher, Storage, traits::StorageHasher, DB,
 };
 use namada::ledger::{ibc, parameters, pos};
 use namada::proto::{self, Tx};
@@ -760,7 +760,7 @@ mod test_utils {
     #[cfg(not(feature = "abcipp"))]
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
+    use namada::ledger::storage::{BlockStateWrite, MerkleTree, traits::Sha256Hasher};
     use namada::types::address::{xan, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;

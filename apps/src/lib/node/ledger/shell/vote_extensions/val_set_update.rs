@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use namada::ledger::pos::types::VotingPower;
-use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::ledger::storage::{DB, DBIter, traits::StorageHasher};
 use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::validator_set_update;
 use namada::types::voting_power::FractionalVotingPower;
