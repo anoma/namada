@@ -17,7 +17,6 @@ pub mod eth_events {
     use std::fmt::Debug;
     use std::str::FromStr;
 
-    use enum_iterator::Sequence;
     use ethabi::decode;
     #[cfg(test)]
     use ethabi::encode;
@@ -45,19 +44,19 @@ pub mod eth_events {
 
     /// This represents all possible event types that can be emitted by any of
     /// the Ethereum bridge smart contracts
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Sequence)]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
     pub enum EventType {
         Bridge(BridgeEventType),
         Governance(GovernanceEventType),
     }
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Sequence)]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
     pub enum BridgeEventType {
         TransferToNamada,
         TransferToEthereum,
     }
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Sequence)]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
     pub enum GovernanceEventType {
         ValidatorSetUpdate,
         NewContract,
@@ -66,6 +65,21 @@ pub mod eth_events {
     }
 
     impl EventType {
+        pub fn all() -> Vec<Self> {
+            // TODO: we can get rid of this with enum_iterator::Sequence once we
+            // upgrade to Rust >= 1.63
+            vec![
+                EventType::Bridge(BridgeEventType::TransferToNamada),
+                EventType::Bridge(BridgeEventType::TransferToEthereum),
+                EventType::Governance(GovernanceEventType::ValidatorSetUpdate),
+                EventType::Governance(GovernanceEventType::NewContract),
+                EventType::Governance(GovernanceEventType::UpgradedContract),
+                EventType::Governance(
+                    GovernanceEventType::UpdateBridgeWhiteList,
+                ),
+            ]
+        }
+
         pub fn signature(&self) -> &str {
             match self {
                 EventType::Bridge(event) => match event {
@@ -810,7 +824,6 @@ pub mod eth_events {
     #[cfg(test)]
     mod test_events {
         use assert_matches::assert_matches;
-        use enum_iterator::all;
 
         use super::*;
 
@@ -818,7 +831,7 @@ pub mod eth_events {
         /// always gives it back
         #[test]
         fn test_event_type_try_from_signature() {
-            for ty in all::<EventType>() {
+            for ty in EventType::all() {
                 let sig = ty.signature();
 
                 assert_eq!(EventType::try_from(sig), Ok(ty));

@@ -1,7 +1,6 @@
 use std::ops::Deref;
 
 use clarity::Address;
-use enum_iterator::all;
 use namada::types::ethereum_events::{EthAddress, EthereumEvent};
 use num256::Uint256;
 use tokio::sync::mpsc::Sender as BoundedSender;
@@ -171,7 +170,7 @@ async fn run_oracle_aux(oracle: Oracle) {
         let block_to_check = latest_block.clone() - MIN_CONFIRMATIONS.into();
         // check for events with at least `[MIN_CONFIRMATIONS]`
         // confirmations.
-        for event_type in all::<EventType>() {
+        for event_type in EventType::all().into_iter() {
             let addr: Address = match event_type {
                 EventType::Bridge(_) => MINT_CONTRACT.0.into(),
                 EventType::Governance(_) => GOVERNANCE_CONTRACT.0.into(),
