@@ -1030,9 +1030,7 @@ pub fn init_connection(msg: &MsgConnectionOpenInit) -> ConnectionEnd {
         ConnState::Init,
         msg.client_id.clone(),
         msg.counterparty.clone(),
-        msg.version
-            .clone()
-            .map_or_else(|| vec![ConnVersion::default()], |v| vec![v]),
+        vec![msg.version.clone().unwrap_or_default()],
         msg.delay_period,
     )
 }
