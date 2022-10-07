@@ -33,7 +33,10 @@ pub struct EventLog {
     // prune events, and for that we need to keep track of their
     // block height; additionally, we want to improve the efficiency
     // of the log, since we might be logging many events per block,
-    // which can constitue a dos attack on us
+    // which can constitute a dos attack on us.
+    //
+    // we should strive to be more read than write friendly, to
+    // support many concurrent readers of log events.
     inner: Arc<RwLock<Vec<Event>>>,
 }
 
