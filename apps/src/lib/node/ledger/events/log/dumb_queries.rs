@@ -12,7 +12,8 @@ use regex::Regex;
 use crate::node::ledger::events::{Event, EventType};
 
 lazy_static! {
-    static ref REGEX: Regex = Regex::new(
+    /// Regular expresion used to parse Tendermint queries.
+    static ref QUERY_PARSING_REGEX: Regex = Regex::new(
         r"^tm\.event='NewBlock' AND (accepted|applied)\.([a-z]+)='([^']+)'$"
     )
     .unwrap();
@@ -41,7 +42,7 @@ impl<'q> QueryMatcher<'q> {
 
     /// Parses a Tendermint-like events query.
     pub fn parse(query: &'q str) -> Option<Self> {
-        let captures = REGEX.captures(query)?;
+        let captures = QUERY_PARSING_REGEX.captures(query)?;
 
         let event_type = match captures.get(1)?.as_str() {
             "accepted" => EventType::Accepted,
