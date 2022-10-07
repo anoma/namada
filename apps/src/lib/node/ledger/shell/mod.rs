@@ -308,6 +308,22 @@ pub enum MempoolTxType {
     RecheckTransaction,
 }
 
+/// The paramaters to pass to [`Shell::new`].
+#[derive(Debug)]
+pub struct NewShellParams<'cache, D = storage::PersistentDB>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+{
+    pub config: config::Ledger,
+    pub wasm_dir: PathBuf,
+    pub broadcast_sender: UnboundedSender<Vec<u8>>,
+    pub event_log_sender: Option<UnboundedSender<Vec<Event>>>,
+    pub eth_receiver: Option<Receiver<EthereumEvent>>,
+    pub db_cache: Option<&'cache D::Cache>,
+    pub vp_wasm_compilation_cache: u64,
+    pub tx_wasm_compilation_cache: u64,
+}
+
 #[derive(Debug)]
 pub struct Shell<D = storage::PersistentDB, H = Sha256Hasher>
 where
@@ -349,16 +365,18 @@ where
 {
     /// Create a new shell from a path to a database and a chain id. Looks
     /// up the database with this data and tries to load the last state.
-    pub fn new(
-        config: config::Ledger,
-        wasm_dir: PathBuf,
-        broadcast_sender: UnboundedSender<Vec<u8>>,
-        event_log_sender: Option<UnboundedSender<Vec<Event>>>,
-        eth_receiver: Option<Receiver<EthereumEvent>>,
-        db_cache: Option<&D::Cache>,
-        vp_wasm_compilation_cache: u64,
-        tx_wasm_compilation_cache: u64,
-    ) -> Self {
+    pub fn new(params: NewShellParams<'_, D>) -> Self {
+        let NewShellParams {
+            config,
+            wasm_dir,
+            broadcast_sender,
+            event_log_sender,
+            eth_receiver,
+            db_cache,
+            vp_wasm_compilation_cache,
+            tx_wasm_compilation_cache,
+        } = params;
+
         let chain_id = config.chain_id;
         let db_path = config.shell.db_dir(&chain_id);
         let base_dir = config.shell.base_dir;
@@ -876,35 +894,45 @@ mod test_utils {
     }
 
     impl TestShell {
-        /// Returns a new shell with
-        ///    - A broadcast receiver, which will receive any protocol txs sent
-        ///      by the shell.
-        ///    - A sender that can send Ethereum events into the ledger, mocking
-        ///      the Ethereum fullnode process
+        /// Returns a new test shell, and a number of channels to mock
+        /// shell sub-processes.
+        ///
+        /// The returned channels include:
+        ///
+        ///    - A channel which will receive any protocol txs sent by the shell
+        ///      via the [`Shell::broadcast`] method.
+        ///    - A channel that can send Ethereum events into the ledger,
+        ///      mocking the Ethereum fullnode process.
         pub fn new_at_height<H: Into<BlockHeight>>(
             height: H,
         ) -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
-            let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+            let (broadcast_sender, broadcast_receiver) =
+                tokio::sync::mpsc::unbounded_channel();
+            // TODO: return the `event_log_receiver` from this func
+            let (event_log_sender, _event_log_receiver) =
+                tokio::sync::mpsc::unbounded_channel();
             let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-            let mut shell = Shell::<MockDB, Sha256Hasher>::new(
-                config::Ledger::new(
-                    base_dir,
-                    Default::default(),
-                    TendermintMode::Validator,
-                ),
-                top_level_directory().join("wasm"),
-                sender,
-                Some(eth_receiver),
-                None,
-                vp_wasm_compilation_cache,
-                tx_wasm_compilation_cache,
-            );
+            let mut shell =
+                Shell::<MockDB, Sha256Hasher>::new(NewShellParams {
+                    config: config::Ledger::new(
+                        base_dir,
+                        Default::default(),
+                        TendermintMode::Validator,
+                    ),
+                    wasm_dir: top_level_directory().join("wasm"),
+                    broadcast_sender,
+                    event_log_sender: Some(event_log_sender),
+                    eth_receiver: Some(eth_receiver),
+                    db_cache: None,
+                    vp_wasm_compilation_cache,
+                    tx_wasm_compilation_cache,
+                });
             shell.storage.last_height = height.into();
-            (Self { shell }, receiver, eth_sender)
+            (Self { shell }, broadcast_receiver, eth_sender)
         }
 
         /// Same as [`TestShell::new_at_height`], but returns a shell at block
@@ -1031,18 +1059,20 @@ mod test_utils {
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
-            config::Ledger::new(
-                base_dir.clone(),
-                Default::default(),
-                TendermintMode::Validator,
-            ),
-            top_level_directory().join("wasm"),
-            broadcast_sender.clone(),
-            event_log_sender.clone(),
-            Some(receiver),
-            None,
-            vp_wasm_compilation_cache,
-            tx_wasm_compilation_cache,
+            NewShellParams {
+                config: config::Ledger::new(
+                    base_dir.clone(),
+                    Default::default(),
+                    TendermintMode::Validator,
+                ),
+                wasm_dir: top_level_directory().join("wasm"),
+                broadcast_sender: broadcast_sender.clone(),
+                event_log_sender: Some(event_log_sender.clone()),
+                eth_receiver: Some(receiver),
+                db_cache: None,
+                vp_wasm_compilation_cache,
+                tx_wasm_compilation_cache,
+            },
         );
         let keypair = gen_keypair();
         // enqueue a wrapper tx
@@ -1092,18 +1122,20 @@ mod test_utils {
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
-            config::Ledger::new(
-                base_dir,
-                Default::default(),
-                TendermintMode::Validator,
-            ),
-            top_level_directory().join("wasm"),
-            broadcast_sender,
-            event_log_sender,
-            Some(receiver),
-            None,
-            vp_wasm_compilation_cache,
-            tx_wasm_compilation_cache,
+            NewShellParams {
+                config: config::Ledger::new(
+                    base_dir,
+                    Default::default(),
+                    TendermintMode::Validator,
+                ),
+                wasm_dir: top_level_directory().join("wasm"),
+                broadcast_sender,
+                event_log_sender: Some(event_log_sender),
+                eth_receiver: Some(receiver),
+                db_cache: None,
+                vp_wasm_compilation_cache,
+                tx_wasm_compilation_cache,
+            },
         );
         assert!(!shell.storage.tx_queue.is_empty());
     }

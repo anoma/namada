@@ -11,6 +11,7 @@ use namada::types::hash::Hash;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 use tower::Service;
 
+use super::super::shell::NewShellParams;
 use super::super::Shell;
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::{Error, Request, Response};
@@ -18,6 +19,19 @@ use crate::config;
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::abci::RequestBeginBlock;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
+use crate::node::ledger::events::Event;
+
+/// The paramaters to pass to [`AbcippShim::new`].
+pub struct NewAbcippShimParams<'cache> {
+    pub config: config::Ledger,
+    pub wasm_dir: PathBuf,
+    pub broadcast_sender: UnboundedSender<Vec<u8>>,
+    pub event_log_sender: Option<UnboundedSender<Vec<Event>>>,
+    pub eth_receiver: Option<Receiver<EthereumEvent>>,
+    pub db_cache: &'cache rocksdb::Cache,
+    pub vp_wasm_compilation_cache: u64,
+    pub tx_wasm_compilation_cache: u64,
+}
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -37,29 +51,34 @@ pub struct AbcippShim {
 impl AbcippShim {
     /// Create a shell with a ABCI service that passes messages to and from the
     /// shell.
-    pub fn new(
-        config: config::Ledger,
-        wasm_dir: PathBuf,
-        broadcast_sender: UnboundedSender<Vec<u8>>,
-        eth_receiver: Option<Receiver<EthereumEvent>>,
-        db_cache: &rocksdb::Cache,
-        vp_wasm_compilation_cache: u64,
-        tx_wasm_compilation_cache: u64,
-    ) -> (Self, AbciService) {
+    pub fn new(params: NewAbcippShimParams<'_>) -> (Self, AbciService) {
+        let NewAbcippShimParams {
+            config,
+            wasm_dir,
+            broadcast_sender,
+            event_log_sender,
+            eth_receiver,
+            db_cache,
+            vp_wasm_compilation_cache,
+            tx_wasm_compilation_cache,
+        } = params;
+
         // We can use an unbounded channel here, because tower-abci limits the
         // the number of requests that can come in
+        let db_cache = Some(db_cache);
         let (shell_send, shell_recv) = std::sync::mpsc::channel();
         (
             Self {
-                service: Shell::new(
+                service: Shell::new(NewShellParams {
                     config,
                     wasm_dir,
                     broadcast_sender,
+                    event_log_sender,
                     eth_receiver,
-                    Some(db_cache),
+                    db_cache,
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,
-                ),
+                }),
                 #[cfg(not(feature = "abcipp"))]
                 begin_block_request: None,
                 processed_txs: vec![],

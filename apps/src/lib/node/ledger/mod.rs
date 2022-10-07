@@ -34,7 +34,9 @@ use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
-use crate::node::ledger::shims::abcipp_shim::AbcippShim;
+use crate::node::ledger::shims::abcipp_shim::{
+    AbcippShim, NewAbcippShimParams,
+};
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
 use crate::{config, wasm_loader};
 
@@ -406,7 +408,16 @@ fn start_abci_broadcaster_shell(
 
     // Channels for validators to send protocol txs to be broadcast to the
     // broadcaster service
-    let (broadcaster_sender, broadcaster_receiver) = mpsc::unbounded_channel();
+    let (broadcast_sender, broadcast_receiver) = mpsc::unbounded_channel();
+
+    // Channels for validators to send events to an event log, which will be
+    // queried from the node's RPC `/events` endpoint.
+    //
+    // TODO: make the sender a param of `start_abci_broadcaster_shell`;
+    // the sender will be returned by another task which starts the
+    // event log; we will also need yet another task for the rpc
+    // server itself
+    let (event_log_sender, _event_log_receiver) = mpsc::unbounded_channel();
 
     // Start broadcaster
     let broadcaster = if matches!(
@@ -421,7 +432,7 @@ fn start_abci_broadcaster_shell(
                 // Construct a service for broadcasting protocol txs from the
                 // ledger
                 let mut broadcaster =
-                    Broadcaster::new(&rpc_address, broadcaster_receiver);
+                    Broadcaster::new(&rpc_address, broadcast_receiver);
                 broadcaster.run(bc_abort_recv).await;
                 tracing::info!("Broadcaster is no longer running.");
 
@@ -442,15 +453,17 @@ fn start_abci_broadcaster_shell(
     // Construct our ABCI application.
     let tendermint_mode = config.tendermint.tendermint_mode.clone();
     let ledger_address = config.shell.ledger_address;
-    let (shell, abci_service) = AbcippShim::new(
+    let event_log_sender = Some(event_log_sender);
+    let (shell, abci_service) = AbcippShim::new(NewAbcippShimParams {
         config,
         wasm_dir,
-        broadcaster_sender,
+        broadcast_sender,
+        event_log_sender,
         eth_receiver,
-        &db_cache,
+        db_cache: &db_cache,
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
-    );
+    });
 
     // Channel for signalling shut down to ABCI server
     let (abci_abort_send, abci_abort_recv) = tokio::sync::oneshot::channel();
