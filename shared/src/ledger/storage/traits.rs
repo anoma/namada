@@ -39,7 +39,7 @@ pub trait SubTreeWrite {
         value: MerkleValue,
     ) -> Result<Hash, Error>;
     /// Delete a key from the sub-tree
-    fn subtree_delete(&mut self, key: &Key) -> Result<(), Error>;
+    fn subtree_delete(&mut self, key: &Key) -> Result<Hash, Error>;
 }
 
 impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
@@ -92,10 +92,10 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }
 
-    fn subtree_delete(&mut self, key: &Key) -> Result<(), Error> {
+    fn subtree_delete(&mut self, key: &Key) -> Result<Hash, Error> {
         let value = Hash::zero();
         self.update(H::hash(key.to_string()).into(), value)
-            .and(Ok(()))
+            .map(Hash::from)
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }
 }
@@ -150,11 +150,11 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }
 
-    fn subtree_delete(&mut self, key: &Key) -> Result<(), Error> {
+    fn subtree_delete(&mut self, key: &Key) -> Result<Hash, Error> {
         let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
         let value = TreeBytes::zero();
         self.update(key, value)
-            .and(Ok(()))
+            .map(Hash::from)
             .map_err(|err| Error::MerkleTree(format!("{:?}", err)))
     }
 }
