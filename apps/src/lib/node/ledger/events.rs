@@ -31,7 +31,7 @@ pub struct Event {
 }
 
 /// The two types of custom events we currently use
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EventType {
     // The transaction was accepted to be included in a block
     Accepted,

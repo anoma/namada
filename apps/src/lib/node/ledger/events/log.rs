@@ -41,7 +41,6 @@ pub struct EventLog {
 
 /// An iterator over the [`Event`] instances in the
 /// event log, matching a given [`Query`].
-#[allow(dead_code)]
 pub struct EventLogIterator<'a> {
     index: usize,
     guard: RwLockReadGuard<'a, Vec<Event>>,
@@ -52,9 +51,15 @@ impl<'a> Iterator for EventLogIterator<'a> {
     type Item = Event;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let event = self.guard.get(self.index).cloned()?;
-        self.index += 1;
-        Some(event)
+        let event = loop {
+            let event = self.guard.get(self.index)?;
+            self.index += 1;
+
+            if self.query.matches(event) {
+                break event;
+            }
+        };
+        Some(event.clone())
     }
 }
 
@@ -139,7 +144,7 @@ mod dumb_queries {
     use lazy_static::lazy_static;
     use regex::Regex;
 
-    use crate::node::ledger::events::EventType;
+    use crate::node::ledger::events::{Event, EventType};
 
     lazy_static! {
         static ref REGEX: Regex = Regex::new(
@@ -150,14 +155,26 @@ mod dumb_queries {
 
     /// A [`QueryMatcher`] verifies if a Namada event matches a
     /// given Tendermint query.
-    #[allow(dead_code)]
     pub struct QueryMatcher<'q> {
         event_type: EventType,
-        attr: &'q str,
+        attr: String,
         value: &'q str,
     }
 
     impl<'q> QueryMatcher<'q> {
+        /// Checks if this [`QueryMatcher`] validates the
+        /// given [`Event`].
+        pub fn matches(&self, event: &Event) -> bool {
+            event.event_type == self.event_type
+                && event
+                    .attributes
+                    .get(&self.attr)
+                    .as_ref()
+                    .map(|value| value == &self.value)
+                    .unwrap_or_default()
+        }
+
+        /// Parses a Tendermint-like events query.
         pub fn parse(query: &'q str) -> Option<Self> {
             let captures = REGEX.captures(query)?;
 
@@ -168,7 +185,7 @@ mod dumb_queries {
                 // and `applied`
                 _ => unreachable!(),
             };
-            let attr = captures.get(2)?.as_str();
+            let attr = captures.get(2)?.as_str().to_string();
             let value = captures.get(3)?.as_str();
 
             Some(Self {
