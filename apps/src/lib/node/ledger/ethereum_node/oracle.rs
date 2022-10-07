@@ -1,6 +1,7 @@
 use std::ops::Deref;
 
 use clarity::Address;
+use enum_iterator::all;
 use namada::types::ethereum_events::{EthAddress, EthereumEvent};
 use num256::Uint256;
 use tokio::sync::mpsc::Sender as BoundedSender;
@@ -9,7 +10,7 @@ use tokio::task::LocalSet;
 #[cfg(not(test))]
 use web30::client::Web3;
 
-use super::events::{signatures, PendingEvent};
+use super::events::{EventType, PendingEvent};
 #[cfg(test)]
 use super::test_tools::mock_web3_client::Web3;
 
@@ -170,10 +171,10 @@ async fn run_oracle_aux(oracle: Oracle) {
         let block_to_check = latest_block.clone() - MIN_CONFIRMATIONS.into();
         // check for events with at least `[MIN_CONFIRMATIONS]`
         // confirmations.
-        for sig in signatures::SIGNATURES {
-            let addr: Address = match signatures::SigType::from(sig) {
-                signatures::SigType::Bridge => MINT_CONTRACT.0.into(),
-                signatures::SigType::Governance => GOVERNANCE_CONTRACT.0.into(),
+        for event_type in all::<EventType>() {
+            let addr: Address = match event_type {
+                EventType::Bridge(_) => MINT_CONTRACT.0.into(),
+                EventType::Governance(_) => GOVERNANCE_CONTRACT.0.into(),
             };
             // fetch the events for matching the given signature
             let mut events = loop {
@@ -182,14 +183,14 @@ async fn run_oracle_aux(oracle: Oracle) {
                         block_to_check.clone(),
                         Some(block_to_check.clone()),
                         vec![addr],
-                        vec![sig],
+                        vec![event_type.signature()],
                     )
                     .await
                     .map(|logs| {
                         logs.into_iter()
                             .filter_map(|log| {
                                 PendingEvent::decode(
-                                    sig,
+                                    event_type.signature(),
                                     block_to_check.clone(),
                                     log.data.0.as_slice(),
                                 )
@@ -250,10 +251,11 @@ mod test_oracle {
 
     use super::*;
     use crate::node::ledger::ethereum_node::events::{
-        ChangedContract, RawTransfersToEthereum,
+        BridgeEventType, ChangedContract, GovernanceEventType,
+        RawTransfersToEthereum,
     };
     use crate::node::ledger::ethereum_node::test_tools::mock_web3_client::{
-        MockEventType, TestCmd, Web3,
+        TestCmd, Web3,
     };
 
     /// The data returned from setting up a test
@@ -367,7 +369,9 @@ mod test_oracle {
         let (sender, _) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: MockEventType::NewContract,
+                event_type: EventType::Governance(
+                    GovernanceEventType::NewContract,
+                ),
                 data: new_event,
                 height: 101,
                 seen: sender,
@@ -414,7 +418,9 @@ mod test_oracle {
         let (sender, mut seen) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: MockEventType::NewContract,
+                event_type: EventType::Governance(
+                    GovernanceEventType::NewContract,
+                ),
                 data: new_event,
                 height: 150,
                 seen: sender,
@@ -480,7 +486,9 @@ mod test_oracle {
         let (sender, seen_second) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: MockEventType::TransferToEthereum,
+                event_type: EventType::Bridge(
+                    BridgeEventType::TransferToEthereum,
+                ),
                 data: second_event,
                 height: 125,
                 seen: sender,
@@ -489,7 +497,9 @@ mod test_oracle {
         let (sender, _recv) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: MockEventType::NewContract,
+                event_type: EventType::Governance(
+                    GovernanceEventType::NewContract,
+                ),
                 data: first_event,
                 height: 100,
                 seen: sender,

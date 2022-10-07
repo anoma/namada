@@ -1914,7 +1914,16 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4eeac5c5edb79e4e39fe8439ef35207780a11f69c52cbe424ce3dfad4cb78de6"
 dependencies = [
- "enum-iterator-derive",
+ "enum-iterator-derive 0.7.0",
+]
+
+[[package]]
+name = "enum-iterator"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91a4ec26efacf4aeff80887a175a419493cb6f8b5480d26387eb0bd038976187"
+dependencies = [
+ "enum-iterator-derive 1.1.0",
 ]
 
 [[package]]
@@ -1922,6 +1931,17 @@ name = "enum-iterator-derive"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c134c37760b27a871ba422106eedbb8247da973a09e82558bf26d619c882b159"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "enum-iterator-derive"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "828de45d0ca18782232dfb8f3ea9cc428e8ced380eb26a520baaacfc70de39ce"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4380,6 +4400,7 @@ dependencies = [
  "derivative",
  "directories",
  "ed25519-consensus",
+ "enum-iterator 1.2.0",
  "ethabi",
  "eyre",
  "ferveo",
@@ -6774,9 +6795,9 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "strum"
-version = "0.24.0"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e96acfc1b70604b8b2f1ffa4c57e59176c7dbb05d556c71ecd2f5498a1dee7f8"
+checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
 dependencies = [
  "strum_macros",
 ]
@@ -8491,7 +8512,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "591683f3356ac31cc88aaecaf77ac2cc9f456014348b01af46c164f44f531162"
 dependencies = [
  "cfg-if 1.0.0",
- "enum-iterator",
+ "enum-iterator 0.7.0",
  "enumset",
  "leb128",
  "libloading",
@@ -8516,7 +8537,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dccfde103e9b87427099a6de344b7c791574f307d035c8c7dbbc00974c1af0c1"
 dependencies = [
  "cfg-if 1.0.0",
- "enum-iterator",
+ "enum-iterator 0.7.0",
  "enumset",
  "leb128",
  "loupe",
@@ -8563,7 +8584,7 @@ dependencies = [
  "backtrace",
  "cc",
  "cfg-if 1.0.0",
- "enum-iterator",
+ "enum-iterator 0.7.0",
  "indexmap",
  "libc",
  "loupe",

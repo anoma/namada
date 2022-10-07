@@ -64,8 +64,8 @@ pub mod mock_web3_client {
     use tokio::sync::oneshot::Sender;
     use web30::types::Log;
 
-    use super::super::events::signatures::*;
     use super::super::{Error, Result};
+    use crate::node::ledger::ethereum_node::events::EventType;
 
     /// Commands we can send to the mock client
     #[derive(Debug)]
@@ -74,22 +74,11 @@ pub mod mock_web3_client {
         Unresponsive,
         NewHeight(Uint256),
         NewEvent {
-            event_type: MockEventType,
+            event_type: EventType,
             data: Vec<u8>,
             height: u32,
             seen: Sender<()>,
         },
-    }
-
-    /// The type of events supported
-    #[derive(Debug, PartialEq)]
-    pub enum MockEventType {
-        TransferToNamada,
-        TransferToEthereum,
-        ValSetUpdate,
-        NewContract,
-        UpgradedContract,
-        BridgeWhitelist,
     }
 
     /// A pointer to a mock Web3 client. The
@@ -104,7 +93,7 @@ pub mod mock_web3_client {
         cmd_channel: UnboundedReceiver<TestCmd>,
         active: bool,
         latest_block_height: Uint256,
-        events: Vec<(MockEventType, Vec<u8>, u32, Sender<()>)>,
+        events: Vec<(EventType, Vec<u8>, u32, Sender<()>)>,
     }
 
     impl Web3 {
@@ -177,18 +166,11 @@ pub mod mock_web3_client {
         ) -> Result<Vec<Log>> {
             self.check_cmd_channel();
             if self.0.borrow().active {
-                let ty = match events.remove(0) {
-                    TRANSFER_TO_NAMADA_SIG => MockEventType::TransferToNamada,
-                    TRANSFER_TO_ETHEREUM_SIG => {
-                        MockEventType::TransferToEthereum
+                let ty = match EventType::try_from(events.remove(0)) {
+                    Ok(ty) => ty,
+                    Err(error) => {
+                        return Err(Error::Runtime(error));
                     }
-                    VALIDATOR_SET_UPDATE_SIG => MockEventType::ValSetUpdate,
-                    NEW_CONTRACT_SIG => MockEventType::NewContract,
-                    UPGRADED_CONTRACT_SIG => MockEventType::UpgradedContract,
-                    UPDATE_BRIDGE_WHITELIST_SIG => {
-                        MockEventType::BridgeWhitelist
-                    }
-                    _ => return Ok(vec![]),
                 };
                 let mut logs = vec![];
                 let mut events = vec![];

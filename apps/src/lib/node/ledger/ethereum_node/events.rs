@@ -1,40 +1,15 @@
 pub mod signatures {
-    pub const TRANSFER_TO_NAMADA_SIG: &str =
+    pub(super) const TRANSFER_TO_NAMADA_SIG: &str =
         "TransferToNamada(uint256,address[],string[],uint256[],uint32)";
-    pub const TRANSFER_TO_ETHEREUM_SIG: &str =
+    pub(super) const TRANSFER_TO_ETHEREUM_SIG: &str =
         "TransferToErc(uint256,address[],address[],uint256[],uint32)";
-    pub const VALIDATOR_SET_UPDATE_SIG: &str =
+    pub(super) const VALIDATOR_SET_UPDATE_SIG: &str =
         "ValidatorSetUpdate(uint256,bytes32,bytes32)";
-    pub const NEW_CONTRACT_SIG: &str = "NewContract(string,address)";
-    pub const UPGRADED_CONTRACT_SIG: &str = "UpgradedContract(string,address)";
-    pub const UPDATE_BRIDGE_WHITELIST_SIG: &str =
+    pub(super) const NEW_CONTRACT_SIG: &str = "NewContract(string,address)";
+    pub(super) const UPGRADED_CONTRACT_SIG: &str =
+        "UpgradedContract(string,address)";
+    pub(super) const UPDATE_BRIDGE_WHITELIST_SIG: &str =
         "UpdateBridgeWhiteList(uint256,address[],uint256[])";
-    pub const SIGNATURES: [&str; 6] = [
-        TRANSFER_TO_NAMADA_SIG,
-        TRANSFER_TO_ETHEREUM_SIG,
-        VALIDATOR_SET_UPDATE_SIG,
-        NEW_CONTRACT_SIG,
-        UPGRADED_CONTRACT_SIG,
-        UPDATE_BRIDGE_WHITELIST_SIG,
-    ];
-
-    /// Used to determine which smart contract address
-    /// a signature belongs to
-    pub enum SigType {
-        Bridge,
-        Governance,
-    }
-
-    impl From<&str> for SigType {
-        fn from(sig: &str) -> Self {
-            match sig {
-                TRANSFER_TO_NAMADA_SIG | TRANSFER_TO_ETHEREUM_SIG => {
-                    SigType::Bridge
-                }
-                _ => SigType::Governance,
-            }
-        }
-    }
 }
 
 pub mod eth_events {
@@ -42,6 +17,7 @@ pub mod eth_events {
     use std::fmt::Debug;
     use std::str::FromStr;
 
+    use enum_iterator::Sequence;
     use ethabi::decode;
     #[cfg(test)]
     use ethabi::encode;
@@ -66,6 +42,91 @@ pub mod eth_events {
     }
 
     pub type Result<T> = std::result::Result<T, Error>;
+
+    /// This represents all possible event types that can be emitted by any of
+    /// the Ethereum bridge smart contracts
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Sequence)]
+    pub enum EventType {
+        Bridge(BridgeEventType),
+        Governance(GovernanceEventType),
+    }
+
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Sequence)]
+    pub enum BridgeEventType {
+        TransferToNamada,
+        TransferToEthereum,
+    }
+
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Sequence)]
+    pub enum GovernanceEventType {
+        ValidatorSetUpdate,
+        NewContract,
+        UpgradedContract,
+        UpdateBridgeWhiteList,
+    }
+
+    impl EventType {
+        pub fn signature(&self) -> &str {
+            match self {
+                EventType::Bridge(event) => match event {
+                    BridgeEventType::TransferToNamada => {
+                        signatures::TRANSFER_TO_NAMADA_SIG
+                    }
+                    BridgeEventType::TransferToEthereum => {
+                        signatures::TRANSFER_TO_ETHEREUM_SIG
+                    }
+                },
+                EventType::Governance(event) => match event {
+                    GovernanceEventType::ValidatorSetUpdate => {
+                        signatures::VALIDATOR_SET_UPDATE_SIG
+                    }
+                    GovernanceEventType::NewContract => {
+                        signatures::NEW_CONTRACT_SIG
+                    }
+                    GovernanceEventType::UpgradedContract => {
+                        signatures::UPGRADED_CONTRACT_SIG
+                    }
+                    GovernanceEventType::UpdateBridgeWhiteList => {
+                        signatures::UPDATE_BRIDGE_WHITELIST_SIG
+                    }
+                },
+            }
+        }
+    }
+
+    impl TryFrom<&str> for EventType {
+        type Error = String;
+
+        fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
+            match value {
+                signatures::TRANSFER_TO_NAMADA_SIG => {
+                    Ok(EventType::Bridge(BridgeEventType::TransferToNamada))
+                }
+                signatures::TRANSFER_TO_ETHEREUM_SIG => {
+                    Ok(EventType::Bridge(BridgeEventType::TransferToEthereum))
+                }
+                signatures::VALIDATOR_SET_UPDATE_SIG => {
+                    Ok(EventType::Governance(
+                        GovernanceEventType::ValidatorSetUpdate,
+                    ))
+                }
+                signatures::NEW_CONTRACT_SIG => {
+                    Ok(EventType::Governance(GovernanceEventType::NewContract))
+                }
+                signatures::UPGRADED_CONTRACT_SIG => Ok(EventType::Governance(
+                    GovernanceEventType::UpgradedContract,
+                )),
+                signatures::UPDATE_BRIDGE_WHITELIST_SIG => {
+                    Ok(EventType::Governance(
+                        GovernanceEventType::UpdateBridgeWhiteList,
+                    ))
+                }
+                _ => Err(format!(
+                    "Value does not match any event signature: {value}",
+                )),
+            }
+        }
+    }
 
     /// An event waiting for a certain number of confirmations
     /// before being sent to the ledger
