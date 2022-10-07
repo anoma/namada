@@ -195,4 +195,31 @@ mod dumb_queries {
             })
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// Test if we parse a correct Tendermint query.
+        #[test]
+        fn test_parse_correct_tm_query() {
+            let q = QueryMatcher::parse(
+                "tm.event='NewBlock' AND applied.hash='123456'",
+            )
+            .unwrap();
+
+            assert_eq!(q.event_type, EventType::Applied);
+            assert_eq!(&q.attr, "hash");
+            assert_eq!(q.value, "123456");
+
+            let q = QueryMatcher::parse(
+                "tm.event='NewBlock' AND accepted.hash='DEADBEEF'",
+            )
+            .unwrap();
+
+            assert_eq!(q.event_type, EventType::Accepted);
+            assert_eq!(&q.attr, "hash");
+            assert_eq!(q.value, "DEADBEEF");
+        }
+    }
 }
