@@ -199,6 +199,7 @@ mod dumb_queries {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::node::ledger::events::EventLevel;
 
         /// Test if we parse a correct Tendermint query.
         #[test]
@@ -220,6 +221,50 @@ mod dumb_queries {
             assert_eq!(q.event_type, EventType::Accepted);
             assert_eq!(&q.attr, "hash");
             assert_eq!(q.value, "DEADBEEF");
+        }
+
+        /// Test if query matching is working as expected.
+        #[test]
+        fn test_tm_query_matching() {
+            let matcher = QueryMatcher {
+                event_type: EventType::Accepted,
+                attr: "hash".to_string(),
+                value: "DEADBEEF",
+            };
+
+            let tests = {
+                let event_1 = Event {
+                    event_type: EventType::Accepted,
+                    level: EventLevel::Block,
+                    attributes: {
+                        let mut attrs = std::collections::HashMap::new();
+                        attrs
+                            .insert("hash".to_string(), "DEADBEEF".to_string());
+                        attrs
+                    },
+                };
+                let accepted_1 = true;
+
+                let event_2 = Event {
+                    event_type: EventType::Applied,
+                    level: EventLevel::Block,
+                    attributes: {
+                        let mut attrs = std::collections::HashMap::new();
+                        attrs
+                            .insert("hash".to_string(), "DEADBEEF".to_string());
+                        attrs
+                    },
+                };
+                let accepted_2 = false;
+
+                [(event_1, accepted_1), (event_2, accepted_2)]
+            };
+
+            for (ref ev, status) in tests {
+                if matcher.matches(ev) != status {
+                    panic!("Test failed");
+                }
+            }
         }
     }
 }
