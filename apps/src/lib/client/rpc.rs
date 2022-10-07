@@ -1072,10 +1072,7 @@ pub async fn is_validator(
     ledger_address: TendermintAddress,
 ) -> bool {
     let client = HttpClient::new(ledger_address).unwrap();
-    let key = pos::validator_state_key(address);
-    let state: Option<pos::ValidatorStates> =
-        query_storage_value(&client, &key).await;
-    state.is_some()
+    unwrap_client_response(RPC.vp().pos().is_validator(&client, address).await)
 }
 
 /// Check if a given address is a known delegator
