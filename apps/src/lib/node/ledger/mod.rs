@@ -416,7 +416,8 @@ fn start_abci_broadcaster_shell(
     // TODO: make the sender a param of `start_abci_broadcaster_shell`;
     // the sender will be returned by another task which starts the
     // event log; we will also need yet another task for the rpc
-    // server itself
+    // server itself. if we are not a validator, `event_log_sender`
+    // should be `None`
     let (event_log_sender, _event_log_receiver) = mpsc::unbounded_channel();
 
     // Start broadcaster
