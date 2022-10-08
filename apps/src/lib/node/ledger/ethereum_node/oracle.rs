@@ -90,12 +90,6 @@ impl Oracle {
         }
         true
     }
-
-    /// Check if the receiver in the ledger has hung up.
-    /// Used to help determine when to stop the oracle
-    fn connected(&self) -> bool {
-        !self.sender.is_closed()
-    }
 }
 
 /// Set up an Oracle and run the process where the Oracle
@@ -128,6 +122,8 @@ pub fn run_oracle(
     })
 }
 
+const SLEEP_DUR: std::time::Duration = std::time::Duration::from_secs(1);
+
 /// Given an oracle, watch for new Ethereum events, processing
 /// them into Anoma native types.
 ///
@@ -138,96 +134,93 @@ async fn run_oracle_aux(oracle: Oracle) {
     // the latest block height seen and a queue of events
     // awaiting a certain number of confirmations
     let mut pending: Vec<PendingEvent> = Vec::new();
-    const SLEEP_DUR: std::time::Duration = std::time::Duration::from_secs(1);
     loop {
-        tokio::time::sleep(SLEEP_DUR).await;
-        // update the latest block height
-        let latest_block = loop {
-            match oracle.eth_block_number().await {
-                Ok(height) => break height,
-                Err(error) => {
-                    tracing::warn!(
-                        ?error,
-                        "Couldn't get the latest Ethereum block height, will \
-                         keep trying"
-                    );
-                    tokio::time::sleep(SLEEP_DUR).await;
+        tokio::select! {
+            should_continue = run_oracle_aux_inner(&oracle, &mut pending) => {
+                if !should_continue {
+                    break;
                 }
-            }
-            if !oracle.connected() {
+            },
+            _ = oracle.sender.closed() => {
                 tracing::info!(
                     "Ethereum oracle could not send events to the ledger; the \
-                     receiver has hung up. Shutting down"
+                    receiver has hung up. Shutting down"
                 );
-                return;
+                break
             }
         };
-        tracing::debug!(?latest_block, "Got latest Ethereum block height");
-        // No blocks in existence yet with enough confirmations
-        if Uint256::from(MIN_CONFIRMATIONS) > latest_block {
-            if !oracle.connected() {
-                tracing::info!(
-                    "Ethereum oracle could not send events to the ledger; the \
-                     receiver has hung up. Shutting down"
+        tokio::time::sleep(SLEEP_DUR).await;
+    }
+}
+
+// returns whether to continue or not
+async fn run_oracle_aux_inner(
+    oracle: &Oracle,
+    pending: &mut Vec<PendingEvent>,
+) -> bool {
+    // update the latest block height
+    let latest_block = loop {
+        match oracle.eth_block_number().await {
+            Ok(height) => break height,
+            Err(error) => {
+                tracing::warn!(
+                    ?error,
+                    "Couldn't get the latest Ethereum block height, will keep \
+                     trying"
                 );
-                return;
+                return true;
             }
-            continue;
         }
-        let block_to_check = latest_block.clone() - MIN_CONFIRMATIONS.into();
-        // check for events with at least `[MIN_CONFIRMATIONS]`
-        // confirmations.
-        for sig in signatures::SIGNATURES {
-            let addr: Address = match signatures::SigType::from(sig) {
-                signatures::SigType::Bridge => MINT_CONTRACT.0.into(),
-                signatures::SigType::Governance => GOVERNANCE_CONTRACT.0.into(),
-            };
-            // fetch the events for matching the given signature
-            let mut events = loop {
-                if let Ok(pending) = oracle
-                    .check_for_events(
-                        block_to_check.clone(),
-                        Some(block_to_check.clone()),
-                        vec![addr],
-                        vec![sig],
-                    )
-                    .await
-                    .map(|logs| {
-                        logs.into_iter()
-                            .filter_map(|log| {
-                                PendingEvent::decode(
-                                    sig,
-                                    block_to_check.clone(),
-                                    log.data.0.as_slice(),
-                                )
-                                .ok()
-                            })
-                            .collect::<Vec<PendingEvent>>()
-                    })
-                {
-                    break pending;
-                }
-                if !oracle.connected() {
-                    tracing::info!(
-                        "Ethereum oracle could not send events to the ledger; \
-                         the receiver has hung up. Shutting down"
-                    );
-                    return;
-                }
-            };
-            pending.append(&mut events);
-            if !oracle
-                .send(process_queue(&latest_block, &mut pending))
+    };
+    tracing::debug!(?latest_block, "Got latest Ethereum block height");
+    // No blocks in existence yet with enough confirmations
+    if Uint256::from(MIN_CONFIRMATIONS) > latest_block {
+        return true;
+    }
+    let block_to_check = latest_block.clone() - MIN_CONFIRMATIONS.into();
+    // check for events with at least `[MIN_CONFIRMATIONS]`
+    // confirmations.
+    for sig in signatures::SIGNATURES {
+        let addr: Address = match signatures::SigType::from(sig) {
+            signatures::SigType::Bridge => MINT_CONTRACT.0.into(),
+            signatures::SigType::Governance => GOVERNANCE_CONTRACT.0.into(),
+        };
+        // fetch the events for matching the given signature
+        let mut events = loop {
+            if let Ok(pending) = oracle
+                .check_for_events(
+                    block_to_check.clone(),
+                    Some(block_to_check.clone()),
+                    vec![addr],
+                    vec![sig],
+                )
                 .await
+                .map(|logs| {
+                    logs.into_iter()
+                        .filter_map(|log| {
+                            PendingEvent::decode(
+                                sig,
+                                block_to_check.clone(),
+                                log.data.0.as_slice(),
+                            )
+                            .ok()
+                        })
+                        .collect::<Vec<PendingEvent>>()
+                })
             {
-                tracing::info!(
-                    "Ethereum oracle could not send events to the ledger; the \
-                     receiver has hung up. Shutting down"
-                );
-                return;
+                break pending;
             }
+        };
+        pending.append(&mut events);
+        if !oracle.send(process_queue(&latest_block, pending)).await {
+            tracing::info!(
+                "Ethereum oracle could not send events to the ledger; the \
+                 receiver has hung up. Shutting down"
+            );
+            return false;
         }
     }
+    true
 }
 
 /// Check which events in the queue have reached their
