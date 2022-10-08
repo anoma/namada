@@ -47,7 +47,14 @@ impl Drop for Oracle {
         // send an abort signal to shut down the
         // rest of the ledger gracefully
         let abort = self.abort.take().unwrap();
-        let _ = abort.send(());
+        match abort.send(()) {
+            Ok(()) => tracing::debug!("Oracle sent abort signal"),
+            Err(()) => {
+                // this isn't necessarily an issue as the ledger may have shut
+                // down first
+                tracing::debug!("Oracle was unable to send an abort signal")
+            }
+        };
     }
 }
 
