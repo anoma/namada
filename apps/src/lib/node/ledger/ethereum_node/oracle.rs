@@ -1,6 +1,7 @@
 use std::ops::Deref;
 
 use clarity::Address;
+use eyre::{eyre, Result};
 use namada::types::ethereum_events::{EthAddress, EthereumEvent};
 use num256::Uint256;
 use tokio::sync::mpsc::Sender as BoundedSender;
@@ -122,8 +123,6 @@ pub fn run_oracle(
     })
 }
 
-const SLEEP_DUR: std::time::Duration = std::time::Duration::from_secs(1);
-
 /// Given an oracle, watch for new Ethereum events, processing
 /// them into Anoma native types.
 ///
@@ -134,16 +133,26 @@ async fn run_oracle_aux(oracle: Oracle) {
     // the latest block height seen and a queue of events
     // awaiting a certain number of confirmations
     let mut pending: Vec<PendingEvent> = Vec::new();
+
+    // TODO(namada#560): get the appropriate Ethereum block height to start
+    // checking from rather than starting from zero every time
+    let mut next_block_to_check: Uint256 = 0u8.into();
+
     loop {
+        tracing::info!(
+            ?next_block_to_check,
+            "Checking Ethereum block for bridge events"
+        );
         tokio::select! {
-            should_continue = run_oracle_aux_inner(&oracle, &mut pending) => {
-                if !should_continue {
-                    break;
+            result = process(&oracle, &mut pending, next_block_to_check.clone()) => {
+                match result {
+                    Ok(()) => next_block_to_check += 1u8.into(),
+                    Err(error) => tracing::warn!(?error, block = ?next_block_to_check, "Error while trying to check Ethereum block for bridge events"),
                 }
             },
             _ = oracle.sender.closed() => {
                 tracing::info!(
-                    "Ethereum oracle could not send events to the ledger; the \
+                    "Ethereum oracle can not send events to the ledger; the \
                     receiver has hung up. Shutting down"
                 );
                 break
@@ -153,31 +162,46 @@ async fn run_oracle_aux(oracle: Oracle) {
     }
 }
 
-// returns whether to continue or not
-async fn run_oracle_aux_inner(
+const SLEEP_DUR: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Checks if the given block has any events relating to the bridge, and if so,
+/// sends them to the oracle's `sender`
+async fn process(
     oracle: &Oracle,
     pending: &mut Vec<PendingEvent>,
-) -> bool {
+    block_to_check: Uint256,
+) -> Result<()> {
     // update the latest block height
     let latest_block = loop {
-        match oracle.eth_block_number().await {
-            Ok(height) => break height,
+        let latest_block = match oracle.eth_block_number().await {
+            Ok(height) => height,
             Err(error) => {
-                tracing::warn!(
-                    ?error,
-                    "Couldn't get the latest Ethereum block height, will keep \
-                     trying"
-                );
-                return true;
+                return Err(eyre!(
+                    "Couldn't get the latest synced Ethereum block height \
+                     from the RPC endpoint: {:?}",
+                    error
+                ));
             }
+        };
+        let minimum_latest_block =
+            block_to_check.clone() + Uint256::from(MIN_CONFIRMATIONS);
+        if minimum_latest_block > latest_block {
+            tracing::debug!(
+                ?block_to_check,
+                ?latest_block,
+                ?minimum_latest_block,
+                "Waiting for enough Ethereum blocks to be synced"
+            );
+            tokio::time::sleep(SLEEP_DUR).await;
+            continue;
         }
+        break latest_block;
     };
-    tracing::debug!(?latest_block, "Got latest Ethereum block height");
-    // No blocks in existence yet with enough confirmations
-    if Uint256::from(MIN_CONFIRMATIONS) > latest_block {
-        return true;
-    }
-    let block_to_check = latest_block.clone() - MIN_CONFIRMATIONS.into();
+    tracing::debug!(
+        ?block_to_check,
+        ?latest_block,
+        "Got latest Ethereum block height"
+    );
     // check for events with at least `[MIN_CONFIRMATIONS]`
     // confirmations.
     for sig in signatures::SIGNATURES {
@@ -185,9 +209,15 @@ async fn run_oracle_aux_inner(
             signatures::SigType::Bridge => MINT_CONTRACT.0.into(),
             signatures::SigType::Governance => GOVERNANCE_CONTRACT.0.into(),
         };
+        tracing::debug!(
+            ?block_to_check,
+            ?addr,
+            ?sig,
+            "Checking for bridge events"
+        );
         // fetch the events for matching the given signature
         let mut events = loop {
-            if let Ok(pending) = oracle
+            let logs = match oracle
                 .check_for_events(
                     block_to_check.clone(),
                     Some(block_to_check.clone()),
@@ -195,32 +225,80 @@ async fn run_oracle_aux_inner(
                     vec![sig],
                 )
                 .await
-                .map(|logs| {
-                    logs.into_iter()
-                        .filter_map(|log| {
-                            PendingEvent::decode(
-                                sig,
-                                block_to_check.clone(),
-                                log.data.0.as_slice(),
-                            )
-                            .ok()
-                        })
-                        .collect::<Vec<PendingEvent>>()
-                })
             {
-                break pending;
+                Ok(logs) => logs,
+                Err(error) => {
+                    return Err(eyre!(
+                        "Couldn't check for events ({sig} from {addr}) with \
+                         the RPC endpoint: {:?}",
+                        error
+                    ));
+                }
+            };
+            if !logs.is_empty() {
+                tracing::info!(
+                    ?block_to_check,
+                    ?addr,
+                    ?sig,
+                    n_events = logs.len(),
+                    "Found bridge events in Ethereum block"
+                )
             }
+            break logs
+                .into_iter()
+                .filter_map(|log| {
+                    match PendingEvent::decode(
+                        sig,
+                        block_to_check.clone(),
+                        log.data.0.as_slice(),
+                    ) {
+                        Ok(event) => Some(event),
+                        Err(error) => {
+                            tracing::error!(
+                                ?error,
+                                ?block_to_check,
+                                ?addr,
+                                ?sig,
+                                "Couldn't decode event: {:#?}",
+                                log
+                            );
+                            None
+                        }
+                    }
+                })
+                .collect();
         };
         pending.append(&mut events);
-        if !oracle.send(process_queue(&latest_block, pending)).await {
+        if !pending.is_empty() {
             tracing::info!(
-                "Ethereum oracle could not send events to the ledger; the \
-                 receiver has hung up. Shutting down"
+                ?block_to_check,
+                ?addr,
+                ?sig,
+                pending = pending.len(),
+                "There are Ethereum events pending"
             );
-            return false;
+        }
+        let confirmed = process_queue(&latest_block, pending);
+        if !confirmed.is_empty() {
+            tracing::info!(
+                ?block_to_check,
+                ?addr,
+                ?sig,
+                pending = pending.len(),
+                confirmed = confirmed.len(),
+                ?MIN_CONFIRMATIONS,
+                "Some events that have reached the minimum number of \
+                 confirmations and will be sent onwards"
+            );
+        }
+        if !oracle.send(confirmed).await {
+            return Err(eyre!(
+                "Could not send all bridge events ({sig} from {addr}) to the \
+                 shell"
+            ));
         }
     }
-    true
+    Ok(())
 }
 
 /// Check which events in the queue have reached their
