@@ -196,7 +196,7 @@ impl LogEntrySender {
     ///
     /// This call will fail if the associated [`Logger`] has been dropped.
     #[inline]
-    pub fn send_events(&self, entry: LogEntry) -> Option<()> {
+    pub fn send_new_entry(&self, entry: LogEntry) -> Option<()> {
         self.sender.send(entry).ok()
     }
 }
