@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::time::Duration;
 
 use clarity::Address;
 use eyre::{eyre, Result};
@@ -21,6 +22,9 @@ pub(crate) const MIN_CONFIRMATIONS: u64 = 100;
 const MINT_CONTRACT: EthAddress = EthAddress([0; 20]);
 const GOVERNANCE_CONTRACT: EthAddress = EthAddress([1; 20]);
 
+/// The default amount of time the oracle will wait between checking blocks
+const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
+
 /// A client that can talk to geth and parse
 /// and relay events relevant to Anoma to the
 /// ledger process
@@ -33,6 +37,8 @@ pub struct Oracle {
     /// A channel to signal that the ledger should shut down
     /// because the Oracle has stopped
     abort: Option<Sender<()>>,
+    /// How long the oracle should wait between checking blocks
+    backoff: Duration,
 }
 
 impl Deref for Oracle {
@@ -65,11 +71,13 @@ impl Oracle {
         url: &str,
         sender: BoundedSender<EthereumEvent>,
         abort: Sender<()>,
+        backoff: Duration,
     ) -> Self {
         Self {
             client: Web3::new(url, std::time::Duration::from_secs(30)),
             sender,
             abort: Some(abort),
+            backoff,
         }
     }
 
@@ -91,6 +99,10 @@ impl Oracle {
         }
         true
     }
+
+    async fn sleep(&self) {
+        tokio::time::sleep(self.backoff).await;
+    }
 }
 
 /// Set up an Oracle and run the process where the Oracle
@@ -110,7 +122,12 @@ pub fn run_oracle(
                 .run_until(async move {
                     tracing::info!(?url, "Ethereum event oracle is starting");
 
-                    let oracle = Oracle::new(&url, sender, abort_sender);
+                    let oracle = Oracle::new(
+                        &url,
+                        sender,
+                        abort_sender,
+                        DEFAULT_BACKOFF,
+                    );
                     run_oracle_aux(oracle).await;
 
                     tracing::info!(
@@ -158,11 +175,9 @@ async fn run_oracle_aux(oracle: Oracle) {
                 break
             }
         };
-        tokio::time::sleep(SLEEP_DUR).await;
+        oracle.sleep().await;
     }
 }
-
-const SLEEP_DUR: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// Checks if the given block has any events relating to the bridge, and if so,
 /// sends them to the oracle's `sender`
@@ -192,7 +207,9 @@ async fn process(
                 ?minimum_latest_block,
                 "Waiting for enough Ethereum blocks to be synced"
             );
-            tokio::time::sleep(SLEEP_DUR).await;
+            // this isn't an error condition, so we continue in the loop here
+            // with a back off
+            oracle.sleep().await;
             continue;
         }
         break latest_block;
@@ -352,6 +369,8 @@ mod test_oracle {
                 client,
                 sender: eth_sender,
                 abort: Some(abort),
+                // backoff should be short for tests so that they run faster
+                backoff: Duration::from_millis(5),
             },
             admin_channel,
             eth_recv: eth_receiver,
