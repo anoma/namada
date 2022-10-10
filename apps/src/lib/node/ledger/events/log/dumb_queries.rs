@@ -21,7 +21,6 @@ lazy_static! {
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
 /// given Tendermint query.
-#[derive(Debug, Clone)]
 pub struct QueryMatcher<'q> {
     event_type: EventType,
     attr: String,

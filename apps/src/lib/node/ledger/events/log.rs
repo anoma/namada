@@ -3,7 +3,7 @@
 //! The log is flushed every other `N` block heights, where `N` is a
 //! configurable parameter.
 
-pub mod dumb_queries;
+mod dumb_queries;
 
 use std::sync::{Arc, RwLock};
 
@@ -171,20 +171,12 @@ impl EventLog {
         &self,
         query: &'a str,
     ) -> Result<EventLogIterator<'a>, IterError> {
-        let matcher = dumb_queries::QueryMatcher::parse(query)
+        let query = dumb_queries::QueryMatcher::parse(query)
             .ok_or(IterError::InvalidQuery)?;
-        self.try_iter_with_matcher(matcher)
-    }
-
-    /// Just like [`EventLog`], but uses a pre-compiled query matcher.
-    pub fn try_iter_with_matcher<'a>(
-        &self,
-        matcher: dumb_queries::QueryMatcher<'a>,
-    ) -> Result<EventLogIterator<'a>, IterError> {
         let snapshot = self.snapshot().ok_or(IterError::EmptyLog)?;
         Ok(EventLogIterator {
+            query,
             index: 0,
-            query: matcher,
             node: Some(snapshot.head),
         })
     }
@@ -196,28 +188,15 @@ impl EventLog {
         deadline: Instant,
         query: &'a str,
     ) -> Result<EventLogIterator<'a>, IterError> {
-        let matcher = dumb_queries::QueryMatcher::parse(query)
-            .ok_or(IterError::InvalidQuery)?;
-        macro_rules! try_iter {
-            () => {
-                match self.try_iter_with_matcher(matcher.clone()) {
-                    Ok(iter) => break Ok(iter),
-                    Err(IterError::EmptyLog) => (),
-                    err => break err,
-                }
-            };
-        }
         tokio::time::timeout_at(deadline, async {
             loop {
-                // do a couple of inline attempts to unlock the mutex with
-                // some new events
-                {
-                    try_iter!();
-                    try_iter!();
-                    try_iter!();
-                    try_iter!();
-                }
                 self.inner.notifier.listen().await;
+
+                match self.try_iter(query) {
+                    Ok(iter) => break Ok(iter),
+                    Err(IterError::EmptyLog) => continue,
+                    err => break err,
+                }
             }
         })
         .await
