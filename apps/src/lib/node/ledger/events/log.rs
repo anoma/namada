@@ -5,8 +5,9 @@
 
 mod dumb_queries;
 
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock};
 
+use namada::types::storage::BlockHeight;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task;
 
@@ -26,42 +27,66 @@ pub fn new() -> (EventLog, EventLogger, EventSender) {
     (log, logger, sender)
 }
 
+pub struct LogEntry {
+    block_height: BlockHeight,
+    events: Vec<Event>,
+}
+
+struct LogNode {
+    entry: LogEntry,
+    next: Option<Arc<LogNode>>,
+}
+
 /// A log of [`Event`] instances emitted by `FinalizeBlock` calls,
 /// in the ledger.
 #[derive(Debug, Clone)]
 pub struct EventLog {
-    // TODO: this storage repr is a placeholder! we need to
-    // prune events, and for that we need to keep track of their
-    // block height; additionally, we want to improve the efficiency
-    // of the log, since we might be logging many events per block,
-    // which can constitute a dos attack on us.
-    //
-    // we should strive to be more read than write friendly, to
-    // support many concurrent readers of log events.
-    inner: Arc<RwLock<Vec<Event>>>,
+    inner: Arc<EventLogInner>,
+}
+
+struct EventLogInner {
+    /// A generator of notifications for RPC callers.
+    notifier: event_listener::Event,
+    /// Write protected data.
+    lock: RwLock<EventLogInnerMux>,
+}
+
+struct EventLogInnerMux {
+    /// The total number of entries in the log.
+    num_entries: usize,
+    /// The earliest block height in the event log.
+    oldest_height: BlockHeight,
+    /// Pointer to the freshest log entry.
+    head: Option<Arc<LogNode>>,
 }
 
 /// An iterator over the [`Event`] instances in the
 /// event log, matching a given [`Query`].
 pub struct EventLogIterator<'a> {
     index: usize,
-    guard: RwLockReadGuard<'a, Vec<Event>>,
     query: dumb_queries::QueryMatcher<'a>,
+    node: Option<Arc<LogNode>>,
 }
 
 impl<'a> Iterator for EventLogIterator<'a> {
     type Item = Event;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let event = loop {
-            let event = self.guard.get(self.index)?;
-            self.index += 1;
-
-            if self.query.matches(event) {
-                break event;
+        Some(loop {
+            let node = self.node.as_ref()?;
+            match node.entry.events.get(self.index) {
+                Some(event) => {
+                    self.index += 1;
+                    if self.query.matches(event) {
+                        break event.clone();
+                    }
+                }
+                None => {
+                    self.index = 0;
+                    self.node = node.next.clone();
+                }
             }
-        };
-        Some(event.clone())
+        })
     }
 }
 

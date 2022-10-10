@@ -64,6 +64,7 @@ abciplus = [
 
 [dependencies]
 lazy_static = "1.4.0"
+event-listener = "2.5.3"
 namada = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand", "secp256k1-sign-verify"]}
 arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "bat/arse-merkle-tree", features = ["std", "borsh"]}
 ark-serialize = "0.3.0"
