@@ -1440,7 +1440,7 @@ pub mod args {
     const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
-    const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
+    const NET_ADDRESS: Arg<String> = arg("net-address");
     const NODE_OPT: ArgOpt<String> = arg_opt("node");
     const NODE: Arg<String> = arg("node");
     const NFT_ADDRESS: Arg<Address> = arg("nft-address");
@@ -3060,7 +3060,7 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
         pub alias: String,
-        pub net_address: SocketAddr,
+        pub net_address: String,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
     }
