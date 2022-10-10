@@ -159,7 +159,7 @@ impl EventLog {
     //
     // TODO: stop iterating as soon as we timeout (need new timeout
     // param)
-    pub fn iter<'a>(&self, query: &'a str) -> Option<EventLogIterator<'a>> {
+    pub fn try_iter<'a>(&self, query: &'a str) -> Option<EventLogIterator<'a>> {
         let query = dumb_queries::QueryMatcher::parse(query)?;
         let snapshot = self.snapshot()?;
         Some(EventLogIterator {
@@ -335,7 +335,7 @@ mod tests {
 
         // inspect log
         let events_in_log: Vec<_> = log
-            .iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
+            .try_iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
             .unwrap()
             .collect();
 
@@ -382,7 +382,9 @@ mod tests {
 
             handles.push(std::thread::spawn(move || {
                 let events_in_log: Vec<_> = log
-                    .iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
+                    .try_iter(
+                        "tm.event='NewBlock' AND accepted.hash='DEADBEEF'",
+                    )
                     .unwrap()
                     .collect();
 
