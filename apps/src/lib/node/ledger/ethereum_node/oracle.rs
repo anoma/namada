@@ -39,6 +39,10 @@ pub struct Oracle {
     abort: Option<Sender<()>>,
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
+    /// If provided, the oracle will attempt to send blocks that it has checked
+    /// to this channel, but won't pause if this channel is full or
+    /// disconnected.
+    blocks_checked: Option<BoundedSender<Uint256>>,
 }
 
 impl Deref for Oracle {
@@ -78,6 +82,7 @@ impl Oracle {
             sender,
             abort: Some(abort),
             backoff,
+            blocks_checked: None,
         }
     }
 
@@ -163,7 +168,14 @@ async fn run_oracle_aux(oracle: Oracle) {
         tokio::select! {
             result = process(&oracle, &mut pending, next_block_to_check.clone()) => {
                 match result {
-                    Ok(()) => next_block_to_check += 1u8.into(),
+                    Ok(()) => {
+                        if let Some(blocks_checked) = &oracle.blocks_checked {
+                            if let Err(error) = blocks_checked.try_send(next_block_to_check.clone()) {
+                                tracing::warn!(?error, block = ?next_block_to_check, "Failed to send block checked to channel");
+                            };
+                        }
+                        next_block_to_check += 1u8.into()
+                    },
                     Err(error) => tracing::warn!(?error, block = ?next_block_to_check, "Error while trying to check Ethereum block for bridge events"),
                 }
             },
@@ -342,6 +354,7 @@ fn process_queue(
 mod test_oracle {
     use namada::types::ethereum_events::TransferToEthereum;
     use tokio::sync::oneshot::{channel, Receiver};
+    use tokio::time::timeout;
 
     use super::*;
     use crate::node::ledger::ethereum_node::events::{
@@ -356,6 +369,7 @@ mod test_oracle {
         oracle: Oracle,
         admin_channel: tokio::sync::mpsc::UnboundedSender<TestCmd>,
         eth_recv: tokio::sync::mpsc::Receiver<EthereumEvent>,
+        blocks_checked_recv: tokio::sync::mpsc::Receiver<Uint256>,
         abort_recv: Receiver<()>,
     }
 
@@ -363,6 +377,8 @@ mod test_oracle {
     fn setup() -> TestPackage {
         let (admin_channel, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
+        let (blocks_checked_sender, blocks_checked_receiver) =
+            tokio::sync::mpsc::channel(1000);
         let (abort, abort_recv) = channel();
         TestPackage {
             oracle: Oracle {
@@ -371,9 +387,11 @@ mod test_oracle {
                 abort: Some(abort),
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
+                blocks_checked: Some(blocks_checked_sender),
             },
             admin_channel,
             eth_recv: eth_receiver,
+            blocks_checked_recv: blocks_checked_receiver,
             abort_recv,
         }
     }
@@ -641,6 +659,63 @@ mod test_oracle {
         } else {
             panic!("Test failed");
         }
+
+        drop(eth_recv);
+        oracle.join().expect("Test failed");
+    }
+
+    /// Test that Ethereum blocks are checked in sequence up to the latest block
+    /// that has reached the minimum number of confirmations
+    #[tokio::test]
+    async fn test_blocks_checked_sequence() {
+        let TestPackage {
+            oracle,
+            eth_recv,
+            admin_channel,
+            mut blocks_checked_recv,
+            ..
+        } = setup();
+        let oracle = std::thread::spawn(move || {
+            tokio_test::block_on(run_oracle_aux(oracle));
+        });
+
+        // set the height of the chain such that the first `n` blocks are deep
+        // enough to be considered confirmed by the oracle
+        let n = 10;
+        for height in 0..MIN_CONFIRMATIONS + n {
+            admin_channel
+                .send(TestCmd::NewHeight(Uint256::from(height)))
+                .expect("Test failed");
+        }
+        // check that the oracle has indeed processed the first `n` blocks
+        for height in 0u64..n {
+            let block_checked =
+                timeout(Duration::from_secs(3), blocks_checked_recv.recv())
+                    .await
+                    .expect("Timed out waiting for block to be checked")
+                    .unwrap();
+            assert_eq!(block_checked, Uint256::from(height));
+        }
+
+        // check that the oracle hasn't yet checked any further blocks
+        assert!(
+            timeout(Duration::from_secs(1), blocks_checked_recv.recv())
+                .await
+                .is_err()
+        );
+
+        // increase the height of the chain by one, and check that the oracle
+        // has now processed the `n+1`th block
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(MIN_CONFIRMATIONS + n)))
+            .expect("Test failed");
+
+        let block_checked =
+            timeout(Duration::from_secs(3), blocks_checked_recv.recv())
+                .await
+                .expect("Timed out waiting for block to be checked")
+                .unwrap();
+        assert_eq!(block_checked, Uint256::from(n));
 
         drop(eth_recv);
         oracle.join().expect("Test failed");
