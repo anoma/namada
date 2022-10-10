@@ -215,7 +215,7 @@ impl EventLog {
         })
         .await
         .map_or_else(
-            // we time out from `tokio::time::timeout_at`;
+            // we timed out from `tokio::time::timeout_at`;
             // let's try to fetch events one more time...
             |_| self.try_iter_with_matcher(matcher),
             // we did not time out; return whatever result we got
