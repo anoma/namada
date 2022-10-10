@@ -139,7 +139,7 @@ impl<'a> Iterator for EventLogIterator<'a> {
 impl EventLog {
     /// Returns a new iterator over this [`EventLog`], if the
     /// given `query` is valid.
-    // TODO: listen for log updates, to avoid early returns when the
+    // TODO: listen to log updates, to avoid early returns when the
     // log has no entries
     //
     // TODO: stop iterating as soon as we timeout (need new timeout
