@@ -720,4 +720,61 @@ mod test_oracle {
         drop(eth_recv);
         oracle.join().expect("Test failed");
     }
+
+    /// Test that if the Ethereum RPC endpoint returns a latest block that is
+    /// more than one block later than the previous latest block we received, we
+    /// still check all the blocks inbetween
+    #[tokio::test]
+    async fn test_all_blocks_checked() {
+        let TestPackage {
+            oracle,
+            eth_recv,
+            admin_channel,
+            mut blocks_checked_recv,
+            ..
+        } = setup();
+        let oracle = std::thread::spawn(move || {
+            tokio_test::block_on(run_oracle_aux(oracle));
+        });
+
+        let initially_confirmed_blocks = 10;
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(
+                MIN_CONFIRMATIONS + initially_confirmed_blocks,
+            )))
+            .expect("Test failed");
+
+        // check that the oracle has indeed processed the first `n` blocks, even
+        // though the first latest block that the oracle received was not 0
+        for height in 0u64..initially_confirmed_blocks {
+            let block_checked =
+                timeout(Duration::from_secs(3), blocks_checked_recv.recv())
+                    .await
+                    .expect("Timed out waiting for block to be checked")
+                    .unwrap();
+            assert_eq!(block_checked, Uint256::from(height));
+        }
+
+        // the next time the oracle checks, the latest block will have increased
+        // by more than one
+        let latest_block = initially_confirmed_blocks + 10;
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(
+                MIN_CONFIRMATIONS + latest_block,
+            )))
+            .expect("Test failed");
+
+        // check that the oracle still checks the blocks inbetween
+        for height in initially_confirmed_blocks..latest_block {
+            let block_checked =
+                timeout(Duration::from_secs(3), blocks_checked_recv.recv())
+                    .await
+                    .expect("Timed out waiting for block to be checked")
+                    .unwrap();
+            assert_eq!(block_checked, Uint256::from(height));
+        }
+
+        drop(eth_recv);
+        oracle.join().expect("Test failed");
+    }
 }
