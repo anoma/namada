@@ -176,7 +176,9 @@ pub(super) enum ShellMode {
         event_log_sender: UnboundedSender<Vec<Event>>,
         ethereum_recv: EthereumReceiver,
     },
-    Full,
+    Full {
+        event_log_sender: UnboundedSender<Vec<Event>>,
+    },
     Seed,
 }
 
@@ -279,8 +281,8 @@ impl ShellMode {
         }
     }
 
-    /// If this node is a validator, send a vector of [`Event`] instances
-    /// to its event log.
+    /// If this node is a validator or a full node, send a vector of [`Event`]
+    /// instances to its event log.
     ///
     /// These events can then be queried from this node's `/events` RPC
     /// endpoint, until they are ejected fron the event log some time later.
@@ -288,13 +290,17 @@ impl ShellMode {
     /// which is configured on a per-node basis based on a specific number
     /// of block heights parameter.
     pub fn log_events(&self, events: Vec<Event>) {
-        if let Self::Validator {
-            event_log_sender, ..
-        } = self
-        {
-            event_log_sender.send(events).expect(
-                "An events RPC endpoint should be running for a validator",
-            );
+        match self {
+            Self::Validator {
+                event_log_sender, ..
+            }
+            | Self::Full { event_log_sender } => {
+                event_log_sender.send(events).expect(
+                    "An events RPC endpoint should be running for a validator \
+                     or a full node",
+                );
+            }
+            _ => (),
         }
     }
 }
@@ -452,7 +458,9 @@ where
                     }
                 }
             }
-            TendermintMode::Full => ShellMode::Full,
+            TendermintMode::Full => ShellMode::Full {
+                event_log_sender: event_log_sender.unwrap(),
+            },
             TendermintMode::Seed => ShellMode::Seed,
         };
 
