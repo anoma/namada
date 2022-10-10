@@ -84,6 +84,10 @@ struct LogNode {
 
 /// Represents a log of [`Event`] instances emitted by
 /// `FinalizeBlock` calls, in the ledger.
+///
+/// __INVARIANT:__ All logged events should be ordered by
+/// the shell's block height at the time of calling
+/// `FinalizeBlock`.
 #[derive(Debug, Clone)]
 pub struct EventLog {
     inner: Arc<EventLogInner>,
