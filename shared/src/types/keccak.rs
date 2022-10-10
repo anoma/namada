@@ -30,6 +30,7 @@ pub enum TryFromError {
     Default,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,

@@ -60,7 +60,10 @@ async fn run_version_command(tendermint_path: &str) -> eyre::Result<String> {
 fn parse_version(version_cmd_output: &str) -> eyre::Result<Version> {
     let version_str = version_cmd_output.trim_end().trim_start_matches('v');
     Version::parse(version_str).wrap_err_with(|| {
-        eyre!("Failed to parse Tendermint version from string: {version_str}")
+        eyre!(
+            "Couldn't parse semantic version from Tendermint version string: \
+             {version_str}"
+        )
     })
 }
 
@@ -116,25 +119,32 @@ pub async fn run(
 ) -> Result<()> {
     let tendermint_path = from_env_or_default()?;
 
-    let version = get_version(&tendermint_path).await.map_err(|err| {
-        Error::Runtime(format!("Failed to check Tendermint version: {:?}", err))
-    })?;
     let version_reqs = version_requirements();
-    if version_reqs.matches(&version) {
-        tracing::info!(
+    match get_version(&tendermint_path).await {
+        Ok(version) => {
+            if version_reqs.matches(&version) {
+                tracing::info!(
+                    %tendermint_path,
+                    %version,
+                    %version_reqs,
+                    "Running with supported Tendermint version",
+                );
+            } else {
+                tracing::warn!(
+                    %tendermint_path,
+                    %version,
+                    %version_reqs,
+                    "Running with a Tendermint version which may not be supported - run at your own risk!",
+                );
+            }
+        }
+        Err(error) => tracing::warn!(
             %tendermint_path,
-            %version,
             %version_reqs,
-            "Running with supported Tendermint version",
-        );
-    } else {
-        tracing::warn!(
-            %tendermint_path,
-            %version,
-            %version_reqs,
-            "Running with a Tendermint version which may not be supported - run at your own risk!",
-        );
-    }
+            %error,
+            "Couldn't check if Tendermint version is supported - run at your own risk!",
+        ),
+    };
 
     let home_dir_string = home_dir.to_string_lossy().to_string();
     let mode = config.tendermint_mode.to_str().to_owned();

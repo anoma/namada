@@ -6,6 +6,11 @@ on:
       tag:
         description: 'The docker image tag'
         required: true
+  push:
+    branches:
+      - main
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 env:
   GIT_LFS_SKIP_SMUDGE: 1
@@ -15,11 +20,10 @@ permissions:
   contents: write
   packages: write
 
+
 jobs:
   docker:
     runs-on: ${{ matrix.os }}
-    permissions:
-      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -30,7 +34,7 @@ jobs:
             path: ./docker/namada-wasm
           - name: Build and Push Namada docker image
             image: namada
-            path: ./docker/namada-build
+            path: ./docker/namada
 
     steps:
       - name: Checkout repo
@@ -41,9 +45,9 @@ jobs:
         uses: docker/setup-buildx-action@v2
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v4
         with:
-          images: ghcr.io/anoma/namada
+          images: ghcr.io/${{ github.repository_owner }}/namada
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Login to GHCR
         uses: docker/login-action@v2
@@ -57,7 +61,7 @@ jobs:
           context: .
           file: ${{ matrix.make.path }}/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}:${{ matrix.make.image }}-${{ github.event.inputs.tag  }}
+          tags: ghcr.io/${{ github.repository_owner }}/namada:${{ matrix.make.image }}-${{ github.event.inputs.tag || steps.meta.outputs.version }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ matrix.make.image }}-${{ github.event.inputs.tag  }}
-          cache-to: type=inline
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

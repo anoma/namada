@@ -63,8 +63,8 @@ jobs:
       - name: ${{ matrix.make.name }}
         working-directory: ./.github/workflows/scripts
         run: |
-          pip3 install github3.py >/dev/null 2>&1
           pip3 install -Iv cryptography==37.0.4 >/dev/null 2>&1
+          pip3 install github3.py >/dev/null 2>&1
           python3 ${{ matrix.make.command }}.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

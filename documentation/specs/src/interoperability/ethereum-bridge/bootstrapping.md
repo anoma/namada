@@ -3,8 +3,12 @@
 ## Overview
 
 The Ethereum bridge is not enabled at the launch of a Namada chain. Instead,
-there is a governance parameter, `eth_bridge_proxy_address`, which is
-initialized to the zero Ethereum address
+there are two governance parameters:
+
+- `eth_bridge_proxy_address`
+- `eth_bridge_wnam_address`
+
+Both are initialized to the zero Ethereum address
 (`"0x0000000000000000000000000000000000000000"`). An overview of the steps to
 enable the Ethereum bridge for a given Namada chain are:
 
@@ -58,8 +62,7 @@ do the Ethereum bridge smart contract deployment.
 If for some reason the validity of the smart contract deployment cannot be
 agreed upon by the validators who will responsible for restarting Namada, it
 must remain possible to restart the chain with the Ethereum bridge still not
-enabled i.e. with `eth_bridge_proxy_address =
-"0x0000000000000000000000000000000000000000"`.
+enabled.
 
 ## Example
 
@@ -102,7 +105,8 @@ validator set does not change at any point.
 
 - Validators coordinate to craft a new genesis file for the chain restart at
   `3400`, with the governance parameter `eth_bridge_proxy_address` set to
-  `0x00000000000000000000000000000000DeaDBeef`
+  `0x00000000000000000000000000000000DeaDBeef` and `eth_bridge_wnam_address` at
+  `0x000000000000000000000000000000000000Cafe`
 
 - The chain restarts at `3400` (the first block of epoch `34`)
 

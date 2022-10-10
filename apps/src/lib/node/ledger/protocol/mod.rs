@@ -1,4 +1,6 @@
 //! The ledger's protocol
+mod transactions;
+
 use std::collections::BTreeSet;
 use std::panic;
 
@@ -34,6 +36,8 @@ pub enum Error {
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
+    #[error(transparent)]
+    ProtocolTxError(#[from] eyre::Error),
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
     #[error("Gas error: {0}")]
@@ -202,9 +206,9 @@ where
 /// is updated natively rather than via the wasm environment, so gas does not
 /// need to be metered and validity predicates are bypassed. A [`TxResult`]
 /// containing changed keys and the like should be returned in the normal way.
-pub(crate) fn apply_protocol_tx<'a, D, H>(
+pub(crate) fn apply_protocol_tx<D, H>(
     tx: ProtocolTxType,
-    _storage: &'a mut Storage<D, H>,
+    storage: &mut Storage<D, H>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -214,12 +218,10 @@ where
         ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
             events,
             ..
-        }) => {
-            if !events.is_empty() {
-                tracing::debug!(n = events.len(), "Ethereum events received");
-            }
-            Ok(TxResult::default())
-        }
+        }) => self::transactions::ethereum_events::apply_derived_tx(
+            storage, events,
+        )
+        .map_err(Error::ProtocolTxError),
         ProtocolTxType::ValidatorSetUpdate(_) => Ok(TxResult::default()),
         _ => {
             tracing::error!(

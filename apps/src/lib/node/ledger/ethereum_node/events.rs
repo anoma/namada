@@ -1,6 +1,6 @@
 pub mod signatures {
     pub const TRANSFER_TO_NAMADA_SIG: &str =
-        "TransferToNamada(uint256,address[],string[],uint256[],uint32)";
+        "TransferToNamada(uint256,(address,uint256,string)[],uint256)";
     pub const TRANSFER_TO_ETHEREUM_SIG: &str =
         "TransferToErc(uint256,address[],address[],uint256[],uint32)";
     pub const VALIDATOR_SET_UPDATE_SIG: &str =
@@ -202,7 +202,7 @@ pub mod eth_events {
         /// Check if the minimum number of confirmations has been
         /// reached at the input block height.
         pub fn is_confirmed(&self, height: &Uint256) -> bool {
-            self.confirmations >= height.clone() - self.block_height.clone()
+            self.confirmations <= height.clone() - self.block_height.clone()
         }
     }
 
@@ -236,57 +236,33 @@ pub mod eth_events {
         /// Parse ABI serialized data from an Ethereum event into
         /// an instance of [`RawTransfersToNamada`]
         fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, assets, receivers, amounts, confs]: [Token; 5] =
-                decode(
-                    &[
+            let [nonce, transfers, confs]: [Token; 3] = decode(
+                &[
+                    ParamType::Uint(256),
+                    ParamType::Array(Box::new(ParamType::Tuple(vec![
+                        ParamType::Address,
                         ParamType::Uint(256),
-                        ParamType::Array(Box::new(ParamType::Address)),
-                        ParamType::Array(Box::new(ParamType::String)),
-                        ParamType::Array(Box::new(ParamType::Uint(256))),
-                        ParamType::Uint(32),
-                    ],
-                    data,
-                )
-                .map_err(|err| Error::Decode(format!("{:?}", err)))?
-                .try_into()
-                .map_err(|_| {
-                    Error::Decode(
-                        "TransferToNamada signature should contain five types"
-                            .to_string(),
-                    )
-                })?;
+                        ParamType::String,
+                    ]))),
+                    ParamType::Uint(256),
+                ],
+                data,
+            )
+            .map_err(|err| Error::Decode(format!("{:#?}", err)))?
+            .try_into()
+            .map_err(|error| {
+                Error::Decode(format!(
+                    "TransferToNamada signature should contain three types: \
+                     {:?}",
+                    error
+                ))
+            })?;
 
-            let assets = assets.parse_eth_address_array()?;
-            let receivers = receivers.parse_address_array()?;
-            let amounts = amounts.parse_amount_array()?;
-            if assets.len() != amounts.len() {
-                Err(Error::Decode(
-                    "Number of source addresses is different from number of \
-                     transfer amounts"
-                        .into(),
-                ))
-            } else if receivers.len() != assets.len() {
-                Err(Error::Decode(
-                    "Number of source addresses is different from number of \
-                     target addresses"
-                        .into(),
-                ))
-            } else {
-                Ok(Self {
-                    transfers: assets
-                        .into_iter()
-                        .zip(receivers.into_iter())
-                        .zip(amounts.into_iter())
-                        .map(|((asset, receiver), amount)| TransferToNamada {
-                            amount,
-                            asset,
-                            receiver,
-                        })
-                        .collect(),
-                    nonce: nonce.parse_uint256()?,
-                    confirmations: confs.parse_u32()?,
-                })
-            }
+            Ok(Self {
+                transfers: transfers.parse_transfer_to_namada_array()?,
+                nonce: nonce.parse_uint256()?,
+                confirmations: confs.parse_u32()?,
+            })
         }
 
         /// Serialize an instance [`RawTransfersToNamada`] using Ethereum's
@@ -298,31 +274,27 @@ pub mod eth_events {
                 nonce,
                 confirmations,
             } = self;
-            let amounts: Vec<Token> = transfers
-                .iter()
-                .map(|TransferToNamada { amount, .. }| {
-                    Token::Uint(u64::from(*amount).into())
-                })
-                .collect();
-            let (assets, receivers): (Vec<Token>, Vec<Token>) = transfers
+
+            let transfers = transfers
                 .into_iter()
                 .map(
                     |TransferToNamada {
-                         asset, receiver, ..
+                         asset,
+                         receiver,
+                         amount,
                      }| {
-                        (
+                        Token::Tuple(vec![
                             Token::Address(asset.0.into()),
+                            Token::Uint(u64::from(amount).into()),
                             Token::String(receiver.to_string()),
-                        )
+                        ])
                     },
                 )
-                .unzip();
+                .collect();
 
             encode(&[
                 Token::Uint(nonce.into()),
-                Token::Array(assets),
-                Token::Array(receivers),
-                Token::Array(amounts),
+                Token::Array(transfers),
                 Token::Uint(confirmations.into()),
             ])
         }
@@ -582,6 +554,10 @@ pub mod eth_events {
         fn parse_eth_address_array(self) -> Result<Vec<EthAddress>>;
         fn parse_address_array(self) -> Result<Vec<Address>>;
         fn parse_string_array(self) -> Result<Vec<String>>;
+        fn parse_transfer_to_namada_array(
+            self,
+        ) -> Result<Vec<TransferToNamada>>;
+        fn parse_transfer_to_namada(self) -> Result<TransferToNamada>;
     }
 
     impl Parse for Token {
@@ -711,6 +687,43 @@ pub mod eth_events {
             Ok(addrs)
         }
 
+        fn parse_transfer_to_namada_array(
+            self,
+        ) -> Result<Vec<TransferToNamada>> {
+            let array = if let Token::Array(array) = self {
+                array
+            } else {
+                return Err(Error::Decode(format!(
+                    "Expected type `Array`, got {:?}",
+                    self
+                )));
+            };
+            let mut transfers = vec![];
+            for token in array.into_iter() {
+                let transfer = token.parse_transfer_to_namada()?;
+                transfers.push(transfer);
+            }
+            Ok(transfers)
+        }
+
+        fn parse_transfer_to_namada(self) -> Result<TransferToNamada> {
+            if let Token::Tuple(mut items) = self {
+                let asset = items.remove(0).parse_eth_address()?;
+                let amount = items.remove(0).parse_amount()?;
+                let receiver = items.remove(0).parse_address()?;
+                Ok(TransferToNamada {
+                    asset,
+                    amount,
+                    receiver,
+                })
+            } else {
+                Err(Error::Decode(format!(
+                    "Expected type `Tuple`, got {:?}",
+                    self
+                )))
+            }
+        }
+
         fn parse_address_array(self) -> Result<Vec<Address>> {
             let array = if let Token::Array(array) = self {
                 array
@@ -750,6 +763,45 @@ pub mod eth_events {
     mod test_events {
         use super::*;
 
+        #[test]
+        fn test_transfer_to_namada_decode() {
+            let data: Vec<u8> = vec![
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 95, 189, 178, 49, 86, 120, 175, 236, 179, 103, 240,
+                50, 217, 63, 100, 47, 100, 24, 10, 163, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 84, 97, 116, 101, 115, 116, 49, 118, 52, 101, 104,
+                103, 119, 51, 54, 120, 117, 117, 110, 119, 100, 54, 57, 56, 57,
+                112, 114, 119, 100, 102, 107, 120, 113, 109, 110, 118, 115,
+                102, 106, 120, 115, 54, 110, 118, 118, 54, 120, 120, 117, 99,
+                114, 115, 51, 102, 51, 120, 99, 109, 110, 115, 51, 102, 99,
+                120, 100, 122, 114, 118, 118, 122, 57, 120, 118, 101, 114, 122,
+                118, 122, 114, 53, 54, 108, 101, 56, 102, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0,
+            ];
+
+            let raw = RawTransfersToNamada::decode(&data);
+
+            let raw = raw.unwrap();
+            assert_eq!(
+                raw.transfers,
+                vec![TransferToNamada {
+                    amount: Amount::from(100),
+                    asset: EthAddress::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3").unwrap(),
+                    receiver: Address::decode("atest1v4ehgw36xuunwd6989prwdfkxqmnvsfjxs6nvv6xxucrs3f3xcmns3fcxdzrvvz9xverzvzr56le8f").unwrap(),
+                }]
+            )
+        }
         /// For each of the basic types, test that roundtrip
         /// encoding - decoding is a no-op
         #[test]
