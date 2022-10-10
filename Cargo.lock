@@ -2026,9 +2026,9 @@ dependencies = [
 
 [[package]]
 name = "event-listener"
-version = "2.5.2"
+version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77f3309417938f28bf8228fcff79a4a37103981e3e186d2ccd19c74b38f4eb71"
+checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 
 [[package]]
 name = "expectrl"
@@ -4370,6 +4370,7 @@ dependencies = [
  "directories",
  "ed25519-consensus",
  "ethabi",
+ "event-listener",
  "eyre",
  "ferveo",
  "ferveo-common",

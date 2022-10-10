@@ -14,24 +14,29 @@ use tokio::task;
 use crate::node::ledger::events::Event;
 
 /// Instantiates a new event log and its associated machinery.
-pub fn new() -> (EventLog, EventLogger, EventSender) {
+pub fn new() -> (EventLog, Logger, LogEntrySender) {
     let (tx, rx) = mpsc::unbounded_channel();
 
     let log = EventLog::new();
-    let logger = EventLogger {
+    let logger = Logger {
         receiver: rx,
         log: log.clone(),
     };
-    let sender = EventSender { sender: tx };
+    let sender = LogEntrySender { sender: tx };
 
     (log, logger, sender)
 }
 
+/// Represents an entry in the event log.
+#[derive(Debug)]
 pub struct LogEntry {
-    block_height: BlockHeight,
-    events: Vec<Event>,
+    /// The block height at which we emitted the events.
+    pub block_height: BlockHeight,
+    /// The events emitted by a `FinalizeBlock` call.
+    pub events: Vec<Event>,
 }
 
+#[derive(Debug)]
 struct LogNode {
     entry: LogEntry,
     next: Option<Arc<LogNode>>,
@@ -44,6 +49,8 @@ pub struct EventLog {
     inner: Arc<EventLogInner>,
 }
 
+#[derive(Debug)]
+#[allow(dead_code)]
 struct EventLogInner {
     /// A generator of notifications for RPC callers.
     notifier: event_listener::Event,
@@ -51,11 +58,13 @@ struct EventLogInner {
     lock: RwLock<EventLogInnerMux>,
 }
 
+#[derive(Debug)]
+#[allow(dead_code)]
 struct EventLogInnerMux {
     /// The total number of entries in the log.
     num_entries: usize,
     /// The earliest block height in the event log.
-    oldest_height: BlockHeight,
+    oldest_height: Option<BlockHeight>,
     /// Pointer to the freshest log entry.
     head: Option<Arc<LogNode>>,
 }
@@ -63,8 +72,11 @@ struct EventLogInnerMux {
 /// An iterator over the [`Event`] instances in the
 /// event log, matching a given [`Query`].
 pub struct EventLogIterator<'a> {
+    /// The current index pointing at the events in the `node` field.
     index: usize,
+    /// A query to filter out events.
     query: dumb_queries::QueryMatcher<'a>,
+    /// A pointer to one of the event log's entries.
     node: Option<Arc<LogNode>>,
 }
 
@@ -93,19 +105,30 @@ impl<'a> Iterator for EventLogIterator<'a> {
 impl EventLog {
     /// Returns a new iterator over this [`EventLog`], if the
     /// given `query` is valid.
-    pub fn iter<'a>(&'a self, query: &'a str) -> Option<EventLogIterator<'a>> {
+    pub fn iter<'a>(&self, query: &'a str) -> Option<EventLogIterator<'a>> {
         let query = dumb_queries::QueryMatcher::parse(query)?;
+        let node = {
+            let log = self.inner.lock.read().unwrap();
+            log.head.clone()
+        };
         Some(EventLogIterator {
             query,
+            node,
             index: 0,
-            guard: self.inner.read().unwrap(),
         })
     }
 
     /// Creates a new event log.
     fn new() -> Self {
         Self {
-            inner: Arc::new(RwLock::new(Vec::new())),
+            inner: Arc::new(EventLogInner {
+                notifier: event_listener::Event::new(),
+                lock: RwLock::new(EventLogInnerMux {
+                    num_entries: 0,
+                    oldest_height: None,
+                    head: None,
+                }),
+            }),
         }
     }
 
@@ -115,27 +138,27 @@ impl EventLog {
     }
 
     /// Add new events to the log.
-    fn add(&self, events: Vec<Event>) {
-        let mut buf = self.inner.write().unwrap();
-        buf.extend(events);
+    fn add(&self, entry: LogEntry) {
+        let _ = entry;
+        // TODO
     }
 }
 
 /// Receives events from an [`EventSender`], and logs them to the
 /// [`EventLog`].
 #[derive(Debug)]
-pub struct EventLogger {
+pub struct Logger {
     log: EventLog,
-    receiver: UnboundedReceiver<Vec<Event>>,
+    receiver: UnboundedReceiver<LogEntry>,
 }
 
-impl EventLogger {
+impl Logger {
     /// Receive new events from a `FinalizeBlock` call, and log them.
     ///
     /// We should use this method in a loop, such as:
     ///
     /// ```ignore
-    /// let mut logger: EventLogger = /* ... */;
+    /// let mut logger: Logger = /* ... */;
     ///
     /// loop {
     ///     if logger.log_new_events_batch().await.is_none() {
@@ -160,20 +183,20 @@ impl EventLogger {
 
 /// Utility struct to log events in the ledger's [`EventLog`].
 ///
-/// An [`EventSender`] always has an associated [`EventLogger`],
+/// A [`LogEntrySender`] always has an associated [`Logger`],
 /// which will receive events from the same sender and log them
 /// in the [`EventLog`].
 #[derive(Debug, Clone)]
-pub struct EventSender {
-    sender: UnboundedSender<Vec<Event>>,
+pub struct LogEntrySender {
+    sender: UnboundedSender<LogEntry>,
 }
 
-impl EventSender {
-    /// Send new events to an [`EventLogger`].
+impl LogEntrySender {
+    /// Send a new [`LogEntry`] to a [`Logger`].
     ///
-    /// This call will fail if the associated [`EventLogger`] has been dropped.
+    /// This call will fail if the associated [`Logger`] has been dropped.
     #[inline]
-    pub fn send_events(&self, events: Vec<Event>) -> Option<()> {
-        self.sender.send(events).ok()
+    pub fn send_events(&self, entry: LogEntry) -> Option<()> {
+        self.sender.send(entry).ok()
     }
 }

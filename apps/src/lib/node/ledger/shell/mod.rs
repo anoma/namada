@@ -61,6 +61,7 @@ use crate::facade::tendermint_proto::types::ConsensusParams;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::facade::tower_abci::{request, response};
+use crate::node::ledger::events::log::LogEntry;
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -173,11 +174,11 @@ pub(super) enum ShellMode {
     Validator {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        event_log_sender: UnboundedSender<Vec<Event>>,
+        event_log_sender: UnboundedSender<LogEntry>,
         ethereum_recv: EthereumReceiver,
     },
     Full {
-        event_log_sender: UnboundedSender<Vec<Event>>,
+        event_log_sender: UnboundedSender<LogEntry>,
     },
     Seed,
 }
@@ -286,19 +287,26 @@ impl ShellMode {
     ///
     /// These events can then be queried from this node's `/events` RPC
     /// endpoint, until they are ejected fron the event log some time later.
+    ///
     /// Ejecting events from a node's log happens after they have expired,
     /// which is configured on a per-node basis based on a specific number
-    /// of block heights parameter.
-    pub fn log_events(&self, events: Vec<Event>) {
+    /// of block heights parameter. This is the reason for including a
+    /// `block_height` parameter in this call.
+    pub fn log_events(&self, block_height: BlockHeight, events: Vec<Event>) {
         match self {
             Self::Validator {
                 event_log_sender, ..
             }
             | Self::Full { event_log_sender } => {
-                event_log_sender.send(events).expect(
-                    "An events RPC endpoint should be running for a validator \
-                     or a full node",
-                );
+                event_log_sender
+                    .send(LogEntry {
+                        block_height,
+                        events,
+                    })
+                    .expect(
+                        "An events RPC endpoint should be running for a \
+                         validator or a full node",
+                    );
             }
             _ => (),
         }
@@ -323,7 +331,7 @@ where
     pub config: config::Ledger,
     pub wasm_dir: PathBuf,
     pub broadcast_sender: UnboundedSender<Vec<u8>>,
-    pub event_log_sender: Option<UnboundedSender<Vec<Event>>>,
+    pub event_log_sender: Option<UnboundedSender<LogEntry>>,
     pub eth_receiver: Option<Receiver<EthereumEvent>>,
     pub db_cache: Option<&'cache D::Cache>,
     pub vp_wasm_compilation_cache: u64,
