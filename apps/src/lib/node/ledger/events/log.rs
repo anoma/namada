@@ -9,6 +9,7 @@ use std::sync::{Arc, RwLock};
 
 use namada::types::storage::BlockHeight;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::time::Instant;
 
 use crate::node::ledger::events::Event;
 
@@ -151,22 +152,56 @@ impl<'a> Iterator for EventLogIterator<'a> {
     }
 }
 
+/// Error returned by calling [`EventLog`] iteration methods.
+#[derive(Debug)]
+pub enum IterError {
+    /// We failed to parse a query passed as argument.
+    InvalidQuery,
+    /// The event log has no entries.
+    EmptyLog,
+    /// We timed out waiting for log entries.
+    Timeout,
+}
+
 impl EventLog {
     /// Returns a new iterator over this [`EventLog`], if the
-    /// given `query` is valid.
-    // TODO: listen to log updates, to avoid early returns when the
-    // log has no entries
-    //
-    // TODO: stop iterating as soon as we timeout (need new timeout
-    // param)
-    pub fn try_iter<'a>(&self, query: &'a str) -> Option<EventLogIterator<'a>> {
-        let query = dumb_queries::QueryMatcher::parse(query)?;
-        let snapshot = self.snapshot()?;
-        Some(EventLogIterator {
+    /// given `query` is valid and there are events present in
+    /// the [`EventLog`].
+    pub fn try_iter<'a>(
+        &self,
+        query: &'a str,
+    ) -> Result<EventLogIterator<'a>, IterError> {
+        let query = dumb_queries::QueryMatcher::parse(query)
+            .ok_or(IterError::InvalidQuery)?;
+        let snapshot = self.snapshot().ok_or(IterError::EmptyLog)?;
+        Ok(EventLogIterator {
             query,
             index: 0,
             node: Some(snapshot.head),
         })
+    }
+
+    /// Waits up to `deadline` for new events, and if it succeeds,
+    /// returns an iterator over these events.
+    pub async fn wait_iter<'a>(
+        &self,
+        deadline: Instant,
+        query: &'a str,
+    ) -> Result<EventLogIterator<'a>, IterError> {
+        tokio::time::timeout_at(deadline, async {
+            loop {
+                self.inner.notifier.listen().await;
+
+                match self.try_iter(query) {
+                    Ok(iter) => break Ok(iter),
+                    Err(IterError::EmptyLog) => continue,
+                    err => break err,
+                }
+            }
+        })
+        .await
+        .map_err(|_| IterError::Timeout)
+        .and_then(|result| result)
     }
 
     /// Creates a new event log.
