@@ -14,6 +14,15 @@ use tokio::task;
 use crate::node::ledger::events::Event;
 
 /// Instantiates a new event log and its associated machinery.
+///
+/// General usage flow:
+///
+///   1. Spawn a new asynchronous task, with a [`Logger`]
+///      running on a loop.
+///   2. Send new events to the [`Logger`] with a [`LogEntrySender`].
+///      This will alter the state of the [`EventLog`].
+///   3. Concurrently, other asynchronous tasks may access the
+///      [`EventLog`] to check for new events.
 pub fn new() -> (EventLog, Logger, LogEntrySender) {
     let (tx, rx) = mpsc::unbounded_channel();
 
@@ -137,14 +146,14 @@ impl EventLog {
         // TODO
     }
 
-    /// Add new events to the log.
+    /// Add a new entry to the log.
     fn add(&self, entry: LogEntry) {
         let _ = entry;
         // TODO
     }
 }
 
-/// Receives events from an [`EventSender`], and logs them to the
+/// Receives new entries from a [`LogEntrySender`], and logs them in the
 /// [`EventLog`].
 #[derive(Debug)]
 pub struct Logger {
@@ -161,31 +170,31 @@ impl Logger {
     /// let mut logger: Logger = /* ... */;
     ///
     /// loop {
-    ///     if logger.log_new_events_batch().await.is_none() {
+    ///     if logger.log_new_entry().await.is_none() {
     ///         /* handle errors */
     ///     }
     /// }
     /// ```
-    pub async fn log_new_events_batch(&mut self) -> Option<()> {
+    pub async fn log_new_entry(&mut self) -> Option<()> {
         task::block_in_place(|| self.log.prune());
-        let events = self.receiver.recv().await?;
-        task::block_in_place(move || self.log.add(events));
+        let entry = self.receiver.recv().await?;
+        task::block_in_place(move || self.log.add(entry));
         Some(())
     }
 
-    /// Call [`Self::log_new_events_batch`] repeatedly.
+    /// Call [`Self::log_new_entry`] repeatedly.
     pub async fn run(&mut self) -> Option<()> {
         loop {
-            self.log_new_events_batch().await?;
+            self.log_new_entry().await?;
         }
     }
 }
 
-/// Utility struct to log events in the ledger's [`EventLog`].
+/// Utility struct to log new entries in the ledger's [`EventLog`].
 ///
 /// A [`LogEntrySender`] always has an associated [`Logger`],
-/// which will receive events from the same sender and log them
-/// in the [`EventLog`].
+/// which will receive log entries from the same sender and
+/// log them in the [`EventLog`].
 #[derive(Debug, Clone)]
 pub struct LogEntrySender {
     sender: UnboundedSender<LogEntry>,
