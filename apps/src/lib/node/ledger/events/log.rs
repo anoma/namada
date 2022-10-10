@@ -119,7 +119,7 @@ struct EventLogInnerMux {
 }
 
 /// Represents an iterator over the [`Event`] instances in the
-/// event log, matching a given [`Query`].
+/// event log, matching a given [`QueryMatcher`].
 pub struct EventLogIterator<'a> {
     /// The current index pointing at the events in the `node` field.
     index: usize,
