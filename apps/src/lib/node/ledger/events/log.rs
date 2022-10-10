@@ -13,6 +13,20 @@ use tokio::task;
 
 use crate::node::ledger::events::Event;
 
+/// Soft lock on the maximum number of events the event log can hold.
+///
+/// If the number of events in the log exceeds this value, the log
+/// will be pruned.
+// TODO: make this a config param
+const MAX_LOG_EVENTS: usize = 50000;
+
+/// Soft lock on the number of entries the event log can hold.
+///
+/// If the difference between the newest log entry and the oldest's
+/// block heights is greater than this value, the log will be pruned.
+// TODO: make this a config param
+const LOG_BLOCK_HEIGHT_DIFF: u64 = 1000;
+
 /// Instantiates a new event log and its associated machinery.
 ///
 /// General usage flow:
@@ -69,7 +83,6 @@ struct EventLogSnapshot {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 struct EventLogInner {
     /// A generator of notifications for RPC callers.
     notifier: event_listener::Event,
@@ -78,12 +91,11 @@ struct EventLogInner {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 struct EventLogInnerMux {
     /// The total number of entries in the log.
     num_entries: usize,
     /// The earliest block height in the event log.
-    oldest_height: Option<BlockHeight>,
+    oldest_height: BlockHeight,
     /// Pointer to the freshest log entry.
     head: Option<Arc<LogNode>>,
 }
@@ -144,7 +156,7 @@ impl EventLog {
                 notifier: event_listener::Event::new(),
                 lock: RwLock::new(EventLogInnerMux {
                     num_entries: 0,
-                    oldest_height: None,
+                    oldest_height: 0.into(),
                     head: None,
                 }),
             }),
@@ -153,13 +165,30 @@ impl EventLog {
 
     /// Prune the event log, ejecting old [`Event`] instances.
     fn prune(&self) {
+        let _ = MAX_LOG_EVENTS;
+        let _ = LOG_BLOCK_HEIGHT_DIFF;
         // TODO
     }
 
     /// Add a new entry to the log.
     fn add(&self, entry: LogEntry) {
-        let _ = entry;
-        // TODO
+        // update the log head
+        {
+            let mut log = self.inner.lock.write().unwrap();
+
+            log.head = Some(Arc::new(LogNode {
+                entry,
+                next: log.head.take(),
+            }));
+            log.num_entries += 1;
+        }
+
+        // notify all event listeners
+        self.inner.notifier.notify(usize::MAX);
+
+        // we don't need to hold a lock to check
+        // if the log needs to be pruned
+        self.prune();
     }
 
     /// Snapshot the current state of the event log, and return it.
@@ -169,7 +198,7 @@ impl EventLog {
         log.head.clone().map(|head| EventLogSnapshot {
             head,
             num_entries: log.num_entries,
-            oldest_height: log.oldest_height.unwrap(),
+            oldest_height: log.oldest_height,
         })
     }
 }
