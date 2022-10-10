@@ -15,16 +15,16 @@ use crate::node::ledger::events::Event;
 
 /// Run a CPU-bound task without blocking the Tokio runtime.
 macro_rules! block_in_place {
-    ($statement:expr) => {{
+    ($expr:expr) => {{
         // we need this because `tokio_test` panics if we
         // call `tokio::task::block_in_place()`
         #[cfg(test)]
         {
-            $statement;
+            $expr
         }
         #[cfg(not(test))]
         {
-            ::tokio::task::block_in_place(|| $statement);
+            ::tokio::task::block_in_place(|| $expr)
         }
     }};
 }
@@ -171,28 +171,42 @@ impl EventLog {
         &self,
         query: &'a str,
     ) -> Result<EventLogIterator<'a>, IterError> {
-        let query = dumb_queries::QueryMatcher::parse(query)
+        let matcher = dumb_queries::QueryMatcher::parse(query)
             .ok_or(IterError::InvalidQuery)?;
-        let snapshot = self.snapshot().ok_or(IterError::EmptyLog)?;
+        self.try_iter_with_matcher(matcher)
+    }
+
+    /// Just like [`EventLog::try_iter`], but uses a pre-compiled query matcher.
+    pub fn try_iter_with_matcher<'a>(
+        &self,
+        matcher: dumb_queries::QueryMatcher<'a>,
+    ) -> Result<EventLogIterator<'a>, IterError> {
+        let snapshot =
+            block_in_place!(self.snapshot()).ok_or(IterError::EmptyLog)?;
         Ok(EventLogIterator {
-            query,
             index: 0,
+            query: matcher,
             node: Some(snapshot.head),
         })
     }
 
     /// Waits up to `deadline` for new events, and if it succeeds,
     /// returns an iterator over these events.
+    ///
+    /// If we time out, try to return any existing events in the log.
     pub async fn wait_iter<'a>(
         &self,
         deadline: Instant,
         query: &'a str,
     ) -> Result<EventLogIterator<'a>, IterError> {
-        tokio::time::timeout_at(deadline, async {
+        let matcher = dumb_queries::QueryMatcher::parse(query)
+            .ok_or(IterError::InvalidQuery)?;
+        let m = matcher.clone();
+        tokio::time::timeout_at(deadline, async move {
             loop {
                 self.inner.notifier.listen().await;
 
-                match self.try_iter(query) {
+                match self.try_iter_with_matcher(m.clone()) {
                     Ok(iter) => break Ok(iter),
                     Err(IterError::EmptyLog) => continue,
                     err => break err,
@@ -200,8 +214,13 @@ impl EventLog {
             }
         })
         .await
-        .map_err(|_| IterError::Timeout)
-        .and_then(|result| result)
+        .map_or_else(
+            // we timeout out from `tokio::time::timeout_at`;
+            // let's try to fetch events one more time...
+            |_| self.try_iter_with_matcher(matcher),
+            // we did not time out; return whatever result we got
+            |result| result,
+        )
     }
 
     /// Creates a new event log.
