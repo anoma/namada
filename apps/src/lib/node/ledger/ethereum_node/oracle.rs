@@ -22,7 +22,7 @@ pub(crate) const MIN_CONFIRMATIONS: u64 = 100;
 const MINT_CONTRACT: EthAddress = EthAddress([0; 20]);
 const GOVERNANCE_CONTRACT: EthAddress = EthAddress([1; 20]);
 
-/// The default amount of time the oracle will wait between checking blocks
+/// The default amount of time the oracle will wait between processing blocks
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
 
 /// A client that can talk to geth and parse
@@ -39,10 +39,10 @@ pub struct Oracle {
     abort: Option<Sender<()>>,
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
-    /// If provided, the oracle will attempt to send blocks that it has checked
-    /// to this channel, but won't pause if this channel is full or
-    /// disconnected.
-    blocks_checked: Option<BoundedSender<Uint256>>,
+    /// If provided, the oracle will attempt to send block heights that it has
+    /// processed to this channel, but won't pause if this channel is full
+    /// or disconnected.
+    blocks_processed: Option<BoundedSender<Uint256>>,
 }
 
 impl Deref for Oracle {
@@ -57,13 +57,15 @@ impl Drop for Oracle {
     fn drop(&mut self) {
         // send an abort signal to shut down the
         // rest of the ledger gracefully
-        let abort = self.abort.take().unwrap();
-        match abort.send(()) {
-            Ok(()) => tracing::debug!("Oracle sent abort signal"),
+        match self.abort.take().unwrap().send(()) {
+            Ok(()) => tracing::info!("Oracle sent abort signal"),
             Err(()) => {
                 // this isn't necessarily an issue as the ledger may have shut
                 // down first
-                tracing::debug!("Oracle was unable to send an abort signal")
+                tracing::debug!(
+                    "Oracle was unable to send an abort signal as the abort \
+                     channel was already closed"
+                )
             }
         };
     }
@@ -82,7 +84,7 @@ impl Oracle {
             sender,
             abort: Some(abort),
             backoff,
-            blocks_checked: None,
+            blocks_processed: None,
         }
     }
 
@@ -151,32 +153,31 @@ pub fn run_oracle(
 /// It also checks that once the specified number of confirmations
 /// is reached, an event is forwarded to the ledger process
 async fn run_oracle_aux(oracle: Oracle) {
-    // Initialize our local state. This includes
-    // the latest block height seen and a queue of events
-    // awaiting a certain number of confirmations
+    // Initialize a queue to keep events which are awaiting a certain number of
+    // confirmations
     let mut pending: Vec<PendingEvent> = Vec::new();
 
     // TODO(namada#560): get the appropriate Ethereum block height to start
     // checking from rather than starting from zero every time
-    let mut next_block_to_check: Uint256 = 0u8.into();
+    let mut next_block_to_process: Uint256 = 0u8.into();
 
     loop {
         tracing::info!(
-            ?next_block_to_check,
+            ?next_block_to_process,
             "Checking Ethereum block for bridge events"
         );
         tokio::select! {
-            result = process(&oracle, &mut pending, next_block_to_check.clone()) => {
+            result = process(&oracle, &mut pending, next_block_to_process.clone()) => {
                 match result {
                     Ok(()) => {
-                        if let Some(blocks_checked) = &oracle.blocks_checked {
-                            if let Err(error) = blocks_checked.try_send(next_block_to_check.clone()) {
-                                tracing::warn!(?error, block = ?next_block_to_check, "Failed to send block checked to channel");
+                        if let Some(blocks_processed) = &oracle.blocks_processed {
+                            if let Err(error) = blocks_processed.try_send(next_block_to_process.clone()) {
+                                tracing::warn!(?error, block = ?next_block_to_process, "Failed to send processed block height to `blocks_processed` channel");
                             };
                         }
-                        next_block_to_check += 1u8.into()
+                        next_block_to_process += 1u8.into()
                     },
-                    Err(error) => tracing::warn!(?error, block = ?next_block_to_check, "Error while trying to check Ethereum block for bridge events"),
+                    Err(error) => tracing::warn!(?error, block = ?next_block_to_process, "Error while trying to process Ethereum block"),
                 }
             },
             _ = oracle.sender.closed() => {
@@ -192,11 +193,11 @@ async fn run_oracle_aux(oracle: Oracle) {
 }
 
 /// Checks if the given block has any events relating to the bridge, and if so,
-/// sends them to the oracle's `sender`
+/// sends them to the oracle's `sender` channel
 async fn process(
     oracle: &Oracle,
     pending: &mut Vec<PendingEvent>,
-    block_to_check: Uint256,
+    block_to_process: Uint256,
 ) -> Result<()> {
     // update the latest block height
     let latest_block = loop {
@@ -211,10 +212,10 @@ async fn process(
             }
         };
         let minimum_latest_block =
-            block_to_check.clone() + Uint256::from(MIN_CONFIRMATIONS);
+            block_to_process.clone() + Uint256::from(MIN_CONFIRMATIONS);
         if minimum_latest_block > latest_block {
             tracing::debug!(
-                ?block_to_check,
+                ?block_to_process,
                 ?latest_block,
                 ?minimum_latest_block,
                 "Waiting for enough Ethereum blocks to be synced"
@@ -227,7 +228,7 @@ async fn process(
         break latest_block;
     };
     tracing::debug!(
-        ?block_to_check,
+        ?block_to_process,
         ?latest_block,
         "Got latest Ethereum block height"
     );
@@ -239,7 +240,7 @@ async fn process(
             signatures::SigType::Governance => GOVERNANCE_CONTRACT.0.into(),
         };
         tracing::debug!(
-            ?block_to_check,
+            ?block_to_process,
             ?addr,
             ?sig,
             "Checking for bridge events"
@@ -248,8 +249,8 @@ async fn process(
         let mut events = {
             let logs = match oracle
                 .check_for_events(
-                    block_to_check.clone(),
-                    Some(block_to_check.clone()),
+                    block_to_process.clone(),
+                    Some(block_to_process.clone()),
                     vec![addr],
                     vec![sig],
                 )
@@ -266,7 +267,7 @@ async fn process(
             };
             if !logs.is_empty() {
                 tracing::info!(
-                    ?block_to_check,
+                    ?block_to_process,
                     ?addr,
                     ?sig,
                     n_events = logs.len(),
@@ -277,14 +278,14 @@ async fn process(
                 .filter_map(|log| {
                     match PendingEvent::decode(
                         sig,
-                        block_to_check.clone(),
+                        block_to_process.clone(),
                         log.data.0.as_slice(),
                     ) {
                         Ok(event) => Some(event),
                         Err(error) => {
                             tracing::error!(
                                 ?error,
-                                ?block_to_check,
+                                ?block_to_process,
                                 ?addr,
                                 ?sig,
                                 "Couldn't decode event: {:#?}",
@@ -294,12 +295,12 @@ async fn process(
                         }
                     }
                 })
-                .collect();
+                .collect()
         };
         pending.append(&mut events);
         if !pending.is_empty() {
             tracing::info!(
-                ?block_to_check,
+                ?block_to_process,
                 ?addr,
                 ?sig,
                 pending = pending.len(),
@@ -309,7 +310,7 @@ async fn process(
         let confirmed = process_queue(&latest_block, pending);
         if !confirmed.is_empty() {
             tracing::info!(
-                ?block_to_check,
+                ?block_to_process,
                 ?addr,
                 ?sig,
                 pending = pending.len(),
@@ -368,7 +369,7 @@ mod test_oracle {
         oracle: Oracle,
         admin_channel: tokio::sync::mpsc::UnboundedSender<TestCmd>,
         eth_recv: tokio::sync::mpsc::Receiver<EthereumEvent>,
-        blocks_checked_recv: tokio::sync::mpsc::Receiver<Uint256>,
+        blocks_processed_recv: tokio::sync::mpsc::Receiver<Uint256>,
         abort_recv: Receiver<()>,
     }
 
@@ -376,7 +377,7 @@ mod test_oracle {
     fn setup() -> TestPackage {
         let (admin_channel, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
-        let (blocks_checked_sender, blocks_checked_receiver) =
+        let (blocks_processed, blocks_processed_recv) =
             tokio::sync::mpsc::channel(1000);
         let (abort, abort_recv) = channel();
         TestPackage {
@@ -386,11 +387,11 @@ mod test_oracle {
                 abort: Some(abort),
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
-                blocks_checked: Some(blocks_checked_sender),
+                blocks_processed: Some(blocks_processed),
             },
             admin_channel,
             eth_recv: eth_receiver,
-            blocks_checked_recv: blocks_checked_receiver,
+            blocks_processed_recv,
             abort_recv,
         }
     }
@@ -663,58 +664,62 @@ mod test_oracle {
         oracle.join().expect("Test failed");
     }
 
-    /// Test that Ethereum blocks are checked in sequence up to the latest block
-    /// that has reached the minimum number of confirmations
+    /// Test that Ethereum blocks are processed in sequence up to the latest
+    /// block that has reached the minimum number of confirmations
     #[tokio::test]
     async fn test_blocks_checked_sequence() {
         let TestPackage {
             oracle,
             eth_recv,
             admin_channel,
-            mut blocks_checked_recv,
+            mut blocks_processed_recv,
             ..
         } = setup();
         let oracle = std::thread::spawn(move || {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
 
-        // set the height of the chain such that the first `n` blocks are deep
+        // set the height of the chain such that there are some blocks deep
         // enough to be considered confirmed by the oracle
-        let n = 10;
-        for height in 0..MIN_CONFIRMATIONS + n {
+        let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
+        let synced_block_height = MIN_CONFIRMATIONS + confirmed_block_height;
+        for height in 0..synced_block_height + 1 {
             admin_channel
                 .send(TestCmd::NewHeight(Uint256::from(height)))
                 .expect("Test failed");
         }
-        // check that the oracle has indeed processed the first `n` blocks
-        for height in 0u64..n {
-            let block_checked =
-                timeout(Duration::from_secs(3), blocks_checked_recv.recv())
+        // check that the oracle indeed processes the confirmed blocks
+        for height in 0u64..confirmed_block_height + 1 {
+            let block_processed =
+                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
                     .await
                     .expect("Timed out waiting for block to be checked")
                     .unwrap();
-            assert_eq!(block_checked, Uint256::from(height));
+            assert_eq!(block_processed, Uint256::from(height));
         }
 
         // check that the oracle hasn't yet checked any further blocks
+        // TODO: check this in a deterministic way rather than just waiting a
+        // bit
         assert!(
-            timeout(Duration::from_secs(1), blocks_checked_recv.recv())
+            timeout(Duration::from_secs(1), blocks_processed_recv.recv())
                 .await
                 .is_err()
         );
 
         // increase the height of the chain by one, and check that the oracle
-        // has now processed the `n+1`th block
+        // processed the next confirmed block
+        let synced_block_height = synced_block_height + 1;
         admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(MIN_CONFIRMATIONS + n)))
+            .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
             .expect("Test failed");
 
-        let block_checked =
-            timeout(Duration::from_secs(3), blocks_checked_recv.recv())
+        let block_processed =
+            timeout(Duration::from_secs(3), blocks_processed_recv.recv())
                 .await
                 .expect("Timed out waiting for block to be checked")
                 .unwrap();
-        assert_eq!(block_checked, Uint256::from(n));
+        assert_eq!(block_processed, Uint256::from(confirmed_block_height + 1));
 
         drop(eth_recv);
         oracle.join().expect("Test failed");
@@ -729,48 +734,48 @@ mod test_oracle {
             oracle,
             eth_recv,
             admin_channel,
-            mut blocks_checked_recv,
+            mut blocks_processed_recv,
             ..
         } = setup();
         let oracle = std::thread::spawn(move || {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
 
-        let initially_confirmed_blocks = 10;
+        let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
+        let synced_block_height = MIN_CONFIRMATIONS + confirmed_block_height;
         admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(
-                MIN_CONFIRMATIONS + initially_confirmed_blocks,
-            )))
+            .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
             .expect("Test failed");
 
         // check that the oracle has indeed processed the first `n` blocks, even
         // though the first latest block that the oracle received was not 0
-        for height in 0u64..initially_confirmed_blocks {
-            let block_checked =
-                timeout(Duration::from_secs(3), blocks_checked_recv.recv())
+        for height in 0u64..confirmed_block_height + 1 {
+            let block_processed =
+                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
                     .await
                     .expect("Timed out waiting for block to be checked")
                     .unwrap();
-            assert_eq!(block_checked, Uint256::from(height));
+            assert_eq!(block_processed, Uint256::from(height));
         }
 
         // the next time the oracle checks, the latest block will have increased
         // by more than one
-        let latest_block = initially_confirmed_blocks + 10;
+        let difference = 10;
+        let synced_block_height = synced_block_height + difference;
         admin_channel
-            .send(TestCmd::NewHeight(Uint256::from(
-                MIN_CONFIRMATIONS + latest_block,
-            )))
+            .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
             .expect("Test failed");
 
         // check that the oracle still checks the blocks inbetween
-        for height in initially_confirmed_blocks..latest_block {
-            let block_checked =
-                timeout(Duration::from_secs(3), blocks_checked_recv.recv())
+        for height in (confirmed_block_height + 1)
+            ..(confirmed_block_height + difference + 1)
+        {
+            let block_processed =
+                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
                     .await
                     .expect("Timed out waiting for block to be checked")
                     .unwrap();
-            assert_eq!(block_checked, Uint256::from(height));
+            assert_eq!(block_processed, Uint256::from(height));
         }
 
         drop(eth_recv);
