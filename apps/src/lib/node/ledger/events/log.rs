@@ -193,7 +193,7 @@ impl EventLog {
     /// Waits up to `deadline` for new events, and if it succeeds,
     /// returns an iterator over these events.
     ///
-    /// If we time out, try to return any existing events in the log.
+    /// If we time out, we try to return any existing events in the log.
     pub async fn wait_iter<'a>(
         &self,
         deadline: Instant,
@@ -215,7 +215,7 @@ impl EventLog {
         })
         .await
         .map_or_else(
-            // we timeout out from `tokio::time::timeout_at`;
+            // we time out from `tokio::time::timeout_at`;
             // let's try to fetch events one more time...
             |_| self.try_iter_with_matcher(matcher),
             // we did not time out; return whatever result we got
