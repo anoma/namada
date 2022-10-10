@@ -162,6 +162,7 @@ impl EventLog {
         // TODO
     }
 
+    /// Snapshot the current state of the event log, and return it.
     #[allow(dead_code)]
     fn snapshot(&self) -> Option<EventLogSnapshot> {
         let log = self.inner.lock.read().unwrap();
