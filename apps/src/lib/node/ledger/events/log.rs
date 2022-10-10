@@ -176,7 +176,7 @@ impl EventLog {
         self.try_iter_with_matcher(matcher)
     }
 
-    /// Just like [`EventLog::try_iter`], but uses a pre-compiled query matcher.
+    /// Just like [`EventLog`], but uses a pre-compiled query matcher.
     pub fn try_iter_with_matcher<'a>(
         &self,
         matcher: dumb_queries::QueryMatcher<'a>,
