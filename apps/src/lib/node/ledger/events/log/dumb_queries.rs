@@ -2,7 +2,7 @@
 //!
 //! This parser will only work with simple queries of the form:
 //!
-//! ```ignore
+//! ```text
 //! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
 //! ```
 
