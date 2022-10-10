@@ -17,7 +17,7 @@ use thiserror::Error;
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
 use super::IBC_KEY_LIMIT;
 use crate::bytes::ByteBuf;
-use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolTree;
+use crate::ledger::eth_bridge::storage::bridge_pool::{BridgePoolTree, get_signed_root_key};
 use crate::ledger::storage::ics23_specs::ibc_leaf_spec;
 use crate::ledger::storage::{ics23_specs, types};
 use crate::types::address::{Address, InternalAddress};
@@ -177,7 +177,13 @@ impl StoreType {
                         Ok((StoreType::Ibc, key.sub_key()?))
                     }
                     InternalAddress::EthBridgePool => {
-                        Ok((StoreType::BridgePool, key.sub_key()?))
+                        // the root of this sub-tree is kept in accounts
+                        // storage along with a quorum of validator signatures
+                        if *key == get_signed_root_key() {
+                            Ok((StoreType::Account, key.clone()))
+                        } else {
+                            Ok((StoreType::BridgePool, key.sub_key()?))
+                        }
                     }
                     // use the same key for Parameters
                     _ => Ok((StoreType::Account, key.clone())),
