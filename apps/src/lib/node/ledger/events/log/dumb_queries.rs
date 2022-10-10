@@ -14,7 +14,7 @@ use crate::node::ledger::events::{Event, EventType};
 lazy_static! {
     /// Regular expresion used to parse Tendermint queries.
     static ref QUERY_PARSING_REGEX: Regex = Regex::new(
-        r"^tm\.event='NewBlock' AND (accepted|applied)\.([a-z]+)='([^']+)'$"
+        r"^tm\.event='NewBlock' AND (accepted|applied)\.([\w_]+)='([^']+)'$"
     )
     .unwrap();
 }
