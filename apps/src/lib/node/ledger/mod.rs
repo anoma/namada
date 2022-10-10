@@ -30,7 +30,7 @@ use self::abortable::AbortableSpawner;
 use self::ethereum_node::eth_fullnode;
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
-use crate::config::{ethereum, TendermintMode};
+use crate::config::{ethereum_bridge, TendermintMode};
 use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
@@ -622,25 +622,26 @@ async fn maybe_start_ethereum_oracle(
         return (None, spawn_dummy_task(()));
     }
 
-    let ethereum_url = config.ethereum.oracle_rpc_endpoint.clone();
+    let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
 
     // Start the oracle for listening to Ethereum events
     let (eth_sender, eth_receiver) = mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
-    let oracle = match config.ethereum.mode {
-        ethereum::Mode::Managed | ethereum::Mode::Remote => {
+    let oracle = match config.ethereum_bridge.mode {
+        ethereum_bridge::ledger::Mode::Managed
+        | ethereum_bridge::ledger::Mode::Remote => {
             ethereum_node::oracle::run_oracle(
                 ethereum_url,
                 eth_sender,
                 abort_sender,
             )
         }
-        ethereum::Mode::EventsEndpoint => {
+        ethereum_bridge::ledger::Mode::EventsEndpoint => {
             ethereum_node::test_tools::events_endpoint::serve(
                 eth_sender,
                 abort_sender,
             )
         }
-        ethereum::Mode::Off => spawn_dummy_task(()),
+        ethereum_bridge::ledger::Mode::Off => spawn_dummy_task(()),
     };
 
     (Some(eth_receiver), oracle)
@@ -659,14 +660,17 @@ async fn maybe_start_geth(
     tokio::sync::oneshot::Sender<()>,
 ) {
     if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator)
-        || !matches!(config.ethereum.mode, ethereum::Mode::Managed)
+        || !matches!(
+            config.ethereum_bridge.mode,
+            ethereum_bridge::ledger::Mode::Managed
+        )
     {
         let eth_node = spawn_dummy_task(Ok(()));
         let (abort_sender, _) = tokio::sync::oneshot::channel::<()>();
         return (eth_node, abort_sender);
     }
 
-    let ethereum_url = config.ethereum.oracle_rpc_endpoint.clone();
+    let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
 
     // Boot up geth and wait for it to finish syncing
     let (eth_node, abort_sender) =

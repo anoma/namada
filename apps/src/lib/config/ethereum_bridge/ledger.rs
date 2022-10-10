@@ -1,4 +1,4 @@
-//! Configuration settings to do with the Ethereum bridge.
+//! Runtime configuration for a validator node
 #[allow(unused_imports)]
 use namada::types::ethereum_events::EthereumEvent;
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,8 @@ pub enum Mode {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
-    /// The mode in which to run the Ethereum bridge
+    /// The mode in which to run the Ethereum node and oracle setup of this
+    /// validator
     pub mode: Mode,
     /// The Ethereum JSON-RPC endpoint that the Ethereum event oracle will use
     /// to listen for events from the Ethereum bridge smart contracts
