@@ -345,4 +345,57 @@ mod tests {
             assert_eq!(events[0], events_in_log[i]);
         }
     }
+
+    /// Test parallel log accesses.
+    #[test]
+    fn test_parallel_log_reads() {
+        const NUM_CONCURRENT_READERS: usize = 4;
+        const NUM_HEIGHTS: u64 = 4;
+
+        let (log, mut logger, sender) = new();
+
+        // send events to the logger
+        let events = mock_tx_events("DEADBEEF");
+
+        for height in 0..NUM_HEIGHTS {
+            sender.send_new_entry(LogEntry {
+                block_height: height.into(),
+                events: events.clone(),
+            });
+        }
+
+        // receive events in the logger, and log them
+        // to the event log
+        tokio_test::block_on(async move {
+            for _ in 0..NUM_HEIGHTS {
+                logger.log_new_entry().await.unwrap();
+            }
+        });
+
+        // test reading the log in parallel
+        let mut handles = vec![];
+
+        for _ in 0..NUM_CONCURRENT_READERS {
+            let log = log.clone();
+            let events = events.clone();
+
+            handles.push(std::thread::spawn(move || {
+                let events_in_log: Vec<_> = log
+                    .iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
+                    .unwrap()
+                    .collect();
+
+                assert_eq!(events_in_log.len(), NUM_HEIGHTS as usize);
+
+                for i in 0..NUM_HEIGHTS {
+                    let i = i as usize;
+                    assert_eq!(events[0], events_in_log[i]);
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+    }
 }
