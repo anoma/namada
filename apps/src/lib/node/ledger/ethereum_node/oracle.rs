@@ -245,7 +245,7 @@ async fn process(
             "Checking for bridge events"
         );
         // fetch the events for matching the given signature
-        let mut events = loop {
+        let mut events = {
             let logs = match oracle
                 .check_for_events(
                     block_to_check.clone(),
@@ -273,8 +273,7 @@ async fn process(
                     "Found bridge events in Ethereum block"
                 )
             }
-            break logs
-                .into_iter()
+            logs.into_iter()
                 .filter_map(|log| {
                     match PendingEvent::decode(
                         sig,
