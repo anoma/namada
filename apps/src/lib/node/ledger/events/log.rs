@@ -3,7 +3,7 @@
 //! The log is flushed every other `N` block heights, where `N` is a
 //! configurable parameter.
 
-mod dumb_queries;
+pub mod dumb_queries;
 
 use std::sync::{Arc, RwLock};
 
