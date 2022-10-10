@@ -284,6 +284,7 @@ mod tests {
     use super::*;
     use crate::node::ledger::events::{EventLevel, EventType};
 
+    /// Return a vector of mock `FinalizeBlock` events.
     fn mock_tx_events(hash: &str) -> Vec<Event> {
         let event_1 = Event {
             event_type: EventType::Accepted,
