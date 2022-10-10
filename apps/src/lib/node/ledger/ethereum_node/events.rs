@@ -707,10 +707,10 @@ pub mod eth_events {
         }
 
         fn parse_transfer_to_namada(self) -> Result<TransferToNamada> {
-            if let Token::Tuple(tuple) = self {
-                let asset = tuple[0].clone().parse_eth_address()?;
-                let amount = tuple[1].clone().parse_amount()?;
-                let receiver = tuple[2].clone().parse_address()?;
+            if let Token::Tuple(mut items) = self {
+                let asset = items.remove(0).parse_eth_address()?;
+                let amount = items.remove(0).parse_amount()?;
+                let receiver = items.remove(0).parse_address()?;
                 Ok(TransferToNamada {
                     asset,
                     amount,
