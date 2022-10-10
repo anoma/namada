@@ -276,6 +276,17 @@ impl EventLog {
     }
 }
 
+impl EventLogInnerMux {
+    /// Modifies the state of the [`EventLogInnerMux`] with the provided
+    /// [`EventLogSnapshot`].
+    #[allow(dead_code)]
+    fn install_snapshot(&mut self, snapshot: EventLogSnapshot) {
+        self.oldest_height = snapshot.oldest_height;
+        self.num_entries = snapshot.num_entries;
+        self.head = Some(snapshot.head);
+    }
+}
+
 /// Receiver of new entries from a [`LogEntrySender`].
 ///
 /// Received entries are logged to an [`EventLog`].
