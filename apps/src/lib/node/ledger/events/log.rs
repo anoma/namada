@@ -284,44 +284,52 @@ mod tests {
     use super::*;
     use crate::node::ledger::events::{EventLevel, EventType};
 
+    fn mock_tx_events(hash: &str) -> Vec<Event> {
+        let event_1 = Event {
+            event_type: EventType::Accepted,
+            level: EventLevel::Block,
+            attributes: {
+                let mut attrs = std::collections::HashMap::new();
+                attrs.insert("hash".to_string(), hash.to_string());
+                attrs
+            },
+        };
+        let event_2 = Event {
+            event_type: EventType::Applied,
+            level: EventLevel::Block,
+            attributes: {
+                let mut attrs = std::collections::HashMap::new();
+                attrs.insert("hash".to_string(), hash.to_string());
+                attrs
+            },
+        };
+        vec![event_1, event_2]
+    }
+
     /// Test adding a couple of events to the event log, and
     /// reading those events back.
     #[test]
     fn test_log_add() {
+        const NUM_HEIGHTS: u64 = 4;
+
         let (log, mut logger, sender) = new();
 
-        let events = {
-            let event_1 = Event {
-                event_type: EventType::Accepted,
-                level: EventLevel::Block,
-                attributes: {
-                    let mut attrs = std::collections::HashMap::new();
-                    attrs.insert("hash".to_string(), "DEADBEEF".to_string());
-                    attrs
-                },
-            };
-            let event_2 = Event {
-                event_type: EventType::Applied,
-                level: EventLevel::Block,
-                attributes: {
-                    let mut attrs = std::collections::HashMap::new();
-                    attrs.insert("hash".to_string(), "DEADBEEF".to_string());
-                    attrs
-                },
-            };
-            vec![event_1, event_2]
-        };
-
         // send events to the logger
-        sender.send_new_entry(LogEntry {
-            block_height: 0.into(),
-            events: events.clone(),
-        });
+        let events = mock_tx_events("DEADBEEF");
+
+        for height in 0..NUM_HEIGHTS {
+            sender.send_new_entry(LogEntry {
+                block_height: height.into(),
+                events: events.clone(),
+            });
+        }
 
         // receive events in the logger, and log them
         // to the event log
         tokio_test::block_on(async move {
-            logger.log_new_entry().await.unwrap();
+            for _ in 0..NUM_HEIGHTS {
+                logger.log_new_entry().await.unwrap();
+            }
         });
 
         // inspect log
@@ -330,7 +338,11 @@ mod tests {
             .unwrap()
             .collect();
 
-        assert_eq!(events_in_log.len(), 1);
-        assert_eq!(events[0], events_in_log[0]);
+        assert_eq!(events_in_log.len(), NUM_HEIGHTS as usize);
+
+        for i in 0..NUM_HEIGHTS {
+            let i = i as usize;
+            assert_eq!(events[0], events_in_log[i]);
+        }
     }
 }
