@@ -58,6 +58,16 @@ pub struct EventLog {
     inner: Arc<EventLogInner>,
 }
 
+/// Contains a snapshot of the state of the [`EventLog`]
+/// at some fixed point in time.
+#[derive(Debug)]
+#[allow(dead_code)]
+struct EventLogSnapshot {
+    oldest_height: BlockHeight,
+    num_entries: usize,
+    head: Arc<LogNode>,
+}
+
 #[derive(Debug)]
 #[allow(dead_code)]
 struct EventLogInner {
@@ -150,6 +160,16 @@ impl EventLog {
     fn add(&self, entry: LogEntry) {
         let _ = entry;
         // TODO
+    }
+
+    #[allow(dead_code)]
+    fn snapshot(&self) -> Option<EventLogSnapshot> {
+        let log = self.inner.lock.read().unwrap();
+        log.head.clone().map(|head| EventLogSnapshot {
+            head,
+            num_entries: log.num_entries,
+            oldest_height: log.oldest_height.unwrap(),
+        })
     }
 }
 
