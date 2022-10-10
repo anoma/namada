@@ -379,10 +379,12 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
                         ref mut right,
                         ..
                     } = ep;
-                    let ep = left.as_mut().or(right.as_mut()).expect(
-                        "A left or right existence proof should exist.",
-                    );
-                    ep.leaf = Some(ibc_leaf_spec::<H>());
+                    if let Some(left) = left.as_mut() {
+                        left.leaf = Some(ibc_leaf_spec::<H>());
+                    }
+                    if let Some(right) = right.as_mut() {
+                        right.leaf = Some(ibc_leaf_spec::<H>());
+                    }
                 }
                 _ => unreachable!(),
             }
