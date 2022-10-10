@@ -59,14 +59,15 @@ pub struct LogEntry {
     pub events: Vec<Event>,
 }
 
+/// Represents a node in the linked list of log entries.
 #[derive(Debug)]
 struct LogNode {
     entry: LogEntry,
     next: Option<Arc<LogNode>>,
 }
 
-/// A log of [`Event`] instances emitted by `FinalizeBlock` calls,
-/// in the ledger.
+/// Represents a log of [`Event`] instances emitted by
+/// `FinalizeBlock` calls, in the ledger.
 #[derive(Debug, Clone)]
 pub struct EventLog {
     inner: Arc<EventLogInner>,
@@ -82,6 +83,7 @@ struct EventLogSnapshot {
     head: Arc<LogNode>,
 }
 
+/// Container for an event notifier and a lock, holding [`EventLog`] data.
 #[derive(Debug)]
 struct EventLogInner {
     /// A generator of notifications for RPC callers.
@@ -90,6 +92,7 @@ struct EventLogInner {
     lock: RwLock<EventLogInnerMux>,
 }
 
+/// Data which needs lock protection, in the [`EventLog`].
 #[derive(Debug)]
 struct EventLogInnerMux {
     /// The total number of entries in the log.
@@ -100,7 +103,7 @@ struct EventLogInnerMux {
     head: Option<Arc<LogNode>>,
 }
 
-/// An iterator over the [`Event`] instances in the
+/// Represents an iterator over the [`Event`] instances in the
 /// event log, matching a given [`Query`].
 pub struct EventLogIterator<'a> {
     /// The current index pointing at the events in the `node` field.
@@ -136,16 +139,18 @@ impl<'a> Iterator for EventLogIterator<'a> {
 impl EventLog {
     /// Returns a new iterator over this [`EventLog`], if the
     /// given `query` is valid.
+    // TODO: listen for log updates, to avoid early returns when the
+    // log has no entries
+    //
+    // TODO: stop iterating as soon as we timeout (need new timeout
+    // param)
     pub fn iter<'a>(&self, query: &'a str) -> Option<EventLogIterator<'a>> {
         let query = dumb_queries::QueryMatcher::parse(query)?;
-        let node = {
-            let log = self.inner.lock.read().unwrap();
-            log.head.clone()
-        };
+        let snapshot = self.snapshot()?;
         Some(EventLogIterator {
             query,
-            node,
             index: 0,
+            node: Some(snapshot.head),
         })
     }
 
@@ -192,7 +197,6 @@ impl EventLog {
     }
 
     /// Snapshot the current state of the event log, and return it.
-    #[allow(dead_code)]
     fn snapshot(&self) -> Option<EventLogSnapshot> {
         let log = self.inner.lock.read().unwrap();
         log.head.clone().map(|head| EventLogSnapshot {
@@ -203,8 +207,9 @@ impl EventLog {
     }
 }
 
-/// Receives new entries from a [`LogEntrySender`], and logs them in the
-/// [`EventLog`].
+/// Receiver of new entries from a [`LogEntrySender`].
+///
+/// Received entries are logged to an [`EventLog`].
 #[derive(Debug)]
 pub struct Logger {
     log: EventLog,
