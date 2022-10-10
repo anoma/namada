@@ -9,9 +9,24 @@ use std::sync::{Arc, RwLock};
 
 use namada::types::storage::BlockHeight;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::task;
 
 use crate::node::ledger::events::Event;
+
+/// Run a CPU-bound task without blocking the Tokio runtime.
+macro_rules! block_in_place {
+    ($statement:expr) => {{
+        // we need this because `tokio_test` panics if we
+        // call `tokio::task::block_in_place()`
+        #[cfg(test)]
+        {
+            $statement;
+        }
+        #[cfg(not(test))]
+        {
+            ::tokio::task::block_in_place(|| $statement);
+        }
+    }};
+}
 
 /// Soft lock on the maximum number of events the event log can hold.
 ///
@@ -231,9 +246,8 @@ impl Logger {
     /// }
     /// ```
     pub async fn log_new_entry(&mut self) -> Option<()> {
-        task::block_in_place(|| self.log.prune());
         let entry = self.receiver.recv().await?;
-        task::block_in_place(move || self.log.add(entry));
+        block_in_place!(self.log.add(entry));
         Some(())
     }
 
@@ -262,5 +276,61 @@ impl LogEntrySender {
     #[inline]
     pub fn send_new_entry(&self, entry: LogEntry) -> Option<()> {
         self.sender.send(entry).ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node::ledger::events::{EventLevel, EventType};
+
+    /// Test adding a couple of events to the event log, and
+    /// reading those events back.
+    #[test]
+    fn test_log_add() {
+        let (log, mut logger, sender) = new();
+
+        let events = {
+            let event_1 = Event {
+                event_type: EventType::Accepted,
+                level: EventLevel::Block,
+                attributes: {
+                    let mut attrs = std::collections::HashMap::new();
+                    attrs.insert("hash".to_string(), "DEADBEEF".to_string());
+                    attrs
+                },
+            };
+            let event_2 = Event {
+                event_type: EventType::Applied,
+                level: EventLevel::Block,
+                attributes: {
+                    let mut attrs = std::collections::HashMap::new();
+                    attrs.insert("hash".to_string(), "DEADBEEF".to_string());
+                    attrs
+                },
+            };
+            vec![event_1, event_2]
+        };
+
+        // send events to the logger
+        sender.send_new_entry(LogEntry {
+            block_height: 0.into(),
+            events: events.clone(),
+        });
+
+        // receive events in the logger, and log them
+        // to the event log
+        tokio_test::block_on(async move {
+            logger.log_new_entry().await.unwrap();
+        });
+
+        // inspect log
+        let events_in_log: Vec<_> = log
+            .iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
+            .unwrap()
+            .collect();
+
+        assert_eq!(events_in_log.len(), 1);
+        assert_eq!(events[0], events_in_log[0]);
     }
 }

@@ -15,7 +15,7 @@ use crate::facade::tendermint_proto::abci::EventAttribute;
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EventLevel {
     Block,
     Tx,
@@ -23,7 +23,7 @@ pub enum EventLevel {
 
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Event {
     pub event_type: EventType,
     pub level: EventLevel,
