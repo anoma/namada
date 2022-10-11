@@ -128,7 +128,7 @@ struct EventLogInnerMux {
 
 /// Represents an iterator over the [`Event`] instances in the
 /// event log, matching a given Tendermint-like query.
-pub struct EventLogIterator<'a> {
+pub struct EventLogIter<'a> {
     /// The current index pointing at the events in the `node` field.
     index: usize,
     /// A query to filter out events.
@@ -137,7 +137,7 @@ pub struct EventLogIterator<'a> {
     node: Option<Arc<LogNode>>,
 }
 
-impl<'a> Iterator for EventLogIterator<'a> {
+impl<'a> Iterator for EventLogIter<'a> {
     type Item = Event;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -177,7 +177,7 @@ impl EventLog {
     pub fn try_iter<'a>(
         &self,
         query: &'a str,
-    ) -> Result<EventLogIterator<'a>, IterError> {
+    ) -> Result<EventLogIter<'a>, IterError> {
         let matcher = dumb_queries::QueryMatcher::parse(query)
             .ok_or(IterError::InvalidQuery)?;
         self.try_iter_with_matcher(matcher)
@@ -187,10 +187,10 @@ impl EventLog {
     pub fn try_iter_with_matcher<'a>(
         &self,
         matcher: dumb_queries::QueryMatcher<'a>,
-    ) -> Result<EventLogIterator<'a>, IterError> {
+    ) -> Result<EventLogIter<'a>, IterError> {
         let snapshot =
             block_in_place!(self.snapshot()).ok_or(IterError::EmptyLog)?;
-        Ok(EventLogIterator {
+        Ok(EventLogIter {
             index: 0,
             query: matcher,
             node: Some(snapshot.head),
@@ -205,7 +205,7 @@ impl EventLog {
         &self,
         deadline: Instant,
         query: &'a str,
-    ) -> Result<EventLogIterator<'a>, IterError> {
+    ) -> Result<EventLogIter<'a>, IterError> {
         let matcher = dumb_queries::QueryMatcher::parse(query)
             .ok_or(IterError::InvalidQuery)?;
         let m = matcher.clone();
