@@ -16,8 +16,6 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
 /// The main address of the Ethereum bridge pool
 pub const BRIDGE_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::EthBridgePool);
-/// Sub-segmnet for getting the contents of the pool
-const PENDING_TRANSFERS_SEG: &str = "pending_transfers";
 /// Sub-segment for getting the latest signed
 const SIGNED_ROOT_SEG: &str = "signed_root";
 
