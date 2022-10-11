@@ -82,6 +82,33 @@ struct LogNode {
     next: Option<Arc<LogNode>>,
 }
 
+impl LogNode {
+    /// Return an iterator over the given linked list
+    /// of [`LogNode`] instances.
+    #[allow(dead_code)]
+    fn iter(node: Option<Arc<LogNode>>) -> LogNodeIter {
+        LogNodeIter { node }
+    }
+}
+
+/// Iterator over [`LogNode`] instances in
+/// the same linked list.
+#[derive(Debug)]
+struct LogNodeIter {
+    node: Option<Arc<LogNode>>,
+}
+
+impl Iterator for LogNodeIter {
+    type Item = Arc<LogNode>;
+
+    fn next(&mut self) -> Option<Arc<LogNode>> {
+        self.node.take().map(|node| {
+            self.node = node.next.clone();
+            node
+        })
+    }
+}
+
 /// Represents a log of [`Event`] instances emitted by
 /// `FinalizeBlock` calls, in the ledger.
 ///
