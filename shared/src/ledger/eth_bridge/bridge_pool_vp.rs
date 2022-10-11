@@ -25,6 +25,7 @@ use crate::ledger::storage::{DBIter, DB};
 use crate::proto::SignedTxData;
 use crate::types::address::{xan, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
+use crate::types::keccak::encode::Encode;
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
