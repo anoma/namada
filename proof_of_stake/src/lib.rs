@@ -1045,6 +1045,10 @@ pub trait PosBase {
             total_active_stake,
         );
 
+        let coeffs = match rewards_calculator.get_reward_coeffs() {
+            Ok(coeffs) => coeffs,
+            Err(_) => return Err(InflationError::Error),
+        };
 
         // Iterate over validators, calculating their fraction of the block
         // rewards accounting for possible block proposal and signing
