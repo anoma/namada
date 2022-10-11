@@ -400,8 +400,8 @@ const fn calc_num_of_kept_events(curr: usize) -> usize {
     3 * curr / 4
 }
 
-/// Calculate the number of log entries, when we prune
-/// the event log.
+/// Calculate the number of log entries to keep, when we
+/// prune the event log.
 ///
 /// We parameterize this computation with the difference
 /// between the oldest and most recent block heights
