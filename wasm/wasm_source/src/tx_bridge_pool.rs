@@ -20,8 +20,6 @@ fn apply_tx(tx_data: Vec<u8>) {
     } = transfer.gas_fees;
     token::transfer(payer, &BRIDGE_POOL_ADDRESS, &address::xan(), amount);
     // add transfer into the pool
-    let pending_key = bridge_pool::get_pending_key();
-    let mut pending: HashSet<PendingTransfer> = read(&pending_key).unwrap();
-    pending.insert(transfer);
-    write(pending_key, pending.try_to_vec().unwrap());
+    let pending_key = bridge_pool::get_pending_key(&transfer);
+    write(pending_key, transfer.try_to_vec().unwrap());
 }
