@@ -1109,17 +1109,17 @@ pub fn packet_from_message(
 
 /// Returns a commitment from the given packet
 pub fn commitment(packet: &Packet) -> PacketCommitment {
-    let input = packet
-        .timeout_timestamp
-        .nanoseconds()
-        .to_be_bytes()
-        .to_vec();
+    let timeout = packet.timeout_timestamp.nanoseconds().to_be_bytes();
     let revision_number = packet.timeout_height.revision_number.to_be_bytes();
-    let input = [input.as_slice(), revision_number.as_slice()].concat();
     let revision_height = packet.timeout_height.revision_height.to_be_bytes();
-    let input = [input.as_slice(), revision_height.as_slice()].concat();
     let data = sha2::Sha256::digest(&packet.data);
-    let input = [input.as_slice(), data.as_slice()].concat();
+    let input = [
+        &timeout,
+        &revision_number,
+        &revision_height,
+        data.as_slice(),
+    ]
+    .concat();
     sha2::Sha256::digest(&input).to_vec().into()
 }
 
