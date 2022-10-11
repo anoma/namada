@@ -406,6 +406,10 @@ impl EventLogInnerMux {
             self.oldest_height = snapshot.oldest_height;
             self.num_events = snapshot.num_events;
             self.head = Some(snapshot.head);
+        } else {
+            self.oldest_height = 0.into();
+            self.num_events = 0;
+            self.head = None;
         }
     }
 }
