@@ -210,8 +210,7 @@ async fn process(
             Err(error) => {
                 return Err(eyre!(
                     "Couldn't get the latest synced Ethereum block height \
-                     from the RPC endpoint: {:?}",
-                    error
+                     from the RPC endpoint: {error:?}",
                 ));
             }
         };
@@ -264,8 +263,7 @@ async fn process(
                 Err(error) => {
                     return Err(eyre!(
                         "Couldn't check for events ({sig} from {addr}) with \
-                         the RPC endpoint: {:?}",
-                        error
+                         the RPC endpoint: {error:?}",
                     ));
                 }
             };
