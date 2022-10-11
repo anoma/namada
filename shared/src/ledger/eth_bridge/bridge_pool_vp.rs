@@ -673,15 +673,6 @@ mod test_bridge_pool_vp {
                 BTreeSet::from([get_pending_key(&transfer)])
             },
             Expect::False,
-            |transfer, log| {
-                log.write(
-                    &get_pending_key(&transfer),
-                    transfer.try_to_vec().unwrap(),
-                )
-                .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
-            },
-            Expect::False,
         );
     }
 
