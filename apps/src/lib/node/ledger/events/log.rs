@@ -364,7 +364,6 @@ impl EventLog {
         let mut total_events = 0;
         let mut oldest_height = 0.into();
 
-        // TODO: improve this code
         let head = LogNode::iter(head.as_ref())
             // filter out excess events in the log
             .take_while(|n| {
