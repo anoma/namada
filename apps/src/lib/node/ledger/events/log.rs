@@ -245,10 +245,15 @@ impl EventLog {
     }
 
     /// Prune the event log, ejecting old [`Event`] instances.
-    fn prune(&self, head: Option<Arc<LogNode>>, num_events: usize) {
+    fn prune(
+        &self,
+        head: Option<Arc<LogNode>>,
+        num_events: usize,
+        height_diff: u64,
+    ) {
         let _ = MAX_LOG_EVENTS;
         let _ = LOG_BLOCK_HEIGHT_DIFF;
-        let _ = (head, num_events);
+        let _ = (head, num_events, height_diff);
         // TODO
     }
 
@@ -260,15 +265,16 @@ impl EventLog {
         }
 
         // update the log head
-        let (head, events) = {
+        let (head, events, diff) = {
             let mut log = self.inner.lock.write().unwrap();
+            let height_diff = entry.block_height.0 - log.oldest_height.0;
             log.num_events += entry.events.len();
             log.head = Some(Arc::new(LogNode {
                 entry,
                 next: log.head.take(),
             }));
             let new_head = log.head.clone();
-            (new_head, log.num_events)
+            (new_head, log.num_events, height_diff)
         };
 
         // notify all event listeners
@@ -276,7 +282,7 @@ impl EventLog {
 
         // we don't need to hold a lock to check
         // if the log needs to be pruned
-        self.prune(head, events);
+        self.prune(head, events, diff);
     }
 
     /// Snapshot the current state of the event log, and return it.
