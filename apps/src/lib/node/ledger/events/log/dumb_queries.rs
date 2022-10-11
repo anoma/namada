@@ -11,12 +11,13 @@ use regex::Regex;
 
 use crate::node::ledger::events::{Event, EventType};
 
+/// Regular expression used to parse Tendermint queries.
+const QUERY_PARSING_REGEX_STR: &str =
+    r"^tm\.event='NewBlock' AND (accepted|applied)\.([\w_]+)='([^']+)'$";
+
 lazy_static! {
-    /// Regular expresion used to parse Tendermint queries.
-    static ref QUERY_PARSING_REGEX: Regex = Regex::new(
-        r"^tm\.event='NewBlock' AND (accepted|applied)\.([\w_]+)='([^']+)'$"
-    )
-    .unwrap();
+    /// Compiled regular expression used to parse Tendermint queries.
+    static ref QUERY_PARSING_REGEX: Regex = Regex::new(QUERY_PARSING_REGEX_STR).unwrap();
 }
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
@@ -65,8 +66,29 @@ impl<'q> QueryMatcher<'q> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+    use proptest::string::{string_regex, RegexGeneratorStrategy};
+
     use super::*;
     use crate::node::ledger::events::EventLevel;
+
+    /// Returns a proptest strategy that yields Tendermint-like queries.
+    fn tm_query_strat() -> RegexGeneratorStrategy<String> {
+        string_regex(
+            // slice out the string init and end specifiers
+            &QUERY_PARSING_REGEX_STR[1..QUERY_PARSING_REGEX_STR.len() - 1],
+        )
+        .unwrap()
+    }
+
+    proptest! {
+        /// Test if we can parse a Tendermint query, feeding [`QueryMatcher::parse`]
+        /// random input data.
+        #[test]
+        fn test_random_inputs(query in tm_query_strat()) {
+            QueryMatcher::parse(&query).unwrap();
+        }
+    }
 
     /// Test if we parse a correct Tendermint query.
     #[test]
