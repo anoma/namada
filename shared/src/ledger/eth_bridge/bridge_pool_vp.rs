@@ -23,8 +23,7 @@ use crate::ledger::storage::{DBIter, DB};
 use crate::proto::SignedTxData;
 use crate::types::address::{xan, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
-use crate::types::keccak::encode::Encode;
-use crate::types::storage::{Key, KeySeg};
+use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
 
@@ -117,11 +116,11 @@ where
         };
 
         let pending_key = get_pending_key(&transfer);
-        for key in keys_changed.iter().filter(is_bridge_pool_key) {
-            if key != pending_key {
+        for key in keys_changed.iter().filter(|k| is_bridge_pool_key(k)) {
+            if *key != pending_key {
                 tracing::debug!(
-                    "Rejecting transaction as it is attempting to change an incorrect \
-                    key in the pending transaction pool."
+                    "Rejecting transaction as it is attempting to change an \
+                     incorrect key in the pending transaction pool."
                 );
                 return Ok(false);
             }
@@ -132,9 +131,7 @@ where
                  pending transfers"
             ))?;
         if pending != transfer {
-            tracing::debug!(
-                    "An incorrect transfer was added to the pool."
-            );
+            tracing::debug!("An incorrect transfer was added to the pool.");
             return Ok(false);
         }
 
