@@ -612,18 +612,16 @@ pub fn init_network(
         })
     }
 
-    if let Some(token) = &mut config.token {
-        token.iter_mut().for_each(|(name, config)| {
-            if config.address.is_none() {
-                let address = address::gen_established_address("token");
-                config.address = Some(address.to_string());
-                wallet.add_address(name.clone(), address);
-            }
-            if config.vp.is_none() {
-                config.vp = Some("vp_token".to_string());
-            }
-        })
-    }
+    config.token.iter_mut().for_each(|(name, config)| {
+        if config.address.is_none() {
+            let address = address::gen_established_address("token");
+            config.address = Some(address.to_string());
+            wallet.add_address(name.clone(), address);
+        }
+        if config.vp.is_none() {
+            config.vp = Some("vp_token".to_string());
+        }
+    });
 
     if let Some(implicit) = &mut config.implicit {
         implicit.iter_mut().for_each(|(name, config)| {
