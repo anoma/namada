@@ -708,6 +708,8 @@ pub trait PosBase {
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total deltas of all validators (active and inactive).
     fn read_total_deltas(&self) -> TotalDeltas<Self::TokenChange>;
+    /// Read the last block's consensus vote information
+    fn read_last_block_consensus_votes(&self) -> Option<Vec<VoteInfo>>;
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
     /// Write PoS validator's raw hash of its consensus key.
@@ -788,6 +790,8 @@ pub trait PosBase {
     fn write_validator_set(&mut self, value: &ValidatorSets<Self::Address>);
     /// Write total deltas in PoS for all validators (active and inactive)
     fn write_total_deltas(&mut self, value: &TotalDeltas<Self::TokenChange>);
+    /// Write the last block's consensus vote information
+    fn write_last_block_consensus_votes(&mut self, value: &Vec<VoteInfo>);
     /// Credit tokens to the `target` account. This should only be used at
     /// genesis.
     fn credit_tokens(

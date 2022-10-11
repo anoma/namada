@@ -42,6 +42,7 @@ const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
 const BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY: &str = "below_capacity";
 const BELOW_THRESHOLD_VALIDATOR_SET_STORAGE_KEY: &str = "below_threshold";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
+const LAST_CONSENSUS_VOTES_STORAGE_KEY: &str = "last_consensus_votes";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -562,6 +563,25 @@ pub fn is_total_deltas_key(key: &Key) -> bool {
     }
 }
 
+/// Storage key for consensus votes of the previous block.
+pub fn last_consensus_votes_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&LAST_CONSENSUS_VOTES_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for consensus votes of the previous block?
+pub fn is_last_consensus_votes_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
+            if addr == &ADDRESS && key == LAST_CONSENSUS_VOTES_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Get validator address from bond key
 pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
     match key.get_at(3) {
@@ -631,6 +651,11 @@ where
         key: &Self::Address,
     ) -> Option<types::ValidatorDeltas<Self::TokenChange>> {
         let (value, _gas) = self.read(&validator_deltas_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap())
+    }
+
+    fn read_last_block_consensus_votes(&self) -> Option<Vec<VoteInfo>> {
+        let (value, _gas) = self.read(&last_consensus_votes_key()).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
@@ -829,6 +854,11 @@ where
 
     fn write_total_deltas(&mut self, value: &TotalDeltas) {
         self.write(&total_deltas_key(), encode(value)).unwrap();
+    }
+
+    fn write_last_block_consensus_votes(&mut self, value: &Vec<VoteInfo>) {
+        self.write(&last_consensus_votes_key(), encode(value))
+            .unwrap();
     }
 
     fn credit_tokens(
