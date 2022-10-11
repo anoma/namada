@@ -100,6 +100,7 @@ pub struct EventLog {
 struct EventLogSnapshot {
     oldest_height: BlockHeight,
     num_entries: usize,
+    num_events: usize,
     head: Arc<LogNode>,
 }
 
@@ -117,6 +118,11 @@ struct EventLogInner {
 struct EventLogInnerMux {
     /// The total number of entries in the log.
     num_entries: usize,
+    /// The total number of events stored in the log.
+    ///
+    /// This value is the sum of every batch of events in
+    /// each entry in the log.
+    num_events: usize,
     /// The earliest block height in the event log.
     oldest_height: BlockHeight,
     /// Pointer to the freshest log entry.
@@ -233,6 +239,7 @@ impl EventLog {
             inner: Arc::new(EventLogInner {
                 notifier: event_listener::Event::new(),
                 lock: RwLock::new(EventLogInnerMux {
+                    num_events: 0,
                     num_entries: 0,
                     oldest_height: 0.into(),
                     head: None,
@@ -242,31 +249,44 @@ impl EventLog {
     }
 
     /// Prune the event log, ejecting old [`Event`] instances.
-    fn prune(&self) {
+    fn prune(
+        &self,
+        head: Option<Arc<LogNode>>,
+        num_entries: usize,
+        num_events: usize,
+    ) {
         let _ = MAX_LOG_EVENTS;
         let _ = LOG_BLOCK_HEIGHT_DIFF;
+        let _ = (head, num_entries, num_events);
         // TODO
     }
 
     /// Add a new entry to the log.
     fn add(&self, entry: LogEntry) {
-        // update the log head
-        {
-            let mut log = self.inner.lock.write().unwrap();
+        // do not log zero length event vecs
+        if entry.events.is_empty() {
+            return;
+        }
 
+        // update the log head
+        let (head, entries, events) = {
+            let mut log = self.inner.lock.write().unwrap();
+            log.num_entries += 1;
+            log.num_events += entry.events.len();
             log.head = Some(Arc::new(LogNode {
                 entry,
                 next: log.head.take(),
             }));
-            log.num_entries += 1;
-        }
+            let new_head = log.head.clone();
+            (new_head, log.num_entries, log.num_events)
+        };
 
         // notify all event listeners
         self.inner.notifier.notify(usize::MAX);
 
         // we don't need to hold a lock to check
         // if the log needs to be pruned
-        self.prune();
+        self.prune(head, entries, events);
     }
 
     /// Snapshot the current state of the event log, and return it.
@@ -274,6 +294,7 @@ impl EventLog {
         let log = self.inner.lock.read().unwrap();
         log.head.clone().map(|head| EventLogSnapshot {
             head,
+            num_events: log.num_events,
             num_entries: log.num_entries,
             oldest_height: log.oldest_height,
         })
@@ -287,6 +308,7 @@ impl EventLogInnerMux {
     fn install_snapshot(&mut self, snapshot: EventLogSnapshot) {
         self.oldest_height = snapshot.oldest_height;
         self.num_entries = snapshot.num_entries;
+        self.num_events = snapshot.num_events;
         self.head = Some(snapshot.head);
     }
 }
