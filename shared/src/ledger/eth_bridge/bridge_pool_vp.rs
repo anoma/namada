@@ -23,8 +23,7 @@ use crate::ledger::storage::{DBIter, DB};
 use crate::proto::SignedTxData;
 use crate::types::address::{xan, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
-use crate::types::keccak::encode::Encode;
-use crate::types::storage::{Key, KeySeg};
+use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
 
@@ -457,6 +456,15 @@ mod test_bridge_pool_vp {
         assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Negative(GAS_FEE.into()),
+            |transfer, log| {
+                log.write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+                BTreeSet::from([get_pending_key(&transfer)])
+            },
+            Expect::False,
             |transfer, log| {
                 log.write(
                     &get_pending_key(&transfer),
