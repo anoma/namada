@@ -5,6 +5,7 @@
 
 pub mod dumb_queries;
 
+use std::default::Default;
 use std::ops::ControlFlow;
 use std::sync::{Arc, RwLock};
 
@@ -30,19 +31,30 @@ macro_rules! block_in_place {
     }};
 }
 
-/// Soft lock on the maximum number of events the event log can hold.
-///
-/// If the number of events in the log exceeds this value, the log
-/// will be pruned.
-// TODO: make this a config param
-const MAX_LOG_EVENTS: usize = 50000;
+/// Parameters to configure the pruning of the event log.
+#[derive(Debug, Copy, Clone)]
+pub struct Params {
+    /// Soft lock on the maximum number of events the event log can hold.
+    ///
+    /// If the number of events in the log exceeds this value, the log
+    /// will be pruned.
+    pub max_log_events: usize,
+    /// Soft lock on the number of entries the event log can hold.
+    ///
+    /// If the difference between the newest log entry and the oldest's
+    /// block heights is greater than this value, the log will be pruned.
+    pub log_block_height_diff: u64,
+}
 
-/// Soft lock on the number of entries the event log can hold.
-///
-/// If the difference between the newest log entry and the oldest's
-/// block heights is greater than this value, the log will be pruned.
-// TODO: make this a config param
-const LOG_BLOCK_HEIGHT_DIFF: u64 = 1000;
+impl Default for Params {
+    fn default() -> Self {
+        // TODO: tune the default params
+        Self {
+            max_log_events: 50000,
+            log_block_height_diff: 1000,
+        }
+    }
+}
 
 /// Instantiates a new event log and its associated machinery.
 ///
@@ -54,10 +66,10 @@ const LOG_BLOCK_HEIGHT_DIFF: u64 = 1000;
 ///      This will alter the state of the [`EventLog`].
 ///   3. Concurrently, other asynchronous tasks may access the
 ///      [`EventLog`] to check for new events.
-pub fn new() -> (EventLog, Logger, LogEntrySender) {
+pub fn new(params: Params) -> (EventLog, Logger, LogEntrySender) {
     let (tx, rx) = mpsc::unbounded_channel();
 
-    let log = EventLog::new();
+    let log = EventLog::new(params);
     let logger = Logger {
         receiver: rx,
         log: log.clone(),
@@ -132,6 +144,8 @@ struct EventLogSnapshot {
 /// Container for an event notifier and a lock, holding [`EventLog`] data.
 #[derive(Debug)]
 struct EventLogInner {
+    /// Parameters to configure log pruning.
+    params: Params,
     /// A generator of notifications for RPC callers.
     notifier: event_listener::Event,
     /// Write protected data.
@@ -257,9 +271,10 @@ impl EventLog {
     }
 
     /// Creates a new event log.
-    fn new() -> Self {
+    fn new(params: Params) -> Self {
         Self {
             inner: Arc::new(EventLogInner {
+                params,
                 notifier: event_listener::Event::new(),
                 lock: RwLock::new(EventLogInnerMux {
                     num_events: 0,
@@ -278,7 +293,7 @@ impl EventLog {
         height_diff: u64,
         oldest_height: u64,
     ) {
-        if num_events > MAX_LOG_EVENTS {
+        if num_events > self.inner.params.max_log_events {
             let keep_events = calc_num_of_kept_events(num_events);
             let snapshot = if keep_events > 0 {
                 Some(self.prune_too_many_events(head, keep_events))
@@ -288,7 +303,7 @@ impl EventLog {
             self.inner.lock.write().unwrap().install_snapshot(snapshot);
             return;
         }
-        if height_diff > LOG_BLOCK_HEIGHT_DIFF {
+        if height_diff > self.inner.params.log_block_height_diff {
             let thres = calc_num_of_kept_ents(height_diff);
             let snapshot = if thres > 0 {
                 Some(self.prune_old_events(head, thres, oldest_height))
@@ -382,10 +397,7 @@ impl EventLog {
                     .next = Some(next);
                 head
             })
-            .expect(
-                "num_events > MAX_LOG_EVENTS, therefore we prune at least one \
-                 node",
-            );
+            .expect("We always prune at least one node from the log");
 
         EventLogSnapshot {
             head,
@@ -559,7 +571,7 @@ mod tests {
     async fn test_log_add() {
         const NUM_HEIGHTS: u64 = 4;
 
-        let (log, mut logger, sender) = new();
+        let (log, mut logger, sender) = new(Params::default());
 
         // send events to the logger
         let events = mock_tx_events("DEADBEEF");
@@ -597,7 +609,7 @@ mod tests {
         const NUM_CONCURRENT_READERS: usize = 4;
         const NUM_HEIGHTS: u64 = 4;
 
-        let (log, mut logger, sender) = new();
+        let (log, mut logger, sender) = new(Params::default());
 
         // send events to the logger
         let events = mock_tx_events("DEADBEEF");
@@ -647,7 +659,7 @@ mod tests {
     /// Test that we reject log entries with no new events.
     #[tokio::test]
     async fn test_reject_empty_events() {
-        let (log, mut logger, sender) = new();
+        let (log, mut logger, sender) = new(Params::default());
 
         sender.send_new_entry(LogEntry {
             block_height: 0.into(),
