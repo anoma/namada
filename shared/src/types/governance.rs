@@ -84,8 +84,8 @@ pub enum TallyResult {
     Passed,
     /// Proposal was rejected
     Rejected,
-    /// Proposal result is unknown
-    Unknown,
+    /// A critical error in tally computation
+    Failed,
 }
 
 /// The result with votes of a proposal
@@ -124,7 +124,7 @@ impl Display for TallyResult {
         match self {
             TallyResult::Passed => write!(f, "passed"),
             TallyResult::Rejected => write!(f, "rejected"),
-            TallyResult::Unknown => write!(f, "unknown"),
+            TallyResult::Failed => write!(f, "failed"),
         }
     }
 }

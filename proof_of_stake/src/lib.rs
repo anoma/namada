@@ -19,7 +19,7 @@ pub mod types;
 pub mod validation;
 
 use core::fmt::Debug;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -168,17 +168,86 @@ pub trait PosReadOnly {
     }
 
     /// Get the total bond amount for the given bond ID at the given epoch.
-    fn get_bond_amount(
+    fn bond_amount(
         &self,
         bond_id: &BondId<Self::Address>,
         epoch: impl Into<Epoch>,
     ) -> Result<Self::TokenAmount, Self::Error> {
-        // TODO apply slashes, if any
+        // TODO new slash logic
+        let slashes = self.read_validator_slashes(&bond_id.validator)?;
         // TODO apply rewards, if any
-        let bonds = self.read_bond(&bond_id)?;
+        let bonds = self.read_bond(bond_id)?;
         Ok(bonds
-            .and_then(|bonds| bonds.get(epoch.into()).map(|bond| bond.sum()))
+            .and_then(|bonds| {
+                bonds.get(epoch).map(|bond| {
+                    let mut total: u64 = 0;
+                    // Find the sum of the bonds
+                    for (start_epoch, delta) in bond.pos_deltas.into_iter() {
+                        let delta: u64 = delta.into();
+                        total += delta;
+                        // Apply slashes if any
+                        for slash in slashes.iter() {
+                            if slash.epoch <= start_epoch {
+                                let current_slashed = slash.rate * delta;
+                                total -= current_slashed;
+                            }
+                        }
+                    }
+                    let neg_deltas: u64 = bond.neg_deltas.into();
+                    Self::TokenAmount::from(total - neg_deltas)
+                })
+            })
             .unwrap_or_default())
+    }
+
+    /// Get all the validator known addresses. These validators may be in any
+    /// state, e.g. active, inactive or jailed.
+    fn validator_addresses(
+        &self,
+        epoch: impl Into<Epoch>,
+    ) -> Result<HashSet<Self::Address>, Self::Error> {
+        let validator_sets = self.read_validator_set()?;
+        let validator_set = validator_sets.get(epoch).unwrap();
+
+        Ok(validator_set
+            .active
+            .union(&validator_set.inactive)
+            .map(|validator| validator.address.clone())
+            .collect())
+    }
+
+    /// Get the total stake of a validator at the given epoch or current when
+    /// `None`. The total stake is a sum of validator's self-bonds and
+    /// delegations to their address.
+    fn validator_stake(
+        &self,
+        validator: &Self::Address,
+        epoch: impl Into<Epoch>,
+    ) -> Result<Self::TokenAmount, Self::Error> {
+        let total_deltas = self.read_validator_total_deltas(validator)?;
+        let total_stake = total_deltas
+            .and_then(|total_deltas| total_deltas.get(epoch))
+            .and_then(|total_stake| {
+                let sum: i128 = total_stake.into();
+                let sum: u64 = sum.try_into().ok()?;
+                Some(sum.into())
+            });
+        Ok(total_stake.unwrap_or_default())
+    }
+
+    /// Get the total stake in PoS system at the given epoch or current when
+    /// `None`.
+    fn total_stake(
+        &self,
+        epoch: impl Into<Epoch>,
+    ) -> Result<Self::TokenAmount, Self::Error> {
+        let epoch = epoch.into();
+        // TODO read total stake from storage once added
+        self.validator_addresses(epoch)?
+            .into_iter()
+            .try_fold(Self::TokenAmount::default(), |acc, validator| {
+                Ok(acc + self.validator_stake(&validator, epoch)?)
+            })
     }
 }
 
