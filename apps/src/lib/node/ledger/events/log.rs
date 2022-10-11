@@ -480,4 +480,24 @@ mod tests {
             h.join().unwrap();
         }
     }
+
+    /// Test that we reject log entries with no new events.
+    #[tokio::test]
+    async fn test_reject_empty_events() {
+        let (log, mut logger, sender) = new();
+
+        sender.send_new_entry(LogEntry {
+            block_height: 0.into(),
+            events: vec![],
+        });
+
+        logger.log_new_entry().await.unwrap();
+
+        // inspect log
+        let locked_log = log.inner.lock.read().unwrap();
+
+        assert!(locked_log.head.is_none());
+        assert_eq!(locked_log.num_events, 0);
+        assert_eq!(locked_log.oldest_height.0, 0);
+    }
 }
