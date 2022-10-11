@@ -5,6 +5,7 @@
 
 pub mod dumb_queries;
 
+use std::ops::ControlFlow;
 use std::sync::{Arc, RwLock};
 
 use namada::types::storage::BlockHeight;
@@ -67,7 +68,7 @@ pub fn new() -> (EventLog, Logger, LogEntrySender) {
 }
 
 /// Represents an entry in the event log.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LogEntry {
     /// The block height at which we emitted the events.
     pub block_height: BlockHeight,
@@ -280,7 +281,9 @@ impl EventLog {
     ) {
         if num_events > MAX_LOG_EVENTS {
             let keep_events = calc_num_of_kept_events(num_events);
-            return self.prune_too_many_events(head, keep_events);
+            let snapshot = self.prune_too_many_events(head, keep_events);
+            self.inner.lock.write().unwrap().install_snapshot(snapshot);
+            return;
         }
         if height_diff > LOG_BLOCK_HEIGHT_DIFF {
             let keep_newer_than = calc_num_of_kept_ents(height_diff);
@@ -294,9 +297,56 @@ impl EventLog {
         &self,
         head: Option<Arc<LogNode>>,
         max_events: usize,
-    ) {
-        // TODO
-        let _ = (head, max_events);
+    ) -> Option<EventLogSnapshot> {
+        if max_events == 0 {
+            return None;
+        }
+
+        // allocate a new list, and drop
+        // the old one
+        let mut total_events = 0;
+        let mut oldest_height = 0.into();
+
+        // TODO: improve this code
+        let head = LogNode::iter(head.as_ref())
+            // iterate over all log entries
+            .map(|n| n.entry.clone())
+            // build vec of new log nodes, all
+            // pointing to a null next node
+            .try_fold(vec![], |mut vec, entry| {
+                total_events += entry.events.len();
+                if total_events > max_events {
+                    oldest_height = entry.block_height;
+                    vec.push(Arc::new(LogNode { entry, next: None }));
+                    ControlFlow::Break(vec)
+                } else {
+                    vec.push(Arc::new(LogNode { entry, next: None }));
+                    ControlFlow::Continue(vec)
+                }
+            })
+            .into_inner()
+            // iterate the vec in reverse order,
+            // to link the nodes together in the
+            // correct order, e.g.: next <- head
+            .into_iter()
+            .rev()
+            // link all nodes together
+            .reduce(|next, mut head| {
+                Arc::get_mut(&mut head)
+                    .expect("There is only one live instance of this Arc")
+                    .next = Some(next);
+                head
+            })
+            .expect(
+                "num_events > MAX_LOG_EVENTS, therefore we prune at least one \
+                 node",
+            );
+
+        Some(EventLogSnapshot {
+            head,
+            num_events: total_events,
+            oldest_height,
+        })
     }
 
     /// Prune events from the log, keeping only events whose
@@ -353,11 +403,12 @@ impl EventLog {
 impl EventLogInnerMux {
     /// Modifies the state of the [`EventLogInnerMux`] with the provided
     /// [`EventLogSnapshot`].
-    #[allow(dead_code)]
-    fn install_snapshot(&mut self, snapshot: EventLogSnapshot) {
-        self.oldest_height = snapshot.oldest_height;
-        self.num_events = snapshot.num_events;
-        self.head = Some(snapshot.head);
+    fn install_snapshot(&mut self, snapshot: Option<EventLogSnapshot>) {
+        if let Some(snapshot) = snapshot {
+            self.oldest_height = snapshot.oldest_height;
+            self.num_events = snapshot.num_events;
+            self.head = Some(snapshot.head);
+        }
     }
 }
 
@@ -435,6 +486,20 @@ const fn calc_num_of_kept_events(curr: usize) -> usize {
 /// stored in the log.
 const fn calc_num_of_kept_ents(diff: u64) -> u64 {
     3 * diff / 4
+}
+
+/// Extend [`ControlFlow`] with some new methods.
+trait ControlFlowExt<T> {
+    /// Unwrap a [`ControlFlow`].
+    fn into_inner(self) -> T;
+}
+
+impl<T> ControlFlowExt<T> for ControlFlow<T, T> {
+    fn into_inner(self) -> T {
+        match self {
+            ControlFlow::Break(x) | ControlFlow::Continue(x) => x,
+        }
+    }
 }
 
 #[cfg(test)]
