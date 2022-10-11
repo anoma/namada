@@ -32,6 +32,7 @@ use namada::ledger::storage::{
 };
 use namada::ledger::{ibc, pos};
 use namada::proto::{self, Tx};
+use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key};
@@ -192,6 +193,8 @@ where
     /// The id of the current chain
     #[allow(dead_code)]
     chain_id: ChainId,
+    /// The address of the native token
+    native_token: Address,
     /// The persistent storage
     pub(super) storage: Storage<D, H>,
     /// Gas meter for the current block
@@ -231,6 +234,7 @@ where
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
+        native_token: Address,
     ) -> Self {
         let chain_id = config.chain_id;
         let db_path = config.shell.db_dir(&chain_id);
@@ -304,6 +308,7 @@ where
 
         Self {
             chain_id,
+            native_token,
             storage,
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),
@@ -840,6 +845,7 @@ mod test_utils {
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
+        let native_token = address::nam();
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
                 base_dir.clone(),
@@ -851,6 +857,7 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
+            native_token.clone(),
         );
         let keypair = gen_keypair();
         // enqueue a wrapper tx
@@ -861,7 +868,7 @@ mod test_utils {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: native_token.clone(),
             },
             &keypair,
             Epoch(0),

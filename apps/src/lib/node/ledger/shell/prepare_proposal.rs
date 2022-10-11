@@ -189,7 +189,7 @@ mod test_prepare_proposal {
                 WrapperTx::new(
                     Fee {
                         amount: 0.into(),
-                        token: nam(),
+                        token: shell.native_token.clone(),
                     },
                     &keypair,
                     Epoch(0),
@@ -244,7 +244,7 @@ mod test_prepare_proposal {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: nam(),
+                    token: shell.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),

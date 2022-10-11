@@ -8,7 +8,7 @@ use crate::ledger::native_vp::{self, Ctx};
 use crate::ledger::pos::{self as pos_storage, BondId, Bonds};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::vp_env::VpEnv;
-use crate::types::address::{nam, Address, InternalAddress};
+use crate::types::address::{self, Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
@@ -53,7 +53,7 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    let balance_key = token::balance_key(&nam(), &ADDRESS);
+    let balance_key = token::balance_key(&address::nam(), &ADDRESS);
     let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
     let min_funds_parameter: Option<token::Amount> =
         read(ctx, &min_funds_parameter_key, ReadType::PRE).ok();
@@ -164,7 +164,7 @@ where
     CA: 'static + WasmCacheAccess,
 {
     let funds_key = gov_storage::get_funds_key(proposal_id);
-    let balance_key = token::balance_key(&nam(), &ADDRESS);
+    let balance_key = token::balance_key(&address::nam(), &ADDRESS);
     let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
     let min_funds_parameter: Option<token::Amount> =
         read(ctx, &min_funds_parameter_key, ReadType::PRE).ok();

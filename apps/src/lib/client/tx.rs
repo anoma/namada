@@ -23,7 +23,7 @@ use namada::types::transaction::governance::{
 };
 use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use namada::types::{address, storage, token};
+use namada::types::{storage, token};
 use namada::{ledger, vm};
 
 use super::rpc;
@@ -911,7 +911,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
-    let balance_key = token::balance_key(&address::nam(), bond_source);
+    let balance_key = token::balance_key(&ctx.native_token, bond_source);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
