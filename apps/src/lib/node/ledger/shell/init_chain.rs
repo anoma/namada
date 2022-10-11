@@ -2,9 +2,11 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use namada::ledger::parameters::storage::get_staked_ratio_key;
 use namada::ledger::pos::{into_tm_voting_power, staking_token_address};
 use namada::types::key::*;
 use namada::types::token::total_supply_key;
+use rust_decimal::Decimal;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
 
@@ -139,7 +141,7 @@ where
         }
 
         // Initialize genesis token accounts
-        let mut total_balance = token::Amount::default();
+        let mut total_nam_balance = token::Amount::default();
         for genesis::TokenAccount {
             address,
             vp_code_path,
@@ -174,8 +176,8 @@ where
                 .unwrap();
 
             for (owner, amount) in balances {
-                if owner == staking_token_address() {
-                    total_balance += amount;
+                if address == staking_token_address() {
+                    total_nam_balance += amount;
                 }
                 self.storage
                     .write(
@@ -187,7 +189,7 @@ where
         }
 
         // Initialize genesis validator accounts
-        let mut total_non_staked_tokens = token::Amount::default();
+        let mut total_staked_nam_tokens = token::Amount::default();
         for validator in &genesis.validators {
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.validator_vp_code_path.clone(),
@@ -228,8 +230,12 @@ where
                         .expect("encode public key"),
                 )
                 .expect("Unable to set genesis user public key");
-            // Account balance (tokens not staked in PoS)
-            total_non_staked_tokens += validator.non_staked_balance;
+
+            // Balances
+            total_staked_nam_tokens += validator.pos_data.tokens;
+            total_nam_balance +=
+                validator.pos_data.tokens + validator.non_staked_balance;
+
             self.storage
                 .write(
                     &token::balance_key(&address::xan(), addr),
@@ -277,11 +283,22 @@ where
         self.storage
             .write(
                 &total_supply_key(&staking_token_address()),
-                total_balance
+                total_nam_balance
                     .try_to_vec()
                     .expect("encode initial total NAM balance"),
             )
             .expect("unable to set total NAM balance in storage");
+
+        // Set the ratio of staked to total NAM tokens in the parameters storage
+        self.storage
+            .write(
+                &get_staked_ratio_key(),
+                (Decimal::from(total_staked_nam_tokens)
+                    / Decimal::from(total_nam_balance))
+                .try_to_vec()
+                .expect("encode initial NAM staked ratio"),
+            )
+            .expect("unable to set staked ratio of NAM in storage");
 
         ibc::init_genesis_storage(&mut self.storage);
 
