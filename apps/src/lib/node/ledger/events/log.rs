@@ -86,7 +86,7 @@ impl LogNode {
     /// Return an iterator over the given linked list
     /// of [`LogNode`] instances.
     #[allow(dead_code)]
-    fn iter(node: Option<Arc<LogNode>>) -> LogNodeIter {
+    fn iter(node: Option<&Arc<LogNode>>) -> LogNodeIter<'_> {
         LogNodeIter { node }
     }
 }
@@ -94,16 +94,16 @@ impl LogNode {
 /// Iterator over [`LogNode`] instances in
 /// the same linked list.
 #[derive(Debug)]
-struct LogNodeIter {
-    node: Option<Arc<LogNode>>,
+struct LogNodeIter<'a> {
+    node: Option<&'a Arc<LogNode>>,
 }
 
-impl Iterator for LogNodeIter {
-    type Item = Arc<LogNode>;
+impl<'a> Iterator for LogNodeIter<'a> {
+    type Item = &'a Arc<LogNode>;
 
-    fn next(&mut self) -> Option<Arc<LogNode>> {
+    fn next(&mut self) -> Option<&'a Arc<LogNode>> {
         self.node.take().map(|node| {
-            self.node = node.next.clone();
+            self.node = node.next.as_ref();
             node
         })
     }
