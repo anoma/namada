@@ -5,7 +5,6 @@
 
 pub mod dumb_queries;
 
-use std::ops::ControlFlow;
 use std::sync::{Arc, RwLock};
 
 use namada::types::storage::BlockHeight;
@@ -307,25 +306,26 @@ impl EventLog {
 
         // TODO: improve this code
         let head = LogNode::iter(head.as_ref())
-            // iterate over all log entries
-            .map(|n| n.entry.clone())
-            // build vec of new log nodes, all
-            // pointing to a null next node
-            .try_fold(vec![], |mut vec, entry| {
-                total_events += entry.events.len();
-                if total_events > max_events {
-                    oldest_height = entry.block_height;
-                    vec.push(Arc::new(LogNode { entry, next: None }));
-                    ControlFlow::Break(vec)
-                } else {
-                    vec.push(Arc::new(LogNode { entry, next: None }));
-                    ControlFlow::Continue(vec)
-                }
+            // do an actual clone on the log nodes
+            .map(|n| {
+                Arc::new(LogNode {
+                    entry: n.entry.clone(),
+                    next: None,
+                })
             })
-            .into_inner()
-            // iterate the vec in reverse order,
-            // to link the nodes together in the
-            // correct order, e.g.: next <- head
+            // filter out excess events in the log
+            .take_while(|n| {
+                total_events += n.entry.events.len();
+                let max_events_reached = total_events > max_events;
+                if max_events_reached {
+                    oldest_height = n.entry.block_height;
+                }
+                !max_events_reached
+            })
+            // build vec of new log nodes, all pointing to a null next node
+            .collect::<Vec<_>>()
+            // iterate the vec in reverse order, to link the nodes together in
+            // the correct order, e.g.: next <- head
             .into_iter()
             .rev()
             // link all nodes together
@@ -488,20 +488,6 @@ const fn calc_num_of_kept_events(curr: usize) -> usize {
 /// stored in the log.
 const fn calc_num_of_kept_ents(diff: u64) -> u64 {
     3 * diff / 4
-}
-
-/// Extend [`ControlFlow`] with some new methods.
-trait ControlFlowExt<T> {
-    /// Unwrap a [`ControlFlow`].
-    fn into_inner(self) -> T;
-}
-
-impl<T> ControlFlowExt<T> for ControlFlow<T, T> {
-    fn into_inner(self) -> T {
-        match self {
-            ControlFlow::Break(x) | ControlFlow::Continue(x) => x,
-        }
-    }
 }
 
 #[cfg(test)]
