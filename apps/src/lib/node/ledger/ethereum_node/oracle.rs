@@ -729,7 +729,7 @@ mod test_oracle {
 
     /// Test that if the Ethereum RPC endpoint returns a latest block that is
     /// more than one block later than the previous latest block we received, we
-    /// still check all the blocks inbetween
+    /// still check all the blocks in between
     #[tokio::test]
     async fn test_all_blocks_checked() {
         let TestPackage {
