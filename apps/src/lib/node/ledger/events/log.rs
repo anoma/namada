@@ -350,7 +350,7 @@ impl EventLog {
     }
 
     /// Prune all events in the log whose oldest parent
-    /// node evalutes to false, when evaluated with `predicate`.
+    /// node evalutes to false, when passed to `predicate`.
     fn prune_on_condition<P>(
         &self,
         head: Option<Arc<LogNode>>,
