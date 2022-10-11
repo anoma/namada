@@ -5,6 +5,7 @@
 
 pub mod dumb_queries;
 
+use std::ops::ControlFlow;
 use std::sync::{Arc, RwLock};
 
 use namada::types::storage::BlockHeight;
@@ -275,16 +276,26 @@ impl EventLog {
         head: Option<Arc<LogNode>>,
         num_events: usize,
         height_diff: u64,
+        oldest_height: u64,
     ) {
         if num_events > MAX_LOG_EVENTS {
             let keep_events = calc_num_of_kept_events(num_events);
-            let snapshot = self.prune_too_many_events(head, keep_events);
+            let snapshot = if keep_events > 0 {
+                Some(self.prune_too_many_events(head, keep_events))
+            } else {
+                None
+            };
             self.inner.lock.write().unwrap().install_snapshot(snapshot);
             return;
         }
         if height_diff > LOG_BLOCK_HEIGHT_DIFF {
-            let keep_newer_than = calc_num_of_kept_ents(height_diff);
-            self.prune_old_events(head, keep_newer_than);
+            let thres = calc_num_of_kept_ents(height_diff);
+            let snapshot = if thres > 0 {
+                Some(self.prune_old_events(head, thres, oldest_height))
+            } else {
+                None
+            };
+            self.inner.lock.write().unwrap().install_snapshot(snapshot);
         }
     }
 
@@ -294,11 +305,45 @@ impl EventLog {
         &self,
         head: Option<Arc<LogNode>>,
         max_events: usize,
-    ) -> Option<EventLogSnapshot> {
-        if max_events == 0 {
-            return None;
-        }
+    ) -> EventLogSnapshot {
+        self.prune_on_condition(head, |_, total_events| {
+            if total_events <= max_events {
+                ControlFlow::Continue(())
+            } else {
+                ControlFlow::Break(())
+            }
+        })
+    }
 
+    /// Prune events from the log, keeping only events whose
+    /// diff with the oldest height in the log is lower than
+    /// `threshold`.
+    fn prune_old_events(
+        &self,
+        head: Option<Arc<LogNode>>,
+        threshold: u64,
+        oldest_height: u64,
+    ) -> EventLogSnapshot {
+        self.prune_on_condition(head, |node, _| {
+            let diff = node.entry.block_height.0 - oldest_height;
+            if diff > threshold {
+                ControlFlow::Continue(())
+            } else {
+                ControlFlow::Break(())
+            }
+        })
+    }
+
+    /// Prune all events in the log whose oldest parent
+    /// node evalutes to false, when passed to `predicate`.
+    fn prune_on_condition<P>(
+        &self,
+        head: Option<Arc<LogNode>>,
+        mut predicate: P,
+    ) -> EventLogSnapshot
+    where
+        P: FnMut(&LogNode, usize) -> ControlFlow<()>,
+    {
         // allocate a new list, and drop
         // the old one
         let mut total_events = 0;
@@ -316,11 +361,13 @@ impl EventLog {
             // filter out excess events in the log
             .take_while(|n| {
                 total_events += n.entry.events.len();
-                let max_events_reached = total_events > max_events;
-                if max_events_reached {
-                    oldest_height = n.entry.block_height;
+                match predicate(&*n, total_events) {
+                    ControlFlow::Continue(()) => true,
+                    ControlFlow::Break(()) => {
+                        oldest_height = n.entry.block_height;
+                        false
+                    }
                 }
-                !max_events_reached
             })
             // build vec of new log nodes, all pointing to a null next node
             .collect::<Vec<_>>()
@@ -340,23 +387,11 @@ impl EventLog {
                  node",
             );
 
-        Some(EventLogSnapshot {
+        EventLogSnapshot {
             head,
             num_events: total_events,
             oldest_height,
-        })
-    }
-
-    /// Prune events from the log, keeping only events whose
-    /// diff with the oldest height in the log is lower than
-    /// `keep_newer_than`.
-    fn prune_old_events(
-        &self,
-        head: Option<Arc<LogNode>>,
-        keep_newer_than: u64,
-    ) {
-        // TODO
-        let _ = (head, keep_newer_than);
+        }
     }
 
     /// Add a new entry to the log.
@@ -367,7 +402,7 @@ impl EventLog {
         }
 
         // update the log head
-        let (head, events, diff) = {
+        let (head, events, diff, oldest) = {
             let mut log = self.inner.lock.write().unwrap();
             let height_diff = entry.block_height.0 - log.oldest_height.0;
             log.num_events += entry.events.len();
@@ -376,7 +411,7 @@ impl EventLog {
                 next: log.head.take(),
             }));
             let new_head = log.head.clone();
-            (new_head, log.num_events, height_diff)
+            (new_head, log.num_events, height_diff, log.oldest_height.0)
         };
 
         // notify all event listeners
@@ -384,7 +419,7 @@ impl EventLog {
 
         // we don't need to hold a lock to check
         // if the log needs to be pruned
-        self.prune(head, events, diff);
+        self.prune(head, events, diff, oldest);
     }
 
     /// Snapshot the current state of the event log, and return it.
