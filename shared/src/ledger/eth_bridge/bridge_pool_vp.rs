@@ -14,16 +14,15 @@ use std::collections::{BTreeSet, HashSet};
 use borsh::BorshDeserialize;
 use eyre::eyre;
 
-use crate::ledger::eth_bridge::storage::bridge_pool::{
-    get_pending_key, is_protected_storage, BRIDGE_POOL_ADDRESS,
-};
+use crate::ledger::eth_bridge::storage::bridge_pool::{get_pending_key, is_protected_storage, BRIDGE_POOL_ADDRESS, is_bridge_pool_key};
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::proto::SignedTxData;
 use crate::types::address::{xan, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
-use crate::types::storage::Key;
+use crate::types::keccak::encode::Encode;
+use crate::types::storage::{Key, KeySeg};
 use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
 
@@ -115,42 +114,26 @@ where
             }
         };
 
-        // check that only the pending_key value is changed
-        if keys_changed.iter().any(is_protected_storage) {
-            tracing::debug!(
-                "Rejecting transaction as it is attempting to change the \
-                 bridge pool storage other than the pending transaction pool"
-            );
-            return Ok(false);
-        }
-        // check that the pending transfer (and only that) was added to the pool
-        // TODO: This will change slightly when we merkelize the pool,
-        // but that will be a separate PR.
-        let pending_key = get_pending_key();
-        let pending_pre: HashSet<PendingTransfer> =
-            (&self.ctx).read_pre_value(&pending_key)?.ok_or(eyre!(
-                "The bridge pool transfers are missing from storage"
-            ))?;
-        let pending_post: HashSet<PendingTransfer> =
-            (&self.ctx).read_post_value(&pending_key)?.ok_or(eyre!(
-                "The bridge pool transfers are missing from storage"
-            ))?;
-        if !pending_post.contains(&transfer) {
-            tracing::debug!(
-                "Rejecting transaction as the transfer wasn't added to the \
-                 pending transfers"
-            );
-            return Ok(false);
-        }
-        for item in pending_pre.symmetric_difference(&pending_post) {
-            if item != &transfer {
+        let pending_key = get_pending_key(&transfer);
+        for key in keys_changed.iter().filter(is_bridge_pool_key) {
+            if key != pending_key {
                 tracing::debug!(
-                    ?item,
-                    "Rejecting transaction as an unrecognized item was added \
-                     to the pending transfers"
+                    "Rejecting transaction as it is attempting to change an incorrect \
+                    key in the pending transaction pool."
                 );
                 return Ok(false);
             }
+        }
+        let pending: PendingTransfer =
+            (&self.ctx).read_post_value(&pending_key)?.ok_or(eyre!(
+                "Rejecting transaction as the transfer wasn't added to the \
+                 pending transfers"
+            ))?;
+        if pending != transfer {
+            tracing::debug!(
+                    "An incorrect transfer was added to the pool."
+            );
+            return Ok(false);
         }
 
         // check that gas fees were put into escrow
@@ -228,8 +211,8 @@ mod test_bridge_pool_vp {
     }
 
     /// The bridge pool at the beginning of all tests
-    fn initial_pool() -> HashSet<PendingTransfer> {
-        let transfer = PendingTransfer {
+    fn initial_pool() -> PendingTransfer {
+        PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
@@ -240,9 +223,7 @@ mod test_bridge_pool_vp {
                 amount: 0.into(),
                 payer: bertha_address(),
             },
-        };
-
-        HashSet::<PendingTransfer>::from([transfer])
+        }
     }
 
     /// Create a new storage
@@ -252,9 +233,9 @@ mod test_bridge_pool_vp {
         writelog
             .write(&get_signed_root_key(), Hash([0; 32]).try_to_vec().unwrap())
             .unwrap();
-
+        let transfer = initial_pool();
         writelog
-            .write(&get_pending_key(), initial_pool().try_to_vec().unwrap())
+            .write(&get_pending_key(&transfer), transfer.try_to_vec().unwrap())
             .unwrap();
         let escrow_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
         let amount: Amount = ESCROWED_AMOUNT.into();
