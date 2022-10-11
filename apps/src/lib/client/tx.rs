@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::env;
 use std::fs::File;
@@ -682,12 +683,9 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                         safe_exit(1)
                     }
                 }
-                let mut delegation_addresses = rpc::get_delegators_delegation(
-                    &client,
-                    &voter_address,
-                    epoch,
-                )
-                .await;
+                let mut delegations =
+                    rpc::get_delegators_delegation(&client, &voter_address)
+                        .await;
 
                 // Optimize by quering if a vote from a validator
                 // is equal to ours. If so, we can avoid voting, but ONLY if we
@@ -704,22 +702,22 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     )
                     .await
                 {
-                    delegation_addresses = filter_delegations(
+                    delegations = filter_delegations(
                         &client,
-                        delegation_addresses,
+                        delegations,
                         proposal_id,
                         &args.vote,
                     )
                     .await;
                 }
 
-                println!("{:?}", delegation_addresses);
+                println!("{:?}", delegations);
 
                 let tx_data = VoteProposalData {
                     id: proposal_id,
                     vote: args.vote,
                     voter: voter_address,
-                    delegations: delegation_addresses,
+                    delegations: delegations.into_iter().collect(),
                 };
 
                 let data = tx_data
@@ -779,33 +777,37 @@ async fn is_safe_voting_window(
 /// vote)
 async fn filter_delegations(
     client: &HttpClient,
-    mut delegation_addresses: Vec<Address>,
+    delegations: HashSet<Address>,
     proposal_id: u64,
     delegator_vote: &ProposalVote,
-) -> Vec<Address> {
-    let mut remove_indexes: Vec<usize> = vec![];
+) -> HashSet<Address> {
+    // Filter delegations by their validator's vote concurrently
+    let delegations = futures::future::join_all(
+        delegations
+            .into_iter()
+            // we cannot use `filter/filter_map` directly because we want to
+            // return a future
+            .map(|validator_address| async {
+                let vote_key = gov_storage::get_vote_proposal_key(
+                    proposal_id,
+                    validator_address.to_owned(),
+                    validator_address.to_owned(),
+                );
 
-    for (index, validator_address) in delegation_addresses.iter().enumerate() {
-        let vote_key = gov_storage::get_vote_proposal_key(
-            proposal_id,
-            validator_address.to_owned(),
-            validator_address.to_owned(),
-        );
-
-        if let Some(validator_vote) =
-            rpc::query_storage_value::<ProposalVote>(client, &vote_key).await
-        {
-            if &validator_vote == delegator_vote {
-                remove_indexes.push(index);
-            }
-        }
-    }
-
-    for index in remove_indexes {
-        delegation_addresses.swap_remove(index);
-    }
-
-    delegation_addresses
+                if let Some(validator_vote) =
+                    rpc::query_storage_value::<ProposalVote>(client, &vote_key)
+                        .await
+                {
+                    if &validator_vote == delegator_vote {
+                        return None;
+                    }
+                }
+                Some(validator_address)
+            }),
+    )
+    .await;
+    // Take out the `None`s
+    delegations.into_iter().flatten().collect()
 }
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
