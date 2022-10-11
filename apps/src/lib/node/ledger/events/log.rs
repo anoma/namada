@@ -331,7 +331,7 @@ impl EventLog {
     }
 
     /// Prune events from the log, keeping only events whose
-    /// diff with the oldest height in the log is lower than
+    /// diff with the oldest height in the log is higher than
     /// `threshold`.
     fn prune_old_events(
         &self,
