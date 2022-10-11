@@ -86,7 +86,6 @@ struct LogNode {
 impl LogNode {
     /// Return an iterator over the given linked list
     /// of [`LogNode`] instances.
-    #[allow(dead_code)]
     fn iter(node: Option<&Arc<LogNode>>) -> LogNodeIter<'_> {
         LogNodeIter { node }
     }
@@ -124,7 +123,6 @@ pub struct EventLog {
 /// Contains a snapshot of the state of the [`EventLog`]
 /// at some fixed point in time.
 #[derive(Debug)]
-#[allow(dead_code)]
 struct EventLogSnapshot {
     oldest_height: BlockHeight,
     num_events: usize,
