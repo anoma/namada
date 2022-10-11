@@ -388,8 +388,8 @@ mod tests {
 
     /// Test adding a couple of events to the event log, and
     /// reading those events back.
-    #[test]
-    fn test_log_add() {
+    #[tokio::test]
+    async fn test_log_add() {
         const NUM_HEIGHTS: u64 = 4;
 
         let (log, mut logger, sender) = new();
@@ -406,11 +406,9 @@ mod tests {
 
         // receive events in the logger, and log them
         // to the event log
-        tokio_test::block_on(async move {
-            for _ in 0..NUM_HEIGHTS {
-                logger.log_new_entry().await.unwrap();
-            }
-        });
+        for _ in 0..NUM_HEIGHTS {
+            logger.log_new_entry().await.unwrap();
+        }
 
         // inspect log
         let events_in_log: Vec<_> = log
@@ -427,8 +425,8 @@ mod tests {
     }
 
     /// Test parallel log accesses.
-    #[test]
-    fn test_parallel_log_reads() {
+    #[tokio::test]
+    async fn test_parallel_log_reads() {
         const NUM_CONCURRENT_READERS: usize = 4;
         const NUM_HEIGHTS: u64 = 4;
 
@@ -446,11 +444,9 @@ mod tests {
 
         // receive events in the logger, and log them
         // to the event log
-        tokio_test::block_on(async move {
-            for _ in 0..NUM_HEIGHTS {
-                logger.log_new_entry().await.unwrap();
-            }
-        });
+        for _ in 0..NUM_HEIGHTS {
+            logger.log_new_entry().await.unwrap();
+        }
 
         // test reading the log in parallel
         let mut handles = vec![];
