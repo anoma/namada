@@ -12,6 +12,7 @@ use namada::ledger::pos::{
 use namada::ledger::protocol;
 use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage_api::StorageRead;
+use namada::types::address::Address;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
@@ -57,7 +58,7 @@ where
 
         let mut response = shim::response::FinalizeBlock::default();
 
-        // Begin the next block and check if a new epoch began
+        // Begin the new block and check if a new epoch has begun
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
         let (current_epoch, _gas) = self.storage.get_current_epoch();
@@ -356,17 +357,50 @@ where
 
         if new_epoch {
             self.update_epoch(&mut response);
-            self.apply_inflation(
-                &current_epoch,
-                &req.proposer_address,
-                &req.votes,
-            );
-        } else {
-            self.apply_block_rewards(
-                &current_epoch,
-                &req.proposer_address,
-                &req.votes,
-            );
+        }
+
+        // Read the block proposer of the previously committed block in storage
+        // (n-1 if we are in the process of finalizing n right now).
+        match self.storage.read_last_block_proposer_address() {
+            Some(proposer_address) => {
+                if new_epoch {
+                    println!("APPLYING INFLATION");
+                    self.apply_inflation(
+                        current_epoch,
+                        &proposer_address,
+                        &req.votes,
+                    );
+                } else {
+                    // TODO: watch out because this is likely not using the
+                    // proper block proposer address
+                    self.storage
+                        .log_block_rewards(
+                            current_epoch,
+                            &proposer_address,
+                            &req.votes,
+                        )
+                        .unwrap();
+                }
+            }
+            None => {
+                if req.votes.len() == 0 && req.proposer_address.len() > 0 {
+                    // Get proposer address from storage based on the consensus
+                    // key hash
+                    let tm_raw_hash_string =
+                        tm_raw_hash_to_string(req.proposer_address);
+                    let native_proposer_address = self
+                        .storage
+                        .read_validator_address_raw_hash(tm_raw_hash_string)
+                        .expect(
+                            "Unable to find native validator address of block \
+                             proposer from tendermint raw hash",
+                        );
+                    self.storage.write_last_block_proposer_address(
+                        &native_proposer_address,
+                    );
+                } else {
+                }
+            }
         }
 
         let _ = self
@@ -451,51 +485,39 @@ where
         });
     }
 
-    /// Calculate the block rewards and apply them to the consensus validators'
-    /// reward accumulators
-    fn apply_block_rewards(
-        &mut self,
-        current_epoch: &Epoch,
-        proposer_address: &Vec<u8>,
-        votes: &Vec<VoteInfo>,
-    ) {
-        // Get proposer address from storage based on the consensus key hash
-        let tm_raw_hash_string = tm_raw_hash_to_string(proposer_address);
-        let native_proposer_address = self
-            .storage
-            .read_validator_address_raw_hash(tm_raw_hash_string)
-            .expect(
-                "Unable to find native validator address of block proposer \
-                 from tendermint raw hash",
-            );
-
-        self.storage
-            .log_block_rewards(*current_epoch, &native_proposer_address, votes)
-            .unwrap();
-    }
-
     /// Calculate the new inflation rate, mint the new tokens to the PoS
-    /// account, then update the reward products of the validators
+    /// account, then update the reward products of the validators. This is
+    /// executed while finalizing the first block of a new epoch and is applied
+    /// with respect to the previous epoch.
     fn apply_inflation(
         &mut self,
-        current_epoch: &Epoch,
-        proposer_address: &Vec<u8>,
+        current_epoch: Epoch,
+        proposer_address: &Address,
         votes: &Vec<VoteInfo>,
     ) {
-        let last_epoch = *current_epoch - 1;
+        let last_epoch = current_epoch - 1;
         // Get input values needed for the PD controller for PoS and MASP.
         // Run the PD controllers to calculate new rates.
         //
         // MASP is included below just for some completeness.
 
+        // Calculate the fractional block rewards for the previous block (final
+        // block of the previous epoch), which also gives the final
+        // accumulator value updates
+        self.storage
+            .log_block_rewards(last_epoch, &proposer_address, votes)
+            .unwrap();
+
+        // TODO: review if the appropriate epoch is being used (last vs now)
+
         // Read from Parameters storage
-        let epochs_per_year: u64 =
-            self.read_storage_key(&params_storage::get_epochs_per_year_key());
-        let pos_locked_ratio_last: Decimal = self
-            .expect("Epochs per year should exist in storage")
-            .read_storage_key(&params_storage::get_staked_ratio_key());
-        let pos_last_inflation_rate = self
-            .expect("PoS staked ratio should exist in storage")
+        let epochs_per_year: u64 = self
+            .read_storage_key(&params_storage::get_epochs_per_year_key())
+            .expect("Epochs per year should exist in storage");
+        let pos_staked_ratio: Decimal = self
+            .read_storage_key(&params_storage::get_staked_ratio_key())
+            .expect("PoS staked ratio should exist in storage");
+        let pos_inflation_rate = self
             .read_storage_key(&params_storage::get_pos_inflation_rate_key())
             .expect("PoS inflation rate should exist in storage");
         let pos_p_gain: Decimal = self
@@ -520,25 +542,25 @@ where
         let pos_locked_ratio_target = pos_params.target_staked_ratio;
         let pos_max_inflation_rate = pos_params.max_inflation_rate;
 
-        // Arbitrary default values until real ones can be fetched
-        // TODO: these need to be properly fetched.
+        // TODO: properly fetch these values (arbitrary for now)
         let masp_locked_supply: Amount = Amount::default();
         let masp_locked_ratio_target = Decimal::new(5, 1);
         let masp_locked_ratio_last = Decimal::new(5, 1);
-        let masp_max_reward_rate = Decimal::new(2, 1);
-        let masp_last_reward_rate = Decimal::new(12, 2);
+        let masp_max_inflation_rate = Decimal::new(2, 1);
+        let masp_last_inflation_rate = Decimal::new(12, 2);
         let masp_p_gain = Decimal::new(1, 1);
         let masp_d_gain = Decimal::new(1, 1);
 
+        // Run rewards PD controller
         let pos_controller = inflation::RewardsController::new(
             pos_locked_supply,
             total_tokens,
             pos_locked_ratio_target,
-            pos_locked_ratio_last,
-            pos_max_reward_rate,
-            pos_last_reward_rate,
-            pos_p_gain,
-            pos_d_gain,
+            pos_last_staked_ratio,
+            pos_max_inflation_rate,
+            token::Amount::from(pos_last_inflation_amount),
+            pos_p_gain_nom,
+            pos_d_gain_nom,
             epochs_per_year,
         );
         let _masp_controller = inflation::RewardsController::new(
@@ -546,142 +568,101 @@ where
             total_tokens,
             masp_locked_ratio_target,
             masp_locked_ratio_last,
-            masp_max_reward_rate,
-            masp_last_reward_rate,
+            masp_max_inflation_rate,
+            token::Amount::from(masp_last_inflation_rate),
             masp_p_gain,
             masp_d_gain,
             epochs_per_year,
         );
 
+        // Run the rewards controllers
         let new_pos_vals = RewardsController::run(&pos_controller);
-        let new_masp_vals = RewardsController::run(&_masp_controller);
+        // let new_masp_vals = RewardsController::run(&_masp_controller);
 
-        let new_pos_reward_rate = new_pos_vals.last_reward_rate;
-        let new_masp_reward_rate = new_masp_vals.last_reward_rate;
-
-        self.storage
-            .write(
-                &params_storage::get_pos_reward_rate_key(),
-                new_pos_reward_rate
-                    .try_to_vec()
-                    .expect("encode new reward rate"),
-            )
-            .expect("unable to encode new reward rate (Decimal)");
-        self.storage
-            .write(
-                &params_storage::get_staked_ratio_key(),
-                new_pos_vals
-                    .locked_ratio_last
-                    .try_to_vec()
-                    .expect("encode new locked ratio"),
-            )
-            .expect("unable to encode new locked ratio (Decimal)");
-        self.storage
-            .write(
-                &params_storage::get_pos_gain_p_key(),
-                new_pos_vals.p_gain.try_to_vec().expect("encode new p gain"),
-            )
-            .expect("unable to encode new p gain (Decimal)");
-        self.storage
-            .write(
-                &params_storage::get_pos_gain_d_key(),
-                new_pos_vals.d_gain.try_to_vec().expect("encode new d gain"),
-            )
-            .expect("unable to encode new d gain (Decimal)");
-
-        let pos_minted_tokens =
-            decimal_mult_u64(new_pos_reward_rate, u64::from(total_tokens));
-        let _masp_minted_tokens =
-            decimal_mult_u64(new_masp_reward_rate, u64::from(total_tokens));
-
-        // Mint tokens to PoS account
-        let pos_address = self.storage.read_pos_address();
+        // Mint tokens to the PoS account for the last epoch's inflation
+        let pos_minted_tokens = new_pos_vals.inflation;
         inflation::mint_tokens(
             &mut self.storage,
-            &pos_address,
+            &POS_ADDRESS,
             &staking_token_address(),
             Amount::from(pos_minted_tokens),
         )
         .unwrap();
 
-        // Get proposer address from storage based on the consensus key hash
-        let tm_raw_hash_string = tm_raw_hash_to_string(proposer_address);
-        let native_proposer_address = self
-            .storage
-            .read_validator_address_raw_hash(tm_raw_hash_string)
-            .expect(
-                "Unable to find native validator address of block proposer \
-                 from tendermint raw hash",
-            );
-
-        // Calculate the fractional block rewards and update the accumulator
-        // amounts for each of the consensus validators
-        self.storage
-            .log_block_rewards(*current_epoch, &native_proposer_address, votes)
-            .unwrap();
-
-        // Calculate the reward token amount for each consensus validator and
-        // update the rewards products
+        // For each consensus validator, update the rewards products
         //
         // TODO: update implementation using lazy DS and be more
         // memory-efficient
 
-        // Get the number of blocks in this past epoch
-        let first_block_of_this_epoch: u64 = self
-            .storage
-            .block
-            .pred_epochs
-            .first_block_heights
-            .as_slice()
-            .last()
-            .unwrap()
-            .0;
-        let num_blocks_in_this_epoch =
-            current_epoch.0 - first_block_of_this_epoch + 1;
+        // Get the number of blocks in the last epoch
+        let first_block_of_last_epoch =
+            self.storage.block.pred_epochs.first_block_heights
+                [last_epoch.0 as usize]
+                .0;
+        let num_blocks_in_last_epoch = if first_block_of_last_epoch == 0 {
+            self.storage.block.height.0 - first_block_of_last_epoch - 1
+        } else {
+            self.storage.block.height.0 - first_block_of_last_epoch
+        };
 
+        // Read the rewards accumulator, which was last updated when finalizing
+        // the previous block
+        // TODO: may need to change logic of how this gets initialized
+        // TODO: can/should this be optimized? Since we are reading and writing
+        // to the accumulator storage earlier in apply_inflation
         let accumulators = self
             .storage
             .read_consensus_validator_rewards_accumulator()
-            .expect(
-                "Accumulators should exist since we are applying the \
-                 inflation in the last block of an epoch",
+            .expect("Accumulators should exist");
+
+        let current_epoch = Epoch::from(current_epoch.0);
+        let last_epoch = Epoch::from(last_epoch.0);
+
+        // TODO: think about changing the reward to Decimal
+        let mut reward_tokens_remaining = pos_minted_tokens.clone();
+        for (address, value) in accumulators.iter() {
+            dbg!(reward_tokens_remaining.clone());
+            // Get reward token amount for this validator
+            let fractional_claim =
+                value / Decimal::from(num_blocks_in_last_epoch);
+            let reward = decimal_mult_u64(
+                fractional_claim,
+                u64::from(pos_minted_tokens),
             );
 
-        let mut reward_tokens_remaining = pos_minted_tokens.clone();
-        let current_epoch =
-            namada::ledger::pos::types::Epoch::from(current_epoch.0);
-        let last_epoch = namada::ledger::pos::types::Epoch::from(last_epoch.0);
-
-        // TODO: maybe change reward to Decimal
-        for (address, acc) in accumulators.iter() {
-            let fractional_claim =
-                acc / Decimal::from(num_blocks_in_this_epoch);
-            let reward = decimal_mult_u64(fractional_claim, pos_minted_tokens);
-
+            // Read epoched validator data and rewards products
             let validator_deltas =
                 self.storage.read_validator_deltas(address).unwrap();
-            let commission_rate =
+            let commission_rates =
                 self.storage.read_validator_commission_rate(address);
-            let mut rewards_products =
-                self.storage.read_validator_rewards_products(address);
+            let mut rewards_products = self
+                .storage
+                .read_validator_rewards_products(address)
+                .unwrap_or(std::collections::HashMap::new());
             let mut delegation_rewards_products = self
                 .storage
-                .read_validator_delegation_rewards_products(address);
+                .read_validator_delegation_rewards_products(address)
+                .unwrap_or(std::collections::HashMap::new());
 
+            // Get validator data at the last epoch
             let stake = validator_deltas
-                .get(current_epoch)
+                .get(last_epoch)
                 .map(|sum| Decimal::from(sum))
                 .unwrap();
-            let last_product = *rewards_products.get(&last_epoch).unwrap();
-            let last_delegation_product =
-                *delegation_rewards_products.get(&last_epoch).unwrap();
+            let last_product =
+                *rewards_products.get(&last_epoch).unwrap_or(&Decimal::ONE);
+            let last_delegation_product = *delegation_rewards_products
+                .get(&last_epoch)
+                .unwrap_or(&Decimal::ONE);
+            let commission_rate = *commission_rates.get(last_epoch).unwrap();
+            // Calculate new rewards products and write them to storage (for the
+            // current epoch)
             let new_product =
                 last_product * (Decimal::ONE + Decimal::from(reward) / stake);
             let new_delegation_product = last_delegation_product
                 * (Decimal::ONE
                     + (Decimal::ONE - commission_rate) * Decimal::from(reward)
                         / stake);
-
             rewards_products.insert(current_epoch, new_product);
             delegation_rewards_products
                 .insert(current_epoch, new_delegation_product);
@@ -705,6 +686,41 @@ where
         if reward_tokens_remaining > 0 {
             // TODO: do something here?
         }
+
+        // Write new rewards parameters that will be used for the inflation of
+        // the current new epoch
+        self.storage
+            .write(
+                &params_storage::get_pos_inflation_rate_key(),
+                new_pos_vals
+                    .inflation_rate
+                    .try_to_vec()
+                    .expect("encode new reward rate"),
+            )
+            .expect("unable to encode new reward rate (Decimal)");
+        self.storage
+            .write(
+                &params_storage::get_staked_ratio_key(),
+                new_pos_vals
+                    .locked_ratio
+                    .try_to_vec()
+                    .expect("encode new locked ratio"),
+            )
+            .expect("unable to encode new locked ratio (Decimal)");
+
+        // Delete the accumulators from storage
+        self.storage
+            .write(
+                &params_storage::get_pos_gain_p_key(),
+                new_pos_vals.p_gain.try_to_vec().expect("encode new p gain"),
+            )
+            .expect("unable to encode new p gain (Decimal)");
+        self.storage
+            .write(
+                &params_storage::get_pos_gain_d_key(),
+                new_pos_vals.d_gain.try_to_vec().expect("encode new d gain"),
+            )
+            .expect("unable to encode new d gain (Decimal)");
         self.storage
             .delete(&consensus_validator_set_accumulator_key())
             .unwrap();

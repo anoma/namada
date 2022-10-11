@@ -18,10 +18,11 @@ pub enum RewardsError {
 
 /// Holds coefficients for the three different ways to get PoS rewards
 #[derive(Debug, Copy, Clone)]
+#[allow(missing_docs)]
 pub struct PosRewards {
-    proposer_coeff: Decimal,
-    signer_coeff: Decimal,
-    active_val_coeff: Decimal,
+    pub proposer_coeff: Decimal,
+    pub signer_coeff: Decimal,
+    pub active_val_coeff: Decimal,
 }
 
 /// Holds relevant PoS parameters and is used to calculate the coefficients for
@@ -66,7 +67,6 @@ impl PosRewardsCalculator {
             + dec!(0.01);
         let signer_coeff = self.signer_param;
         let active_val_coeff = dec!(1.0) - proposer_coeff - signer_coeff;
-
 
         let coeffs = PosRewards {
             proposer_coeff,

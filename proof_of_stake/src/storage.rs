@@ -31,6 +31,7 @@ const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
+const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -418,6 +419,25 @@ pub fn is_total_deltas_key(key: &Key) -> bool {
                     if addr == &ADDRESS && key == TOTAL_DELTAS_STORAGE_KEY)
 }
 
+/// Storage key for block proposer address of the previous block.
+pub fn last_block_proposer_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&LAST_BLOCK_PROPOSER_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for block proposer address of the previous block?
+pub fn is_last_block_proposer_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
+            if addr == &ADDRESS && key == LAST_BLOCK_PROPOSER_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Get validator address from bond key
 pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
     match key.get_at(3) {
@@ -434,11 +454,10 @@ where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    const POS_ADDRESS: namada_core::types::address::Address = super::ADDRESS;
-    const POS_SLASH_POOL_ADDRESS: namada_core::types::address::Address =
-        super::SLASH_POOL_ADDRESS;
+    const POS_ADDRESS: Address = super::ADDRESS;
+    const POS_SLASH_POOL_ADDRESS: Address = super::SLASH_POOL_ADDRESS;
 
-    fn staking_token_address(&self) -> namada_core::types::address::Address {
+    fn staking_token_address(&self) -> Address {
         self.native_token.clone()
     }
 
@@ -450,7 +469,7 @@ where
     fn read_validator_address_raw_hash(
         &self,
         raw_hash: impl AsRef<str>,
-    ) -> Option<namada_core::types::address::Address> {
+    ) -> Option<Address> {
         let (value, _gas) = self
             .read(&validator_address_raw_hash_key(raw_hash))
             .unwrap();
@@ -459,43 +478,39 @@ where
 
     fn read_validator_consensus_key(
         &self,
-        key: &namada_core::types::address::Address,
+        key: &Address,
     ) -> Option<ValidatorConsensusKeys> {
         let (value, _gas) =
             self.read(&validator_consensus_key_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
-    fn read_validator_state(
-        &self,
-        key: &namada_core::types::address::Address,
-    ) -> Option<ValidatorStates> {
+    fn read_validator_state(&self, key: &Address) -> Option<ValidatorStates> {
         let (value, _gas) = self.read(&validator_state_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
     fn read_validator_deltas(
         &self,
-        key: &namada_core::types::address::Address,
+        key: &Address,
     ) -> Option<types::ValidatorDeltas> {
         let (value, _gas) = self.read(&validator_deltas_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
-    fn read_validator_slashes(
-        &self,
-        key: &namada_core::types::address::Address,
-    ) -> types::Slashes {
+    fn read_last_block_proposer_address(&self) -> Option<Address> {
+        let (value, _gas) = self.read(&last_block_proposer_key()).unwrap();
+        value.map(|value| decode(value).unwrap())
+    }
+
+    fn read_validator_slashes(&self, key: &Address) -> types::Slashes {
         let (value, _gas) = self.read(&validator_slashes_key(key)).unwrap();
         value
             .map(|value| decode(value).unwrap())
             .unwrap_or_default()
     }
 
-    fn read_validator_commission_rate(
-        &self,
-        key: &namada_core::types::address::Address,
-    ) -> CommissionRates {
+    fn read_validator_commission_rate(&self, key: &Address) -> CommissionRates {
         let (value, _gas) =
             self.read(&validator_commission_rate_key(key)).unwrap();
         decode(value.unwrap()).unwrap()
@@ -503,7 +518,7 @@ where
 
     fn read_validator_max_commission_rate_change(
         &self,
-        key: &namada_core::types::address::Address,
+        key: &Address,
     ) -> Decimal {
         let (value, _gas) = self
             .read(&validator_max_commission_rate_change_key(key))
@@ -514,20 +529,20 @@ where
     fn read_validator_rewards_products(
         &self,
         key: &Address,
-    ) -> RewardsProducts {
+    ) -> Option<RewardsProducts> {
         let (value, _gas) =
             self.read(&validator_self_rewards_product_key(key)).unwrap();
-        decode(value.unwrap()).unwrap()
+        value.map(|value| decode(value).unwrap())
     }
 
     fn read_validator_delegation_rewards_products(
         &self,
         key: &Address,
-    ) -> RewardsProducts {
+    ) -> Option<RewardsProducts> {
         let (value, _gas) = self
             .read(&validator_delegation_rewards_product_key(key))
             .unwrap();
-        decode(value.unwrap()).unwrap()
+        value.map(|value| decode(value).unwrap())
     }
 
     fn read_validator_last_known_product_epoch(&self, key: &Address) -> Epoch {
@@ -539,11 +554,11 @@ where
 
     fn read_consensus_validator_rewards_accumulator(
         &self,
-    ) -> Option<std::collections::HashMap<Address, rust_decimal::Decimal>> {
+    ) -> Option<std::collections::HashMap<Address, Decimal>> {
         let (value, _gas) = self
             .read(&consensus_validator_set_accumulator_key())
             .unwrap();
-        decode(value.unwrap()).unwrap()
+        value.map(|value| decode(value).unwrap())
     }
 
     fn read_validator_set(&self) -> ValidatorSets {
@@ -562,7 +577,7 @@ where
 
     fn write_validator_address_raw_hash(
         &mut self,
-        address: &namada_core::types::address::Address,
+        address: &Address,
         consensus_key: &namada_core::types::key::common::PublicKey,
     ) {
         let raw_hash = key::tm_consensus_key_raw_hash(consensus_key);
@@ -572,7 +587,7 @@ where
 
     fn write_validator_commission_rate(
         &mut self,
-        key: &namada_core::types::address::Address,
+        key: &Address,
         value: &CommissionRates,
     ) {
         self.write(&validator_commission_rate_key(key), encode(value))
@@ -581,7 +596,7 @@ where
 
     fn write_validator_max_commission_rate_change(
         &mut self,
-        key: &namada_core::types::address::Address,
+        key: &Address,
         value: &rust_decimal::Decimal,
     ) {
         self.write(
@@ -631,7 +646,7 @@ where
 
     fn write_validator_consensus_key(
         &mut self,
-        key: &namada_core::types::address::Address,
+        key: &Address,
         value: &ValidatorConsensusKeys,
     ) {
         self.write(&validator_consensus_key_key(key), encode(value))
@@ -640,7 +655,7 @@ where
 
     fn write_validator_state(
         &mut self,
-        key: &namada_core::types::address::Address,
+        key: &Address,
         value: &ValidatorStates,
     ) {
         self.write(&validator_state_key(key), encode(value))
@@ -649,7 +664,7 @@ where
 
     fn write_validator_deltas(
         &mut self,
-        key: &namada_core::types::address::Address,
+        key: &Address,
         value: &ValidatorDeltas,
     ) {
         self.write(&validator_deltas_key(key), encode(value))
@@ -658,7 +673,7 @@ where
 
     fn write_validator_slash(
         &mut self,
-        validator: &namada_core::types::address::Address,
+        validator: &Address,
         value: types::Slash,
     ) {
         let mut slashes = PosBase::read_validator_slashes(self, validator);
@@ -679,10 +694,15 @@ where
         self.write(&total_deltas_key(), encode(value)).unwrap();
     }
 
+    fn write_last_block_proposer_address(&mut self, value: &Address) {
+        self.write(&last_block_proposer_key(), encode(value))
+            .unwrap();
+    }
+
     fn credit_tokens(
         &mut self,
-        token: &namada_core::types::address::Address,
-        target: &namada_core::types::address::Address,
+        token: &Address,
+        target: &Address,
         amount: namada_core::types::token::Amount,
     ) {
         let key = token::balance_key(token, target);
@@ -703,10 +723,10 @@ where
 
     fn transfer(
         &mut self,
-        token: &namada_core::types::address::Address,
+        token: &Address,
         amount: namada_core::types::token::Amount,
-        src: &namada_core::types::address::Address,
-        dest: &namada_core::types::address::Address,
+        src: &Address,
+        dest: &Address,
     ) {
         let src_key = token::balance_key(token, src);
         let dest_key = token::balance_key(token, dest);
