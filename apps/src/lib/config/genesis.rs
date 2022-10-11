@@ -786,7 +786,7 @@ pub fn genesis() -> Genesis {
         epochs_per_year: 365,
         pos_gain_p: dec!(0.1),
         pos_gain_d: dec!(0.1),
-        staked_ratio: dec!(0.4),
+        staked_ratio: dec!(0.0),
         pos_inflation_rate: dec!(0.1),
     };
     let albert = EstablishedAccount {

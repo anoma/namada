@@ -358,7 +358,7 @@ where
                 "Unable to find native validator address of block proposer \
                  from tendermint raw hash",
             );
-        
+
         self.storage
             .log_block_rewards(*current_epoch, &native_proposer_address, votes)
             .unwrap();
@@ -509,7 +509,7 @@ where
         self.storage
             .log_block_rewards(*current_epoch, &native_proposer_address, votes)
             .unwrap();
-        
+
         // Calculate the reward token amount for each consensus validator and
         // update the rewards products
         //

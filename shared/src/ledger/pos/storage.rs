@@ -1,7 +1,9 @@
 //! Proof-of-Stake storage keys and storage integration via [`PosBase`] trait.
 
 use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::types::{Epoch, RewardsProducts, ValidatorStates};
+use namada_proof_of_stake::types::{
+    Epoch, RewardsProducts, ValidatorStates, VoteInfo,
+};
 use namada_proof_of_stake::{types, PosBase};
 
 use super::{

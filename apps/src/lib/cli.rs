@@ -1026,7 +1026,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
                 QueryCommissionRate(args::QueryCommissionRate::parse(matches))
-            }) 
+            })
         }
 
         fn def() -> App {
@@ -2260,7 +2260,7 @@ pub mod args {
                 ))
         }
     }
-    
+
     /// Query PoS slashes
     #[derive(Clone, Debug)]
     pub struct QuerySlashes {

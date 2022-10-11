@@ -235,7 +235,6 @@ impl Parameters {
                 "PoS inflation rate parameter must be initialized in the \
                  genesis block",
             );
-
     }
 }
 
@@ -295,8 +294,8 @@ where
     update(storage, value, key)
 }
 
-/// Update the epochs_per_year parameter in storage. Returns the parameters and gas
-/// cost.
+/// Update the epochs_per_year parameter in storage. Returns the parameters and
+/// gas cost.
 pub fn update_epochs_per_year_parameter<DB, H>(
     storage: &mut Storage<DB, H>,
     value: &EpochDuration,
@@ -337,8 +336,8 @@ where
     update(storage, value, key)
 }
 
-/// Update the PoS staked ratio parameter in storage. Returns the parameters and gas
-/// cost.
+/// Update the PoS staked ratio parameter in storage. Returns the parameters and
+/// gas cost.
 pub fn update_staked_ratio_parameter<DB, H>(
     storage: &mut Storage<DB, H>,
     value: &EpochDuration,
@@ -351,8 +350,8 @@ where
     update(storage, value, key)
 }
 
-/// Update the PoS inflation rate parameter in storage. Returns the parameters and gas
-/// cost.
+/// Update the PoS inflation rate parameter in storage. Returns the parameters
+/// and gas cost.
 pub fn update_pos_inflation_rate_parameter<DB, H>(
     storage: &mut Storage<DB, H>,
     value: &EpochDuration,
