@@ -523,7 +523,8 @@ where
                 .block
                 .tree
                 .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
-                .map_err(Error::MerkleTreeError)? {
+                .map_err(Error::MerkleTreeError)?
+            {
                 self.block
                     .tree
                     .get_tendermint_proof(key, proof)
@@ -540,11 +541,14 @@ where
                             array::from_ref(key),
                             vec![value],
                         )
-                        .map_err(Error::MerkleTreeError)? {
+                        .map_err(Error::MerkleTreeError)?
+                    {
                         tree.get_tendermint_proof(key, proof)
                             .map_err(Error::MerkleTreeError)
                     } else {
-                        Err(Error::MerkleTreeError(MerkleTreeError::TendermintProof))
+                        Err(Error::MerkleTreeError(
+                            MerkleTreeError::TendermintProof,
+                        ))
                     }
                 }
                 None => Err(Error::NoMerkleTree { height }),

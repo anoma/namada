@@ -3,7 +3,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
-use namada::ledger::storage::{DB, DBIter, traits::StorageHasher};
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Signed;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::BlockHeight;

@@ -4,7 +4,8 @@
 use std::collections::HashMap;
 
 use namada::ledger::pos::types::VotingPower;
-use namada::ledger::storage::{DB, DBIter, traits::StorageHasher};
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::{DBIter, DB};
 use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::validator_set_update;
 #[cfg(feature = "abcipp")]

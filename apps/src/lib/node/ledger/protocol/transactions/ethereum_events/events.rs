@@ -4,7 +4,8 @@ use std::collections::BTreeSet;
 
 use eyre::Result;
 use namada::ledger::eth_bridge::storage::wrapped_erc20s;
-use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
 use namada::types::storage::Key;
 
