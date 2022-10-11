@@ -177,7 +177,11 @@ async fn run_oracle_aux(oracle: Oracle) {
                         }
                         next_block_to_process += 1u8.into()
                     },
-                    Err(error) => tracing::warn!(?error, block = ?next_block_to_process, "Error while trying to process Ethereum block"),
+                    Err(error) => tracing::warn!(
+                        ?error,
+                        block = ?next_block_to_process,
+                        "Error while trying to process Ethereum block"
+                    ),
                 }
             },
             _ = oracle.sender.closed() => {
