@@ -251,10 +251,37 @@ impl EventLog {
         num_events: usize,
         height_diff: u64,
     ) {
-        let _ = MAX_LOG_EVENTS;
-        let _ = LOG_BLOCK_HEIGHT_DIFF;
-        let _ = (head, num_events, height_diff);
+        if num_events > MAX_LOG_EVENTS {
+            let keep_events = calc_num_of_kept_events(num_events);
+            return self.prune_too_many_events(head, keep_events);
+        }
+        if height_diff > LOG_BLOCK_HEIGHT_DIFF {
+            let keep_newer_than = calc_num_of_kept_ents(height_diff);
+            self.prune_old_events(head, keep_newer_than);
+        }
+    }
+
+    /// Prune events from the log, keeping as many as `max_events`
+    /// of the most recent events.
+    fn prune_too_many_events(
+        &self,
+        head: Option<Arc<LogNode>>,
+        max_events: usize,
+    ) {
         // TODO
+        let _ = (head, max_events);
+    }
+
+    /// Prune events from the log, keeping only events whose
+    /// diff with the oldest height in the log is lower than
+    /// `keep_newer_than`.
+    fn prune_old_events(
+        &self,
+        head: Option<Arc<LogNode>>,
+        keep_newer_than: u64,
+    ) {
+        // TODO
+        let _ = (head, keep_newer_than);
     }
 
     /// Add a new entry to the log.
@@ -362,6 +389,25 @@ impl LogEntrySender {
     pub fn send_new_entry(&self, entry: LogEntry) -> Option<()> {
         self.sender.send(entry).ok()
     }
+}
+
+/// Calculate the number of events to keep, when we prune
+/// the event log.
+///
+/// We parameterize this computation with the current number
+/// of events in the log.
+const fn calc_num_of_kept_events(curr: usize) -> usize {
+    3 * curr / 4
+}
+
+/// Calculate the number of log entries, when we prune
+/// the event log.
+///
+/// We parameterize this computation with the difference
+/// between the oldest and most recent block heights
+/// stored in the log.
+const fn calc_num_of_kept_ents(diff: u64) -> u64 {
+    3 * diff / 4
 }
 
 #[cfg(test)]
