@@ -1,7 +1,8 @@
 //! Helpers for writing to storage
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::Result;
-use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::storage;
 use namada::types::token::Amount;
 

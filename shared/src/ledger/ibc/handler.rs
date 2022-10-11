@@ -36,7 +36,6 @@ use crate::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOp
 use crate::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
 use crate::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
 use crate::ibc::core::ics03_connection::msgs::ConnectionMsg;
-use crate::ibc::core::ics03_connection::version::Version as ConnVersion;
 use crate::ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
@@ -1030,9 +1029,7 @@ pub fn init_connection(msg: &MsgConnectionOpenInit) -> ConnectionEnd {
         ConnState::Init,
         msg.client_id.clone(),
         msg.counterparty.clone(),
-        msg.version
-            .clone()
-            .map_or_else(|| vec![ConnVersion::default()], |v| vec![v]),
+        vec![msg.version.clone().unwrap_or_default()],
         msg.delay_period,
     )
 }
@@ -1112,17 +1109,17 @@ pub fn packet_from_message(
 
 /// Returns a commitment from the given packet
 pub fn commitment(packet: &Packet) -> PacketCommitment {
-    let mut input = packet
+    let input = packet
         .timeout_timestamp
         .nanoseconds()
         .to_be_bytes()
         .to_vec();
     let revision_number = packet.timeout_height.revision_number.to_be_bytes();
-    input.append(&mut revision_number.to_vec());
+    let input = [input.as_slice(), revision_number.as_slice()].concat();
     let revision_height = packet.timeout_height.revision_height.to_be_bytes();
-    input.append(&mut revision_height.to_vec());
+    let input = [input.as_slice(), revision_height.as_slice()].concat();
     let data = sha2::Sha256::digest(&packet.data);
-    input.append(&mut data.to_vec());
+    let input = [input.as_slice(), data.as_slice()].concat();
     sha2::Sha256::digest(&input).to_vec().into()
 }
 

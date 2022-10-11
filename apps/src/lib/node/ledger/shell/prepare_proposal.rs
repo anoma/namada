@@ -1,6 +1,7 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
-use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Tx;
 use namada::types::storage::BlockHeight;
 use namada::types::transaction::tx_types::TxType;

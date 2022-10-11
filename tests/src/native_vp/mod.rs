@@ -2,7 +2,7 @@ mod pos;
 
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage::mockdb::MockDB;
-use namada::ledger::storage::Sha256Hasher;
+use namada::ledger::storage::traits::Sha256Hasher;
 use namada::vm::wasm::compilation_cache;
 use namada::vm::wasm::compilation_cache::common::Cache;
 use namada::vm::{wasm, WasmCacheRwAccess};

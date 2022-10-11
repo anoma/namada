@@ -13,8 +13,9 @@ use super::wasm::TxCache;
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::write_log::{self, WriteLog};
-use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::ledger::storage::{self, Storage};
 use crate::ledger::vp_env;
 use crate::proto::Tx;
 use crate::types::address::{self, Address};
@@ -1759,7 +1760,8 @@ pub mod testing {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::ledger::storage::{self, StorageHasher};
+    use crate::ledger::storage::traits::StorageHasher;
+    use crate::ledger::storage::{self};
     use crate::vm::memory::testing::NativeMemory;
 
     /// Setup a transaction environment
