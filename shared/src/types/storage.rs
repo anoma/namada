@@ -656,6 +656,22 @@ impl KeySeg for KeccakHash {
     }
 }
 
+impl KeySeg for KeccakHash {
+    fn parse(seg: String) -> Result<Self> {
+        seg.clone()
+            .try_into()
+            .map_err(|_| Error::ParseError(seg, "Hash".into()))
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
 /// Epoch identifier. Epochs are identified by consecutive numbers.
 #[derive(
     Clone,
