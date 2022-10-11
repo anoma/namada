@@ -168,6 +168,14 @@ struct EventLogInnerMux {
 
 /// Represents an iterator over the [`Event`] instances in the
 /// event log, matching a given Tendermint-like query.
+// TODO: explore a way to remove cloning an Arc at each
+// iteration step, which is a bit expensive  (it usually
+// involves two atomic ops - incrementing the ref of the next
+// ptr, and decrementing the ref of the current ptr)
+//
+// this can probably be done with some pinning hacks, e.g.:
+// - <https://doc.rust-lang.org/std/pin/index.html>
+// - <https://doc.rust-lang.org/std/marker/struct.PhantomPinned.html>
 pub struct EventLogIter<'a> {
     /// The current index pointing at the events in the `node` field.
     index: usize,
