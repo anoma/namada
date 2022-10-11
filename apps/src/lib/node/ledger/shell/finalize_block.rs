@@ -248,6 +248,34 @@ where
             response.events.push(tx_event);
         }
 
+        // Read the consensus voting info from the previously committed block
+        // (n-1 if we are in the process of finalizing n right now).
+        match self.storage.read_last_block_consensus_votes() {
+            Some(vote_info) => {
+                if new_epoch {
+                    println!("\nTHIS IS THE LAST BLOCK OF THE CURRENT EPOCH\n");
+                    self.apply_inflation(
+                        &current_epoch,
+                        &req.proposer_address,
+                        &vote_info,
+                    );
+                } else {
+                    // TODO: watch out because this is likely not using the
+                    // proper block proposer address
+                    self.apply_block_rewards(
+                        &current_epoch,
+                        &req.proposer_address,
+                        &vote_info,
+                    );
+                }
+            }
+            None => {
+                if req.votes.len() > 0 {
+                    self.storage.write_last_block_consensus_votes(&req.votes);
+                }
+            }
+        }
+
         if new_epoch {
             self.update_epoch(&mut response);
             self.apply_inflation(&current_epoch, &req.proposer_address, &req.votes);
