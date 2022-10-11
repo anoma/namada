@@ -366,17 +366,10 @@ impl EventLog {
 
         // TODO: improve this code
         let head = LogNode::iter(head.as_ref())
-            // do an actual clone on the log nodes
-            .map(|n| {
-                Arc::new(LogNode {
-                    entry: n.entry.clone(),
-                    next: None,
-                })
-            })
             // filter out excess events in the log
             .take_while(|n| {
                 total_events += n.entry.events.len();
-                match predicate(&*n, total_events) {
+                match predicate(n, total_events) {
                     ControlFlow::Continue(()) => true,
                     ControlFlow::Break(()) => {
                         oldest_height = n.entry.block_height;
@@ -385,12 +378,17 @@ impl EventLog {
                 }
             })
             // build vec of new log nodes, all pointing to a null next node
+            .map(|n| {
+                Arc::new(LogNode {
+                    entry: n.entry.clone(),
+                    next: None,
+                })
+            })
             .collect::<Vec<_>>()
             // iterate the vec in reverse order, to link the nodes together in
             // the correct order, e.g.: next <- head
             .into_iter()
             .rev()
-            // link all nodes together
             .reduce(|next, mut head| {
                 Arc::get_mut(&mut head)
                     .expect("There is only one live instance of this Arc")
