@@ -27,6 +27,3 @@ wasm/*.wasm
 
 # app version string file
 /apps/version.rs
-
-# for annoying contributors using mac
-*.DS_Store 
