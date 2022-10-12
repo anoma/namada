@@ -196,14 +196,12 @@ mod tests {
     use namada::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada::ledger::pos::namada_proof_of_stake::epoched::Epoched;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::pos::types::{ValidatorSet, WeightedValidator};
+    use namada::ledger::pos::types::{ValidatorSet, VotingPower};
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::testing::TestStorage;
-    use namada::ledger::storage::Sha256Hasher;
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
-        arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
-        DAI_ERC20_ETH_ADDRESS,
+        arbitrary_amount, arbitrary_eth_address, DAI_ERC20_ETH_ADDRESS,
     };
     use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada::types::token::Amount;
@@ -211,42 +209,126 @@ mod tests {
 
     use super::*;
 
+    mod helpers {
+        use super::*;
+
+        /// Wraps a [`TestStorage`] along with the addresses of validators who
+        /// were set up for it
+        pub struct TestSetup<const N: usize> {
+            pub storage: TestStorage,
+            pub genesis_validators: [Address; N],
+        }
+
+        impl<const N: usize> TestSetup<N> {
+            /// Sets up a [`TestStorage`] and `N` validators with the given
+            /// voting powers
+            pub fn with_genesis_validator_voting_powers(
+                voting_powers: [VotingPower; N],
+            ) -> Self {
+                let validators: Vec<_> = (0..N)
+                    .map(|_| address::testing::gen_established_address())
+                    .collect();
+                let storage = {
+                    let mut storage = TestStorage::default();
+                    let validator_set = ValidatorSet {
+                        active: validators
+                            .iter()
+                            .enumerate()
+                            .map(|(i, address)| WeightedValidator {
+                                voting_power: voting_powers[i],
+                                address: address.to_owned(),
+                            })
+                            .collect(),
+                        inactive: BTreeSet::default(),
+                    };
+                    let validator_sets =
+                        Epoched::init_at_genesis(validator_set, 1);
+                    storage.write_validator_set(&validator_sets);
+                    storage
+                };
+                TestSetup {
+                    storage,
+                    genesis_validators: validators.try_into().unwrap(),
+                }
+            }
+        }
+
+        /// Models a simplified version of the Ethereum bridge smart contracts
+        /// that emits events and keeps track of the nonces
+        #[derive(Debug, Default)]
+        pub struct FakeEthereumBridge {
+            // The nonce of the most recent event emitted by the bridge
+            // contract
+            bridge_nonce: Option<u64>,
+        }
+
+        impl FakeEthereumBridge {
+            fn emit_next_bridge_nonce(&mut self) -> u64 {
+                let next = match self.bridge_nonce {
+                    Some(nonce) => nonce + 1,
+                    None => 0,
+                };
+                self.bridge_nonce = Some(next);
+                next
+            }
+
+            pub fn emit_transfers_to_namada(
+                &mut self,
+                transfers: Vec<TransferToNamada>,
+            ) -> EthereumEvent {
+                EthereumEvent::TransfersToNamada {
+                    nonce: self.emit_next_bridge_nonce().into(),
+                    transfers,
+                }
+            }
+        }
+
+        pub fn generate_transfer_to_namada(
+            receiver: Address,
+        ) -> TransferToNamada {
+            let amount = arbitrary_amount();
+            let asset = arbitrary_eth_address();
+            TransferToNamada {
+                amount,
+                asset,
+                receiver,
+            }
+        }
+    }
+
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer
-    fn test_apply_single_transfer() -> Result<()> {
+    fn test_apply_updates_single_transfer() -> Result<()> {
         let sole_validator = address::testing::gen_established_address();
-        let receiver = address::testing::established_address_2();
 
-        let amount = arbitrary_amount();
-        let asset = arbitrary_eth_address();
-        let body = EthereumEvent::TransfersToNamada {
-            nonce: arbitrary_nonce(),
-            transfers: vec![TransferToNamada {
-                amount,
-                asset: asset.clone(),
-                receiver: receiver.clone(),
-            }],
-        };
+        let receiver = address::testing::gen_established_address();
+        let sole_transfer =
+            helpers::generate_transfer_to_namada(receiver.clone());
+        let transfers = vec![sole_transfer.clone()];
+
+        let mut bridge = helpers::FakeEthereumBridge::default();
+        let event = bridge.emit_transfers_to_namada(transfers);
+
+        let sole_validator_sighting =
+            (sole_validator.clone(), BlockHeight(100));
         let update = EthMsgUpdate {
-            body: body.clone(),
-            seen_by: BTreeSet::from_iter(vec![(
-                sole_validator.clone(),
-                BlockHeight(100),
-            )]),
+            body: event.clone(),
+            seen_by: BTreeSet::from([sole_validator_sighting.clone()]),
         };
-        let updates = HashSet::from_iter(vec![update]);
-        let voting_powers = HashMap::from_iter(vec![(
-            (sole_validator.clone(), BlockHeight(100)),
+        let updates = HashSet::from([update]);
+        let voting_powers = HashMap::from([(
+            sole_validator_sighting,
             FractionalVotingPower::new(1, 1).unwrap(),
         )]);
         let mut storage = TestStorage::default();
 
         let changed_keys = apply_updates(&mut storage, updates, voting_powers)?;
 
-        let eth_msg_keys: vote_tracked::Keys<EthereumEvent> = (&body).into();
-        let wrapped_erc20_keys: wrapped_erc20s::Keys = (&asset).into();
+        let eth_msg_keys: Keys<EthereumEvent> = (&event).into();
+        let wrapped_erc20_keys: wrapped_erc20s::Keys =
+            (&sole_transfer.asset).into();
         assert_eq!(
-            BTreeSet::from_iter(vec![
+            BTreeSet::from([
                 eth_msg_keys.body(),
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
@@ -259,7 +341,7 @@ mod tests {
 
         let (body_bytes, _) = storage.read(&eth_msg_keys.body())?;
         let body_bytes = body_bytes.unwrap();
-        assert_eq!(EthereumEvent::try_from_slice(&body_bytes)?, body);
+        assert_eq!(EthereumEvent::try_from_slice(&body_bytes)?, event);
 
         let (seen_bytes, _) = storage.read(&eth_msg_keys.seen())?;
         let seen_bytes = seen_bytes.unwrap();
@@ -282,7 +364,7 @@ mod tests {
         let wrapped_erc20_balance_bytes = wrapped_erc20_balance_bytes.unwrap();
         assert_eq!(
             Amount::try_from_slice(&wrapped_erc20_balance_bytes)?,
-            amount
+            sole_transfer.amount
         );
 
         let (wrapped_erc20_supply_bytes, _) =
@@ -290,31 +372,10 @@ mod tests {
         let wrapped_erc20_supply_bytes = wrapped_erc20_supply_bytes.unwrap();
         assert_eq!(
             Amount::try_from_slice(&wrapped_erc20_supply_bytes)?,
-            amount
+            sole_transfer.amount
         );
 
         Ok(())
-    }
-
-    /// Set up a `TestStorage` initialized at genesis with validators of equal
-    /// power
-    fn set_up_test_storage(
-        active_validators: HashSet<Address>,
-    ) -> Storage<MockDB, Sha256Hasher> {
-        let mut storage = TestStorage::default();
-        let validator_set = ValidatorSet {
-            active: active_validators
-                .into_iter()
-                .map(|address| WeightedValidator {
-                    voting_power: 100.into(),
-                    address,
-                })
-                .collect(),
-            inactive: BTreeSet::default(),
-        };
-        let validator_sets = Epoched::init_at_genesis(validator_set, 1);
-        storage.write_validator_set(&validator_sets);
-        storage
     }
 
     #[test]
@@ -322,33 +383,29 @@ mod tests {
     /// has enough voting power behind it for it to be applied at the same time
     /// that it is recorded in storage
     fn test_apply_derived_tx_new_event_mint_immediately() {
-        let sole_validator = address::testing::established_address_2();
-        let mut storage = set_up_test_storage(HashSet::from_iter(vec![
-            sole_validator.clone(),
-        ]));
-        let receiver = address::testing::established_address_1();
+        let mut test =
+            helpers::TestSetup::with_genesis_validator_voting_powers([
+                100.into()
+            ]);
 
-        let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
-            transfers: vec![TransferToNamada {
-                amount: Amount::from(100),
-                asset: DAI_ERC20_ETH_ADDRESS,
-                receiver: receiver.clone(),
-            }],
-        };
+        let receiver = address::testing::gen_established_address();
+        let transfers =
+            vec![helpers::generate_transfer_to_namada(receiver.clone())];
 
-        let result = apply_derived_tx(
-            &mut storage,
+        let mut bridge = helpers::FakeEthereumBridge::default();
+        let event = bridge.emit_transfers_to_namada(transfers);
+
+        let tx_result = apply_derived_tx(
+            &mut test.storage,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
-                signers: BTreeSet::from([(sole_validator, BlockHeight(100))]),
+                signers: BTreeSet::from([(
+                    test.genesis_validators[0].clone(),
+                    BlockHeight(100),
+                )]),
             }],
-        );
-
-        let tx_result = match result {
-            Ok(tx_result) => tx_result,
-            Err(err) => panic!("unexpected error: {:#?}", err),
-        };
+        )
+        .unwrap_or_else(|err| panic!("Test failed: {:#?}", err));
 
         assert_eq!(
             tx_result.gas_used, 0,
@@ -358,7 +415,7 @@ mod tests {
         let dai_keys = wrapped_erc20s::Keys::from(&DAI_ERC20_ETH_ADDRESS);
         assert_eq!(
             tx_result.changed_keys,
-            BTreeSet::from_iter(vec![
+            BTreeSet::from([
                 eth_msg_keys.body(),
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
@@ -378,39 +435,36 @@ mod tests {
     /// voting power to be acted on immediately
     #[test]
     fn test_apply_derived_tx_new_event_dont_mint() {
-        let validator_a = address::testing::established_address_2();
-        let validator_b = address::testing::established_address_3();
-        let mut storage = set_up_test_storage(HashSet::from_iter(vec![
-            validator_a.clone(),
-            validator_b,
-        ]));
-        let receiver = address::testing::established_address_1();
+        let equal_voting_power = 100;
+        let mut test =
+            helpers::TestSetup::with_genesis_validator_voting_powers([
+                equal_voting_power.into(),
+                equal_voting_power.into(),
+            ]);
 
-        let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
-            transfers: vec![TransferToNamada {
-                amount: Amount::from(100),
-                asset: DAI_ERC20_ETH_ADDRESS,
-                receiver,
-            }],
-        };
+        let receiver = address::testing::gen_established_address();
+        let transfers =
+            vec![helpers::generate_transfer_to_namada(receiver.clone())];
 
-        let result = apply_derived_tx(
-            &mut storage,
+        let mut bridge = helpers::FakeEthereumBridge::default();
+        let event = bridge.emit_transfers_to_namada(transfers);
+
+        let tx_result = apply_derived_tx(
+            &mut test.storage,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
-                signers: BTreeSet::from([(validator_a, BlockHeight(100))]),
+                signers: BTreeSet::from([(
+                    test.genesis_validators[0].clone(),
+                    BlockHeight(100),
+                )]),
             }],
-        );
-        let tx_result = match result {
-            Ok(tx_result) => tx_result,
-            Err(err) => panic!("unexpected error: {:#?}", err),
-        };
+        )
+        .unwrap_or_else(|err| panic!("Test failed: {:#?}", err));
 
         let eth_msg_keys = vote_tracked::Keys::from(&event);
         assert_eq!(
             tx_result.changed_keys,
-            BTreeSet::from_iter(vec![
+            BTreeSet::from([
                 eth_msg_keys.body(),
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
