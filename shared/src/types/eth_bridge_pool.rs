@@ -61,8 +61,8 @@ pub struct PendingTransfer {
     pub gas_fee: GasFee,
 }
 
-impl Encode<7> for PendingTransfer {
-    fn tokenize(&self) -> [Token; 7] {
+impl Encode<8> for PendingTransfer {
+    fn tokenize(&self) -> [Token; 8] {
         let version = Token::Uint(1.into());
         let namespace = Token::String("transfer".into());
         let from = Token::Address(self.transfer.asset.0.into());
