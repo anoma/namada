@@ -436,6 +436,22 @@ impl EventLog {
         // update the log head
         let (head, events, diff) = {
             let mut log = self.inner.lock.write().unwrap();
+            let height_respects_log_invariant = {
+                log.head
+                    .as_ref()
+                    .map(|head| entry.block_height > head.entry.block_height)
+                    // if the log is empty, we can add whatever height
+                    // we want to the log
+                    .unwrap_or_else(|| {
+                        log.oldest_height = entry.block_height;
+                        true
+                    })
+            };
+            if !height_respects_log_invariant {
+                // drop entries whose block height is not
+                // higher than the log head's height
+                return;
+            }
             let height_diff = entry.block_height.0 - log.oldest_height.0;
             log.num_events += entry.events.len();
             log.head = Some(Arc::new(LogNode {
