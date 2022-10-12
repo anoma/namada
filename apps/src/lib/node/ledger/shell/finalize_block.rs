@@ -538,7 +538,7 @@ mod test_finalize_block {
     /// not appear in the queue of txs to be decrypted
     #[test]
     fn test_process_proposal_rejected_wrapper_tx() {
-        let (mut shell, _, _) = setup();
+        let (mut shell, _utils) = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_wrappers = vec![];
@@ -613,7 +613,7 @@ mod test_finalize_block {
     /// proposal
     #[test]
     fn test_process_proposal_rejected_decrypted_tx() {
-        let (mut shell, _, _) = setup();
+        let (mut shell, _utils) = setup();
         let keypair = gen_keypair();
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -661,7 +661,7 @@ mod test_finalize_block {
     /// but the tx result contains the appropriate error code.
     #[test]
     fn test_undecryptable_returns_error_code() {
-        let (mut shell, _, _) = setup();
+        let (mut shell, _utils) = setup();
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         let pubkey = EncryptionKey::default();
@@ -718,7 +718,7 @@ mod test_finalize_block {
     /// decrypted txs are de-queued.
     #[test]
     fn test_mixed_txs_queued_in_correct_order() {
-        let (mut shell, _, _) = setup();
+        let (mut shell, _utils) = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];
@@ -841,7 +841,7 @@ mod test_finalize_block {
     /// the correct event
     #[test]
     fn test_rejected_protocol_tx() {
-        let (mut shell, _, _) = setup();
+        let (mut shell, _utils) = setup();
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
 

@@ -1036,9 +1036,8 @@ mod test_utils {
     /// shell.
     pub(super) fn setup_at_height<H: Into<BlockHeight>>(
         height: H,
-    ) -> (TestShell, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
-        let (mut test, receiver, eth_receiver) =
-            TestShell::new_at_height(height);
+    ) -> (TestShell, TestShellUtils) {
+        let (mut test, utils) = TestShell::new_at_height(height);
         test.init_chain(RequestInitChain {
             time: Some(Timestamp {
                 seconds: 0,
@@ -1047,13 +1046,12 @@ mod test_utils {
             chain_id: ChainId::default().to_string(),
             ..Default::default()
         });
-        (test, receiver, eth_receiver)
+        (test, utils)
     }
 
     /// Same as [`setup`], but returns a shell at block height 0.
     #[inline]
-    pub(super) fn setup()
-    -> (TestShell, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
+    pub(super) fn setup() -> (TestShell, TestShellUtils) {
         setup_at_height(BlockHeight(0))
     }
 
