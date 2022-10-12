@@ -722,6 +722,36 @@ mod tests {
         assert_eq!(locked_log.oldest_height.0, 0);
     }
 
+    /// Test that we reject log entries with invalid block heights.
+    #[tokio::test]
+    async fn test_reject_invalid_heights() {
+        let (log, mut logger, sender) = new(Params::default());
+
+        let events = mock_tx_events("DEADBEEF");
+
+        sender
+            .send_new_entry(LogEntry {
+                block_height: 4.into(),
+                events: events.clone(),
+            })
+            .unwrap();
+        sender
+            .send_new_entry(LogEntry {
+                block_height: 0.into(),
+                events: events.clone(),
+            })
+            .unwrap();
+        logger.log_new_entry().await.unwrap();
+        logger.log_new_entry().await.unwrap();
+
+        // inspect log
+        let locked_log = log.inner.lock.read().unwrap();
+
+        assert!(locked_log.head.is_some());
+        assert_eq!(locked_log.num_events, 2);
+        assert_eq!(locked_log.oldest_height.0, 4);
+    }
+
     /// Test that we prune the event log once the maximum
     /// number of configured stored events has been reached.
     #[tokio::test]
