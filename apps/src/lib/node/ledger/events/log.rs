@@ -463,7 +463,12 @@ impl EventLogInnerMux {
 
 /// Receiver of new entries from a [`LogEntrySender`].
 ///
-/// Received entries are logged to an [`EventLog`].
+/// Received entries are logged to an [`EventLog`]. Only
+/// one [`LogEntrySender`] should be live per associated
+/// [`EventLog`], such that the log's invariants are kept.
+/// This is because we need log entries to be properly
+/// ordered by block height for the current pruning
+/// algorithm to work.
 #[derive(Debug)]
 pub struct Logger {
     log: EventLog,
