@@ -714,9 +714,8 @@ pub trait PosBase {
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total deltas of all validators (active and inactive).
     fn read_total_deltas(&self) -> TotalDeltas<Self::TokenChange>;
-
-    /// Read the last block's consensus vote information
-    fn read_last_block_consensus_votes(&self) -> Option<Vec<VoteInfo>>;
+    /// Read the last block proposer's namada address
+    fn read_last_block_proposer_address(&self) -> Option<Self::Address>;
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
     /// Write PoS validator's raw hash of its consensus key.
@@ -797,8 +796,8 @@ pub trait PosBase {
     fn write_validator_set(&mut self, value: &ValidatorSets<Self::Address>);
     /// Write total deltas in PoS for all validators (active and inactive)
     fn write_total_deltas(&mut self, value: &TotalDeltas<Self::TokenChange>);
-    /// Write the last block's consensus vote information
-    fn write_last_block_consensus_votes(&mut self, value: &Vec<VoteInfo>);
+    /// Write the last block proposer's namada address
+    fn write_last_block_proposer_address(&mut self, value: &Self::Address);
     /// Credit tokens to the `target` account. This should only be used at
     /// genesis.
     fn credit_tokens(
@@ -1002,13 +1001,25 @@ pub trait PosBase {
     /// products.
     fn log_block_rewards(
         &mut self,
-        current_epoch: impl Into<Epoch>,
+        epoch: impl Into<Epoch>,
         proposer_address: &Self::Address,
         votes: &Vec<VoteInfo>,
     ) -> Result<(), InflationError> {
-        let current_epoch: Epoch = current_epoch.into();
+        println!("\nInside PosBase::log_block_rewards()");
+
+        // TODO: all values collected here need to be consistent with the same
+        // block that the voting info corresponds to, which is the
+        // previous block from the current one we are in.
+
+        // The votes correspond to the last committed block (n-1 if we are
+        // finalizing block n)
+
+        // Get epoch of the previous block
+        let last_block_epoch: Epoch = epoch.into();
+
+        // let current_epoch: Epoch = current_epoch.into();
         let validator_set = self.read_validator_set();
-        let validators = validator_set.get(current_epoch).unwrap();
+        let validators = validator_set.get(last_block_epoch).unwrap();
         let pos_params = self.read_pos_params();
 
         // Get total stake of the consensus validator set
@@ -1041,7 +1052,7 @@ pub trait PosBase {
         let active_val_stake: Decimal = total_active_stake.into();
         let signing_stake: Decimal = total_signing_stake.into();
 
-        let mut rewards_calculator = PosRewardsCalculator::new(
+        let rewards_calculator = PosRewardsCalculator::new(
             pos_params.block_proposer_reward,
             pos_params.block_vote_reward,
             total_signing_stake,
@@ -1059,33 +1070,29 @@ pub trait PosBase {
             || HashMap::<Self::Address, Decimal>::new()
         );
         for validator in validators.active.iter() {
-            let mut rewards_frac: Decimal = Decimal::default();
+            let mut rewards_frac = Decimal::default();
             let stake: Decimal = validator.bonded_stake.into();
 
             // Proposer reward
             if validator.address == *proposer_address {
-                let coeff = rewards_calculator.get_proposer_coeff().unwrap();
-                rewards_frac += coeff;
+                rewards_frac += coeffs.proposer_coeff;
             }
 
             // Signer reward
             if signer_set.contains(&validator.address) {
-                let coeff = rewards_calculator.get_signer_coeff().unwrap();
                 let signing_frac = stake / signing_stake;
-                rewards_frac += coeff * signing_frac;
+                rewards_frac += coeffs.signer_coeff * signing_frac;
             }
 
             // Active validator reward
-            let active_val_coeff =
-                rewards_calculator.get_active_val_coeff().unwrap();
             let active_val_frac = stake / active_val_stake;
-            rewards_frac += active_val_coeff * active_val_frac;
+            rewards_frac += coeffs.active_val_coeff * active_val_frac;
 
             let prev_val = *validator_accumulators.get(&validator.address).unwrap_or(&Decimal::ZERO);
             validator_accumulators.insert(validator.address.clone(), prev_val + rewards_frac);
         }
 
-        // Write the updated map fo reward accumulators back to storage
+        // Write the updated map of reward accumulators back to storage
         self.write_consensus_validator_rewards_accumulator(
             &validator_accumulators,
         );
@@ -1113,7 +1120,7 @@ pub trait PosBase {
             block_height: evidence_block_height.into(),
         };
 
-        let mut deltas =
+        let mut validator_deltas =
             self.read_validator_deltas(validator).ok_or_else(|| {
                 SlashError::ValidatorHasNoTotalDeltas(validator.clone())
             })?;
@@ -1125,7 +1132,7 @@ pub trait PosBase {
             current_epoch,
             validator,
             &validator_slash,
-            &mut deltas,
+            &mut validator_deltas,
             &mut validator_set,
             &mut total_deltas,
         )?;
@@ -1134,7 +1141,7 @@ pub trait PosBase {
             .map_err(|_err| SlashError::InvalidSlashChange(slashed_change))?;
         let slashed_amount = Self::TokenAmount::from(slashed_amount);
 
-        self.write_validator_deltas(validator, &deltas);
+        self.write_validator_deltas(validator, &validator_deltas);
         self.write_validator_slash(validator, validator_slash);
         self.write_validator_set(&validator_set);
         self.write_total_deltas(&total_deltas);

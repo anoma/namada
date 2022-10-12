@@ -20,13 +20,14 @@ pub enum RewardsType {
 
 /// Holds the PD controller values that should be updated in storage
 pub struct ValsToUpdate {
-    pub locked_ratio_last: Decimal,
-    pub last_reward_rate: Decimal,
+    pub locked_ratio: Decimal,
+    pub inflation_rate: Decimal,
     pub p_gain: Decimal,
     pub d_gain: Decimal,
 }
 
 /// PD controller used to dynamically adjust the rewards rates
+#[derive(Debug, Clone)]
 pub struct RewardsController {
     locked_tokens: token::Amount,
     total_tokens: token::Amount,
@@ -103,8 +104,8 @@ impl RewardsController {
         };
 
         ValsToUpdate {
-            locked_ratio_last: locked_ratio,
-            last_reward_rate: reward_rate,
+            locked_ratio,
+            inflation_rate: reward_rate,
             p_gain: p_gain_new,
             d_gain: d_gain_new,
         }
