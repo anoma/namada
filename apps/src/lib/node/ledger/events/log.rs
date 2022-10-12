@@ -385,12 +385,10 @@ impl EventLog {
                 match predicate(n, new_total_events) {
                     ControlFlow::Continue(()) => {
                         total_events = new_total_events;
+                        oldest_height = n.entry.block_height;
                         true
                     }
-                    ControlFlow::Break(()) => {
-                        oldest_height = n.entry.block_height;
-                        false
-                    }
+                    ControlFlow::Break(()) => false,
                 }
             })
             // build vec of new log nodes, all pointing to a null next node
