@@ -672,7 +672,7 @@ where
     ) -> CommissionRates {
         let (value, _gas) =
             self.read(&validator_commission_rate_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap()).unwrap()
+        decode(value.unwrap()).unwrap()
     }
 
     fn read_validator_max_commission_rate_change(
@@ -681,26 +681,26 @@ where
     ) -> rust_decimal::Decimal {
         let (value, _gas) =
             self.read(&validator_commission_rate_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap()).unwrap()
+        decode(value.unwrap()).unwrap()
     }
 
     fn read_validator_rewards_products(
         &self,
         key: &Self::Address,
-    ) -> RewardsProducts {
+    ) -> Option<RewardsProducts> {
         let (value, _gas) =
             self.read(&validator_self_rewards_product_key(key)).unwrap();
-        decode(value.unwrap()).unwrap()
+        value.map(|value| decode(value).unwrap())
     }
 
     fn read_validator_delegation_rewards_products(
         &self,
         key: &Self::Address,
-    ) -> RewardsProducts {
+    ) -> Option<RewardsProducts> {
         let (value, _gas) = self
             .read(&validator_delegation_rewards_product_key(key))
             .unwrap();
-        decode(value.unwrap()).unwrap()
+        value.map(|value| decode(value).unwrap())
     }
 
     fn read_validator_last_known_product_epoch(
@@ -720,7 +720,7 @@ where
         let (value, _gas) = self
             .read(&consensus_validator_set_accumulator_key())
             .unwrap();
-        decode(value.unwrap()).unwrap()
+        value.map(|value| decode(value).unwrap())
     }
 
     fn read_validator_set(&self) -> ValidatorSets {
