@@ -527,13 +527,7 @@ impl Logger {
 /// A [`LogEntrySender`] always has an associated [`Logger`],
 /// which will receive log entries from the same sender and
 /// log them in the [`EventLog`].
-///
-/// Only one [`LogEntrySender`] should be live per associated
-/// [`EventLog`], such that the log's invariants are kept.
-/// This is because we need log entries to be properly
-/// ordered by block height for the current pruning
-/// algorithm to work.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LogEntrySender {
     sender: UnboundedSender<LogEntry>,
 }
