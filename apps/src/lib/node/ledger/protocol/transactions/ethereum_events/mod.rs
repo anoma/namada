@@ -175,23 +175,91 @@ where
         (vote_tracking, changed, confirmed)
     };
     tracing::debug!("Read EthMsg - {:#?}", &eth_msg_pre);
+
+    let newly_seen_by = update
+        .seen_by
+        .iter()
+        .map(|(address, _)| address)
+        .cloned()
+        .collect();
+
     Ok(calculate_updated(
         eth_msg_pre,
-        &update.seen_by,
+        &newly_seen_by,
         voting_powers,
     ))
 }
 
 /// Takes an existing [`EthMsg`] and calculates the new [`EthMsg`] based on new
 /// validators which have seen it
+// TODO: kind of pointless to accept the event and pass it straight back
+// unchanged?
 fn calculate_updated(
-    eth_msg: EthMsg,
-    _update_seen_by: &BTreeSet<(Address, BlockHeight)>,
+    eth_msg_pre: EthMsg,
+    newly_seen_by: &BTreeSet<Address>,
     _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> (EthMsg, ChangedKeys) {
-    let body = eth_msg.body; // this never changes
-    // TODO: change eth msg seen by to a BTreeSet first
-    (eth_msg, BTreeSet::default())
+    // TODO: maybe keys changed should be callers responsibility to work out?
+    let mut keys_changed = ChangedKeys::default();
+
+    let event = eth_msg_pre.body; // this never changes
+    let eth_msg_keys = Keys::from(&event);
+    let event_hash = event.hash().unwrap();
+
+    // For any event and validator, only the first vote by that validator for
+    // that event counts, later votes we encounter here can just be ignored. We
+    // can warn here when we encounter duplicate votes but these are
+    // reasonably likely to occur so this perhaps shouldn't be a warning unless
+    // it is happening a lot
+    for validator in eth_msg_pre.seen_by.intersection(newly_seen_by) {
+        tracing::warn!(
+            ?event_hash,
+            ?validator,
+            "Encountered duplicate vote for an event by a validator, ignoring"
+        );
+    }
+    let mut eth_msg_post_voting_power = eth_msg_pre.voting_power.clone();
+    let mut eth_msg_post_seen_by = eth_msg_pre.seen_by.clone();
+    for validator in newly_seen_by.difference(&eth_msg_pre.seen_by) {
+        tracing::info!(
+            ?event_hash,
+            ?validator,
+            "Recording validator as having voted for this event"
+        );
+        eth_msg_post_seen_by.insert(validator.to_owned());
+        // TODO: sum voting powers - are block heights needed at this point?
+        // TODO: they shouldn't be - we should be deduping votes within a digest
+        // earlier on and just taking the earliest one for each validator
+
+        // TODO: add the actual voting power from the _voting_powers map
+        eth_msg_post_voting_power += FractionalVotingPower::default();
+    }
+
+    let eth_msg_post_seen =
+        if eth_msg_post_voting_power > FractionalVotingPower::TWO_THIRDS {
+            tracing::info!(
+                ?event_hash,
+                "Event has been seen by a quorum of validators"
+            );
+            keys_changed.insert(eth_msg_keys.seen());
+            true
+        } else {
+            tracing::debug!(
+                ?event_hash,
+                "Event is not yet seen by a quorum of validators"
+            );
+            false
+        };
+
+    (
+        EthMsg {
+            body: event,
+            voting_power: eth_msg_post_voting_power,
+            seen_by: eth_msg_post_seen_by,
+            seen: eth_msg_post_seen,
+        },
+        keys_changed,
+    )
 }
 
 fn write_eth_msg<D, H>(
