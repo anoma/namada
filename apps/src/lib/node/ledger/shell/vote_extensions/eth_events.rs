@@ -369,8 +369,8 @@ mod test_vote_extensions {
     /// Test that ethereum events are added to vote extensions.
     /// Check that vote extensions pass verification.
     #[cfg(feature = "abcipp")]
-    #[test]
-    fn test_eth_events_vote_extension() {
+    #[tokio::test]
+    async fn test_eth_events_vote_extension() {
         let (mut shell, _, oracle) = setup();
         let address = shell
             .mode
@@ -389,8 +389,8 @@ mod test_vote_extensions {
             name: "Test".to_string(),
             address: EthAddress([0; 20]),
         };
-        oracle.send(event_1.clone()).expect("Test failed");
-        oracle.send(event_2.clone()).expect("Test failed");
+        oracle.send(event_1.clone()).await.expect("Test failed");
+        oracle.send(event_2.clone()).await.expect("Test failed");
         let vote_extension =
             <VoteExtension as BorshDeserialize>::try_from_slice(
                 &shell.extend_vote(Default::default()).vote_extension[..],
