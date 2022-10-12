@@ -21,7 +21,8 @@ use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
 pub use crate::ledger::storage::merkle_tree::{
-    MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
+    MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreRef,
+    StoreType,
 };
 use crate::ledger::storage::traits::StorageHasher;
 use crate::tendermint::merkle::proof::Proof;

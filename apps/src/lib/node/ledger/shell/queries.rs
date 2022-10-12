@@ -1,13 +1,22 @@
 //! Shell methods for querying state
 use std::cmp::max;
+use std::default::Default;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
+use namada::ledger::eth_bridge::storage::bridge_pool::{
+    get_pending_key, get_signed_root_key, BridgePoolTree,
+};
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
+use namada::ledger::storage::{StoreRef, StoreType};
 use namada::types::address::Address;
+use namada::types::eth_bridge_pool::{
+    MultiSignedMerkleRoot, PendingTransfer, RelayProof,
+};
+use namada::types::keccak::encode::Encode;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Epoch, Key, PrefixValue};
@@ -18,6 +27,7 @@ use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tendermint_proto::types::EvidenceParams;
 use crate::node::ledger::response;
+use crate::node::ledger::rpc::BridgePoolSubpath;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -84,6 +94,14 @@ where
                     self.read_storage_prefix(&storage_key, height, query.prove)
                 }
                 Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
+                Path::EthereumBridgePool(subpath) => match subpath {
+                    BridgePoolSubpath::Contents => {
+                        self.read_ethereum_bridge_pool()
+                    }
+                    BridgePoolSubpath::Proof => {
+                        self.generate_bridge_pool_proof(query.data)
+                    }
+                },
             },
             Err(err) => response::Query {
                 code: 1,
@@ -305,6 +323,129 @@ where
                 info: format!("Storage error: {}", err),
                 ..Default::default()
             },
+        }
+    }
+
+    /// Read the current contents of the Ethereum bridge
+    /// pool.
+    fn read_ethereum_bridge_pool(&self) -> response::Query {
+        if let Ok(Some(stores)) = self
+            .storage
+            .db
+            .read_merkle_tree_stores(self.storage.last_height)
+        {
+            let transfers = match stores.get_store(StoreType::BridgePool) {
+                StoreRef::BridgePool(store) => store.try_to_vec().unwrap(),
+                _ => unreachable!(),
+            };
+            response::Query {
+                code: 0,
+                value: transfers,
+                ..Default::default()
+            }
+        } else {
+            response::Query {
+                code: 1,
+                log: "Could not retrieve the Ethereum bridge pool for the \
+                      latest height"
+                    .into(),
+                info: "Could not retrieve the Ethereum bridge pool for the \
+                       latest height"
+                    .into(),
+                ..Default::default()
+            }
+        }
+    }
+
+    /// Generate a merkle proof for the inclusion of then
+    /// requested transfers in the Ethereum bridge pool.
+    fn generate_bridge_pool_proof(
+        &self,
+        request_bytes: Vec<u8>,
+    ) -> response::Query {
+        if let Ok(transfers) =
+            <Vec<PendingTransfer>>::try_from_slice(request_bytes.as_slice())
+        {
+            // get the latest signed merkle root of the Ethereum bridge pool
+            let signed_root: MultiSignedMerkleRoot =
+                match self.storage.read(&get_signed_root_key()) {
+                    Ok((Some(bytes), _)) => {
+                        BorshDeserialize::try_from_slice(bytes.as_slice())
+                            .unwrap()
+                    }
+                    _ => {
+                        return response::Query {
+                            code: 1,
+                            log: "Could not deserialize the signed Ethereum \
+                                  bridge pool merkle root"
+                                .into(),
+                            info: "Could not deserialize the signed Ethereum \
+                                   bridge pool merkle root"
+                                .into(),
+                            ..Default::default()
+                        };
+                    }
+                };
+            // get the merkle tree corresponding to the above root.
+            let tree = if let Ok(Some(stores)) =
+                self.storage.db.read_merkle_tree_stores(signed_root.height)
+            {
+                match stores.get_store(StoreType::BridgePool) {
+                    StoreRef::BridgePool(store) => {
+                        BridgePoolTree::new(store.clone())
+                    }
+                    _ => unreachable!(),
+                }
+            } else {
+                return response::Query {
+                    code: 1,
+                    log: "Could not retrieve the Ethereum bridge pool for the \
+                          latest signed root"
+                        .into(),
+                    info: "Could not retrieve the Ethereum bridge pool for \
+                           the latest signed root"
+                        .into(),
+                    ..Default::default()
+                };
+            };
+            if tree.root() != signed_root.root {
+                return response::Query {
+                    code: 1,
+                    log: "The latest signed root does not equal the root of \
+                          corresponding Merkle tree"
+                        .into(),
+                    info: "The latest signed root does not equal the root of \
+                           corresponding Merkle tree"
+                        .into(),
+                    ..Default::default()
+                };
+            }
+            // get the membership proof
+            let keys: Vec<_> = transfers.iter().map(get_pending_key).collect();
+            match tree.get_membership_proof(&keys, transfers) {
+                Ok(proof) => response::Query {
+                    code: 0,
+                    value: RelayProof {
+                        root: signed_root,
+                        proof,
+                    }
+                    .encode(),
+                    ..Default::default()
+                },
+                Err(e) => response::Query {
+                    code: 1,
+                    log: e.to_string(),
+                    info: e.to_string(),
+                    ..Default::default()
+                },
+            }
+        } else {
+            response::Query {
+                code: 1,
+                log: "Could not deserialize transfers".into(),
+                info: "Could not deserialize transfers".into(),
+                ..Default::default()
+            }
         }
     }
 }
