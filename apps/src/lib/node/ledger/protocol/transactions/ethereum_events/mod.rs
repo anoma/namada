@@ -220,8 +220,6 @@ fn calculate_new_eth_msg(
         EthMsg {
             body: update.body,
             voting_power: seen_by_voting_power,
-            // the below `.collect()` is deterministic and will result in a
-            // sorted vector as `update.seen_by` is a [`BTreeSet`]
             seen_by: update
                 .seen_by
                 .into_iter()
