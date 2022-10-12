@@ -33,6 +33,7 @@ use crate::config::{ethereum, TendermintMode};
 use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
+use crate::node::ledger::events::log;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::{
     AbcippShim, NewAbcippShimParams,
@@ -418,7 +419,7 @@ fn start_abci_broadcaster_shell(
     // event log; we will also need yet another task for the rpc
     // server itself. if we are not a validator or a full node,
     // `event_log_sender` should be `None`
-    let (event_log_sender, _event_log_receiver) = mpsc::unbounded_channel();
+    let (_, _, event_log_sender) = log::new(log::Params::default());
 
     // Start broadcaster
     let broadcaster = if matches!(

@@ -1079,7 +1079,7 @@ mod test_utils {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
         // we have to use RocksDB for this test
         let (broadcast_sender, _) = tokio::sync::mpsc::unbounded_channel();
-        let (event_log_sender, _) = tokio::sync::mpsc::unbounded_channel();
+        let (_, _, event_log_sender) = log::new(log::Params::default());
         let (_, receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
@@ -1093,7 +1093,7 @@ mod test_utils {
                 ),
                 wasm_dir: top_level_directory().join("wasm"),
                 broadcast_sender: broadcast_sender.clone(),
-                event_log_sender: Some(event_log_sender.clone()),
+                event_log_sender: Some(event_log_sender),
                 eth_receiver: Some(receiver),
                 db_cache: None,
                 vp_wasm_compilation_cache,
@@ -1147,6 +1147,7 @@ mod test_utils {
         let (_, receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         // Reboot the shell and check that the queue was restored from DB
+        let (_, _, event_log_sender) = log::new(log::Params::default());
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             NewShellParams {
                 config: config::Ledger::new(
