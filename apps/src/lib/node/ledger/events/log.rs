@@ -124,9 +124,9 @@ impl<'a> Iterator for LogNodeIter<'a> {
 /// Represents a log of [`Event`] instances emitted by
 /// `FinalizeBlock` calls, in the ledger.
 ///
-/// __INVARIANT:__ All logged events should be ordered by
-/// the shell's block height at the time of calling
-/// `FinalizeBlock`.
+/// __INVARIANT:__ All logged events should be ordered
+/// in reverse by the shell's block height at the time
+/// of calling `FinalizeBlock`.
 #[derive(Debug, Clone)]
 pub struct EventLog {
     inner: Arc<EventLogInner>,
@@ -305,7 +305,6 @@ impl EventLog {
         head: Option<Arc<LogNode>>,
         num_events: usize,
         height_diff: u64,
-        oldest_height: u64,
     ) {
         if num_events > self.inner.params.max_log_events {
             let keep_events = calc_num_of_kept_events(num_events);
@@ -318,9 +317,9 @@ impl EventLog {
             return;
         }
         if height_diff > self.inner.params.log_block_height_diff {
-            let thres = calc_num_of_kept_ents(height_diff);
-            let snapshot = if thres > 0 {
-                Some(self.prune_old_events(head, thres, oldest_height))
+            let nodes_to_keep = calc_num_of_kept_ents(height_diff);
+            let snapshot = if nodes_to_keep > 0 {
+                Some(self.prune_old_events(head, nodes_to_keep))
             } else {
                 None
             };
@@ -344,18 +343,15 @@ impl EventLog {
         })
     }
 
-    /// Prune events from the log, keeping only events whose
-    /// diff with the oldest height in the log is higher than
-    /// `threshold`.
+    /// Prune nodes and their events from the log, keeping only as many
+    /// as `nodes_to_keep`.
     fn prune_old_events(
         &self,
         head: Option<Arc<LogNode>>,
-        threshold: u64,
-        oldest_height: u64,
+        nodes_to_keep: u64,
     ) -> EventLogSnapshot {
-        self.prune_on_condition(head, |node, _| {
-            let diff = node.entry.block_height.0 - oldest_height;
-            if diff > threshold {
+        self.prune_on_condition(head, |no_nodes, _| {
+            if no_nodes <= nodes_to_keep {
                 ControlFlow::Continue(())
             } else {
                 ControlFlow::Break(())
@@ -371,10 +367,11 @@ impl EventLog {
         mut predicate: P,
     ) -> EventLogSnapshot
     where
-        P: FnMut(&LogNode, usize) -> ControlFlow<()>,
+        P: FnMut(u64, usize) -> ControlFlow<()>,
     {
         // allocate a new list, and drop
         // the old one
+        let mut total_ents = 0;
         let mut total_events = 0;
         let mut oldest_height = 0.into();
 
@@ -382,7 +379,8 @@ impl EventLog {
             // filter out events in the log
             .take_while(|n| {
                 let new_total_events = total_events + n.entry.events.len();
-                match predicate(n, new_total_events) {
+                total_ents += 1;
+                match predicate(total_ents, new_total_events) {
                     ControlFlow::Continue(()) => {
                         total_events = new_total_events;
                         oldest_height = n.entry.block_height;
@@ -426,7 +424,7 @@ impl EventLog {
         }
 
         // update the log head
-        let (head, events, diff, oldest) = {
+        let (head, events, diff) = {
             let mut log = self.inner.lock.write().unwrap();
             let height_diff = entry.block_height.0 - log.oldest_height.0;
             log.num_events += entry.events.len();
@@ -435,7 +433,7 @@ impl EventLog {
                 next: log.head.take(),
             }));
             let new_head = log.head.clone();
-            (new_head, log.num_events, height_diff, log.oldest_height.0)
+            (new_head, log.num_events, height_diff)
         };
 
         // notify all event listeners
@@ -443,7 +441,7 @@ impl EventLog {
 
         // we don't need to hold a lock to check
         // if the log needs to be pruned
-        self.prune(head, events, diff, oldest);
+        self.prune(head, events, diff);
     }
 }
 
@@ -505,7 +503,7 @@ impl Logger {
 /// A [`LogEntrySender`] always has an associated [`Logger`],
 /// which will receive log entries from the same sender and
 /// log them in the [`EventLog`].
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct LogEntrySender {
     sender: UnboundedSender<LogEntry>,
 }
