@@ -874,7 +874,13 @@ mod test_finalize_block {
     /// on-chain, it dequeues from the list of events to vote on.
     #[test]
     fn test_eth_events_dequeued() {
-        let (mut shell, _, oracle) = setup();
+        let (
+            mut shell,
+            TestShellUtils {
+                eth_oracle_sender: oracle,
+                ..
+            },
+        ) = setup();
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let address = shell

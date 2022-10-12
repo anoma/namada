@@ -322,7 +322,13 @@ mod test_vote_extensions {
     /// done
     #[test]
     fn test_get_eth_events() {
-        let (mut shell, _, oracle) = setup();
+        let (
+            mut shell,
+            TestShellUtils {
+                eth_oracle_sender: oracle,
+                ..
+            },
+        ) = setup();
         let event_1 = EthereumEvent::TransfersToEthereum {
             nonce: 1.into(),
             transfers: vec![TransferToEthereum {
