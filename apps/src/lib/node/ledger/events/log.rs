@@ -208,20 +208,21 @@ impl EventLogSnapshot {
     ) -> Result<EventLogIter<'n, 'q>, Error> {
         let matcher = dumb_queries::QueryMatcher::parse(query)
             .ok_or(Error::InvalidQuery)?;
-        self.iter_with_matcher(matcher)
+        Ok(self.iter_with_matcher(matcher))
     }
 
     /// Just like [`EventLogSnapshot::try_iter`], but uses a pre-compiled
     /// query matcher.
+    #[inline]
     pub fn iter_with_matcher<'n, 'q>(
         &'n self,
         matcher: dumb_queries::QueryMatcher<'q>,
-    ) -> Result<EventLogIter<'n, 'q>, Error> {
-        Ok(EventLogIter {
+    ) -> EventLogIter<'n, 'q> {
+        EventLogIter {
             index: 0,
             query: matcher,
             node: Some(&self.head),
-        })
+        }
     }
 }
 
