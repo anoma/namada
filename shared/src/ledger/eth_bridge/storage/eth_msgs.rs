@@ -40,7 +40,7 @@ impl Keys {
             .expect("should always be able to construct this key")
     }
 
-    /// Get the `seen_by` key - there should be a [`BTreeSet<Address>`] stored
+    /// Get the `seen_by` key - there should be a `BTreeSet<Address>` stored
     /// here.
     pub fn seen_by(&self) -> Key {
         self.prefix
