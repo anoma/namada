@@ -174,16 +174,38 @@ where
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
         (vote_tracking, changed, confirmed)
     };
-    let eth_msg_post = EthMsg {
-        body: update.body,
-        vote_tracking,
-    };
-    tracing::debug!("writing EthMsg - {:#?}", &eth_msg_post);
-    write(
-        storage,
-        &eth_msg_keys,
-        &eth_msg_post.body,
-        &eth_msg_post.vote_tracking,
+    tracing::debug!("Read EthMsg - {:#?}", &eth_msg_pre);
+    Ok(calculate_diff(eth_msg_pre, &update.seen_by, voting_powers))
+}
+
+fn calculate_diff(
+    eth_msg: EthMsg,
+    _update_seen_by: &BTreeSet<(Address, BlockHeight)>,
+    _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+) -> (EthMsg, ChangedKeys) {
+    tracing::warn!(
+        "Updating Ethereum events is not yet implemented, so this Ethereum \
+         event won't change"
+    );
+    (eth_msg, BTreeSet::default())
+}
+
+fn write_eth_msg<D, H>(
+    storage: &mut Storage<D, H>,
+    eth_msg_keys: &Keys,
+    eth_msg: &EthMsg,
+) -> Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    tracing::debug!("writing EthMsg - {:#?}", eth_msg);
+    storage.write(&eth_msg_keys.body(), &eth_msg.body.try_to_vec()?)?;
+    storage.write(&eth_msg_keys.seen(), &eth_msg.seen.try_to_vec()?)?;
+    storage.write(&eth_msg_keys.seen_by(), &eth_msg.seen_by.try_to_vec()?)?;
+    storage.write(
+        &eth_msg_keys.voting_power(),
+        &eth_msg.voting_power.try_to_vec()?,
     )?;
     Ok((changed, confirmed))
 }
