@@ -42,7 +42,7 @@ const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
 const BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY: &str = "below_capacity";
 const BELOW_THRESHOLD_VALIDATOR_SET_STORAGE_KEY: &str = "below_threshold";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
-const LAST_CONSENSUS_VOTES_STORAGE_KEY: &str = "last_consensus_votes";
+const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -563,18 +563,18 @@ pub fn is_total_deltas_key(key: &Key) -> bool {
     }
 }
 
-/// Storage key for consensus votes of the previous block.
-pub fn last_consensus_votes_key() -> Key {
+/// Storage key for block proposer address of the previous block.
+pub fn last_block_proposer_key() -> Key {
     Key::from(ADDRESS.to_db_key())
-        .push(&LAST_CONSENSUS_VOTES_STORAGE_KEY.to_owned())
+        .push(&LAST_BLOCK_PROPOSER_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for consensus votes of the previous block?
-pub fn is_last_consensus_votes_key(key: &Key) -> bool {
+/// Is storage key for block proposer address of the previous block?
+pub fn is_last_block_proposer_key(key: &Key) -> bool {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if addr == &ADDRESS && key == LAST_CONSENSUS_VOTES_STORAGE_KEY =>
+            if addr == &ADDRESS && key == LAST_BLOCK_PROPOSER_STORAGE_KEY =>
         {
             true
         }
@@ -654,8 +654,8 @@ where
         value.map(|value| decode(value).unwrap())
     }
 
-    fn read_last_block_consensus_votes(&self) -> Option<Vec<VoteInfo>> {
-        let (value, _gas) = self.read(&last_consensus_votes_key()).unwrap();
+    fn read_last_block_proposer_address(&self) -> Option<Self::Address> {
+        let (value, _gas) = self.read(&last_block_proposer_key()).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
@@ -856,8 +856,8 @@ where
         self.write(&total_deltas_key(), encode(value)).unwrap();
     }
 
-    fn write_last_block_consensus_votes(&mut self, value: &Vec<VoteInfo>) {
-        self.write(&last_consensus_votes_key(), encode(value))
+    fn write_last_block_proposer_address(&mut self, value: &Self::Address) {
+        self.write(&last_block_proposer_key(), encode(value))
             .unwrap();
     }
 
