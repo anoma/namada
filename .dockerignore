@@ -1,0 +1,9 @@
+target
+.changelog
+.github
+.vscode
+audit
+test
+wasm_for_tests
+genesis
+docker

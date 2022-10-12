@@ -31,15 +31,6 @@ check-release:
 package: build-release
 	scripts/make-package.sh
 
-build-release-image-docker:
-	docker build -t namada-build - < docker/namada-build/Dockerfile
-
-build-release-docker: build-release-image-docker
-	docker run --rm -v ${PWD}:/var/build namada-build make build-release
-
-package-docker: build-release-image-docker
-	docker run --rm -v ${PWD}:/var/build namada-build make package
-
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
 	$(cargo) check && \

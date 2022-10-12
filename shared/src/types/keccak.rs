@@ -28,6 +28,7 @@ pub enum TryFromError {
     Debug,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshSerialize,

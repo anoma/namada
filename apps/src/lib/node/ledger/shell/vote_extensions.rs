@@ -26,12 +26,10 @@ const VALIDATOR_EXPECT_MSG: &str = "Only validators receive this method call.";
 pub enum VoteExtensionError {
     #[error("The vote extension was issued at block height 0.")]
     IssuedAtGenesis,
-    #[cfg(feature = "abcipp")]
-    #[error(
-        "The vote extension has an unexpected sequence number (e.g. block \
-         height)."
-    )]
-    UnexpectedSequenceNumber,
+    #[error("The vote extension was issued for an unexpected block height.")]
+    UnexpectedBlockHeight,
+    #[error("The vote extension was issued for an unexpected epoch.")]
+    UnexpectedEpoch,
     #[error(
         "The vote extension contains duplicate or non-sorted Ethereum events."
     )]
@@ -95,10 +93,21 @@ where
             .to_owned();
 
         let ext = ethereum_events::Vext {
+            #[cfg(feature = "abcipp")]
             block_height: self.storage.get_current_decision_height(),
+            #[cfg(not(feature = "abcipp"))]
+            block_height: self.storage.last_height,
             ethereum_events: self.new_ethereum_events(),
             validator_addr,
         };
+        if !ext.ethereum_events.is_empty() {
+            tracing::info!(
+                new_ethereum_events.len = ext.ethereum_events.len(),
+                ?ext.block_height,
+                "Voting for new Ethereum events"
+            );
+            tracing::debug!("New Ethereum events - {:#?}", ext.ethereum_events);
+        }
 
         let protocol_key = match &self.mode {
             ShellMode::Validator { data, .. } => &data.keys.protocol_keypair,
@@ -134,7 +143,10 @@ where
                 let ext = validator_set_update::Vext {
                     validator_addr,
                     voting_powers,
+                    #[cfg(feature = "abcipp")]
                     block_height: self.storage.get_current_decision_height(),
+                    #[cfg(not(feature = "abcipp"))]
+                    block_height: self.storage.last_height,
                 };
 
                 let eth_key = match &self.mode {
@@ -282,7 +294,7 @@ pub fn deserialize_vote_extensions(
     })
 }
 
-/// Given a `Vec` of [`ExtendedVoteInfo`], return an iterator over the
+/// Given a slice of [`TxBytes`], return an iterator over the
 /// ones we could deserialize to [`VoteExtension`]
 /// instances.
 #[cfg(not(feature = "abcipp"))]

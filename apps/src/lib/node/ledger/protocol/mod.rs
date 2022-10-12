@@ -1,4 +1,6 @@
 //! The ledger's protocol
+mod transactions;
+
 use std::collections::BTreeSet;
 use std::panic;
 
@@ -18,6 +20,7 @@ use namada::types::address::{Address, InternalAddress};
 use namada::types::storage;
 use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
+#[cfg(not(feature = "abcipp"))]
 use namada::types::vote_extensions::ethereum_events;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{self, wasm, WasmCacheAccess};
@@ -34,6 +37,8 @@ pub enum Error {
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
+    #[error(transparent)]
+    ProtocolTxError(#[from] eyre::Error),
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
     #[error("Gas error: {0}")]
@@ -202,12 +207,10 @@ where
 /// is updated natively rather than via the wasm environment, so gas does not
 /// need to be metered and validity predicates are bypassed. A [`TxResult`]
 /// containing changed keys and the like should be returned in the normal way.
-pub(crate) fn apply_protocol_tx<'a, D, H>(
+#[cfg(not(feature = "abcipp"))]
+pub(crate) fn apply_protocol_tx<D, H>(
     tx: ProtocolTxType,
-    // TODO: eventually this `storage` parameter could be tightened further to
-    // an impl trait of only the subset of [`Storage`] functionality that we
-    // need
-    _storage: &'a mut Storage<D, H>,
+    storage: &mut Storage<D, H>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -217,13 +220,41 @@ where
         ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
             events,
             ..
-        }) => {
-            if !events.is_empty() {
-                tracing::debug!(n = events.len(), "Ethereum events received");
-            }
+        }) => self::transactions::ethereum_events::apply_derived_tx(
+            storage, events,
+        )
+        .map_err(Error::ProtocolTxError),
+        ProtocolTxType::ValidatorSetUpdate(_) => Ok(TxResult::default()),
+        _ => {
+            tracing::error!(
+                "Attempt made to apply an unsupported protocol transaction! - \
+                 {:#?}",
+                tx
+            );
+            Err(Error::TxTypeError)
+        }
+    }
+}
+
+#[cfg(feature = "abcipp")]
+pub(crate) fn apply_protocol_tx<D, H>(
+    tx: ProtocolTxType,
+    _storage: &mut Storage<D, H>,
+) -> Result<TxResult>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    match tx {
+        ProtocolTxType::EthereumEvents(_)
+        | ProtocolTxType::ValidatorSetUpdate(_) => {
+            // TODO(namada#198): implement this
+            tracing::warn!(
+                "Attempt made to apply an unimplemented protocol transaction, \
+                 no actions will be taken"
+            );
             Ok(TxResult::default())
         }
-        ProtocolTxType::ValidatorSetUpdate(_) => Ok(TxResult::default()),
         _ => {
             tracing::error!(
                 "Attempt made to apply an unsupported protocol transaction! - \

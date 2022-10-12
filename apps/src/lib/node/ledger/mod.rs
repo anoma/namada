@@ -44,6 +44,10 @@ const ENV_VAR_TOKIO_THREADS: &str = "ANOMA_TOKIO_THREADS";
 /// Env. var to set a number of Rayon global worker threads
 const ENV_VAR_RAYON_THREADS: &str = "ANOMA_RAYON_THREADS";
 
+/// The maximum number of Ethereum events the channel between
+/// the oracle and the shell can hold.
+const ORACLE_CHANNEL_BUFFER_SIZE: usize = 1000;
+
 // Until ABCI++ is ready, the shim provides the service implementation.
 // We will add this part back in once the shim is no longer needed.
 //```
@@ -384,7 +388,7 @@ async fn run_aux_setup(
 /// a new OS thread, to drive the ABCI server.
 fn start_abci_broadcaster_shell(
     spawner: &mut AbortableSpawner,
-    eth_receiver: Option<mpsc::UnboundedReceiver<EthereumEvent>>,
+    eth_receiver: Option<mpsc::Receiver<EthereumEvent>>,
     wasm_dir: PathBuf,
     setup_data: RunAuxSetup,
     config: config::Ledger,
@@ -610,7 +614,7 @@ async fn start_ethereum_node(
     config: &config::Ledger,
 ) -> (
     task::JoinHandle<shell::Result<()>>,
-    Option<mpsc::UnboundedReceiver<EthereumEvent>>,
+    Option<mpsc::Receiver<EthereumEvent>>,
     task::JoinHandle<()>,
 ) {
     if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
@@ -660,15 +664,20 @@ async fn start_ethereum_node(
         });
 
     // Start the oracle for listening to Ethereum events
-    let (eth_sender, eth_receiver) = mpsc::unbounded_channel();
+    let (eth_sender, eth_receiver) = mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
     let oracle = match config.ethereum.mode {
-        ethereum::Mode::Managed => ethereum_node::oracle::run_oracle(
-            ethereum_url,
-            eth_sender,
-            abort_sender,
-        ),
+        ethereum::Mode::Managed | ethereum::Mode::Remote => {
+            ethereum_node::oracle::run_oracle(
+                ethereum_url,
+                eth_sender,
+                abort_sender,
+            )
+        }
         ethereum::Mode::EventsEndpoint => {
-            ethereum_node::test_tools::event_endpoint::start_oracle(eth_sender)
+            ethereum_node::test_tools::events_endpoint::serve(
+                eth_sender,
+                abort_sender,
+            )
         }
         ethereum::Mode::Off => {
             ethereum_node::test_tools::mock_oracle::run_oracle(

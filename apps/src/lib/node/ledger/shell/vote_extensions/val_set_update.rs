@@ -8,6 +8,7 @@ use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::validator_set_update;
+#[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
@@ -19,17 +20,18 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    /// Validates a validator set update vote extension issued for the new
-    /// epoch provided as an argument
+    /// Validates a validator set update vote extension issued for the
+    /// succeeding epoch of the block height provided as an argument.
     ///
     /// Checks that:
-    ///  * The signing validator was active at the preceding epoch
-    ///  * The validator correctly signed the extension
-    ///  * The validator signed over the block height inside of the extension
+    ///  * The signing validator was active at the preceding epoch.
+    ///  * The validator correctly signed the extension, with its Ethereum hot
+    ///    key.
+    ///  * The validator signed over the block height inside of the extension.
     ///  * The voting powers in the vote extension correspond to the voting
-    ///    powers of the validators of the new epoch
+    ///    powers of the validators of the new epoch.
     ///  * The voting powers are normalized to `2^32`, and sorted in descending
-    ///    order
+    ///    order.
     #[inline]
     #[allow(dead_code)]
     pub fn validate_valset_upd_vext(
@@ -54,26 +56,49 @@ where
     > {
         #[cfg(feature = "abcipp")]
         if ext.data.block_height != last_height {
-            let ext_height = ext.data.block_height;
             tracing::error!(
+                ext_height = ?ext.data.block_height,
+                ?last_height,
                 "Validator set update vote extension issued for a block \
-                 height {ext_height} different from the expected height \
-                 {last_height}"
+                 height different from the expected last height.",
             );
-            return Err(VoteExtensionError::UnexpectedSequenceNumber);
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
+        }
+        #[cfg(not(feature = "abcipp"))]
+        if ext.data.block_height > last_height {
+            tracing::error!(
+                ext_height = ?ext.data.block_height,
+                ?last_height,
+                "Validator set update vote extension issued for a block \
+                 height higher than the chain's last height.",
+            );
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
         if last_height.0 == 0 {
             tracing::error!("Dropping vote extension issued at genesis");
             return Err(VoteExtensionError::IssuedAtGenesis);
         }
+        // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
+        // `last_height` here, instead of `ext.data.block_height`
+        let ext_height_epoch = match self
+            .storage
+            .get_epoch(ext.data.block_height)
+        {
+            Some(epoch) => epoch,
+            _ => {
+                tracing::error!(
+                    block_height = ?ext.data.block_height,
+                    "The epoch of the validator set update vote extension's \
+                     block height should always be known",
+                );
+                return Err(VoteExtensionError::UnexpectedEpoch);
+            }
+        };
         // verify if the voting powers in storage match the voting powers in the
         // vote extensions
-        let last_height_epoch = self.storage.get_epoch(last_height).expect(
-            "The epoch of the last block height should always be known",
-        );
-        let next_epoch = last_height_epoch.next();
-        for (eth_addr_book, namada_addr, namada_power) in
-            self.storage.get_active_eth_addresses(Some(next_epoch))
+        for (eth_addr_book, namada_addr, namada_power) in self
+            .storage
+            .get_active_eth_addresses(Some(ext_height_epoch))
         {
             let &ext_power = match ext.data.voting_powers.get(&eth_addr_book) {
                 Some(voting_power) => voting_power,
@@ -102,7 +127,7 @@ where
         let validator = &ext.data.validator_addr;
         let (voting_power, _) = self
             .storage
-            .get_validator_from_address(validator, Some(last_height_epoch))
+            .get_validator_from_address(validator, Some(ext_height_epoch))
             .map_err(|err| {
                 tracing::error!(
                     ?err,
@@ -117,7 +142,7 @@ where
             .read_validator_eth_hot_key(validator)
             .expect("We should have this hot key in storage");
         let pk = epoched_pk
-            .get(last_height_epoch)
+            .get(ext_height_epoch)
             .expect("We should have the hot key of the given epoch");
         // verify the signature of the vote extension
         ext.verify(pk)
@@ -182,19 +207,22 @@ where
             return None;
         }
 
+        #[cfg(feature = "abcipp")]
         let vexts_epoch =
             self.storage.get_epoch(self.storage.last_height).expect(
                 "The epoch of the last block height should always be known",
             );
 
+        #[cfg(feature = "abcipp")]
         let total_voting_power =
             u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
+        #[cfg(feature = "abcipp")]
         let mut voting_power = FractionalVotingPower::default();
 
         let mut voting_powers = None;
         let mut signatures = HashMap::new();
 
-        for (validator_voting_power, mut vote_extension) in
+        for (_validator_voting_power, mut vote_extension) in
             self.filter_invalid_valset_upd_vexts(vote_extensions)
         {
             if voting_powers.is_none() {
@@ -208,15 +236,18 @@ where
             let block_height = vote_extension.data.block_height;
 
             // update voting power
-            let validator_voting_power = u64::from(validator_voting_power);
-            voting_power += FractionalVotingPower::new(
-                validator_voting_power,
-                total_voting_power,
-            )
-            .expect(
-                "The voting power we obtain from storage should always be \
-                 valid",
-            );
+            #[cfg(feature = "abcipp")]
+            {
+                let validator_voting_power = u64::from(_validator_voting_power);
+                voting_power += FractionalVotingPower::new(
+                    validator_voting_power,
+                    total_voting_power,
+                )
+                .expect(
+                    "The voting power we obtain from storage should always be \
+                     valid",
+                );
+            }
 
             // register the signature of `validator_addr`
             let addr = validator_addr.clone();
@@ -350,7 +381,7 @@ mod test_vote_extensions {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            assert!(shell.validate_valset_upd_vext(
+            assert!(!shell.validate_valset_upd_vext(
                 validator_set_update.unwrap(),
                 shell.storage.get_current_decision_height()
             ))
@@ -496,9 +527,6 @@ mod test_vote_extensions {
 
     /// Test if a [`validator_set_update::Vext`] with an incorrect signature
     /// is rejected
-    // TODO:
-    // - sign with secp key
-    // - add validator voting powers from storage
     #[test]
     fn test_reject_bad_signatures() {
         let (shell, _recv, _) = test_utils::setup();
