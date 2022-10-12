@@ -381,9 +381,12 @@ impl EventLog {
         let head = LogNode::iter(head.as_ref())
             // filter out events in the log
             .take_while(|n| {
-                total_events += n.entry.events.len();
-                match predicate(n, total_events) {
-                    ControlFlow::Continue(()) => true,
+                let new_total_events = total_events + n.entry.events.len();
+                match predicate(n, new_total_events) {
+                    ControlFlow::Continue(()) => {
+                        total_events = new_total_events;
+                        true
+                    }
                     ControlFlow::Break(()) => {
                         oldest_height = n.entry.block_height;
                         false
