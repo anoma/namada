@@ -134,8 +134,8 @@ pub struct EventLog {
 
 /// Contains a snapshot of the state of the [`EventLog`]
 /// at some fixed point in time.
-#[derive(Debug)]
-struct EventLogSnapshot {
+#[derive(Debug, Clone)]
+pub struct EventLogSnapshot {
     oldest_height: BlockHeight,
     num_events: usize,
     head: Arc<LogNode>,
@@ -168,24 +168,16 @@ struct EventLogInnerMux {
 
 /// Represents an iterator over the [`Event`] instances in the
 /// event log, matching a given Tendermint-like query.
-// TODO: explore a way to remove cloning an Arc at each
-// iteration step, which is a bit expensive  (it usually
-// involves two atomic ops - incrementing the ref of the next
-// ptr, and decrementing the ref of the current ptr)
-//
-// this can probably be done with some pinning hacks, e.g.:
-// - <https://doc.rust-lang.org/std/pin/index.html>
-// - <https://doc.rust-lang.org/std/marker/struct.PhantomPinned.html>
-pub struct EventLogIter<'a> {
+pub struct EventLogIter<'n, 'q> {
     /// The current index pointing at the events in the `node` field.
     index: usize,
     /// A query to filter out events.
-    query: dumb_queries::QueryMatcher<'a>,
+    query: dumb_queries::QueryMatcher<'q>,
     /// A pointer to one of the event log's entries.
-    node: Option<Arc<LogNode>>,
+    node: Option<&'n Arc<LogNode>>,
 }
 
-impl<'a> Iterator for EventLogIter<'a> {
+impl<'n, 'q> Iterator for EventLogIter<'n, 'q> {
     type Item = Event;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -200,17 +192,43 @@ impl<'a> Iterator for EventLogIter<'a> {
                 }
                 None => {
                     self.index = 0;
-                    self.node = node.next.clone();
+                    self.node = node.next.as_ref();
                 }
             }
         })
     }
 }
 
-/// Error returned by calling [`EventLog`] iteration methods.
+impl EventLogSnapshot {
+    /// Returns a new iterator over this [`EventLogSnapshot`], if the
+    /// given `query` is valid.
+    pub fn try_iter<'n, 'q>(
+        &'n self,
+        query: &'q str,
+    ) -> Result<EventLogIter<'n, 'q>, Error> {
+        let matcher = dumb_queries::QueryMatcher::parse(query)
+            .ok_or(Error::InvalidQuery)?;
+        self.iter_with_matcher(matcher)
+    }
+
+    /// Just like [`EventLogSnapshot::try_iter`], but uses a pre-compiled
+    /// query matcher.
+    pub fn iter_with_matcher<'n, 'q>(
+        &'n self,
+        matcher: dumb_queries::QueryMatcher<'q>,
+    ) -> Result<EventLogIter<'n, 'q>, Error> {
+        Ok(EventLogIter {
+            index: 0,
+            query: matcher,
+            node: Some(&self.head),
+        })
+    }
+}
+
+/// Errors specific to [`EventLog`] operations.
 #[derive(Debug)]
-pub enum IterError {
-    /// We failed to parse a query passed as argument.
+pub enum Error {
+    /// We failed to parse a Tendermint query.
     InvalidQuery,
     /// The event log has no entries.
     EmptyLog,
@@ -219,52 +237,33 @@ pub enum IterError {
 }
 
 impl EventLog {
-    /// Returns a new iterator over this [`EventLog`], if the
-    /// given `query` is valid and there are events present in
-    /// the [`EventLog`].
-    pub fn try_iter<'a>(
-        &self,
-        query: &'a str,
-    ) -> Result<EventLogIter<'a>, IterError> {
-        let matcher = dumb_queries::QueryMatcher::parse(query)
-            .ok_or(IterError::InvalidQuery)?;
-        self.try_iter_with_matcher(matcher)
-    }
-
-    /// Just like [`EventLog::try_iter`], but uses a pre-compiled query matcher.
-    pub fn try_iter_with_matcher<'a>(
-        &self,
-        matcher: dumb_queries::QueryMatcher<'a>,
-    ) -> Result<EventLogIter<'a>, IterError> {
-        let snapshot =
-            block_in_place!(self.snapshot()).ok_or(IterError::EmptyLog)?;
-        Ok(EventLogIter {
-            index: 0,
-            query: matcher,
-            node: Some(snapshot.head),
-        })
+    /// Snapshot the current state of the event log, and return it.
+    pub fn snapshot(&self) -> Result<EventLogSnapshot, Error> {
+        let log = block_in_place!(self.inner.lock.read()).unwrap();
+        log.head
+            .clone()
+            .map(|head| EventLogSnapshot {
+                head,
+                num_events: log.num_events,
+                oldest_height: log.oldest_height,
+            })
+            .ok_or(Error::EmptyLog)
     }
 
     /// Waits up to `deadline` for new events, and if it succeeds,
-    /// returns an iterator over these events.
+    /// returns a new snapshot of the log.
     ///
-    /// If we time out, we try to return any existing events in the log.
-    pub async fn wait_iter<'a>(
+    /// If we time out, we try to return a snapshot one more time.
+    pub async fn wait_snapshot(
         &self,
         deadline: Instant,
-        query: &'a str,
-    ) -> Result<EventLogIter<'a>, IterError> {
-        let matcher = dumb_queries::QueryMatcher::parse(query)
-            .ok_or(IterError::InvalidQuery)?;
-        let m = matcher.clone();
+    ) -> Result<EventLogSnapshot, Error> {
         tokio::time::timeout_at(deadline, async move {
             loop {
                 self.inner.notifier.listen().await;
 
-                match self.try_iter_with_matcher(m.clone()) {
-                    Ok(iter) => break Ok(iter),
-                    Err(IterError::EmptyLog) => continue,
-                    err => break err,
+                if let Ok(snapshot) = self.snapshot() {
+                    break snapshot;
                 }
             }
         })
@@ -272,9 +271,10 @@ impl EventLog {
         .map_or_else(
             // we timed out from `tokio::time::timeout_at`;
             // let's try to fetch events one more time...
-            |_| self.try_iter_with_matcher(matcher),
-            // we did not time out; return whatever result we got
-            |result| result,
+            |_| self.snapshot(),
+            // we did not time out; return the snapshot
+            // of the log
+            Ok,
         )
     }
 
@@ -438,16 +438,6 @@ impl EventLog {
         // if the log needs to be pruned
         self.prune(head, events, diff, oldest);
     }
-
-    /// Snapshot the current state of the event log, and return it.
-    fn snapshot(&self) -> Option<EventLogSnapshot> {
-        let log = self.inner.lock.read().unwrap();
-        log.head.clone().map(|head| EventLogSnapshot {
-            head,
-            num_events: log.num_events,
-            oldest_height: log.oldest_height,
-        })
-    }
 }
 
 impl EventLogInnerMux {
@@ -596,6 +586,8 @@ mod tests {
 
         // inspect log
         let events_in_log: Vec<_> = log
+            .snapshot()
+            .unwrap()
             .try_iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
             .unwrap()
             .collect();
@@ -641,6 +633,8 @@ mod tests {
 
             handles.push(std::thread::spawn(move || {
                 let events_in_log: Vec<_> = log
+                    .snapshot()
+                    .unwrap()
                     .try_iter(
                         "tm.event='NewBlock' AND accepted.hash='DEADBEEF'",
                     )
