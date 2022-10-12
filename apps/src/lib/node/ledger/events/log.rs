@@ -258,8 +258,6 @@ impl EventLog {
 
     /// Waits up to `deadline` for new events, and if it succeeds,
     /// returns a new snapshot of the log.
-    ///
-    /// If we time out, we try to return a snapshot one more time.
     pub async fn wait_snapshot(
         &self,
         deadline: Instant,
@@ -275,9 +273,8 @@ impl EventLog {
         })
         .await
         .map_or_else(
-            // we timed out from `tokio::time::timeout_at`;
-            // let's try to fetch events one more time...
-            |_| self.snapshot(),
+            // we timed out from `tokio::time::timeout_at`
+            |_| Err(Error::Timeout),
             // we did not time out; return the snapshot
             // of the log
             Ok,
