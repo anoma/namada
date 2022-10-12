@@ -68,7 +68,11 @@ impl keccak::encode::Encode for PendingTransfer {
 
 impl From<&PendingTransfer> for Key {
     fn from(transfer: &PendingTransfer) -> Self {
-        Key{segments: vec![DbKeySeg::StringSeg(transfer.keccak256().to_string())]}
+        Key {
+            segments: vec![DbKeySeg::StringSeg(
+                transfer.keccak256().to_string(),
+            )],
+        }
     }
 }
 

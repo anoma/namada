@@ -17,7 +17,9 @@ use thiserror::Error;
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
 use super::IBC_KEY_LIMIT;
 use crate::bytes::ByteBuf;
-use crate::ledger::eth_bridge::storage::bridge_pool::{BridgePoolTree, get_signed_root_key};
+use crate::ledger::eth_bridge::storage::bridge_pool::{
+    get_signed_root_key, BridgePoolTree,
+};
 use crate::ledger::storage::ics23_specs::ibc_leaf_spec;
 use crate::ledger::storage::{ics23_specs, types};
 use crate::types::address::{Address, InternalAddress};
@@ -717,7 +719,8 @@ mod test {
                 std::array::from_ref(&ibc_key),
                 vec![ibc_val.clone().into()],
             )
-            .unwrap(){
+            .unwrap()
+        {
             MembershipProof::ICS23(proof) => proof,
             _ => panic!("Test failed"),
         };
@@ -770,11 +773,12 @@ mod test {
         tree.update(&pos_key, pos_val.clone()).unwrap();
 
         let specs = proof_specs::<Sha256Hasher>();
-        let proof = match tree.get_sub_tree_existence_proof(
-            std::array::from_ref(&pos_key),
-            vec![pos_val.clone().into()],
-        )
-        .unwrap()
+        let proof = match tree
+            .get_sub_tree_existence_proof(
+                std::array::from_ref(&pos_key),
+                vec![pos_val.clone().into()],
+            )
+            .unwrap()
         {
             MembershipProof::ICS23(proof) => proof,
             _ => panic!("Test failed"),
