@@ -238,6 +238,11 @@ pub enum Error {
 
 impl EventLog {
     /// Snapshot the current state of the event log, and return it.
+    /// This operation may fail if the event log has no entries.
+    ///
+    /// For as long as the caller holds an instance of an
+    /// [`EventLogSnapshot`], the state of the [`EventLog`]
+    /// at the time of calling this method can be accessed.
     pub fn snapshot(&self) -> Result<EventLogSnapshot, Error> {
         let log = block_in_place!(self.inner.lock.read()).unwrap();
         log.head
