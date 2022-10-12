@@ -327,7 +327,7 @@ impl EventLog {
         }
     }
 
-    /// Prune events from the log, keeping as many as `max_events`
+    /// Prune events from the log, keeping at most `max_events + excess`
     /// of the most recent events.
     fn prune_too_many_events(
         &self,
@@ -378,7 +378,7 @@ impl EventLog {
         let mut oldest_height = 0.into();
 
         let head = LogNode::iter(head.as_ref())
-            // filter out excess events in the log
+            // filter out events in the log
             .take_while(|n| {
                 total_events += n.entry.events.len();
                 match predicate(n, total_events) {
