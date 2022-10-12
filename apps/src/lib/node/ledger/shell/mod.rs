@@ -832,6 +832,7 @@ mod test_utils {
         RequestInitChain, RequestProcessProposal,
     };
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+    use crate::node::ledger::events::log;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
@@ -910,25 +911,30 @@ mod test_utils {
         pub txs: Vec<Vec<u8>>,
     }
 
+    /// Contains testing utils, that interact with the [`TestShell`].
+    pub struct TestShellUtils {
+        /// Receives protocol txs broadcasted with [`Shell::broadcast`].
+        pub broadcast_receiver: UnboundedReceiver<Vec<u8>>,
+        /// Allows the [`TestShell`] to mock new Ethereum events.
+        pub eth_oracle_sender: Sender<EthereumEvent>,
+        /// Stores events emitted by `FinalizeBlock` calls in the ledger.
+        pub event_log: log::EventLog,
+        /// Logs events emitted by `FinalizeBlock` calls in the shell to
+        /// the [`EventLog`].
+        pub event_logger: log::Logger,
+    }
+
     impl TestShell {
-        /// Returns a new test shell, and a number of channels to mock
-        /// shell sub-processes.
-        ///
-        /// The returned channels include:
-        ///
-        ///    - A channel which will receive any protocol txs sent by the shell
-        ///      via the [`Shell::broadcast`] method.
-        ///    - A channel that can send Ethereum events into the ledger,
-        ///      mocking the Ethereum fullnode process.
+        /// Returns a new test shell, and some [`TestShellUtils`].
         pub fn new_at_height<H: Into<BlockHeight>>(
             height: H,
-        ) -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
+        ) -> (Self, TestShellUtils) {
             let (broadcast_sender, broadcast_receiver) =
                 tokio::sync::mpsc::unbounded_channel();
-            // TODO: return the `event_log_receiver` from this func
-            let (event_log_sender, _event_log_receiver) =
-                tokio::sync::mpsc::unbounded_channel();
-            let (eth_sender, eth_receiver) =
+            // TODO: config log params
+            let (event_log, event_logger, event_log_sender) =
+                log::new(log::Params::default());
+            let (eth_oracle_sender, eth_receiver) =
                 tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
@@ -949,14 +955,19 @@ mod test_utils {
                     tx_wasm_compilation_cache,
                 });
             shell.storage.last_height = height.into();
-            (Self { shell }, broadcast_receiver, eth_sender)
+            let utils = TestShellUtils {
+                broadcast_receiver,
+                eth_oracle_sender,
+                event_logger,
+                event_log,
+            };
+            (Self { shell }, utils)
         }
 
         /// Same as [`TestShell::new_at_height`], but returns a shell at block
         /// height 0.
         #[inline]
-        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>)
-        {
+        pub fn new() -> (Self, TestShellUtils) {
             Self::new_at_height(BlockHeight(1))
         }
 
