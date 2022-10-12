@@ -319,7 +319,7 @@ impl EventLog {
         if num_events > self.inner.params.max_log_events {
             let keep_events = calc_num_of_kept_events(num_events);
             let snapshot = if keep_events > 0 {
-                Some(self.prune_too_many_events(head, keep_events))
+                self.prune_too_many_events(head, keep_events)
             } else {
                 None
             };
@@ -329,7 +329,7 @@ impl EventLog {
         if height_diff > self.inner.params.log_block_height_diff {
             let nodes_to_keep = calc_num_of_kept_ents(height_diff);
             let snapshot = if nodes_to_keep > 0 {
-                Some(self.prune_old_events(head, nodes_to_keep))
+                self.prune_old_events(head, nodes_to_keep)
             } else {
                 None
             };
@@ -343,7 +343,7 @@ impl EventLog {
         &self,
         head: Option<Arc<LogNode>>,
         max_events: usize,
-    ) -> EventLogSnapshot {
+    ) -> Option<EventLogSnapshot> {
         self.prune_on_condition(head, |_, total_events| {
             if total_events <= max_events {
                 ControlFlow::Continue(())
@@ -359,7 +359,7 @@ impl EventLog {
         &self,
         head: Option<Arc<LogNode>>,
         nodes_to_keep: u64,
-    ) -> EventLogSnapshot {
+    ) -> Option<EventLogSnapshot> {
         self.prune_on_condition(head, |no_nodes, _| {
             if no_nodes <= nodes_to_keep {
                 ControlFlow::Continue(())
@@ -375,7 +375,7 @@ impl EventLog {
         &self,
         head: Option<Arc<LogNode>>,
         mut predicate: P,
-    ) -> EventLogSnapshot
+    ) -> Option<EventLogSnapshot>
     where
         P: FnMut(u64, usize) -> ControlFlow<()>,
     {
@@ -385,7 +385,7 @@ impl EventLog {
         let mut total_events = 0;
         let mut oldest_height = 0.into();
 
-        let head = LogNode::iter(head.as_ref())
+        LogNode::iter(head.as_ref())
             // filter out events in the log
             .take_while(|n| {
                 let new_total_events = total_events + n.entry.events.len();
@@ -417,13 +417,11 @@ impl EventLog {
                     .next = Some(next);
                 head
             })
-            .expect("We always prune at least one node from the log");
-
-        EventLogSnapshot {
-            head,
-            num_events: total_events,
-            oldest_height,
-        }
+            .map(|head| EventLogSnapshot {
+                head,
+                num_events: total_events,
+                oldest_height,
+            })
     }
 
     /// Add a new entry to the log.
