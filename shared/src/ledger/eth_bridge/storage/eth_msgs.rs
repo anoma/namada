@@ -40,7 +40,8 @@ impl Keys {
             .expect("should always be able to construct this key")
     }
 
-    /// Get the `seen_by` key - there should be a [`Vec<Address>`] stored here.
+    /// Get the `seen_by` key - there should be a [`BTreeSet<Address>`] stored
+    /// here.
     pub fn seen_by(&self) -> Key {
         self.prefix
             .push(&SEEN_BY_KEY_SEGMENT.to_owned())

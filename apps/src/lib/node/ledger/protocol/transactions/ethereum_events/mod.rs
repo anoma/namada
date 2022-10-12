@@ -249,7 +249,8 @@ where
     );
     let body: EthereumEvent = read::value(store, &eth_msg_keys.body())?;
     let seen: bool = read::value(store, &eth_msg_keys.seen())?;
-    let seen_by: Vec<Address> = read::value(store, &eth_msg_keys.seen_by())?;
+    let seen_by: BTreeSet<Address> =
+        read::value(store, &eth_msg_keys.seen_by())?;
     let voting_power: FractionalVotingPower =
         read::value(store, &eth_msg_keys.voting_power())?;
 
