@@ -449,10 +449,7 @@ mod tests {
             &mut storage,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
-                signers: HashSet::from_iter(vec![(
-                    sole_validator,
-                    BlockHeight(100),
-                )]),
+                signers: BTreeSet::from([(sole_validator, BlockHeight(100))]),
             }],
         );
 
@@ -510,10 +507,7 @@ mod tests {
             &mut storage,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
-                signers: HashSet::from_iter(vec![(
-                    validator_a,
-                    BlockHeight(100),
-                )]),
+                signers: BTreeSet::from([(validator_a, BlockHeight(100))]),
             }],
         );
         let tx_result = match result {

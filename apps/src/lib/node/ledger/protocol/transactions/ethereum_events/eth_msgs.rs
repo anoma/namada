@@ -58,7 +58,7 @@ pub struct EthMsg {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeSet, HashSet};
+    use std::collections::BTreeSet;
 
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
@@ -76,7 +76,7 @@ mod tests {
         let event = arbitrary_single_transfer(arbitrary_nonce(), receiver);
         let with_signers = MultiSignedEthEvent {
             event: event.clone(),
-            signers: HashSet::from_iter(vec![(
+            signers: BTreeSet::from([(
                 sole_validator.clone(),
                 BlockHeight(100),
             )]),
