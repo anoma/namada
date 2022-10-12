@@ -478,7 +478,7 @@ mod test_vote_extensions {
     /// change to the validator set.
     #[test]
     fn test_validate_eth_events_vexts() {
-        let (mut shell, _recv, _) = setup_at_height(3u64);
+        let (mut shell, _utils) = setup_at_height(3u64);
         let signing_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let address = shell

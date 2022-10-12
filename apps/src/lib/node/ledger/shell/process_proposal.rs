@@ -471,7 +471,7 @@ mod test_process_proposal {
     #[test]
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _utils) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
@@ -545,7 +545,7 @@ mod test_process_proposal {
     #[test]
     fn test_drop_vext_digest_with_invalid_sigs() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _utils) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
@@ -603,7 +603,7 @@ mod test_process_proposal {
     fn test_drop_vext_digest_with_invalid_bheights() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
         const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _utils) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
@@ -671,7 +671,7 @@ mod test_process_proposal {
     #[test]
     fn test_drop_vext_digest_with_invalid_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _utils) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (addr, protocol_key) = {
             let bertha_key = wallet::defaults::bertha_keypair();
@@ -726,7 +726,7 @@ mod test_process_proposal {
     /// by [`process_proposal`].
     #[test]
     fn test_unsigned_wrapper_rejected() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _utils) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -772,7 +772,7 @@ mod test_process_proposal {
     /// Test that a wrapper tx with invalid signature is rejected
     #[test]
     fn test_wrapper_bad_signature_rejected() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _utils) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -855,7 +855,7 @@ mod test_process_proposal {
     /// non-zero, [`process_proposal`] rejects that tx
     #[test]
     fn test_wrapper_unknown_address() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _utils) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -899,7 +899,7 @@ mod test_process_proposal {
     /// [`process_proposal`] rejects that tx
     #[test]
     fn test_wrapper_insufficient_balance_address() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _utils) = test_utils::setup_at_height(3u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -946,7 +946,7 @@ mod test_process_proposal {
     /// validated, [`process_proposal`] rejects it
     #[test]
     fn test_decrypted_txs_out_of_order() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _utils) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let mut txs = vec![];
         for i in 0..3 {
@@ -1011,7 +1011,7 @@ mod test_process_proposal {
     /// is rejected by [`process_proposal`]
     #[test]
     fn test_incorrectly_labelled_as_undecryptable() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _utils) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
 
         let tx = Tx::new(
@@ -1062,7 +1062,7 @@ mod test_process_proposal {
     /// undecryptable but still accepted
     #[test]
     fn test_invalid_hash_commitment() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _utils) = test_utils::setup_at_height(3u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -1108,7 +1108,7 @@ mod test_process_proposal {
     /// marked undecryptable and the errors handled correctly
     #[test]
     fn test_undecryptable() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _utils) = test_utils::setup_at_height(3u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
         let pubkey = EncryptionKey::default();
         // not valid tx bytes
@@ -1150,7 +1150,7 @@ mod test_process_proposal {
     /// [`process_proposal`] than expected, they are rejected
     #[test]
     fn test_too_many_decrypted_txs() {
-        let (mut shell, _recv, _) = TestShell::new();
+        let (mut shell, _utils) = TestShell::new();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1183,7 +1183,7 @@ mod test_process_proposal {
     /// Process Proposal should reject a RawTx, but not panic
     #[test]
     fn test_raw_tx_rejected() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _utils) = test_utils::setup_at_height(3u64);
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
