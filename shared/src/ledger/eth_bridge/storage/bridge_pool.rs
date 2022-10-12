@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::convert::TryInto;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use ethabi::Token;
 use eyre::eyre;
 
 use crate::types::address::{Address, InternalAddress};
@@ -83,7 +84,7 @@ impl BridgePoolTree {
         let hash = Self::parse_key(key)?;
         _ = self.store.insert(hash);
         self.root = self.compute_root();
-        Ok(self.root())
+        Ok(self.root().into())
     }
 
     /// Delete a key from storage and update the root
@@ -114,9 +115,9 @@ impl BridgePoolTree {
         }
     }
 
-    /// Return the root as a [struct@`Hash`] type.
-    pub fn root(&self) -> Hash {
-        self.root.clone().into()
+    /// Return the root as a [`struct@Hash`] type.
+    pub fn root(&self) -> KeccakHash {
+        self.root.clone()
     }
 
     /// Get a reference to the backing store
@@ -334,6 +335,31 @@ impl BridgePoolProof {
     }
 }
 
+impl Encode for BridgePoolProof {
+    fn tokenize(&self) -> Vec<Token> {
+        let BridgePoolProof {
+            proof,
+            leaves,
+            flags,
+        } = self;
+        let proof = Token::Array(
+            proof
+                .iter()
+                .map(|hash| Token::FixedBytes(hash.0.to_vec()))
+                .collect(),
+        );
+        let transfers = Token::Array(
+            leaves
+                .iter()
+                .map(|t| Token::FixedArray(t.tokenize()))
+                .collect(),
+        );
+        let flags =
+            Token::Array(flags.iter().map(|flag| Token::Bool(*flag)).collect());
+        vec![proof, transfers, flags]
+    }
+}
+
 #[cfg(test)]
 mod test_bridge_pool_tree {
     use std::array;
@@ -396,9 +422,8 @@ mod test_bridge_pool_tree {
             transfers.push(transfer);
             let _ = tree.insert_key(&key).expect("Test failed");
         }
-        let expected: Hash =
-            hash_pair(transfers[0].keccak256(), transfers[1].keccak256())
-                .into();
+        let expected =
+            hash_pair(transfers[0].keccak256(), transfers[1].keccak256());
         assert_eq!(tree.root(), expected);
     }
 
@@ -433,7 +458,7 @@ mod test_bridge_pool_tree {
             hash_pair(transfers[0].keccak256(), transfers[1].keccak256());
         let right_hash =
             hash_pair(transfers[2].keccak256(), Default::default());
-        let expected: Hash = hash_pair(left_hash, right_hash).into();
+        let expected = hash_pair(left_hash, right_hash);
         assert_eq!(tree.root(), expected);
     }
 
@@ -489,9 +514,8 @@ mod test_bridge_pool_tree {
         tree.delete_key(&Key::from(&transfers[1]))
             .expect("Test failed");
 
-        let expected: Hash =
-            hash_pair(transfers[0].keccak256(), transfers[2].keccak256())
-                .into();
+        let expected =
+            hash_pair(transfers[0].keccak256(), transfers[2].keccak256());
         assert_eq!(tree.root(), expected);
     }
 
@@ -625,7 +649,7 @@ mod test_bridge_pool_tree {
         let proof = tree
             .get_membership_proof(array::from_ref(&key), vec![transfer])
             .expect("Test failed");
-        assert!(proof.verify(tree.root().into()));
+        assert!(proof.verify(tree.root()));
     }
 
     /// Check proofs for membership of single transfer
@@ -659,7 +683,7 @@ mod test_bridge_pool_tree {
                 vec![transfers.remove(0)],
             )
             .expect("Test failed");
-        assert!(proof.verify(tree.root().into()));
+        assert!(proof.verify(tree.root()));
     }
 
     /// Test that a multiproof works for leaves who are siblings
@@ -691,7 +715,7 @@ mod test_bridge_pool_tree {
         let proof = tree
             .get_membership_proof(&keys, values)
             .expect("Test failed");
-        assert!(proof.verify(tree.root().into()));
+        assert!(proof.verify(tree.root()));
     }
 
     /// Test that proving an empty subset of leaves always works
@@ -721,7 +745,7 @@ mod test_bridge_pool_tree {
         let proof = tree
             .get_membership_proof(&keys, values)
             .expect("Test failed");
-        assert!(proof.verify(tree.root().into()))
+        assert!(proof.verify(tree.root()))
     }
 
     /// Test a proof for all the leaves
@@ -751,7 +775,7 @@ mod test_bridge_pool_tree {
         let proof = tree
             .get_membership_proof(&keys, transfers)
             .expect("Test failed");
-        assert!(proof.verify(tree.root().into()));
+        assert!(proof.verify(tree.root()));
     }
 
     /// Test a proof for all the leaves when the number of leaves is odd
@@ -781,7 +805,7 @@ mod test_bridge_pool_tree {
         let proof = tree
             .get_membership_proof(&keys, transfers)
             .expect("Test failed");
-        assert!(proof.verify(tree.root().into()));
+        assert!(proof.verify(tree.root()));
     }
 
     /// Test proofs of large trees
@@ -812,7 +836,7 @@ mod test_bridge_pool_tree {
         let proof = tree
             .get_membership_proof(&keys, values)
             .expect("Test failed");
-        assert!(proof.verify(tree.root().into()));
+        assert!(proof.verify(tree.root()));
     }
 
     /// Create a random set of transfers.
@@ -879,7 +903,7 @@ mod test_bridge_pool_tree {
                 values.push(transfer);
             }
             let proof = tree.get_membership_proof(&keys, values).expect("Test failed");
-            assert!(proof.verify(tree.root().into()));
+            assert!(proof.verify(tree.root()));
         }
     }
 }
