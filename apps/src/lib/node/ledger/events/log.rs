@@ -683,4 +683,57 @@ mod tests {
         assert_eq!(locked_log.num_events, 0);
         assert_eq!(locked_log.oldest_height.0, 0);
     }
+
+    /// Test that we prune the event log once the maximum
+    /// number of configured stored events has been reached.
+    #[tokio::test]
+    async fn test_log_prune_on_max_events() {
+        let (log, mut logger, sender) = new(Params {
+            max_log_events: 4,
+            log_block_height_diff: 9999,
+        });
+
+        let events = mock_tx_events("DEADBEEF");
+
+        // the log can store up to 4 events + excess,
+        // so if we send 2 events we shouldn't
+        // prune any of them
+        sender.send_new_entry(LogEntry {
+            block_height: 0.into(),
+            events: events.clone(),
+        });
+        logger.log_new_entry().await.unwrap();
+
+        // make sure these events landed in
+        // the log, and that we didn't prune it
+        {
+            let locked_log = log.inner.lock.read().unwrap();
+            assert!(locked_log.head.is_some());
+            assert_eq!(locked_log.num_events, 2);
+            assert_eq!(locked_log.oldest_height.0, 0);
+        }
+
+        // add 4 more events to the log - total = 6;
+        // this should trigger a log prune
+        sender.send_new_entry(LogEntry {
+            block_height: 1.into(),
+            events: events.clone(),
+        });
+        sender.send_new_entry(LogEntry {
+            block_height: 2.into(),
+            events,
+        });
+        logger.log_new_entry().await.unwrap();
+        logger.log_new_entry().await.unwrap();
+
+        // make sure we pruned the log;
+        // we basically drop the last batch of events,
+        // so 6 - 2 = 4 events left
+        {
+            let locked_log = log.inner.lock.read().unwrap();
+            assert!(locked_log.head.is_some());
+            assert_eq!(locked_log.num_events, calc_num_of_kept_events(6));
+            assert_eq!(locked_log.oldest_height.0, 1);
+        }
+    }
 }
