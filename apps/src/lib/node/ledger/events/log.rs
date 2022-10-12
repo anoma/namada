@@ -178,7 +178,7 @@ pub struct EventLogIter<'n, 'q> {
 }
 
 impl<'n, 'q> Iterator for EventLogIter<'n, 'q> {
-    type Item = Event;
+    type Item = &'n Event;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(loop {
@@ -187,7 +187,7 @@ impl<'n, 'q> Iterator for EventLogIter<'n, 'q> {
                 Some(event) => {
                     self.index += 1;
                     if self.query.matches(event) {
-                        break event.clone();
+                        break event;
                     }
                 }
                 None => {
@@ -595,6 +595,7 @@ mod tests {
             .unwrap()
             .try_iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
             .unwrap()
+            .cloned()
             .collect();
 
         assert_eq!(events_in_log.len(), NUM_HEIGHTS as usize);
@@ -644,6 +645,7 @@ mod tests {
                         "tm.event='NewBlock' AND accepted.hash='DEADBEEF'",
                     )
                     .unwrap()
+                    .cloned()
                     .collect();
 
                 assert_eq!(events_in_log.len(), NUM_HEIGHTS as usize);
