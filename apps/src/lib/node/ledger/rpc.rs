@@ -17,7 +17,10 @@ pub enum Path {
     DryRunTx,
     /// Epoch of the last committed block.
     Epoch,
-    /// Read a storage value with exact storage key.
+    /// The pool of transfers waiting to be
+    /// relayed to Ethereum.
+    EthereumBridgePool(BridgePoolSubpath),
+    /// Read a storage value with exact storage key
     Value(storage::Key),
     /// Read a range of storage values with a matching key prefix.
     Prefix(storage::Key),
@@ -30,6 +33,16 @@ pub enum Path {
 }
 
 #[derive(Debug, Clone)]
+pub enum BridgePoolSubpath {
+    /// For queries that wish to see the contents of the
+    /// Ethereum bridge pool.
+    Contents,
+    /// For queries that want to get a merkle proof of
+    /// inclusion of transfers in the Ethereum bridge pool.
+    Proof,
+}
+
+#[derive(Debug, Clone)]
 pub struct BalanceQuery {
     #[allow(dead_code)]
     owner: Option<Address>,
@@ -39,6 +52,9 @@ pub struct BalanceQuery {
 
 const DRY_RUN_TX_PATH: &str = "dry_run_tx";
 const EPOCH_PATH: &str = "epoch";
+const ETH_BRIDGE_POOL_PATH: &str = "eth_bridge_pool";
+const EBP_INFO_SUBPATH: &str = "contents";
+const EBP_PROOF_SUBPATH: &str = "proof";
 const VALUE_PREFIX: &str = "value";
 const PREFIX_PREFIX: &str = "prefix";
 const HAS_KEY_PREFIX: &str = "has_key";
@@ -59,6 +75,13 @@ impl Display for Path {
             Path::HasKey(storage_key) => {
                 write!(f, "{}/{}", HAS_KEY_PREFIX, storage_key)
             }
+            Path::EthereumBridgePool(subpath) => {
+                let subpath = match subpath {
+                    BridgePoolSubpath::Contents => EBP_INFO_SUBPATH,
+                    BridgePoolSubpath::Proof => EBP_PROOF_SUBPATH,
+                };
+                write!(f, "{}/{}", ETH_BRIDGE_POOL_PATH, subpath)
+            }
             Path::Accepted { tx_hash } => {
                 write!(f, "{ACCEPTED_PREFIX}/{tx_hash}")
             }
@@ -77,6 +100,12 @@ impl FromStr for Path {
             DRY_RUN_TX_PATH => Ok(Self::DryRunTx),
             EPOCH_PATH => Ok(Self::Epoch),
             _ => match s.split_once('/') {
+                Some((ETH_BRIDGE_POOL_PATH, EBP_INFO_SUBPATH)) => {
+                    Ok(Self::EthereumBridgePool(BridgePoolSubpath::Contents))
+                }
+                Some((ETH_BRIDGE_POOL_PATH, EBP_PROOF_SUBPATH)) => {
+                    Ok(Self::EthereumBridgePool(BridgePoolSubpath::Proof))
+                }
                 Some((VALUE_PREFIX, storage_key)) => {
                     let key = storage::Key::parse(storage_key)
                         .map_err(PathParseError::InvalidStorageKey)?;
