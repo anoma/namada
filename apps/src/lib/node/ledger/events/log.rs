@@ -224,6 +224,19 @@ impl EventLogSnapshot {
             node: Some(&self.head),
         }
     }
+
+    /// Return the [`BlockHeight`] of the oldest event batch
+    /// in the [`EventLogSnapshot`].
+    #[inline]
+    pub fn oldest_height(&self) -> BlockHeight {
+        self.oldest_height
+    }
+
+    /// Return the number of events in the [`EventLogSnapshot`].
+    #[inline]
+    pub fn num_events(&self) -> usize {
+        self.num_events
+    }
 }
 
 /// Errors specific to [`EventLog`] operations.
@@ -542,6 +555,8 @@ const fn calc_num_of_kept_ents(diff: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use tokio::time::{self, Duration};
+
     use super::*;
     use crate::node::ledger::events::{EventLevel, EventType};
 
@@ -580,10 +595,12 @@ mod tests {
         let events = mock_tx_events("DEADBEEF");
 
         for height in 0..NUM_HEIGHTS {
-            sender.send_new_entry(LogEntry {
-                block_height: height.into(),
-                events: events.clone(),
-            });
+            sender
+                .send_new_entry(LogEntry {
+                    block_height: height.into(),
+                    events: events.clone(),
+                })
+                .unwrap();
         }
 
         // receive events in the logger, and log them
@@ -621,10 +638,12 @@ mod tests {
         let events = mock_tx_events("DEADBEEF");
 
         for height in 0..NUM_HEIGHTS {
-            sender.send_new_entry(LogEntry {
-                block_height: height.into(),
-                events: events.clone(),
-            });
+            sender
+                .send_new_entry(LogEntry {
+                    block_height: height.into(),
+                    events: events.clone(),
+                })
+                .unwrap();
         }
 
         // receive events in the logger, and log them
@@ -670,10 +689,12 @@ mod tests {
     async fn test_reject_empty_events() {
         let (log, mut logger, sender) = new(Params::default());
 
-        sender.send_new_entry(LogEntry {
-            block_height: 0.into(),
-            events: vec![],
-        });
+        sender
+            .send_new_entry(LogEntry {
+                block_height: 0.into(),
+                events: vec![],
+            })
+            .unwrap();
 
         logger.log_new_entry().await.unwrap();
 
@@ -699,10 +720,12 @@ mod tests {
         // the log can store up to 4 events + excess,
         // so if we send 2 events we shouldn't
         // prune any of them
-        sender.send_new_entry(LogEntry {
-            block_height: 0.into(),
-            events: events.clone(),
-        });
+        sender
+            .send_new_entry(LogEntry {
+                block_height: 0.into(),
+                events: events.clone(),
+            })
+            .unwrap();
         logger.log_new_entry().await.unwrap();
 
         // make sure these events landed in
@@ -716,14 +739,18 @@ mod tests {
 
         // add 4 more events to the log - total = 6;
         // this should trigger a log prune
-        sender.send_new_entry(LogEntry {
-            block_height: 1.into(),
-            events: events.clone(),
-        });
-        sender.send_new_entry(LogEntry {
-            block_height: 2.into(),
-            events,
-        });
+        sender
+            .send_new_entry(LogEntry {
+                block_height: 1.into(),
+                events: events.clone(),
+            })
+            .unwrap();
+        sender
+            .send_new_entry(LogEntry {
+                block_height: 2.into(),
+                events,
+            })
+            .unwrap();
         logger.log_new_entry().await.unwrap();
         logger.log_new_entry().await.unwrap();
 
@@ -753,10 +780,12 @@ mod tests {
         // add batches of events to the log
         // split up across 4 log entries
         for height in 0..4 {
-            sender.send_new_entry(LogEntry {
-                block_height: height.into(),
-                events: events.clone(),
-            });
+            sender
+                .send_new_entry(LogEntry {
+                    block_height: height.into(),
+                    events: events.clone(),
+                })
+                .unwrap();
             logger.log_new_entry().await.unwrap();
         }
 
@@ -773,10 +802,12 @@ mod tests {
 
         // add another entry to the log, for a total of 5 ents;
         // this should trigger a log prune
-        sender.send_new_entry(LogEntry {
-            block_height: 4.into(),
-            events,
-        });
+        sender
+            .send_new_entry(LogEntry {
+                block_height: 4.into(),
+                events,
+            })
+            .unwrap();
         logger.log_new_entry().await.unwrap();
 
         // make sure we pruned the log
@@ -787,5 +818,38 @@ mod tests {
             assert_eq!(locked_log.num_events, num_events);
             assert_eq!(locked_log.oldest_height.0, 2);
         }
+    }
+
+    /// Test waiting for new log events.
+    #[tokio::test]
+    async fn test_snapshot_wait() {
+        let (log, mut logger, sender) = new(Params::default());
+
+        // wait up to 10 ms for events
+        let max_wait_time = Duration::from_millis(10);
+
+        let sender_task = tokio::spawn(async move {
+            time::sleep(max_wait_time / 2).await;
+
+            // send events to the logger
+            sender
+                .send_new_entry(LogEntry {
+                    block_height: 0.into(),
+                    events: mock_tx_events("DEADBEEF"),
+                })
+                .unwrap();
+        });
+        let logger_task = tokio::spawn(async move {
+            logger.log_new_entry().await.unwrap();
+        });
+
+        // wait for new events to arrive
+        let deadline = Instant::now() + max_wait_time;
+        let snapshot = log.wait_snapshot(deadline).await.unwrap();
+        assert_eq!(snapshot.num_events(), 2);
+
+        // clean up tasks
+        sender_task.await.unwrap();
+        logger_task.await.unwrap();
     }
 }
