@@ -61,7 +61,7 @@ use crate::facade::tendermint_proto::types::ConsensusParams;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::facade::tower_abci::{request, response};
-use crate::node::ledger::events::log::LogEntry;
+use crate::node::ledger::events::log::{LogEntry, LogEntrySender};
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -174,11 +174,11 @@ pub(super) enum ShellMode {
     Validator {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        event_log_sender: UnboundedSender<LogEntry>,
+        event_log_sender: LogEntrySender,
         ethereum_recv: EthereumReceiver,
     },
     Full {
-        event_log_sender: UnboundedSender<LogEntry>,
+        event_log_sender: LogEntrySender,
     },
     Seed,
 }
@@ -299,7 +299,7 @@ impl ShellMode {
             }
             | Self::Full { event_log_sender } => {
                 event_log_sender
-                    .send(LogEntry {
+                    .send_new_entry(LogEntry {
                         block_height,
                         events,
                     })
@@ -331,7 +331,7 @@ where
     pub config: config::Ledger,
     pub wasm_dir: PathBuf,
     pub broadcast_sender: UnboundedSender<Vec<u8>>,
-    pub event_log_sender: Option<UnboundedSender<LogEntry>>,
+    pub event_log_sender: Option<LogEntrySender>,
     pub eth_receiver: Option<Receiver<EthereumEvent>>,
     pub db_cache: Option<&'cache D::Cache>,
     pub vp_wasm_compilation_cache: u64,

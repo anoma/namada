@@ -19,14 +19,14 @@ use crate::config;
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::abci::RequestBeginBlock;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
-use crate::node::ledger::events::log::LogEntry;
+use crate::node::ledger::events::log::LogEntrySender;
 
 /// The paramaters to pass to [`AbcippShim::new`].
 pub struct NewAbcippShimParams<'cache> {
     pub config: config::Ledger,
     pub wasm_dir: PathBuf,
     pub broadcast_sender: UnboundedSender<Vec<u8>>,
-    pub event_log_sender: Option<UnboundedSender<LogEntry>>,
+    pub event_log_sender: Option<LogEntrySender>,
     pub eth_receiver: Option<Receiver<EthereumEvent>>,
     pub db_cache: &'cache rocksdb::Cache,
     pub vp_wasm_compilation_cache: u64,
