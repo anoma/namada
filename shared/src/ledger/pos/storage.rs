@@ -558,20 +558,28 @@ where
         &self,
         key: &Self::Address,
     ) -> rust_decimal::Decimal {
+        let (value, _gas) =
+            self.read(&validator_max_commission_rate_change_key(key)).unwrap();
+        decode(value.unwrap()).unwrap()
+    }
+
+    fn read_validator_rewards_products(
+        &self,
+        key: &Self::Address,
+    ) -> Option<RewardsProducts> {
+        let (value, _gas) =
+            self.read(&validator_self_rewards_product_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap())
+    }
+
+    fn read_validator_delegation_rewards_products(
+        &self,
+        key: &Self::Address,
+    ) -> Option<RewardsProducts> {
         let (value, _gas) = self
-            .read(&validator_max_commission_rate_change_key(key))
+            .read(&validator_delegation_rewards_product_key(key))
             .unwrap();
-        decode(value.unwrap()).unwrap()
-    }
-
-    fn read_validator_rewards_products(&self, key: &Self::Address) -> RewardsProducts {
-        let (value, _gas) = self.read(&validator_self_rewards_product_key(key)).unwrap();
-        decode(value.unwrap()).unwrap()
-    }
-
-    fn read_validator_delegation_rewards_products(&self, key: &Self::Address) -> RewardsProducts {
-        let (value, _gas) = self.read(&validator_delegation_rewards_product_key(key)).unwrap();
-        decode(value.unwrap()).unwrap()
+        value.map(|value| decode(value).unwrap())
     }
 
     fn read_validator_last_known_product_epoch(&self, key: &Self::Address) -> Epoch {
@@ -579,9 +587,14 @@ where
         decode(value.unwrap()).unwrap()
     }
 
-    fn read_consensus_validator_rewards_accumulator(&self) -> Option<std::collections::HashMap<Self::Address, rust_decimal::Decimal>> {
-        let (value, _gas) = self.read(&consensus_validator_set_accumulator_key()).unwrap();
-        decode(value.unwrap()).unwrap()
+    fn read_consensus_validator_rewards_accumulator(
+        &self,
+    ) -> Option<std::collections::HashMap<Self::Address, rust_decimal::Decimal>>
+    {
+        let (value, _gas) = self
+            .read(&consensus_validator_set_accumulator_key())
+            .unwrap();
+        value.map(|value| decode(value).unwrap())
     }
 
     fn read_validator_set(&self) -> ValidatorSets {

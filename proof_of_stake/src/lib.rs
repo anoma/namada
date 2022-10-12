@@ -697,9 +697,15 @@ pub trait PosBase {
         key: &Self::Address,
     ) -> Decimal;
     /// Read PoS validator's reward products
-    fn read_validator_rewards_products(&self, key: &Self::Address) -> RewardsProducts;
+    fn read_validator_rewards_products(
+        &self,
+        key: &Self::Address,
+    ) -> Option<RewardsProducts>;
     /// Read PoS validator's delegation reward products
-    fn read_validator_delegation_rewards_products(&self, key: &Self::Address) -> RewardsProducts;
+    fn read_validator_delegation_rewards_products(
+        &self,
+        key: &Self::Address,
+    ) -> Option<RewardsProducts>;
     /// Read PoS validator's last known epoch with rewards products
     fn read_validator_last_known_product_epoch(&self, key: &Self::Address) -> Epoch;
     /// Read PoS consensus validator's rewards accumulator
