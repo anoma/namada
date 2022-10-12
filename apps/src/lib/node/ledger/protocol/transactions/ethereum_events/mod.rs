@@ -175,18 +175,22 @@ where
         (vote_tracking, changed, confirmed)
     };
     tracing::debug!("Read EthMsg - {:#?}", &eth_msg_pre);
-    Ok(calculate_diff(eth_msg_pre, &update.seen_by, voting_powers))
+    Ok(calculate_updated(
+        eth_msg_pre,
+        &update.seen_by,
+        voting_powers,
+    ))
 }
 
-fn calculate_diff(
+/// Takes an existing [`EthMsg`] and calculates the new [`EthMsg`] based on new
+/// validators which have seen it
+fn calculate_updated(
     eth_msg: EthMsg,
     _update_seen_by: &BTreeSet<(Address, BlockHeight)>,
     _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> (EthMsg, ChangedKeys) {
-    tracing::warn!(
-        "Updating Ethereum events is not yet implemented, so this Ethereum \
-         event won't change"
-    );
+    let body = eth_msg.body; // this never changes
+    // TODO: change eth msg seen by to a BTreeSet first
     (eth_msg, BTreeSet::default())
 }
 
