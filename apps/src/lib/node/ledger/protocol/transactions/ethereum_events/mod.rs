@@ -348,7 +348,7 @@ mod tests {
     fn test_get_voting_powers_empty() {
         let storage = TestStorage::default();
 
-        let result = get_voting_powers(&storage, &vec![]);
+        let result = get_voting_powers(&storage, &[]);
 
         assert!(result.unwrap().is_empty())
     }
@@ -402,7 +402,7 @@ mod tests {
                 equal_voting_power,
             ),
         ];
-        let storage = set_up_test_storage(HashMap::from_iter(voters.clone()));
+        let storage = set_up_test_storage(HashMap::from_iter(voters));
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
             transfers: vec![TransferToNamada {
