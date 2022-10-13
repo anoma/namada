@@ -57,7 +57,7 @@ where
         .map(|MultiSignedEthEvent { event, signers }| {
             let voters: HashSet<Address> =
                 signers.iter().map(|(addr, _)| addr.to_owned()).collect();
-            let mut votes = HashSet::with_capacity(voters.len());
+            let mut votes = BTreeSet::default();
             for voter in voters {
                 let earliest_vote_height = signers
                     .iter()
@@ -370,7 +370,7 @@ mod tests {
                 receiver: address::testing::established_address_1(),
             }],
         };
-        let signers = HashSet::from_iter(vec![(voter.clone(), voting_height)]);
+        let signers = BTreeSet::from_iter(vec![(voter.clone(), voting_height)]);
 
         let events = vec![MultiSignedEthEvent { event, signers }];
 
@@ -411,7 +411,7 @@ mod tests {
                 receiver: address::testing::established_address_1(),
             }],
         };
-        let signers = HashSet::from_iter(vec![
+        let signers = BTreeSet::from_iter(vec![
             (address::testing::established_address_1(), BlockHeight(100)),
             (address::testing::established_address_1(), BlockHeight(101)),
             (address::testing::established_address_1(), BlockHeight(102)),
