@@ -5,8 +5,9 @@ use std::str::FromStr;
 
 use namada::types::address::Address;
 use namada::types::storage;
-use tendermint::abci::Path as AbciPath;
 use thiserror::Error;
+
+use crate::facade::tendermint::abci::Path as AbciPath;
 
 /// RPC query path
 #[derive(Debug, Clone)]

@@ -24,20 +24,20 @@ use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, storage, token};
 use namada::{ledger, vm};
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
-use tendermint_rpc::query::{EventType, Query};
-use tendermint_rpc::{Client, HttpClient};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::signing::{find_keypair, sign_tx};
-use crate::client::tendermint_rpc_types::{Error, TxBroadcastData, TxResponse};
+use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::client::tendermint_websocket_client::{
     Error as WsError, TendermintWebsocketClient, WebSocketAddress,
 };
-use crate::client::tm_jsonrpc_client::{fetch_event, JsonRpcAddress};
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+use crate::facade::tendermint_rpc::query::{EventType, Query};
+use crate::facade::tendermint_rpc::{Client, HttpClient};
+use crate::node::ledger::events::EventType as NamadaEventType;
 use crate::node::ledger::tendermint_node;
 
 const ACCEPTED_QUERY_KEY: &str = "accepted.hash";
@@ -1208,7 +1208,7 @@ pub async fn broadcast_tx(
     address: TendermintAddress,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response, WsError> {
-    let (tx, wrapper_tx_hash, _decrypted_tx_hash) = match to_broadcast {
+    let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
             wrapper_hash,
@@ -1246,7 +1246,7 @@ pub async fn broadcast_tx(
         // acceptance/application results later
         {
             println!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
-            println!("Inner transaction hash: {:?}", _decrypted_tx_hash);
+            println!("Inner transaction hash: {:?}", decrypted_tx_hash);
         }
         Ok(response)
     } else {
@@ -1265,56 +1265,88 @@ pub async fn broadcast_tx(
 pub async fn submit_tx(
     address: TendermintAddress,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, Error> {
-    // the data for finding the relevant events
+) -> Result<TxResponse, WsError> {
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
             wrapper_hash,
             decrypted_hash,
         } => (tx, wrapper_hash, decrypted_hash),
-        TxBroadcastData::DryRun(_) => {
-            panic!("Cannot broadcast a dry-run transaction")
+        _ => panic!("Cannot broadcast a dry-run transaction"),
+    };
+
+    let websocket_timeout =
+        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
+            if let Ok(timeout) = val.parse::<u64>() {
+                Duration::new(timeout, 0)
+            } else {
+                Duration::new(300, 0)
+            }
+        } else {
+            Duration::new(300, 0)
+        };
+    tracing::debug!("Tenderming address: {:?}", address);
+    let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
+        WebSocketAddress::try_from(address.clone())?,
+        Some(websocket_timeout),
+    )?;
+
+    // It is better to subscribe to the transaction before it is broadcast
+    //
+    // Note that the `APPLIED_QUERY_KEY` key comes from a custom event
+    // created by the shell
+    let query = Query::from(EventType::NewBlock)
+        .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
+    wrapper_tx_subscription.subscribe(query)?;
+
+    // We also subscribe to the event emitted when the encrypted
+    // payload makes its way onto the blockchain
+    let mut decrypted_tx_subscription = {
+        let mut decrypted_tx_subscription = TendermintWebsocketClient::open(
+            WebSocketAddress::try_from(address.clone())?,
+            Some(websocket_timeout),
+        )?;
+        let query = Query::from(EventType::NewBlock)
+            .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
+        decrypted_tx_subscription.subscribe(query)?;
+        decrypted_tx_subscription
+    };
+
+    // Broadcast the supplied transaction
+    broadcast_tx(address, &to_broadcast).await?;
+
+    let parsed = {
+        let parsed = TxResponse::parse(
+            wrapper_tx_subscription.receive_response()?,
+            NamadaEventType::Accepted,
+            wrapper_hash,
+        );
+
+        println!(
+            "Transaction accepted with result: {}",
+            serde_json::to_string_pretty(&parsed).unwrap()
+        );
+        // The transaction is now on chain. We wait for it to be decrypted
+        // and applied
+        if parsed.code == 0.to_string() {
+            let parsed = TxResponse::parse(
+                decrypted_tx_subscription.receive_response()?,
+                NamadaEventType::Applied,
+                decrypted_hash.as_str(),
+            );
+            println!(
+                "Transaction applied with result: {}",
+                serde_json::to_string_pretty(&parsed).unwrap()
+            );
+            Ok(parsed)
+        } else {
+            Ok(parsed)
         }
     };
-    let url = JsonRpcAddress::try_from(&address)?.to_string();
 
-    // the filters for finding the relevant events
-    let wrapper_query = Query::from(EventType::NewBlockHeader)
-        .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
-    let tx_query = Query::from(EventType::NewBlockHeader)
-        .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
-
-    // broadcast the tx
-    if let Err(err) = broadcast_tx(address, &to_broadcast).await {
-        eprintln!("Encountered error while broadcasting transaction: {}", err);
-        safe_exit(1)
-    }
-
-    // get the event for the wrapper tx
-    let response =
-        fetch_event(&url, wrapper_query, wrapper_hash.as_str()).await?;
-    println!(
-        "Transaction accepted with result: {}",
-        serde_json::to_string_pretty(&response).unwrap()
-    );
-
-    // The transaction is now on chain. We wait for it to be decrypted
-    // and applied
-    if response.code == 0.to_string() {
-        // get the event for the inner tx
-        let response =
-            fetch_event(&url, tx_query, decrypted_hash.as_str()).await?;
-        println!(
-            "Transaction applied with result: {}",
-            serde_json::to_string_pretty(&response).unwrap()
-        );
-        Ok(response)
-    } else {
-        tracing::warn!(
-            "Received an error from the associated wrapper tx: {}",
-            response.code
-        );
-        Ok(response)
-    }
+    wrapper_tx_subscription.unsubscribe()?;
+    wrapper_tx_subscription.close();
+    decrypted_tx_subscription.unsubscribe()?;
+    decrypted_tx_subscription.close();
+    parsed
 }
