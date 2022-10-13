@@ -193,7 +193,7 @@ mod tests {
                     .expect("Genesis validator should already have self-bond");
                 assert_eq!(
                     bond.pos_deltas, expected_bond,
-                    "Delegation before pipeline offset should be equal to the \
+                    "Self-bond before pipeline offset should be equal to the \
                      genesis initial stake - checking epoch {epoch}"
                 );
             }
@@ -209,7 +209,7 @@ mod tests {
                 let bond: Bond<token::Amount> = bonds_post.get(epoch).unwrap();
                 assert_eq!(
                     bond.pos_deltas, expected_bond,
-                    "Delegation at and after pipeline offset should contain \
+                    "Self-bond at and after pipeline offset should contain \
                      genesis stake and the bonded amount - checking epoch \
                      {epoch}"
                 );
