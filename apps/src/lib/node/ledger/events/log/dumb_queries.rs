@@ -37,8 +37,7 @@ impl<'q> QueryMatcher<'q> {
             && event
                 .attributes
                 .get(&self.attr)
-                .as_ref()
-                .map(|value| value == &self.value)
+                .map(|value| value == self.value)
                 .unwrap_or_default()
     }
 
