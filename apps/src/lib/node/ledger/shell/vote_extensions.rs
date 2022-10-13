@@ -41,6 +41,15 @@ pub enum VoteExtensionError {
     PubKeyNotInStorage,
     #[error("The vote extension's signature is invalid.")]
     VerifySigFailed,
+    #[error(
+        "Validator is missing from an expected field in the vote extension."
+    )]
+    ValidatorMissingFromExtension,
+    #[error(
+        "Found value for a field in the vote extension diverging from the \
+         equivalent field in storage."
+    )]
+    DivergesFromStorage,
 }
 
 impl<D, H> Shell<D, H>
@@ -48,6 +57,8 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
+    /// The ExtendVote ABCI++ method implementation.
+    ///
     /// INVARIANT: This method must be stateless.
     #[cfg(feature = "abcipp")]
     #[inline]
@@ -121,32 +132,36 @@ where
             .can_send_validator_set_update(SendValsetUpd::Now)
             .then(|| {
                 let next_epoch = self.storage.get_current_epoch().0.next();
-                let _validator_set =
-                    self.storage.get_active_validators(Some(next_epoch));
+                let voting_powers = self
+                    .storage
+                    .get_active_eth_addresses(Some(next_epoch))
+                    .map(|(eth_addr_book, _, voting_power)| {
+                        (eth_addr_book, voting_power)
+                    })
+                    .collect();
 
                 let ext = validator_set_update::Vext {
                     validator_addr,
-                    // TODO: we need a way to map ethereum addresses to
-                    // namada validator addresses
-                    voting_powers: std::collections::HashMap::new(),
+                    voting_powers,
                     #[cfg(feature = "abcipp")]
                     block_height: self.storage.get_current_decision_height(),
                     #[cfg(not(feature = "abcipp"))]
                     block_height: self.storage.last_height,
                 };
 
-                let protocol_key = match &self.mode {
+                let eth_key = match &self.mode {
                     ShellMode::Validator { data, .. } => {
-                        &data.keys.protocol_keypair
+                        &data.keys.eth_bridge_keypair
                     }
                     _ => unreachable!("{VALIDATOR_EXPECT_MSG}"),
                 };
 
-                // TODO: sign validator set update with secp key instead
-                ext.sign(protocol_key)
+                ext.sign(eth_key)
             })
     }
 
+    /// The VerifyVoteExtension ABCI++ method.
+    ///
     /// This checks that the vote extension:
     /// * Correctly deserializes.
     /// * The Ethereum events vote extension within was correctly signed by an
@@ -156,8 +171,8 @@ where
     ///   block height.
     /// * The Ethereum events vote extension block height signed over is correct
     ///   (for replay protection).
-    /// * The validator set update vote extension epoch signed over is correct
-    ///   (for replay protection).
+    /// * The validator set update vote extension block height signed over is
+    ///   correct (for replay protection).
     ///
     /// INVARIANT: This method must be stateless.
     #[cfg(feature = "abcipp")]

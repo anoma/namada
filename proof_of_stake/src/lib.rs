@@ -33,10 +33,11 @@ use epoched::{
 use parameters::PosParams;
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, Epoch, GenesisValidator, Slash, SlashType, Slashes,
-    TotalVotingPowers, Unbond, Unbonds, ValidatorConsensusKeys, ValidatorSet,
-    ValidatorSetUpdate, ValidatorSets, ValidatorState, ValidatorStates,
-    ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
+    ActiveValidator, Bonds, Epoch, EthAddress, GenesisValidator, Slash,
+    SlashType, Slashes, TotalVotingPowers, TryRefTo, Unbond, Unbonds,
+    ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet, ValidatorSetUpdate,
+    ValidatorSets, ValidatorState, ValidatorStates, ValidatorTotalDeltas,
+    ValidatorVotingPowers, VotingPower, VotingPowerDelta,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -146,6 +147,18 @@ pub trait PosReadOnly {
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total voting power of all validators (active and inactive).
     fn read_total_voting_power(&self) -> TotalVotingPowers;
+
+    /// Read PoS validator's Eth bridge governance key
+    fn read_validator_eth_cold_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<ValidatorEthKey<Self::PublicKey>>;
+
+    /// Read PoS validator's Eth validator set update signing key
+    fn read_validator_eth_hot_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<ValidatorEthKey<Self::PublicKey>>;
 }
 
 /// PoS system trait to be implemented in integration that can read and write
@@ -204,6 +217,19 @@ pub trait PosActions: PosReadOnly {
     fn write_validator_set(&mut self, value: ValidatorSets<Self::Address>);
     /// Write PoS total voting power of all validators (active and inactive).
     fn write_total_voting_power(&mut self, value: TotalVotingPowers);
+    /// Write PoS validator's Eth bridge governance key
+    fn write_validator_eth_cold_key(
+        &mut self,
+        address: &Self::Address,
+        value: ValidatorEthKey<Self::PublicKey>,
+    );
+
+    /// Write PoS validator's Eth validator set update signing key
+    fn write_validator_eth_hot_key(
+        &self,
+        address: &Self::Address,
+        value: ValidatorEthKey<Self::PublicKey>,
+    );
 
     /// Delete an emptied PoS bond (validator self-bond or a delegation).
     fn delete_bond(&mut self, key: &BondId<Self::Address>);
@@ -226,8 +252,13 @@ pub trait PosActions: PosReadOnly {
         address: &Self::Address,
         staking_reward_address: &Self::Address,
         consensus_key: &Self::PublicKey,
+        eth_cold_key: &Self::PublicKey,
+        eth_hot_key: &Self::PublicKey,
         current_epoch: impl Into<Epoch>,
-    ) -> Result<(), BecomeValidatorError<Self::Address>> {
+    ) -> Result<(), BecomeValidatorError<Self::Address>>
+    where
+        Self::PublicKey: TryRefTo<EthAddress>,
+    {
         let current_epoch = current_epoch.into();
         let params = self.read_pos_params();
         let mut validator_set = self.read_validator_set();
@@ -245,6 +276,8 @@ pub trait PosActions: PosReadOnly {
         }
         let BecomeValidatorData {
             consensus_key,
+            eth_cold_key,
+            eth_hot_key,
             state,
             total_deltas,
             voting_power,
@@ -252,14 +285,18 @@ pub trait PosActions: PosReadOnly {
             &params,
             address,
             consensus_key,
+            eth_cold_key,
+            eth_hot_key,
             &mut validator_set,
             current_epoch,
-        );
+        )?;
         self.write_validator_staking_reward_address(
             address,
             staking_reward_address.clone(),
         );
         self.write_validator_consensus_key(address, consensus_key);
+        self.write_validator_eth_cold_key(address, eth_cold_key);
+        self.write_validator_eth_hot_key(address, eth_hot_key);
         self.write_validator_state(address, state);
         self.write_validator_set(validator_set);
         self.write_validator_address_raw_hash(address);
@@ -571,6 +608,17 @@ pub trait PosBase {
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total voting power of all validators (active and inactive).
     fn read_total_voting_power(&self) -> TotalVotingPowers;
+    /// Read PoS validator's Eth bridge governance key
+    fn read_validator_eth_cold_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<ValidatorEthKey<Self::PublicKey>>;
+
+    /// Read PoS validator's Eth validator set update signing key
+    fn read_validator_eth_hot_key(
+        &self,
+        key: &Self::Address,
+    ) -> Option<ValidatorEthKey<Self::PublicKey>>;
 
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
@@ -624,6 +672,18 @@ pub trait PosBase {
     fn write_validator_set(&mut self, value: &ValidatorSets<Self::Address>);
     /// Read PoS total voting power of all validators (active and inactive).
     fn write_total_voting_power(&mut self, value: &TotalVotingPowers);
+    /// Write PoS validator's Eth bridge governance key
+    fn write_validator_eth_cold_key(
+        &mut self,
+        address: &Self::Address,
+        value: &ValidatorEthKey<Self::PublicKey>,
+    );
+    /// Write PoS validator's Eth validator set update signing key
+    fn write_validator_eth_hot_key(
+        &mut self,
+        address: &Self::Address,
+        value: &ValidatorEthKey<Self::PublicKey>,
+    );
     /// Initialize staking reward account with the given public key.
     fn init_staking_reward_account(
         &mut self,
@@ -663,7 +723,10 @@ pub trait PosBase {
         > + Clone
         + 'a,
         current_epoch: impl Into<Epoch>,
-    ) -> Result<(), GenesisError> {
+    ) -> Result<(), GenesisError>
+    where
+        Self::PublicKey: TryRefTo<EthAddress>,
+    {
         let current_epoch = current_epoch.into();
         self.write_pos_params(params);
 
@@ -684,6 +747,8 @@ pub trait PosBase {
                 total_deltas,
                 voting_power,
                 bond: (bond_id, bond),
+                eth_cold_key,
+                eth_hot_key,
             } = res?;
             self.write_validator_address_raw_hash(address);
             self.write_validator_staking_reward_address(
@@ -691,6 +756,8 @@ pub trait PosBase {
                 &staking_reward_address,
             );
             self.write_validator_consensus_key(address, &consensus_key);
+            self.write_validator_eth_cold_key(address, &eth_cold_key);
+            self.write_validator_eth_hot_key(address, &eth_hot_key);
             self.write_validator_state(address, &state);
             self.write_validator_total_deltas(address, &total_deltas);
             self.write_validator_voting_power(address, &voting_power);
@@ -893,6 +960,8 @@ pub trait PosBase {
 pub enum GenesisError {
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
+    #[error("Ethereum address can only be of secp kind")]
+    SecpKeyConversion,
 }
 
 #[allow(missing_docs)]
@@ -905,6 +974,8 @@ pub enum BecomeValidatorError<Address: Display + Debug> {
          address {0}"
     )]
     StakingRewardAddressEqValidatorAddress(Address),
+    #[error("Ethereum address can only be of secp kind")]
+    SecpKeyConversion,
 }
 
 #[allow(missing_docs)]
@@ -1056,6 +1127,8 @@ where
     total_deltas: ValidatorTotalDeltas<TokenChange>,
     voting_power: ValidatorVotingPowers,
     bond: (BondId<Address>, Bonds<TokenAmount>),
+    eth_cold_key: ValidatorEthKey<PK>,
+    eth_hot_key: ValidatorEthKey<PK>,
 }
 
 /// A function that returns genesis data created from the initial validator set.
@@ -1109,7 +1182,13 @@ where
         + BorshDeserialize
         + BorshSerialize
         + BorshSchema,
-    PK: 'a + Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema,
+    PK: 'a
+        + Debug
+        + Clone
+        + BorshDeserialize
+        + BorshSerialize
+        + BorshSchema
+        + TryRefTo<EthAddress>,
 {
     // Accumulate the validator set and total voting power
     let mut active: BTreeSet<WeightedValidator<Address>> = BTreeSet::default();
@@ -1155,9 +1234,15 @@ where
                   tokens,
                   consensus_key,
                   staking_reward_key,
+                  eth_cold_key,
+                  eth_hot_key,
               }| {
             let consensus_key =
                 Epoched::init_at_genesis(consensus_key.clone(), current_epoch);
+            let eth_cold_key =
+                Epoched::init_at_genesis(eth_cold_key.clone(), current_epoch);
+            let eth_hot_key =
+                Epoched::init_at_genesis(eth_hot_key.clone(), current_epoch);
             let state = Epoched::init_at_genesis(
                 ValidatorState::Candidate,
                 current_epoch,
@@ -1187,6 +1272,8 @@ where
                 total_deltas,
                 voting_power,
                 bond: (bond_id, bond),
+                eth_cold_key,
+                eth_hot_key,
             })
         },
     );
@@ -1297,28 +1384,38 @@ where
         + BorshSchema,
 {
     consensus_key: ValidatorConsensusKeys<PK>,
+    eth_cold_key: ValidatorEthKey<PK>,
+    eth_hot_key: ValidatorEthKey<PK>,
     state: ValidatorStates,
     total_deltas: ValidatorTotalDeltas<TokenChange>,
     voting_power: ValidatorVotingPowers,
 }
 
 /// A function that initialized data for a new validator.
-fn become_validator<Address, PK, TokenChange>(
+fn become_validator<'a, Address, PK, TokenChange>(
     params: &PosParams,
     address: &Address,
     consensus_key: &PK,
+    eth_cold_key: &'a PK,
+    eth_hot_key: &'a PK,
     validator_set: &mut ValidatorSets<Address>,
     current_epoch: Epoch,
-) -> BecomeValidatorData<PK, TokenChange>
+) -> Result<BecomeValidatorData<PK, TokenChange>, BecomeValidatorError<Address>>
 where
-    Address: Debug
+    Address: Display
+        + Debug
         + Clone
         + Ord
         + Hash
         + BorshDeserialize
         + BorshSerialize
         + BorshSchema,
-    PK: Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema,
+    PK: Debug
+        + Clone
+        + BorshDeserialize
+        + BorshSerialize
+        + BorshSchema
+        + TryRefTo<EthAddress>,
     TokenChange: Default
         + Debug
         + Clone
@@ -1330,6 +1427,9 @@ where
 {
     let consensus_key =
         Epoched::init(consensus_key.clone(), current_epoch, params);
+    let eth_cold_key =
+        Epoched::init(eth_cold_key.clone(), current_epoch, params);
+    let eth_hot_key = Epoched::init(eth_hot_key.clone(), current_epoch, params);
 
     let mut state =
         Epoched::init_at_genesis(ValidatorState::Pending, current_epoch);
@@ -1366,12 +1466,14 @@ where
         params,
     );
 
-    BecomeValidatorData {
+    Ok(BecomeValidatorData {
         consensus_key,
         state,
         total_deltas,
         voting_power,
-    }
+        eth_cold_key,
+        eth_hot_key,
+    })
 }
 
 struct BondData<TokenAmount, TokenChange>

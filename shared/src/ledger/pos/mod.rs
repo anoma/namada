@@ -3,6 +3,8 @@
 mod storage;
 pub mod vp;
 
+use std::convert::{TryFrom, TryInto};
+
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::types::{
@@ -15,8 +17,10 @@ pub use vp::PosVP;
 
 use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
 use crate::types::address::{self, Address, InternalAddress};
+use crate::types::ethereum_events::EthAddress;
+use crate::types::key::common;
 use crate::types::storage::Epoch;
-use crate::types::{key, token};
+use crate::types::token;
 
 /// Address of the PoS account implemented as a native VP
 pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
@@ -47,9 +51,7 @@ pub fn init_genesis_storage<'a, DB, H>(
 
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type ValidatorConsensusKeys =
-    namada_proof_of_stake::types::ValidatorConsensusKeys<
-        key::common::PublicKey,
-    >;
+    namada_proof_of_stake::types::ValidatorConsensusKeys<common::PublicKey>;
 
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type ValidatorTotalDeltas =
@@ -71,7 +73,7 @@ pub type BondId = namada_proof_of_stake::types::BondId<Address>;
 pub type GenesisValidator = namada_proof_of_stake::types::GenesisValidator<
     Address,
     token::Amount,
-    key::common::PublicKey,
+    common::PublicKey,
 >;
 
 impl From<Epoch> for namada_proof_of_stake::types::Epoch {
@@ -85,5 +87,34 @@ impl From<namada_proof_of_stake::types::Epoch> for Epoch {
     fn from(epoch: namada_proof_of_stake::types::Epoch) -> Self {
         let epoch: u64 = epoch.into();
         Epoch(epoch)
+    }
+}
+
+impl From<EthAddress> for namada_proof_of_stake::types::EthAddress {
+    fn from(EthAddress(addr): EthAddress) -> Self {
+        namada_proof_of_stake::types::EthAddress(addr)
+    }
+}
+
+impl TryFrom<&common::PublicKey> for namada_proof_of_stake::types::EthAddress {
+    type Error = common::EthAddressConvError;
+
+    fn try_from(value: &common::PublicKey) -> Result<Self, Self::Error> {
+        let addr = EthAddress::try_from(value)?;
+        Ok(addr.into())
+    }
+}
+
+impl
+    namada_proof_of_stake::types::TryRefTo<
+        namada_proof_of_stake::types::EthAddress,
+    > for common::PublicKey
+{
+    type Error = common::EthAddressConvError;
+
+    fn try_ref_to(
+        &self,
+    ) -> Result<namada_proof_of_stake::types::EthAddress, Self::Error> {
+        self.try_into()
     }
 }

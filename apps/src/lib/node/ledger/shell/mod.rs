@@ -247,9 +247,9 @@ impl ShellMode {
         }
     }
 
-    /// Get the protocol keypair for this validator
+    /// Get the protocol keypair for this validator.
     pub fn get_protocol_key(&self) -> Option<&common::SecretKey> {
-        match &self {
+        match self {
             ShellMode::Validator {
                 data:
                     ValidatorData {
@@ -261,6 +261,24 @@ impl ShellMode {
                     },
                 ..
             } => Some(protocol_keypair),
+            _ => None,
+        }
+    }
+
+    /// Get the Ethereum bridge keypair for this validator.
+    pub fn get_eth_bridge_keypair(&self) -> Option<&common::SecretKey> {
+        match self {
+            ShellMode::Validator {
+                data:
+                    ValidatorData {
+                        keys:
+                            ValidatorKeys {
+                                eth_bridge_keypair, ..
+                            },
+                        ..
+                    },
+                ..
+            } => Some(eth_bridge_keypair),
             _ => None,
         }
     }
@@ -395,13 +413,15 @@ where
                 }
                 #[cfg(feature = "dev")]
                 {
-                    let validator_keys = wallet::defaults::validator_keys();
+                    let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
+                        wallet::defaults::validator_keys();
                     ShellMode::Validator {
                         data: wallet::ValidatorData {
                             address: wallet::defaults::validator_address(),
                             keys: wallet::ValidatorKeys {
-                                protocol_keypair: validator_keys.0,
-                                dkg_keypair: Some(validator_keys.1),
+                                protocol_keypair,
+                                eth_bridge_keypair,
+                                dkg_keypair: Some(dkg_keypair),
                             },
                         },
                         broadcast_sender,
@@ -802,7 +822,13 @@ mod test_utils {
     }
 
     /// Generate a random public/private keypair
+    #[inline]
     pub(super) fn gen_keypair() -> common::SecretKey {
+        gen_ed25519_keypair()
+    }
+
+    /// Generate a random ed25519 public/private keypair
+    pub(super) fn gen_ed25519_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
@@ -810,18 +836,33 @@ mod test_utils {
         ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
     }
 
+    /// Generate a random secp256k1 public/private keypair
+    pub(super) fn gen_secp256k1_keypair() -> common::SecretKey {
+        use rand::prelude::ThreadRng;
+        use rand::thread_rng;
+
+        let mut rng: ThreadRng = thread_rng();
+        secp256k1::SigScheme::generate(&mut rng)
+            .try_to_sk()
+            .unwrap()
+    }
+
     /// Invalidate a valid signature `sig`.
     pub(super) fn invalidate_signature(
         sig: common::Signature,
     ) -> common::Signature {
-        let mut sig_bytes = match sig {
+        match sig {
             common::Signature::Ed25519(ed25519::Signature(ref sig)) => {
-                sig.to_bytes()
+                let mut sig_bytes = sig.to_bytes();
+                sig_bytes[0] = sig_bytes[0].wrapping_add(1);
+                common::Signature::Ed25519(ed25519::Signature(sig_bytes.into()))
             }
-            _ => unreachable!(),
-        };
-        sig_bytes[0] = sig_bytes[0].wrapping_add(1);
-        common::Signature::Ed25519(ed25519::Signature(sig_bytes.into()))
+            common::Signature::Secp256k1(secp256k1::Signature(ref sig)) => {
+                let mut sig_bytes = sig.serialize();
+                sig_bytes[0] = sig_bytes[0].wrapping_add(1);
+                common::Signature::Secp256k1((&sig_bytes).try_into().unwrap())
+            }
+        }
     }
 
     /// A wrapper around the shell that implements

@@ -118,27 +118,47 @@ impl Wallet {
     /// we should re-use a keypair already in the wallet
     pub fn gen_validator_keys(
         &mut self,
+        eth_bridge_pk: Option<common::PublicKey>,
         protocol_pk: Option<common::PublicKey>,
-        scheme: SchemeType,
+        protocol_key_scheme: SchemeType,
     ) -> Result<ValidatorKeys, FindKeyError> {
-        let protocol_keypair = protocol_pk.map(|pk| {
-            self.find_key_by_pkh(&PublicKeyHash::from(&pk))
-                .ok()
-                .or_else(|| {
-                    self.store
-                        .validator_data
-                        .take()
-                        .map(|data| Rc::new(data.keys.protocol_keypair))
-                })
-                .ok_or(FindKeyError::KeyNotFound)
-        });
-        match protocol_keypair {
-            Some(Err(err)) => Err(err),
-            other => Ok(Store::gen_validator_keys(
-                other.map(|res| res.unwrap().as_ref().clone()),
-                scheme,
-            )),
-        }
+        let protocol_keypair = self.find_secret_key(protocol_pk, |data| {
+            Rc::new(data.keys.protocol_keypair)
+        })?;
+        let eth_bridge_keypair = self
+            .find_secret_key(eth_bridge_pk, |data| {
+                Rc::new(data.keys.eth_bridge_keypair)
+            })?;
+        Ok(Store::gen_validator_keys(
+            eth_bridge_keypair.map(|sk| sk.as_ref().clone()),
+            protocol_keypair.map(|sk| sk.as_ref().clone()),
+            protocol_key_scheme,
+        ))
+    }
+
+    /// Find a corresponding [`common::SecretKey`] in [`Store`], for some
+    /// [`common::PublicKey`].
+    ///
+    /// If a key was provided in `maybe_pk`, and it's found in [`Store`], we use
+    /// `extract_key` to retrieve it from [`ValidatorData`].
+    fn find_secret_key<F>(
+        &mut self,
+        maybe_pk: Option<common::PublicKey>,
+        extract_key: F,
+    ) -> Result<Option<Rc<common::SecretKey>>, FindKeyError>
+    where
+        F: Fn(ValidatorData) -> Rc<common::SecretKey>,
+    {
+        maybe_pk
+            .map(|pk| {
+                self.find_key_by_pkh(&PublicKeyHash::from(&pk))
+                    .ok()
+                    .or_else(|| {
+                        self.store.validator_data.take().map(extract_key)
+                    })
+                    .ok_or(FindKeyError::KeyNotFound)
+            })
+            .transpose()
     }
 
     /// Add validator data to the store
