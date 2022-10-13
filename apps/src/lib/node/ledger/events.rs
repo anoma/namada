@@ -13,8 +13,8 @@ use thiserror::Error;
 
 use crate::facade::tendermint_proto::abci::EventAttribute;
 
-/// Indicates if an event is emitted do to
-/// an individual Tx or the nature of a finalized block
+/// Indicates if an event is emitted from an individual tx or from
+/// a `FinalizeBlock` call in the ledger.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EventLevel {
     Block,
@@ -30,7 +30,7 @@ pub struct Event {
     pub attributes: HashMap<String, String>,
 }
 
-/// The two types of custom events we currently use
+/// The types of custom events we currently use.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EventType {
     // The transaction was accepted to be included in a block
