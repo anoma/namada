@@ -24,9 +24,6 @@ jobs:
           - name: tendermint-unreleased
             repository: heliaxdev/tendermint
             tendermint_version: 559fb33ff9b27503ce7ac1c7d8589fe1d8b3e900
-          - name: tendermint-unreleased
-            repository: heliaxdev/tendermint
-            tendermint_version: ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
 
     steps:
       - name: Build ${{ matrix.make.name }}
