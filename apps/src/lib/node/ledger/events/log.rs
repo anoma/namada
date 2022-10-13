@@ -337,7 +337,7 @@ impl EventLog {
         }
     }
 
-    /// Prune events from the log, keeping at most `max_events + excess`
+    /// Prune events from the log, keeping at most `max_events`
     /// of the most recent events.
     fn prune_too_many_events(
         &self,
@@ -755,7 +755,7 @@ mod tests {
 
         let events = mock_tx_events("DEADBEEF");
 
-        // the log can store up to 4 events + excess,
+        // the log can store up to 4 events,
         // so if we send 2 events we shouldn't
         // prune any of them
         sender
