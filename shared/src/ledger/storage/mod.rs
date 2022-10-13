@@ -986,7 +986,8 @@ mod tests {
                 epoch_duration: epoch_duration.clone(),
                 max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_whitelist: vec![],
-                tx_whitelist: vec![]
+                tx_whitelist: vec![],
+                implicit_vp: vec![],
             };
             parameters.init_storage(&mut storage);
 
