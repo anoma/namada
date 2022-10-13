@@ -21,8 +21,8 @@ pub enum EventLevel {
     Tx,
 }
 
-/// Custom events that can be queried from Tendermint
-/// using a websocket client
+/// Custom events that can be queried from Namada
+/// validators or fullnodes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Event {
     pub event_type: EventType,
