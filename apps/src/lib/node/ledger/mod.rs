@@ -238,13 +238,16 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
 
     // Start ABCI server and broadcaster (the latter only if we are a validator
     // node)
-    let (abci, broadcaster, shell_handler) = start_abci_broadcaster_shell(
-        &mut spawner,
-        eth_receiver,
-        wasm_dir,
-        setup_data,
-        config,
-    );
+    let (abci, broadcaster, shell_handler) =
+        start_abci_broadcaster_shell(StartAbciBroadcasterShellParams {
+            spawner: &mut spawner,
+            eth_receiver,
+            // TODO: start event log
+            event_log_sender: None,
+            wasm_dir,
+            setup_data,
+            config,
+        });
 
     // Wait for interrupt signal or abort message
     let aborted = spawner.wait_for_abort().await.child_terminated();
@@ -386,20 +389,35 @@ async fn run_aux_setup(
     }
 }
 
+/// Parameters fed to [`start_abci_broadcaster_shell`].
+struct StartAbciBroadcasterShellParams<'spawner> {
+    spawner: &'spawner mut AbortableSpawner,
+    eth_receiver: Option<mpsc::Receiver<EthereumEvent>>,
+    event_log_sender: Option<log::LogEntrySender>,
+    wasm_dir: PathBuf,
+    setup_data: RunAuxSetup,
+    config: config::Ledger,
+}
+
 /// This function spawns an ABCI server and a [`Broadcaster`] into the
 /// asynchronous runtime. Additionally, it executes a shell in
 /// a new OS thread, to drive the ABCI server.
 fn start_abci_broadcaster_shell(
-    spawner: &mut AbortableSpawner,
-    eth_receiver: Option<mpsc::Receiver<EthereumEvent>>,
-    wasm_dir: PathBuf,
-    setup_data: RunAuxSetup,
-    config: config::Ledger,
+    params: StartAbciBroadcasterShellParams<'_>,
 ) -> (
     task::JoinHandle<shell::Result<()>>,
     task::JoinHandle<()>,
     thread::JoinHandle<()>,
 ) {
+    let StartAbciBroadcasterShellParams {
+        spawner,
+        eth_receiver,
+        event_log_sender,
+        wasm_dir,
+        setup_data,
+        config,
+    } = params;
+
     let rpc_address = config.tendermint.rpc_address.to_string();
     let RunAuxSetup {
         vp_wasm_compilation_cache,
@@ -410,16 +428,6 @@ fn start_abci_broadcaster_shell(
     // Channels for validators to send protocol txs to be broadcast to the
     // broadcaster service
     let (broadcast_sender, broadcast_receiver) = mpsc::unbounded_channel();
-
-    // Channels for validators to send events to an event log, which will be
-    // queried from the node's RPC `/events` endpoint.
-    //
-    // TODO: make the sender a param of `start_abci_broadcaster_shell`;
-    // the sender will be returned by another task which starts the
-    // event log; we will also need yet another task for the rpc
-    // server itself. if we are not a validator or a full node,
-    // `event_log_sender` should be `None`
-    let (_, _, event_log_sender) = log::new(log::Params::default());
 
     // Start broadcaster
     let broadcaster = if matches!(
@@ -455,7 +463,6 @@ fn start_abci_broadcaster_shell(
     // Construct our ABCI application.
     let tendermint_mode = config.tendermint.tendermint_mode.clone();
     let ledger_address = config.shell.ledger_address;
-    let event_log_sender = Some(event_log_sender);
     let (shell, abci_service) = AbcippShim::new(NewAbcippShimParams {
         config,
         wasm_dir,
