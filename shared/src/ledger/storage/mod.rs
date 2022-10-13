@@ -500,7 +500,11 @@ where
         &self,
         addr: &Address,
     ) -> Result<(Option<Vec<u8>>, u64)> {
-        let key = Key::validity_predicate(addr);
+        let key = if let Address::Implicit(_) = addr {
+            parameters::storage::get_implicit_vp_key()
+        } else {
+            Key::validity_predicate(addr)
+        };
         self.read(&key)
     }
 
