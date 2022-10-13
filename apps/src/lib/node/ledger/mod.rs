@@ -236,14 +236,17 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let (eth_node, eth_receiver, oracle) =
         start_ethereum_node(&mut spawner, &config).await;
 
+    // Start logging events in the background
+    let (event_log, event_log_sender) =
+        start_event_logger(&mut spawner, &config);
+
     // Start ABCI server and broadcaster (the latter only if we are a validator
     // node)
     let (abci, broadcaster, shell_handler) =
         start_abci_broadcaster_shell(StartAbciBroadcasterShellParams {
             spawner: &mut spawner,
             eth_receiver,
-            // TODO: start event log
-            event_log_sender: None,
+            event_log_sender,
             wasm_dir,
             setup_data,
             config,
@@ -253,11 +256,17 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let aborted = spawner.wait_for_abort().await.child_terminated();
 
     // Wait for all managed tasks to finish.
-    let res =
-        tokio::try_join!(tendermint_node, eth_node, abci, oracle, broadcaster);
+    let res = tokio::try_join!(
+        tendermint_node,
+        eth_node,
+        abci,
+        oracle,
+        broadcaster,
+        event_log
+    );
 
     match res {
-        Ok((tendermint_res, eth_res, abci_res, _, _)) => {
+        Ok((tendermint_res, eth_res, abci_res, _, _, _)) => {
             // we ignore errors on user-initiated shutdown
             if aborted {
                 if let Err(err) = tendermint_res {
@@ -715,4 +724,33 @@ async fn start_ethereum_node(
 /// which will resolve instantly.
 fn spawn_dummy_task<T: Send + 'static>(ready: T) -> task::JoinHandle<T> {
     tokio::spawn(async { std::future::ready(ready).await })
+}
+
+/// Starts up a task in the background that logs events to the
+/// [`log::EventLog`].
+fn start_event_logger(
+    spawner: &mut AbortableSpawner,
+    config: &config::Ledger,
+) -> (task::JoinHandle<()>, Option<log::LogEntrySender>) {
+    if !matches!(
+        config.tendermint.tendermint_mode,
+        TendermintMode::Validator | TendermintMode::Full
+    ) {
+        let logger = spawn_dummy_task(());
+        return (logger, None);
+    }
+
+    // TODO: return the `EventLog` as well
+    // TODO: fetch params from the config
+    let (_log, mut logger, sender) = log::new(log::Params::default());
+
+    let logger = spawner
+        .spawn_abortable("EventLogger", move |_aborter| async move {
+            tracing::info!("Starting the event logger.");
+            logger.run().await;
+            tracing::info!("Event logger is no longer running.");
+        })
+        .with_no_cleanup();
+
+    (logger, Some(sender))
 }
