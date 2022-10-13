@@ -16,18 +16,18 @@ The second internal address holds the funds of rejected proposals.
 Each proposal will be stored in a sub-key under the internal proposal address. The storage keys involved are:
 
 ```
-/$GovernanceAddress/proposal/$id/content: Vec<u8>
-/$GovernanceAddress/proposal/$id/author: Address
-/$GovernanceAddress/proposal/$id/start_epoch: Epoch
-/$GovernanceAddress/proposal/$id/end_epoch: Epoch
-/$GovernanceAddress/proposal/$id/grace_epoch: Epoch
-/$GovernanceAddress/proposal/$id/proposal_code: Option<Vec<u8>>
-/$GovernanceAddress/proposal/$id/funds: u64
-/$GovernanceAddress/proposal/epoch/$id: u64
+/\$GovernanceAddress/proposal/\$id/content: Vec<u8>
+/\$GovernanceAddress/proposal/\$id/author: Address
+/\$GovernanceAddress/proposal/\$id/start_epoch: Epoch
+/\$GovernanceAddress/proposal/\$id/end_epoch: Epoch
+/\$GovernanceAddress/proposal/\$id/grace_epoch: Epoch
+/\$GovernanceAddress/proposal/\$id/proposal_code: Option<Vec<u8>>
+/\$GovernanceAddress/proposal/\$id/funds: u64
+/\$GovernanceAddress/proposal/epoch/\$id: u64
 ```
 
 - `Author` address field will be used to credit the locked funds if the proposal is approved.
-- `/\$GovernanceAddress/proposal/\$epoch/$id` is used for easing the ledger governance execution. `$epoch` refers to the same value as the on specific in the `grace_epoch` field.
+- `/\$GovernanceAddress/proposal/\$epoch/\$id` is used for easing the ledger governance execution. `\$epoch` refers to the same value as the on specific in the `grace_epoch` field.
 - The `content` value should follow a standard format. We leverage a similar format to what is described in the [BIP2](https://github.com/bitcoin/bips/blob/master/bip-0002.mediawiki#bip-format-and-structure) document:
 
 ```json
@@ -71,7 +71,7 @@ The governance machinery also relies on a subkey stored under the `NAM` token ad
 ```
 
 This is to leverage the `NAM` VP to check that the funds were correctly locked.
-The governance subkey, `/$GovernanceAddress/proposal/$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to Treasury.
+The governance subkey, `/\$GovernanceAddress/proposal/\$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to Treasury.
 
 ### GovernanceAddress VP
 Just like Pos, also governance has his own storage space. The `GovernanceAddress` validity predicate task is to check the integrity and correctness of new proposals. A proposal, to be correct, must satisfy the following:
@@ -193,7 +193,7 @@ The funds will be stored under:
 ```
 
 ### SlashFundAddress VP
-The slash_fund validity predicate will approve a transfer only if the transfer has been made by the protocol (by checking the existence of `/$GovernanceAddress/pending/$proposal_id` storage key)
+The slash_fund validity predicate will approve a transfer only if the transfer has been made by the protocol (by checking the existence of `/\$GovernanceAddress/pending/\$proposal_id` storage key)
 
 It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/main/shared/src/ledger/slash_fund/mod.rs#L70).
 
