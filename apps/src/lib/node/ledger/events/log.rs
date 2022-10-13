@@ -34,12 +34,12 @@ macro_rules! block_in_place {
 /// Parameters to configure the pruning of the event log.
 #[derive(Debug, Copy, Clone)]
 pub struct Params {
-    /// Soft lock on the maximum number of events the event log can hold.
+    /// Soft limit on the maximum number of events the event log can hold.
     ///
     /// If the number of events in the log exceeds this value, the log
     /// will be pruned.
     pub max_log_events: usize,
-    /// Soft lock on the number of entries the event log can hold.
+    /// Soft limit on the number of entries the event log can hold.
     ///
     /// If the difference between the newest log entry and the oldest's
     /// block heights is greater than this value, the log will be pruned.
