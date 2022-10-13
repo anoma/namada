@@ -220,8 +220,6 @@ fn calculate_new_eth_msg(
         EthMsg {
             body: update.body,
             voting_power: seen_by_voting_power,
-            // the below `.collect()` is deterministic and will result in a
-            // sorted vector as `update.seen_by` is a [`BTreeSet`]
             seen_by: update
                 .seen_by
                 .into_iter()
@@ -249,7 +247,8 @@ where
     );
     let body: EthereumEvent = read::value(store, &eth_msg_keys.body())?;
     let seen: bool = read::value(store, &eth_msg_keys.seen())?;
-    let seen_by: Vec<Address> = read::value(store, &eth_msg_keys.seen_by())?;
+    let seen_by: BTreeSet<Address> =
+        read::value(store, &eth_msg_keys.seen_by())?;
     let voting_power: FractionalVotingPower =
         read::value(store, &eth_msg_keys.voting_power())?;
 
@@ -448,10 +447,7 @@ mod tests {
             &mut storage,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
-                signers: HashSet::from_iter(vec![(
-                    sole_validator,
-                    BlockHeight(100),
-                )]),
+                signers: BTreeSet::from([(sole_validator, BlockHeight(100))]),
             }],
         );
 
@@ -509,10 +505,7 @@ mod tests {
             &mut storage,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
-                signers: HashSet::from_iter(vec![(
-                    validator_a,
-                    BlockHeight(100),
-                )]),
+                signers: BTreeSet::from([(validator_a, BlockHeight(100))]),
             }],
         );
         let tx_result = match result {

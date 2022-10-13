@@ -1,6 +1,6 @@
 //! Extend Tendermint votes with Ethereum events seen by a quorum of validators.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
@@ -239,7 +239,7 @@ where
             // register all ethereum events seen by `validator_addr`
             for ev in vote_extension.data.ethereum_events {
                 let signers =
-                    event_observers.entry(ev).or_insert_with(HashSet::new);
+                    event_observers.entry(ev).or_insert_with(BTreeSet::new);
                 #[cfg(feature = "abcipp")]
                 signers.insert(validator_addr.clone());
                 #[cfg(not(feature = "abcipp"))]

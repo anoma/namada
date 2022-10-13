@@ -276,7 +276,7 @@ pub(super) mod record {
 // TODO: write tests for validator set update vote extensions in
 // prepare proposals
 mod test_prepare_proposal {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::{BTreeSet, HashMap};
 
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos::namada_proof_of_stake::types::{
@@ -569,7 +569,7 @@ mod test_prepare_proposal {
         let events = vec![MultiSignedEthEvent {
             event: ext.data.ethereum_events[0].clone(),
             signers: {
-                let mut s = HashSet::new();
+                let mut s = BTreeSet::new();
                 #[cfg(feature = "abcipp")]
                 s.insert(ext.data.validator_addr.clone());
                 #[cfg(not(feature = "abcipp"))]

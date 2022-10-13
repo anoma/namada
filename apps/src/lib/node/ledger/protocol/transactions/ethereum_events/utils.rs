@@ -281,7 +281,7 @@ mod tests {
                     1.into(),
                     address::testing::established_address_1(),
                 ),
-                signers: HashSet::from_iter(vec![
+                signers: BTreeSet::from([
                     (
                         address::testing::established_address_1(),
                         BlockHeight(100),
@@ -297,7 +297,7 @@ mod tests {
                     2.into(),
                     address::testing::established_address_2(),
                 ),
-                signers: HashSet::from_iter(vec![
+                signers: BTreeSet::from([
                     (
                         address::testing::established_address_1(),
                         BlockHeight(101),

@@ -411,7 +411,7 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
@@ -580,7 +580,7 @@ mod test_process_proposal {
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
-                        let mut s = HashSet::new();
+                        let mut s = BTreeSet::new();
                         #[cfg(feature = "abcipp")]
                         s.insert(addr);
                         #[cfg(not(feature = "abcipp"))]
@@ -634,7 +634,7 @@ mod test_process_proposal {
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
-                        let mut s = HashSet::new();
+                        let mut s = BTreeSet::new();
                         #[cfg(feature = "abcipp")]
                         s.insert(addr);
                         #[cfg(not(feature = "abcipp"))]
@@ -705,7 +705,7 @@ mod test_process_proposal {
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
-                        let mut s = HashSet::new();
+                        let mut s = BTreeSet::new();
                         #[cfg(feature = "abcipp")]
                         s.insert(addr);
                         #[cfg(not(feature = "abcipp"))]
