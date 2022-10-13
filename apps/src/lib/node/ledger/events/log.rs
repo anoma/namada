@@ -318,9 +318,16 @@ impl EventLog {
     ) {
         if num_events > self.inner.params.max_log_events {
             let keep_events = calc_num_of_kept_events(num_events);
+            tracing::debug!(
+                max_log_events = self.inner.params.max_log_events,
+                events_to_keep = keep_events,
+                previous_count = num_events,
+                "Pruning events from the event log",
+            );
             let snapshot = if keep_events > 0 {
                 self.prune_too_many_events(head, keep_events)
             } else {
+                tracing::debug!("Clearing event log");
                 None
             };
             self.inner.lock.write().unwrap().install_snapshot(snapshot);
@@ -328,9 +335,16 @@ impl EventLog {
         }
         if height_diff > self.inner.params.log_block_height_diff {
             let nodes_to_keep = calc_num_of_kept_ents(height_diff);
+            tracing::debug!(
+                max_height_diff = self.inner.params.log_block_height_diff,
+                nodes_to_keep,
+                height_diff,
+                "Pruning entries from the event log",
+            );
             let snapshot = if nodes_to_keep > 0 {
                 self.prune_old_events(head, nodes_to_keep)
             } else {
+                tracing::debug!("Clearing event log");
                 None
             };
             self.inner.lock.write().unwrap().install_snapshot(snapshot);
@@ -428,6 +442,7 @@ impl EventLog {
     fn add(&self, entry: LogEntry) {
         // do not log zero length event vecs
         if entry.events.is_empty() {
+            tracing::debug!(?entry, "Rejected log entry with empty events");
             return;
         }
 
@@ -448,7 +463,13 @@ impl EventLog {
             if !height_respects_log_invariant {
                 // drop entries whose block height is not
                 // higher than the log head's height
+                tracing::debug!(
+                    ?entry,
+                    "Rejected log entry with invalid block height",
+                );
                 return;
+            } else {
+                tracing::debug!(?entry, "Adding new entry to the event log");
             }
             let height_diff = entry.block_height.0 - log.oldest_height.0;
             log.num_events += entry.events.len();
