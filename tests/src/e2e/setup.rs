@@ -664,9 +664,9 @@ where
     );
 
     run_cmd
-        .env("ANOMA_LOG", "debug")
+        .env("ANOMA_LOG", "info")
         .env("ANOMA_TM_STDOUT", "true")
-        .env("TM_LOG_LEVEL", "debug")
+        .env("TM_LOG_LEVEL", "info")
         .env("ANOMA_LEDGER__ETHEREUM__MODE", "Off")
         .env("ANOMA_LOG_COLOR", "false")
         .current_dir(working_dir)
