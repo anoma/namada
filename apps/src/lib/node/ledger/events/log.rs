@@ -153,7 +153,7 @@ struct EventLogInner {
 }
 
 /// Data which needs lock protection, in the [`EventLog`].
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct EventLogInnerMux {
     /// The total number of events stored in the log.
     ///
@@ -478,9 +478,7 @@ impl EventLogInnerMux {
             self.num_events = snapshot.num_events;
             self.head = Some(snapshot.head);
         } else {
-            self.oldest_height = 0.into();
-            self.num_events = 0;
-            self.head = None;
+            *self = Default::default();
         }
     }
 }
