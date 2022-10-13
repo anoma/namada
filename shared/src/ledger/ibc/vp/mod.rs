@@ -730,6 +730,7 @@ mod tests {
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
+        keys_changed.insert(conn_ids_key);
 
         let verifiers = BTreeSet::new();
 
@@ -869,6 +870,7 @@ mod tests {
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
+        keys_changed.insert(conn_ids_key);
 
         let verifiers = BTreeSet::new();
 
