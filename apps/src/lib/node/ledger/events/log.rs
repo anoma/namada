@@ -206,8 +206,11 @@ impl EventLogSnapshot {
         &'n self,
         query: &'q str,
     ) -> Result<EventLogIter<'n, 'q>, Error> {
-        let matcher = dumb_queries::QueryMatcher::parse(query)
-            .ok_or(Error::InvalidQuery)?;
+        let matcher =
+            dumb_queries::QueryMatcher::parse(query).ok_or_else(|| {
+                tracing::debug!(query, "Invalid Tendermint query");
+                Error::InvalidQuery
+            })?;
         Ok(self.iter_with_matcher(matcher))
     }
 
