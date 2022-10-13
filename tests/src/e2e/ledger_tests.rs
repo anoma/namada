@@ -275,11 +275,31 @@ fn ledger_txs_and_queries() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let txs_args = vec![
-        // 2. Submit a token transfer tx
+        // 2. Submit a token transfer tx (from an established account)
         vec![
             "transfer",
             "--source",
             BERTHA,
+            "--target",
+            ALBERT,
+            "--token",
+            XAN,
+            "--amount",
+            "10.1",
+            "--fee-amount",
+            "0",
+            "--gas-limit",
+            "0",
+            "--fee-token",
+            XAN,
+            "--ledger-address",
+            &validator_one_rpc,
+        ],
+        // Submit a token transfer tx (from an implicit account)
+        vec![
+            "transfer",
+            "--source",
+            DAEWON,
             "--target",
             ALBERT,
             "--token",
@@ -1036,6 +1056,7 @@ fn proposal_submission() -> Result<()> {
                     &working_dir,
                     Some("tx_"),
                 )),
+                ..genesis.parameters
             };
 
             GenesisConfig {

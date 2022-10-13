@@ -113,22 +113,21 @@ vp = "vp_user"
 
 # Wasm VP definitions
 
-# Default user VP
+# Implicit VP
+[wasm.vp_implicit]
+filename = "vp_implicit.wasm"
+
+# Default user VP in established accounts
 [wasm.vp_user]
-# filename (relative to wasm path used by the node)
 filename = "vp_user.wasm"
-# SHA-256 hash of the wasm file
-sha256 = "dc7b97f0448f2369bd2401c3c1d8898f53cac8c464a8c1b1f7f81415a658625d"
 
 # Token VP
 [wasm.vp_token]
 filename = "vp_token.wasm"
-sha256 = "e428a11f570d21dd3c871f5d35de6fe18098eb8ee0456b3e11a72ccdd8685cd0"
 
 # Faucet VP
 [wasm.vp_testnet_faucet]
 filename = "vp_testnet_faucet.wasm"
-sha256 = "2038d93afd456a77c45123811b671627f488c8d2a72b714d82dd494cbbd552bc"
 
 # General protocol parameters.
 [parameters]
@@ -142,6 +141,8 @@ max_expected_time_per_block = 30
 vp_whitelist = []
 # tx whitelist
 tx_whitelist = []
+# Implicit VP WASM name
+implicit_vp = "vp_implicit"
 
 # Proof of stake parameters.
 [pos_params]
