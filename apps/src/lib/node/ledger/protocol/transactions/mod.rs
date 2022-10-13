@@ -4,4 +4,5 @@
 //! to update their blockchain state in a deterministic way. This can be done
 //! natively rather than via the wasm environment as happens with regular
 //! transactions.
+#[cfg(not(feature = "abcipp"))]
 pub(super) mod ethereum_events;
