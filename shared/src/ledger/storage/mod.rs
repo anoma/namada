@@ -364,6 +364,7 @@ where
         };
         self.db.write_block(state)?;
         self.last_height = self.block.height;
+        self.last_epoch = self.block.epoch;
         self.header = None;
         Ok(())
     }
@@ -617,8 +618,6 @@ where
         if new_epoch {
             // Begin a new epoch
             self.block.epoch = self.block.epoch.next();
-            self.last_epoch = self.last_epoch.next();
-            debug_assert_eq!(self.block.epoch, self.last_epoch);
             let EpochDuration {
                 min_num_of_blocks,
                 min_duration,
@@ -987,7 +986,6 @@ mod tests {
                 )
             {
                 assert_eq!(storage.block.epoch, epoch_before.next());
-                assert_eq!(storage.last_epoch, epoch_before.next());
                 assert_eq!(storage.next_epoch_min_start_height,
                     block_height + epoch_duration.min_num_of_blocks);
                 assert_eq!(storage.next_epoch_min_start_time,
@@ -995,9 +993,10 @@ mod tests {
                 assert_eq!(storage.block.pred_epochs.get_epoch(block_height), Some(epoch_before.next()));
             } else {
                 assert_eq!(storage.block.epoch, epoch_before);
-                assert_eq!(storage.last_epoch, epoch_before);
                 assert_eq!(storage.block.pred_epochs.get_epoch(block_height), Some(epoch_before));
             }
+            // Last epoch should only change when the block is committed
+            assert_eq!(storage.last_epoch, epoch_before);
 
             // Update the epoch duration parameters
             parameters.epoch_duration.min_num_of_blocks =
@@ -1011,7 +1010,7 @@ mod tests {
             parameters::update_epoch_parameter(&mut storage, &parameters.epoch_duration).unwrap();
 
             // Test for 2.
-            let epoch_before = storage.last_epoch;
+            let epoch_before = storage.block.epoch;
             let height_of_update = storage.next_epoch_min_start_height.0 ;
             let time_of_update = storage.next_epoch_min_start_time;
             let height_before_update = BlockHeight(height_of_update - 1);
@@ -1022,18 +1021,14 @@ mod tests {
             // satisfied
             storage.update_epoch(height_before_update, time_before_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert_eq!(storage.last_epoch, epoch_before);
             storage.update_epoch(height_of_update, time_before_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert_eq!(storage.last_epoch, epoch_before);
             storage.update_epoch(height_before_update, time_of_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert_eq!(storage.last_epoch, epoch_before);
 
             // Update should happen at this or after this height and time
             storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before.next());
-            assert_eq!(storage.last_epoch, epoch_before.next());
             // The next epoch's minimum duration should change
             assert_eq!(storage.next_epoch_min_start_height,
                 height_of_update + parameters.epoch_duration.min_num_of_blocks);
