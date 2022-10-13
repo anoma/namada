@@ -863,11 +863,11 @@ mod tests {
     async fn test_snapshot_wait() {
         let (log, mut logger, sender) = new(Params::default());
 
-        // wait up to 10 ms for events
-        let max_wait_time = Duration::from_millis(10);
+        // wait up to 1s for events
+        let max_wait_time = Duration::from_secs(1);
 
         let sender_task = tokio::spawn(async move {
-            time::sleep(max_wait_time / 2).await;
+            time::sleep(max_wait_time / 4).await;
 
             // send events to the logger
             sender
