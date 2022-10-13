@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
+use bimap::BiHashMap;
 use file_lock::{FileLock, FileOptions};
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::dkg_session_keys::DkgKeypair;
@@ -53,7 +54,7 @@ pub struct Store {
     /// Cryptographic keypairs
     keys: HashMap<Alias, StoredKeypair>,
     /// Anoma address book
-    addresses: HashMap<Alias, Address>,
+    addresses: BiHashMap<Alias, Address>,
     /// Known mappings of public key hashes to their aliases in the `keys`
     /// field. Used for look-up by a public key.
     pkhs: HashMap<PublicKeyHash, Alias>,
@@ -135,15 +136,15 @@ impl Store {
     /// the genesis file, if not found.
     pub fn load_or_new_from_genesis(
         store_dir: &Path,
-        load_genesis: impl FnOnce() -> GenesisConfig,
+        genesis_cfg: GenesisConfig,
     ) -> Result<Self, LoadStoreError> {
         Self::load(store_dir).or_else(|_| {
             #[cfg(not(feature = "dev"))]
-            let store = Self::new(load_genesis());
+            let store = Self::new(genesis_cfg);
             #[cfg(feature = "dev")]
             let store = {
                 // The function is unused in dev
-                let _ = load_genesis;
+                let _ = genesis_cfg;
                 Self::new()
             };
             store.save(store_dir).map_err(|err| {
@@ -224,7 +225,12 @@ impl Store {
 
     /// Find the stored address by an alias.
     pub fn find_address(&self, alias: impl AsRef<str>) -> Option<&Address> {
-        self.addresses.get(&alias.into())
+        self.addresses.get_by_left(&alias.into())
+    }
+
+    /// Find an alias by the address if it's in the wallet.
+    pub fn find_alias(&self, address: &Address) -> Option<&Alias> {
+        self.addresses.get_by_right(address)
     }
 
     /// Get all known keys by their alias, paired with PKH, if known.
@@ -248,7 +254,7 @@ impl Store {
     }
 
     /// Get all known addresses by their alias, paired with PKH, if known.
-    pub fn get_addresses(&self) -> &HashMap<Alias, Address> {
+    pub fn get_addresses(&self) -> &BiHashMap<Alias, Address> {
         &self.addresses
     }
 
@@ -365,7 +371,7 @@ impl Store {
                 alias = address.encode()
             );
         }
-        if self.addresses.contains_key(&alias) {
+        if self.addresses.contains_left(&alias) {
             match show_overwrite_confirmation(&alias, "an address") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {

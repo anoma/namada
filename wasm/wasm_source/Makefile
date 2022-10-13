@@ -23,8 +23,12 @@ wasms += vp_testnet_faucet
 wasms += vp_token
 wasms += vp_user
 
-# Build all wasms
+# Build all wasms in release mode
 all: $(wasms)
+
+# Build all wasms in debug mode
+debug:
+	$(foreach wasm,$(wasms),make debug_$(wasm) && ) true
 
 # `cargo check` all wasms
 check:
@@ -50,8 +54,13 @@ fmt-check:
 # Build a selected wasm
 # Linker flag "-s" for stripping (https://github.com/rust-lang/cargo/issues/3483#issuecomment-431209957)
 $(wasms): %:
-	RUSTFLAGS='-C link-arg=-s' $(cargo) build --release --target wasm32-unknown-unknown --features $@ && \
+	RUSTFLAGS='-C link-arg=-s' $(cargo) build --release --target wasm32-unknown-unknown --target-dir 'target' --features $@ && \
 	cp "./target/wasm32-unknown-unknown/release/namada_wasm.wasm" ../$@.wasm
+
+# Build a selected wasm in debug mode
+$(patsubst %,debug_%,$(wasms)): debug_%:
+	RUSTFLAGS='-C link-arg=-s' $(cargo) build --target wasm32-unknown-unknown --target-dir 'target' --features $* && \
+	cp "../target/wasm32-unknown-unknown/debug/anoma_wasm.wasm" ../$*.wasm
 
 # `cargo check` one of the wasms, e.g. `make check_tx_transfer`
 $(patsubst %,check_%,$(wasms)): check_%:
@@ -78,4 +87,4 @@ clean:
 deps:
 	$(rustup) target add wasm32-unknown-unknown
 
-.PHONY : all check test clippy fmt fmt-check clean deps
+.PHONY : all debug check test clippy fmt fmt-check clean deps

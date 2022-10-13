@@ -9,9 +9,9 @@ use namada::ledger::ibc::vp::{Ibc, IbcToken};
 use namada::ledger::native_vp::{self, NativeVp};
 use namada::ledger::parameters::{self, ParametersVp};
 use namada::ledger::pos::{self, PosVP};
+use namada::ledger::slash_fund::SlashFundVp;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use namada::ledger::treasury::TreasuryVp;
 use namada::proto::{self, Tx};
 use namada::types::address::{Address, InternalAddress};
 use namada::types::storage;
@@ -49,8 +49,8 @@ pub enum Error {
     IbcTokenNativeVpError(namada::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
     GovernanceNativeVpError(namada::ledger::governance::vp::Error),
-    #[error("Treasury native VP error: {0}")]
-    TreasuryNativeVpError(namada::ledger::treasury::Error),
+    #[error("SlashFund native VP error: {0}")]
+    SlashFundNativeVpError(namada::ledger::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]
     EthBridgeNativeVpError(namada::ledger::eth_bridge::vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
@@ -249,10 +249,13 @@ where
                 }
                 Address::Internal(internal_addr) => {
                     let ctx = native_vp::Ctx::new(
+                        addr,
                         storage,
                         write_log,
                         tx,
                         gas_meter,
+                        &keys_changed,
+                        &verifiers,
                         vp_wasm_cache.clone(),
                     );
                     let tx_data = match tx.data.as_ref() {
@@ -325,12 +328,12 @@ where
                             gas_meter = governance.ctx.gas_meter.into_inner();
                             result
                         }
-                        InternalAddress::Treasury => {
-                            let treasury = TreasuryVp { ctx };
-                            let result = treasury
+                        InternalAddress::SlashFund => {
+                            let slash_fund = SlashFundVp { ctx };
+                            let result = slash_fund
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
-                                .map_err(Error::TreasuryNativeVpError);
-                            gas_meter = treasury.ctx.gas_meter.into_inner();
+                                .map_err(Error::SlashFundNativeVpError);
+                            gas_meter = slash_fund.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::IbcEscrow(_)

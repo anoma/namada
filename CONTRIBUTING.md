@@ -47,4 +47,4 @@ for i in $(ls -d .changelog/*/*/); do basename "$i"; done
 
 ## Development priorities
 
-If you’d like to follow the development or contribute with new or unimplemented features, we recommend to check [the pinned issues](https://github.com/anoma/anoma/issues) that are set to tracking issues in current focus of the ledger, intent gossiper and matchmaker team.
+If you’d like to follow the development or contribute with new or unimplemented features, we recommend to check [the issues](https://github.com/anoma/namada/issues) that are in current focus of the ledger team.

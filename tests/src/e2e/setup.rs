@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
@@ -16,13 +17,14 @@ use expectrl::process::unix::{PtyStream, UnixProcess};
 use expectrl::session::Session;
 use expectrl::stream::log::LoggedStream;
 use expectrl::{Eof, WaitStatus};
-use eyre::eyre;
+use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::{config, wallet};
 use rand::Rng;
+use serde_json;
 use tempfile::{tempdir, TempDir};
 
 use crate::e2e::helpers::generate_bin_command;
@@ -65,21 +67,12 @@ pub fn add_validators(num: u8, mut genesis: GenesisConfig) -> GenesisConfig {
     let validator_0 = genesis.validator.get_mut("validator-0").unwrap();
     // Clone the first validator before modifying it
     let other_validators = validator_0.clone();
-    // Set the first validator to be a bootstrap node to enable P2P connectivity
-    validator_0.intent_gossip_seed = Some(true);
-    // A bootstrap node doesn't participate in the gossipsub protocol for
-    // gossiping intents, so we remove its matchmaker
-    validator_0.matchmaker_account = None;
-    validator_0.matchmaker_code = None;
-    validator_0.matchmaker_tx = None;
     let net_address_0 =
         SocketAddr::from_str(validator_0.net_address.as_ref().unwrap())
             .unwrap();
     let net_address_port_0 = net_address_0.port();
     for ix in 0..num {
         let mut validator = other_validators.clone();
-        // Only the first validator is bootstrap
-        validator.intent_gossip_seed = None;
         let mut net_address = net_address_0;
         // 6 ports for each validator
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
@@ -112,7 +105,7 @@ pub fn network(
     // Open the source genesis file
     let genesis = genesis_config::open_genesis_config(
         working_dir.join(SINGLE_NODE_NET_GENESIS),
-    );
+    )?;
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);
@@ -488,7 +481,6 @@ impl AnomaCmd {
     }
 
     /// Assert that the process exited with failure
-    #[allow(dead_code)]
     pub fn assert_failure(&mut self) {
         // Make sure that there is no unread output first
         let _ = self.exp_eof().unwrap();
@@ -769,7 +761,6 @@ pub mod constants {
     pub const CHRISTEL: &str = "Christel";
     pub const CHRISTEL_KEY: &str = "Christel-key";
     pub const DAEWON: &str = "Daewon";
-    pub const MATCHMAKER_KEY: &str = "matchmaker-key";
 
     //  Native VP aliases
     pub const GOVERNANCE_ADDRESS: &str = "governance";
@@ -852,11 +843,42 @@ pub fn copy_wasm_to_chain_dir<'a>(
             .join(chain_id.as_str())
             .join(config::DEFAULT_WASM_DIR);
         for file in &wasm_files {
-            std::fs::copy(
-                working_dir.join("wasm").join(&file),
-                target_wasm_dir.join(&file),
-            )
-            .unwrap();
+            let src = working_dir.join("wasm").join(&file);
+            let dst = target_wasm_dir.join(&file);
+            std::fs::copy(&src, &dst)
+                .wrap_err_with(|| {
+                    format!(
+                        "copying {} to {}",
+                        &src.to_string_lossy(),
+                        &dst.to_string_lossy(),
+                    )
+                })
+                .unwrap();
         }
     }
+}
+
+pub fn get_all_wasms_hashes(
+    working_dir: &Path,
+    filter: Option<&str>,
+) -> Vec<String> {
+    let checksums_path = working_dir.join("wasm/checksums.json");
+    let checksums_content = fs::read_to_string(checksums_path).unwrap();
+    let checksums: HashMap<String, String> =
+        serde_json::from_str(&checksums_content).unwrap();
+    let filter_prefix = filter.unwrap_or_default();
+    checksums
+        .values()
+        .filter_map(|wasm| {
+            if wasm.contains(&filter_prefix) {
+                Some(
+                    wasm.split('.').collect::<Vec<&str>>()[1]
+                        .to_owned()
+                        .to_uppercase(),
+                )
+            } else {
+                None
+            }
+        })
+        .collect()
 }

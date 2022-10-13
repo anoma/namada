@@ -21,7 +21,7 @@ Supported validity predicates for Namada:
     - Proof-of-stake (see [spec](../economics/proof-of-stake.md))
     - IBC & IbcToken (see [spec](../interoperability/ibc.md))
     - Governance (see [spec](./governance.md))
-    - Treasury (see [spec](./governance.md#TreasuryAddress))
+    - SlashFund (see [spec](./governance.md#SlashFundAddress))
     - Protocol parameters
 - WASM
     - Fungible token (see [spec](./fungible-token.md))

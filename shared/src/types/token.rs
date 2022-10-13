@@ -139,6 +139,12 @@ impl From<Amount> for u64 {
     }
 }
 
+impl From<Amount> for u128 {
+    fn from(amount: Amount) -> Self {
+        u128::from(amount.micro)
+    }
+}
+
 impl Add for Amount {
     type Output = Amount;
 
@@ -250,6 +256,23 @@ pub fn balance_prefix(token_addr: &Address) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
+/// Obtain a storage key prefix for multitoken balances.
+pub fn multitoken_balance_prefix(
+    token_addr: &Address,
+    sub_prefix: &Key,
+) -> Key {
+    Key::from(token_addr.to_db_key()).join(sub_prefix)
+}
+
+/// Obtain a storage key for user's multitoken balance.
+pub fn multitoken_balance_key(prefix: &Key, owner: &Address) -> Key {
+    prefix
+        .push(&BALANCE_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&owner.to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Check if the given storage key is balance key for the given token. If it is,
 /// returns the owner.
 pub fn is_balance_key<'a>(
@@ -297,6 +320,51 @@ pub fn is_non_owner_balance_key(key: &Key) -> Option<&Address> {
     }
 }
 
+/// Check if the given storage key is multitoken balance key for the given
+/// token. If it is, returns the sub prefix and the owner.
+pub fn is_multitoken_balance_key<'a>(
+    token_addr: &Address,
+    key: &'a Key,
+) -> Option<(Key, &'a Address)> {
+    match key.segments.first() {
+        Some(DbKeySeg::AddressSeg(addr)) if addr == token_addr => {
+            multitoken_balance_owner(key)
+        }
+        _ => None,
+    }
+}
+
+/// Check if the given storage key is multitoken balance key for unspecified
+/// token. If it is, returns the sub prefix and the owner.
+pub fn is_any_multitoken_balance_key(key: &Key) -> Option<(Key, &Address)> {
+    match key.segments.first() {
+        Some(DbKeySeg::AddressSeg(_)) => multitoken_balance_owner(key),
+        _ => None,
+    }
+}
+
+fn multitoken_balance_owner(key: &Key) -> Option<(Key, &Address)> {
+    let len = key.segments.len();
+    if len < 4 {
+        // the key of a multitoken should have 1 or more segments other than
+        // token, balance, owner
+        return None;
+    }
+    match &key.segments[..] {
+        [
+            ..,
+            DbKeySeg::StringSeg(balance),
+            DbKeySeg::AddressSeg(owner),
+        ] if balance == BALANCE_STORAGE_KEY => {
+            let sub_prefix = Key {
+                segments: key.segments[1..(len - 2)].to_vec(),
+            };
+            Some((sub_prefix, owner))
+        }
+        _ => None,
+    }
+}
+
 /// A simple bilateral token transfer
 #[derive(
     Debug,
@@ -318,6 +386,8 @@ pub struct Transfer {
     pub target: Address,
     /// Token's address
     pub token: Address,
+    /// Source token's sub prefix
+    pub sub_prefix: Option<Key>,
     /// The amount of tokens
     pub amount: Amount,
 }
@@ -354,6 +424,7 @@ impl TryFrom<FungibleTokenPacketData> for Transfer {
             source,
             target,
             token,
+            sub_prefix: None,
             amount,
         })
     }
@@ -391,5 +462,23 @@ mod tests {
 
         let zero = Amount::from(0);
         assert_eq!("0", zero.to_string());
+    }
+}
+
+/// Helpers for testing with addresses.
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    /// Generate an arbitrary token amount
+    pub fn arb_amount() -> impl Strategy<Value = Amount> {
+        any::<u64>().prop_map(Amount::from)
+    }
+
+    /// Generate an arbitrary token amount up to and including given `max` value
+    pub fn arb_amount_ceiled(max: u64) -> impl Strategy<Value = Amount> {
+        (0..=max).prop_map(Amount::from)
     }
 }

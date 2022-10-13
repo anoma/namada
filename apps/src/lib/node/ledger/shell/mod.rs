@@ -6,6 +6,7 @@
 //! (unless we can simply overwrite them in the next block).
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod finalize_block;
+mod governance;
 mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
@@ -29,7 +30,7 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, DB,
 };
-use namada::ledger::{ibc, parameters, pos};
+use namada::ledger::{ibc, pos};
 use namada::proto::{self, Tx};
 use namada::types::chain::ChainId;
 use namada::types::key::*;
@@ -50,7 +51,6 @@ use tendermint_proto::abci::{
     RequestPrepareProposal, ValidatorUpdate,
 };
 use tendermint_proto::crypto::public_key;
-use tendermint_proto::types::ConsensusParams;
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
 use tower_abci::{request, response};
@@ -103,6 +103,8 @@ pub enum Error {
     Broadcaster(tokio::sync::mpsc::error::TryRecvError),
     #[error("Error executing proposal {0}: {1}")]
     BadProposal(u64, String),
+    #[error("Error reading wasm: {0}")]
+    ReadingWasm(#[from] eyre::Error),
 }
 
 impl From<Error> for TxResult {
@@ -270,11 +272,10 @@ where
                     );
                     let wallet = wallet::Wallet::load_or_new_from_genesis(
                         wallet_path,
-                        move || {
-                            genesis::genesis_config::open_genesis_config(
-                                genesis_path,
-                            )
-                        },
+                        genesis::genesis_config::open_genesis_config(
+                            genesis_path,
+                        )
+                        .unwrap(),
                     );
                     wallet
                         .take_validator_data()
@@ -397,6 +398,7 @@ where
             let pos_params = self.storage.read_pos_params();
             let current_epoch = self.storage.block.epoch;
             for evidence in byzantine_validators {
+                tracing::info!("Processing evidence {evidence:?}.");
                 let evidence_height = match u64::try_from(evidence.height) {
                     Ok(height) => height,
                     Err(err) => {
@@ -422,6 +424,13 @@ where
                         continue;
                     }
                 };
+                if evidence_epoch + pos_params.unbonding_len <= current_epoch {
+                    tracing::info!(
+                        "Skipping outdated evidence from epoch \
+                         {evidence_epoch}"
+                    );
+                    continue;
+                }
                 let slash_type = match EvidenceType::from_i32(evidence.r#type) {
                     Some(r#type) => match r#type {
                         EvidenceType::DuplicateVote => {
@@ -447,19 +456,7 @@ where
                     }
                 };
                 let validator_raw_hash = match evidence.validator {
-                    Some(validator) => {
-                        match String::from_utf8(validator.address) {
-                            Ok(raw_hash) => raw_hash,
-                            Err(err) => {
-                                tracing::error!(
-                                    "Evidence failed to decode validator \
-                                     address from utf-8 with {}",
-                                    err
-                                );
-                                continue;
-                            }
-                        }
-                    }
+                    Some(validator) => tm_raw_hash_to_string(validator.address),
                     None => {
                         tracing::error!(
                             "Evidence without a validator {:#?}",
@@ -483,9 +480,9 @@ where
                 };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {}",
-                    evidence_epoch,
-                    slash_type,
                     validator,
+                    slash_type,
+                    evidence_epoch,
                     evidence_height
                 );
                 if let Err(err) = self.storage.slash(
@@ -610,10 +607,10 @@ where
         let genesis_path = &self
             .base_dir
             .join(format!("{}.toml", self.chain_id.as_str()));
-        let mut wallet =
-            wallet::Wallet::load_or_new_from_genesis(wallet_path, move || {
-                genesis::genesis_config::open_genesis_config(genesis_path)
-            });
+        let mut wallet = wallet::Wallet::load_or_new_from_genesis(
+            wallet_path,
+            genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
+        );
         self.mode.get_validator_address().map(|addr| {
             let pk_bytes = self
                 .storage
