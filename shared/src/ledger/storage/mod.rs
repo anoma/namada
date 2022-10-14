@@ -707,10 +707,6 @@ where
 
     /// Update the MASP's allowed conversions
     fn update_allowed_conversions(&mut self) -> Result<()> {
-        // No conversions exist yet on the first epoch
-        if self.last_epoch == Epoch(0) {
-            return Ok(());
-        }
         // The derived conversions will be placed in MASP address space
         let masp_addr = masp();
         let key_prefix: Key = masp_addr.to_db_key().into();
@@ -747,9 +743,9 @@ where
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset
             let old_asset =
-                Self::encode_asset_type(addr.clone(), self.last_epoch.prev());
-            let new_asset =
                 Self::encode_asset_type(addr.clone(), self.last_epoch);
+            let new_asset =
+                Self::encode_asset_type(addr.clone(), self.block.epoch);
             current_convs.insert(
                 addr.clone(),
                 (Amount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
@@ -762,7 +758,7 @@ where
                 old_asset,
                 (
                     addr.clone(),
-                    self.last_epoch.prev(),
+                    self.last_epoch,
                     Amount::zero().into(),
                     0,
                 ),
