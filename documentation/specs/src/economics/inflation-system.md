@@ -70,10 +70,10 @@ These tokens are distributed to the proof-of-stake reward distribution validity 
 
 Similarly, for each asset $A$ for which shielded pool rewards are being paid:
 
-- Calculate the control value $C_{SP_A} := (KP_{SP_A} * E_{SP_A}) - (KD_{SP_A} * E'{SP_A})$
 - Calculate the new $I_{SP_A} := max(0, min(I_{SP_A} + C_{SP_A}, Cap_{SP_A-Epoch}))$
 - Calculate the error $E_{SP_A} = R_{SP_A-Target} - R_{SP_A}$
 - Calculate the error derivative $E'_{SP_A} = E_{SP_A} - E_{SP_A-last} = R_{SP_A} - R_{SP_A-last}$
+- Calculate the control value $C_{SP_A} = (KP_{SP_A} * E_{SP_A}) - (KD_{SP_A} * E'_{SP_A})$
 
 These tokens are distributed to the shielded pool reward distribution validity predicate.
 
