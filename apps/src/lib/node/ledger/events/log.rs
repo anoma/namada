@@ -20,6 +20,7 @@ pub enum Error {
 }
 
 /// Parameters to configure the pruning of the event log.
+#[derive(Debug, Copy, Clone)]
 pub struct Params {
     /// Soft limit on the maximum number of events the event log can hold.
     ///
