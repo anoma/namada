@@ -149,8 +149,8 @@ mod tests {
 
         assert_eq!(events_in_log.len(), NUM_HEIGHTS);
 
-        for i in 0..NUM_HEIGHTS {
-            assert_eq!(events[0], events_in_log[i]);
+        for event in events_in_log {
+            assert_eq!(events[0], event);
         }
     }
 
@@ -161,7 +161,9 @@ mod tests {
 
         // log cap has to be a multiple of two
         // for this test
-        assert!(LOG_CAP & 1 == 0);
+        if LOG_CAP & 1 != 0 {
+            panic!();
+        }
 
         const MATCHED_EVENTS: usize = LOG_CAP / 2;
 
@@ -189,8 +191,8 @@ mod tests {
 
         assert_eq!(events_in_log.len(), MATCHED_EVENTS);
 
-        for i in 0..MATCHED_EVENTS {
-            assert_eq!(events[0], events_in_log[i]);
+        for event in events_in_log {
+            assert_eq!(events[0], event);
         }
 
         // add a new APPLIED event to the log,
@@ -206,8 +208,8 @@ mod tests {
         const ACCEPTED_EVENTS: usize = MATCHED_EVENTS - 1;
         assert_eq!(events_in_log.len(), ACCEPTED_EVENTS);
 
-        for i in 0..ACCEPTED_EVENTS {
-            assert_eq!(events[0], events_in_log[i]);
+        for event in events_in_log {
+            assert_eq!(events[0], event);
         }
     }
 }
