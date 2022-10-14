@@ -17,6 +17,7 @@ use namada::types::address::Address;
 use namada::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
 };
+use namada::types::ethereum_events::EthAddress;
 use namada::types::keccak::encode::Encode;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::key;
@@ -1084,7 +1085,7 @@ mod test_queries {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        let _ = shell.storage.commit().expect("Test failed");
+        shell.storage.commit().expect("Test failed");
         shell.storage.block.height = shell.storage.block.height + 1;
 
         // check the response
@@ -1121,7 +1122,7 @@ mod test_queries {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        let _ = shell.storage.commit().expect("Test failed");
+        shell.storage.commit().expect("Test failed");
         shell.storage.block.height = shell.storage.block.height + 1;
 
         // update the pool
@@ -1129,7 +1130,7 @@ mod test_queries {
             .storage
             .delete(&get_pending_key(&transfer))
             .expect("Test failed");
-        let mut transfer2 = transfer.clone();
+        let mut transfer2 = transfer;
         transfer2.transfer.amount = 1.into();
         shell
             .storage
@@ -1137,7 +1138,7 @@ mod test_queries {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        let _ = shell.storage.commit().expect("Test failed");
+        shell.storage.commit().expect("Test failed");
         shell.storage.block.height = shell.storage.block.height + 1;
 
         // check the response
@@ -1181,7 +1182,7 @@ mod test_queries {
         };
 
         // commit the changes and increase block height
-        let _ = shell.storage.commit().expect("Test failed");
+        shell.storage.commit().expect("Test failed");
         shell.storage.block.height = shell.storage.block.height + 1;
 
         // update the pool
@@ -1195,14 +1196,11 @@ mod test_queries {
         // add the signature for the pool at the previous block height
         shell
             .storage
-            .write(
-                &get_signed_root_key(),
-                signed_root.clone().try_to_vec().unwrap(),
-            )
+            .write(&get_signed_root_key(), signed_root.try_to_vec().unwrap())
             .expect("Test failed");
 
         // commit the changes and increase block height
-        let _ = shell.storage.commit().expect("Test failed");
+        shell.storage.commit().expect("Test failed");
         shell.storage.block.height = shell.storage.block.height + 1;
 
         let resp = shell.generate_bridge_pool_proof(
