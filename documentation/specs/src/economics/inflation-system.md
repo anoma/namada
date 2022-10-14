@@ -61,9 +61,9 @@ To run the PD-controllers for proof-of-stake and shielded pool rewards, we first
 
 Then, for proof-of-stake first, run the PD-controller:
 
-- Calculate the error $E_{PoS} := R_{PoS-Target} - R_{PoS}$
-- Calculate the control value $C_{PoS} := (KP_{PoS} * E_{PoS}) - (KD_{PoS} * E'_{PoS})$
+- Calculate the error $E_{PoS} = R_{PoS-Target} - R_{PoS}$
 - Calculate the error derivative $E'_{PoS} = E_{PoS} - E_{PoS-last} = R_{PoS} - R_{PoS-last}$
+- Calculate the control value $C_{PoS} = (KP_{PoS} * E_{PoS}) - (KD_{PoS} * E'_{PoS})$
 - Calculate the new $I'_{PoS} = max(0, min(I_{PoS} + C_{PoS}, Cap_{PoS}))$
 
 These tokens are distributed to the proof-of-stake reward distribution validity predicate.
