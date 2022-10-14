@@ -289,6 +289,16 @@ impl MerkleValue {
     }
 }
 
+impl MerkleValue {
+    /// Get the natural byte repesentation of the value
+    pub fn to_bytes(self) -> Vec<u8> {
+        match self {
+            Self::Bytes(bytes) => bytes,
+            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
+        }
+    }
+}
+
 /// Storage keys that are utf8 encoded strings
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub struct StringKey {
