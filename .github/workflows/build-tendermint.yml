@@ -12,6 +12,7 @@ permissions:
 env:
   GIT_LFS_SKIP_SMUDGE: 1
 
+
 jobs:
   tendermint:
     runs-on: ${{ matrix.os }}
