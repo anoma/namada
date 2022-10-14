@@ -161,7 +161,7 @@ mod tests {
 
         // log cap has to be a multiple of two
         // for this test
-        if LOG_CAP & 1 != 0 {
+        if LOG_CAP < 2 || LOG_CAP & 1 != 0 {
             panic!();
         }
 
