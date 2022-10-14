@@ -4330,7 +4330,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.3",
  "rust_decimal",
- "secp256k1",
  "serde 1.0.137",
  "serde_json",
  "sha2 0.9.9",
