@@ -74,6 +74,10 @@ where
             }
         })
         .collect();
+    // from a type perspective we ultimately want something like a
+    // `BTreeMap<EthereumEvent, BTreeMap<Address, BlockHeight>>` where each seen
+    // event has an associated map of validators who saw it mapped to the
+    // earliest block height at which they saw it
 
     let voting_powers = get_voting_powers(storage, &deduped)?;
 
