@@ -25,11 +25,11 @@ First, we start with the following fixed (governance-alterable) parameters:
 - $I_{PGF}$ is the public goods funding reward rate, in units of percent per annum
 - $R_{PoS-Target}$ is the target staking ratio (genesis default: 2/3)
 - $R_{SP-A-Target}$ is the target amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
-- ${KP}_{PoS}$ is the proportional gain of the proof-of-stake PD controller, as a fraction of the total input range
-- ${KD}_{PoS}$ is the derivative gain of the proof-of-stake PD controller, as a fraction of the total input range
-- ${KP}_{SP_A}$ is the proportional gain of the shielded pool reward controller for asset $A$, as a fraction of the total input range (separate value for each asset $A$)
-- ${KD}_{SP_A}$ is the derivative gain of the shielded pool reward controller for asset $A$, as a fraction of the total input range (separate value for each asset $A$) 
 - $EpochsPerYear$ is the number of epochs per year (genesis default: 365)
+- ${KP}_{PoS-nom}$ is the nominal proportional gain of the proof-of-stake PD controller, as a fraction of the total input range
+- ${KD}_{PoS-nom}$ is the nominal derivative gain of the proof-of-stake PD controller, as a fraction of the total input range
+- ${KP}_{SP_A-nom}$ is the nominal proportional gain of the shielded pool reward controller for asset $A$, as a fraction of the total input range (separate value for each asset $A$)
+- ${KD}_{SP_A-nom}$ is the nominal derivative gain of the shielded pool reward controller for asset $A$, as a fraction of the total input range (separate value for each asset $A$)
 
 Second, we take as input the following state values:
 
@@ -53,11 +53,11 @@ To run the PD-controllers for proof-of-stake and shielded pool rewards, we first
 - Calculate the per-epoch cap on proof-of-stake and shielded pool reward rates
     - $Cap_{PoS-Epoch} := S_{NAM} * Cap_{PoS} / EpochsPerYear$
     - $Cap_{SP_A-Epoch} := S_{NAM} * Cap_{SP_A} / EpochsPerYear$ (separate value for each $A$)
-    - ${KP}_{PoS} := {KP}_{PoS} * Cap_{PoS-Epoch}$
-    - ${KD}_{PoS} := {KD}_{PoS} * Cap_{PoS-Epoch}$
-    - ${KP}_{SP_A} := {KP}_{SP_A} * Cap_{SP_A-Epoch}$
-    - ${KD}_{SP_A} := {KD}_{SP_A} * Cap_{SP_A-Epoch}$
 - Calculate PD-controller constants to be used for this epoch
+    - ${KP}_{PoS} = {KP}_{PoS-nom} * Cap_{PoS-Epoch}$
+    - ${KD}_{PoS} = {KD}_{PoS-nom} * Cap_{PoS-Epoch}$
+    - ${KP}_{SP_A} = {KP}_{SP_A-nom} * Cap_{SP_A-Epoch}$
+    - ${KD}_{SP_A} = {KD}_{SP_A-nom} * Cap_{SP_A-Epoch}$
 
 Then, for proof-of-stake first, run the PD-controller:
 
