@@ -277,7 +277,8 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         let account = Smt::new(stores.account.0.into(), stores.account.1);
         let ibc = Amt::new(stores.ibc.0.into(), stores.ibc.1);
         let pos = Smt::new(stores.pos.0.into(), stores.pos.1);
-        let bridge_pool = BridgePoolTree::new(stores.bridge_pool.1);
+        let bridge_pool =
+            BridgePoolTree::new(stores.bridge_pool.0, stores.bridge_pool.1);
         Self {
             base,
             account,
