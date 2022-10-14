@@ -27,10 +27,15 @@ pub struct Error(#[from] eyre::Error);
 
 /// Get the storage key for the transfers in the pool
 pub fn get_pending_key(transfer: &PendingTransfer) -> Key {
+    get_key_from_hash(&transfer.keccak256())
+}
+
+/// Get the storage key for the transfers using the hash
+pub fn get_key_from_hash(hash: &KeccakHash) -> Key {
     Key {
         segments: vec![
             DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
-            transfer.keccak256().to_db_key(),
+            hash.to_db_key(),
         ],
     }
 }
@@ -64,14 +69,8 @@ pub struct BridgePoolTree {
 
 impl BridgePoolTree {
     /// Create a new merkle tree for the Ethereum bridge pool
-    pub fn new(store: BTreeSet<KeccakHash>) -> Self {
-        let mut tree = Self {
-            root: KeccakHash::default(),
-            store,
-        };
-        let root = tree.compute_root();
-        tree.root = root;
-        tree
+    pub fn new(root: KeccakHash, store: BTreeSet<KeccakHash>) -> Self {
+        Self { root, store }
     }
 
     /// Parse the key to ensure it is of the correct type.
