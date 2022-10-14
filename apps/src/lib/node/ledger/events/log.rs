@@ -133,7 +133,7 @@ mod tests {
 
         let mut log = EventLog::new(Params::default());
 
-        // send events to the logger
+        // add new events to the log
         let events = mock_tx_events("DEADBEEF");
 
         for _ in 0..NUM_HEIGHTS {
@@ -147,9 +147,66 @@ mod tests {
             .cloned()
             .collect();
 
-        assert_eq!(events_in_log.len(), NUM_HEIGHTS as usize);
+        assert_eq!(events_in_log.len(), NUM_HEIGHTS);
 
         for i in 0..NUM_HEIGHTS {
+            assert_eq!(events[0], events_in_log[i]);
+        }
+    }
+
+    /// Test pruning old events from the log.
+    #[test]
+    fn test_log_prune() {
+        const LOG_CAP: usize = 4;
+
+        // log cap has to be a multiple of two
+        // for this test
+        assert!(LOG_CAP & 1 == 0);
+
+        const MATCHED_EVENTS: usize = LOG_CAP / 2;
+
+        let mut log = EventLog::new(Params {
+            max_log_events: LOG_CAP,
+        });
+
+        // completely fill the log with events
+        //
+        // `mock_tx_events` returns 2 events, so
+        // we do `LOG_CAP / 2` iters to fill the log
+        let events = mock_tx_events("DEADBEEF");
+        assert_eq!(events.len(), 2);
+
+        for _ in 0..(LOG_CAP / 2) {
+            log.log_events(&events);
+        }
+
+        // inspect log - it should be full
+        let events_in_log: Vec<_> = log
+            .try_iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
+            .unwrap()
+            .cloned()
+            .collect();
+
+        assert_eq!(events_in_log.len(), MATCHED_EVENTS);
+
+        for i in 0..MATCHED_EVENTS {
+            assert_eq!(events[0], events_in_log[i]);
+        }
+
+        // add a new APPLIED event to the log,
+        // pruning the first ACCEPTED event we added
+        log.log_events(Some(&events[1]));
+
+        let events_in_log: Vec<_> = log
+            .try_iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
+            .unwrap()
+            .cloned()
+            .collect();
+
+        const ACCEPTED_EVENTS: usize = MATCHED_EVENTS - 1;
+        assert_eq!(events_in_log.len(), ACCEPTED_EVENTS);
+
+        for i in 0..ACCEPTED_EVENTS {
             assert_eq!(events[0], events_in_log[i]);
         }
     }
