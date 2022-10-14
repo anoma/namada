@@ -1,6 +1,6 @@
 //! Extend Tendermint votes with Ethereum events seen by a quorum of validators.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::storage::traits::StorageHasher;
@@ -240,7 +240,7 @@ where
             // register all ethereum events seen by `validator_addr`
             for ev in vote_extension.data.ethereum_events {
                 let signers =
-                    event_observers.entry(ev).or_insert_with(HashSet::new);
+                    event_observers.entry(ev).or_insert_with(BTreeSet::new);
                 #[cfg(feature = "abcipp")]
                 signers.insert(validator_addr.clone());
                 #[cfg(not(feature = "abcipp"))]
@@ -370,8 +370,8 @@ mod test_vote_extensions {
     /// Test that ethereum events are added to vote extensions.
     /// Check that vote extensions pass verification.
     #[cfg(feature = "abcipp")]
-    #[test]
-    fn test_eth_events_vote_extension() {
+    #[tokio::test]
+    async fn test_eth_events_vote_extension() {
         let (mut shell, _, oracle) = setup();
         let address = shell
             .mode
@@ -390,8 +390,8 @@ mod test_vote_extensions {
             name: "Test".to_string(),
             address: EthAddress([0; 20]),
         };
-        oracle.send(event_1.clone()).expect("Test failed");
-        oracle.send(event_2.clone()).expect("Test failed");
+        oracle.send(event_1.clone()).await.expect("Test failed");
+        oracle.send(event_2.clone()).await.expect("Test failed");
         let vote_extension =
             <VoteExtension as BorshDeserialize>::try_from_slice(
                 &shell.extend_vote(Default::default()).vote_extension[..],

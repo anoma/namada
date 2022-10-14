@@ -13,6 +13,7 @@ use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
 use namada::ledger::storage::{StoreRef, StoreType};
 use namada::types::address::Address;
+use namada::types::ethereum_events::EthAddress;
 use namada::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
 };
@@ -21,6 +22,7 @@ use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Epoch, Key, PrefixValue};
 use namada::types::token::{self, Amount};
+use namada::types::vote_extensions::validator_set_update::EthAddrBook;
 
 use super::*;
 use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
@@ -521,6 +523,29 @@ pub(crate) trait QueriesExt {
 
     /// Retrieves the [`BlockHeight`] that is currently being decided.
     fn get_current_decision_height(&self) -> BlockHeight;
+
+    /// For a given Namada validator, return its corresponding Ethereum bridge
+    /// address.
+    fn get_ethbridge_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress>;
+
+    /// For a given Namada validator, return its corresponding Ethereum
+    /// governance address.
+    fn get_ethgov_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress>;
+
+    /// Extension of [`Self::get_active_validators`], which additionally returns
+    /// all Ethereum addresses of some validator.
+    fn get_active_eth_addresses<'db>(
+        &'db self,
+        epoch: Option<Epoch>,
+    ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, VotingPower)> + 'db>;
 }
 
 impl<D, H> QueriesExt for Storage<D, H>
@@ -736,6 +761,66 @@ where
     #[inline]
     fn get_current_decision_height(&self) -> BlockHeight {
         self.last_height + 1
+    }
+
+    #[inline]
+    fn get_ethbridge_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.read_validator_eth_hot_key(validator)
+            .as_ref()
+            .and_then(|epk| epk.get(epoch).and_then(|pk| pk.try_into().ok()))
+    }
+
+    #[inline]
+    fn get_ethgov_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.read_validator_eth_cold_key(validator)
+            .as_ref()
+            .and_then(|epk| epk.get(epoch).and_then(|pk| pk.try_into().ok()))
+    }
+
+    #[inline]
+    fn get_active_eth_addresses<'db>(
+        &'db self,
+        epoch: Option<Epoch>,
+    ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, VotingPower)> + 'db>
+    {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        Box::new(self.get_active_validators(Some(epoch)).into_iter().map(
+            move |validator| {
+                let hot_key_addr = self
+                    .get_ethbridge_from_namada_addr(
+                        &validator.address,
+                        Some(epoch),
+                    )
+                    .expect(
+                        "All Namada validators should have an Ethereum bridge \
+                         key",
+                    );
+                let cold_key_addr = self
+                    .get_ethgov_from_namada_addr(
+                        &validator.address,
+                        Some(epoch),
+                    )
+                    .expect(
+                        "All Namada validators should have an Ethereum \
+                         governance key",
+                    );
+                let eth_addr_book = EthAddrBook {
+                    hot_key_addr,
+                    cold_key_addr,
+                };
+                (eth_addr_book, validator.address, validator.voting_power)
+            },
+        ))
     }
 }
 
