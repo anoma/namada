@@ -445,18 +445,16 @@ where
     pub fn write(
         &mut self,
         key: &Key,
-        value: impl AsRef<[u8]>,
+        value: impl Into<MerkleValue>,
     ) -> Result<(u64, i64)> {
-        // Note that this method is the same as `StorageWrite::write_bytes`,
-        // but with gas and storage bytes len diff accounting
+        let value: MerkleValue = value.into();
         tracing::debug!("storage write key {}", key,);
-        let value = value.as_ref();
-        self.block.tree.update(key, &value)?;
+        self.block.tree.update(key, value.clone())?;
 
-        let len = value.len();
-        let gas = key.len() + len;
+        let bytes = value.to_bytes();
+        let gas = key.len() + bytes.len();
         let size_diff =
-            self.db.write_subspace_val(self.last_height, key, value)?;
+            self.db.write_subspace_val(self.last_height, key, bytes)?;
         Ok((gas as _, size_diff))
     }
 
