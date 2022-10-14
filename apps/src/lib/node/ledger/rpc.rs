@@ -9,19 +9,27 @@ use thiserror::Error;
 
 use crate::facade::tendermint::abci::Path as AbciPath;
 
-/// RPC query path
+/// RPC query path.
 #[derive(Debug, Clone)]
 pub enum Path {
-    /// Dry run a transaction
+    /// Dry run a transaction.
     DryRunTx,
-    /// Epoch of the last committed block
+    /// Epoch of the last committed block.
     Epoch,
-    /// Read a storage value with exact storage key
+    /// Read a storage value with exact storage key.
     Value(storage::Key),
-    /// Read a range of storage values with a matching key prefix
+    /// Read a range of storage values with a matching key prefix.
     Prefix(storage::Key),
-    /// Check if the given storage key exists
+    /// Check if the given storage key exists.
     HasKey(storage::Key),
+    /// Check if a transaction was accepted.
+    // TODO: use a fixed length type here,
+    // for the accepted hash
+    Accepted(String),
+    /// Check if a transaction was applied.
+    // TODO: use a fixed length type here,
+    // for the applied hash
+    Applied(String),
 }
 
 #[derive(Debug, Clone)]
