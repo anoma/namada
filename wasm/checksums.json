@@ -1,6 +1,5 @@
 {
     "tx_bond.wasm": "tx_bond.cc16670ccd2b4a0de0e20de051196dda9058bab885b93c948e9d5dc9fba65e76.wasm",
-    "tx_from_intent.wasm": "tx_from_intent.e21563260c03cfdab1f195878f49bf93722027ad26fcd097cfebbc5c4d279082.wasm",
     "tx_ibc.wasm": "tx_ibc.bc1783aaa0fcb587e3963a03b7629fed3c59ef7dbcd099ce3101260b4fafb758.wasm",
     "tx_init_account.wasm": "tx_init_account.8a70c8722e31af7d0875d2f13279da238269fa91053d0e9413c20fc9cd8e8662.wasm",
     "tx_init_nft.wasm": "tx_init_nft.28872d99008b7b14593355c6ab6d62108b61a3d2956a0581d80c3d5816b13d4a.wasm",
