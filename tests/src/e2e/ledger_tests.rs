@@ -35,8 +35,6 @@ use crate::{run, run_as};
 /// combinations from fresh state, the node starts-up successfully for both a
 /// validator and non-validator user.
 #[test]
-#[ignore]
-// TODO(namada#418): re-enable once working again
 fn run_ledger() -> Result<()> {
     let test = setup::single_node_net()?;
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
