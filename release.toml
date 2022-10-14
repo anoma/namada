@@ -4,6 +4,4 @@ pre-release-commit-message = "Namada {{version}}"
 publish                    = false
 push                       = false
 shared-version             = true
-sign-tag                   = true
-tag-message                = "Namada {{version}}"
-tag-name                   = "v{{version}}"
+tag                        = false
