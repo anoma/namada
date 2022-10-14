@@ -57,7 +57,7 @@ where
         .map(|MultiSignedEthEvent { event, signers }| {
             let voters: HashSet<Address> =
                 signers.iter().map(|(addr, _)| addr.to_owned()).collect();
-            let mut votes = BTreeSet::default();
+            let mut earliest_votes = BTreeSet::default();
             for voter in voters {
                 let earliest_vote_height = signers
                     .iter()
@@ -66,11 +66,11 @@ where
                     .min()
                     .expect("every voter must have at least one vote");
                 // TODO: remove the above expect!
-                _ = votes.insert((voter, earliest_vote_height));
+                _ = earliest_votes.insert((voter, earliest_vote_height));
             }
             MultiSignedEthEvent {
                 event,
-                signers: votes,
+                signers: earliest_votes,
             }
         })
         .collect();
