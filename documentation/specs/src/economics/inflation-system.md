@@ -35,8 +35,8 @@ Second, we take as input the following state values:
 
 - $S_{NAM}$ is the current supply of NAM
 - $L_{NAM}$ is the current amount of NAM locked in proof-of-stake
-- $I_{PoS}$ is the current proof-of-stake reward rate, in units of tokens per epoch
 - $E_{PoS-last}$ is the error in proof-of-stake lock ratio (stored from the past epoch)
+- $I_{PoS}$ is the current proof-of-stake reward rate, in units of percent per annum
 - $L_{SP_A}$ is the current amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
 - $I_{SP_A}$ is the current shielded pool reward rate for asset $A$, in units of tokens per epoch
 - $E_{SP_A-last}$ is the error in shielded pool lock amount for asset $A$ (stored from the past epoch) (separate value for each asset $A$)
