@@ -105,7 +105,6 @@ rand = {version = "0.8", optional = true}
 # TODO proptest rexports the RngCore trait but the re-implementations only work for version `0.8`. *sigh*
 rand_core = {version = "0.6", optional = true}
 rust_decimal = "1.14.3"
-secp256k1 = "0.21.3"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_json = "1.0.62"
 sha2 = "0.9.3"
