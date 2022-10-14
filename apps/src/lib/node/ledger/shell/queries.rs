@@ -16,8 +16,8 @@ use namada::types::address::Address;
 use namada::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
 };
-use namada::types::ethereum_events::EthAddress;
 use namada::types::keccak::encode::Encode;
+use namada::types::ethereum_events::EthAddress;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::MembershipProof::BridgePool;
