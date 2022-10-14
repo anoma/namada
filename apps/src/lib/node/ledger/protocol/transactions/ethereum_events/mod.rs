@@ -75,25 +75,37 @@ where
 fn dedupe(events: Vec<MultiSignedEthEvent>) -> Vec<MultiSignedEthEvent> {
     events
         .into_iter()
-        .map(|MultiSignedEthEvent { event, signers }| {
-            let voters: HashSet<Address> =
-                signers.iter().map(|(addr, _)| addr.to_owned()).collect();
-            let mut earliest_votes = BTreeSet::default();
-            for voter in voters {
-                let earliest_vote_height = signers
-                    .iter()
-                    .filter(|(addr, _)| *addr == voter)
-                    .map(|(_, height)| *height)
-                    .min()
-                    .expect("every voter must have at least one vote");
-                // TODO: remove the above expect!
-                _ = earliest_votes.insert((voter, earliest_vote_height));
-            }
-            MultiSignedEthEvent {
-                event,
-                signers: earliest_votes,
-            }
-        })
+        .map(
+            |MultiSignedEthEvent {
+                 event,
+                 signers: votes,
+             }| {
+                let event_hash = event.hash();
+                let unique_voters: BTreeSet<Address> =
+                    votes.iter().map(|(addr, _)| addr.to_owned()).collect();
+                tracing::debug!(
+                    event = ?event_hash,
+                    votes = votes.len(),
+                    unique_voters = unique_voters.len(),
+                    "Found votes for event"
+                );
+                let mut earliest_votes = BTreeSet::default();
+                for voter in unique_voters {
+                    let earliest_vote_height = votes
+                        .iter()
+                        .filter(|(addr, _)| *addr == voter)
+                        .map(|(_, height)| *height)
+                        .min()
+                        .expect("every voter must have at least one vote");
+                    // TODO: remove the above expect!
+                    _ = earliest_votes.insert((voter, earliest_vote_height));
+                }
+                MultiSignedEthEvent {
+                    event,
+                    signers: earliest_votes,
+                }
+            },
+        )
         .collect()
 }
 
@@ -393,23 +405,9 @@ mod tests {
     }
 
     #[test]
-    /// Assert that `get_voting_powers` returns the earliest vote for an event
-    /// by any given validator, if there are multiple votes from a validator for
-    /// the same event
-    fn test_get_voting_powers_dedupe_votes() {
-        // the voting powers of the validators aren't relevant for this test
-        let equal_voting_power = VotingPower::from(100);
-        let voters = vec![
-            (
-                address::testing::established_address_1(),
-                equal_voting_power,
-            ),
-            (
-                address::testing::established_address_2(),
-                equal_voting_power,
-            ),
-        ];
-        let storage = set_up_test_storage(HashMap::from_iter(voters));
+    /// Assert that `dedupe` returns events with only the earliest votes for
+    /// that event by any given validator
+    fn test_dedupe() {
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
             transfers: vec![TransferToNamada {
@@ -420,34 +418,34 @@ mod tests {
         };
         let signers = BTreeSet::from_iter(vec![
             (address::testing::established_address_1(), BlockHeight(100)),
-            (address::testing::established_address_1(), BlockHeight(101)),
+            (address::testing::established_address_2(), BlockHeight(91)),
             (address::testing::established_address_1(), BlockHeight(102)),
             (address::testing::established_address_2(), BlockHeight(90)),
-            (address::testing::established_address_2(), BlockHeight(91)),
+            (address::testing::established_address_1(), BlockHeight(101)),
         ]);
 
-        let events = vec![MultiSignedEthEvent { event, signers }];
+        let events = vec![MultiSignedEthEvent {
+            event: event.clone(),
+            signers,
+        }];
 
-        let result = get_voting_powers(&storage, &events);
+        let result = dedupe(events);
 
         assert_eq!(
-            result.unwrap(),
-            HashMap::from_iter(vec![
-                (
+            result,
+            vec![MultiSignedEthEvent {
+                event,
+                signers: BTreeSet::from([
                     (
                         address::testing::established_address_1(),
                         BlockHeight(100)
                     ),
-                    FractionalVotingPower::new(1, 2).unwrap()
-                ),
-                (
                     (
                         address::testing::established_address_2(),
                         BlockHeight(90)
-                    ),
-                    FractionalVotingPower::new(1, 2).unwrap()
-                )
-            ])
+                    )
+                ])
+            }],
         );
     }
 
