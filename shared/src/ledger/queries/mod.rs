@@ -57,12 +57,22 @@ where
     Ok(())
 }
 
-/// For queries that only support latest height, check that the given height is
-/// not different from latest height, otherwise return an error.
+/// For queries that don't support proofs, require that they are not requested.
 pub fn require_no_proof(request: &RequestQuery) -> storage_api::Result<()> {
     if request.prove {
         return Err(storage_api::Error::new_const(
             "This query doesn't support proofs",
+        ));
+    }
+    Ok(())
+}
+
+/// For queries that don't use request data, require that there are no data
+/// attached.
+pub fn require_no_data(request: &RequestQuery) -> storage_api::Result<()> {
+    if !request.data.is_empty() {
+        return Err(storage_api::Error::new_const(
+            "This query doesn't accept request data",
         ));
     }
     Ok(())

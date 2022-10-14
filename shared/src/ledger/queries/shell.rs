@@ -1,7 +1,7 @@
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 
+use crate::ledger::queries::require_latest_height;
 use crate::ledger::queries::types::{RequestCtx, RequestQuery, ResponseQuery};
-use crate::ledger::queries::{require_latest_height, require_no_proof};
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::types::storage::{self, Epoch, PrefixValue};
@@ -15,14 +15,14 @@ router! {SHELL,
 
     // Raw storage access - read value
     ( "value" / [storage_key: storage::Key] )
-        -> Option<Vec<u8>> = storage_value,
+        -> Option<Vec<u8>> = (with_options storage_value),
 
     // Dry run a transaction
-    ( "dry_run_tx" ) -> TxResult = dry_run_tx,
+    ( "dry_run_tx" ) -> TxResult = (with_options dry_run_tx),
 
     // Raw storage access - prefix iterator
     ( "prefix" / [storage_key: storage::Key] )
-        -> Vec<PrefixValue> = storage_prefix,
+        -> Vec<PrefixValue> = (with_options storage_prefix),
 
     // Raw storage access - is given storage key present?
     ( "has_key" / [storage_key: storage::Key] )
@@ -80,22 +80,13 @@ where
     )
 }
 
-fn epoch<D, H>(
-    ctx: RequestCtx<'_, D, H>,
-    request: &RequestQuery,
-) -> storage_api::Result<ResponseQuery<Epoch>>
+fn epoch<D, H>(ctx: RequestCtx<'_, D, H>) -> storage_api::Result<Epoch>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    require_latest_height(&ctx, request)?;
-    require_no_proof(request)?;
-
     let data = ctx.storage.last_epoch;
-    Ok(ResponseQuery {
-        data,
-        ..Default::default()
-    })
+    Ok(data)
 }
 
 fn storage_value<D, H>(
@@ -112,13 +103,13 @@ where
         .read_with_height(&storage_key, request.height)
         .into_storage_result()?
     {
-        (Some(data), _gas) => {
+        (Some(value), _gas) => {
             let proof = if request.prove {
                 let proof = ctx
                     .storage
                     .get_existence_proof(
                         &storage_key,
-                        data.clone(),
+                        value.clone().into(),
                         request.height,
                     )
                     .into_storage_result()?;
@@ -127,7 +118,7 @@ where
                 None
             };
             Ok(ResponseQuery {
-                data: Some(data),
+                data: Some(value),
                 proof_ops: proof,
                 ..Default::default()
             })
@@ -175,7 +166,7 @@ where
         for PrefixValue { key, value } in &data {
             let proof = ctx
                 .storage
-                .get_existence_proof(key, value.clone(), request.height)
+                .get_existence_proof(key, value.clone().into(), request.height)
                 .into_storage_result()?;
             let mut cur_ops: Vec<ProofOp> =
                 proof.ops.into_iter().map(|op| op.into()).collect();
@@ -195,21 +186,14 @@ where
 
 fn storage_has_key<D, H>(
     ctx: RequestCtx<'_, D, H>,
-    request: &RequestQuery,
     storage_key: storage::Key,
-) -> storage_api::Result<ResponseQuery<bool>>
+) -> storage_api::Result<bool>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    require_latest_height(&ctx, request)?;
-    require_no_proof(request)?;
-
     let data = StorageRead::has_key(ctx.storage, &storage_key)?;
-    Ok(ResponseQuery {
-        data,
-        ..Default::default()
-    })
+    Ok(data)
 }
 
 #[cfg(test)]
@@ -262,7 +246,7 @@ mod test {
         let tx_bytes = tx.to_bytes();
         let result = RPC
             .shell()
-            .dry_run_tx_with_options(&client, Some(tx_bytes), None, false)
+            .dry_run_tx(&client, Some(tx_bytes), None, false)
             .await
             .unwrap();
         assert!(result.data.is_accepted());
@@ -274,19 +258,19 @@ mod test {
         // ... there should be no value yet.
         let read_balance = RPC
             .shell()
-            .storage_value(&client, &balance_key)
+            .storage_value(&client, None, None, false, &balance_key)
             .await
             .unwrap();
-        assert!(read_balance.is_none());
+        assert!(read_balance.data.is_none());
 
         // Request storage prefix iterator
         let balance_prefix = token::balance_prefix(&token_addr);
         let read_balances = RPC
             .shell()
-            .storage_prefix(&client, &balance_prefix)
+            .storage_prefix(&client, None, None, false, &balance_prefix)
             .await
             .unwrap();
-        assert!(read_balances.is_empty());
+        assert!(read_balances.data.is_empty());
 
         // Request storage has key
         let has_balance_key = RPC
@@ -302,22 +286,22 @@ mod test {
         // ... there should be the same value now
         let read_balance = RPC
             .shell()
-            .storage_value(&client, &balance_key)
+            .storage_value(&client, None, None, false, &balance_key)
             .await
             .unwrap();
         assert_eq!(
             balance,
-            token::Amount::try_from_slice(&read_balance.unwrap()).unwrap()
+            token::Amount::try_from_slice(&read_balance.data.unwrap()).unwrap()
         );
 
         // Request storage prefix iterator
         let balance_prefix = token::balance_prefix(&token_addr);
         let read_balances = RPC
             .shell()
-            .storage_prefix(&client, &balance_prefix)
+            .storage_prefix(&client, None, None, false, &balance_prefix)
             .await
             .unwrap();
-        assert_eq!(read_balances.len(), 1);
+        assert_eq!(read_balances.data.len(), 1);
 
         // Request storage has key
         let has_balance_key = RPC
