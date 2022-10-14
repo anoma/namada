@@ -51,8 +51,29 @@ where
          protocol transaction"
     );
 
-    // TODO: put into a fn and add tests
-    let deduped: Vec<MultiSignedEthEvent> = events
+    let events = dedupe(events);
+    // from a type perspective we ultimately want something like a
+    // `BTreeMap<EthereumEvent, BTreeMap<Address, BlockHeight>>` where each seen
+    // event has an associated map of validators who saw it mapped to the
+    // earliest block height at which they saw it
+
+    let voting_powers = get_voting_powers(storage, &events)?;
+
+    let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
+
+    let changed_keys = apply_updates(storage, updates, voting_powers)?;
+
+    Ok(TxResult {
+        changed_keys,
+        ..Default::default()
+    })
+}
+
+/// Dedupe consumes `events` and returns a version of it where the `signers`
+/// associated with each event has at most one vote per validator, where this
+/// vote is the earliest by block height among their included votes
+fn dedupe(events: Vec<MultiSignedEthEvent>) -> Vec<MultiSignedEthEvent> {
+    events
         .into_iter()
         .map(|MultiSignedEthEvent { event, signers }| {
             let voters: HashSet<Address> =
@@ -73,25 +94,7 @@ where
                 signers: earliest_votes,
             }
         })
-        .collect();
-    // from a type perspective we ultimately want something like a
-    // `BTreeMap<EthereumEvent, BTreeMap<Address, BlockHeight>>` where each seen
-    // event has an associated map of validators who saw it mapped to the
-    // earliest block height at which they saw it
-
-    let voting_powers = get_voting_powers(storage, &deduped)?;
-
-    let updates = deduped
-        .into_iter()
-        .map(Into::<EthMsgUpdate>::into)
-        .collect();
-
-    let changed_keys = apply_updates(storage, updates, voting_powers)?;
-
-    Ok(TxResult {
-        changed_keys,
-        ..Default::default()
-    })
+        .collect()
 }
 
 fn get_active_validators<D, H>(
