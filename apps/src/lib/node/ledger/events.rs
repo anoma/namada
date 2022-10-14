@@ -1,3 +1,5 @@
+pub mod log;
+
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::{self, Display};
