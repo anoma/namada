@@ -22,7 +22,7 @@ First, we start with the following fixed (governance-alterable) parameters:
 
 - $Cap_{PoS}$ is the cap of proof-of-stake reward rate, in units of percent per annum (genesis default: 10%)
 - $Cap_{SP-A}$ is the cap of shielded pool reward rate for each asset $A$, in units of percent per annum
-- $R_{PGF}$ is the public goods funding reward rate, in units of percent per annum
+- $I_{PGF}$ is the public goods funding reward rate, in units of percent per annum
 - $R_{PoS-Target}$ is the target staking ratio (genesis default: 2/3)
 - $R_{SP-A-Target}$ is the target amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
 - ${KP}_{PoS}$ is the proportional gain of the proof-of-stake PD controller, as a fraction of the total input range
@@ -43,7 +43,7 @@ Second, we take as input the following state values:
 
 Public goods funding inflation can be calculated and paid immediately (in terms of total tokens per epoch):
 
-- $I_{PGF} := R_{PGF} * S_{NAM} / EpochsPerYear$
+- $T_{PGF} := I_{PGF} * S_{NAM} / EpochsPerYear$
 
 These tokens are distributed to the public goods funding validity predicate.
 
