@@ -4379,6 +4379,7 @@ dependencies = [
  "git2",
  "hex",
  "itertools 0.10.3",
+ "lazy_static 1.4.0",
  "libc",
  "libloading",
  "libp2p",
