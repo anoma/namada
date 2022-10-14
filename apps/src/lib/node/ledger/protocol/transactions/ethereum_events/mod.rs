@@ -36,7 +36,7 @@ type ChangedKeys = BTreeSet<storage::Key>;
 /// the passed `events`.
 pub(crate) fn apply_derived_tx<D, H>(
     storage: &mut Storage<D, H>,
-    events: Vec<MultiSignedEthEvent>,
+    events: Vec<MultiSignedEthEvent>, /* TODO: should this be a BTreeMap<EthereumEvent, BTreeSet<(Address, BlockHeight)>> */
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
