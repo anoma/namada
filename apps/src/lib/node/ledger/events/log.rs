@@ -96,3 +96,61 @@ impl EventLog {
             .filter(move |event| matcher.matches(event))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node::ledger::events::{EventLevel, EventType};
+
+    /// Return a vector of mock `FinalizeBlock` events.
+    fn mock_tx_events(hash: &str) -> Vec<Event> {
+        let event_1 = Event {
+            event_type: EventType::Accepted,
+            level: EventLevel::Block,
+            attributes: {
+                let mut attrs = std::collections::HashMap::new();
+                attrs.insert("hash".to_string(), hash.to_string());
+                attrs
+            },
+        };
+        let event_2 = Event {
+            event_type: EventType::Applied,
+            level: EventLevel::Block,
+            attributes: {
+                let mut attrs = std::collections::HashMap::new();
+                attrs.insert("hash".to_string(), hash.to_string());
+                attrs
+            },
+        };
+        vec![event_1, event_2]
+    }
+
+    /// Test adding a couple of events to the event log, and
+    /// reading those events back.
+    #[test]
+    fn test_log_add() {
+        const NUM_HEIGHTS: usize = 4;
+
+        let mut log = EventLog::new(Params::default());
+
+        // send events to the logger
+        let events = mock_tx_events("DEADBEEF");
+
+        for _ in 0..NUM_HEIGHTS {
+            log.log_events(&events);
+        }
+
+        // inspect log
+        let events_in_log: Vec<_> = log
+            .try_iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
+            .unwrap()
+            .cloned()
+            .collect();
+
+        assert_eq!(events_in_log.len(), NUM_HEIGHTS as usize);
+
+        for i in 0..NUM_HEIGHTS {
+            assert_eq!(events[0], events_in_log[i]);
+        }
+    }
+}
