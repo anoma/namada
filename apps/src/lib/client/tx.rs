@@ -4,7 +4,8 @@ use std::env;
 use std::fs::File;
 use std::time::Duration;
 
-use async_std::io::{self, WriteExt};
+use async_std::io::prelude::WriteExt;
+use async_std::io::{self};
 use borsh::BorshSerialize;
 use itertools::Either::*;
 use namada::ledger::governance::storage as gov_storage;
