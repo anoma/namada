@@ -245,6 +245,7 @@ impl FromStr for Key {
 /// several Merkle trees, each of which is
 /// responsible for understanding how to parse
 /// this value.
+#[derive(Debug, Clone)]
 pub enum MerkleValue {
     /// raw bytes
     Bytes(Vec<u8>),
@@ -264,6 +265,16 @@ where
 impl From<PendingTransfer> for MerkleValue {
     fn from(transfer: PendingTransfer) -> Self {
         Self::Transfer(transfer)
+    }
+}
+
+impl MerkleValue {
+    /// Get the natural byte repesentation of the value
+    pub fn to_bytes(self) -> Vec<u8> {
+        match self {
+            Self::Bytes(bytes) => bytes,
+            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
+        }
     }
 }
 
