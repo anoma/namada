@@ -48,7 +48,29 @@ macro_rules! handle_match {
         return $router.internal_handle($ctx, $request, $start)
     };
 
-    // Handler function
+    // Handler function that uses a request (`with_options`)
+    (
+        $ctx:ident, $request:ident, $start:ident, $end:ident,
+        (with_options $handle:tt), ( $( $matched_args:ident, )* ),
+    ) => {
+        // check that we're at the end of the path - trailing slash is optional
+        if !($end == $request.path.len() ||
+            // ignore trailing slashes
+            $end == $request.path.len() - 1 && &$request.path[$end..] == "/") {
+                // we're not at the end, no match
+                println!("Not fully matched");
+                break
+        }
+        let result = $handle($ctx, $request, $( $matched_args ),* )?;
+        let data = borsh::BorshSerialize::try_to_vec(&result.data).into_storage_result()?;
+        return Ok($crate::ledger::queries::EncodedResponseQuery {
+            data,
+            info: result.info,
+            proof_ops: result.proof_ops,
+        });
+    };
+
+    // Handler function that doesn't use the request, just the path args, if any
     (
         $ctx:ident, $request:ident, $start:ident, $end:ident,
         $handle:tt, ( $( $matched_args:ident, )* ),
@@ -61,14 +83,19 @@ macro_rules! handle_match {
                 // println!("Not fully matched");
                 break
         }
+        // Check that the request is not sent with unsupported non-default
+        $crate::ledger::queries::require_latest_height(&$ctx, $request)?;
+        $crate::ledger::queries::require_no_proof($request)?;
+        $crate::ledger::queries::require_no_data($request)?;
+
         // If you get a compile error from here with `expected function, found
         // queries::Storage`, you're probably missing the marker `(sub _)`
-        let result = $handle($ctx, $request, $( $matched_args ),* )?;
-        let data = borsh::BorshSerialize::try_to_vec(&result.data).into_storage_result()?;
+        let data = $handle($ctx, $( $matched_args ),* )?;
+        let data = borsh::BorshSerialize::try_to_vec(&data).into_storage_result()?;
         return Ok($crate::ledger::queries::EncodedResponseQuery {
             data,
-            info: result.info,
-            proof_ops: result.proof_ops,
+            info: Default::default(),
+            proof_ops: None,
         });
     };
 }
@@ -168,16 +195,18 @@ macro_rules! try_match_segments {
             ( $( $matched_args, )* $arg, ), ( $( $( $tail )/ * )? ) );
     };
 
-    // Special case of the pattern below. When there are no more args in the
-    // tail and the handle isn't a sub-router (its fragment is ident), we try
-    // to match the rest of the path till the end. This is specifically needed
-    // for storage methods, which have `storage::Key` param that includes
-    // path-like slashes.
+    // Special case of the typed argument pattern below. When there are no more
+    // args in the tail and the handle isn't a sub-router (its handler is
+    // ident), we try to match the rest of the path till the end.
+    //
+    // This is specifically needed for storage methods, which have
+    // `storage::Key` param that includes path-like slashes.
     //
     // Try to match and parse a typed argument, declares the expected $arg into
     // type $t, if it can be parsed
     (
-        $ctx:ident, $request:ident, $start:ident, $end:ident, $handle:ident,
+        $ctx:ident, $request:ident, $start:ident, $end:ident,
+        $handle:ident,
         ( $( $matched_args:ident, )* ),
         (
             [$arg:ident : $arg_ty:ty]
@@ -199,6 +228,41 @@ macro_rules! try_match_segments {
         }
         // Invoke the terminal pattern
         try_match_segments!($ctx, $request, $start, $end, $handle,
+            ( $( $matched_args, )* $arg, ), () );
+    };
+
+    // One more special case of the typed argument pattern below for a handler
+    // `with_options`, where we try to match the rest of the path till the end.
+    //
+    // This is specifically needed for storage methods, which have
+    // `storage::Key` param that includes path-like slashes.
+    //
+    // Try to match and parse a typed argument, declares the expected $arg into
+    // type $t, if it can be parsed
+    (
+        $ctx:ident, $request:ident, $start:ident, $end:ident,
+        (with_options $handle:ident),
+        ( $( $matched_args:ident, )* ),
+        (
+            [$arg:ident : $arg_ty:ty]
+        )
+    ) => {
+        let $arg: $arg_ty;
+        $end = $request.path.len();
+        match $request.path[$start..$end].parse::<$arg_ty>() {
+            Ok(parsed) => {
+                println!("Parsed {}", parsed);
+                $arg = parsed
+            },
+            Err(_) =>
+            {
+                println!("Cannot parse {} from {}", stringify!($arg_ty), &$request.path[$start..$end]);
+                // If arg cannot be parsed, try to skip to next pattern
+                break
+            }
+        }
+        // Invoke the terminal pattern
+        try_match_segments!($ctx, $request, $start, $end, (with_options $handle),
             ( $( $matched_args, )* $arg, ), () );
     };
 
@@ -308,11 +372,65 @@ macro_rules! pattern_to_prefix {
 /// Turn patterns and their handlers into methods for the router, where each
 /// dynamic pattern is turned into a parameter for the method.
 macro_rules! pattern_and_handler_to_method {
-    // terminal rule
+    // terminal rule for $handle that uses request (`with_options`)
     (
         ( $( $param:tt: $param_ty:ty ),* )
         [ $( { $prefix:expr } ),* ]
-        // $( $return_type:path )?,
+        $return_type:path,
+        (with_options $handle:tt),
+        ()
+    ) => {
+        // paste! used to construct the `fn $handle_path`'s name.
+        paste::paste! {
+            #[allow(dead_code)]
+            #[doc = "Get a path to query `" $handle "`."]
+            pub fn [<$handle _path>](&self, $( $param: &$param_ty ),* ) -> String {
+                itertools::join(
+                    [ Some(std::borrow::Cow::from(&self.prefix)), $( $prefix ),* ]
+                    .into_iter()
+                    .filter_map(|x| x), "/")
+            }
+
+            #[allow(dead_code)]
+            #[allow(clippy::too_many_arguments)]
+            #[cfg(any(test, feature = "async-client"))]
+            #[doc = "Request value with optional data (used for e.g. \
+                `dry_run_tx`), optionally specified height (supported for \
+                `storage_value`) and optional proof (supported for \
+                `storage_value` and `storage_prefix`) from `" $handle "`."]
+            pub async fn $handle<CLIENT>(&self, client: &CLIENT,
+                data: Option<Vec<u8>>,
+                height: Option<$crate::types::storage::BlockHeight>,
+                prove: bool,
+                $( $param: &$param_ty ),*
+            )
+                -> std::result::Result<
+                    $crate::ledger::queries::ResponseQuery<$return_type>,
+                    <CLIENT as $crate::ledger::queries::Client>::Error
+                >
+                where CLIENT: $crate::ledger::queries::Client + std::marker::Sync {
+                    let path = self.[<$handle _path>]( $( $param ),* );
+
+                    let $crate::ledger::queries::ResponseQuery {
+                        data, info, proof_ops
+                    } = client.request(path, data, height, prove).await?;
+
+                    let decoded: $return_type =
+                        borsh::BorshDeserialize::try_from_slice(&data[..])?;
+
+                    Ok($crate::ledger::queries::ResponseQuery {
+                        data: decoded,
+                        info,
+                        proof_ops,
+                    })
+            }
+        }
+    };
+
+    // terminal rule that $handle that doesn't use request
+    (
+        ( $( $param:tt: $param_ty:ty ),* )
+        [ $( { $prefix:expr } ),* ]
         $return_type:path,
         $handle:tt,
         ()
@@ -349,40 +467,6 @@ macro_rules! pattern_and_handler_to_method {
                     let decoded: $return_type =
                         borsh::BorshDeserialize::try_from_slice(&data[..])?;
                     Ok(decoded)
-            }
-
-            #[allow(dead_code)]
-            #[allow(clippy::too_many_arguments)]
-            #[cfg(any(test, feature = "async-client"))]
-            #[doc = "Request value with optional data (used for e.g. \
-                `dry_run_tx`), optionally specified height (supported for \
-                `storage_value`) and optional proof (supported for \
-                `storage_value` and `storage_prefix`) from `" $handle "`."]
-            pub async fn [<$handle _with_options>]<CLIENT>(&self, client: &CLIENT,
-                data: Option<Vec<u8>>,
-                height: Option<$crate::types::storage::BlockHeight>,
-                prove: bool,
-                $( $param: &$param_ty ),*
-            )
-                -> std::result::Result<
-                    $crate::ledger::queries::ResponseQuery<$return_type>,
-                    <CLIENT as $crate::ledger::queries::Client>::Error
-                >
-                where CLIENT: $crate::ledger::queries::Client + std::marker::Sync {
-                    let path = self.[<$handle _path>]( $( $param ),* );
-
-                    let $crate::ledger::queries::ResponseQuery {
-                        data, info, proof_ops
-                    } = client.request(path, data, height, prove).await?;
-
-                    let decoded: $return_type =
-                        borsh::BorshDeserialize::try_from_slice(&data[..])?;
-
-                    Ok($crate::ledger::queries::ResponseQuery {
-                        data: decoded,
-                        info,
-                        proof_ops,
-                    })
             }
         }
     };
@@ -581,6 +665,61 @@ macro_rules! router_type {
 /// methods (enabled with `feature = "async-client"`).
 ///
 /// The `router!` macro implements greedy matching algorithm.
+///
+/// ## Examples
+///
+/// ```rust,ignore
+/// router! {ROOT,
+///   // This pattern matches `/pattern_a/something`, where `something` can be
+///   // parsed with `FromStr` into `ArgType`.
+///   ( "pattern_a" / [typed_dynamic_arg: ArgType] ) -> ReturnType = handler,
+///
+///   ( "pattern_b" / [optional_dynamic_arg: opt ArgType] ) -> ReturnType =
+/// handler,
+///
+///   // Untyped dynamic arg is a string slice `&str`
+///   ( "pattern_c" / [untyped_dynamic_arg] ) -> ReturnType = handler,
+///
+///   // The handler additionally receives the `RequestQuery`, which can have
+///   // some data attached, specified block height and ask for a proof. It
+///   // returns `ResponseQuery`, which can have some `info` string and a proof.
+///   ( "pattern_d" ) -> ReturnType = (with_options handler),
+///
+///   ( "another" / "pattern" / "that" / "goes" / "deep" ) -> ReturnType = handler,
+///
+///   // Inlined sub-tree
+///   ( "subtree" / [this_is_fine: ArgType] ) = {
+///     ( "a" ) -> u64 = a_handler,
+///     ( "b" / [another_arg] ) -> u64 = b_handler,
+///   }
+///
+///   // Imported sub-router - The prefix can only have literal segments
+///   ( "sub" / "no_dynamic_args" ) = (sub SUB_ROUTER),
+/// }
+///
+/// router! {SUB_ROUTER,
+///   ( "pattern" ) -> ReturnType = handler,
+/// }
+/// ```
+///
+/// Handler functions used in the patterns should have the expected signature:
+/// ```rust,ignore
+/// fn handler<D, H>(ctx: RequestCtx<'_, D, H>, args ...)
+///   -> storage_api::Result<ReturnType>
+/// where
+///     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+///     H: 'static + StorageHasher + Sync;
+/// ```
+///
+/// If the handler wants to support request options, it can be defined as
+/// `(with_options $handler)` and then the expected signature is:
+/// ```rust,ignore
+/// fn handler<D, H>(ctx: RequestCtx<'_, D, H>, request: &RequestQuery, args
+/// ...)   -> storage_api::Result<ResponseQuery<ReturnType>>
+/// where
+///     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+///     H: 'static + StorageHasher + Sync;
+/// ```
 #[macro_export]
 macro_rules! router {
     { $name:ident, $( $pattern:tt $( -> $return_type:path )? = $handle:tt , )* } => (
@@ -659,9 +798,8 @@ mod test_rpc_handlers {
             $(
                 pub fn $name<D, H>(
                     _ctx: RequestCtx<'_, D, H>,
-                    _request: &RequestQuery,
                     $( $( $param: $param_ty ),* )?
-                ) -> storage_api::Result<ResponseQuery<String>>
+                ) -> storage_api::Result<String>
                 where
                     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
                     H: 'static + StorageHasher + Sync,
@@ -670,10 +808,7 @@ mod test_rpc_handlers {
                     $( $(
                         let data = format!("{data}/{}", $param);
                     )* )?
-                    Ok(ResponseQuery {
-                        data,
-                        ..ResponseQuery::default()
-                    })
+                    Ok(data)
                 }
             )*
         };
@@ -698,11 +833,10 @@ mod test_rpc_handlers {
     /// support optional args.
     pub fn b3iii<D, H>(
         _ctx: RequestCtx<'_, D, H>,
-        _request: &RequestQuery,
         a1: token::Amount,
         a2: token::Amount,
         a3: Option<token::Amount>,
-    ) -> storage_api::Result<ResponseQuery<String>>
+    ) -> storage_api::Result<String>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -711,22 +845,18 @@ mod test_rpc_handlers {
         let data = format!("{data}/{}", a1);
         let data = format!("{data}/{}", a2);
         let data = a3.map(|a3| format!("{data}/{}", a3)).unwrap_or(data);
-        Ok(ResponseQuery {
-            data,
-            ..ResponseQuery::default()
-        })
+        Ok(data)
     }
 
     /// This handler is hand-written, because the test helper macro doesn't
     /// support optional args.
     pub fn b3iiii<D, H>(
         _ctx: RequestCtx<'_, D, H>,
-        _request: &RequestQuery,
         a1: token::Amount,
         a2: token::Amount,
         a3: Option<token::Amount>,
         a4: Option<Epoch>,
-    ) -> storage_api::Result<ResponseQuery<String>>
+    ) -> storage_api::Result<String>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -736,6 +866,20 @@ mod test_rpc_handlers {
         let data = format!("{data}/{}", a2);
         let data = a3.map(|a3| format!("{data}/{}", a3)).unwrap_or(data);
         let data = a4.map(|a4| format!("{data}/{}", a4)).unwrap_or(data);
+        Ok(data)
+    }
+
+    /// This handler is hand-written, because the test helper macro doesn't
+    /// support handlers with `with_options`.
+    pub fn c<D, H>(
+        _ctx: RequestCtx<'_, D, H>,
+        _request: &RequestQuery,
+    ) -> storage_api::Result<ResponseQuery<String>>
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync,
+    {
+        let data = "c".to_owned();
         Ok(ResponseQuery {
             data,
             ..ResponseQuery::default()
@@ -774,6 +918,7 @@ mod test_rpc {
                 ( "iiii" / [a3: opt token::Amount] / "xyz" / [a4: opt Epoch] ) -> String = b3iiii,
             },
         },
+        ( "c" ) -> String = (with_options c),
     }
 
     router! {TEST_SUB_RPC,

@@ -68,6 +68,17 @@ pub fn require_no_proof(request: &RequestQuery) -> storage_api::Result<()> {
     Ok(())
 }
 
+/// For queries that don't use request data, require that there are no data
+/// attached.
+pub fn require_no_data(request: &RequestQuery) -> storage_api::Result<()> {
+    if !request.data.is_empty() {
+        return Err(storage_api::Error::new_const(
+            "This query doesn't accept request data",
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(any(test, feature = "tendermint-rpc"))]
 /// Provides [`Client`] implementation for Tendermint RPC client
 pub mod tm {
