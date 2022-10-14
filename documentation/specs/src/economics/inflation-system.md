@@ -4,7 +4,7 @@ The Namada protocol controls the Namada token NAM (the native staking token), wh
 
 ### Proof-of-stake rewards
 
-The security of the proof-of-stake voting power allocation mechanism used by Namada is depenedent in part upon locking (bonding) tokens to validators, where these tokens can be slashed should the validators misbehave. Funds so locked are only able to be withdrawn after an unbonding period. In order to reward validators and delegators for locking their stake and participating in the consensus mechanism, Namada pays a variable amount of inflation to all delegators and validators. The amount of inflation paid is varied on a PD-controller in order to target a particular bonding ratio (fraction of the NAM token being locked in proof-of-stake). Namada targets a bonding ratio of 2/3, paying up to 10% inflation per annum to proof-of-stake rewards. See [reward distribution mechanism](./proof-of-stake/reward-distribution.md) for details.
+The security of the proof-of-stake voting power allocation mechanism used by Namada is dependent in part upon locking (bonding) tokens to validators, where these tokens can be slashed should the validators misbehave. Funds so locked are only able to be withdrawn after an unbonding period. In order to reward validators and delegators for locking their stake and participating in the consensus mechanism, Namada pays a variable amount of inflation to all delegators and validators. The amount of inflation paid is varied on a PD-controller in order to target a particular bonding ratio (fraction of the NAM token being locked in proof-of-stake). Namada targets a bonding ratio of 2/3, paying up to 10% inflation per annum to proof-of-stake rewards. See [reward distribution mechanism](./proof-of-stake/reward-distribution.md) for details.
 
 ### Shielded pool rewards
 
@@ -20,16 +20,16 @@ Inflation is calculated and paid per-epoch as follows.
 
 First, we start with the following fixed (governance-alterable) parameters:
 
-- $Cap_{PoS}$ is the cap of proof-of-stake reward rate, in units of percent per annum
+- $Cap_{PoS}$ is the cap of proof-of-stake reward rate, in units of percent per annum (genesis default: 10%)
 - $Cap_{SP-A}$ is the cap of shielded pool reward rate for each asset $A$, in units of percent per annum
 - $R_{PGF}$ is the public goods funding reward rate, in units of percent per annum
-- $R_{PoS-Target}$ is the target staking ratio (genesis default 2/3)
+- $R_{PoS-Target}$ is the target staking ratio (genesis default: 2/3)
 - $R_{SP-A-Target}$ is the target amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
-- $EpochsPerYear$ is the number of epochs per year (genesis default 365)
 - ${KP}_{PoS}$ is the proportional gain of the proof-of-stake PD controller, as a fraction of the total input range
 - ${KD}_{PoS}$ is the derivative gain of the proof-of-stake PD controller, as a fraction of the total input range
 - ${KP}_{SP_A}$ is the proportional gain of the shielded pool reward controller for asset $A$, as a fraction of the total input range (separate value for each asset $A$)
 - ${KD}_{SP_A}$ is the derivative gain of the shielded pool reward controller for asset $A$, as a fraction of the total input range (separate value for each asset $A$) 
+- $EpochsPerYear$ is the number of epochs per year (genesis default: 365)
 
 Second, we take as input the following state values:
 
@@ -41,7 +41,7 @@ Second, we take as input the following state values:
 - $I_{SP_A}$ is the current shielded pool reward rate for asset $A$, in units of tokens per epoch
 - $E_{SP_A-last}$ is the error in shielded pool lock amount for asset $A$ (stored from the past epoch) (separate value for each asset $A$)
 
-Public goods funding inflation can be calculated and paid immediately:
+Public goods funding inflation can be calculated and paid immediately (in terms of total tokens per epoch):
 
 - $I_{PGF} := R_{PGF} * S_{NAM} / EpochsPerYear$
 
@@ -49,15 +49,15 @@ These tokens are distributed to the public goods funding validity predicate.
 
 To run the PD-controllers for proof-of-stake and shielded pool rewards, we first calculate some intermediate values:
 
-- Calculate the staking ratio $R_{PoS}$ as $L_{NAM} / S_{NAM}$
+- Calculate the latest staking ratio $R_{PoS}$ as $L_{NAM} / S_{NAM}$
 - Calculate the per-epoch cap on proof-of-stake and shielded pool reward rates
     - $Cap_{PoS-Epoch} := S_{NAM} * Cap_{PoS} / EpochsPerYear$
     - $Cap_{SP_A-Epoch} := S_{NAM} * Cap_{SP_A} / EpochsPerYear$ (separate value for each $A$)
-- Calculate PD-controller constants
     - ${KP}_{PoS} := {KP}_{PoS} * Cap_{PoS-Epoch}$
     - ${KD}_{PoS} := {KD}_{PoS} * Cap_{PoS-Epoch}$
     - ${KP}_{SP_A} := {KP}_{SP_A} * Cap_{SP_A-Epoch}$
     - ${KD}_{SP_A} := {KD}_{SP_A} * Cap_{SP_A-Epoch}$
+- Calculate PD-controller constants to be used for this epoch
 
 Then, for proof-of-stake first, run the PD-controller:
 
