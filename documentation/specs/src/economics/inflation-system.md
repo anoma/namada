@@ -62,7 +62,7 @@ To run the PD-controllers for proof-of-stake and shielded pool rewards, we first
 Then, for proof-of-stake first, run the PD-controller:
 
 - Calculate the error $E_{PoS} = R_{PoS-Target} - R_{PoS}$
-- Calculate the error derivative $E'_{PoS} = E_{PoS} - E_{PoS-last} = R_{PoS} - R_{PoS-last}$
+- Calculate the error derivative $E'_{PoS} = E_{PoS} - E_{PoS-last} = R_{PoS-last} - R_{PoS}$
 - Calculate the control value $C_{PoS} = (KP_{PoS} * E_{PoS}) - (KD_{PoS} * E'_{PoS})$
 - Calculate the new $I'_{PoS} = max(0, min(I_{PoS} + C_{PoS}, Cap_{PoS}))$
 
@@ -71,7 +71,7 @@ These tokens are distributed to the proof-of-stake reward distribution validity 
 Similarly, for each asset $A$ for which shielded pool rewards are being paid:
 
 - Calculate the error $E_{SP_A} = R_{SP_A-Target} - R_{SP_A}$
-- Calculate the error derivative $E'_{SP_A} = E_{SP_A} - E_{SP_A-last} = R_{SP_A} - R_{SP_A-last}$
+- Calculate the error derivative $E'_{SP_A} = E_{SP_A} - E_{SP_A-last} = R_{SP_A-last} - R_{SP_A}$
 - Calculate the control value $C_{SP_A} = (KP_{SP_A} * E_{SP_A}) - (KD_{SP_A} * E'_{SP_A})$
 - Calculate the new $I'_{SP_A} = max(0, min(I_{SP_A} + C_{SP_A}, Cap_{SP_A-Epoch}))$
 
