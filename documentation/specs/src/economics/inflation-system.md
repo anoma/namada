@@ -21,10 +21,10 @@ Inflation is calculated and paid per-epoch as follows.
 First, we start with the following fixed (governance-alterable) parameters:
 
 - $Cap_{PoS}$ is the cap of proof-of-stake reward rate, in units of percent per annum (genesis default: 10%)
-- $Cap_{SP-A}$ is the cap of shielded pool reward rate for each asset $A$, in units of percent per annum
-- $R_{PoS-Target}$ is the target staking ratio (genesis default: 2/3)
-- $R_{SP-A-Target}$ is the target amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
+- $Cap_{SP_A}$ is the cap of shielded pool reward rate for each asset $A$, in units of percent per annum
 - $\lambda_{PGF}$ is the public goods funding reward rate, in units of percent per annum
+- $R_{PoS-target}$ is the target staking ratio (genesis default: 2/3)
+- $R_{SP_A-target}$ is the target amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
 - $EpochsPerYear$ is the number of epochs per year (genesis default: 365)
 - ${KP}_{PoS-nom}$ is the nominal proportional gain of the proof-of-stake PD controller, as a fraction of the total input range
 - ${KD}_{PoS-nom}$ is the nominal derivative gain of the proof-of-stake PD controller, as a fraction of the total input range
@@ -49,10 +49,10 @@ These tokens are distributed to the public goods funding validity predicate.
 
 To run the PD-controllers for proof-of-stake and shielded pool rewards, we first calculate some intermediate values:
 
-    - $Cap_{PoS-Epoch} := S_{NAM} * Cap_{PoS} / EpochsPerYear$
-    - $Cap_{SP_A-Epoch} := S_{NAM} * Cap_{SP_A} / EpochsPerYear$ (separate value for each $A$)
 - Calculate the latest staking ratio $R_{PoS}$ as $L_{PoS} / S_{NAM}$
 - Calculate the per-epoch cap on the proof-of-stake and shielded pool token inflation
+    - $Cap_{PoS-Epoch} = S_{NAM} * Cap_{PoS} / EpochsPerYear$
+    - $Cap_{SP_A-Epoch} = S_{NAM} * Cap_{SP_A} / EpochsPerYear$ (separate value for each $A$)
 - Calculate PD-controller constants to be used for this epoch
     - ${KP}_{PoS} = {KP}_{PoS-nom} * Cap_{PoS-Epoch}$
     - ${KD}_{PoS} = {KD}_{PoS-nom} * Cap_{PoS-Epoch}$
@@ -61,7 +61,7 @@ To run the PD-controllers for proof-of-stake and shielded pool rewards, we first
 
 Then, for proof-of-stake first, run the PD-controller:
 
-- Calculate the error $E_{PoS} = R_{PoS-Target} - R_{PoS}$
+- Calculate the error $E_{PoS} = R_{PoS-target} - R_{PoS}$
 - Calculate the error derivative $E'_{PoS} = E_{PoS} - E_{PoS-last} = R_{PoS-last} - R_{PoS}$
 - Calculate the control value $C_{PoS} = (KP_{PoS} * E_{PoS}) - (KD_{PoS} * E'_{PoS})$
 - Calculate the new $I'_{PoS} = max(0, min(I_{PoS} + C_{PoS}, Cap_{PoS-Epoch}))$
@@ -70,11 +70,11 @@ These tokens are distributed to the proof-of-stake reward distribution validity 
 
 Similarly, for each asset $A$ for which shielded pool rewards are being paid:
 
-- Calculate the error $E_{SP_A} = R_{SP_A-Target} - R_{SP_A}$
+- Calculate the error $E_{SP_A} = R_{SP_A-target} - R_{SP_A}$
 - Calculate the error derivative $E'_{SP_A} = E_{SP_A} - E_{SP_A-last} = R_{SP_A-last} - R_{SP_A}$
 - Calculate the control value $C_{SP_A} = (KP_{SP_A} * E_{SP_A}) - (KD_{SP_A} * E'_{SP_A})$
 - Calculate the new $I'_{SP_A} = max(0, min(I_{SP_A} + C_{SP_A}, Cap_{SP_A-Epoch}))$
 
 These tokens are distributed to the shielded pool reward distribution validity predicate.
 
-Finally, we store the current inflation and error values for the next controller round.
+Finally, we store the latest inflation and locked token ratio values for the next epoch's controller round.
