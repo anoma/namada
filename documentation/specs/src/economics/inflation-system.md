@@ -22,9 +22,9 @@ First, we start with the following fixed (governance-alterable) parameters:
 
 - $Cap_{PoS}$ is the cap of proof-of-stake reward rate, in units of percent per annum (genesis default: 10%)
 - $Cap_{SP-A}$ is the cap of shielded pool reward rate for each asset $A$, in units of percent per annum
-- $I_{PGF}$ is the public goods funding reward rate, in units of percent per annum
 - $R_{PoS-Target}$ is the target staking ratio (genesis default: 2/3)
 - $R_{SP-A-Target}$ is the target amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
+- $\lambda_{PGF}$ is the public goods funding reward rate, in units of percent per annum
 - $EpochsPerYear$ is the number of epochs per year (genesis default: 365)
 - ${KP}_{PoS-nom}$ is the nominal proportional gain of the proof-of-stake PD controller, as a fraction of the total input range
 - ${KD}_{PoS-nom}$ is the nominal derivative gain of the proof-of-stake PD controller, as a fraction of the total input range
@@ -35,24 +35,24 @@ Second, we take as input the following state values:
 
 - $S_{NAM}$ is the current supply of NAM
 - $L_{NAM}$ is the current amount of NAM locked in proof-of-stake
-- $I_{PoS}$ is the current proof-of-stake reward rate, in units of percent per annum
+- $I_{PoS}$ is the current proof-of-stake inflation amount, in units of tokens per epoch
 - $R_{PoS-last}$ is the proof-of-stake locked token ratio from the previous epoch
 - $L_{SP_A}$ is the current amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
-- $I_{SP_A}$ is the current shielded pool reward rate for asset $A$, in units of tokens per epoch
+- $I_{SP_A}$ is the current shielded pool inflation amount for asset $A$, in units of tokens per epoch
 - $R_{SP_A-last}$ is the shielded pool locked token ratio for asset $A$ from the previous epoch (separate value for each asset $A$)
 
 Public goods funding inflation can be calculated and paid immediately (in terms of total tokens per epoch):
 
-- $T_{PGF} := I_{PGF} * S_{NAM} / EpochsPerYear$
+- $I_{PGF} = \lambda_{PGF} * S_{NAM} / EpochsPerYear$
 
 These tokens are distributed to the public goods funding validity predicate.
 
 To run the PD-controllers for proof-of-stake and shielded pool rewards, we first calculate some intermediate values:
 
 - Calculate the latest staking ratio $R_{PoS}$ as $L_{NAM} / S_{NAM}$
-- Calculate the per-epoch cap on proof-of-stake and shielded pool reward rates
     - $Cap_{PoS-Epoch} := S_{NAM} * Cap_{PoS} / EpochsPerYear$
     - $Cap_{SP_A-Epoch} := S_{NAM} * Cap_{SP_A} / EpochsPerYear$ (separate value for each $A$)
+- Calculate the per-epoch cap on the proof-of-stake and shielded pool token inflation
 - Calculate PD-controller constants to be used for this epoch
     - ${KP}_{PoS} = {KP}_{PoS-nom} * Cap_{PoS-Epoch}$
     - ${KD}_{PoS} = {KD}_{PoS-nom} * Cap_{PoS-Epoch}$
@@ -64,7 +64,7 @@ Then, for proof-of-stake first, run the PD-controller:
 - Calculate the error $E_{PoS} = R_{PoS-Target} - R_{PoS}$
 - Calculate the error derivative $E'_{PoS} = E_{PoS} - E_{PoS-last} = R_{PoS-last} - R_{PoS}$
 - Calculate the control value $C_{PoS} = (KP_{PoS} * E_{PoS}) - (KD_{PoS} * E'_{PoS})$
-- Calculate the new $I'_{PoS} = max(0, min(I_{PoS} + C_{PoS}, Cap_{PoS}))$
+- Calculate the new $I'_{PoS} = max(0, min(I_{PoS} + C_{PoS}, Cap_{PoS-Epoch}))$
 
 These tokens are distributed to the proof-of-stake reward distribution validity predicate.
 
