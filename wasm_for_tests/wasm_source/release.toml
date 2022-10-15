@@ -1,6 +1,6 @@
 allow-branch               = ["main", "maint-*"]
 consolidate-commits        = true
-pre-release-commit-message = "Namada {{version}}"
+pre-release-commit-message = "fixup! Namada {{version}}"
 publish                    = false
 push                       = false
 shared-version             = true
