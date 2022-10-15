@@ -34,7 +34,7 @@ First, we start with the following fixed (governance-alterable) parameters:
 Second, we take as input the following state values:
 
 - $S_{NAM}$ is the current supply of NAM
-- $L_{NAM}$ is the current amount of NAM locked in proof-of-stake
+- $L_{PoS}$ is the current amount of NAM locked in proof-of-stake
 - $I_{PoS}$ is the current proof-of-stake inflation amount, in units of tokens per epoch
 - $R_{PoS-last}$ is the proof-of-stake locked token ratio from the previous epoch
 - $L_{SP_A}$ is the current amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
@@ -49,9 +49,9 @@ These tokens are distributed to the public goods funding validity predicate.
 
 To run the PD-controllers for proof-of-stake and shielded pool rewards, we first calculate some intermediate values:
 
-- Calculate the latest staking ratio $R_{PoS}$ as $L_{NAM} / S_{NAM}$
     - $Cap_{PoS-Epoch} := S_{NAM} * Cap_{PoS} / EpochsPerYear$
     - $Cap_{SP_A-Epoch} := S_{NAM} * Cap_{SP_A} / EpochsPerYear$ (separate value for each $A$)
+- Calculate the latest staking ratio $R_{PoS}$ as $L_{PoS} / S_{NAM}$
 - Calculate the per-epoch cap on the proof-of-stake and shielded pool token inflation
 - Calculate PD-controller constants to be used for this epoch
     - ${KP}_{PoS} = {KP}_{PoS-nom} * Cap_{PoS-Epoch}$
