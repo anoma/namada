@@ -1668,6 +1668,7 @@ pub mod args {
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NODE_OPT: ArgOpt<String> = arg_opt("node");
     const NODE: Arg<String> = arg("node");
+    const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     const NFT_ADDRESS: Arg<Address> = arg("nft-address");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
     const PIN: ArgFlag = flag("pin");
@@ -2430,6 +2431,8 @@ pub mod args {
         pub owner: Option<WalletBalanceOwner>,
         /// Address of a token
         pub token: Option<WalletAddress>,
+        /// Whether not to convert balances
+        pub no_conversions: bool,
     }
 
     impl Args for QueryBalance {
@@ -2437,10 +2440,12 @@ pub mod args {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
+            let no_conversions = NO_CONVERSIONS.parse(matches);
             Self {
                 query,
                 owner,
                 token,
+                no_conversions,
             }
         }
 
@@ -2455,6 +2460,11 @@ pub mod args {
                     TOKEN_OPT
                         .def()
                         .about("The token's address whose balance to query."),
+                )
+                .arg(
+                    NO_CONVERSIONS
+                        .def()
+                        .about("Whether not to automatically perform conversions."),
                 )
         }
     }

@@ -797,6 +797,8 @@ pub async fn query_shielded_balance(
     let owner = args
         .owner
         .and_then(|x| ctx.get_cached(&x).full_viewing_key());
+    // Used to control whether conversions are automatically performed
+    let no_conversions = args.no_conversions;
     // Viewing keys are used to query shielded balances. If a spending key is
     // provided, then convert to a viewing key first.
     let viewing_keys = match owner {
@@ -826,11 +828,19 @@ pub async fn query_shielded_balance(
             // Query the multi-asset balance at the given spending key
             let viewing_key =
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
-            let balance = ctx
-                .shielded
-                .compute_exchanged_balance(client.clone(), &viewing_key, epoch)
-                .await
-                .expect("context should contain viewing key");
+            let balance;
+            if no_conversions {
+                balance = ctx
+                    .shielded
+                    .compute_shielded_balance(&viewing_key)
+                    .expect("context should contain viewing key");
+            } else {
+                balance = ctx
+                    .shielded
+                    .compute_exchanged_balance(client.clone(), &viewing_key, epoch)
+                    .await
+                    .expect("context should contain viewing key");
+            }
             // Compute the unique asset identifier from the token address
             let token = ctx.get(&token);
             let asset_type = AssetType::new(
@@ -862,15 +872,25 @@ pub async fn query_shielded_balance(
             for fvk in viewing_keys {
                 // Query the multi-asset balance at the given spending key
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
-                let balance = ctx
-                    .shielded
-                    .compute_exchanged_balance(
-                        client.clone(),
-                        &viewing_key,
-                        epoch,
-                    )
-                    .await
-                    .expect("context should contain viewing key");
+                let balance;
+                if no_conversions {
+                    balance = ctx
+                        .shielded
+                        .compute_shielded_balance(
+                            &viewing_key,
+                            )
+                        .expect("context should contain viewing key");
+                } else {
+                    balance = ctx
+                        .shielded
+                        .compute_exchanged_balance(
+                            client.clone(),
+                            &viewing_key,
+                            epoch,
+                        )
+                        .await
+                        .expect("context should contain viewing key");
+                }
                 for (asset_type, value) in balance.components() {
                     if !balances.contains_key(asset_type) {
                         balances.insert(*asset_type, Vec::new());

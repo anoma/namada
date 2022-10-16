@@ -1024,6 +1024,7 @@ impl ShieldedContext {
                 .await
                 .map(|(addr, _epoch)| make_asset_type(target_epoch, &addr))
                 .unwrap_or(asset_type);
+            let at_target_asset_type = asset_type == target_asset_type;
             if let (Some((conv, _wit, usage)), false) = (
                 self.query_allowed_conversion(
                     client.clone(),
@@ -1031,7 +1032,7 @@ impl ShieldedContext {
                     &mut conversions,
                 )
                 .await,
-                asset_type == target_asset_type,
+                at_target_asset_type,
             ) {
                 // Not at the target asset type, not at the latest asset type.
                 // Apply conversion to get from current asset type to the latest
@@ -1051,7 +1052,7 @@ impl ShieldedContext {
                     &mut conversions,
                 )
                 .await,
-                asset_type == target_asset_type,
+                at_target_asset_type,
             ) {
                 // Not at the target asset type, yes at the latest asset type.
                 // Apply inverse conversion to get from latest asset type to
