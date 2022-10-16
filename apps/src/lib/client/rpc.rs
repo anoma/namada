@@ -969,15 +969,25 @@ pub async fn query_shielded_balance(
             for fvk in viewing_keys {
                 // Query the multi-asset balance at the given spending key
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
-                let balance = ctx
-                    .shielded
-                    .compute_exchanged_balance(
-                        client.clone(),
-                        &viewing_key,
-                        epoch,
-                    )
-                    .await
-                    .expect("context should contain viewing key");
+                let balance;
+                if no_conversions {
+                    balance = ctx
+                        .shielded
+                        .compute_shielded_balance(
+                            &viewing_key,
+                            )
+                        .expect("context should contain viewing key");
+                } else {
+                    balance = ctx
+                        .shielded
+                        .compute_exchanged_balance(
+                            client.clone(),
+                            &viewing_key,
+                            epoch,
+                        )
+                        .await
+                        .expect("context should contain viewing key");
+                }
                 if balance[&asset_type] != 0 {
                     let asset_value =
                         token::Amount::from(balance[&asset_type] as u64);
@@ -997,18 +1007,34 @@ pub async fn query_shielded_balance(
             // Query the multi-asset balance at the given spending key
             let viewing_key =
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
-            let balance = ctx
-                .shielded
-                .compute_exchanged_balance(client.clone(), &viewing_key, epoch)
-                .await
-                .expect("context should contain viewing key");
+            let balance;
+            let decoded_balance;
+            if no_conversions {
+                balance = ctx
+                    .shielded
+                    .compute_shielded_balance(
+                        &viewing_key,
+                    )
+                    .expect("context should contain viewing key");
+                // Print balances by human-readable token names
+                decoded_balance = ctx
+                    .shielded
+                    .decode_all_amounts(client.clone(), balance)
+                    .await;
+            } else {
+                balance = ctx
+                    .shielded
+                    .compute_exchanged_balance(client.clone(), &viewing_key, epoch)
+                    .await
+                    .expect("context should contain viewing key");
+                // Print balances by human-readable token names
+                decoded_balance = ctx
+                    .shielded
+                    .decode_amount(client.clone(), balance, epoch)
+                    .await;
+            }
             let mut found_any = false;
-            // Print balances by human-readable token names
-            let balance = ctx
-                .shielded
-                .decode_amount(client.clone(), balance, epoch)
-                .await;
-            for (addr, value) in balance.components() {
+            for (addr, value) in decoded_balance.components() {
                 let asset_value = token::Amount::from(*value as u64);
                 let addr_enc = addr.encode();
                 println!(

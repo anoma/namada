@@ -930,14 +930,17 @@ impl ShieldedContext {
         match conversions.entry(asset_type) {
             Entry::Occupied(conv_entry) => Some(conv_entry.into_mut()),
             Entry::Vacant(conv_entry) => {
+                println!("vacant entry");
                 // Query for the ID of the last accepted transaction
                 let (addr, ep, conv, path): (Address, _, _, _) =
                     query_conversion(client, asset_type).await?;
+                println!("inserting asset type {}", asset_type);
                 self.asset_types.insert(asset_type, (addr, ep));
                 // If the conversion is 0, then we just have a pure decoding
                 if conv == Amount::zero() {
                     None
                 } else {
+                    println!("amount {:?}", conv);
                     Some(conv_entry.insert((Amount::into(conv), path, 0)))
                 }
             }
@@ -987,8 +990,13 @@ impl ShieldedContext {
     ) {
         // If conversion if possible, accumulate the exchanged amount
         let conv: Amount = conv.into();
+        println!("asset type {:?}", asset_type);
+        println!("conv {:?}", conv);
         // The amount required of current asset to qualify for conversion
         let threshold = -conv[&asset_type];
+        if threshold == 0 {
+            eprintln!("Asset threshold of selected conversion for asset type {} is 0, this is a bug, please report it.", asset_type);
+        }
         // We should use an amount of the AllowedConversion that almost
         // cancels the original amount
         let required = value / threshold;
@@ -1019,11 +1027,13 @@ impl ShieldedContext {
         while let Some((asset_type, value)) =
             input.components().next().map(cloned_pair)
         {
+            println!("asset type {}, value {}", asset_type, value);
             let target_asset_type = self
                 .decode_asset_type(client.clone(), asset_type)
                 .await
                 .map(|(addr, _epoch)| make_asset_type(target_epoch, &addr))
                 .unwrap_or(asset_type);
+            println!("target asset type {}", target_asset_type);
             let at_target_asset_type = asset_type == target_asset_type;
             if let (Some((conv, _wit, usage)), false) = (
                 self.query_allowed_conversion(
@@ -1034,6 +1044,7 @@ impl ShieldedContext {
                 .await,
                 at_target_asset_type,
             ) {
+                println!("converting current asset type to latest asset type...");
                 // Not at the target asset type, not at the latest asset type.
                 // Apply conversion to get from current asset type to the latest
                 // asset type.
@@ -1054,6 +1065,7 @@ impl ShieldedContext {
                 .await,
                 at_target_asset_type,
             ) {
+                println!("converting latest asset type to target asset type...");
                 // Not at the target asset type, yes at the latest asset type.
                 // Apply inverse conversion to get from latest asset type to
                 // the target asset type.
@@ -1261,6 +1273,29 @@ impl ShieldedContext {
             // Only assets with the target timestamp count
             match decoded {
                 Some((addr, epoch)) if epoch == target_epoch => {
+                    res += &Amount::from_pair(addr, *val).unwrap()
+                }
+                _ => {}
+            }
+        }
+        res
+    }
+
+    /// Convert an amount whose units are AssetTypes to one whose units are
+    /// Addresses that they decode to.
+    pub async fn decode_all_amounts(
+        &mut self,
+        client: HttpClient,
+        amt: Amount,
+    ) -> Amount<Address> {
+        let mut res = Amount::zero();
+        for (asset_type, val) in amt.components() {
+            // Decode the asset type
+            let decoded =
+                self.decode_asset_type(client.clone(), *asset_type).await;
+            // Only assets with the target timestamp count
+            match decoded {
+                Some((addr, _)) => {
                     res += &Amount::from_pair(addr, *val).unwrap()
                 }
                 _ => {}
