@@ -707,11 +707,13 @@ where
 
     /// Update the MASP's allowed conversions
     fn update_allowed_conversions(&mut self) -> Result<()> {
+        println!("updating allowed conversions...");
         // The derived conversions will be placed in MASP address space
         let masp_addr = masp();
         let key_prefix: Key = masp_addr.to_db_key().into();
 
         let masp_rewards = masp_rewards();
+        println!("masp rewards {:?}", masp_rewards);
         // The total transparent value of the rewards being distributed
         let mut total_reward = token::Amount::from(0);
 
@@ -838,12 +840,12 @@ where
             // Add the decoding entry for the new asset type. An uncommited
             // node position is used since this is not a conversion.
             let new_asset =
-                Self::encode_asset_type(addr.clone(), self.last_epoch);
+                Self::encode_asset_type(addr.clone(), self.block.epoch);
             self.conversion_state.assets.insert(
                 new_asset,
                 (
                     addr.clone(),
-                    self.last_epoch,
+                    self.block.epoch,
                     Amount::zero().into(),
                     self.conversion_state.tree.size(),
                 ),
