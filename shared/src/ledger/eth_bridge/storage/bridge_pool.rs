@@ -157,6 +157,11 @@ impl BridgePoolTree {
             }
             leaves.insert(hash);
         }
+        if !leaves.is_subset(&self.store) {
+            return Err(eyre!(
+                "Cannot generate proof for values that aren't in the tree"
+            ).into());
+        }
 
         let mut proof_hashes = vec![];
         let mut flags = vec![];
