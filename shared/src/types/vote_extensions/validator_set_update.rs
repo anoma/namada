@@ -9,7 +9,7 @@ use num_rational::Ratio;
 use crate::ledger::pos::types::VotingPower;
 use crate::proto::Signed;
 use crate::types::address::Address;
-use crate::types::ethereum_events::EthAddress;
+use crate::types::ethereum_events::{EthAddress, Uint};
 use crate::types::keccak::encode::{AbiEncode, Encode, Token};
 use crate::types::keccak::KeccakHash;
 use crate::types::key::common::{self, Signature};
@@ -266,6 +266,38 @@ fn compute_hash(
         Token::Array(voting_powers),
         bheight_to_token(block_height),
     ])
+}
+
+/// Struct for serializing validator set
+/// arguments with ABI for Ethereum smart
+/// contracts.
+#[derive(Debug, Clone, Default)]
+pub struct ValidatorSetArgs {
+    /// Ethereum address of validators
+    pub validators: Vec<EthAddress>,
+    /// Voting powers of validators
+    pub powers: Vec<Uint>,
+    /// A nonce
+    pub nonce: Uint,
+}
+
+impl Encode<1> for ValidatorSetArgs {
+    fn tokenize(&self) -> [Token; 1] {
+        let addrs = Token::Array(
+            self.validators
+                .iter()
+                .map(|addr| Token::Address(addr.0.into()))
+                .collect(),
+        );
+        let powers = Token::Array(
+            self.powers
+                .iter()
+                .map(|power| Token::Uint(power.clone().into()))
+                .collect(),
+        );
+        let nonce = Token::Uint(self.nonce.clone().into());
+        [Token::FixedArray(vec![addrs, powers, nonce])]
+    }
 }
 
 // this is only here so we don't pollute the
