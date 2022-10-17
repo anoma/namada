@@ -19,7 +19,7 @@ pub struct Keys<T> {
 }
 
 impl<T> Keys<T> {
-    /// Get the `body` key- there should be a Borsh-serialized [`T`] stored
+    /// Get the `body` key - there should be a Borsh-serialized `T` stored
     /// here.
     pub fn body(&self) -> Key {
         self.prefix
