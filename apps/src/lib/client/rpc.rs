@@ -49,7 +49,7 @@ use crate::node::ledger::rpc::Path;
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
 pub async fn query_tx_status(
-    status: TxEventQuery,
+    status: TxEventQuery<'_>,
     args: args::Query,
     deadline: Instant,
 ) -> Event {
@@ -62,7 +62,7 @@ pub async fn query_tx_status(
         loop {
             let data = vec![];
             let response = client
-                .abci_query(Some(status.clone().into()), data, None, false)
+                .abci_query(Some(status.into()), data, None, false)
                 .await
                 .unwrap();
             let mut events = match response.code {
@@ -1479,23 +1479,23 @@ pub async fn query_has_storage_key(
 }
 
 /// Represents a query for an event pertaining to the specified transaction
-#[derive(Debug, Clone)]
-pub enum TxEventQuery {
-    Accepted(String),
-    Applied(String),
+#[derive(Debug, Copy, Clone)]
+pub enum TxEventQuery<'a> {
+    Accepted(&'a str),
+    Applied(&'a str),
 }
 
-impl TxEventQuery {
+impl<'a> TxEventQuery<'a> {
     /// The event type to which this event query pertains
-    fn event_type(&self) -> &'static str {
+    fn event_type(self) -> &'static str {
         match self {
-            TxEventQuery::Accepted(_tx_hash) => "accepted",
-            TxEventQuery::Applied(_tx_hash) => "applied",
+            TxEventQuery::Accepted(_) => "accepted",
+            TxEventQuery::Applied(_) => "applied",
         }
     }
 
     /// The transaction to which this event query pertains
-    fn tx_hash(&self) -> &String {
+    fn tx_hash(self) -> &'a str {
         match self {
             TxEventQuery::Accepted(tx_hash) => tx_hash,
             TxEventQuery::Applied(tx_hash) => tx_hash,
@@ -1503,8 +1503,8 @@ impl TxEventQuery {
     }
 }
 
-impl From<TxEventQuery> for crate::facade::tendermint::abci::Path {
-    fn from(tx_query: TxEventQuery) -> Self {
+impl<'a> From<TxEventQuery<'a>> for crate::facade::tendermint::abci::Path {
+    fn from(tx_query: TxEventQuery<'a>) -> Self {
         format!("{}/{}", tx_query.event_type(), tx_query.tx_hash())
             .parse()
             .expect("This operation is infallible")
@@ -1512,8 +1512,8 @@ impl From<TxEventQuery> for crate::facade::tendermint::abci::Path {
 }
 
 /// Transaction event queries are semantically a subset of general queries
-impl From<TxEventQuery> for Query {
-    fn from(tx_query: TxEventQuery) -> Self {
+impl<'a> From<TxEventQuery<'a>> for Query {
+    fn from(tx_query: TxEventQuery<'a>) -> Self {
         match tx_query {
             TxEventQuery::Accepted(tx_hash) => {
                 Query::default().and_eq("accepted.hash", tx_hash)
@@ -1528,14 +1528,14 @@ impl From<TxEventQuery> for Query {
 /// Lookup the full response accompanying the specified transaction event
 pub async fn query_tx_response(
     ledger_address: &TendermintAddress,
-    tx_query: TxEventQuery,
+    tx_query: TxEventQuery<'_>,
 ) -> Result<TxResponse, TError> {
     // Connect to the Tendermint server holding the transactions
     let (client, driver) = WebSocketClient::new(ledger_address.clone()).await?;
     let driver_handle = tokio::spawn(async move { driver.run().await });
     // Find all blocks that apply a transaction with the specified hash
     let blocks = &client
-        .block_search(Query::from(tx_query.clone()), 1, 255, Order::Ascending)
+        .block_search(tx_query.into(), 1, 255, Order::Ascending)
         .await
         .expect("Unable to query for transaction with given hash")
         .blocks;
@@ -1611,7 +1611,7 @@ pub async fn query_result(_ctx: Context, args: args::QueryResult) {
     // First try looking up application event pertaining to given hash.
     let tx_response = query_tx_response(
         &args.query.ledger_address,
-        TxEventQuery::Applied(args.tx_hash.clone()),
+        TxEventQuery::Applied(&args.tx_hash),
     )
     .await;
     match tx_response {
@@ -1625,7 +1625,7 @@ pub async fn query_result(_ctx: Context, args: args::QueryResult) {
             // If this fails then instead look for an acceptance event.
             let tx_response = query_tx_response(
                 &args.query.ledger_address,
-                TxEventQuery::Accepted(args.tx_hash),
+                TxEventQuery::Accepted(&args.tx_hash),
             )
             .await;
             match tx_response {
