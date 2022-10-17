@@ -148,7 +148,7 @@ where
             })?
         {
             let denom_key = ibc_storage::ibc_denom_key(&token_hash);
-            let denom_bytes = match self.ctx.read_pre(&denom_key) {
+            let denom_bytes = match self.ctx.read_bytes_pre(&denom_key) {
                 Ok(Some(v)) => v,
                 _ => {
                     return Err(Error::Denom(format!(
@@ -174,7 +174,7 @@ where
             .strip_prefix(&format!("{}/", ibc_storage::MULTITOKEN_STORAGE_KEY))
         {
             let denom_key = ibc_storage::ibc_denom_key(&denom);
-            match self.ctx.read_pre(&denom_key)? {
+            match self.ctx.read_bytes_pre(&denom_key)? {
                 Some(v) => std::str::from_utf8(&v)
                     .map_err(|e| {
                         Error::TokenTransfer(format!(
@@ -213,9 +213,10 @@ where
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcBurn),
             );
-            let post =
-                try_decode_token_amount(self.ctx.read_temp(&target_key)?)?
-                    .unwrap_or_default();
+            let post = try_decode_token_amount(
+                self.ctx.read_bytes_temp(&target_key)?,
+            )?
+            .unwrap_or_default();
             // the previous balance of the burn address should be zero
             post.change()
         } else {
@@ -225,10 +226,8 @@ where
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcEscrow),
             );
-            let pre = try_decode_token_amount(self.ctx.read_pre(&target_key)?)?
-                .unwrap_or_default();
-            let post =
-                try_decode_token_amount(self.ctx.read_post(&target_key)?)?
+            let pre =
+                try_decode_token_amount(self.ctx.read_bytes_pre(&target_key)?)?
                     .unwrap_or_default();
             let post = try_decode_token_amount(
                 self.ctx.read_bytes_post(&target_key)?,
@@ -272,10 +271,8 @@ where
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcEscrow),
             );
-            let pre = try_decode_token_amount(self.ctx.read_pre(&source_key)?)?
-                .unwrap_or_default();
-            let post =
-                try_decode_token_amount(self.ctx.read_post(&source_key)?)?
+            let pre =
+                try_decode_token_amount(self.ctx.read_bytes_pre(&source_key)?)?
                     .unwrap_or_default();
             let post = try_decode_token_amount(
                 self.ctx.read_bytes_post(&source_key)?,
@@ -289,9 +286,10 @@ where
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcMint),
             );
-            let post =
-                try_decode_token_amount(self.ctx.read_temp(&source_key)?)?
-                    .unwrap_or_default();
+            let post = try_decode_token_amount(
+                self.ctx.read_bytes_temp(&source_key)?,
+            )?
+            .unwrap_or_default();
             // the previous balance of the mint address should be the maximum
             Amount::max().change() - post.change()
         };
@@ -331,9 +329,10 @@ where
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcMint),
             );
-            let post =
-                try_decode_token_amount(self.ctx.read_temp(&source_key)?)?
-                    .unwrap_or_default();
+            let post = try_decode_token_amount(
+                self.ctx.read_bytes_temp(&source_key)?,
+            )?
+            .unwrap_or_default();
             // the previous balance of the mint address should be the maximum
             Amount::max().change() - post.change()
         } else {
@@ -342,10 +341,8 @@ where
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcEscrow),
             );
-            let pre = try_decode_token_amount(self.ctx.read_pre(&source_key)?)?
-                .unwrap_or_default();
-            let post =
-                try_decode_token_amount(self.ctx.read_post(&source_key)?)?
+            let pre =
+                try_decode_token_amount(self.ctx.read_bytes_pre(&source_key)?)?
                     .unwrap_or_default();
             let post = try_decode_token_amount(
                 self.ctx.read_bytes_post(&source_key)?,

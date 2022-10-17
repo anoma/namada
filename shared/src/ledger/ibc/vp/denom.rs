@@ -4,6 +4,7 @@ use thiserror::Error;
 
 use super::Ibc;
 use crate::ledger::ibc::storage;
+use crate::ledger::native_vp::VpEnv;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::types::ibc::data::{
     Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
@@ -48,7 +49,7 @@ where
                 );
                 let token_hash = storage::calc_hash(&denom);
                 let denom_key = storage::ibc_denom_key(&token_hash.raw());
-                match self.ctx.read_post(&denom_key) {
+                match self.ctx.read_bytes_post(&denom_key) {
                     Ok(Some(v)) => match std::str::from_utf8(&v) {
                         Ok(d) if d == denom => Ok(()),
                         Ok(d) => Err(Error::Denom(format!(

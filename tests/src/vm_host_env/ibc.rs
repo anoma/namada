@@ -65,7 +65,7 @@ use namada::proto::Tx;
 use namada::tendermint_proto::Protobuf;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::ibc::data::{FungibleTokenPacketData, PacketAck};
-use namada::types::storage::{self, BlockHash, BlockHeight};
+use namada::types::storage::{self, BlockHash, BlockHeight, Key};
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_tx_prelude::StorageWrite;

@@ -936,10 +936,12 @@ pub trait IbcActions {
         msg: &MsgTransfer,
     ) -> std::result::Result<(), Self::Error> {
         let mut data = FungibleTokenPacketData::from(msg.clone());
-        if let Some(hash) = storage::token_hash_from_denom(&data.denom)? {
+        if let Some(hash) = storage::token_hash_from_denom(&data.denom)
+            .map_err(Error::IbcStorage)?
+        {
             let denom_key = storage::ibc_denom_key(&hash);
             let denom_bytes =
-                self.read_ibc_data(&denom_key).ok_or_else(|| {
+                self.read_ibc_data(&denom_key)?.ok_or_else(|| {
                     Error::SendingToken(format!(
                         "No original denom: denom_key {}",
                         denom_key
@@ -953,7 +955,7 @@ pub trait IbcActions {
             })?;
             data.denom = denom.to_string();
         }
-        let token = storage::token(&data.denom)?;
+        let token = storage::token(&data.denom).map_err(Error::IbcStorage)?;
         let amount = Amount::from_str(&data.amount).map_err(|e| {
             Error::SendingToken(format!(
                 "Invalid amount: amount {}, error {}",
@@ -978,7 +980,8 @@ pub trait IbcActions {
         let (source, target) = if data.denom.starts_with(&prefix) {
             // the receiver's chain was the source
             // transfer from the origin-specific account of the token
-            let key_prefix = storage::ibc_token_prefix(&data.denom)?;
+            let key_prefix = storage::ibc_token_prefix(&data.denom)
+                .map_err(Error::IbcStorage)?;
             let src = token::multitoken_balance_key(&key_prefix, &source_addr);
 
             let key_prefix = storage::ibc_account_prefix(
@@ -997,7 +1000,8 @@ pub trait IbcActions {
             let src = if data.denom == token.to_string() {
                 token::balance_key(&token, &source_addr)
             } else {
-                let key_prefix = storage::ibc_token_prefix(&data.denom)?;
+                let key_prefix = storage::ibc_token_prefix(&data.denom)
+                    .map_err(Error::IbcStorage)?;
                 token::multitoken_balance_key(&key_prefix, &source_addr)
             };
 
@@ -1012,7 +1016,7 @@ pub trait IbcActions {
             );
             (src, escrow)
         };
-        self.transfer_token(&source, &target, amount);
+        self.transfer_token(&source, &target, amount)?;
 
         // send a packet
         let port_channel_id =
@@ -1033,7 +1037,7 @@ pub trait IbcActions {
         packet: &Packet,
         data: &FungibleTokenPacketData,
     ) -> std::result::Result<(), Self::Error> {
-        let token = storage::token(&data.denom)?;
+        let token = storage::token(&data.denom).map_err(Error::IbcStorage)?;
         let amount = Amount::from_str(&data.amount).map_err(|e| {
             Error::ReceivingToken(format!(
                 "Invalid amount: amount {}, error {}",
@@ -1070,7 +1074,8 @@ pub trait IbcActions {
                 let dest = if denom == token.to_string() {
                     token::balance_key(&token, &dest_addr)
                 } else {
-                    let key_prefix = storage::ibc_token_prefix(denom)?;
+                    let key_prefix = storage::ibc_token_prefix(denom)
+                        .map_err(Error::IbcStorage)?;
                     token::multitoken_balance_key(&key_prefix, &dest_addr)
                 };
                 (escrow, dest)
@@ -1094,19 +1099,20 @@ pub trait IbcActions {
                     &packet.destination_channel,
                     &data.denom
                 );
-                let key_prefix = storage::ibc_token_prefix(&denom)?;
+                let key_prefix = storage::ibc_token_prefix(&denom)
+                    .map_err(Error::IbcStorage)?;
                 let dest =
                     token::multitoken_balance_key(&key_prefix, &dest_addr);
 
                 // store the prefixed denom
                 let token_hash = storage::calc_hash(&denom);
                 let denom_key = storage::ibc_denom_key(token_hash);
-                self.write_ibc_data(&denom_key, denom.as_bytes());
+                self.write_ibc_data(&denom_key, denom.as_bytes())?;
 
                 (mint, dest)
             }
         };
-        self.transfer_token(&source, &target, amount);
+        self.transfer_token(&source, &target, amount)?;
 
         Ok(())
     }
@@ -1117,7 +1123,7 @@ pub trait IbcActions {
         packet: &Packet,
         data: &FungibleTokenPacketData,
     ) -> std::result::Result<(), Self::Error> {
-        let token = storage::token(&data.denom)?;
+        let token = storage::token(&data.denom).map_err(Error::IbcStorage)?;
         let amount = Amount::from_str(&data.amount).map_err(|e| {
             Error::ReceivingToken(format!(
                 "Invalid amount: amount {}, error {}",
@@ -1148,7 +1154,8 @@ pub trait IbcActions {
                 &key_prefix,
                 &Address::Internal(InternalAddress::IbcMint),
             );
-            let key_prefix = storage::ibc_token_prefix(&data.denom)?;
+            let key_prefix = storage::ibc_token_prefix(&data.denom)
+                .map_err(Error::IbcStorage)?;
             let dest = token::multitoken_balance_key(&key_prefix, &dest_addr);
             (mint, dest)
         } else {
@@ -1156,7 +1163,8 @@ pub trait IbcActions {
             let dest = if data.denom == token.to_string() {
                 token::balance_key(&token, &dest_addr)
             } else {
-                let key_prefix = storage::ibc_token_prefix(&data.denom)?;
+                let key_prefix = storage::ibc_token_prefix(&data.denom)
+                    .map_err(Error::IbcStorage)?;
                 token::multitoken_balance_key(&key_prefix, &dest_addr)
             };
 
@@ -1171,7 +1179,7 @@ pub trait IbcActions {
             );
             (escrow, dest)
         };
-        self.transfer_token(&source, &target, amount);
+        self.transfer_token(&source, &target, amount)?;
 
         Ok(())
     }
@@ -1596,10 +1604,4 @@ pub fn make_timeout_event(packet: Packet) -> IbcEvent {
         height: Height::default(),
         packet,
     })
-}
-
-impl From<storage::Error> for Error {
-    fn from(err: storage::Error) -> Self {
-        Self::IbcStorage(err)
-    }
 }

@@ -33,6 +33,7 @@ use crate::ibc::core::ics24_host::identifier::{
 };
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ibc::proofs::Proofs;
+use crate::ledger::native_vp::VpEnv;
 use crate::ledger::storage::{self, StorageHasher};
 use crate::types::ibc::data::{
     Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
@@ -711,7 +712,7 @@ where
                 })?
             {
                 let denom_key = ibc_denom_key(&token_hash);
-                let denom_bytes = match self.ctx.read_pre(&denom_key) {
+                let denom_bytes = match self.ctx.read_bytes_pre(&denom_key) {
                     Ok(Some(v)) => v,
                     _ => {
                         return Err(Error::Denom(format!(
