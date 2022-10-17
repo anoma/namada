@@ -1022,13 +1022,11 @@ impl ShieldedContext {
         while let Some((asset_type, value)) =
             input.components().next().map(cloned_pair)
         {
-            println!("asset type {}, value {}", asset_type, value);
             let target_asset_type = self
                 .decode_asset_type(client.clone(), asset_type)
                 .await
                 .map(|(addr, _epoch)| make_asset_type(target_epoch, &addr))
                 .unwrap_or(asset_type);
-            println!("target asset type {}", target_asset_type);
             let at_target_asset_type = asset_type == target_asset_type;
             if let (Some((conv, _wit, usage)), false) = (
                 self.query_allowed_conversion(
