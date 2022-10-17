@@ -5,13 +5,13 @@ tokens = 1844674407370 # corresponds to 6_714_000 voting power
 non_staked_balance = 1000000000000
 validator_vp = "vp_user"
 staking_reward_vp = "vp_user"
-net_address = "52.210.23.30:26656"
+net_address = "127.0.0.1:26656"
 intent_gossip_seed = true
 
-[token.NAM]
+[token.XAN]
 address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5"
 vp = "vp_token"
-[token.NAM.balances]
+[token.XAN.balances]
 atest1v4ehgw36gc6yxvpjxccyzvphxycrxw2xxsuyydesxgcnjs3cg9znwv3cxgmnj32yxy6rssf5tcqjm3 = 9223372036854
 atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs35g5unvde4ca36y5 = 9223372036854
 
@@ -51,16 +51,6 @@ public_key = ""
 vp = "vp_token"
 [token.Kartoffel.balances]
 atest1v4ehgw36gc6yxvpjxccyzvphxycrxw2xxsuyydesxgcnjs3cg9znwv3cxgmnj32yxy6rssf5tcqjm3 = 9223372036854
-
-# Some established accounts present at genesis.
-[established.matchmaker-2]
-vp = "vp_user"
-
-[established.matchmaker-3]
-vp = "vp_user"
-
-[established.matchmaker-4]
-vp = "vp_user"
 
 [established.faucet]
 address = "atest1v4ehgw36gc6yxvpjxccyzvphxycrxw2xxsuyydesxgcnjs3cg9znwv3cxgmnj32yxy6rssf5tcqjm3"
