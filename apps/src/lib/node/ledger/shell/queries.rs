@@ -428,6 +428,8 @@ where
                 Ok(BridgePool(proof)) => response::Query {
                     code: 0,
                     value: RelayProof {
+                        // TODO: use actual validators
+                        validator_args: Default::default(),
                         root: signed_root,
                         proof,
                         // TODO: Use real nonce
@@ -1181,6 +1183,7 @@ mod test_queries {
             .expect("Test failed");
 
         let proof = RelayProof {
+            validator_args: Default::default(),
             root: signed_root,
             proof,
             // TODO: Use a real nonce
