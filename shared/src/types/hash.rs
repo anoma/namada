@@ -4,7 +4,7 @@ use std::fmt::{self, Display};
 use std::ops::Deref;
 
 use arse_merkle_tree::traits::Value;
-use arse_merkle_tree::{Hash as TreeHash, H256};
+use arse_merkle_tree::Hash as TreeHash;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -110,37 +110,8 @@ impl From<Hash> for TmHash {
     }
 }
 
-impl From<H256> for Hash {
-    fn from(hash: H256) -> Self {
-        Hash(hash.into())
-    }
-}
-
-impl From<&H256> for Hash {
-    fn from(hash: &H256) -> Self {
-        let hash = *hash;
-        Hash(hash.into())
-    }
-}
-
-impl From<Hash> for H256 {
-    fn from(hash: Hash) -> H256 {
-        hash.0.into()
-    }
-}
-
 impl From<Hash> for TreeHash {
     fn from(hash: Hash) -> Self {
         Self::from(hash.0)
-    }
-}
-
-impl Value for Hash {
-    fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-
-    fn zero() -> Self {
-        Hash([0u8; 32])
     }
 }

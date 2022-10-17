@@ -104,7 +104,7 @@ where
                 let proof_ops = if is_proven {
                     match self.storage.get_existence_proof(
                         key,
-                        value.clone(),
+                        value.clone().into(),
                         height,
                     ) {
                         Ok(proof) => Some(proof.into()),
@@ -199,7 +199,7 @@ where
                         for PrefixValue { key, value } in &values {
                             match self.storage.get_existence_proof(
                                 key,
-                                value.clone(),
+                                value.clone().into(),
                                 height,
                             ) {
                                 Ok(p) => {

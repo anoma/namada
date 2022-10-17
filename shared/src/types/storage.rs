@@ -2,7 +2,6 @@
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::Write;
-use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
@@ -10,13 +9,14 @@ use std::str::FromStr;
 use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
+use ics23::CommitmentProof;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[cfg(feature = "ferveo-tpke")]
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
-use crate::ledger::storage::{StorageHasher, IBC_KEY_LIMIT};
+use crate::ledger::storage::IBC_KEY_LIMIT;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
@@ -34,6 +34,8 @@ pub enum Error {
     InvalidKeySeg(String),
     #[error("Error parsing key segment {0}")]
     ParseKeySeg(String),
+    #[error("Could not parse string: '{0}' into requested type: {1}")]
+    ParseError(String, String),
 }
 
 /// Result for functions that may fail
@@ -58,6 +60,7 @@ pub const RESERVED_VP_KEY: &str = "?";
     Copy,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -108,6 +111,12 @@ pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 impl From<Hash> for BlockHash {
     fn from(hash: Hash) -> Self {
         BlockHash(hash.0)
+    }
+}
+
+impl From<u64> for BlockHeight {
+    fn from(height: u64) -> Self {
+        BlockHeight(height)
     }
 }
 
@@ -237,14 +246,25 @@ impl FromStr for Key {
     }
 }
 
-/// A type for converting an Anoma storage key
-/// to that of the right type for the different
-/// merkle trees used.
-pub enum MerkleKey<H: StorageHasher> {
-    /// A key that needs to be hashed
-    Sha256(Key, PhantomData<H>),
-    /// A key that can be given as raw bytes
-    Raw(Key),
+/// An enum representing the different types of values
+/// that can be passed into Anoma's storage.
+///
+/// This is a multi-store organized as
+/// several Merkle trees, each of which is
+/// responsible for understanding how to parse
+/// this value.
+pub enum MerkleValue {
+    /// raw bytes
+    Bytes(Vec<u8>),
+}
+
+impl<T> From<T> for MerkleValue
+where
+    T: AsRef<[u8]>,
+{
+    fn from(bytes: T) -> Self {
+        Self::Bytes(bytes.as_ref().to_owned())
+    }
 }
 
 /// Storage keys that are utf8 encoded strings
@@ -323,6 +343,18 @@ impl From<Vec<u8>> for TreeBytes {
 impl From<TreeBytes> for Vec<u8> {
     fn from(bytes: TreeBytes) -> Self {
         bytes.0
+    }
+}
+
+/// Type of membership proof from a merkle tree
+pub enum MembershipProof {
+    /// ICS23 compliant membership proof
+    ICS23(CommitmentProof),
+}
+
+impl From<CommitmentProof> for MembershipProof {
+    fn from(proof: CommitmentProof) -> Self {
+        Self::ICS23(proof)
     }
 }
 
