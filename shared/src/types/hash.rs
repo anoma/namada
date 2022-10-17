@@ -149,9 +149,17 @@ impl Value for Hash {
 }
 
 /// The hex encoded version of a [`Hash`].
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct HashString {
     inner: [u8; HASH_LENGTH * 2],
+}
+
+impl Default for HashString {
+    fn default() -> Self {
+        Self {
+            inner: [0; HASH_LENGTH * 2],
+        }
+    }
 }
 
 impl Deref for HashString {
@@ -175,7 +183,7 @@ impl TryFrom<&str> for HashString {
 
         for (slot, ch) in buf.iter_mut().zip(hash.chars().take(HEX_LEN)) {
             match ch {
-                'a'..='f' | 'A'..='F' | '0'..='9' => *slot = ch,
+                'a'..='f' | 'A'..='F' | '0'..='9' => *slot = ch as u8,
                 _ => return Err(self::Error::NotHexEncoded),
             }
             hash_len += 1;
