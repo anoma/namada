@@ -383,10 +383,16 @@ impl BorshSchema for Signature {
             borsh::schema::Definition,
         >,
     ) {
-        // Encoded as `[u8; SIGNATURE_SIZE]`
-        let elements = "u8".into();
-        let length = libsecp256k1::util::SIGNATURE_SIZE as u32;
-        let definition = borsh::schema::Definition::Array { elements, length };
+        // Encoded as `([u8; SIGNATURE_SIZE], u8)`
+        let signature =
+            <[u8; libsecp256k1::util::SIGNATURE_SIZE]>::declaration();
+        <[u8; libsecp256k1::util::SIGNATURE_SIZE]>::add_definitions_recursively(
+            definitions,
+        );
+        let recovery = "u8".into();
+        let definition = borsh::schema::Definition::Tuple {
+            elements: vec![signature, recovery],
+        };
         definitions.insert(Self::declaration(), definition);
     }
 
