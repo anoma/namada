@@ -3,15 +3,13 @@
 //! transactions.
 mod eth_msgs;
 mod events;
-mod read;
-mod update;
 mod utils;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshSerialize;
 use eth_msgs::{EthMsg, EthMsgUpdate};
-use eyre::{eyre, Result};
+use eyre::Result;
 use namada::ledger::eth_bridge::storage::vote_tracked;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
@@ -22,7 +20,9 @@ use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
-use crate::node::ledger::protocol::transactions::votes::VoteTracking;
+use crate::node::ledger::protocol::transactions::votes::{
+    calculate_new_vote_tracking, calculate_updated_vote_tracking,
+};
 use crate::node::ledger::shell::queries::QueriesExt;
 
 /// The keys changed while applying a protocol transaction
@@ -206,67 +206,6 @@ where
     };
     write_eth_msg(storage, &eth_msg_keys, &eth_msg_post)?;
     Ok((changed, confirmed))
-}
-
-fn calculate_new_vote_tracking(
-    seen_by: &BTreeSet<(Address, BlockHeight)>,
-    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<VoteTracking> {
-    let mut seen_by_voting_power = FractionalVotingPower::default();
-    for (validator, block_height) in seen_by {
-        match voting_powers
-            .get(&(validator.to_owned(), block_height.to_owned()))
-        {
-            Some(voting_power) => seen_by_voting_power += voting_power,
-            None => {
-                return Err(eyre!(
-                    "voting power was not provided for validator {}",
-                    validator
-                ));
-            }
-        };
-    }
-
-    let newly_confirmed =
-        seen_by_voting_power > FractionalVotingPower::TWO_THIRDS;
-    Ok(VoteTracking {
-        voting_power: seen_by_voting_power,
-        seen_by: seen_by
-            .into_iter()
-            .map(|(validator, _)| validator.to_owned())
-            .collect(),
-        seen: newly_confirmed,
-    })
-}
-
-fn calculate_updated_vote_tracking<D, H, T>(
-    store: &mut Storage<D, H>,
-    keys: &vote_tracked::Keys<T>,
-    _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<VoteTracking>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-    T: BorshDeserialize,
-{
-    let _body: T = read::value(store, &keys.body())?;
-    let seen: bool = read::value(store, &keys.seen())?;
-    let seen_by: BTreeSet<Address> = read::value(store, &keys.seen_by())?;
-    let voting_power: FractionalVotingPower =
-        read::value(store, &keys.voting_power())?;
-
-    let vote_tracking = VoteTracking {
-        voting_power,
-        seen_by,
-        seen,
-    };
-
-    tracing::warn!(
-        ?vote_tracking,
-        "Updating events is not implemented yet, so the returned VoteTracking \
-         will be identical to the one in storage",
-    );
-    Ok(vote_tracking)
 }
 
 fn write_eth_msg<D, H>(

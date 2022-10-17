@@ -8,7 +8,7 @@ use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
 use namada::types::storage::Key;
 
-use super::update;
+use crate::node::ledger::protocol::transactions::update;
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
