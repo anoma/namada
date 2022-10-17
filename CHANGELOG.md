@@ -1,5 +1,108 @@
 # CHANGELOG
 
+## v0.8.0
+
+Namada 0.8.0 is a regular minor release.
+
+### BUG FIXES
+
+- Switch to a alternative sparse merkle tree implementation for IBC sub-tree
+  to be able to support proofs compatible with the current version of ICS23
+  ([#279](https://github.com/anoma/namada/pull/279))
+- Fixed validator raw hash corresponding to validator address in Tendermint
+  ([#326](https://github.com/anoma/namada/pull/326))
+- Fix the value recorded for epoch start block height.
+  ([#384](https://github.com/anoma/namada/issues/384))
+- Fix the rustdoc build. ([#419](https://github.com/anoma/namada/issues/419))
+- Fix the value recorded for epoch start block height.
+  ([#594](https://github.com/anoma/namada/pull/594))
+- Make read_wasm return an error instead of exiting in InitChain
+  ([#1099](https://github.com/anoma/anoma/pull/1099))
+- Fix the `last_epoch` field in the shell to only be updated when the block is
+  committed. ([#1249](https://github.com/anoma/anoma/pull/1249))
+
+### FEATURES
+
+- Added multitoken transfer and query for bridges
+  ([#132](https://github.com/anoma/namada/issues/132))
+- Added lazy vector and map data structures for ledger storage
+  ([#503](https://github.com/anoma/namada/pull/503))
+
+### IMPROVEMENTS
+
+- Validate WASM code of validity predicates written by transactions.
+  ([#240](https://github.com/anoma/anoma/pull/240))
+- Refactored PoS VP logic ([#318](https://github.com/anoma/namada/pull/318))
+- Added a StorageRead trait for a common interface for VPs prior and posterior
+  state, transactions and direct storage access for protocol and RPC handlers
+  ([#324](https://github.com/anoma/namada/pull/324))
+- Added a StorageWrite trait for a common interface for transactions and direct
+  storage access for protocol ([#331](https://github.com/anoma/namada/pull/331))
+- Re-use encoding/decoding storage write/read and handle any errors
+  ([#334](https://github.com/anoma/namada/pull/334))
+- Added a simpler prefix iterator API that returns `std::iter::Iterator` with
+  the storage keys parsed and a variant that also decodes stored values with
+  Borsh ([#335](https://github.com/anoma/namada/pull/335))
+- Handles the case where a custom `$CARGO_TARGET_DIR` is set during WASM build
+  ([#337](https://github.com/anoma/anoma/pull/337))
+- Added `pre/post` methods into `trait VpEnv` that return objects implementing
+  `trait StorageRead` for re-use of library code written on top of `StorageRead`
+  inside validity predicates. ([#380](https://github.com/anoma/namada/pull/380))
+- Fix order of prefix iterator to be sorted by storage
+  keys and add support for a reverse order prefix iterator.
+  ([#409](https://github.com/anoma/namada/issues/409))
+- Re-use `storage_api::Error` type that supports wrapping custom error in `VpEnv` and `TxEnv` traits.
+  ([#465](https://github.com/anoma/namada/pull/465))
+- Fixed governance parameters, tally, tx whitelist and renamed treasury
+  ([#467](https://github.com/anoma/namada/issues/467))
+- Enable mdbook-admonish for the specs
+  ([#518](https://github.com/anoma/namada/issues/518))
+- Extend Merkle tree storage to support multiple Merkle trees with a uniform
+  interface. ([#547](https://github.com/anoma/namada/pull/547))
+- Fix a typo in an error ([#605](https://github.com/anoma/namada/issues/605))
+- Added WASM transaction and validity predicate `Ctx` with methods for host
+  environment functions to unify the interface of native VPs and WASM VPs under
+  `trait VpEnv` ([#1093](https://github.com/anoma/anoma/pull/1093))
+- Allows simple retrival of aliases from addresses in the wallet without
+  the need for multiple hashmaps. This is the first step to improving the
+  UI if one wants to show aliases when fetching addresses from anoma wallet
+  ([#1138](https://github.com/anoma/anoma/pull/1138))
+- Allow specifying an absolute path for the wasm directory
+  ([#1148](https://github.com/anoma/anoma/issues/1148))
+- Add functionality to anomac to download wasms for a given chain
+  ([#1159](https://github.com/anoma/anoma/pull/1159))
+- Improved CLI experience for 'anomaw address find'
+  ([#1161](https://github.com/anoma/anoma/pull/1161))
+- Wallet: Increase the number of iterations used for keys encryption to the
+  recommended value. ([#1168](https://github.com/anoma/anoma/issues/1168))
+- Improve the error message that is displayed when anoma binaries are run without
+  having joined a chain ([#1176](https://github.com/anoma/anoma/pull/1176))
+- Refactored ledger startup code
+  ([#1231](https://github.com/anoma/anoma/pull/1231))
+- Replace Tendermint consensus evidence parameters with
+  application level evidence filter for outdated evidence.
+  ([#1248](https://github.com/anoma/anoma/pull/1248))
+
+### MISCELLANEOUS
+
+- Updated rockDB dependency to 0.19.0 and enabled its jemalloc feature.
+  ([#452](https://github.com/anoma/namada/pull/452))
+- Removed intent gossiper and matchmaker code
+  ([#493](https://github.com/anoma/namada/issues/493))
+- Use a cargo workspace for some of our wasm crates
+  ([#1096](https://github.com/anoma/anoma/pull/1096))
+- Added a make recipe to build WASM in debug mode with `make debug-wasm-scripts`
+  ([#1243](https://github.com/anoma/anoma/pull/1243))
+
+### TESTING
+
+- Test PoS transaction for bonding, unbonding and withdrawal. Fixed an issue
+  found on unbonding. ([#462](https://github.com/anoma/anoma/issues/462))
+- Fix a condition in tx_bond test that causes a false negative result
+  ([#590](https://github.com/anoma/namada/pull/590))
+- Fixed ANOMA_E2E_KEEP_TEMP=true to work in e2e::setup::network
+  ([#1221](https://github.com/anoma/anoma/issues/1221))
+
 ## v0.7.1
 
 Namada 0.7.1 is a patch release of the Namada software, continuing the
