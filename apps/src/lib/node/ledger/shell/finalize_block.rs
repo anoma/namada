@@ -421,6 +421,9 @@ where
             .gas_meter
             .finalize_transaction()
             .map_err(|_| Error::GasOverflow)?;
+
+        self.event_log_mut().log_events(&response.events);
+
         Ok(response)
     }
 

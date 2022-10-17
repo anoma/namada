@@ -470,7 +470,6 @@ where
 
     /// Return a mutable reference to the [`EventLog`].
     #[inline]
-    #[allow(dead_code)]
     pub fn event_log_mut(&mut self) -> &mut EventLog {
         &mut self.event_log
     }
