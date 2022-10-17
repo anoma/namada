@@ -10,6 +10,7 @@ use crate::types::keccak::encode::Encode;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{BlockHeight, DbKeySeg, Key};
 use crate::types::token::Amount;
+use crate::types::vote_extensions::validator_set_update::ValidatorSetArgs;
 
 /// A transfer message to be submitted to Ethereum
 /// to move assets from Namada across the bridge.
@@ -132,6 +133,8 @@ impl Encode<2> for MultiSignedMerkleRoot {
 /// that a set of transfers exist in the Ethereum
 /// bridge pool.
 pub struct RelayProof {
+    /// Information about the signing validators
+    pub validator_args: ValidatorSetArgs,
     /// A merkle root signed by ta quorum of validators
     pub root: MultiSignedMerkleRoot,
     /// A membership proof
@@ -140,11 +143,13 @@ pub struct RelayProof {
     pub nonce: Uint,
 }
 
-impl Encode<6> for RelayProof {
-    fn tokenize(&self) -> [Token; 6] {
+impl Encode<7> for RelayProof {
+    fn tokenize(&self) -> [Token; 7] {
+        let [val_set_args] = self.validator_args.tokenize();
         let [sigs, root] = self.root.tokenize();
         let [proof, transfers, flags] = self.proof.tokenize();
         [
+            val_set_args,
             sigs,
             transfers,
             root,
