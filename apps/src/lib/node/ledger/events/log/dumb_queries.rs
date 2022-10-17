@@ -6,6 +6,8 @@
 //! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
 //! ```
 
+use namada::types::hash::HashString;
+
 use crate::node::ledger::events::{Event, EventType};
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
