@@ -4,6 +4,7 @@ use std::fmt::{self, Display};
 use std::ops::Deref;
 
 use arse_merkle_tree::traits::Value;
+use arse_merkle_tree::Hash as TreeHash;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -106,5 +107,11 @@ impl Hash {
 impl From<Hash> for TmHash {
     fn from(hash: Hash) -> Self {
         TmHash::Sha256(hash.0)
+    }
+}
+
+impl From<Hash> for TreeHash {
+    fn from(hash: Hash) -> Self {
+        Self::from(hash.0)
     }
 }
