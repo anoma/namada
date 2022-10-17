@@ -95,9 +95,7 @@ pub async fn query_tx_status(
     })
     .await
     .map_err(|_| {
-        eprintln!(
-            "Transaction status query deadline of {deadline:#?} exceeded"
-        );
+        eprintln!("Transaction status query deadline of {deadline:?} exceeded");
     })
     .and_then(|result| result)
     .unwrap_or_else(|_| cli::safe_exit(1))
