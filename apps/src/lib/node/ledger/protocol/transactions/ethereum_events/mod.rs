@@ -183,27 +183,93 @@ where
         .cloned()
         .collect();
 
-    Ok(calculate_updated(
-        eth_msg_pre,
-        &newly_seen_by,
-        voting_powers,
-    ))
+    let eth_msg_post =
+        calculate_update(&eth_msg_pre, &newly_seen_by, voting_powers);
+
+    let changed_keys = validate_update(&eth_msg_pre, &eth_msg_post)
+        .expect("We should always be applying a valid update");
+
+    Ok((eth_msg_post, changed_keys))
+}
+
+/// Validates that `post` is an updated version of `pre`, and returns keys which
+/// changed. This function serves as a sort of validity predicate for this
+/// native transaction, which is otherwise not checked by anything else.
+fn validate_update(pre: &EthMsg, post: &EthMsg) -> Result<ChangedKeys> {
+    // TODO: refactor, this should never be the case
+    if pre.body != post.body {
+        return Err(eyre!(
+            "EthMsg body changed from {:#?} to {:#?}",
+            &pre.body,
+            &post.body,
+        ));
+    }
+
+    let mut keys_changed = ChangedKeys::default();
+    let keys = Keys::from(&pre.body);
+
+    let mut seen = false;
+    if pre.seen != post.seen {
+        // the only valid transition for `seen` is from `false` to `true`
+        if pre.seen == true || post.seen == false {
+            return Err(eyre!(
+                "EthMsg seen changed from {:#?} to {:#?}",
+                &pre.seen,
+                &post.seen,
+            ));
+        }
+        keys_changed.insert(keys.seen());
+        seen = true;
+    }
+
+    if pre.seen_by != post.seen_by {
+        // if seen_by changes, it must be a strict superset of the previous
+        // seen_by
+        if !post.seen_by.is_superset(&pre.seen_by) {
+            return Err(eyre!(
+                "EthMsg seen changed from {:#?} to {:#?}",
+                &pre.seen_by,
+                &post.seen_by,
+            ));
+        }
+        keys_changed.insert(keys.seen_by());
+    }
+
+    if pre.voting_power != post.voting_power {
+        // if voting_power changes, it must have increased
+        if pre.voting_power >= post.voting_power {
+            return Err(eyre!(
+                "EthMsg voting_power changed from {:#?} to {:#?}",
+                &pre.voting_power,
+                &post.voting_power,
+            ));
+        }
+        keys_changed.insert(keys.voting_power());
+    }
+
+    if post.voting_power > FractionalVotingPower::TWO_THIRDS && !seen {
+        if pre.voting_power >= post.voting_power {
+            return Err(eyre!(
+                "EthMsg is not seen even though new voting_power is enough: \
+                 {:#?}",
+                &post.voting_power,
+            ));
+        }
+    }
+
+    Ok(keys_changed)
 }
 
 /// Takes an existing [`EthMsg`] and calculates the new [`EthMsg`] based on new
 /// validators which have seen it
-// TODO: kind of pointless to accept the event and pass it straight back
-// unchanged?
-fn calculate_updated(
-    eth_msg_pre: EthMsg,
+fn calculate_update(
+    eth_msg_pre: &EthMsg,
     newly_seen_by: &BTreeSet<Address>,
     _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> (EthMsg, ChangedKeys) {
-    // TODO: maybe keys changed should be callers responsibility to work out?
-    let mut keys_changed = ChangedKeys::default();
-
-    let event = eth_msg_pre.body; // this never changes
-    let eth_msg_keys = Keys::from(&event);
+) -> EthMsg {
+    // TODO: refactor so that we don't need to accept the body in the first
+    // place, which we just end up cloning to return
+    let event = &eth_msg_pre.body;
     let event_hash = event.hash().unwrap();
 
     // For any event and validator, only the first vote by that validator for
@@ -241,7 +307,6 @@ fn calculate_updated(
                 ?event_hash,
                 "Event has been seen by a quorum of validators"
             );
-            keys_changed.insert(eth_msg_keys.seen());
             true
         } else {
             tracing::debug!(
@@ -251,15 +316,12 @@ fn calculate_updated(
             false
         };
 
-    (
-        EthMsg {
-            body: event,
-            voting_power: eth_msg_post_voting_power,
-            seen_by: eth_msg_post_seen_by,
-            seen: eth_msg_post_seen,
-        },
-        keys_changed,
-    )
+    EthMsg {
+        body: event.clone(),
+        voting_power: eth_msg_post_voting_power,
+        seen_by: eth_msg_post_seen_by,
+        seen: eth_msg_post_seen,
+    }
 }
 
 fn write_eth_msg<D, H>(
