@@ -111,15 +111,15 @@ pub mod encode {
     use super::*;
 
     /// Contains a method to encode data to a format compatible with Ethereum.
-    pub trait Encode {
+    pub trait Encode<const N: usize> {
         /// Encodes a struct into a sequence of ABI
         /// [`Token`] instances.
-        fn tokenize(&self) -> Vec<Token>;
+        fn tokenize(&self) -> [Token; N];
 
         /// Returns the encoded [`Token`] instances.
         fn encode(&self) -> Vec<u8> {
             let tokens = self.tokenize();
-            ethabi::encode(&tokens)
+            ethabi::encode(tokens.as_slice())
         }
 
         /// Encodes a slice of [`Token`] instances, and returns the
@@ -156,10 +156,10 @@ pub mod encode {
     /// to `abi.encode`.
     pub type AbiEncode<const N: usize> = [Token; N];
 
-    impl<const N: usize> Encode for AbiEncode<N> {
+    impl<const N: usize> Encode<N> for AbiEncode<N> {
         #[inline]
-        fn tokenize(&self) -> Vec<Token> {
-            self.to_vec()
+        fn tokenize(&self) -> [Token; N] {
+            self.clone()
         }
     }
 

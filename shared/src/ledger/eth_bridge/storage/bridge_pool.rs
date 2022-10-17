@@ -164,7 +164,8 @@ impl BridgePoolTree {
         if !leaves.is_subset(&self.store) {
             return Err(eyre!(
                 "Cannot generate proof for values that aren't in the tree"
-            ).into());
+            )
+            .into());
         }
 
         let mut proof_hashes = vec![];
@@ -355,8 +356,8 @@ impl BridgePoolProof {
     }
 }
 
-impl Encode for BridgePoolProof {
-    fn tokenize(&self) -> Vec<Token> {
+impl Encode<3> for BridgePoolProof {
+    fn tokenize(&self) -> [Token; 3] {
         let BridgePoolProof {
             proof,
             leaves,
@@ -371,12 +372,12 @@ impl Encode for BridgePoolProof {
         let transfers = Token::Array(
             leaves
                 .iter()
-                .map(|t| Token::FixedArray(t.tokenize()))
+                .map(|t| Token::FixedArray(t.tokenize().to_vec()))
                 .collect(),
         );
         let flags =
             Token::Array(flags.iter().map(|flag| Token::Bool(*flag)).collect());
-        vec![proof, transfers, flags]
+        [proof, transfers, flags]
     }
 }
 
