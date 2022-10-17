@@ -9,10 +9,10 @@ mod utils;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::{eyre, Result};
-use namada::ledger::eth_bridge::storage::eth_msgs::Keys;
+use namada::ledger::eth_bridge::storage::vote_tracked;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
@@ -172,7 +172,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let body = update.body.to_owned();
-    let eth_msg_keys = Keys::from(&update.body);
+    let eth_msg_keys = vote_tracked::Keys::from(&update.body);
 
     // we arbitrarily look at whether the seen key is present to
     // determine if the /eth_msg already exists in storage, but maybe there
@@ -191,11 +191,12 @@ where
             %eth_msg_keys.prefix,
             "Ethereum event already exists in storage",
         );
-        let (vote_tracking, changed) = calculate_updated_vote_tracking(
+        let vote_tracking = calculate_updated_vote_tracking(
             storage,
             &eth_msg_keys,
             voting_powers,
         )?;
+        let changed = BTreeSet::default(); // TODO(namada#515): calculate changed keys
         let confirmed =
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
         (vote_tracking, changed, confirmed)
@@ -239,48 +240,39 @@ fn calculate_new_vote_tracking(
     })
 }
 
-fn calculate_updated_vote_tracking<D, H>(
+fn calculate_updated_vote_tracking<D, H, T>(
     store: &mut Storage<D, H>,
-    eth_msg_keys: &Keys,
-    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<(VoteTracking, ChangedKeys)>
+    keys: &vote_tracked::Keys<T>,
+    _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+) -> Result<VoteTracking>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    T: BorshDeserialize,
 {
-    let body: EthereumEvent = read::value(store, &eth_msg_keys.body())?;
-    let seen: bool = read::value(store, &eth_msg_keys.seen())?;
-    let seen_by: BTreeSet<Address> =
-        read::value(store, &eth_msg_keys.seen_by())?;
+    let _body: T = read::value(store, &keys.body())?;
+    let seen: bool = read::value(store, &keys.seen())?;
+    let seen_by: BTreeSet<Address> = read::value(store, &keys.seen_by())?;
     let voting_power: FractionalVotingPower =
-        read::value(store, &eth_msg_keys.voting_power())?;
+        read::value(store, &keys.voting_power())?;
 
-    let eth_msg_pre = EthMsg {
-        body,
-        vote_tracking: VoteTracking {
-            voting_power,
-            seen_by,
-            seen,
-        },
+    let vote_tracking = VoteTracking {
+        voting_power,
+        seen_by,
+        seen,
     };
-    tracing::debug!("Read EthMsg - {:#?}", &eth_msg_pre);
-    Ok(calculate_diff(eth_msg_pre, voting_powers))
-}
 
-fn calculate_diff(
-    eth_msg: EthMsg,
-    _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> (VoteTracking, ChangedKeys) {
     tracing::warn!(
-        "Updating Ethereum events is not yet implemented, so this Ethereum \
-         event won't change"
+        ?vote_tracking,
+        "Updating events is not implemented yet, so the returned VoteTracking \
+         will be identical to the one in storage",
     );
-    (eth_msg.vote_tracking, BTreeSet::default())
+    Ok(vote_tracking)
 }
 
 fn write_eth_msg<D, H>(
     storage: &mut Storage<D, H>,
-    eth_msg_keys: &Keys,
+    eth_msg_keys: &vote_tracked::Keys<EthereumEvent>,
     eth_msg: &EthMsg,
 ) -> Result<()>
 where
@@ -359,7 +351,7 @@ mod tests {
 
         let changed_keys = apply_updates(&mut storage, updates, voting_powers)?;
 
-        let eth_msg_keys: Keys = (&body).into();
+        let eth_msg_keys: vote_tracked::Keys<EthereumEvent> = (&body).into();
         let wrapped_erc20_keys: wrapped_erc20s::Keys = (&asset).into();
         assert_eq!(
             BTreeSet::from_iter(vec![
@@ -470,7 +462,7 @@ mod tests {
             tx_result.gas_used, 0,
             "No gas should be used for a derived transaction"
         );
-        let eth_msg_keys = Keys::from(&event);
+        let eth_msg_keys = vote_tracked::Keys::from(&event);
         let dai_keys = wrapped_erc20s::Keys::from(&DAI_ERC20_ETH_ADDRESS);
         assert_eq!(
             tx_result.changed_keys,
@@ -523,7 +515,7 @@ mod tests {
             Err(err) => panic!("unexpected error: {:#?}", err),
         };
 
-        let eth_msg_keys = Keys::from(&event);
+        let eth_msg_keys = vote_tracked::Keys::from(&event);
         assert_eq!(
             tx_result.changed_keys,
             BTreeSet::from_iter(vec![
