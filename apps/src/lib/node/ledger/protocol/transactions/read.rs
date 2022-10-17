@@ -58,7 +58,7 @@ mod tests {
     use namada::types::storage;
     use namada::types::token::Amount;
 
-    use crate::node::ledger::protocol::transactions::ethereum_events::read;
+    use crate::node::ledger::protocol::transactions::read;
 
     #[test]
     fn test_amount_returns_zero_for_uninitialized_storage() {
