@@ -5,11 +5,12 @@ use std::hash::Hash;
 use namada::types::key::*;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
-use tendermint_proto::abci;
-use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
-use tendermint_proto::google::protobuf;
 
 use super::*;
+use crate::facade::tendermint_proto::abci;
+use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+use crate::facade::tendermint_proto::google::protobuf;
+use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::wasm_loader;
 
 impl<D, H> Shell<D, H>
