@@ -67,7 +67,7 @@ pub async fn query_tx_status(
                         Ok(events) => events,
                         Err(err) => {
                             eprintln!("Error decoding the event value: {err}");
-                            return Err(());
+                            break Err(());
                         }
                     }
                 }
@@ -76,20 +76,22 @@ pub async fn query_tx_status(
                         "Error in the query {} (error code {})",
                         response.info, err
                     );
-                    return Err(());
+                    break Err(());
                 }
             };
-            if events.len() > 0 {
-                break events;
+            if !events.is_empty() {
+                break Ok(events);
             }
         }
     })
     .await
     .map_err(|_| {
-        eprintln!("Transaction status query deadline of {deadline} exceeded");
+        eprintln!(
+            "Transaction status query deadline of {deadline:#?} exceeded"
+        );
     })
     .and_then(|result| result)
-    .unwrap_or_else(|| cli::safe_exit(1))
+    .unwrap_or_else(|_| cli::safe_exit(1))
 }
 
 /// Query the epoch of the last committed block
@@ -1490,9 +1492,6 @@ impl TxEventQuery {
             TxEventQuery::Applied(tx_hash) => tx_hash,
         }
     }
-
-    /// The path to the ABCI query this [`TxEventQuery`] can perform.
-    fn query_path(&self) -> String {}
 }
 
 impl From<TxEventQuery> for crate::facade::tendermint::abci::Path {
