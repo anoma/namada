@@ -30,7 +30,7 @@ use namada::types::key::*;
 use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
-use tokio::time::Instant;
+use tokio::time::{Duration, Instant};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
@@ -55,6 +55,10 @@ pub async fn query_tx_status(
 ) -> Vec<Event> {
     tokio::time::timeout_at(deadline, async move {
         let client = HttpClient::new(args.ledger_address).unwrap();
+
+        const ONE_SECOND: Duration = Duration::from_secs(1);
+        let mut backoff = ONE_SECOND;
+
         loop {
             let data = vec![];
             let response = client
@@ -82,6 +86,10 @@ pub async fn query_tx_status(
             if !events.is_empty() {
                 break Ok(events);
             }
+            // simple linear backoff - if an event is not available,
+            // increase the backoff duration by one second
+            tokio::time::sleep(ONE_SECOND).await;
+            backoff += ONE_SECOND;
         }
     })
     .await
