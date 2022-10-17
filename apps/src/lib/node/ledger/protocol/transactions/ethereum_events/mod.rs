@@ -4,12 +4,11 @@
 mod eth_msgs;
 mod events;
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::Result;
 use namada::ledger::eth_bridge::storage::vote_tracked;
-use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada::types::address::Address;
 use namada::types::storage::{self, BlockHeight};
@@ -17,11 +16,12 @@ use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
-use crate::node::ledger::protocol::transactions::utils;
+use crate::node::ledger::protocol::transactions::utils::{
+    self, get_active_validators,
+};
 use crate::node::ledger::protocol::transactions::votes::{
     calculate_new, calculate_updated, write,
 };
-use crate::node::ledger::shell::queries::QueriesExt;
 
 /// The keys changed while applying a protocol transaction
 type ChangedKeys = BTreeSet<storage::Key>;
@@ -60,25 +60,6 @@ where
         changed_keys,
         ..Default::default()
     })
-}
-
-fn get_active_validators<D, H>(
-    storage: &Storage<D, H>,
-    block_heights: HashSet<BlockHeight>,
-) -> BTreeMap<BlockHeight, BTreeSet<WeightedValidator<Address>>>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    let mut active_validators = BTreeMap::default();
-    for height in block_heights.into_iter() {
-        let epoch = storage.get_epoch(height).expect(
-            "The epoch of the last block height should always be known",
-        );
-        _ = active_validators
-            .insert(height, storage.get_active_validators(Some(epoch)));
-    }
-    active_validators
 }
 
 /// Constructs a map of all validators who voted for an event to their
@@ -216,7 +197,7 @@ mod tests {
     use namada::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada::ledger::pos::namada_proof_of_stake::epoched::Epoched;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::pos::types::ValidatorSet;
+    use namada::ledger::pos::types::{ValidatorSet, WeightedValidator};
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::testing::TestStorage;
     use namada::ledger::storage::Sha256Hasher;
