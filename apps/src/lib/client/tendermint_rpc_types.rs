@@ -1,10 +1,11 @@
+use std::convert::TryFrom;
+
 use namada::proto::Tx;
 use namada::types::address::Address;
 use serde::Serialize;
 
 use crate::cli::safe_exit;
-use crate::facade::tendermint_rpc::event::Event;
-use crate::node::ledger::events::EventType as NamadaEventType;
+use crate::node::ledger::events::Event;
 
 /// Data needed for broadcasting a tx and
 /// monitoring its progress on chain
@@ -34,65 +35,69 @@ pub struct TxResponse {
     pub initialized_accounts: Vec<Address>,
 }
 
-impl TxResponse {
-    /// Parse the JSON payload received from a subscription
-    ///
-    /// Searches for custom events emitted from the ledger and converts
-    /// them back to thin wrapper around a hashmap for further parsing.
-    pub fn parse(
-        event: Event,
-        event_type: NamadaEventType,
-        tx_hash: &str,
-    ) -> Self {
-        let events = event
-            .events
-            .expect("We should have obtained Tx events from the RPC");
-        let evt_key = event_type.to_string();
-        // Find the tx with a matching hash
-        macro_rules! tx_error {
-            () => {
-                || {
-                    eprintln!(
-                        "Couldn't find tx with hash {tx_hash} in events \
-                         {events:?}",
-                    );
-                    safe_exit(1)
-                }
-            };
+impl TryFrom<Event> for TxResponse {
+    type Error = String;
+
+    fn try_from(event: Event) -> Result<Self, Self::Error> {
+        fn missing_field_err(field: &str) -> String {
+            format!("Field \"{field}\" not present in event")
         }
-        let (index, _) = events
-            .get(&format!("{evt_key}.hash"))
-            .unwrap_or_else(tx_error!())
-            .iter()
-            .enumerate()
-            .find(|(_, hash)| hash == &tx_hash)
-            .unwrap_or_else(tx_error!());
-        let info = events[&format!("{evt_key}.info")][index].clone();
-        let log = events[&format!("{evt_key}.log")][index].clone();
-        let height = events[&format!("{evt_key}.height")][index].clone();
-        let code = events[&format!("{evt_key}.code")][index].clone();
-        let gas_used = events[&format!("{evt_key}.gas_used")][index].clone();
-        let initialized_accounts = events
-            [&format!("{evt_key}.initialized_accounts")]
-            .get(index)
-            .as_ref()
-            .map(|initialized_accounts| {
-                serde_json::from_str(initialized_accounts).unwrap()
-            })
-            .unwrap_or_else(|| {
-                eprintln!(
-                    "Tendermint omitted one of the expected indices in events"
-                );
-                Vec::new()
-            });
-        TxResponse {
+
+        let hash = event
+            .get("hash")
+            .ok_or_else(|| missing_field_err("hash"))?
+            .clone();
+        let info = event
+            .get("info")
+            .ok_or_else(|| missing_field_err("info"))?
+            .clone();
+        let log = event
+            .get("log")
+            .ok_or_else(|| missing_field_err("log"))?
+            .clone();
+        let height = event
+            .get("height")
+            .ok_or_else(|| missing_field_err("height"))?
+            .clone();
+        let code = event
+            .get("code")
+            .ok_or_else(|| missing_field_err("code"))?
+            .clone();
+        let gas_used = event
+            .get("gas_used")
+            .ok_or_else(|| missing_field_err("gas_used"))?
+            .clone();
+        let initialized_accounts = event
+            .get("initialized_accounts")
+            .map(String::as_str)
+            // TODO: fix finalize block, to return initialized accounts,
+            // even when we reject a tx?
+            .or(Some("[]"))
+            // NOTE: at this point we only have `Some(vec)`, not `None`
+            .ok_or_else(|| unreachable!())
+            .and_then(|initialized_accounts| {
+                serde_json::from_str(initialized_accounts)
+                    .map_err(|err| format!("JSON decode error: {err}"))
+            })?;
+
+        Ok(TxResponse {
+            hash,
             info,
             log,
             height,
             code,
             gas_used,
             initialized_accounts,
-            hash: tx_hash.to_string(),
-        }
+        })
+    }
+}
+
+impl TxResponse {
+    /// Convert an [`Event`] to a [`TxResponse`], or error out.
+    pub fn from_event(event: Event) -> Self {
+        event.try_into().unwrap_or_else(|err| {
+            eprintln!("Error fetching TxResponse: {err}");
+            safe_exit(1);
+        })
     }
 }
