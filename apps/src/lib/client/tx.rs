@@ -544,15 +544,35 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         denom,
         amount: args.amount.to_string(),
     });
+
+    let timeout_height = match args.timeout_height_offset {
+        Some(offset) => {
+            let current_height: u64 = match client.status().await {
+                Ok(resp) => resp.sync_info.latest_block_height.into(),
+                Err(e) => {
+                    eprintln!("Getting the current height failed: {}", e);
+                    safe_exit(1)
+                }
+            };
+            IbcHeight::new(0, current_height + offset)
+        }
+        None => IbcHeight::zero(),
+    };
+
+    let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
+        (IbcTimestamp::now() + Duration::new(offset, 0)).unwrap()
+    } else {
+        IbcTimestamp::none()
+    };
+
     let msg = MsgTransfer {
         source_port: args.port_id,
         source_channel: args.channel_id,
         token,
         sender: Signer::new(source.to_string()),
         receiver: Signer::new(args.receiver),
-        // TODO timeout isn't supported for now
-        timeout_height: IbcHeight::new(0, 1000),
-        timeout_timestamp: IbcTimestamp::none(),
+        timeout_height,
+        timeout_timestamp,
     };
     tracing::debug!("IBC transfer message {:?}", msg);
     let any_msg = msg.to_any();
