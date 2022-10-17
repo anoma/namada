@@ -19,6 +19,7 @@ use super::*;
 use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tendermint_proto::types::EvidenceParams;
+use crate::node::ledger::events::log::dumb_queries;
 use crate::node::ledger::response;
 
 #[derive(Error, Debug)]
@@ -86,14 +87,39 @@ where
                     self.read_storage_prefix(&storage_key, height, query.prove)
                 }
                 Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
-                Path::Accepted(_) => todo!(),
-                Path::Applied(_) => todo!(),
+                Path::Accepted(ref hash) => {
+                    let matcher = dumb_queries::QueryMatcher::accepted(hash);
+                    self.query_event_log(matcher)
+                }
+                Path::Applied(ref hash) => {
+                    let matcher = dumb_queries::QueryMatcher::applied(hash);
+                    self.query_event_log(matcher)
+                }
             },
             Err(err) => response::Query {
                 code: 1,
                 info: format!("RPC error: {}", err),
                 ..Default::default()
             },
+        }
+    }
+
+    /// Query events in the event log matching the given query.
+    fn query_event_log(
+        &self,
+        matcher: dumb_queries::QueryMatcher<'_>,
+    ) -> response::Query {
+        let value = self
+            .event_log()
+            .iter_with_matcher(matcher)
+            .cloned()
+            .collect::<Vec<_>>()
+            .try_to_vec()
+            .unwrap();
+
+        response::Query {
+            value,
+            ..Default::default()
         }
     }
 

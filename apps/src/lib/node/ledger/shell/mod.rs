@@ -463,7 +463,6 @@ where
 
     /// Return a reference to the [`EventLog`].
     #[inline]
-    #[allow(dead_code)]
     pub fn event_log(&self) -> &EventLog {
         &self.event_log
     }
