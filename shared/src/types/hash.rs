@@ -148,7 +148,7 @@ impl Value for Hash {
     }
 }
 
-/// The hex encoded version of a [`Hash`].
+/// A hex encoded hash.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct HashString {
     inner: [u8; HASH_LENGTH * 2],
