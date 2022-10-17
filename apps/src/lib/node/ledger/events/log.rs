@@ -77,8 +77,22 @@ impl EventLog {
 
 #[cfg(test)]
 mod tests {
+    use namada::types::hash::HashString;
+
     use super::*;
     use crate::node::ledger::events::{EventLevel, EventType};
+
+    const HASH: &str =
+        "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF";
+
+    /// An accepted tx hash query.
+    macro_rules! accepted {
+        ($hash:expr) => {
+            dumb_queries::QueryMatcher::accepted(
+                &HashString::try_from($hash).unwrap(),
+            )
+        };
+    }
 
     /// Return a vector of mock `FinalizeBlock` events.
     fn mock_tx_events(hash: &str) -> Vec<Event> {
@@ -112,18 +126,15 @@ mod tests {
         let mut log = EventLog::new(Params::default());
 
         // add new events to the log
-        let events = mock_tx_events("DEADBEEF");
+        let events = mock_tx_events(HASH);
 
         for _ in 0..NUM_HEIGHTS {
             log.log_events(events.clone());
         }
 
         // inspect log
-        let events_in_log: Vec<_> = log
-            .try_iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
-            .unwrap()
-            .cloned()
-            .collect();
+        let events_in_log: Vec<_> =
+            log.iter_with_matcher(accepted!(HASH)).cloned().collect();
 
         assert_eq!(events_in_log.len(), NUM_HEIGHTS);
 
@@ -153,7 +164,7 @@ mod tests {
         //
         // `mock_tx_events` returns 2 events, so
         // we do `LOG_CAP / 2` iters to fill the log
-        let events = mock_tx_events("DEADBEEF");
+        let events = mock_tx_events(HASH);
         assert_eq!(events.len(), 2);
 
         for _ in 0..(LOG_CAP / 2) {
@@ -161,11 +172,8 @@ mod tests {
         }
 
         // inspect log - it should be full
-        let events_in_log: Vec<_> = log
-            .try_iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
-            .unwrap()
-            .cloned()
-            .collect();
+        let events_in_log: Vec<_> =
+            log.iter_with_matcher(accepted!(HASH)).cloned().collect();
 
         assert_eq!(events_in_log.len(), MATCHED_EVENTS);
 
@@ -177,11 +185,8 @@ mod tests {
         // pruning the first ACCEPTED event we added
         log.log_events(Some(events[1].clone()));
 
-        let events_in_log: Vec<_> = log
-            .try_iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
-            .unwrap()
-            .cloned()
-            .collect();
+        let events_in_log: Vec<_> =
+            log.iter_with_matcher(accepted!(HASH)).cloned().collect();
 
         const ACCEPTED_EVENTS: usize = MATCHED_EVENTS - 1;
         assert_eq!(events_in_log.len(), ACCEPTED_EVENTS);
