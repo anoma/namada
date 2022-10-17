@@ -987,8 +987,6 @@ impl ShieldedContext {
     ) {
         // If conversion if possible, accumulate the exchanged amount
         let conv: Amount = conv.into();
-        println!("asset type {:?}", asset_type);
-        println!("conv {:?}", conv);
         // The amount required of current asset to qualify for conversion
         let threshold = -conv[&asset_type];
         if threshold == 0 {
