@@ -12,13 +12,6 @@ use crate::node::ledger::events::Event;
 
 pub mod dumb_queries;
 
-/// Errors specific to [`EventLog`] operations.
-#[derive(Debug)]
-pub enum Error {
-    /// We failed to parse a Tendermint query.
-    InvalidQuery,
-}
-
 /// Parameters to configure the pruning of the event log.
 #[derive(Debug, Copy, Clone)]
 pub struct Params {
@@ -66,31 +59,16 @@ impl EventLog {
         tracing::debug!(num_entries, "Added new entries to the event log");
     }
 
-    /// Returns a new iterator over this [`EventLog`], if the
-    /// given `query` is valid.
-    pub fn try_iter<'query, 'log>(
+    /// Returns a new iterator over this [`EventLog`].
+    #[inline]
+    pub fn iter_with_matcher<'query, 'log>(
         &'log self,
-        query: &'query str,
-    ) -> Result<impl Iterator<Item = &'log Event> + 'query, Error>
+        matcher: dumb_queries::QueryMatcher<'query>,
+    ) -> impl Iterator<Item = &'log Event> + 'query
     where
         // the log should outlive the query
         'log: 'query,
     {
-        let matcher =
-            dumb_queries::QueryMatcher::parse(query).ok_or_else(|| {
-                tracing::debug!(query, "Invalid Tendermint query");
-                Error::InvalidQuery
-            })?;
-        Ok(self.iter_with_matcher(matcher))
-    }
-
-    /// Just like [`EventLog::try_iter`], but uses a pre-compiled
-    /// query matcher.
-    #[inline]
-    pub fn iter_with_matcher<'query, 'log: 'query>(
-        &'log self,
-        matcher: dumb_queries::QueryMatcher<'query>,
-    ) -> impl Iterator<Item = &'log Event> + 'query {
         self.queue
             .iter()
             .filter(move |&event| matcher.matches(event))
