@@ -3,7 +3,6 @@
 //! transactions.
 mod eth_msgs;
 mod events;
-mod utils;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -20,6 +19,7 @@ use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
+use crate::node::ledger::protocol::transactions::utils;
 use crate::node::ledger::protocol::transactions::votes::{
     calculate_new_vote_tracking, calculate_updated_vote_tracking,
 };

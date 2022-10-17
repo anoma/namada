@@ -14,3 +14,6 @@ mod read;
 
 #[cfg(not(feature = "abcipp"))]
 mod update;
+
+#[cfg(not(feature = "abcipp"))]
+mod utils;
