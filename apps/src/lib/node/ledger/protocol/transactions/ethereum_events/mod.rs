@@ -176,24 +176,24 @@ where
     };
     tracing::debug!("Read EthMsg - {:#?}", &eth_msg_pre);
 
-    let mut relevant_voting_powers = HashMap::default();
-    let newly_seen_by = update
-        .seen_by
-        .iter()
-        .map(|(address, block_height)| {
-            let fvp = voting_powers
-                .get(&(address.to_owned(), block_height.to_owned()))
-                .unwrap();
-            relevant_voting_powers.insert(address.to_owned(), fvp.to_owned());
-            address
-        })
-        .cloned()
-        .collect();
+    let mut votes = HashMap::default();
+    update.seen_by.iter().for_each(|(address, block_height)| {
+        let fvp = voting_powers
+            .get(&(address.to_owned(), block_height.to_owned()))
+            .unwrap();
+        if let Some(already_present_fvp) =
+            votes.insert(address.to_owned(), fvp.to_owned())
+        {
+            tracing::warn!(
+                ?address,
+                ?already_present_fvp,
+                new_fvp = ?fvp,
+                "Validator voted more than once, arbitrarily using later value",
+            )
+        }
+    });
 
-    // TODO: voting_powers should be deduped further up this call stack
-
-    let eth_msg_post =
-        calculate_update(&eth_msg_pre, &newly_seen_by, &relevant_voting_powers);
+    let eth_msg_post = calculate_update(&eth_msg_pre, &votes);
 
     let changed_keys = validate_update(&eth_msg_pre, &eth_msg_post)
         .expect("We should always be applying a valid update");
@@ -207,20 +207,20 @@ where
 /// at which they saw the event.
 fn calculate_update(
     eth_msg_pre: &EthMsg,
-    newly_seen_by: &BTreeSet<Address>,
-    voting_powers: &HashMap<Address, FractionalVotingPower>,
+    votes: &HashMap<Address, FractionalVotingPower>,
 ) -> EthMsg {
     // TODO: refactor so that we don't need to accept the body in the first
     // place, which we just end up cloning to return
     let event = &eth_msg_pre.body;
     let event_hash = event.hash().unwrap();
+    let voters: BTreeSet<Address> = votes.keys().cloned().collect();
 
     // For any event and validator, only the first vote by that validator for
     // that event counts, later votes we encounter here can just be ignored. We
     // can warn here when we encounter duplicate votes but these are
     // reasonably likely to occur so this perhaps shouldn't be a warning unless
     // it is happening a lot
-    for validator in eth_msg_pre.seen_by.intersection(newly_seen_by) {
+    for validator in eth_msg_pre.seen_by.intersection(&voters) {
         tracing::warn!(
             ?event_hash,
             ?validator,
@@ -229,14 +229,14 @@ fn calculate_update(
     }
     let mut eth_msg_post_voting_power = eth_msg_pre.voting_power.clone();
     let mut eth_msg_post_seen_by = eth_msg_pre.seen_by.clone();
-    for validator in newly_seen_by.difference(&eth_msg_pre.seen_by) {
+    for validator in voters.difference(&eth_msg_pre.seen_by) {
         tracing::info!(
             ?event_hash,
             ?validator,
             "Recording validator as having voted for this event"
         );
         eth_msg_post_seen_by.insert(validator.to_owned());
-        eth_msg_post_voting_power += voting_powers.get(validator).expect(
+        eth_msg_post_voting_power += votes.get(validator).expect(
             "voting powers map must have all validators from newly_seen_by",
         );
     }
