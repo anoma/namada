@@ -29,8 +29,6 @@ pub struct VoteTracking {
     pub seen_by: BTreeSet<Address>,
     /// Whether this event has been acted on or not - this should only ever
     /// transition from `false` to `true`, once there is enough voting power
-    // TODO: this field is redundant - we can derive whether an event is seen
-    // or not from looking at `voting_power`
     pub seen: bool,
 }
 
@@ -75,6 +73,7 @@ where
     H: 'static + StorageHasher + Sync,
     T: BorshDeserialize,
 {
+    // TODO(namada#515): implement this
     let _body: T = read::value(store, &keys.body())?;
     let seen: bool = read::value(store, &keys.seen())?;
     let seen_by: BTreeSet<Address> = read::value(store, &keys.seen_by())?;

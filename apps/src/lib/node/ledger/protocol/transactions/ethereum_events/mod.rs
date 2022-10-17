@@ -150,7 +150,6 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let body = update.body.to_owned();
     let eth_msg_keys = vote_tracked::Keys::from(&update.body);
 
     // we arbitrarily look at whether the seen key is present to
@@ -177,7 +176,7 @@ where
         (vote_tracking, changed, confirmed)
     };
     let eth_msg_post = EthMsg {
-        body,
+        body: update.body,
         vote_tracking,
     };
     tracing::debug!("writing EthMsg - {:#?}", &eth_msg_post);
