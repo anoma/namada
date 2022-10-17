@@ -7,6 +7,7 @@ use std::str::FromStr;
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
@@ -142,7 +143,7 @@ impl Display for DkgPublicKey {
         let vec = self
             .try_to_vec()
             .expect("Encoding public key shouldn't fail");
-        write!(f, "{}", hex::encode(&vec))
+        write!(f, "{}", HEXLOWER.encode(&vec))
     }
 }
 
@@ -150,7 +151,9 @@ impl FromStr for DkgPublicKey {
     type Err = ParsePublicKeyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let vec = hex::decode(s).map_err(ParsePublicKeyError::InvalidHex)?;
+        let vec = HEXLOWER
+            .decode(s.as_ref())
+            .map_err(ParsePublicKeyError::InvalidHex)?;
         BorshDeserialize::try_from_slice(&vec)
             .map_err(ParsePublicKeyError::InvalidEncoding)
     }
