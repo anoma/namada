@@ -323,6 +323,9 @@ impl<'de> Deserialize<'de> for Signature {
         struct ByteArrayVisitor;
 
         impl<'de> Visitor<'de> for ByteArrayVisitor {
+            // [`libsecp265k1::util::SIGNATURE_SIZE`] is for a traditional
+            // signature on this curve. For Ethereum, an extra byte is included
+            // that prevents malleability attacks.
             type Value = [u8; libsecp256k1::util::SIGNATURE_SIZE + 1];
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
