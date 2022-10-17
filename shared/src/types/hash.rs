@@ -149,19 +149,7 @@ impl Value for Hash {
 }
 
 /// The hex encoded version of a [`Hash`].
-#[derive(
-    Clone,
-    Debug,
-    Default,
-    Hash,
-    PartialEq,
-    Eq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
-)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 pub struct HashString {
     inner: [u8; HASH_LENGTH * 2],
 }
