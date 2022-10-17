@@ -33,7 +33,7 @@ pub struct VoteTracking {
     pub seen: bool,
 }
 
-pub fn calculate_new_vote_tracking(
+pub fn calculate_new(
     seen_by: &BTreeSet<(Address, BlockHeight)>,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<VoteTracking> {
@@ -64,7 +64,7 @@ pub fn calculate_new_vote_tracking(
     })
 }
 
-pub fn calculate_updated_vote_tracking<D, H, T>(
+pub fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tracked::Keys<T>,
     _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
@@ -92,4 +92,25 @@ where
          will be identical to the one in storage",
     );
     Ok(vote_tracking)
+}
+
+pub fn write<D, H, T>(
+    storage: &mut Storage<D, H>,
+    keys: &vote_tracked::Keys<T>,
+    body: &T,
+    vote_tracking: &VoteTracking,
+) -> Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    T: BorshSerialize,
+{
+    storage.write(&keys.body(), &body.try_to_vec()?)?;
+    storage.write(&keys.seen(), &vote_tracking.seen.try_to_vec()?)?;
+    storage.write(&keys.seen_by(), &vote_tracking.seen_by.try_to_vec()?)?;
+    storage.write(
+        &keys.voting_power(),
+        &vote_tracking.voting_power.try_to_vec()?,
+    )?;
+    Ok(())
 }

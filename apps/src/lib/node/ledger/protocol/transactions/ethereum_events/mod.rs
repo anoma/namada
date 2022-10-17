@@ -6,7 +6,6 @@ mod events;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use borsh::BorshSerialize;
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::Result;
 use namada::ledger::eth_bridge::storage::vote_tracked;
@@ -14,7 +13,6 @@ use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
-use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::{self, BlockHeight};
 use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
@@ -22,7 +20,7 @@ use namada::types::voting_power::FractionalVotingPower;
 
 use crate::node::ledger::protocol::transactions::utils;
 use crate::node::ledger::protocol::transactions::votes::{
-    calculate_new_vote_tracking, calculate_updated_vote_tracking,
+    calculate_new, calculate_updated, write,
 };
 use crate::node::ledger::shell::queries::QueriesExt;
 
@@ -181,8 +179,7 @@ where
 
     let (vote_tracking, changed, confirmed) = if !exists_in_storage {
         tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-        let vote_tracking =
-            calculate_new_vote_tracking(&update.seen_by, voting_powers)?;
+        let vote_tracking = calculate_new(&update.seen_by, voting_powers)?;
         let changed = eth_msg_keys.into_iter().collect();
         let confirmed = vote_tracking.seen;
         (vote_tracking, changed, confirmed)
@@ -191,11 +188,8 @@ where
             %eth_msg_keys.prefix,
             "Ethereum event already exists in storage",
         );
-        let vote_tracking = calculate_updated_vote_tracking(
-            storage,
-            &eth_msg_keys,
-            voting_powers,
-        )?;
+        let vote_tracking =
+            calculate_updated(storage, &eth_msg_keys, voting_powers)?;
         let changed = BTreeSet::default(); // TODO(namada#515): calculate changed keys
         let confirmed =
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
@@ -205,34 +199,14 @@ where
         body,
         vote_tracking,
     };
-    write_eth_msg(storage, &eth_msg_keys, &eth_msg_post)?;
+    tracing::debug!("writing EthMsg - {:#?}", &eth_msg_post);
+    write(
+        storage,
+        &eth_msg_keys,
+        &eth_msg_post.body,
+        &eth_msg_post.vote_tracking,
+    )?;
     Ok((changed, confirmed))
-}
-
-fn write_eth_msg<D, H>(
-    storage: &mut Storage<D, H>,
-    eth_msg_keys: &vote_tracked::Keys<EthereumEvent>,
-    eth_msg: &EthMsg,
-) -> Result<()>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    tracing::debug!("writing EthMsg - {:#?}", eth_msg);
-    storage.write(&eth_msg_keys.body(), &eth_msg.body.try_to_vec()?)?;
-    storage.write(
-        &eth_msg_keys.seen(),
-        &eth_msg.vote_tracking.seen.try_to_vec()?,
-    )?;
-    storage.write(
-        &eth_msg_keys.seen_by(),
-        &eth_msg.vote_tracking.seen_by.try_to_vec()?,
-    )?;
-    storage.write(
-        &eth_msg_keys.voting_power(),
-        &eth_msg.vote_tracking.voting_power.try_to_vec()?,
-    )?;
-    Ok(())
 }
 
 #[cfg(test)]
