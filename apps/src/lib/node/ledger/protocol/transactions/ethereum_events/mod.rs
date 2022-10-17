@@ -176,15 +176,24 @@ where
     };
     tracing::debug!("Read EthMsg - {:#?}", &eth_msg_pre);
 
+    let mut relevant_voting_powers = HashMap::default();
     let newly_seen_by = update
         .seen_by
         .iter()
-        .map(|(address, _)| address)
+        .map(|(address, block_height)| {
+            let fvp = voting_powers
+                .get(&(address.to_owned(), block_height.to_owned()))
+                .unwrap();
+            relevant_voting_powers.insert(address.to_owned(), fvp.to_owned());
+            address
+        })
         .cloned()
         .collect();
 
+    // TODO: voting_powers should be deduped further up this call stack
+
     let eth_msg_post =
-        calculate_update(&eth_msg_pre, &newly_seen_by, voting_powers);
+        calculate_update(&eth_msg_pre, &newly_seen_by, &relevant_voting_powers);
 
     let changed_keys = validate_update(&eth_msg_pre, &eth_msg_post)
         .expect("We should always be applying a valid update");
@@ -193,11 +202,13 @@ where
 }
 
 /// Takes an existing [`EthMsg`] and calculates the new [`EthMsg`] based on new
-/// validators which have seen it
+/// validators which have seen it. `voting_powers` should map validators who
+/// have newly seen the event to their fractional voting power at a block height
+/// at which they saw the event.
 fn calculate_update(
     eth_msg_pre: &EthMsg,
     newly_seen_by: &BTreeSet<Address>,
-    _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    voting_powers: &HashMap<Address, FractionalVotingPower>,
 ) -> EthMsg {
     // TODO: refactor so that we don't need to accept the body in the first
     // place, which we just end up cloning to return
@@ -225,12 +236,9 @@ fn calculate_update(
             "Recording validator as having voted for this event"
         );
         eth_msg_post_seen_by.insert(validator.to_owned());
-        // TODO: sum voting powers - are block heights needed at this point?
-        // TODO: they shouldn't be - we should be deduping votes within a digest
-        // earlier on and just taking the earliest one for each validator
-
-        // TODO: add the actual voting power from the _voting_powers map
-        eth_msg_post_voting_power += FractionalVotingPower::default();
+        eth_msg_post_voting_power += voting_powers.get(validator).expect(
+            "voting powers map must have all validators from newly_seen_by",
+        );
     }
 
     let eth_msg_post_seen =
