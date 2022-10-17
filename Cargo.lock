@@ -4303,6 +4303,7 @@ dependencies = [
  "byte-unit",
  "chrono",
  "clru",
+ "data-encoding",
  "derivative",
  "ed25519-consensus",
  "ethabi",
