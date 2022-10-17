@@ -23,6 +23,8 @@ pub enum Error {
     Temporary { error: String },
     #[error("Failed trying to convert slice to a hash: {0}")]
     ConversionFailed(std::array::TryFromSliceError),
+    #[error("The string is not valid hex encoded data.")]
+    NotHexEncoded,
 }
 
 /// Result for functions that may fail
@@ -143,5 +145,58 @@ impl Value for Hash {
 
     fn zero() -> Self {
         Hash([0u8; 32])
+    }
+}
+
+/// The hex encoded version of a [`Hash`].
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Hash,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+)]
+pub struct HashString {
+    inner: [u8; HASH_LENGTH * 2],
+}
+
+impl Deref for HashString {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        // SAFETY: We can only construct a `HashString`
+        // from valid hex encoded data.
+        unsafe { std::str::from_utf8_unchecked(&self.inner) }
+    }
+}
+
+impl TryFrom<&str> for HashString {
+    type Error = self::Error;
+
+    fn try_from(hash: &str) -> HashResult<Self> {
+        const HEX_LEN: usize = HASH_LENGTH * 2;
+
+        let mut hash_len = 0;
+        let mut buf = [0; HEX_LEN];
+
+        for (slot, ch) in buf.iter_mut().zip(hash.chars().take(HEX_LEN)) {
+            match ch {
+                'a'..='f' | 'A'..='F' | '0'..='9' => *slot = ch,
+                _ => return Err(self::Error::NotHexEncoded),
+            }
+            hash_len += 1;
+        }
+
+        if hash_len == HEX_LEN {
+            Ok(HashString { inner: buf })
+        } else {
+            Err(self::Error::NotHexEncoded)
+        }
     }
 }
