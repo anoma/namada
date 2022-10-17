@@ -430,6 +430,8 @@ where
                     value: RelayProof {
                         root: signed_root,
                         proof,
+                        // TODO: Use real nonce
+                        nonce: 0.into(),
                     }
                     .encode(),
                     ..Default::default()
@@ -1181,6 +1183,8 @@ mod test_queries {
         let proof = RelayProof {
             root: signed_root,
             proof,
+            // TODO: Use a real nonce
+            nonce: 0.into(),
         }
         .encode();
         assert_eq!(proof, resp.value);
@@ -1223,7 +1227,7 @@ mod test_queries {
         shell.storage.block.height = shell.storage.block.height + 1;
 
         // update the pool
-        let mut transfer2 = transfer.clone();
+        let mut transfer2 = transfer;
         transfer2.transfer.amount = 1.into();
         shell
             .storage
