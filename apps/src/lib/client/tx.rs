@@ -930,17 +930,14 @@ impl ShieldedContext {
         match conversions.entry(asset_type) {
             Entry::Occupied(conv_entry) => Some(conv_entry.into_mut()),
             Entry::Vacant(conv_entry) => {
-                println!("vacant entry");
                 // Query for the ID of the last accepted transaction
                 let (addr, ep, conv, path): (Address, _, _, _) =
                     query_conversion(client, asset_type).await?;
-                println!("inserting asset type {}", asset_type);
                 self.asset_types.insert(asset_type, (addr, ep));
                 // If the conversion is 0, then we just have a pure decoding
                 if conv == Amount::zero() {
                     None
                 } else {
-                    println!("amount {:?}", conv);
                     Some(conv_entry.insert((Amount::into(conv), path, 0)))
                 }
             }
