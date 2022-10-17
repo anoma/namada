@@ -4,6 +4,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use namada::types::address::Address;
+use namada::types::hash::{self, HashString};
 use namada::types::storage;
 use thiserror::Error;
 
@@ -23,13 +24,9 @@ pub enum Path {
     /// Check if the given storage key exists.
     HasKey(storage::Key),
     /// Check if a transaction was accepted.
-    // TODO: use a fixed length type here,
-    // for the accepted hash
-    Accepted(String),
+    Accepted(HashString),
     /// Check if a transaction was applied.
-    // TODO: use a fixed length type here,
-    // for the applied hash
-    Applied(String),
+    Applied(HashString),
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +42,8 @@ const EPOCH_PATH: &str = "epoch";
 const VALUE_PREFIX: &str = "value";
 const PREFIX_PREFIX: &str = "prefix";
 const HAS_KEY_PREFIX: &str = "has_key";
+const ACCEPTED_PREFIX: &str = "accepted";
+const APPLIED_PREFIX: &str = "applied";
 
 impl Display for Path {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -59,6 +58,14 @@ impl Display for Path {
             }
             Path::HasKey(storage_key) => {
                 write!(f, "{}/{}", HAS_KEY_PREFIX, storage_key)
+            }
+            Path::Accepted(hash) => {
+                let hash: &str = hash;
+                write!(f, "{ACCEPTED_PREFIX}/{hash}")
+            }
+            Path::Applied(hash) => {
+                let hash: &str = hash;
+                write!(f, "{APPLIED_PREFIX}/{hash}")
             }
         }
     }
@@ -87,6 +94,16 @@ impl FromStr for Path {
                         .map_err(PathParseError::InvalidStorageKey)?;
                     Ok(Self::HasKey(key))
                 }
+                Some((ACCEPTED_PREFIX, hash)) => {
+                    let hash =
+                        hash.try_into().map_err(PathParseError::InvalidHash)?;
+                    Ok(Self::Accepted(hash))
+                }
+                Some((APPLIED_PREFIX, hash)) => {
+                    let hash =
+                        hash.try_into().map_err(PathParseError::InvalidHash)?;
+                    Ok(Self::Applied(hash))
+                }
                 _ => Err(PathParseError::InvalidPath(s.to_string())),
             },
         }
@@ -109,4 +126,6 @@ pub enum PathParseError {
     InvalidPath(String),
     #[error("Invalid storage key: {0}")]
     InvalidStorageKey(storage::Error),
+    #[error("Invalid hash: {0}")]
+    InvalidHash(hash::Error),
 }

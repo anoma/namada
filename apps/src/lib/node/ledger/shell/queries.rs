@@ -86,6 +86,8 @@ where
                     self.read_storage_prefix(&storage_key, height, query.prove)
                 }
                 Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
+                Path::Accepted(_) => todo!(),
+                Path::Applied(_) => todo!(),
             },
             Err(err) => response::Query {
                 code: 1,
