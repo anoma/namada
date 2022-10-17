@@ -1636,7 +1636,7 @@ pub mod args {
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".into()));
+        arg_default_from_ctx("fee-token", DefaultFn(|| "XAN".into()));
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_LIMIT: ArgDefault<token::Amount> =
