@@ -22,6 +22,7 @@ use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
+use crate::node::ledger::protocol::transactions::votes::VoteTracking;
 use crate::node::ledger::shell::queries::QueriesExt;
 
 /// The keys changed while applying a protocol transaction
@@ -169,6 +170,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    let body = update.body.to_owned();
     let eth_msg_keys = Keys::from(&update.body);
 
     // we arbitrarily look at whether the seen key is present to
@@ -176,31 +178,41 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let (eth_msg_post, changed, confirmed) = if !exists_in_storage {
-        let (eth_msg_post, changed) =
-            calculate_new_eth_msg(update, voting_powers)?;
-        let confirmed = eth_msg_post.seen;
-        (eth_msg_post, changed, confirmed)
+    let (vote_tracking, changed, confirmed) = if !exists_in_storage {
+        tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
+        let vote_tracking =
+            calculate_new_vote_tracking(&update.seen_by, voting_powers)?;
+        let changed = eth_msg_keys.into_iter().collect();
+        let confirmed = vote_tracking.seen;
+        (vote_tracking, changed, confirmed)
     } else {
-        let (eth_msg_post, changed) =
-            calculate_updated_eth_msg(storage, update, voting_powers)?;
+        tracing::debug!(
+            %eth_msg_keys.prefix,
+            "Ethereum event already exists in storage",
+        );
+        let (vote_tracking, changed) = calculate_updated_vote_tracking(
+            storage,
+            &eth_msg_keys,
+            voting_powers,
+        )?;
         let confirmed =
-            eth_msg_post.seen && changed.contains(&eth_msg_keys.seen());
-        (eth_msg_post, changed, confirmed)
+            vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
+        (vote_tracking, changed, confirmed)
+    };
+    let eth_msg_post = EthMsg {
+        body,
+        vote_tracking,
     };
     write_eth_msg(storage, &eth_msg_keys, &eth_msg_post)?;
     Ok((changed, confirmed))
 }
 
-fn calculate_new_eth_msg(
-    update: EthMsgUpdate,
+fn calculate_new_vote_tracking(
+    seen_by: &BTreeSet<(Address, BlockHeight)>,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<(EthMsg, ChangedKeys)> {
-    let eth_msg_keys = Keys::from(&update.body);
-    tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-
+) -> Result<VoteTracking> {
     let mut seen_by_voting_power = FractionalVotingPower::default();
-    for (validator, block_height) in &update.seen_by {
+    for (validator, block_height) in seen_by {
         match voting_powers
             .get(&(validator.to_owned(), block_height.to_owned()))
         {
@@ -216,35 +228,25 @@ fn calculate_new_eth_msg(
 
     let newly_confirmed =
         seen_by_voting_power > FractionalVotingPower::TWO_THIRDS;
-    Ok((
-        EthMsg {
-            body: update.body,
-            voting_power: seen_by_voting_power,
-            seen_by: update
-                .seen_by
-                .into_iter()
-                .map(|(validator, _)| validator)
-                .collect(),
-            seen: newly_confirmed,
-        },
-        eth_msg_keys.into_iter().collect(),
-    ))
+    Ok(VoteTracking {
+        voting_power: seen_by_voting_power,
+        seen_by: seen_by
+            .into_iter()
+            .map(|(validator, _)| validator.to_owned())
+            .collect(),
+        seen: newly_confirmed,
+    })
 }
 
-fn calculate_updated_eth_msg<D, H>(
+fn calculate_updated_vote_tracking<D, H>(
     store: &mut Storage<D, H>,
-    update: EthMsgUpdate,
+    eth_msg_keys: &Keys,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<(EthMsg, ChangedKeys)>
+) -> Result<(VoteTracking, ChangedKeys)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let eth_msg_keys = Keys::from(&update.body);
-    tracing::debug!(
-        %eth_msg_keys.prefix,
-        "Ethereum event already exists in storage",
-    );
     let body: EthereumEvent = read::value(store, &eth_msg_keys.body())?;
     let seen: bool = read::value(store, &eth_msg_keys.seen())?;
     let seen_by: BTreeSet<Address> =
@@ -254,24 +256,25 @@ where
 
     let eth_msg_pre = EthMsg {
         body,
-        voting_power,
-        seen_by,
-        seen,
+        vote_tracking: VoteTracking {
+            voting_power,
+            seen_by,
+            seen,
+        },
     };
     tracing::debug!("Read EthMsg - {:#?}", &eth_msg_pre);
-    Ok(calculate_diff(eth_msg_pre, update, voting_powers))
+    Ok(calculate_diff(eth_msg_pre, voting_powers))
 }
 
 fn calculate_diff(
     eth_msg: EthMsg,
-    _update: EthMsgUpdate,
     _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> (EthMsg, ChangedKeys) {
+) -> (VoteTracking, ChangedKeys) {
     tracing::warn!(
         "Updating Ethereum events is not yet implemented, so this Ethereum \
          event won't change"
     );
-    (eth_msg, BTreeSet::default())
+    (eth_msg.vote_tracking, BTreeSet::default())
 }
 
 fn write_eth_msg<D, H>(
@@ -285,11 +288,17 @@ where
 {
     tracing::debug!("writing EthMsg - {:#?}", eth_msg);
     storage.write(&eth_msg_keys.body(), &eth_msg.body.try_to_vec()?)?;
-    storage.write(&eth_msg_keys.seen(), &eth_msg.seen.try_to_vec()?)?;
-    storage.write(&eth_msg_keys.seen_by(), &eth_msg.seen_by.try_to_vec()?)?;
+    storage.write(
+        &eth_msg_keys.seen(),
+        &eth_msg.vote_tracking.seen.try_to_vec()?,
+    )?;
+    storage.write(
+        &eth_msg_keys.seen_by(),
+        &eth_msg.vote_tracking.seen_by.try_to_vec()?,
+    )?;
     storage.write(
         &eth_msg_keys.voting_power(),
-        &eth_msg.voting_power.try_to_vec()?,
+        &eth_msg.vote_tracking.voting_power.try_to_vec()?,
     )?;
     Ok(())
 }
