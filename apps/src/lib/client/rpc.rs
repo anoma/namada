@@ -89,7 +89,7 @@ pub async fn query_tx_status(
             }
             // simple linear backoff - if an event is not available,
             // increase the backoff duration by one second
-            tokio::time::sleep(ONE_SECOND).await;
+            tokio::time::sleep(backoff).await;
             backoff += ONE_SECOND;
         }
     })
