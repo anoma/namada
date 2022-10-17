@@ -7,6 +7,7 @@
 //! ```
 
 use lazy_static::lazy_static;
+use namada::types::hash::HashString;
 use regex::Regex;
 
 use crate::node::ledger::events::{Event, EventType};
@@ -60,6 +61,24 @@ impl<'q> QueryMatcher<'q> {
             attr,
             value,
         })
+    }
+
+    /// Returns a query matching the given accepted hash.
+    pub fn accepted(hash: &'q HashString) -> Self {
+        Self {
+            event_type: EventType::Accepted,
+            attr: "hash".to_string(),
+            value: hash,
+        }
+    }
+
+    /// Returns a query matching the given applied hash.
+    pub fn applied(hash: &'q HashString) -> Self {
+        Self {
+            event_type: EventType::Applied,
+            attr: "hash".to_string(),
+            value: hash,
+        }
     }
 }
 
