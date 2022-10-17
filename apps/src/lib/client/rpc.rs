@@ -52,7 +52,7 @@ pub async fn query_tx_status(
     status: TxEventQuery,
     args: args::Query,
     deadline: Instant,
-) -> Vec<Event> {
+) -> Event {
     tokio::time::timeout_at(deadline, async move {
         let client = HttpClient::new(args.ledger_address).unwrap();
 
@@ -65,7 +65,7 @@ pub async fn query_tx_status(
                 .abci_query(Some(status.clone().into()), data, None, false)
                 .await
                 .unwrap();
-            let events = match response.code {
+            let mut events = match response.code {
                 Code::Ok => {
                     match Vec::<Event>::try_from_slice(&response.value[..]) {
                         Ok(events) => events,
@@ -83,8 +83,9 @@ pub async fn query_tx_status(
                     break Err(());
                 }
             };
-            if !events.is_empty() {
-                break Ok(events);
+            if let Some(e) = events.pop() {
+                // we should only have one event matching the query
+                break Ok(e);
             }
             // simple linear backoff - if an event is not available,
             // increase the backoff duration by one second
