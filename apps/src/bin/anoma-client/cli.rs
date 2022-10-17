@@ -18,6 +18,9 @@ pub async fn main() -> Result<()> {
                 Sub::TxTransfer(TxTransfer(args)) => {
                     tx::submit_transfer(ctx, args).await;
                 }
+                Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
+                    tx::submit_ibc_transfer(ctx, args).await;
+                }
                 Sub::TxUpdateVp(TxUpdateVp(args)) => {
                     tx::submit_update_vp(ctx, args).await;
                 }
