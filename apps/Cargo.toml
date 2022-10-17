@@ -126,10 +126,11 @@ tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev
 tendermint-config-abcipp = {package = "tendermint-config", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
 tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
 tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["http-client", "websocket-client"], optional = true}
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abciplus", optional = true}
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abciplus", optional = true}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abciplus", optional = true}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", branch = "bat/abciplus", features = ["http-client", "websocket-client"], optional = true}
+# branch bat/abciplus
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "2e9e0d058a68e2534974ff7d22b9058d4ebda3be", optional = true}
+tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "2e9e0d058a68e2534974ff7d22b9058d4ebda3be", optional = true}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "2e9e0d058a68e2534974ff7d22b9058d4ebda3be", optional = true}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "2e9e0d058a68e2534974ff7d22b9058d4ebda3be", features = ["http-client", "websocket-client"], optional = true}
 thiserror = "1.0.30"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
@@ -138,7 +139,8 @@ tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 # with a patch for https://github.com/penumbra-zone/tower-abci/issues/7.
 tower-abci-abcipp = {package = "tower-abci", git = "https://github.com/heliaxdev/tower-abci", rev = "f6463388fc319b6e210503b43b3aecf6faf6b200", optional = true}
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci", branch = "bat/abciplus", optional = true}
+# branch bat/abciplus
+tower-abci = {git = "https://github.com/heliaxdev/tower-abci", rev = "21623a99bdca5b006d53752a1967849bef3b89ea", optional = true}
 tracing = "0.1.30"
 tracing-log = "0.1.2"
 tracing-subscriber = {version = "0.3.7", features = ["env-filter"]}
