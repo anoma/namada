@@ -402,7 +402,7 @@ where
         }
     }
 
-    /// Generate a merkle proof for the inclusion of then
+    /// Generate a merkle proof for the inclusion of the
     /// requested transfers in the Ethereum bridge pool.
     fn generate_bridge_pool_proof(
         &self,
@@ -1225,5 +1225,67 @@ mod test_queries {
         }
         .encode();
         assert_eq!(proof, resp.value);
+    }
+
+    /// Test if the no merkle tree including a transfer
+    /// has had its root signed, then we cannot generate
+    /// a proof.
+    #[test]
+    fn test_cannot_get_proof() {
+        let (mut shell, _, _) = test_utils::setup();
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([0; 20]),
+                recipient: EthAddress([0; 20]),
+                amount: 0.into(),
+                nonce: 0.into(),
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address(),
+            },
+        };
+
+        // write a transfer into the bridge pool
+        shell
+            .storage
+            .write(&get_pending_key(&transfer), transfer.clone())
+            .expect("Test failed");
+
+        // create a signed Merkle root for this pool
+        let signed_root = MultiSignedMerkleRoot {
+            sigs: vec![],
+            root: transfer.keccak256(),
+            height: Default::default(),
+        };
+
+        // commit the changes and increase block height
+        shell.storage.commit().expect("Test failed");
+        shell.storage.block.height = shell.storage.block.height + 1;
+
+        // update the pool
+        let mut transfer2 = transfer.clone();
+        transfer2.transfer.amount = 1.into();
+        shell
+            .storage
+            .write(&get_pending_key(&transfer2), transfer2.clone())
+            .expect("Test failed");
+
+        // add the signature for the pool at the previous block height
+        shell
+            .storage
+            .write(&get_signed_root_key(), signed_root.try_to_vec().unwrap())
+            .expect("Test failed");
+
+        // commit the changes and increase block height
+        shell.storage.commit().expect("Test failed");
+        shell.storage.block.height = shell.storage.block.height + 1;
+
+        // this is in the pool, but its merkle root has not been signed yet
+        let resp = shell.generate_bridge_pool_proof(
+            vec![transfer2].try_to_vec().expect("Test failed"),
+        );
+        // thus proof generation should fail
+        assert_eq!(resp.code, 1);
     }
 }
