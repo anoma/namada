@@ -93,7 +93,7 @@ impl EventLog {
     ) -> impl Iterator<Item = &'log Event> + 'query {
         self.queue
             .iter()
-            .filter(move |event| matcher.matches(event))
+            .filter(move |&event| matcher.matches(event))
     }
 }
 
