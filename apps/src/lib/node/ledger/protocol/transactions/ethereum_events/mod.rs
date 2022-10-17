@@ -176,6 +176,7 @@ where
     };
     tracing::debug!("Read EthMsg - {:#?}", &eth_msg_pre);
 
+    // TODO: move construction of votes map up the call path
     let mut votes = HashMap::default();
     update.seen_by.iter().for_each(|(address, block_height)| {
         let fvp = voting_powers
