@@ -115,7 +115,7 @@ tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.c
 tendermint = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
 thiserror = "1.0.30"
-tiny-keccak = "2.0.2"
+tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 tracing = "0.1.30"
 wasmer = {version = "=2.2.0", optional = true}
 wasmer-cache = {version = "=2.2.0", optional = true}
