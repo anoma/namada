@@ -30,6 +30,7 @@ use namada::types::key::*;
 use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
+use tokio::time::Instant;
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
@@ -40,7 +41,56 @@ use crate::facade::tendermint_rpc::query::Query;
 use crate::facade::tendermint_rpc::{
     Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
 };
+use crate::node::ledger::events::Event;
 use crate::node::ledger::rpc::Path;
+
+/// Query the status of a given transaction.
+///
+/// If a response is not delivered until `deadline`, we exit the cli with an
+/// error.
+pub async fn query_tx_status(
+    status: TxEventQuery,
+    args: args::Query,
+    deadline: Instant,
+) -> Vec<Event> {
+    tokio::time::timeout_at(deadline, async move {
+        let client = HttpClient::new(args.ledger_address).unwrap();
+        loop {
+            let data = vec![];
+            let response = client
+                .abci_query(Some(status.clone().into()), data, None, false)
+                .await
+                .unwrap();
+            let events = match response.code {
+                Code::Ok => {
+                    match Vec::<Event>::try_from_slice(&response.value[..]) {
+                        Ok(events) => events,
+                        Err(err) => {
+                            eprintln!("Error decoding the event value: {err}");
+                            return Err(());
+                        }
+                    }
+                }
+                Code::Err(err) => {
+                    eprintln!(
+                        "Error in the query {} (error code {})",
+                        response.info, err
+                    );
+                    return Err(());
+                }
+            };
+            if events.len() > 0 {
+                break events;
+            }
+        }
+    })
+    .await
+    .map_err(|_| {
+        eprintln!("Transaction status query deadline of {deadline} exceeded");
+    })
+    .and_then(|result| result)
+    .unwrap_or_else(|| cli::safe_exit(1))
+}
 
 /// Query the epoch of the last committed block
 pub async fn query_epoch(args: args::Query) -> Epoch {
@@ -1439,6 +1489,17 @@ impl TxEventQuery {
             TxEventQuery::Accepted(tx_hash) => tx_hash,
             TxEventQuery::Applied(tx_hash) => tx_hash,
         }
+    }
+
+    /// The path to the ABCI query this [`TxEventQuery`] can perform.
+    fn query_path(&self) -> String {}
+}
+
+impl From<TxEventQuery> for crate::facade::tendermint::abci::Path {
+    fn from(tx_query: TxEventQuery) -> Self {
+        format!("{}/{}", tx_query.event_type(), tx_query.tx_hash())
+            .parse()
+            .expect("This operation is infallible")
     }
 }
 
