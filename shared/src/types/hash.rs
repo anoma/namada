@@ -172,6 +172,15 @@ impl Deref for HashString {
     }
 }
 
+impl TryFrom<String> for HashString {
+    type Error = self::Error;
+
+    #[inline]
+    fn try_from(hash: String) -> HashResult<Self> {
+        hash.as_str().try_into()
+    }
+}
+
 impl TryFrom<&str> for HashString {
     type Error = self::Error;
 
@@ -193,6 +202,26 @@ impl TryFrom<&str> for HashString {
             Ok(HashString { inner: buf })
         } else {
             Err(self::Error::NotHexEncoded)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use proptest::string::{string_regex, RegexGeneratorStrategy};
+
+    use super::*;
+
+    /// Returns a proptest strategy that yields hex encoded hashes.
+    fn hex_encoded_hash_strat() -> RegexGeneratorStrategy<String> {
+        string_regex(r"[a-fA-F0-9]{64}").unwrap()
+    }
+
+    proptest! {
+        #[test]
+        fn test_hash_string(hex_hash in hex_encoded_hash_strat()) {
+            let _: HashString = hex_hash.try_into().unwrap();
         }
     }
 }
