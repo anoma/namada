@@ -906,7 +906,7 @@ mod test_finalize_block {
             #[cfg(feature = "abcipp")]
             signers: HashSet::from([address.clone()]),
             #[cfg(not(feature = "abcipp"))]
-            signers: HashSet::from([(
+            signers: BTreeSet::from([(
                 address.clone(),
                 shell.storage.last_height,
             )]),

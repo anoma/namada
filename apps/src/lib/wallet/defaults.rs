@@ -81,13 +81,23 @@ mod dev {
 
     use crate::wallet::alias::Alias;
 
-    /// Generate a new protocol signing keypair and DKG session keypair
-    pub fn validator_keys() -> (common::SecretKey, DkgKeypair) {
+    /// Generate a new protocol signing keypair, eth hot key and DKG session
+    /// keypair
+    pub fn validator_keys() -> (common::SecretKey, common::SecretKey, DkgKeypair)
+    {
+        // ed25519 bytes
         let bytes: [u8; 33] = [
             0, 200, 107, 23, 252, 78, 80, 8, 164, 142, 3, 194, 33, 12, 250,
             169, 211, 127, 47, 13, 194, 54, 199, 81, 102, 246, 189, 119, 144,
             25, 27, 113, 222,
         ];
+        // secp256k1 bytes
+        let eth_bridge_key_bytes = [
+            1, 117, 93, 118, 129, 202, 67, 51, 62, 202, 196, 130, 244, 5, 44,
+            88, 200, 121, 169, 11, 227, 79, 223, 74, 88, 49, 132, 213, 59, 64,
+            20, 13, 82,
+        ];
+        // DkgKeypair
         let dkg_bytes = [
             32, 0, 0, 0, 210, 193, 55, 24, 92, 233, 23, 2, 73, 204, 221, 107,
             110, 222, 192, 136, 54, 24, 108, 236, 137, 27, 121, 142, 142, 7,
@@ -96,6 +106,8 @@ mod dev {
 
         (
             BorshDeserialize::deserialize(&mut bytes.as_ref()).unwrap(),
+            BorshDeserialize::deserialize(&mut eth_bridge_key_bytes.as_ref())
+                .unwrap(),
             BorshDeserialize::deserialize(&mut dkg_bytes.as_ref()).unwrap(),
         )
     }
