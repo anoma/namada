@@ -60,8 +60,8 @@ pub struct PendingTransfer {
     pub gas_fee: GasFee,
 }
 
-impl Encode for PendingTransfer {
-    fn tokenize(&self) -> Vec<Token> {
+impl Encode<7> for PendingTransfer {
+    fn tokenize(&self) -> [Token; 7] {
         let version = Token::Uint(1.into());
         let namespace = Token::String("transfer".into());
         let from = Token::Address(self.transfer.asset.0.into());
@@ -70,7 +70,7 @@ impl Encode for PendingTransfer {
         let amount = Token::Uint(u64::from(self.transfer.amount).into());
         let fee_from = Token::String(self.gas_fee.payer.to_string());
         let nonce = Token::Uint(self.transfer.nonce.clone().into());
-        vec![version, namespace, from, to, amount, fee, fee_from, nonce]
+        [version, namespace, from, to, amount, fee, fee_from, nonce]
     }
 }
 
@@ -119,17 +119,15 @@ pub struct MultiSignedMerkleRoot {
     pub height: BlockHeight,
 }
 
-impl Encode for MultiSignedMerkleRoot {
-    fn tokenize(&self) -> Vec<Token> {
+impl Encode<2> for MultiSignedMerkleRoot {
+    fn tokenize(&self) -> [Token; 2] {
         let MultiSignedMerkleRoot { sigs, root, .. } = self;
         // TODO: check the tokenization of the signatures
         let sigs = Token::Array(
-            sigs.iter()
-                .map(|sig| Token::FixedBytes(sig.0.serialize().to_vec()))
-                .collect(),
+            sigs.iter().map(|sig| sig.tokenize()[0].clone()).collect(),
         );
         let root = Token::FixedBytes(root.0.to_vec());
-        vec![sigs, root]
+        [sigs, root]
     }
 }
 
@@ -141,13 +139,21 @@ pub struct RelayProof {
     pub root: MultiSignedMerkleRoot,
     /// A membership proof
     pub proof: BridgePoolProof,
+    /// A nonce for the batch for replay protection
+    pub nonce: Uint,
 }
 
-impl Encode for RelayProof {
-    fn tokenize(&self) -> Vec<Token> {
-        vec![
-            Token::Array(self.root.tokenize()),
-            Token::Array(self.proof.tokenize()),
+impl Encode<6> for RelayProof {
+    fn tokenize(&self) -> [Token; 6] {
+        let [sigs, root] = self.root.tokenize();
+        let [proof, transfers, flags] = self.proof.tokenize();
+        [
+            sigs,
+            transfers,
+            root,
+            proof,
+            flags,
+            Token::Uint(self.nonce.clone().into()),
         ]
     }
 }

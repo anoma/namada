@@ -146,7 +146,11 @@ impl BridgePoolTree {
         // get the leaf hashes
         let leaves: BTreeSet<KeccakHash> =
             values.iter().map(|v| v.keccak256()).collect();
-
+        if !leaves.is_subset(&self.leaves) {
+            return Err(eyre!(
+                "Cannot generate proof for values that aren't in the tree"
+            ).into());
+        }
         let mut proof_hashes = vec![];
         let mut flags = vec![];
         let mut hashes: Vec<_> = self
@@ -330,8 +334,8 @@ impl BridgePoolProof {
     }
 }
 
-impl Encode for BridgePoolProof {
-    fn tokenize(&self) -> Vec<Token> {
+impl Encode<3> for BridgePoolProof {
+    fn tokenize(&self) -> [Token; 3] {
         let BridgePoolProof {
             proof,
             leaves,
@@ -346,12 +350,12 @@ impl Encode for BridgePoolProof {
         let transfers = Token::Array(
             leaves
                 .iter()
-                .map(|t| Token::FixedArray(t.tokenize()))
+                .map(|t| Token::FixedArray(t.tokenize().to_vec()))
                 .collect(),
         );
         let flags =
             Token::Array(flags.iter().map(|flag| Token::Bool(*flag)).collect());
-        vec![proof, transfers, flags]
+        [proof, transfers, flags]
     }
 }
 
