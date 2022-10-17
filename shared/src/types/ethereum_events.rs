@@ -1,5 +1,6 @@
 //! Types representing data intended for Anoma via Ethereum events
 
+use std::fmt::Display;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -66,6 +67,12 @@ impl EthAddress {
     /// e.g. "0x6b175474e89094c44da98b954eedeac495271d0f"
     pub fn to_canonical(&self) -> String {
         format!("{:?}", ethabi::ethereum_types::Address::from(&self.0))
+    }
+}
+
+impl Display for EthAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_canonical())
     }
 }
 
