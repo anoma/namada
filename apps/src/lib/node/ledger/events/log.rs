@@ -54,12 +54,12 @@ impl EventLog {
     }
 
     /// Log a new batch of events into the event log.
-    pub fn log_events<'e, E>(&mut self, events: E)
+    pub fn log_events<E>(&mut self, events: E)
     where
-        E: IntoIterator<Item = &'e Event> + 'e,
+        E: IntoIterator<Item = Event>,
     {
         let mut num_entries = 0;
-        for event in events.into_iter().cloned() {
+        for event in events.into_iter() {
             self.queue.push(event);
             num_entries += 1;
         }
@@ -137,7 +137,7 @@ mod tests {
         let events = mock_tx_events("DEADBEEF");
 
         for _ in 0..NUM_HEIGHTS {
-            log.log_events(&events);
+            log.log_events(events.clone());
         }
 
         // inspect log
@@ -179,7 +179,7 @@ mod tests {
         assert_eq!(events.len(), 2);
 
         for _ in 0..(LOG_CAP / 2) {
-            log.log_events(&events);
+            log.log_events(events.clone());
         }
 
         // inspect log - it should be full
@@ -197,7 +197,7 @@ mod tests {
 
         // add a new APPLIED event to the log,
         // pruning the first ACCEPTED event we added
-        log.log_events(Some(&events[1]));
+        log.log_events(Some(events[1].clone()));
 
         let events_in_log: Vec<_> = log
             .try_iter("tm.event='NewBlock' AND accepted.hash='DEADBEEF'")
