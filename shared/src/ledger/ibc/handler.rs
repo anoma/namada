@@ -675,9 +675,17 @@ pub trait IbcActions {
         msg: &MsgRecvPacket,
     ) -> std::result::Result<(), Self::Error> {
         // check the packet data
-        if let Ok(data) = serde_json::from_slice(&msg.packet.data) {
-            self.receive_token(&msg.packet, &data)?;
-        }
+        let packet_ack =
+            if let Ok(data) = serde_json::from_slice(&msg.packet.data) {
+                match self.receive_token(&msg.packet, &data) {
+                    Ok(_) => PacketAck::result_success(),
+                    Err(_) => PacketAck::result_error(
+                        "receiving a token failed".to_string(),
+                    ),
+                }
+            } else {
+                PacketAck::result_error("unknown packet data".to_string())
+            };
 
         // store the receipt
         let receipt_key = storage::receipt_key(
@@ -693,7 +701,7 @@ pub trait IbcActions {
             &msg.packet.destination_channel,
             msg.packet.sequence,
         );
-        let ack = PacketAck::default().encode_to_vec();
+        let ack = packet_ack.encode_to_vec();
         let ack_commitment = sha2::Sha256::digest(&ack).to_vec();
         self.write_ibc_data(&ack_key, ack_commitment)?;
 
@@ -718,12 +726,28 @@ pub trait IbcActions {
         &mut self,
         msg: &MsgAcknowledgement,
     ) -> std::result::Result<(), Self::Error> {
+        let ack = PacketAck::try_from(msg.acknowledgement.clone())
+            .map_err(Error::IbcData)?;
+        if !ack.is_success() {
+            if let Ok(data) = serde_json::from_slice(&msg.packet.data) {
+                self.refund_token(&msg.packet, &data)?;
+            }
+        }
+
         let commitment_key = storage::commitment_key(
             &msg.packet.source_port,
             &msg.packet.source_channel,
             msg.packet.sequence,
         );
         self.delete_ibc_data(&commitment_key)?;
+
+        // get and increment the next sequence ack
+        let port_channel_id = port_channel_id(
+            msg.packet.source_port.clone(),
+            msg.packet.source_channel,
+        );
+        let seq_key = storage::next_sequence_ack_key(&port_channel_id);
+        self.get_and_inc_sequence(&seq_key)?;
 
         let event = make_ack_event(msg.packet.clone()).try_into().unwrap();
         self.emit_ibc_event(event)?;
@@ -917,13 +941,12 @@ pub trait IbcActions {
                 data.sender, e
             ))
         })?;
-        let token_str =
-            data.denomination.split('/').last().ok_or_else(|| {
-                Error::SendingToken(format!(
-                    "No token was specified: {}",
-                    data.denomination
-                ))
-            })?;
+        let token_str = data.denom.split('/').last().ok_or_else(|| {
+            Error::SendingToken(format!(
+                "No token was specified: {}",
+                data.denom
+            ))
+        })?;
         let token = Address::decode(token_str).map_err(|e| {
             Error::SendingToken(format!(
                 "Invalid token address: token {}, error {}",
@@ -937,13 +960,13 @@ pub trait IbcActions {
             ))
         })?;
 
-        // check the denomination field
+        // check the denom field
         let prefix = format!(
             "{}/{}/",
             msg.source_port.clone(),
             msg.source_channel.clone()
         );
-        if data.denomination.starts_with(&prefix) {
+        if data.denom.starts_with(&prefix) {
             // sink zone
             let burn = Address::Internal(InternalAddress::IbcBurn);
             self.transfer_token(&source, &burn, &token, amount)?;
@@ -982,13 +1005,12 @@ pub trait IbcActions {
                 data.receiver, e
             ))
         })?;
-        let token_str =
-            data.denomination.split('/').last().ok_or_else(|| {
-                Error::ReceivingToken(format!(
-                    "No token was specified: {}",
-                    data.denomination
-                ))
-            })?;
+        let token_str = data.denom.split('/').last().ok_or_else(|| {
+            Error::ReceivingToken(format!(
+                "No token was specified: {}",
+                data.denom
+            ))
+        })?;
         let token = Address::decode(token_str).map_err(|e| {
             Error::ReceivingToken(format!(
                 "Invalid token address: token {}, error {}",
@@ -1007,7 +1029,7 @@ pub trait IbcActions {
             packet.source_port.clone(),
             packet.source_channel.clone()
         );
-        if data.denomination.starts_with(&prefix) {
+        if data.denom.starts_with(&prefix) {
             // unescrow the token because this chain is the source
             let escrow =
                 Address::Internal(InternalAddress::ibc_escrow_address(
@@ -1035,13 +1057,12 @@ pub trait IbcActions {
                 data.sender, e
             ))
         })?;
-        let token_str =
-            data.denomination.split('/').last().ok_or_else(|| {
-                Error::ReceivingToken(format!(
-                    "No token was specified: {}",
-                    data.denomination
-                ))
-            })?;
+        let token_str = data.denom.split('/').last().ok_or_else(|| {
+            Error::ReceivingToken(format!(
+                "No token was specified: {}",
+                data.denom
+            ))
+        })?;
         let token = Address::decode(token_str).map_err(|e| {
             Error::ReceivingToken(format!(
                 "Invalid token address: token {}, error {}",
@@ -1060,7 +1081,7 @@ pub trait IbcActions {
             packet.source_port.clone(),
             packet.source_channel.clone()
         );
-        if data.denomination.starts_with(&prefix) {
+        if data.denom.starts_with(&prefix) {
             // mint the token because the sender chain is the sink zone
             let mint = Address::Internal(InternalAddress::IbcMint);
             self.transfer_token(&mint, &dest, &token, amount)?;
