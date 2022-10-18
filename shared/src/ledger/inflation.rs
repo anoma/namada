@@ -22,8 +22,6 @@ pub enum RewardsType {
 /// Holds the PD controller values that should be updated in storage
 pub struct ValsToUpdate {
     pub locked_ratio: Decimal,
-    pub p_gain: Decimal,
-    pub d_gain: Decimal,
     pub inflation: u64,
 }
 
@@ -35,9 +33,9 @@ pub struct RewardsController {
     locked_ratio_target: Decimal,
     locked_ratio_last: Decimal,
     max_reward_rate: Decimal,
-    p_gain: Decimal,
-    d_gain: Decimal,
     last_inflation_amount: token::Amount,
+    p_gain_nom: Decimal,
+    d_gain_nom: Decimal,
     epochs_per_year: u64,
 }
 
@@ -49,9 +47,9 @@ impl RewardsController {
         locked_ratio_target: Decimal,
         locked_ratio_last: Decimal,
         max_reward_rate: Decimal,
-        p_gain: Decimal,
-        d_gain: Decimal,
         last_inflation_amount: token::Amount,
+        p_gain_nom: Decimal,
+        d_gain_nom: Decimal,
         epochs_per_year: u64,
     ) -> Self {
         Self {
@@ -60,9 +58,9 @@ impl RewardsController {
             locked_ratio_target,
             locked_ratio_last,
             max_reward_rate,
-            p_gain,
-            d_gain,
             last_inflation_amount,
+            p_gain_nom,
+            d_gain_nom,
             epochs_per_year,
         }
     }
@@ -75,9 +73,9 @@ impl RewardsController {
             locked_ratio_target,
             locked_ratio_last,
             max_reward_rate,
-            p_gain,
-            d_gain,
             last_inflation_amount,
+            p_gain_nom,
+            d_gain_nom,
             epochs_per_year,
         }: &Self,
     ) -> ValsToUpdate {
@@ -107,8 +105,6 @@ impl RewardsController {
 
         ValsToUpdate {
             locked_ratio,
-            p_gain: p_gain_new,
-            d_gain: d_gain_new,
             inflation,
         }
     }

@@ -407,10 +407,10 @@ where
         let epochs_per_year: u64 = self
             .read_storage_key(&params_storage::get_epochs_per_year_key())
             .expect("Epochs per year should exist in storage");
-        let pos_p_gain: Decimal = self
+        let pos_p_gain_nom: Decimal = self
             .read_storage_key(&params_storage::get_pos_gain_p_key())
             .expect("PoS P-gain factor should exist in storage");
-        let pos_d_gain: Decimal = self
+        let pos_d_gain_nom: Decimal = self
             .read_storage_key(&params_storage::get_pos_gain_d_key())
             .expect("PoS D-gain factor should exist in storage");
 
@@ -599,18 +599,6 @@ where
                     .expect("encode new locked ratio"),
             )
             .expect("unable to encode new locked ratio (Decimal)");
-        self.storage
-            .write(
-                &params_storage::get_pos_gain_p_key(),
-                new_pos_vals.p_gain.try_to_vec().expect("encode new p gain"),
-            )
-            .expect("unable to encode new p gain (Decimal)");
-        self.storage
-            .write(
-                &params_storage::get_pos_gain_d_key(),
-                new_pos_vals.d_gain.try_to_vec().expect("encode new d gain"),
-            )
-            .expect("unable to encode new d gain (Decimal)");
         self.storage
             .delete(&consensus_validator_set_accumulator_key())
             .unwrap();
