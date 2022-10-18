@@ -186,7 +186,7 @@ In this section we describe two alternative solutions that come with some optimi
 
 ### Transaction counter
 
-Instead of relying on a hash (32 bytes) we could use a 64 bits (8 bytes) transaction counter as nonce for the wrapper and inner transactions. The advantage is that it would only use 25% of the storage space required by the proposed solution. On the other hand, the handling of the counter for the inner transaction will be performed entirely in wasm (transactions and VPs) making it a bit less efficient. This solution also imposes a strict ordering on the transactions issued by a same address.
+Instead of relying on a hash (32 bytes) we could use a 64 bits (8 bytes) transaction counter as nonce for the wrapper and inner transactions. The advantage is that the space required would be much less since we only need two 8 bytes values in storage for every address which is signing transactions. On the other hand, the handling of the counter for the inner transaction will be performed entirely in wasm (transactions and VPs) making it a bit less efficient. This solution also imposes a strict ordering on the transactions issued by a same address.
 
 **NOTE**: this solution requires the ability to [yield](https://github.com/wasmerio/wasmer/issues/1127) execution from Wasmer which is not implemented yet.
 
@@ -383,7 +383,7 @@ If one wanted to completely prevent this scenario, the solution would be to reje
 
 ### Wrapper-bound InnerTx
 
-The solution is to tie an `InnerTx` to the corresponding `WrapperTx`. By doing so, it becomes impossible to rewrap an inner transaction and, therefore, all the attacks related to this practice would be unfeasible. This mechanism requires eight times less space in storage (only a 64 bit counter for the wrapper tx) and only one check on the wrapper counter in protocol. As a con, it requires communication between the signer of the inner transaction and that of the wrapper during the transaction construction. This solution also imposes a strict ordering on the wrapper transactions issued by a same address.
+The solution is to tie an `InnerTx` to the corresponding `WrapperTx`. By doing so, it becomes impossible to rewrap an inner transaction and, therefore, all the attacks related to this practice would be unfeasible. This mechanism requires even less space in storage (only a 64 bit counter for every address signing wrapper transactions) and only one check on the wrapper counter in protocol. As a con, it requires communication between the signer of the inner transaction and that of the wrapper during the transaction construction. This solution also imposes a strict ordering on the wrapper transactions issued by a same address.
 
 To do so we will have to change the current definition of the two tx structs to the following:
 
