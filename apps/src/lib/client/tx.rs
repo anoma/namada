@@ -52,11 +52,12 @@ const VP_NFT: &str = "vp_nft.wasm";
 
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
-const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME: &str = "NAMADA_EVENTS_MAX_WAIT_TIME";
+const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
+    "NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS";
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
-const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME: u64 = 60;
+const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
@@ -1243,10 +1244,10 @@ pub async fn submit_tx(
     broadcast_tx(address.clone(), &to_broadcast).await?;
 
     let max_wait_time = Duration::from_secs(
-        env::var(ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME)
+        env::var(ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS)
             .ok()
             .and_then(|val| val.parse().ok())
-            .unwrap_or(DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME),
+            .unwrap_or(DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS),
     );
     let deadline = Instant::now() + max_wait_time;
 
