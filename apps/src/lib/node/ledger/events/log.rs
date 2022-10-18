@@ -67,13 +67,12 @@ impl EventLog {
 
     /// Returns a new iterator over this [`EventLog`].
     #[inline]
-    pub fn iter_with_matcher<'query, 'log>(
-        &'log self,
-        matcher: dumb_queries::QueryMatcher<'query>,
-    ) -> impl Iterator<Item = &'log Event> + 'query
+    pub fn iter_with_matcher<'a, T>(
+        &'a self,
+        matcher: dumb_queries::QueryMatcher<'a, T>,
+    ) -> impl Iterator<Item = &Event> + 'a
     where
-        // the log should outlive the query
-        'log: 'query,
+        T: 'a + PartialEq + TryFrom<&'a str>
     {
         self.queue
             .iter()
@@ -83,7 +82,7 @@ impl EventLog {
 
 #[cfg(test)]
 mod tests {
-    use namada::types::hash::HexEncodedHash;
+    use namada::types::hash::Hash;
 
     use super::*;
     use crate::node::ledger::events::{EventLevel, EventType};
@@ -95,7 +94,7 @@ mod tests {
     macro_rules! accepted {
         ($hash:expr) => {
             dumb_queries::QueryMatcher::accepted(
-                &HexEncodedHash::try_from($hash).unwrap(),
+                Hash::try_from($hash).unwrap(),
             )
         };
     }

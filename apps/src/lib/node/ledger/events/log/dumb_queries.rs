@@ -6,46 +6,59 @@
 //! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
 //! ```
 
-use namada::types::hash::HexEncodedHash;
+use std::marker::PhantomData;
+use namada::types::hash::Hash;
 
 use crate::node::ledger::events::{Event, EventType};
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
 /// given Tendermint query.
 #[derive(Debug, Clone)]
-pub struct QueryMatcher<'q> {
+pub struct QueryMatcher<'a, T>
+where
+    T: 'a +  PartialEq + TryFrom<&'a str>
+{
     event_type: EventType,
     attr: String,
-    value: &'q str,
+    value: T,
+    phantom: PhantomData<&'a T>,
 }
 
-impl<'q> QueryMatcher<'q> {
+impl<'a, T> QueryMatcher<'a, T>
+where
+    T: 'a + PartialEq + TryFrom<&'a str>
+{
     /// Checks if this [`QueryMatcher`] validates the
     /// given [`Event`].
-    pub fn matches(&self, event: &Event) -> bool {
+    pub fn matches(&self, event: &'a Event) -> bool {
         event.event_type == self.event_type
             && event
-                .attributes
-                .get(&self.attr)
-                .map(|value| value == self.value)
-                .unwrap_or_default()
+            .attributes
+            .get(&self.attr)
+            .map(|value| T::try_from(value.as_ref()).map(|v| v == self.value).unwrap_or(false))
+            .unwrap_or_default()
     }
+}
+
+impl QueryMatcher<'_, Hash> {
 
     /// Returns a query matching the given accepted transaction hash.
-    pub fn accepted(tx_hash: &'q HexEncodedHash) -> Self {
+    pub fn accepted(tx_hash: Hash) -> Self {
         Self {
             event_type: EventType::Accepted,
             attr: "hash".to_string(),
             value: tx_hash,
+            phantom: PhantomData,
         }
     }
 
     /// Returns a query matching the given applied transaction hash.
-    pub fn applied(tx_hash: &'q HexEncodedHash) -> Self {
+    pub fn applied(tx_hash: Hash) -> Self {
         Self {
             event_type: EventType::Applied,
             attr: "hash".to_string(),
             value: tx_hash,
+            phantom: PhantomData,
         }
     }
 }
@@ -62,6 +75,7 @@ mod tests {
             event_type: EventType::Accepted,
             attr: "hash".to_string(),
             value: "DEADBEEF",
+            phantom: PhantomData,
         };
 
         let tests = {
