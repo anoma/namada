@@ -644,7 +644,7 @@ mod test_utils {
 
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
-    use namada::types::address::{xan, EstablishedAddressGen};
+    use namada::types::address::{nam, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -862,7 +862,7 @@ mod test_utils {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),

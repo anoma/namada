@@ -11,7 +11,7 @@ use itertools::Either::*;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
 use namada::proto::Tx;
-use namada::types::address::{xan as m1t, Address};
+use namada::types::address::{nam, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
@@ -639,7 +639,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1)
         };
 
-        let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
+        let balance = rpc::get_token_balance(&client, &nam(), &proposal.author)
             .await
             .unwrap_or_default();
         if balance
@@ -911,7 +911,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
-    let balance_key = token::balance_key(&address::xan(), bond_source);
+    let balance_key = token::balance_key(&address::nam(), bond_source);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
