@@ -96,9 +96,7 @@ impl TryFrom<String> for Hash {
     type Error = self::Error;
 
     fn try_from(string: String) -> HashResult<Self> {
-        Ok(
-            Self(<[u8; HASH_LENGTH]>::from_hex(string).map_err(Error::FromStringError)?)
-        )
+        string.as_str().try_into()
     }
 }
 

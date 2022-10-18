@@ -15,8 +15,6 @@ use crate::node::ledger::events::{Event, EventType};
 /// given Tendermint query.
 #[derive(Debug, Clone)]
 pub struct QueryMatcher<'a, T>
-where
-    T: 'a +  PartialEq + TryFrom<&'a str>
 {
     event_type: EventType,
     attr: String,
