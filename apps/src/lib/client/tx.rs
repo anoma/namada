@@ -1262,11 +1262,10 @@ pub async fn submit_tx(
     );
 
     let parsed = {
-        let args = args::Query {
-            ledger_address: address.clone(),
-        };
         let wrapper_query = rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
-        let event = rpc::query_tx_status(wrapper_query, args, deadline).await;
+        let event =
+            rpc::query_tx_status(wrapper_query, address.clone(), deadline)
+                .await;
         let parsed = TxResponse::from_event(event);
 
         println!(
@@ -1278,13 +1277,10 @@ pub async fn submit_tx(
         if parsed.code == 0.to_string() {
             // We also listen to the event emitted when the encrypted
             // payload makes its way onto the blockchain
-            let args = args::Query {
-                ledger_address: address,
-            };
             let decrypted_query =
                 rpc::TxEventQuery::Applied(decrypted_hash.as_str());
             let event =
-                rpc::query_tx_status(decrypted_query, args, deadline).await;
+                rpc::query_tx_status(decrypted_query, address, deadline).await;
             let parsed = TxResponse::from_event(event);
             println!(
                 "Transaction applied with result: {}",

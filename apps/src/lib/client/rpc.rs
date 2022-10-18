@@ -50,7 +50,7 @@ use crate::node::ledger::rpc::Path;
 /// error.
 pub async fn query_tx_status(
     status: TxEventQuery<'_>,
-    args: args::Query,
+    address: TendermintAddress,
     deadline: Instant,
 ) -> Event {
     const ONE_SECOND: Duration = Duration::from_secs(1);
@@ -68,7 +68,7 @@ pub async fn query_tx_status(
         *backoff += ONE_SECOND;
     }
     tokio::time::timeout_at(deadline, async move {
-        let client = HttpClient::new(args.ledger_address).unwrap();
+        let client = HttpClient::new(address).unwrap();
         let mut backoff = ONE_SECOND;
 
         loop {
