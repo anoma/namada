@@ -18,7 +18,7 @@ pub use self::context::Context;
 
 include!("../../version.rs");
 
-const APP_NAME: &str = "Anoma";
+const APP_NAME: &str = "Namada";
 
 // Main Anoma sub-commands
 const NODE_CMD: &str = "node";
