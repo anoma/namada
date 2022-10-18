@@ -10,7 +10,7 @@ Note that you need to have [joined a network](./getting-started.md) before you s
 
 The node will attempt to connect to the persistent validator nodes and other peers in the network, and synchronize to the latest block.
 
-By default, the ledger will store its configuration and state in the `.anoma` directory relative to the current working directory. You can use the `--base-dir` CLI global argument or `ANOMA_BASE_DIR` environment variable to change it.
+By default, the ledger will store its configuration and state in the `.namada` directory relative to the current working directory. You can use the `--base-dir` CLI global argument or `NAMADA_BASE_DIR` environment variable to change it.
 
 The ledger also needs access to the built WASM files that are used in the genesis block. These files are included in release and shouldn't be modified, otherwise your node will fail with a consensus error on the genesis block. By default, these are expected to be in the `wasm` directory, relative to the current working directory. This can also be set with the `--wasm-dir` CLI global argument, `ANOMA_WASM_DIR` environment variable or the configuration file.
 

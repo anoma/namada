@@ -1272,7 +1272,7 @@ pub mod args {
     const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
     const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
-        DefaultFn(|| match env::var("ANOMA_BASE_DIR") {
+        DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
             Ok(dir) => dir.into(),
             Err(_) => config::DEFAULT_BASE_DIR.into(),
         }),
@@ -1387,9 +1387,9 @@ pub mod args {
                 .arg(BASE_DIR.def().about(
                     "The base directory is where the nodes, client and wallet \
                      configuration and state is stored. This value can also \
-                     be set via `ANOMA_BASE_DIR` environment variable, but \
+                     be set via `NAMADA_BASE_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
-                     `.anoma`.",
+                     `.namada`.",
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
