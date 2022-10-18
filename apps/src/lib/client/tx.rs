@@ -16,12 +16,10 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
 use namada::types::key::*;
-use namada::types::nft::{self, Nft, NftToken};
 use namada::types::storage::Epoch;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
-use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, storage, token};
 use namada::{ledger, vm};
@@ -49,13 +47,10 @@ const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-const TX_INIT_NFT: &str = "tx_init_nft.wasm";
-const TX_MINT_NFT: &str = "tx_mint_nft.wasm";
 const VP_USER_WASM: &str = "vp_user.wasm";
 const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
-const VP_NFT: &str = "vp_nft.wasm";
 
 const ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: &str =
     "ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT";
@@ -463,75 +458,6 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
 
     let tx = Tx::new(tx_code, Some(data));
     process_tx(ctx, &args.tx, tx, Some(&args.source)).await;
-}
-
-pub async fn submit_init_nft(ctx: Context, args: args::NftCreate) {
-    let file = File::open(&args.nft_data).expect("File must exist.");
-    let nft: Nft = serde_json::from_reader(file)
-        .expect("Couldn't deserialize nft data file");
-
-    let vp_code = match &nft.vp_path {
-        Some(path) => {
-            std::fs::read(path).expect("Expected a file at given code path")
-        }
-        None => ctx.read_wasm(VP_NFT),
-    };
-
-    let signer = Some(WalletAddress::new(nft.creator.clone().to_string()));
-
-    let data = CreateNft {
-        tag: nft.tag.to_string(),
-        creator: nft.creator,
-        vp_code,
-        keys: nft.keys,
-        opt_keys: nft.opt_keys,
-        tokens: nft.tokens,
-    };
-
-    let data = data.try_to_vec().expect(
-        "Encoding transfer data to initialize a new account shouldn't fail",
-    );
-
-    let tx_code = ctx.read_wasm(TX_INIT_NFT);
-
-    let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, signer.as_ref()).await;
-}
-
-pub async fn submit_mint_nft(ctx: Context, args: args::NftMint) {
-    let file = File::open(&args.nft_data).expect("File must exist.");
-    let nft_tokens: Vec<NftToken> =
-        serde_json::from_reader(file).expect("JSON was not well-formatted");
-
-    let nft_creator_key = nft::get_creator_key(&args.nft_address);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    let nft_creator_address =
-        match rpc::query_storage_value::<Address>(&client, &nft_creator_key)
-            .await
-        {
-            Some(addr) => addr,
-            None => {
-                eprintln!("No creator key found for {}", &args.nft_address);
-                safe_exit(1);
-            }
-        };
-
-    let signer = Some(WalletAddress::new(nft_creator_address.to_string()));
-
-    let data = MintNft {
-        address: args.nft_address,
-        creator: nft_creator_address,
-        tokens: nft_tokens,
-    };
-
-    let data = data.try_to_vec().expect(
-        "Encoding transfer data to initialize a new account shouldn't fail",
-    );
-
-    let tx_code = ctx.read_wasm(TX_MINT_NFT);
-
-    let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, signer.as_ref()).await;
 }
 
 pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {

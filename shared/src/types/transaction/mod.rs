@@ -7,8 +7,6 @@ pub mod decrypted;
 pub mod encrypted;
 /// txs to manage governance
 pub mod governance;
-/// txs to manage nfts
-pub mod nft;
 pub mod pos;
 /// transaction protocols made by validators
 pub mod protocol;

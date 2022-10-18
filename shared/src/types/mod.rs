@@ -8,7 +8,6 @@ pub mod hash;
 pub mod ibc;
 pub mod internal;
 pub mod key;
-pub mod nft;
 pub mod storage;
 pub mod time;
 pub mod token;
