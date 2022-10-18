@@ -1280,7 +1280,7 @@ impl ShieldedContext {
         &mut self,
         client: HttpClient,
         amt: Amount,
-    ) -> Amount<Address> {
+    ) -> Amount<(Address, Epoch)> {
         let mut res = Amount::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
@@ -1288,8 +1288,8 @@ impl ShieldedContext {
                 self.decode_asset_type(client.clone(), *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
-                Some((addr, _)) => {
-                    res += &Amount::from_pair(addr, *val).unwrap()
+                Some((addr, epoch)) => {
+                    res += &Amount::from_pair((addr, epoch), *val).unwrap()
                 }
                 _ => {}
             }

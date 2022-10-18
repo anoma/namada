@@ -19,6 +19,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::primitives::ViewingKey;
 use masp_primitives::sapling::Node;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use masp_primitives::transaction::components::Amount;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::Votes;
@@ -162,7 +163,6 @@ pub async fn query_tx_deltas(
     query_token: &Option<Address>,
 ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, TransferDelta, TransactionDelta)>
 {
-    use masp_primitives::transaction::components::Amount;
     const TXS_PER_PAGE: u8 = 100;
     // Connect to the Tendermint server holding the transactions
     let client = HttpClient::new(ledger_address.clone()).unwrap();
@@ -1009,7 +1009,6 @@ pub async fn query_shielded_balance(
             let viewing_key =
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
             let balance;
-            let decoded_balance;
             if no_conversions {
                 balance = ctx
                     .shielded
@@ -1018,10 +1017,11 @@ pub async fn query_shielded_balance(
                     )
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                decoded_balance = ctx
+                let decoded_balance = ctx
                     .shielded
                     .decode_all_amounts(client.clone(), balance)
                     .await;
+                print_decoded_balance_with_epoch(decoded_balance);
             } else {
                 balance = ctx
                     .shielded
@@ -1029,26 +1029,50 @@ pub async fn query_shielded_balance(
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                decoded_balance = ctx
+                let decoded_balance = ctx
                     .shielded
                     .decode_amount(client.clone(), balance, epoch)
                     .await;
-            }
-            let mut found_any = false;
-            for (addr, value) in decoded_balance.components() {
-                let asset_value = token::Amount::from(*value as u64);
-                let addr_enc = addr.encode();
-                println!(
-                    "{}: {}",
-                    tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
-                    asset_value
-                );
-                found_any = true;
-            }
-            if !found_any {
-                println!("No shielded balance found for given key");
+                print_decoded_balance(decoded_balance);
             }
         }
+    }
+}
+
+pub fn print_decoded_balance(decoded_balance: Amount<Address>) {
+    let tokens = address::tokens();
+    let mut found_any = false;
+    for (addr, value) in decoded_balance.components() {
+        let asset_value = token::Amount::from(*value as u64);
+        let addr_enc = addr.encode();
+        println!(
+            "{} : {}",
+            tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
+            asset_value
+        );
+        found_any = true;
+    }
+    if !found_any {
+        println!("No shielded balance found for given key");
+    }
+}
+
+pub fn print_decoded_balance_with_epoch(decoded_balance: Amount<(Address, Epoch)>) {
+    let tokens = address::tokens();
+    let mut found_any = false;
+    for ((addr, epoch), value) in decoded_balance.components() {
+        let asset_value = token::Amount::from(*value as u64);
+        let addr_enc = addr.encode();
+        println!(
+            "{} | {} : {}",
+            tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
+            epoch,
+            asset_value
+        );
+        found_any = true;
+    }
+    if !found_any {
+        println!("No shielded balance found for given key");
     }
 }
 
