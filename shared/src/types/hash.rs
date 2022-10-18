@@ -92,9 +92,7 @@ impl TryFrom<String> for Hash {
     type Error = self::Error;
 
     fn try_from(string: String) -> HashResult<Self> {
-        let bytes: Vec<u8> =
-            Vec::from_hex(string).map_err(Error::FromStringError)?;
-        Self::try_from(bytes.as_slice())
+        string.as_str().try_into()
     }
 }
 
@@ -102,9 +100,10 @@ impl TryFrom<&str> for Hash {
     type Error = self::Error;
 
     fn try_from(string: &str) -> HashResult<Self> {
-        let bytes: Vec<u8> =
-            Vec::from_hex(string).map_err(Error::FromStringError)?;
-        Self::try_from(bytes.as_slice())
+        Ok(Self(
+            <[u8; HASH_LENGTH]>::from_hex(string)
+                .map_err(Error::FromStringError)?,
+        ))
     }
 }
 
