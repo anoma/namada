@@ -87,12 +87,12 @@ where
                     self.read_storage_prefix(&storage_key, height, query.prove)
                 }
                 Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
-                Path::Accepted(ref hash) => {
-                    let matcher = dumb_queries::QueryMatcher::accepted(hash);
+                Path::Accepted { ref tx_hash } => {
+                    let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
                     self.query_event_log(matcher)
                 }
-                Path::Applied(ref hash) => {
-                    let matcher = dumb_queries::QueryMatcher::applied(hash);
+                Path::Applied { ref tx_hash } => {
+                    let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
                     self.query_event_log(matcher)
                 }
             },

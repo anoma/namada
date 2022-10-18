@@ -24,9 +24,9 @@ pub enum Path {
     /// Check if the given storage key exists.
     HasKey(storage::Key),
     /// Check if a transaction was accepted.
-    Accepted(HexEncodedHash),
+    Accepted { tx_hash: HexEncodedHash },
     /// Check if a transaction was applied.
-    Applied(HexEncodedHash),
+    Applied { tx_hash: HexEncodedHash },
 }
 
 #[derive(Debug, Clone)]
@@ -59,13 +59,13 @@ impl Display for Path {
             Path::HasKey(storage_key) => {
                 write!(f, "{}/{}", HAS_KEY_PREFIX, storage_key)
             }
-            Path::Accepted(hash) => {
-                let hash: &str = hash;
-                write!(f, "{ACCEPTED_PREFIX}/{hash}")
+            Path::Accepted { tx_hash } => {
+                let tx_hash: &str = tx_hash;
+                write!(f, "{ACCEPTED_PREFIX}/{tx_hash}")
             }
-            Path::Applied(hash) => {
-                let hash: &str = hash;
-                write!(f, "{APPLIED_PREFIX}/{hash}")
+            Path::Applied { tx_hash } => {
+                let tx_hash: &str = tx_hash;
+                write!(f, "{APPLIED_PREFIX}/{tx_hash}")
             }
         }
     }
@@ -94,15 +94,17 @@ impl FromStr for Path {
                         .map_err(PathParseError::InvalidStorageKey)?;
                     Ok(Self::HasKey(key))
                 }
-                Some((ACCEPTED_PREFIX, hash)) => {
-                    let hash =
-                        hash.try_into().map_err(PathParseError::InvalidHash)?;
-                    Ok(Self::Accepted(hash))
+                Some((ACCEPTED_PREFIX, tx_hash)) => {
+                    let tx_hash = tx_hash
+                        .try_into()
+                        .map_err(PathParseError::InvalidTxHash)?;
+                    Ok(Self::Accepted { tx_hash })
                 }
-                Some((APPLIED_PREFIX, hash)) => {
-                    let hash =
-                        hash.try_into().map_err(PathParseError::InvalidHash)?;
-                    Ok(Self::Applied(hash))
+                Some((APPLIED_PREFIX, tx_hash)) => {
+                    let tx_hash = tx_hash
+                        .try_into()
+                        .map_err(PathParseError::InvalidTxHash)?;
+                    Ok(Self::Applied { tx_hash })
                 }
                 _ => Err(PathParseError::InvalidPath(s.to_string())),
             },
@@ -126,6 +128,6 @@ pub enum PathParseError {
     InvalidPath(String),
     #[error("Invalid storage key: {0}")]
     InvalidStorageKey(storage::Error),
-    #[error("Invalid hash: {0}")]
-    InvalidHash(hash::Error),
+    #[error("Invalid transaction hash: {0}")]
+    InvalidTxHash(hash::Error),
 }
