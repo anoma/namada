@@ -53,18 +53,37 @@ pub async fn query_tx_status(
     args: args::Query,
     deadline: Instant,
 ) -> Event {
+    const ONE_SECOND: Duration = Duration::from_secs(1);
+    // sleep for the duration of `backoff`,
+    // and update the underlying value
+    async fn sleep_update(query: TxEventQuery<'_>, backoff: &mut Duration) {
+        tracing::debug!(
+            ?query,
+            duration = ?backoff,
+            "Retrying tx status query after timeout",
+        );
+        // simple linear backoff - if an event is not available,
+        // increase the backoff duration by one second
+        tokio::time::sleep(*backoff).await;
+        *backoff += ONE_SECOND;
+    }
     tokio::time::timeout_at(deadline, async move {
         let client = HttpClient::new(args.ledger_address).unwrap();
-
-        const ONE_SECOND: Duration = Duration::from_secs(1);
         let mut backoff = ONE_SECOND;
 
         loop {
             let data = vec![];
-            let response = client
+            tracing::debug!(query = ?status, "Querying tx status");
+            let response = match client
                 .abci_query(Some(status.into()), data, None, false)
                 .await
-                .unwrap();
+            {
+                Ok(response) => response,
+                Err(_) => {
+                    sleep_update(status, &mut backoff).await;
+                    continue;
+                }
+            };
             let mut events = match response.code {
                 Code::Ok => {
                     match Vec::<Event>::try_from_slice(&response.value[..]) {
@@ -87,10 +106,7 @@ pub async fn query_tx_status(
                 // we should only have one event matching the query
                 break Ok(e);
             }
-            // simple linear backoff - if an event is not available,
-            // increase the backoff duration by one second
-            tokio::time::sleep(backoff).await;
-            backoff += ONE_SECOND;
+            sleep_update(status, &mut backoff).await;
         }
     })
     .await
