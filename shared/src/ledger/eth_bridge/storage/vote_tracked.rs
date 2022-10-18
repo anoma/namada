@@ -4,7 +4,7 @@ use crate::types::hash::Hash;
 use crate::types::storage::Key;
 
 #[allow(missing_docs)]
-pub const PREFIX_KEY_SEGMENT: &str = "eth_msgs";
+pub const ETH_MSGS_PREFIX_KEY_SEGMENT: &str = "eth_msgs";
 
 const BODY_KEY_SEGMENT: &str = "body";
 const SEEN_KEY_SEGMENT: &str = "seen";
@@ -70,7 +70,7 @@ impl<T> IntoIterator for &Keys<T> {
 /// are stored
 pub fn eth_msgs_prefix() -> Key {
     super::prefix()
-        .push(&PREFIX_KEY_SEGMENT.to_owned())
+        .push(&ETH_MSGS_PREFIX_KEY_SEGMENT.to_owned())
         .expect("should always be able to construct this key")
 }
 
@@ -122,7 +122,7 @@ mod test {
         assert_matches!(&eth_msgs_prefix().segments[..], [
                 DbKeySeg::AddressSeg(ADDRESS),
                 DbKeySeg::StringSeg(s),
-            ] if s == PREFIX_KEY_SEGMENT)
+            ] if s == ETH_MSGS_PREFIX_KEY_SEGMENT)
     }
 
     #[test]
@@ -131,7 +131,7 @@ mod test {
         let keys: Keys<EthereumEvent> = (&event).into();
         let prefix = vec![
             DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(PREFIX_KEY_SEGMENT.to_owned()),
+            DbKeySeg::StringSeg(ETH_MSGS_PREFIX_KEY_SEGMENT.to_owned()),
             DbKeySeg::StringSeg(hash),
         ];
         let body_key = keys.body();
@@ -185,7 +185,7 @@ mod test {
         let keys: Keys<EthereumEvent> = (&event).into();
         let expected = vec![
             DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(PREFIX_KEY_SEGMENT.to_owned()),
+            DbKeySeg::StringSeg(ETH_MSGS_PREFIX_KEY_SEGMENT.to_owned()),
             DbKeySeg::StringSeg(hash),
         ];
         assert_eq!(&keys.prefix.segments[..], &expected[..]);
@@ -197,7 +197,7 @@ mod test {
         let keys: Keys<EthereumEvent> = (&event.hash().unwrap()).into();
         let expected = vec![
             DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(PREFIX_KEY_SEGMENT.to_owned()),
+            DbKeySeg::StringSeg(ETH_MSGS_PREFIX_KEY_SEGMENT.to_owned()),
             DbKeySeg::StringSeg(hash),
         ];
         assert_eq!(&keys.prefix.segments[..], &expected[..]);
