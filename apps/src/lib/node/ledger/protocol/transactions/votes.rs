@@ -86,7 +86,7 @@ where
         seen_by,
         seen,
     };
-    let vote_tracking_post = calculate_update(&vote_tracking_pre, &votes);
+    let vote_tracking_post = calculate_update(keys, &vote_tracking_pre, &votes);
     let changed_keys =
         validate_update(keys, &vote_tracking_pre, &vote_tracking_post)?;
 
@@ -102,11 +102,11 @@ where
 /// validators which have seen it. `voting_powers` should map validators who
 /// have newly seen the event to their fractional voting power at a block height
 /// at which they saw the event.
-fn calculate_update(
+fn calculate_update<T>(
+    keys: &vote_tracked::Keys<T>,
     vote_tracking_pre: &VoteTracking,
     votes: &HashMap<Address, FractionalVotingPower>,
 ) -> VoteTracking {
-    // TODO: accept an event hash to have as a field when logging?
     let voters: BTreeSet<Address> = votes.keys().cloned().collect();
 
     // For any event and validator, only the first vote by that validator for
@@ -116,6 +116,7 @@ fn calculate_update(
     // it is happening a lot
     for validator in vote_tracking_pre.seen_by.intersection(&voters) {
         tracing::warn!(
+            ?keys.prefix,
             ?validator,
             "Encountered duplicate vote for an event by a validator, ignoring"
         );
@@ -124,6 +125,7 @@ fn calculate_update(
     let mut seen_by_post = vote_tracking_pre.seen_by.clone();
     for validator in voters.difference(&vote_tracking_pre.seen_by) {
         tracing::info!(
+            ?keys.prefix,
             ?validator,
             "Recording validator as having voted for this event"
         );
@@ -134,10 +136,16 @@ fn calculate_update(
     }
 
     let seen_post = if voting_power_post > FractionalVotingPower::TWO_THIRDS {
-        tracing::info!("Event has been seen by a quorum of validators");
+        tracing::info!(
+            ?keys.prefix,
+            "Event has been seen by a quorum of validators",
+        );
         true
     } else {
-        tracing::debug!("Event is not yet seen by a quorum of validators");
+        tracing::debug!(
+            ?keys.prefix,
+            "Event is not yet seen by a quorum of validators",
+        );
         false
     };
 
