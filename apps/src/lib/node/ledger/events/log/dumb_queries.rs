@@ -31,21 +31,21 @@ impl<'q> QueryMatcher<'q> {
                 .unwrap_or_default()
     }
 
-    /// Returns a query matching the given accepted hash.
-    pub fn accepted(hash: &'q HexEncodedHash) -> Self {
+    /// Returns a query matching the given accepted transaction hash.
+    pub fn accepted(tx_hash: &'q HexEncodedHash) -> Self {
         Self {
             event_type: EventType::Accepted,
             attr: "hash".to_string(),
-            value: hash,
+            value: tx_hash,
         }
     }
 
-    /// Returns a query matching the given applied hash.
-    pub fn applied(hash: &'q HexEncodedHash) -> Self {
+    /// Returns a query matching the given applied transaction hash.
+    pub fn applied(tx_hash: &'q HexEncodedHash) -> Self {
         Self {
             event_type: EventType::Applied,
             attr: "hash".to_string(),
-            value: hash,
+            value: tx_hash,
         }
     }
 }
