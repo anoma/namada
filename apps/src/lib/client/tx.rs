@@ -23,7 +23,7 @@ use namada::types::governance::{
 };
 use namada::types::key::*;
 use namada::types::nft::{self, Nft, NftToken};
-use namada::types::storage::Epoch;
+use namada::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -538,7 +538,8 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     let tx_code = ctx.read_wasm(TX_IBC_WASM);
 
     let denom = match sub_prefix {
-        Some(sp) => format!("{}/{}", sp, token),
+        // To parse IbcToken address, remove the address prefix
+        Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
         None => token.to_string(),
     };
     let token = Some(Coin {
