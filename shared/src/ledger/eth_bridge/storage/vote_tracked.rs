@@ -12,10 +12,10 @@ const SEEN_BY_KEY_SEGMENT: &str = "seen_by";
 const VOTING_POWER_KEY_SEGMENT: &str = "voting_power";
 
 /// Generator for the keys under which details of a vote tracked event is stored
-pub struct Keys<T> {
+pub struct Keys<T: 'static> {
     /// The prefix under which the details of a vote tracked event is stored
     pub prefix: Key,
-    _phantom: std::marker::PhantomData<T>,
+    _phantom: std::marker::PhantomData<&'static T>,
 }
 
 impl<T> Keys<T> {
