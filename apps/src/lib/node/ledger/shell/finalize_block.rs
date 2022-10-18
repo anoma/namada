@@ -514,12 +514,6 @@ where
         let epochs_per_year: u64 = self
             .read_storage_key(&params_storage::get_epochs_per_year_key())
             .expect("Epochs per year should exist in storage");
-        let pos_staked_ratio: Decimal = self
-            .read_storage_key(&params_storage::get_staked_ratio_key())
-            .expect("PoS staked ratio should exist in storage");
-        let pos_inflation_rate = self
-            .read_storage_key(&params_storage::get_pos_inflation_rate_key())
-            .expect("PoS inflation rate should exist in storage");
         let pos_p_gain: Decimal = self
             .read_storage_key(&params_storage::get_pos_gain_p_key())
             .expect("PoS P-gain factor should exist in storage");
@@ -527,6 +521,12 @@ where
             .read_storage_key(&params_storage::get_pos_gain_d_key())
             .expect("PoS D-gain factor should exist in storage");
 
+        let pos_last_staked_ratio: Decimal = self
+            .read_storage_key(&params_storage::get_staked_ratio_key())
+            .expect("PoS staked ratio should exist in storage");
+        let pos_last_inflation_amount: u64 = self
+            .read_storage_key(&params_storage::get_pos_inflation_amount_key())
+            .expect("PoS inflation rate should exist in storage");
         // Read from PoS storage
         let total_tokens = self
             .read_storage_key(&total_supply_key(&staking_token_address()))
@@ -691,9 +691,9 @@ where
         // the current new epoch
         self.storage
             .write(
-                &params_storage::get_pos_inflation_rate_key(),
+                &params_storage::get_pos_inflation_amount_key(),
                 new_pos_vals
-                    .inflation_rate
+                    .inflation
                     .try_to_vec()
                     .expect("encode new reward rate"),
             )
