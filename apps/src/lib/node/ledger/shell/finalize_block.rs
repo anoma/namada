@@ -7,7 +7,7 @@ use namada::ledger::governance::utils::{
 use namada::ledger::governance::vp::ADDRESS as gov_address;
 use namada::ledger::inflation::{self, RewardsController};
 use namada::ledger::parameters::storage as params_storage;
-use namada::ledger::pos::types::{decimal_mult_u64, VoteInfo};
+use namada::ledger::pos::types::{self, decimal_mult_u64, VoteInfo};
 use namada::ledger::pos::{
     consensus_validator_set_accumulator_key, staking_token_address,
 };
@@ -58,17 +58,11 @@ where
 
         let mut response = shim::response::FinalizeBlock::default();
 
-        // Begin the next block and check if a new epoch began
+        // Begin the new block and check if a new epoch has begun
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
         let (current_epoch, _gas) = self.storage.get_current_epoch();
 
-        dbg!(self.storage.last_height);
-        dbg!(self.storage.last_epoch);
-        dbg!(self.storage.block.height);
-        dbg!(self.storage.block.epoch);
-        dbg!(height);
-        dbg!(current_epoch);
 
         if new_epoch {
             let _proposals_result =
@@ -264,7 +258,7 @@ where
         match self.storage.read_last_block_proposer_address() {
             Some(proposer_address) => {
                 if new_epoch {
-                    println!("\nTHIS IS THE LAST BLOCK OF THE CURRENT EPOCH\n");
+                    println!("APPLYING INFLATION");
                     self.apply_inflation(
                         current_epoch,
                         &proposer_address,
@@ -273,7 +267,6 @@ where
                 } else {
                     // TODO: watch out because this is likely not using the
                     // proper block proposer address
-                    );
                     self.storage
                         .log_block_rewards(
                             current_epoch,
@@ -402,11 +395,14 @@ where
         //
         // MASP is included below just for some completeness.
 
-        // Calculate the fractional block rewards and update the accumulator
-        // amounts for each of the consensus validators
+        // Calculate the fractional block rewards for the previous block (final
+        // block of the previous epoch), which also gives the final
+        // accumulator value updates
         self.storage
             .log_block_rewards(last_epoch, &proposer_address, votes)
             .unwrap();
+
+        // TODO: review if the appropriate epoch is being used (last vs now)
 
         // Read from Parameters storage
         let epochs_per_year: u64 = self
@@ -440,17 +436,45 @@ where
         let pos_locked_ratio_target = pos_params.target_staked_ratio;
         let pos_max_inflation_rate = pos_params.max_inflation_rate;
 
-        // Tokens to mint for this past epoch's PoS inflation
-        let pos_minted_tokens = decimal_mult_u64(
-            pos_inflation_rate / Decimal::from(epochs_per_year),
-            u64::from(total_tokens),
+        // TODO: properly fetch these values (arbitrary for now)
+        let masp_locked_supply: Amount = Amount::default();
+        let masp_locked_ratio_target = Decimal::new(5, 1);
+        let masp_locked_ratio_last = Decimal::new(5, 1);
+        let masp_max_inflation_rate = Decimal::new(2, 1);
+        let masp_last_inflation_rate = Decimal::new(12, 2);
+        let masp_p_gain = Decimal::new(1, 1);
+        let masp_d_gain = Decimal::new(1, 1);
+
+        // Run rewards PD controller
+        let pos_controller = inflation::RewardsController::new(
+            pos_locked_supply,
+            total_tokens,
+            pos_locked_ratio_target,
+            pos_last_staked_ratio,
+            pos_max_inflation_rate,
+            token::Amount::from(pos_last_inflation_amount),
+            pos_p_gain_nom,
+            pos_d_gain_nom,
+            epochs_per_year,
+        );
+        let _masp_controller = inflation::RewardsController::new(
+            masp_locked_supply,
+            total_tokens,
+            masp_locked_ratio_target,
+            masp_locked_ratio_last,
+            masp_max_inflation_rate,
+            token::Amount::from(masp_last_inflation_rate),
+            masp_p_gain,
+            masp_d_gain,
+            epochs_per_year,
         );
 
-        // let _masp_minted_tokens =
-        //     decimal_mult_u64(new_masp_inflation_rate,
-        // u64::from(total_tokens));
+        // Run the rewards controllers
+        let new_pos_vals = RewardsController::run(&pos_controller);
+        // let new_masp_vals = RewardsController::run(&_masp_controller);
 
-        // Mint tokens to PoS account
+        // Mint tokens to the PoS account for the last epoch's inflation
+        let pos_minted_tokens = new_pos_vals.inflation;
         let pos_address = self.storage.read_pos_address();
         inflation::mint_tokens(
             &mut self.storage,
@@ -460,8 +484,7 @@ where
         )
         .unwrap();
 
-        // Calculate the reward token amount for each consensus validator and
-        // update the rewards products
+        // For each consensus validator, update the rewards products
         //
         // TODO: update implementation using lazy DS and be more
         // memory-efficient
@@ -471,22 +494,24 @@ where
             self.storage.block.pred_epochs.first_block_heights
                 [last_epoch.0 as usize]
                 .0;
-
-        let num_blocks_in_last_epoch =
-            self.storage.block.height.0 - first_block_of_last_epoch;
-
+        let num_blocks_in_last_epoch = if first_block_of_last_epoch == 0 {
+            self.storage.block.height.0 - first_block_of_last_epoch - 1
+        } else {
+            self.storage.block.height.0 - first_block_of_last_epoch
+        };
 
         // Read the rewards accumulator, which was last updated when finalizing
-        // the previous block TODO: may need to change logic of how this
-        // gets initialized
+        // the previous block
+        // TODO: may need to change logic of how this gets initialized
+        // TODO: can/should this be optimized? Since we are reading and writing
+        // to the accumulator storage earlier in apply_inflation
         let accumulators = self
             .storage
             .read_consensus_validator_rewards_accumulator()
             .expect("Accumulators should exist");
 
-        let current_epoch =
-            namada::ledger::pos::types::Epoch::from(current_epoch.0);
-        let last_epoch = namada::ledger::pos::types::Epoch::from(last_epoch.0);
+        let current_epoch = types::Epoch::from(current_epoch.0);
+        let last_epoch = types::Epoch::from(last_epoch.0);
 
         // TODO: think about changing the reward to Decimal
         let mut reward_tokens_remaining = pos_minted_tokens.clone();
@@ -495,7 +520,10 @@ where
             // Get reward token amount for this validator
             let fractional_claim =
                 value / Decimal::from(num_blocks_in_last_epoch);
-            let reward = decimal_mult_u64(fractional_claim, pos_minted_tokens);
+            let reward = decimal_mult_u64(
+                fractional_claim,
+                u64::from(pos_minted_tokens),
+            );
 
             // Read epoched validator data and rewards products
             let validator_deltas =
@@ -552,46 +580,9 @@ where
             // TODO: do something here?
             dbg!(reward_tokens_remaining.clone());
         }
-        // Arbitrary default values until real ones can be fetched
-        // TODO: these need to be properly fetched.
-        let masp_locked_supply: Amount = Amount::default();
-        let masp_locked_ratio_target = Decimal::new(5, 1);
-        let masp_locked_ratio_last = Decimal::new(5, 1);
-        let masp_max_inflation_rate = Decimal::new(2, 1);
-        let masp_last_inflation_rate = Decimal::new(12, 2);
-        let masp_p_gain = Decimal::new(1, 1);
-        let masp_d_gain = Decimal::new(1, 1);
 
-        let pos_controller = inflation::RewardsController::new(
-            pos_locked_supply,
-            total_tokens,
-            pos_locked_ratio_target,
-            pos_staked_ratio,
-            pos_max_inflation_rate,
-            pos_inflation_rate,
-            pos_p_gain,
-            pos_d_gain,
-            epochs_per_year,
-        );
-        let _masp_controller = inflation::RewardsController::new(
-            masp_locked_supply,
-            total_tokens,
-            masp_locked_ratio_target,
-            masp_locked_ratio_last,
-            masp_max_inflation_rate,
-            masp_last_inflation_rate,
-            masp_p_gain,
-            masp_d_gain,
-            epochs_per_year,
-        );
-
-        // Run the rewards controller and get new parameters to be written to
-        // storage for the new (current) epoch
-        let new_pos_vals = RewardsController::run(&pos_controller);
-        // let new_masp_vals = RewardsController::run(&_masp_controller);
-
-        // Write the new rewards parameters that will be used for the current
-        // epoch's inflation
+        // Write new rewards parameters that will be used for the inflation of
+        // the current new epoch
         self.storage
             .write(
                 &params_storage::get_pos_inflation_amount_key(),
@@ -610,6 +601,8 @@ where
                     .expect("encode new locked ratio"),
             )
             .expect("unable to encode new locked ratio (Decimal)");
+
+        // Delete the accumulators from storage
         self.storage
             .delete(&consensus_validator_set_accumulator_key())
             .unwrap();

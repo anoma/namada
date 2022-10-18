@@ -58,7 +58,6 @@ impl PosRewardsCalculator {
         let votes_needed = self.get_min_required_votes();
         dbg!(votes_needed);
         dbg!(self.signing_stake.clone());
-        println!("\n");
         if self.signing_stake < votes_needed.into() {
             return Err(RewardsError::InsufficentVotes);
         }
@@ -71,10 +70,6 @@ impl PosRewardsCalculator {
             + dec!(0.01);
         let signer_coeff = self.signer_param;
         let active_val_coeff = dec!(1.0) - proposer_coeff - signer_coeff;
-
-        // let proposer_coeff = dec!(0.2);
-        // let signer_coeff = dec!(0.1);
-        // let active_val_coeff = dec!(0.7);
 
         let coeffs = PosRewards {
             proposer_coeff,

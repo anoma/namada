@@ -989,16 +989,15 @@ pub trait PosBase {
         active_validators.chain(inactive_validators).for_each(f)
     }
 
-    /// Distribute the PoS inflation rewards by updating the validator rewards
-    /// products.
+    /// Tally a running sum of the fracton of rewards owed to each validator in
+    /// the consensus set. This is used to keep track of the rewards due to each
+    /// consensus validator over the lifetime of an epoch.
     fn log_block_rewards(
         &mut self,
         epoch: impl Into<Epoch>,
         proposer_address: &Self::Address,
         votes: &Vec<VoteInfo>,
     ) -> Result<(), InflationError> {
-        println!("\nInside PosBase::log_block_rewards()");
-
         // TODO: all values collected here need to be consistent with the same
         // block that the voting info corresponds to, which is the
         // previous block from the current one we are in.
@@ -1006,15 +1005,13 @@ pub trait PosBase {
         // The votes correspond to the last committed block (n-1 if we are
         // finalizing block n)
 
-        // Get epoch of the previous block
-        let last_block_epoch: Epoch = epoch.into();
-
-        // let current_epoch: Epoch = current_epoch.into();
+        let epoch: Epoch = epoch.into();
         let validator_set = self.read_validator_set();
-        let validators = validator_set.get(last_block_epoch).unwrap();
+        let validators = validator_set.get(epoch).unwrap();
         let pos_params = self.read_pos_params();
 
         // Get total stake of the consensus validator set
+        // TODO: does this need to account for rewards prodcuts?
         let total_active_stake = validators.active.iter().fold(
             0_u64,
             |sum,
@@ -1024,14 +1021,10 @@ pub trait PosBase {
              }| { sum + *bonded_stake },
         );
 
-        dbg!(total_active_stake);
-        dbg!(votes.len());
-
-        let mut signer_set: HashSet<Self::Address> = HashSet::new();
-        let mut total_signing_stake: u64 = 0;
-
         // Get set of signing validator addresses and the combined stake of
         // these signers
+        let mut signer_set: HashSet<Self::Address> = HashSet::new();
+        let mut total_signing_stake: u64 = 0;
         for vote in votes.iter() {
             if !vote.signed_last_block {
                 continue;
@@ -1047,27 +1040,24 @@ pub trait PosBase {
             signer_set.insert(native_address);
             total_signing_stake += vote.validator_vp;
         }
-        dbg!(total_signing_stake.clone());
-        dbg!(signer_set.clone());
 
+        // Get the block rewards coefficients (proposing, signing/voting,
+        // consensus set status)
         let active_val_stake: Decimal = total_active_stake.into();
         let signing_stake: Decimal = total_signing_stake.into();
-
         let rewards_calculator = PosRewardsCalculator::new(
             pos_params.block_proposer_reward,
             pos_params.block_vote_reward,
             total_signing_stake,
             total_active_stake,
         );
-
         let coeffs = match rewards_calculator.get_reward_coeffs() {
             Ok(coeffs) => coeffs,
             Err(_) => return Err(InflationError::Error),
         };
 
-        // Iterate over validators, calculating their fraction of the block
-        // rewards accounting for possible block proposal and signing
-        // (voting)
+        // Calculate the fraction block rewards for each consensus validator and
+        // update the reward accumulators
         let mut validator_accumulators = self
             .read_consensus_validator_rewards_accumulator()
             .unwrap_or_else(|| HashMap::<Self::Address, Decimal>::new());
@@ -1101,7 +1091,6 @@ pub trait PosBase {
         self.write_consensus_validator_rewards_accumulator(
             &validator_accumulators,
         );
-
         Ok(())
     }
 
