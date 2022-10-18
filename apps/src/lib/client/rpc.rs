@@ -79,7 +79,8 @@ pub async fn query_tx_status(
                 .await
             {
                 Ok(response) => response,
-                Err(_) => {
+                Err(err) => {
+                    tracing::debug!(%err, "ABCI query failed");
                     sleep_update(status, &mut backoff).await;
                     continue;
                 }
