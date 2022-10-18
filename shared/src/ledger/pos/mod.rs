@@ -26,9 +26,9 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
 pub const SLASH_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 
-/// Address of the staking token (XAN)
+/// Address of the staking token (NAM)
 pub fn staking_token_address() -> Address {
-    address::xan()
+    address::nam()
 }
 
 /// Initialize storage in the genesis block.
