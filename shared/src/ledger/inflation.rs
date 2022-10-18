@@ -4,6 +4,7 @@
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
 
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
@@ -21,9 +22,9 @@ pub enum RewardsType {
 /// Holds the PD controller values that should be updated in storage
 pub struct ValsToUpdate {
     pub locked_ratio: Decimal,
-    pub inflation_rate: Decimal,
     pub p_gain: Decimal,
     pub d_gain: Decimal,
+    pub inflation: u64,
 }
 
 /// PD controller used to dynamically adjust the rewards rates
@@ -34,9 +35,9 @@ pub struct RewardsController {
     locked_ratio_target: Decimal,
     locked_ratio_last: Decimal,
     max_reward_rate: Decimal,
-    last_reward_rate: Decimal,
     p_gain: Decimal,
     d_gain: Decimal,
+    last_inflation_amount: token::Amount,
     epochs_per_year: u64,
 }
 
@@ -48,9 +49,9 @@ impl RewardsController {
         locked_ratio_target: Decimal,
         locked_ratio_last: Decimal,
         max_reward_rate: Decimal,
-        last_reward_rate: Decimal,
         p_gain: Decimal,
         d_gain: Decimal,
+        last_inflation_amount: token::Amount,
         epochs_per_year: u64,
     ) -> Self {
         Self {
@@ -59,9 +60,9 @@ impl RewardsController {
             locked_ratio_target,
             locked_ratio_last,
             max_reward_rate,
-            last_reward_rate,
             p_gain,
             d_gain,
+            last_inflation_amount,
             epochs_per_year,
         }
     }
@@ -74,9 +75,9 @@ impl RewardsController {
             locked_ratio_target,
             locked_ratio_last,
             max_reward_rate,
-            last_reward_rate,
             p_gain,
             d_gain,
+            last_inflation_amount,
             epochs_per_year,
         }: &Self,
     ) -> ValsToUpdate {
@@ -96,18 +97,19 @@ impl RewardsController {
         let reward_rate = if last_reward_rate + control_val > *max_reward_rate {
             *max_reward_rate
         } else {
-            if last_reward_rate + control_val > dec!(0.0) {
-                last_reward_rate + control_val
+            if last_inflation_amount + control_val > dec!(0.0) {
+                last_inflation_amount + control_val
             } else {
                 dec!(0.0)
             }
         };
+        let inflation: u64 = inflation.to_u64().unwrap();
 
         ValsToUpdate {
             locked_ratio,
-            inflation_rate: reward_rate,
             p_gain: p_gain_new,
             d_gain: d_gain_new,
+            inflation,
         }
     }
 }
