@@ -116,6 +116,7 @@ where
     for update in updates {
         // The order in which updates are applied to storage does not matter.
         // The final storage state will be the same regardless.
+        // TODO: this is where `votes` maps should be calculated
         let (mut changed, newly_confirmed) =
             apply_update(storage, update.clone(), &voting_powers)?;
         changed_keys.append(&mut changed);
@@ -177,7 +178,7 @@ where
     let (vote_tracking_post, changed_keys, confirmed) = if !exists_in_storage {
         tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
         let vote_tracking_new = calculate_new(&update.seen_by, voting_powers)?;
-        let changed_keys = eth_msg_keys.into_iter().collect(); // TODO: this should be infallible
+        let changed_keys = eth_msg_keys.into_iter().collect();
         let confirmed = vote_tracking_new.seen;
         (vote_tracking_new, changed_keys, confirmed)
     } else {

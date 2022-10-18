@@ -35,6 +35,7 @@ pub struct VoteTracking {
     pub seen: bool,
 }
 
+// TODO: refactor accept just votes
 pub fn calculate_new(
     seen_by: &BTreeSet<(Address, BlockHeight)>,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
@@ -120,32 +121,31 @@ fn calculate_update(
             "Encountered duplicate vote for an event by a validator, ignoring"
         );
     }
-    let mut eth_msg_post_voting_power = vote_tracking_pre.voting_power.clone();
-    let mut eth_msg_post_seen_by = vote_tracking_pre.seen_by.clone();
+    let mut voting_power_post = vote_tracking_pre.voting_power.clone();
+    let mut seen_by_post = vote_tracking_pre.seen_by.clone();
     for validator in voters.difference(&vote_tracking_pre.seen_by) {
         tracing::info!(
             ?validator,
             "Recording validator as having voted for this event"
         );
-        eth_msg_post_seen_by.insert(validator.to_owned());
-        eth_msg_post_voting_power += votes.get(validator).expect(
+        seen_by_post.insert(validator.to_owned());
+        voting_power_post += votes.get(validator).expect(
             "voting powers map must have all validators from newly_seen_by",
         );
     }
 
-    let eth_msg_post_seen =
-        if eth_msg_post_voting_power > FractionalVotingPower::TWO_THIRDS {
-            tracing::info!("Event has been seen by a quorum of validators");
-            true
-        } else {
-            tracing::debug!("Event is not yet seen by a quorum of validators");
-            false
-        };
+    let seen_post = if voting_power_post > FractionalVotingPower::TWO_THIRDS {
+        tracing::info!("Event has been seen by a quorum of validators");
+        true
+    } else {
+        tracing::debug!("Event is not yet seen by a quorum of validators");
+        false
+    };
 
     VoteTracking {
-        voting_power: eth_msg_post_voting_power,
-        seen_by: eth_msg_post_seen_by,
-        seen: eth_msg_post_seen,
+        voting_power: voting_power_post,
+        seen_by: seen_by_post,
+        seen: seen_post,
     }
 }
 
