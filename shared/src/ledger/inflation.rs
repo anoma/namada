@@ -84,16 +84,17 @@ impl RewardsController {
         let epochs_py: Decimal = (*epochs_per_year).into();
 
         let locked_ratio = locked / total;
-        let error_p = locked_ratio_target - locked_ratio;
-        let error_d = locked_ratio_last - locked_ratio;
+        let max_inflation = total * max_reward_rate / epochs_py;
+        let p_gain = p_gain_nom * max_inflation;
+        let d_gain = d_gain_nom * max_inflation;
 
-        let gain_factor = max_reward_rate * total / epochs_py;
-        let p_gain_new = p_gain * gain_factor;
-        let d_gain_new = d_gain * gain_factor;
+        let error = locked_ratio_target - locked_ratio;
+        let delta_error = locked_ratio_last - locked_ratio;
+        let control_val = p_gain * error - d_gain * delta_error;
 
-        let control_val = p_gain_new * error_p - d_gain_new * error_d;
-        let reward_rate = if last_reward_rate + control_val > *max_reward_rate {
-            *max_reward_rate
+        let last_inflation_amount = Decimal::from(*last_inflation_amount);
+        let inflation = if last_inflation_amount + control_val > max_inflation {
+            max_inflation
         } else {
             if last_inflation_amount + control_val > dec!(0.0) {
                 last_inflation_amount + control_val
