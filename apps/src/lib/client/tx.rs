@@ -545,17 +545,9 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         amount: args.amount.to_string(),
     });
 
-    let timeout_height = match args.timeout_height_offset {
-        Some(offset) => {
-            let current_height: u64 = match client.status().await {
-                Ok(resp) => resp.sync_info.latest_block_height.into(),
-                Err(e) => {
-                    eprintln!("Getting the current height failed: {}", e);
-                    safe_exit(1)
-                }
-            };
-            IbcHeight::new(0, current_height + offset)
-        }
+    // this height should be that of the destination chain, not this chain
+    let timeout_height = match args.timeout_height {
+        Some(h) => IbcHeight::new(0, h),
         None => IbcHeight::zero(),
     };
 

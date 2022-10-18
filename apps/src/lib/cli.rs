@@ -1375,7 +1375,7 @@ pub mod args {
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     const TARGET: Arg<WalletAddress> = arg("target");
-    const TIMEOUT_HEIGHT_OFFSET: ArgOpt<u64> = arg_opt("timeout-height-offset");
+    const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     const TOKEN: Arg<WalletAddress> = arg("token");
@@ -1571,8 +1571,8 @@ pub mod args {
         pub port_id: PortId,
         /// Channel ID
         pub channel_id: ChannelId,
-        /// Timeout height offset
-        pub timeout_height_offset: Option<u64>,
+        /// Timeout height of the destination chain
+        pub timeout_height: Option<u64>,
         /// Timeout timestamp offset
         pub timeout_sec_offset: Option<u64>,
     }
@@ -1587,7 +1587,7 @@ pub mod args {
             let amount = AMOUNT.parse(matches);
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
-            let timeout_height_offset = TIMEOUT_HEIGHT_OFFSET.parse(matches);
+            let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
             Self {
                 tx,
@@ -1598,7 +1598,7 @@ pub mod args {
                 amount,
                 port_id,
                 channel_id,
-                timeout_height_offset,
+                timeout_height,
                 timeout_sec_offset,
             }
         }
@@ -1618,9 +1618,9 @@ pub mod args {
                 .arg(PORT_ID.def().about("The port ID."))
                 .arg(CHANNEL_ID.def().about("The channel ID."))
                 .arg(
-                    TIMEOUT_HEIGHT_OFFSET
+                    TIMEOUT_HEIGHT
                         .def()
-                        .about("The timeout height offset."),
+                        .about("The timeout height of the destination chain."),
                 )
                 .arg(TIMEOUT_SEC_OFFSET.def().about("The timeout as seconds."))
         }
