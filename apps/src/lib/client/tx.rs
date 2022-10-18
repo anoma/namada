@@ -8,6 +8,12 @@ use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::BorshSerialize;
 use itertools::Either::*;
+use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use namada::ibc::signer::Signer;
+use namada::ibc::timestamp::Timestamp as IbcTimestamp;
+use namada::ibc::tx_msg::Msg;
+use namada::ibc::Height as IbcHeight;
+use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
 use namada::proto::Tx;
@@ -18,6 +24,7 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::nft::{self, Nft, NftToken};
 use namada::types::storage::Epoch;
+use namada::types::time::DateTimeUtc;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -49,6 +56,7 @@ const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+const TX_IBC_WASM: &str = "tx_ibc.wasm";
 const TX_INIT_NFT: &str = "tx_init_nft.wasm";
 const TX_MINT_NFT: &str = "tx_mint_nft.wasm";
 const VP_USER_WASM: &str = "vp_user.wasm";
@@ -459,6 +467,115 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer
         .try_to_vec()
+        .expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    process_tx(ctx, &args.tx, tx, Some(&args.source)).await;
+}
+
+pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
+    let source = ctx.get(&args.source);
+    // Check that the source address exists on chain
+    let source_exists =
+        rpc::known_address(&source, args.tx.ledger_address.clone()).await;
+    if !source_exists {
+        eprintln!("The source address {} doesn't exist on chain.", source);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
+    // We cannot check the receiver
+
+    let token = ctx.get(&args.token);
+    // Check that the token address exists on chain
+    let token_exists =
+        rpc::known_address(&token, args.tx.ledger_address.clone()).await;
+    if !token_exists {
+        eprintln!("The token address {} doesn't exist on chain.", token);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+    // Check source balance
+    let (sub_prefix, balance_key) = match args.sub_prefix {
+        Some(sub_prefix) => {
+            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
+            (
+                Some(sub_prefix),
+                token::multitoken_balance_key(&prefix, &source),
+            )
+        }
+        None => (None, token::balance_key(&token, &source)),
+    };
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
+    {
+        Some(balance) => {
+            if balance < args.amount {
+                eprintln!(
+                    "The balance of the source {} of token {} is lower than \
+                     the amount to be transferred. Amount to transfer is {} \
+                     and the balance is {}.",
+                    source, token, args.amount, balance
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!(
+                "No balance found for the source {} of token {}",
+                source, token
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    }
+    let tx_code = ctx.read_wasm(TX_IBC_WASM);
+
+    let denom = match sub_prefix {
+        Some(sp) => format!("{}/{}", sp, token),
+        None => token.to_string(),
+    };
+    let token = Some(Coin {
+        denom,
+        amount: args.amount.to_string(),
+    });
+
+    // this height should be that of the destination chain, not this chain
+    let timeout_height = match args.timeout_height {
+        Some(h) => IbcHeight::new(0, h),
+        None => IbcHeight::zero(),
+    };
+
+    let now: namada::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
+    let now: IbcTimestamp = now.into();
+    let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
+        (now + Duration::new(offset, 0)).unwrap()
+    } else if timeout_height.is_zero() {
+        // we cannot set 0 to both the height and the timestamp
+        (now + Duration::new(3600, 0)).unwrap()
+    } else {
+        IbcTimestamp::none()
+    };
+
+    let msg = MsgTransfer {
+        source_port: args.port_id,
+        source_channel: args.channel_id,
+        token,
+        sender: Signer::new(source.to_string()),
+        receiver: Signer::new(args.receiver),
+        timeout_height,
+        timeout_timestamp,
+    };
+    tracing::debug!("IBC transfer message {:?}", msg);
+    let any_msg = msg.to_any();
+    let mut data = vec![];
+    prost::Message::encode(&any_msg, &mut data)
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
