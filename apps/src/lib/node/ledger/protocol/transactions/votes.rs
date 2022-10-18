@@ -2,7 +2,6 @@
 //! data stored in the ledger, where those pieces of data should only be acted
 //! on once they have received enough votes
 use std::collections::{BTreeSet, HashMap};
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
@@ -89,7 +88,7 @@ where
     };
     let vote_tracking_post = calculate_update(&vote_tracking_pre, &votes);
     let changed_keys =
-        validate_update(&vote_tracking_pre, &vote_tracking_post)?;
+        validate_update(keys, &vote_tracking_pre, &vote_tracking_post)?;
 
     tracing::warn!(
         ?vote_tracking_pre,
@@ -149,31 +148,15 @@ fn calculate_update(
     }
 }
 
-// TODO: temporary, remove this
-struct Keys;
-
-impl Keys {
-    fn seen(&self) -> Key {
-        Key::from_str("seen").unwrap()
-    }
-
-    fn seen_by(&self) -> Key {
-        Key::from_str("seen_by").unwrap()
-    }
-
-    fn voting_power(&self) -> Key {
-        Key::from_str("voting_power").unwrap()
-    }
-}
 /// Validates that `post` is an updated version of `pre`, and returns keys which
 /// changed. This function serves as a sort of validity predicate for this
 /// native transaction, which is otherwise not checked by anything else.
-fn validate_update(
+fn validate_update<T>(
+    keys: &vote_tracked::Keys<T>,
     pre: &VoteTracking,
     post: &VoteTracking,
 ) -> Result<ChangedKeys> {
     let mut keys_changed = ChangedKeys::default();
-    let keys = Keys;
 
     let mut seen = false;
     if pre.seen != post.seen {
