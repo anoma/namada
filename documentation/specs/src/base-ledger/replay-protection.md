@@ -262,7 +262,7 @@ This implementation requires two transaction counters in storage for every addre
 
 An implementation requiring a single counter in storage has been taken into consideration and discarded because that would not support batching; see the [relative section](#single-counter-in-storage) for a more in-depth explanation.
 
-For both the wrapper and inner transaction, the increase of the counter in storage is an important step that must be correctly executed. First, the implementation will `panic!` in case of a counter overflow to prevent wrapping, since this would allow for the replay of previous transactions. Also, we want to increase the counter as soon as we verify that the signature, the chain id and the passed-in transaction counter are valid. The increase should happen immediately after the checks because of two reasons:
+For both the wrapper and inner transaction, the increase of the counter in storage is an important step that must be correctly executed. First, the implementation will return an error in case of a counter overflow to prevent wrapping, since this would allow for the replay of previous transactions. Also, we want to increase the counter as soon as we verify that the signature, the chain id and the passed-in transaction counter are valid. The increase should happen immediately after the checks because of two reasons:
 
 - Prevent replay attack of a transaction in the same block
 - Update the transaction counter even in case the transaction fails, to prevent a possible replay attack in the future (since a transaction invalid at state Sx could become valid at state Sn where `n > x`)
