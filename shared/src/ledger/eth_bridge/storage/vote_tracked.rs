@@ -118,7 +118,7 @@ mod test {
     }
 
     #[test]
-    fn test_prefix() {
+    fn test_eth_msgs_prefix() {
         assert_matches!(&eth_msgs_prefix().segments[..], [
                 DbKeySeg::AddressSeg(ADDRESS),
                 DbKeySeg::StringSeg(s),
@@ -126,7 +126,7 @@ mod test {
     }
 
     #[test]
-    fn test_keys_all_keys() {
+    fn test_ethereum_event_keys_all_keys() {
         let (event, hash) = helpers::arbitrary_event_with_hash();
         let keys: Keys<EthereumEvent> = (&event).into();
         let prefix = vec![
@@ -164,7 +164,7 @@ mod test {
     }
 
     #[test]
-    fn test_keys_into_iter() {
+    fn test_ethereum_event_keys_into_iter() {
         let (event, _) = helpers::arbitrary_event_with_hash();
         let keys: Keys<EthereumEvent> = (&event).into();
         let as_keys: Vec<_> = keys.into_iter().collect();
@@ -180,7 +180,7 @@ mod test {
     }
 
     #[test]
-    fn test_keys_from_ethereum_event() {
+    fn test_ethereum_event_keys_from_ethereum_event() {
         let (event, hash) = helpers::arbitrary_event_with_hash();
         let keys: Keys<EthereumEvent> = (&event).into();
         let expected = vec![
@@ -192,7 +192,7 @@ mod test {
     }
 
     #[test]
-    fn test_keys_from_hash() {
+    fn test_ethereum_event_keys_from_hash() {
         let (event, hash) = helpers::arbitrary_event_with_hash();
         let keys: Keys<EthereumEvent> = (&event.hash().unwrap()).into();
         let expected = vec![
