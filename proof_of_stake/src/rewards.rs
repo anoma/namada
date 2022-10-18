@@ -68,7 +68,6 @@ impl PosRewardsCalculator {
         let signer_coeff = self.signer_param;
         let active_val_coeff = dec!(1.0) - proposer_coeff - signer_coeff;
 
-
         let coeffs = PosRewards {
             proposer_coeff,
             signer_coeff,
