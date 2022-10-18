@@ -6,7 +6,7 @@ mod events;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use eth_msgs::{EthMsg, EthMsgUpdate};
+use eth_msgs::EthMsgUpdate;
 use eyre::Result;
 use namada::ledger::eth_bridge::storage::vote_tracked;
 use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
@@ -20,7 +20,7 @@ use crate::node::ledger::protocol::transactions::utils::{
     self, get_active_validators,
 };
 use crate::node::ledger::protocol::transactions::votes::{
-    calculate_new, calculate_updated, write,
+    calculate_new, calculate_updated,
 };
 
 /// The keys changed while applying a protocol transaction
@@ -151,31 +151,6 @@ where
 {
     let eth_msg_keys = vote_tracked::Keys::from(&update.body);
 
-    // we arbitrarily look at whether the seen key is present to
-    // determine if the /eth_msg already exists in storage, but maybe there
-    // is a less arbitrary way to do this
-    let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
-
-    let (vote_tracking, changed, confirmed) = if !exists_in_storage {
-        tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-        let vote_tracking = calculate_new(&update.seen_by, voting_powers)?;
-        let changed = eth_msg_keys.into_iter().collect();
-        let confirmed = vote_tracking.seen;
-        (vote_tracking, changed, confirmed)
-    } else {
-        tracing::debug!(
-            %eth_msg_keys.prefix,
-            "Ethereum event already exists in storage",
-        );
-        let vote_tracking =
-            calculate_updated(storage, &eth_msg_keys, voting_powers)?;
-        let changed = BTreeSet::default(); // TODO(namada#515): calculate changed keys
-        let confirmed =
-            vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
-        (vote_tracking, changed, confirmed)
-    };
-    tracing::debug!("Read EthMsg - {:#?}", &eth_msg_pre);
-
     // TODO: move construction of votes map up the call path
     let mut votes = HashMap::default();
     update.seen_by.iter().for_each(|(address, block_height)| {
@@ -194,163 +169,37 @@ where
         }
     });
 
-    let eth_msg_post = calculate_update(&eth_msg_pre, &votes);
+    // we arbitrarily look at whether the seen key is present to
+    // determine if the /eth_msg already exists in storage, but maybe there
+    // is a less arbitrary way to do this
+    let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let changed_keys = validate_update(&eth_msg_pre, &eth_msg_post)
-        .expect("We should always be applying a valid update");
-
-    Ok((eth_msg_post, changed_keys))
-}
-
-/// Takes an existing [`EthMsg`] and calculates the new [`EthMsg`] based on new
-/// validators which have seen it. `voting_powers` should map validators who
-/// have newly seen the event to their fractional voting power at a block height
-/// at which they saw the event.
-fn calculate_update(
-    eth_msg_pre: &EthMsg,
-    votes: &HashMap<Address, FractionalVotingPower>,
-) -> EthMsg {
-    // TODO: refactor so that we don't need to accept the body in the first
-    // place, which we just end up cloning to return
-    let event = &eth_msg_pre.body;
-    let event_hash = event.hash().unwrap();
-    let voters: BTreeSet<Address> = votes.keys().cloned().collect();
-
-    // For any event and validator, only the first vote by that validator for
-    // that event counts, later votes we encounter here can just be ignored. We
-    // can warn here when we encounter duplicate votes but these are
-    // reasonably likely to occur so this perhaps shouldn't be a warning unless
-    // it is happening a lot
-    for validator in eth_msg_pre.seen_by.intersection(&voters) {
-        tracing::warn!(
-            ?event_hash,
-            ?validator,
-            "Encountered duplicate vote for an event by a validator, ignoring"
+    let (vote_tracking_post, changed_keys, confirmed) = if !exists_in_storage {
+        tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
+        let vote_tracking_new = calculate_new(&update.seen_by, voting_powers)?;
+        let changed_keys = eth_msg_keys.into_iter().collect(); // TODO: this should be infallible
+        let confirmed = vote_tracking_new.seen;
+        (vote_tracking_new, changed_keys, confirmed)
+    } else {
+        tracing::debug!(
+            %eth_msg_keys.prefix,
+            "Ethereum event already exists in storage",
         );
-    }
-    let mut eth_msg_post_voting_power = eth_msg_pre.voting_power.clone();
-    let mut eth_msg_post_seen_by = eth_msg_pre.seen_by.clone();
-    for validator in voters.difference(&eth_msg_pre.seen_by) {
-        tracing::info!(
-            ?event_hash,
-            ?validator,
-            "Recording validator as having voted for this event"
-        );
-        eth_msg_post_seen_by.insert(validator.to_owned());
-        eth_msg_post_voting_power += votes.get(validator).expect(
-            "voting powers map must have all validators from newly_seen_by",
-        );
-    }
+        let (vote_tracking_post, changed_keys) =
+            calculate_updated(storage, &eth_msg_keys, &votes)?;
+        let confirmed = vote_tracking_post.seen
+            && changed_keys.contains(&eth_msg_keys.seen());
+        (vote_tracking_post, changed_keys, confirmed)
+    };
 
-    let eth_msg_post_seen =
-        if eth_msg_post_voting_power > FractionalVotingPower::TWO_THIRDS {
-            tracing::info!(
-                ?event_hash,
-                "Event has been seen by a quorum of validators"
-            );
-            true
-        } else {
-            tracing::debug!(
-                ?event_hash,
-                "Event is not yet seen by a quorum of validators"
-            );
-            false
-        };
-
-    EthMsg {
-        body: event.clone(),
-        voting_power: eth_msg_post_voting_power,
-        seen_by: eth_msg_post_seen_by,
-        seen: eth_msg_post_seen,
-    }
-}
-
-/// Validates that `post` is an updated version of `pre`, and returns keys which
-/// changed. This function serves as a sort of validity predicate for this
-/// native transaction, which is otherwise not checked by anything else.
-fn validate_update(pre: &EthMsg, post: &EthMsg) -> Result<ChangedKeys> {
-    // TODO: refactor, this should never be the case
-    if pre.body != post.body {
-        return Err(eyre!(
-            "EthMsg body changed from {:#?} to {:#?}",
-            &pre.body,
-            &post.body,
-        ));
-    }
-
-    let mut keys_changed = ChangedKeys::default();
-    let keys = Keys::from(&pre.body);
-
-    let mut seen = false;
-    if pre.seen != post.seen {
-        // the only valid transition for `seen` is from `false` to `true`
-        if pre.seen == true || post.seen == false {
-            return Err(eyre!(
-                "EthMsg seen changed from {:#?} to {:#?}",
-                &pre.seen,
-                &post.seen,
-            ));
-        }
-        keys_changed.insert(keys.seen());
-        seen = true;
-    }
-
-    if pre.seen_by != post.seen_by {
-        // if seen_by changes, it must be a strict superset of the previous
-        // seen_by
-        if !post.seen_by.is_superset(&pre.seen_by) {
-            return Err(eyre!(
-                "EthMsg seen changed from {:#?} to {:#?}",
-                &pre.seen_by,
-                &post.seen_by,
-            ));
-        }
-        keys_changed.insert(keys.seen_by());
-    }
-
-    if pre.voting_power != post.voting_power {
-        // if voting_power changes, it must have increased
-        if pre.voting_power >= post.voting_power {
-            return Err(eyre!(
-                "EthMsg voting_power changed from {:#?} to {:#?}",
-                &pre.voting_power,
-                &post.voting_power,
-            ));
-        }
-        keys_changed.insert(keys.voting_power());
-    }
-
-    if post.voting_power > FractionalVotingPower::TWO_THIRDS && !seen {
-        if pre.voting_power >= post.voting_power {
-            return Err(eyre!(
-                "EthMsg is not seen even though new voting_power is enough: \
-                 {:#?}",
-                &post.voting_power,
-            ));
-        }
-    }
-
-    Ok(keys_changed)
-}
-
-fn write_eth_msg<D, H>(
-    storage: &mut Storage<D, H>,
-    eth_msg_keys: &Keys,
-    eth_msg: &EthMsg,
-) -> Result<()>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    tracing::debug!("writing EthMsg - {:#?}", eth_msg);
-    storage.write(&eth_msg_keys.body(), &eth_msg.body.try_to_vec()?)?;
-    storage.write(&eth_msg_keys.seen(), &eth_msg.seen.try_to_vec()?)?;
-    storage.write(&eth_msg_keys.seen_by(), &eth_msg.seen_by.try_to_vec()?)?;
-    storage.write(
-        &eth_msg_keys.voting_power(),
-        &eth_msg.voting_power.try_to_vec()?,
+    super::votes::write(
+        storage,
+        &eth_msg_keys,
+        &update.body,
+        &vote_tracking_post,
     )?;
-    Ok((changed, confirmed))
+
+    Ok((changed_keys, confirmed))
 }
 
 #[cfg(test)]
@@ -362,7 +211,6 @@ mod tests {
     use namada::ledger::pos::namada_proof_of_stake::epoched::Epoched;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::types::{ValidatorSet, VotingPower};
-    use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::testing::TestStorage;
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
@@ -375,6 +223,8 @@ mod tests {
     use super::*;
 
     mod helpers {
+        use namada::ledger::pos::types::WeightedValidator;
+
         use super::*;
 
         /// Wraps a [`TestStorage`] along with the addresses of validators who
@@ -489,7 +339,7 @@ mod tests {
 
         let changed_keys = apply_updates(&mut storage, updates, voting_powers)?;
 
-        let eth_msg_keys: Keys<EthereumEvent> = (&event).into();
+        let eth_msg_keys: vote_tracked::Keys<EthereumEvent> = (&event).into();
         let wrapped_erc20_keys: wrapped_erc20s::Keys =
             (&sole_transfer.asset).into();
         assert_eq!(

@@ -2,16 +2,20 @@
 //! data stored in the ledger, where those pieces of data should only be acted
 //! on once they have received enough votes
 use std::collections::{BTreeSet, HashMap};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
 use namada::ledger::eth_bridge::storage::vote_tracked;
 use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada::types::address::Address;
-use namada::types::storage::BlockHeight;
+use namada::types::storage::{BlockHeight, Key};
 use namada::types::voting_power::FractionalVotingPower;
 
 use crate::node::ledger::protocol::transactions::read;
+
+/// The keys changed while applying a protocol transaction
+type ChangedKeys = BTreeSet<Key>;
 
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
@@ -65,32 +69,162 @@ pub fn calculate_new(
 pub fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tracked::Keys<T>,
-    _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<VoteTracking>
+    votes: &HashMap<Address, FractionalVotingPower>,
+) -> Result<(VoteTracking, ChangedKeys)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     T: BorshDeserialize,
 {
-    // TODO(namada#515): implement this
-    let _body: T = read::value(store, &keys.body())?;
     let seen: bool = read::value(store, &keys.seen())?;
     let seen_by: BTreeSet<Address> = read::value(store, &keys.seen_by())?;
     let voting_power: FractionalVotingPower =
         read::value(store, &keys.voting_power())?;
 
-    let vote_tracking = VoteTracking {
+    let vote_tracking_pre = VoteTracking {
         voting_power,
         seen_by,
         seen,
     };
+    let vote_tracking_post = calculate_update(&vote_tracking_pre, &votes);
+    let changed_keys =
+        validate_update(&vote_tracking_pre, &vote_tracking_post)?;
 
     tracing::warn!(
-        ?vote_tracking,
-        "Updating events is not implemented yet, so the returned VoteTracking \
-         will be identical to the one in storage",
+        ?vote_tracking_pre,
+        ?vote_tracking_post,
+        "Calculated and validated vote tracking updates",
     );
-    Ok(vote_tracking)
+    Ok((vote_tracking_post, changed_keys))
+}
+
+/// Takes an existing [`EthMsg`] and calculates the new [`EthMsg`] based on new
+/// validators which have seen it. `voting_powers` should map validators who
+/// have newly seen the event to their fractional voting power at a block height
+/// at which they saw the event.
+fn calculate_update(
+    vote_tracking_pre: &VoteTracking,
+    votes: &HashMap<Address, FractionalVotingPower>,
+) -> VoteTracking {
+    // TODO: accept an event hash to have as a field when logging?
+    let voters: BTreeSet<Address> = votes.keys().cloned().collect();
+
+    // For any event and validator, only the first vote by that validator for
+    // that event counts, later votes we encounter here can just be ignored. We
+    // can warn here when we encounter duplicate votes but these are
+    // reasonably likely to occur so this perhaps shouldn't be a warning unless
+    // it is happening a lot
+    for validator in vote_tracking_pre.seen_by.intersection(&voters) {
+        tracing::warn!(
+            ?validator,
+            "Encountered duplicate vote for an event by a validator, ignoring"
+        );
+    }
+    let mut eth_msg_post_voting_power = vote_tracking_pre.voting_power.clone();
+    let mut eth_msg_post_seen_by = vote_tracking_pre.seen_by.clone();
+    for validator in voters.difference(&vote_tracking_pre.seen_by) {
+        tracing::info!(
+            ?validator,
+            "Recording validator as having voted for this event"
+        );
+        eth_msg_post_seen_by.insert(validator.to_owned());
+        eth_msg_post_voting_power += votes.get(validator).expect(
+            "voting powers map must have all validators from newly_seen_by",
+        );
+    }
+
+    let eth_msg_post_seen =
+        if eth_msg_post_voting_power > FractionalVotingPower::TWO_THIRDS {
+            tracing::info!("Event has been seen by a quorum of validators");
+            true
+        } else {
+            tracing::debug!("Event is not yet seen by a quorum of validators");
+            false
+        };
+
+    VoteTracking {
+        voting_power: eth_msg_post_voting_power,
+        seen_by: eth_msg_post_seen_by,
+        seen: eth_msg_post_seen,
+    }
+}
+
+// TODO: temporary, remove this
+struct Keys;
+
+impl Keys {
+    fn seen(&self) -> Key {
+        Key::from_str("seen").unwrap()
+    }
+
+    fn seen_by(&self) -> Key {
+        Key::from_str("seen_by").unwrap()
+    }
+
+    fn voting_power(&self) -> Key {
+        Key::from_str("voting_power").unwrap()
+    }
+}
+/// Validates that `post` is an updated version of `pre`, and returns keys which
+/// changed. This function serves as a sort of validity predicate for this
+/// native transaction, which is otherwise not checked by anything else.
+fn validate_update(
+    pre: &VoteTracking,
+    post: &VoteTracking,
+) -> Result<ChangedKeys> {
+    let mut keys_changed = ChangedKeys::default();
+    let keys = Keys;
+
+    let mut seen = false;
+    if pre.seen != post.seen {
+        // the only valid transition for `seen` is from `false` to `true`
+        if pre.seen == true || post.seen == false {
+            return Err(eyre!(
+                "VoteTracking seen changed from {:#?} to {:#?}",
+                &pre.seen,
+                &post.seen,
+            ));
+        }
+        keys_changed.insert(keys.seen());
+        seen = true;
+    }
+
+    if pre.seen_by != post.seen_by {
+        // if seen_by changes, it must be a strict superset of the previous
+        // seen_by
+        if !post.seen_by.is_superset(&pre.seen_by) {
+            return Err(eyre!(
+                "VoteTracking seen changed from {:#?} to {:#?}",
+                &pre.seen_by,
+                &post.seen_by,
+            ));
+        }
+        keys_changed.insert(keys.seen_by());
+    }
+
+    if pre.voting_power != post.voting_power {
+        // if voting_power changes, it must have increased
+        if pre.voting_power >= post.voting_power {
+            return Err(eyre!(
+                "VoteTracking voting_power changed from {:#?} to {:#?}",
+                &pre.voting_power,
+                &post.voting_power,
+            ));
+        }
+        keys_changed.insert(keys.voting_power());
+    }
+
+    if post.voting_power > FractionalVotingPower::TWO_THIRDS && !seen {
+        if pre.voting_power >= post.voting_power {
+            return Err(eyre!(
+                "VoteTracking is not seen even though new voting_power is \
+                 enough: {:#?}",
+                &post.voting_power,
+            ));
+        }
+    }
+
+    Ok(keys_changed)
 }
 
 pub fn write<D, H, T>(
