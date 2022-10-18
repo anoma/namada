@@ -25,6 +25,8 @@ pub enum Error {
     ConversionFailed(std::array::TryFromSliceError),
     #[error("The string is not valid hex encoded data.")]
     NotHexEncoded,
+    #[error("Got a hex encoded hash length of {got}, expected 64.")]
+    InvalidHexHashLength { got: usize },
 }
 
 /// Result for functions that may fail
@@ -201,7 +203,7 @@ impl TryFrom<&str> for HexEncodedHash {
         if hash_len == HEX_LEN {
             Ok(HexEncodedHash { inner: buf })
         } else {
-            Err(self::Error::NotHexEncoded)
+            Err(self::Error::InvalidHexHashLength { got: hash_len })
         }
     }
 }
