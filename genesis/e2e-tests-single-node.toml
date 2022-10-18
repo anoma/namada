@@ -155,7 +155,7 @@ pos_gain_d = 0.1
 # The ratio of tokens locked in Proof of Stake to the total token supply
 staked_ratio = 0.4
 # The inflation rate for Proof of Stake
-pos_inflation_rate = 0.1
+pos_inflation_amount = 0
 
 # Proof of stake parameters.
 [pos_params]

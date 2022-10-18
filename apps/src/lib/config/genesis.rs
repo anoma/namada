@@ -240,8 +240,8 @@ pub mod genesis_config {
         pub pos_gain_d: Decimal,
         /// PoS staked ratio
         pub staked_ratio: Decimal,
-        /// PoS reward rate last epoch
-        pub pos_inflation_rate: Decimal,
+        /// PoS inflation amount last epoch
+        pub pos_inflation_amount: u64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -549,7 +549,7 @@ pub mod genesis_config {
             pos_gain_p: config.parameters.pos_gain_p,
             pos_gain_d: config.parameters.pos_gain_d,
             staked_ratio: config.parameters.staked_ratio,
-            pos_inflation_rate: config.parameters.pos_inflation_rate,
+            pos_inflation_amount: config.parameters.pos_inflation_amount,
         };
 
         let gov_params = GovParams {
@@ -787,7 +787,7 @@ pub fn genesis() -> Genesis {
         pos_gain_p: dec!(0.1),
         pos_gain_d: dec!(0.1),
         staked_ratio: dec!(0.0),
-        pos_inflation_rate: dec!(0.1),
+        pos_inflation_amount: 0,
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
