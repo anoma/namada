@@ -48,8 +48,6 @@ pub mod cmds {
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
         TxUpdateVp(TxUpdateVp),
-        TxInitNft(TxInitNft),
-        TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
     }
@@ -64,8 +62,6 @@ pub mod cmds {
                 .subcommand(TxTransfer::def())
                 .subcommand(TxIbcTransfer::def())
                 .subcommand(TxUpdateVp::def())
-                .subcommand(TxInitNft::def())
-                .subcommand(TxMintNft::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
         }
@@ -80,8 +76,6 @@ pub mod cmds {
             let tx_ibc_transfer =
                 SubCmd::parse(matches).map(Self::TxIbcTransfer);
             let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
-            let tx_nft_create = SubCmd::parse(matches).map(Self::TxInitNft);
-            let tx_nft_mint = SubCmd::parse(matches).map(Self::TxMintNft);
             let tx_init_proposal =
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
@@ -93,8 +87,6 @@ pub mod cmds {
                 .or(tx_transfer)
                 .or(tx_ibc_transfer)
                 .or(tx_update_vp)
-                .or(tx_nft_create)
-                .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
         }
@@ -161,9 +153,6 @@ pub mod cmds {
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxInitValidator::def().display_order(1))
-                // Nft transactions
-                .subcommand(TxInitNft::def().display_order(1))
-                .subcommand(TxMintNft::def().display_order(1))
                 // Proposal transactions
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
@@ -195,8 +184,6 @@ pub mod cmds {
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
-            let tx_nft_create = Self::parse_with_ctx(matches, TxInitNft);
-            let tx_nft_mint = Self::parse_with_ctx(matches, TxMintNft);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
@@ -224,8 +211,6 @@ pub mod cmds {
                 .or(tx_update_vp)
                 .or(tx_init_account)
                 .or(tx_init_validator)
-                .or(tx_nft_create)
-                .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(bond)
@@ -284,8 +269,6 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
-        TxInitNft(TxInitNft),
-        TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         Bond(Bond),
@@ -1063,50 +1046,6 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxInitNft(pub args::NftCreate);
-
-    impl SubCmd for TxInitNft {
-        const CMD: &'static str = "init-nft";
-
-        fn parse(matches: &ArgMatches) -> Option<Self>
-        where
-            Self: Sized,
-        {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxInitNft(args::NftCreate::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Create a new NFT.")
-                .add_args::<args::NftCreate>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct TxMintNft(pub args::NftMint);
-
-    impl SubCmd for TxMintNft {
-        const CMD: &'static str = "mint-nft";
-
-        fn parse(matches: &ArgMatches) -> Option<Self>
-        where
-            Self: Sized,
-        {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxMintNft(args::NftMint::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Mint new NFT tokens.")
-                .add_args::<args::NftMint>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
     pub struct TxInitProposal(pub args::InitProposal);
 
     impl SubCmd for TxInitProposal {
@@ -1346,7 +1285,6 @@ pub mod args {
     const LOCALHOST: ArgFlag = flag("localhost");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
-    const NFT_ADDRESS: Arg<Address> = arg("nft-address");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
     const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
@@ -2097,66 +2035,6 @@ pub mod args {
                      withdrawing from self-bonds, the validator is also the \
                      source.",
                 ))
-        }
-    }
-
-    // Transaction to create a new nft
-    #[derive(Clone, Debug)]
-    pub struct NftCreate {
-        /// Common tx argumentsips
-        pub tx: Tx,
-        /// Path to the nft file description
-        pub nft_data: PathBuf,
-    }
-
-    impl Args for NftCreate {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let data_path = DATA_PATH.parse(matches);
-
-            Self {
-                tx,
-                nft_data: data_path,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Tx>()
-                .arg(DATA_PATH.def().about("The path nft description file."))
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct NftMint {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// The nft address
-        pub nft_address: Address,
-        /// The nft token description
-        pub nft_data: PathBuf,
-    }
-
-    impl Args for NftMint {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let nft_address = NFT_ADDRESS.parse(matches);
-            let data_path = DATA_PATH.parse(matches);
-
-            Self {
-                tx,
-                nft_address,
-                nft_data: data_path,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Tx>()
-                .arg(NFT_ADDRESS.def().about("The nft address."))
-                .arg(
-                    DATA_PATH.def().about(
-                        "The data path file that describes the nft tokens.",
-                    ),
-                )
         }
     }
 

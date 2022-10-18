@@ -15,7 +15,6 @@ use once_cell::unsync::Lazy;
 enum KeyType<'a> {
     Token(&'a Address),
     PoS,
-    Nft(&'a Address),
     Vp(&'a Address),
     GovernanceVote(&'a Address),
     Unknown,
@@ -31,8 +30,6 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::Token(address)
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
-        } else if let Some(address) = nft::is_nft_key(key) {
-            Self::Nft(address)
         } else if gov_storage::is_vote_key(key) {
             let voter_address = gov_storage::get_voter_address(key);
             if let Some(address) = voter_address {
@@ -140,13 +137,6 @@ fn validate_tx(
                     if valid { "accepted" } else { "rejected" }
                 );
                 valid
-            }
-            KeyType::Nft(owner) => {
-                if owner == &addr {
-                    *valid_sig
-                } else {
-                    true
-                }
             }
             KeyType::GovernanceVote(voter) => {
                 if voter == &addr {
