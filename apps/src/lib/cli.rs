@@ -186,6 +186,7 @@ pub mod cmds {
                 .subcommand(Withdraw::def().display_order(2))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(3))
+                .subcommand(QueryConversions::def().display_order(3))
                 .subcommand(QueryTransfers::def().display_order(3))
                 .subcommand(QueryBalance::def().display_order(3))
                 .subcommand(QueryBonds::def().display_order(3))
@@ -221,6 +222,7 @@ pub mod cmds {
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
+            let query_conversions = Self::parse_with_ctx(matches, QueryConversions);
             let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
@@ -250,6 +252,7 @@ pub mod cmds {
                 .or(unbond)
                 .or(withdraw)
                 .or(query_epoch)
+                .or(query_conversions)
                 .or(query_transfers)
                 .or(query_balance)
                 .or(query_bonds)
@@ -312,6 +315,7 @@ pub mod cmds {
         Unbond(Unbond),
         Withdraw(Withdraw),
         QueryEpoch(QueryEpoch),
+        QueryConversions(QueryConversions),
         QueryTransfers(QueryTransfers),
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
@@ -1209,6 +1213,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryConversions(pub args::QueryConversions);
+
+    impl SubCmd for QueryConversions {
+        const CMD: &'static str = "conversions";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryConversions(args::QueryConversions::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query currently applicable conversions.")
+                .add_args::<args::QueryConversions>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryTransfers(pub args::QueryTransfers);
 
     impl SubCmd for QueryTransfers {
@@ -1636,7 +1659,7 @@ pub mod args {
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("fee-token", DefaultFn(|| "XAN".into()));
+        arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".into()));
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_LIMIT: ArgDefault<token::Amount> =
@@ -2418,6 +2441,44 @@ pub mod args {
                     DATA_PATH.def().about(
                         "The data path file that describes the nft tokens.",
                     ),
+                )
+        }
+    }
+
+    /// Query asset conversions
+    #[derive(Clone, Debug)]
+    pub struct QueryConversions {
+        /// Common query args
+        pub query: Query,
+        /// Address of a token
+        pub token: Option<WalletAddress>,
+        /// Epoch of the asset
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for QueryConversions {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let token = TOKEN_OPT.parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self {
+                query,
+                epoch,
+                token,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(
+                    EPOCH
+                        .def()
+                        .about("The epoch for which to query conversions."),
+                )
+                .arg(
+                    TOKEN_OPT
+                        .def()
+                        .about("The token address for which to query conversions."),
                 )
         }
     }

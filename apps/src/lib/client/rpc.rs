@@ -30,6 +30,7 @@ use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
 use namada::ledger::treasury::storage as treasury_storage;
+use namada::ledger::storage::ConversionState;
 use namada::proto::{SignedTxData, Tx};
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
@@ -39,7 +40,7 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, PrefixValue, TxIndex,
+    BlockHeight, BlockResults, Epoch, PrefixValue, TxIndex, KeySeg, Key,
 };
 use namada::types::token::{balance_key, Transfer};
 use namada::types::transaction::{
@@ -2017,6 +2018,72 @@ fn process_unbonds_query(
         }
     }
     (total, withdrawable)
+}
+
+/// Query for all conversions.
+pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
+    // The chosen token type of the conversions
+    let target_token = args
+        .token
+        .as_ref()
+        .map(|x| ctx.get(x));
+    // To facilitate human readable token addresses
+    let tokens = address::tokens();
+    let client = HttpClient::new(args.query.ledger_address).unwrap();
+    let masp_addr = masp();
+    let key_prefix: Key = masp_addr.to_db_key().into();
+    let state_key = key_prefix
+        .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
+        .unwrap();
+    let conv_state = query_storage_value::<ConversionState>(&client, &state_key)
+        .await.expect("Conversions should be defined");
+    // Track whether any non-sentinel conversions are found
+    let mut conversions_found = false;
+    for (addr, epoch, conv, _) in conv_state.assets.values() {
+        let amt: masp_primitives::transaction::components::Amount = conv.clone().into();
+        // If the user has specified any targets, then meet them
+        if matches!(&target_token, Some(target) if target != addr) { continue }
+        else if matches!(&args.epoch, Some(target) if target != epoch) { continue }
+        // If we have a sentinel conversion, then skip printing
+        else if amt == masp_primitives::transaction::components::Amount::zero() { continue }
+        conversions_found = true;
+        // Print the asset to which the conversion applies
+        let addr_enc = addr.encode();
+        print!(
+            "{}[{}]: ",
+            tokens
+                .get(&addr)
+                .cloned()
+                .unwrap_or(addr_enc.as_str()),
+            epoch,
+        );
+        // Now print out the components of the allowed conversion
+        let mut prefix = "";
+        for (asset_type, val) in amt.components() {
+            // Look up the address and epoch of asset to facilitate pretty
+            // printing
+            let (addr, epoch, _, _) = &conv_state.assets[asset_type];
+            // Now print out this component of the conversion
+            let addr_enc = addr.encode();
+            print!(
+                "{}{} {}[{}]",
+                prefix,
+                val,
+                tokens
+                    .get(&addr)
+                    .cloned()
+                    .unwrap_or(addr_enc.as_str()),
+                epoch
+            );
+            // Future iterations need to be prefixed with +
+            prefix = " + ";
+        }
+        // Allowed conversions are always implicit equations
+        println!(" = 0");
+    }
+    if !conversions_found {
+        println!("No conversions found satisfying specified criteria.");
+    }
 }
 
 /// Query a conversion.
