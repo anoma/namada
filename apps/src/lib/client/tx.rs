@@ -24,6 +24,7 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::nft::{self, Nft, NftToken};
 use namada::types::storage::Epoch;
+use namada::types::time::DateTimeUtc;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -551,11 +552,13 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         None => IbcHeight::zero(),
     };
 
+    let now: namada::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
+    let now: IbcTimestamp = now.into();
     let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
-        (IbcTimestamp::now() + Duration::new(offset, 0)).unwrap()
+        (now + Duration::new(offset, 0)).unwrap()
     } else if timeout_height.is_zero() {
         // we cannot set 0 to both the height and the timestamp
-        (IbcTimestamp::now() + Duration::new(3600, 0)).unwrap()
+        (now + Duration::new(3600, 0)).unwrap()
     } else {
         IbcTimestamp::none()
     };
