@@ -120,7 +120,10 @@ where
             if *key != pending_key {
                 tracing::debug!(
                     "Rejecting transaction as it is attempting to change an \
-                     incorrect key in the pending transaction pool."
+                     incorrect key in the pending transaction pool: {}.\n \
+                     Expected key: {}",
+                    key,
+                    pending_key
                 );
                 return Ok(false);
             }
@@ -131,7 +134,12 @@ where
                  pending transfers"
             ))?;
         if pending != transfer {
-            tracing::debug!("An incorrect transfer was added to the pool.");
+            tracing::debug!(
+                "An incorrect transfer was added to the pool: {:?}.\n \
+                 Expected: {:?}",
+                transfer,
+                pending
+            );
             return Ok(false);
         }
 
