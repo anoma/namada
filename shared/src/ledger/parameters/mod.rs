@@ -131,8 +131,8 @@ pub struct Parameters {
     pub pos_gain_d: Decimal,
     /// PoS staked ratio (read + write for every epoch)
     pub staked_ratio: Decimal,
-    /// PoS reward rate last epoch (read + write for every epoch)
-    pub pos_inflation_rate: Decimal,
+    /// PoS inflation amount from the last epoch (read + write for every epoch)
+    pub pos_inflation_amount: u64,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -227,15 +227,12 @@ impl Parameters {
              block",
         );
 
-        let pos_inflation_rate_key = storage::get_pos_inflation_rate_key();
-        let pos_inflation_val = encode(&self.pos_inflation_rate);
-        storage
-            .write(&pos_inflation_rate_key, pos_inflation_val)
-            .expect(
-                "PoS inflation rate parameter must be initialized in the \
-                 genesis block",
-            );
-
+        let pos_inflation_key = storage::get_pos_inflation_amount_key();
+        let pos_inflation_val = encode(&self.pos_inflation_amount);
+        storage.write(&pos_inflation_key, pos_inflation_val).expect(
+            "PoS inflation rate parameter must be initialized in the genesis \
+             block",
+        );
     }
 }
 
@@ -351,9 +348,9 @@ where
     update(storage, value, key)
 }
 
-/// Update the PoS inflation rate parameter in storage. Returns the parameters and gas
-/// cost.
-pub fn update_pos_inflation_rate_parameter<DB, H>(
+/// Update the PoS inflation rate parameter in storage. Returns the parameters
+/// and gas cost.
+pub fn update_pos_inflation_amount_parameter<DB, H>(
     storage: &mut Storage<DB, H>,
     value: &EpochDuration,
 ) -> std::result::Result<u64, WriteError>
@@ -361,7 +358,7 @@ where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: ledger_storage::StorageHasher,
 {
-    let key = storage::get_pos_inflation_rate_key();
+    let key = storage::get_pos_inflation_amount_key();
     update(storage, value, key)
 }
 
@@ -482,11 +479,11 @@ where
             .map_err(ReadError::StorageTypeError)?;
 
     // read PoS inflation rate
-    let pos_inflation_rate_key = storage::get_pos_inflation_rate_key();
+    let pos_inflation_key = storage::get_pos_inflation_amount_key();
     let (value, gas_reward) = storage
-        .read(&pos_inflation_rate_key)
+        .read(&pos_inflation_key)
         .map_err(ReadError::StorageError)?;
-    let pos_inflation_rate: Decimal =
+    let pos_inflation_amount: u64 =
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
@@ -500,7 +497,7 @@ where
             pos_gain_p,
             pos_gain_d,
             staked_ratio,
-            pos_inflation_rate,
+            pos_inflation_amount,
         },
         gas_epoch
             + gas_tx

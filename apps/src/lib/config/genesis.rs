@@ -232,6 +232,16 @@ pub mod genesis_config {
         // Hashes of whitelisted txs array. `None` value or an empty array
         // disables whitelisting.
         pub tx_whitelist: Option<Vec<String>>,
+        /// Expected number of epochs per year
+        pub epochs_per_year: u64,
+        /// PoS gain p
+        pub pos_gain_p: Decimal,
+        /// PoS gain d
+        pub pos_gain_d: Decimal,
+        /// PoS staked ratio
+        pub staked_ratio: Decimal,
+        /// PoS inflation rate last epoch
+        pub pos_inflation_amount: u64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -256,9 +266,9 @@ pub mod genesis_config {
         pub block_vote_reward: Decimal,
         // Maximum staking APY
         // XXX: u64 doesn't work with toml-rs!
-        pub max_inflation_rate: u64,
+        pub max_inflation_rate: Decimal,
         // Target ratio of staked NAM tokens to total NAM tokens
-        pub target_staked_ratio: u64,
+        pub target_staked_ratio: Decimal,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote.
         // XXX: u64 doesn't work with toml-rs!
@@ -536,7 +546,7 @@ pub mod genesis_config {
             pos_gain_p: config.parameters.pos_gain_p,
             pos_gain_d: config.parameters.pos_gain_d,
             staked_ratio: config.parameters.staked_ratio,
-            pos_inflation_rate: config.parameters.pos_inflation_rate,
+            pos_inflation_amount: config.parameters.pos_inflation_amount,
         };
 
         let gov_params = GovParams {
@@ -556,7 +566,7 @@ pub mod genesis_config {
             max_validator_slots: config.pos_params.max_validator_slots,
             pipeline_len: config.pos_params.pipeline_len,
             unbonding_len: config.pos_params.unbonding_len,
-            votes_per_token: config.pos_params.votes_per_token,
+            tm_votes_per_token: config.pos_params.tm_votes_per_token,
             block_proposer_reward: config.pos_params.block_proposer_reward,
             block_vote_reward: config.pos_params.block_vote_reward,
             max_inflation_rate: config
@@ -775,8 +785,8 @@ pub fn genesis() -> Genesis {
                                    * per epoch (300) */
         pos_gain_p: dec!(0.1),
         pos_gain_d: dec!(0.1),
-        staked_ratio: dec!(0.4),
-        pos_inflation_rate: dec!(0.1),
+        staked_ratio: dec!(0.0),
+        pos_inflation_amount: 0,
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),

@@ -10,7 +10,7 @@ const EPOCHS_PER_YEAR_KEY: &str = "epochs_per_year";
 const POS_GAIN_P_KEY: &str = "pos_gain_p";
 const POS_GAIN_D_KEY: &str = "pos_gain_d";
 const STAKED_RATIO_KEY: &str = "staked_ratio_key";
-const POS_INFLATION_RATE_KEY: &str = "pos_inflation_rate_key";
+const POS_INFLATION_AMOUNT_KEY: &str = "pos_inflation_amount_key";
 
 /// Returns if the key is a parameter key.
 pub fn is_parameter_key(key: &Key) -> bool {
@@ -90,11 +90,11 @@ pub fn is_staked_ratio_key(key: &Key) -> bool {
 }
 
 /// Returns if the key is the PoS reward rate key.
-pub fn is_pos_inflation_rate_key(key: &Key) -> bool {
+pub fn is_pos_inflation_amount_key(key: &Key) -> bool {
     matches!(&key.segments[..], [
         DbKeySeg::AddressSeg(addr),
-        DbKeySeg::StringSeg(pos_inflation_rate),
-    ] if addr == &ADDRESS && pos_inflation_rate == POS_INFLATION_RATE_KEY)
+        DbKeySeg::StringSeg(pos_inflation_amount),
+    ] if addr == &ADDRESS && pos_inflation_amount == POS_INFLATION_AMOUNT_KEY)
 }
 
 /// Storage key used for epoch parameter.
@@ -177,12 +177,12 @@ pub fn get_staked_ratio_key() -> Key {
     }
 }
 
-/// Storage key used for staked ratio parameter.
-pub fn get_pos_inflation_rate_key() -> Key {
+/// Storage key used for the inflation amount parameter.
+pub fn get_pos_inflation_amount_key() -> Key {
     Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(POS_INFLATION_RATE_KEY.to_string()),
+            DbKeySeg::StringSeg(POS_INFLATION_AMOUNT_KEY.to_string()),
         ],
     }
 }
