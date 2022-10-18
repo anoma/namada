@@ -13,7 +13,7 @@ use crate::node::ledger::events::Event;
 /// Txs may be either a dry run or else
 /// they should be encrypted and included
 /// in a wrapper.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum TxBroadcastData {
     DryRun(Tx),
     Wrapper {

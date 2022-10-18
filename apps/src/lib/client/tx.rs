@@ -1196,6 +1196,11 @@ pub async fn broadcast_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
+    tracing::debug!(
+        tendermint_rpc_address = ?address,
+        transaction = ?to_broadcast,
+        "Broadcasting transaction",
+    );
     let rpc_cli = HttpClient::new(address)?;
 
     // TODO: configure an explicit timeout value? we need to hack away at
@@ -1238,8 +1243,6 @@ pub async fn submit_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
-    tracing::debug!("Tenderming address: {:?}", address);
-
     // Broadcast the supplied transaction
     broadcast_tx(address.clone(), &to_broadcast).await?;
 
@@ -1250,6 +1253,13 @@ pub async fn submit_tx(
             .unwrap_or(DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS),
     );
     let deadline = Instant::now() + max_wait_time;
+
+    tracing::debug!(
+        tendermint_rpc_address = ?address,
+        transaction = ?to_broadcast,
+        ?deadline,
+        "Awaiting transaction approval",
+    );
 
     let parsed = {
         let args = args::Query {
@@ -1285,6 +1295,11 @@ pub async fn submit_tx(
             Ok(parsed)
         }
     };
+
+    tracing::debug!(
+        transaction = ?to_broadcast,
+        "Transaction approved",
+    );
 
     parsed
 }
