@@ -459,8 +459,7 @@ mod tests {
             ]);
 
         let receiver = address::testing::gen_established_address();
-        let transfers =
-            vec![helpers::generate_transfer_to_namada(receiver.clone())];
+        let transfers = vec![helpers::generate_transfer_to_namada(receiver)];
 
         let mut bridge = helpers::FakeEthereumBridge::default();
         let event = bridge.emit_transfers_to_namada(transfers);

@@ -86,7 +86,7 @@ where
         seen_by,
         seen,
     };
-    let vote_tracking_post = calculate_update(keys, &vote_tracking_pre, &votes);
+    let vote_tracking_post = calculate_update(keys, &vote_tracking_pre, votes);
     let changed_keys =
         validate_update(keys, &vote_tracking_pre, &vote_tracking_post)?;
 
@@ -169,7 +169,7 @@ fn validate_update<T>(
     let mut seen = false;
     if pre.seen != post.seen {
         // the only valid transition for `seen` is from `false` to `true`
-        if pre.seen == true || post.seen == false {
+        if pre.seen || !post.seen {
             return Err(eyre!(
                 "VoteTracking seen changed from {:#?} to {:#?}",
                 &pre.seen,
@@ -205,14 +205,15 @@ fn validate_update<T>(
         keys_changed.insert(keys.voting_power());
     }
 
-    if post.voting_power > FractionalVotingPower::TWO_THIRDS && !seen {
-        if pre.voting_power >= post.voting_power {
-            return Err(eyre!(
-                "VoteTracking is not seen even though new voting_power is \
-                 enough: {:#?}",
-                &post.voting_power,
-            ));
-        }
+    if post.voting_power > FractionalVotingPower::TWO_THIRDS
+        && !seen
+        && pre.voting_power >= post.voting_power
+    {
+        return Err(eyre!(
+            "VoteTracking is not seen even though new voting_power is enough: \
+             {:#?}",
+            &post.voting_power,
+        ));
     }
 
     Ok(keys_changed)
