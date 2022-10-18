@@ -164,7 +164,7 @@ pub struct HexEncodedHash {
 impl Default for HexEncodedHash {
     fn default() -> Self {
         Self {
-            inner: [0; HEX_HASH_LENGTH],
+            inner: [b'0'; HEX_HASH_LENGTH],
         }
     }
 }
