@@ -38,6 +38,12 @@ pub struct EventLog {
     queue: CircularQueue<Event>,
 }
 
+impl Default for EventLog {
+    fn default() -> Self {
+        Self::new(Default::default())
+    }
+}
+
 impl EventLog {
     /// Return a new event log.
     pub fn new(params: Params) -> Self {

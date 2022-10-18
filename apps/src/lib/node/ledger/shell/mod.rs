@@ -457,7 +457,7 @@ where
             ),
             proposal_data: HashSet::new(),
             // TODO: config event log params
-            event_log: EventLog::new(Default::default()),
+            event_log: EventLog::default(),
         }
     }
 
