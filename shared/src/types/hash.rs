@@ -13,8 +13,11 @@ use thiserror::Error;
 use crate::tendermint::abci::transaction;
 use crate::tendermint::Hash as TmHash;
 
-/// The length of the transaction hash string
+/// The length of the raw transaction hash.
 pub const HASH_LENGTH: usize = 32;
+
+/// The length of the hex encoded transaction hash.
+pub const HEX_HASH_LENGTH: usize = HASH_LENGTH * 2;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -25,7 +28,9 @@ pub enum Error {
     ConversionFailed(std::array::TryFromSliceError),
     #[error("The string is not valid hex encoded data.")]
     NotHexEncoded,
-    #[error("Got a hex encoded hash length of {got}, expected 64.")]
+    #[error(
+        "Got a hex encoded hash length of {got}, expected {HEX_HASH_LENGTH}."
+    )]
     InvalidHexHashLength { got: usize },
 }
 
@@ -153,13 +158,13 @@ impl Value for Hash {
 /// A hex encoded hash.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct HexEncodedHash {
-    inner: [u8; HASH_LENGTH * 2],
+    inner: [u8; HEX_HASH_LENGTH],
 }
 
 impl Default for HexEncodedHash {
     fn default() -> Self {
         Self {
-            inner: [0; HASH_LENGTH * 2],
+            inner: [0; HEX_HASH_LENGTH],
         }
     }
 }
@@ -187,12 +192,11 @@ impl TryFrom<&str> for HexEncodedHash {
     type Error = self::Error;
 
     fn try_from(hash: &str) -> HashResult<Self> {
-        const HEX_LEN: usize = HASH_LENGTH * 2;
-
         let mut hash_len = 0;
-        let mut buf = [0; HEX_LEN];
+        let mut buf = [0; HEX_HASH_LENGTH];
 
-        for (slot, ch) in buf.iter_mut().zip(hash.chars().take(HEX_LEN)) {
+        for (slot, ch) in buf.iter_mut().zip(hash.chars().take(HEX_HASH_LENGTH))
+        {
             match ch {
                 'a'..='f' | 'A'..='F' | '0'..='9' => *slot = ch as u8,
                 _ => return Err(self::Error::NotHexEncoded),
@@ -200,7 +204,7 @@ impl TryFrom<&str> for HexEncodedHash {
             hash_len += 1;
         }
 
-        if hash_len == HEX_LEN {
+        if hash_len == HEX_HASH_LENGTH {
             Ok(HexEncodedHash { inner: buf })
         } else {
             Err(self::Error::InvalidHexHashLength { got: hash_len })
