@@ -83,7 +83,7 @@ impl EventLog {
 
 #[cfg(test)]
 mod tests {
-    use namada::types::hash::HashString;
+    use namada::types::hash::HexEncodedHash;
 
     use super::*;
     use crate::node::ledger::events::{EventLevel, EventType};
@@ -95,7 +95,7 @@ mod tests {
     macro_rules! accepted {
         ($hash:expr) => {
             dumb_queries::QueryMatcher::accepted(
-                &HashString::try_from($hash).unwrap(),
+                &HexEncodedHash::try_from($hash).unwrap(),
             )
         };
     }

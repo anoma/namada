@@ -6,7 +6,7 @@
 //! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
 //! ```
 
-use namada::types::hash::HashString;
+use namada::types::hash::HexEncodedHash;
 
 use crate::node::ledger::events::{Event, EventType};
 
@@ -32,7 +32,7 @@ impl<'q> QueryMatcher<'q> {
     }
 
     /// Returns a query matching the given accepted hash.
-    pub fn accepted(hash: &'q HashString) -> Self {
+    pub fn accepted(hash: &'q HexEncodedHash) -> Self {
         Self {
             event_type: EventType::Accepted,
             attr: "hash".to_string(),
@@ -41,7 +41,7 @@ impl<'q> QueryMatcher<'q> {
     }
 
     /// Returns a query matching the given applied hash.
-    pub fn applied(hash: &'q HashString) -> Self {
+    pub fn applied(hash: &'q HexEncodedHash) -> Self {
         Self {
             event_type: EventType::Applied,
             attr: "hash".to_string(),

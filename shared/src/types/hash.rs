@@ -150,11 +150,11 @@ impl Value for Hash {
 
 /// A hex encoded hash.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct HashString {
+pub struct HexEncodedHash {
     inner: [u8; HASH_LENGTH * 2],
 }
 
-impl Default for HashString {
+impl Default for HexEncodedHash {
     fn default() -> Self {
         Self {
             inner: [0; HASH_LENGTH * 2],
@@ -162,17 +162,17 @@ impl Default for HashString {
     }
 }
 
-impl Deref for HashString {
+impl Deref for HexEncodedHash {
     type Target = str;
 
     fn deref(&self) -> &str {
-        // SAFETY: We can only construct a `HashString`
+        // SAFETY: We can only construct a `HexEncodedHash`
         // from valid hex encoded data.
         unsafe { std::str::from_utf8_unchecked(&self.inner) }
     }
 }
 
-impl TryFrom<String> for HashString {
+impl TryFrom<String> for HexEncodedHash {
     type Error = self::Error;
 
     #[inline]
@@ -181,7 +181,7 @@ impl TryFrom<String> for HashString {
     }
 }
 
-impl TryFrom<&str> for HashString {
+impl TryFrom<&str> for HexEncodedHash {
     type Error = self::Error;
 
     fn try_from(hash: &str) -> HashResult<Self> {
@@ -199,7 +199,7 @@ impl TryFrom<&str> for HashString {
         }
 
         if hash_len == HEX_LEN {
-            Ok(HashString { inner: buf })
+            Ok(HexEncodedHash { inner: buf })
         } else {
             Err(self::Error::NotHexEncoded)
         }
@@ -221,7 +221,7 @@ mod tests {
     proptest! {
         #[test]
         fn test_hash_string(hex_hash in hex_encoded_hash_strat()) {
-            let _: HashString = hex_hash.try_into().unwrap();
+            let _: HexEncodedHash = hex_hash.try_into().unwrap();
         }
     }
 }
