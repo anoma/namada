@@ -125,9 +125,9 @@ pub struct Parameters {
     pub tx_whitelist: Vec<String>,
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
-    /// PoS gain p (read + write for every epoch)
+    /// PoS gain p (read only)
     pub pos_gain_p: Decimal,
-    /// PoS gain d (read + write for every epoch)
+    /// PoS gain d (read only)
     pub pos_gain_d: Decimal,
     /// PoS staked ratio (read + write for every epoch)
     pub staked_ratio: Decimal,
