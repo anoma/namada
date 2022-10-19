@@ -61,6 +61,7 @@ use crate::facade::tendermint_proto::types::ConsensusParams;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::facade::tower_abci::{request, response};
+use crate::node::ledger::events::log::EventLog;
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -338,6 +339,8 @@ where
     pub(super) tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     /// Proposal execution tracking
     pub proposal_data: HashSet<u64>,
+    /// Log of events emitted by `FinalizeBlock`.
+    event_log: EventLog,
 }
 
 impl<D, H> Shell<D, H>
@@ -453,7 +456,21 @@ where
                 tx_wasm_compilation_cache as usize,
             ),
             proposal_data: HashSet::new(),
+            // TODO: config event log params
+            event_log: EventLog::default(),
         }
+    }
+
+    /// Return a reference to the [`EventLog`].
+    #[inline]
+    pub fn event_log(&self) -> &EventLog {
+        &self.event_log
+    }
+
+    /// Return a mutable reference to the [`EventLog`].
+    #[inline]
+    pub fn event_log_mut(&mut self) -> &mut EventLog {
+        &mut self.event_log
     }
 
     /// Iterate over the wrapper txs in order
