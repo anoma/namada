@@ -17,40 +17,20 @@ use std::time::{Duration, Instant};
 
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
-use namada::types::chain::ChainId;
 use namada::types::token;
+use namada_apps::config::ethereum;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
-use namada_apps::config::{ethereum, Config};
 use serde_json::json;
 use setup::constants::*;
 
-use super::setup::working_dir;
+use super::setup::{disable_eth_fullnode, working_dir};
 use crate::e2e::helpers::{
     find_address, find_voting_power, get_actor_rpc, get_epoch,
 };
-use crate::e2e::setup::{self, sleep, Bin, Test, Who};
+use crate::e2e::setup::{self, sleep, Bin, Who};
 use crate::{run, run_as};
-
-fn update_actor_config<F>(test: &Test, chain_id: &ChainId, who: &Who, update: F)
-where
-    F: FnOnce(&mut Config),
-{
-    let validator_base_dir = test.get_base_dir(who);
-    let mut validator_config =
-        Config::load(&validator_base_dir, chain_id, None);
-    update(&mut validator_config);
-    validator_config
-        .write(&validator_base_dir, chain_id, true)
-        .unwrap();
-}
-
-fn disable_eth_fullnode(test: &Test, chain_id: &ChainId, who: &Who) {
-    update_actor_config(test, chain_id, who, |config| {
-        config.ledger.ethereum.mode = ethereum::Mode::Off;
-    });
-}
 
 /// Test that when we "run-ledger" with all the possible command
 /// combinations from fresh state, the node starts-up successfully for both a
@@ -1804,6 +1784,8 @@ fn test_genesis_validators() -> Result<()> {
 
     // We have to update the ports in the configs again, because the ones from
     // `join-network` use the defaults
+    //
+    // TODO: use `update_actor_config` from `setup`, instead
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
         config.ledger.tendermint.p2p_address.set_port(first_port);

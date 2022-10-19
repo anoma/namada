@@ -21,6 +21,7 @@ use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
+use namada_apps::config::{ethereum, Config};
 use namada_apps::{config, wallet};
 use rand::Rng;
 use tempfile::{tempdir, TempDir};
@@ -53,6 +54,31 @@ pub const SINGLE_NODE_NET_GENESIS: &str = "genesis/e2e-tests-single-node.toml";
 #[derive(Debug)]
 pub struct Network {
     pub chain_id: ChainId,
+}
+
+/// Update the config of some node `who`.
+pub fn update_actor_config<F>(
+    test: &Test,
+    chain_id: &ChainId,
+    who: &Who,
+    update: F,
+) where
+    F: FnOnce(&mut Config),
+{
+    let validator_base_dir = test.get_base_dir(who);
+    let mut validator_config =
+        Config::load(&validator_base_dir, chain_id, None);
+    update(&mut validator_config);
+    validator_config
+        .write(&validator_base_dir, chain_id, true)
+        .unwrap();
+}
+
+/// Disable the Ethereum fullnode of `who`.
+pub fn disable_eth_fullnode(test: &Test, chain_id: &ChainId, who: &Who) {
+    update_actor_config(test, chain_id, who, |config| {
+        config.ledger.ethereum.mode = ethereum::Mode::Off;
+    });
 }
 
 /// Add `num` validators to the genesis config. Note that called from inside
