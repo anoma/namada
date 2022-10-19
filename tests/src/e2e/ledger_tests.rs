@@ -51,7 +51,7 @@ fn run_ledger() -> Result<()> {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
         ledger.exp_string("Anoma ledger node started")?;
-        ledger.exp_string("This node is a fullnode")?;
+        ledger.exp_string("This node is not a validator")?;
     }
 
     Ok(())
@@ -80,7 +80,7 @@ fn test_node_connectivity() -> Result<()> {
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
-    non_validator.exp_string("This node is a fullnode")?;
+    non_validator.exp_string("This node is not a validator")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
@@ -1820,7 +1820,7 @@ fn test_genesis_validators() -> Result<()> {
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
-    non_validator.exp_string("This node is a fullnode")?;
+    non_validator.exp_string("This node is not a validator")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
