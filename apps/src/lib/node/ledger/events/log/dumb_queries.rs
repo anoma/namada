@@ -6,20 +6,20 @@
 //! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
 //! ```
 
-use namada::types::hash::HexEncodedHash;
+use namada::types::hash::Hash;
 
 use crate::node::ledger::events::{Event, EventType};
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
 /// given Tendermint query.
 #[derive(Debug, Clone)]
-pub struct QueryMatcher<'q> {
+pub struct QueryMatcher {
     event_type: EventType,
     attr: String,
-    value: &'q str,
+    value: Hash,
 }
 
-impl<'q> QueryMatcher<'q> {
+impl QueryMatcher {
     /// Checks if this [`QueryMatcher`] validates the
     /// given [`Event`].
     pub fn matches(&self, event: &Event) -> bool {
@@ -27,12 +27,18 @@ impl<'q> QueryMatcher<'q> {
             && event
                 .attributes
                 .get(&self.attr)
-                .map(|value| value == self.value)
+                .and_then(|value| {
+                    value
+                        .as_str()
+                        .try_into()
+                        .map(|v: Hash| v == self.value)
+                        .ok()
+                })
                 .unwrap_or_default()
     }
 
     /// Returns a query matching the given accepted transaction hash.
-    pub fn accepted(tx_hash: &'q HexEncodedHash) -> Self {
+    pub fn accepted(tx_hash: Hash) -> Self {
         Self {
             event_type: EventType::Accepted,
             attr: "hash".to_string(),
@@ -41,7 +47,7 @@ impl<'q> QueryMatcher<'q> {
     }
 
     /// Returns a query matching the given applied transaction hash.
-    pub fn applied(tx_hash: &'q HexEncodedHash) -> Self {
+    pub fn applied(tx_hash: Hash) -> Self {
         Self {
             event_type: EventType::Applied,
             attr: "hash".to_string(),
@@ -61,7 +67,7 @@ mod tests {
         let matcher = QueryMatcher {
             event_type: EventType::Accepted,
             attr: "hash".to_string(),
-            value: "DEADBEEF",
+            value: "DEADBEEF".try_into().unwrap(),
         };
 
         let tests = {

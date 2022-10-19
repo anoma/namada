@@ -87,11 +87,11 @@ where
                     self.read_storage_prefix(&storage_key, height, query.prove)
                 }
                 Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
-                Path::Accepted { ref tx_hash } => {
+                Path::Accepted { tx_hash } => {
                     let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
                     self.query_event_log(matcher)
                 }
-                Path::Applied { ref tx_hash } => {
+                Path::Applied { tx_hash } => {
                     let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
                     self.query_event_log(matcher)
                 }
@@ -107,7 +107,7 @@ where
     /// Query events in the event log matching the given query.
     fn query_event_log(
         &self,
-        matcher: dumb_queries::QueryMatcher<'_>,
+        matcher: dumb_queries::QueryMatcher,
     ) -> response::Query {
         let value = self
             .event_log()

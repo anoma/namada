@@ -6,6 +6,7 @@ use std::ops::Deref;
 use arse_merkle_tree::traits::Value;
 use arse_merkle_tree::{Hash as TreeHash, H256};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -26,12 +27,8 @@ pub enum Error {
     Temporary { error: String },
     #[error("Failed trying to convert slice to a hash: {0}")]
     ConversionFailed(std::array::TryFromSliceError),
-    #[error("The string is not valid hex encoded data.")]
-    NotHexEncoded,
-    #[error(
-        "Got a hex encoded hash length of {got}, expected {HEX_HASH_LENGTH}."
-    )]
-    InvalidHexHashLength { got: usize },
+    #[error("Failed to convert string into a hash: {0}")]
+    FromStringError(hex::FromHexError),
 }
 
 /// Result for functions that may fail
@@ -95,6 +92,25 @@ impl TryFrom<&[u8]> for Hash {
     }
 }
 
+impl TryFrom<String> for Hash {
+    type Error = self::Error;
+
+    fn try_from(string: String) -> HashResult<Self> {
+        string.as_str().try_into()
+    }
+}
+
+impl TryFrom<&str> for Hash {
+    type Error = self::Error;
+
+    fn try_from(string: &str) -> HashResult<Self> {
+        Ok(Self(
+            <[u8; HASH_LENGTH]>::from_hex(string)
+                .map_err(Error::FromStringError)?,
+        ))
+    }
+}
+
 impl From<Hash> for transaction::Hash {
     fn from(hash: Hash) -> Self {
         Self::new(hash.0)
@@ -155,63 +171,6 @@ impl Value for Hash {
     }
 }
 
-/// A hex encoded hash.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct HexEncodedHash {
-    inner: [u8; HEX_HASH_LENGTH],
-}
-
-impl Default for HexEncodedHash {
-    fn default() -> Self {
-        Self {
-            inner: [b'0'; HEX_HASH_LENGTH],
-        }
-    }
-}
-
-impl Deref for HexEncodedHash {
-    type Target = str;
-
-    fn deref(&self) -> &str {
-        // SAFETY: We can only construct a `HexEncodedHash`
-        // from valid hex encoded data.
-        unsafe { std::str::from_utf8_unchecked(&self.inner) }
-    }
-}
-
-impl TryFrom<String> for HexEncodedHash {
-    type Error = self::Error;
-
-    #[inline]
-    fn try_from(hash: String) -> HashResult<Self> {
-        hash.as_str().try_into()
-    }
-}
-
-impl TryFrom<&str> for HexEncodedHash {
-    type Error = self::Error;
-
-    fn try_from(hash: &str) -> HashResult<Self> {
-        let mut hash_len = 0;
-        let mut buf = [0; HEX_HASH_LENGTH];
-
-        for (slot, ch) in buf.iter_mut().zip(hash.chars().take(HEX_HASH_LENGTH))
-        {
-            match ch {
-                'a'..='f' | 'A'..='F' | '0'..='9' => *slot = ch as u8,
-                _ => return Err(self::Error::NotHexEncoded),
-            }
-            hash_len += 1;
-        }
-
-        if hash_len == HEX_HASH_LENGTH {
-            Ok(HexEncodedHash { inner: buf })
-        } else {
-            Err(self::Error::InvalidHexHashLength { got: hash_len })
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
@@ -227,7 +186,7 @@ mod tests {
     proptest! {
         #[test]
         fn test_hash_string(hex_hash in hex_encoded_hash_strat()) {
-            let _: HexEncodedHash = hex_hash.try_into().unwrap();
+            let _: Hash = hex_hash.try_into().unwrap();
         }
     }
 }

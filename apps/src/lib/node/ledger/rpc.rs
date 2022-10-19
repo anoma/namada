@@ -4,7 +4,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use namada::types::address::Address;
-use namada::types::hash::{self, HexEncodedHash};
+use namada::types::hash::{self, Hash};
 use namada::types::storage;
 use thiserror::Error;
 
@@ -24,9 +24,9 @@ pub enum Path {
     /// Check if the given storage key exists.
     HasKey(storage::Key),
     /// Check if a transaction was accepted.
-    Accepted { tx_hash: HexEncodedHash },
+    Accepted { tx_hash: Hash },
     /// Check if a transaction was applied.
-    Applied { tx_hash: HexEncodedHash },
+    Applied { tx_hash: Hash },
 }
 
 #[derive(Debug, Clone)]
@@ -60,11 +60,9 @@ impl Display for Path {
                 write!(f, "{}/{}", HAS_KEY_PREFIX, storage_key)
             }
             Path::Accepted { tx_hash } => {
-                let tx_hash: &str = tx_hash;
                 write!(f, "{ACCEPTED_PREFIX}/{tx_hash}")
             }
             Path::Applied { tx_hash } => {
-                let tx_hash: &str = tx_hash;
                 write!(f, "{APPLIED_PREFIX}/{tx_hash}")
             }
         }
