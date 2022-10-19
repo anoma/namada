@@ -177,14 +177,14 @@ where
     };
     let eth_msg_post = EthMsg {
         body: update.body,
-        vote_tracking,
+        votes: vote_tracking,
     };
     tracing::debug!("writing EthMsg - {:#?}", &eth_msg_post);
     write(
         storage,
         &eth_msg_keys,
         &eth_msg_post.body,
-        &eth_msg_post.vote_tracking,
+        &eth_msg_post.votes,
     )?;
     Ok((changed, confirmed))
 }

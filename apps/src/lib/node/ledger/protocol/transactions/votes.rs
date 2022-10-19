@@ -1,4 +1,4 @@
-//! Logic and data types relating to tracking validators' votes for pieces of
+//! Logic and data types relating to tallying validators' votes for pieces of
 //! data stored in the ledger, where those pieces of data should only be acted
 //! on once they have received enough votes
 use std::collections::{BTreeSet, HashMap};
@@ -17,9 +17,9 @@ use crate::node::ledger::protocol::transactions::read;
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
-/// Represents all the information needed to track a piece of data that may be
+/// Represents all the information needed to tally a piece of data that may be
 /// voted for over multiple epochs
-pub struct VoteTracking {
+pub struct Tally {
     /// The total voting power that's voted for this event across all epochs
     pub voting_power: FractionalVotingPower,
     /// The addresses of validators that voted for this event. We use a
@@ -35,7 +35,7 @@ pub struct VoteTracking {
 pub fn calculate_new(
     seen_by: &BTreeSet<(Address, BlockHeight)>,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<VoteTracking> {
+) -> Result<Tally> {
     let mut seen_by_voting_power = FractionalVotingPower::default();
     for (validator, block_height) in seen_by {
         match voting_powers
@@ -53,7 +53,7 @@ pub fn calculate_new(
 
     let newly_confirmed =
         seen_by_voting_power > FractionalVotingPower::TWO_THIRDS;
-    Ok(VoteTracking {
+    Ok(Tally {
         voting_power: seen_by_voting_power,
         seen_by: seen_by
             .iter()
@@ -67,7 +67,7 @@ pub fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tracked::Keys<T>,
     _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<VoteTracking>
+) -> Result<Tally>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -80,25 +80,25 @@ where
     let voting_power: FractionalVotingPower =
         read::value(store, &keys.voting_power())?;
 
-    let vote_tracking = VoteTracking {
+    let tally = Tally {
         voting_power,
         seen_by,
         seen,
     };
 
     tracing::warn!(
-        ?vote_tracking,
-        "Updating events is not implemented yet, so the returned VoteTracking \
+        ?tally,
+        "Updating events is not implemented yet, so the returned vote tally \
          will be identical to the one in storage",
     );
-    Ok(vote_tracking)
+    Ok(tally)
 }
 
 pub fn write<D, H, T>(
     storage: &mut Storage<D, H>,
     keys: &vote_tracked::Keys<T>,
     body: &T,
-    vote_tracking: &VoteTracking,
+    tally: &Tally,
 ) -> Result<()>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -106,11 +106,8 @@ where
     T: BorshSerialize,
 {
     storage.write(&keys.body(), &body.try_to_vec()?)?;
-    storage.write(&keys.seen(), &vote_tracking.seen.try_to_vec()?)?;
-    storage.write(&keys.seen_by(), &vote_tracking.seen_by.try_to_vec()?)?;
-    storage.write(
-        &keys.voting_power(),
-        &vote_tracking.voting_power.try_to_vec()?,
-    )?;
+    storage.write(&keys.seen(), &tally.seen.try_to_vec()?)?;
+    storage.write(&keys.seen_by(), &tally.seen_by.try_to_vec()?)?;
+    storage.write(&keys.voting_power(), &tally.voting_power.try_to_vec()?)?;
     Ok(())
 }

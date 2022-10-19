@@ -6,7 +6,7 @@ use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
-use crate::node::ledger::protocol::transactions::votes::VoteTracking;
+use crate::node::ledger::protocol::transactions::votes::Tally;
 
 /// Represents an Ethereum event being seen by some validators
 #[derive(
@@ -49,8 +49,8 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
 pub struct EthMsg {
     /// The event being stored
     pub body: EthereumEvent,
-    /// Tracking of votes for this event
-    pub vote_tracking: VoteTracking,
+    /// Tallying of votes for this event
+    pub votes: Tally,
 }
 
 #[cfg(test)]
