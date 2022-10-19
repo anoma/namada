@@ -8,7 +8,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::Result;
-use namada::ledger::eth_bridge::storage::vote_tracked;
+use namada::ledger::eth_bridge::storage::vote_tallies;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
@@ -150,7 +150,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let eth_msg_keys = vote_tracked::Keys::from(&update.body);
+    let eth_msg_keys = vote_tallies::Keys::from(&update.body);
 
     // we arbitrarily look at whether the seen key is present to
     // determine if the /eth_msg already exists in storage, but maybe there
@@ -244,7 +244,7 @@ mod tests {
 
         let changed_keys = apply_updates(&mut storage, updates, voting_powers)?;
 
-        let eth_msg_keys: vote_tracked::Keys<EthereumEvent> = (&body).into();
+        let eth_msg_keys: vote_tallies::Keys<EthereumEvent> = (&body).into();
         let wrapped_erc20_keys: wrapped_erc20s::Keys = (&asset).into();
         assert_eq!(
             BTreeSet::from_iter(vec![
@@ -355,7 +355,7 @@ mod tests {
             tx_result.gas_used, 0,
             "No gas should be used for a derived transaction"
         );
-        let eth_msg_keys = vote_tracked::Keys::from(&event);
+        let eth_msg_keys = vote_tallies::Keys::from(&event);
         let dai_keys = wrapped_erc20s::Keys::from(&DAI_ERC20_ETH_ADDRESS);
         assert_eq!(
             tx_result.changed_keys,
@@ -408,7 +408,7 @@ mod tests {
             Err(err) => panic!("unexpected error: {:#?}", err),
         };
 
-        let eth_msg_keys = vote_tracked::Keys::from(&event);
+        let eth_msg_keys = vote_tallies::Keys::from(&event);
         assert_eq!(
             tx_result.changed_keys,
             BTreeSet::from_iter(vec![

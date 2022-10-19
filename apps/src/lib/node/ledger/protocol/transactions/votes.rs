@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
-use namada::ledger::eth_bridge::storage::vote_tracked;
+use namada::ledger::eth_bridge::storage::vote_tallies;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
@@ -65,7 +65,7 @@ pub fn calculate_new(
 
 pub fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
-    keys: &vote_tracked::Keys<T>,
+    keys: &vote_tallies::Keys<T>,
     _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<Tally>
 where
@@ -96,7 +96,7 @@ where
 
 pub fn write<D, H, T>(
     storage: &mut Storage<D, H>,
-    keys: &vote_tracked::Keys<T>,
+    keys: &vote_tallies::Keys<T>,
     body: &T,
     tally: &Tally,
 ) -> Result<()>

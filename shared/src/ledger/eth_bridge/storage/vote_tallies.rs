@@ -1,4 +1,4 @@
-//! Functionality for accessing the `eth_msgs/...` subspace
+//! Functionality for accessing keys to do with tallying votes
 use crate::types::ethereum_events::EthereumEvent;
 use crate::types::hash::Hash;
 use crate::types::storage::Key;
@@ -11,9 +11,11 @@ const SEEN_KEY_SEGMENT: &str = "seen";
 const SEEN_BY_KEY_SEGMENT: &str = "seen_by";
 const VOTING_POWER_KEY_SEGMENT: &str = "voting_power";
 
-/// Generator for the keys under which details of a vote tracked event is stored
+/// Generator for the keys under which details of votes for some piece of data
+/// is stored
 pub struct Keys<T: 'static> {
-    /// The prefix under which the details of a vote tracked event is stored
+    /// The prefix under which the details of a piece of data for which we are
+    /// tallying votes is stored
     pub prefix: Key,
     _phantom: std::marker::PhantomData<&'static T>,
 }
