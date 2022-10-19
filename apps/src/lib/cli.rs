@@ -9,7 +9,7 @@
 pub mod context;
 mod utils;
 
-use clap::{crate_authors, AppSettings, ArgGroup, ArgMatches};
+use clap::{AppSettings, ArgGroup, ArgMatches};
 use color_eyre::eyre::Result;
 pub use utils::safe_exit;
 use utils::*;
@@ -18,7 +18,7 @@ pub use self::context::Context;
 
 include!("../../version.rs");
 
-const APP_NAME: &str = "Anoma";
+const APP_NAME: &str = "Namada";
 
 // Main Anoma sub-commands
 const NODE_CMD: &str = "node";
@@ -47,8 +47,8 @@ pub mod cmds {
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxUpdateVp(TxUpdateVp),
-        TxInitNft(TxInitNft),
-        TxMintNft(TxMintNft),
+        // TxInitNft(TxInitNft),
+        // TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
     }
@@ -62,8 +62,8 @@ pub mod cmds {
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxUpdateVp::def())
-                .subcommand(TxInitNft::def())
-                .subcommand(TxMintNft::def())
+                // .subcommand(TxInitNft::def())
+                // .subcommand(TxMintNft::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
         }
@@ -76,8 +76,8 @@ pub mod cmds {
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
             let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
-            let tx_nft_create = SubCmd::parse(matches).map(Self::TxInitNft);
-            let tx_nft_mint = SubCmd::parse(matches).map(Self::TxMintNft);
+            // let tx_nft_create = SubCmd::parse(matches).map(Self::TxInitNft);
+            // let tx_nft_mint = SubCmd::parse(matches).map(Self::TxMintNft);
             let tx_init_proposal =
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
@@ -88,8 +88,8 @@ pub mod cmds {
                 .or(tx_custom)
                 .or(tx_transfer)
                 .or(tx_update_vp)
-                .or(tx_nft_create)
-                .or(tx_nft_mint)
+                // .or(tx_nft_create)
+                // .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
         }
@@ -156,8 +156,8 @@ pub mod cmds {
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxInitValidator::def().display_order(1))
                 // Nft transactions
-                .subcommand(TxInitNft::def().display_order(1))
-                .subcommand(TxMintNft::def().display_order(1))
+                // .subcommand(TxInitNft::def().display_order(1))
+                // .subcommand(TxMintNft::def().display_order(1))
                 // Proposal transactions
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
@@ -188,8 +188,8 @@ pub mod cmds {
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
-            let tx_nft_create = Self::parse_with_ctx(matches, TxInitNft);
-            let tx_nft_mint = Self::parse_with_ctx(matches, TxMintNft);
+            // let tx_nft_create = Self::parse_with_ctx(matches, TxInitNft);
+            // let tx_nft_mint = Self::parse_with_ctx(matches, TxMintNft);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
@@ -216,8 +216,8 @@ pub mod cmds {
                 .or(tx_update_vp)
                 .or(tx_init_account)
                 .or(tx_init_validator)
-                .or(tx_nft_create)
-                .or(tx_nft_mint)
+                // .or(tx_nft_create)
+                // .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(bond)
@@ -275,8 +275,8 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
-        TxInitNft(TxInitNft),
-        TxMintNft(TxMintNft),
+        // TxInitNft(TxInitNft),
+        // TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         Bond(Bond),
@@ -1034,49 +1034,49 @@ pub mod cmds {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct TxInitNft(pub args::NftCreate);
+    // #[derive(Clone, Debug)]
+    // pub struct TxInitNft(pub args::NftCreate);
 
-    impl SubCmd for TxInitNft {
-        const CMD: &'static str = "init-nft";
+    // impl SubCmd for TxInitNft {
+    //     const CMD: &'static str = "init-nft";
 
-        fn parse(matches: &ArgMatches) -> Option<Self>
-        where
-            Self: Sized,
-        {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxInitNft(args::NftCreate::parse(matches)))
-        }
+    //     fn parse(matches: &ArgMatches) -> Option<Self>
+    //     where
+    //         Self: Sized,
+    //     {
+    //         matches
+    //             .subcommand_matches(Self::CMD)
+    //             .map(|matches| TxInitNft(args::NftCreate::parse(matches)))
+    //     }
 
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Create a new NFT.")
-                .add_args::<args::NftCreate>()
-        }
-    }
+    //     fn def() -> App {
+    //         App::new(Self::CMD)
+    //             .about("Create a new NFT.")
+    //             .add_args::<args::NftCreate>()
+    //     }
+    // }
 
-    #[derive(Clone, Debug)]
-    pub struct TxMintNft(pub args::NftMint);
+    // #[derive(Clone, Debug)]
+    // pub struct TxMintNft(pub args::NftMint);
 
-    impl SubCmd for TxMintNft {
-        const CMD: &'static str = "mint-nft";
+    // impl SubCmd for TxMintNft {
+    //     const CMD: &'static str = "mint-nft";
 
-        fn parse(matches: &ArgMatches) -> Option<Self>
-        where
-            Self: Sized,
-        {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxMintNft(args::NftMint::parse(matches)))
-        }
+    //     fn parse(matches: &ArgMatches) -> Option<Self>
+    //     where
+    //         Self: Sized,
+    //     {
+    //         matches
+    //             .subcommand_matches(Self::CMD)
+    //             .map(|matches| TxMintNft(args::NftMint::parse(matches)))
+    //     }
 
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Mint new NFT tokens.")
-                .add_args::<args::NftMint>()
-        }
-    }
+    //     fn def() -> App {
+    //         App::new(Self::CMD)
+    //             .about("Mint new NFT tokens.")
+    //             .add_args::<args::NftMint>()
+    //     }
+    // }
 
     #[derive(Clone, Debug)]
     pub struct TxInitProposal(pub args::InitProposal);
@@ -2763,8 +2763,8 @@ pub fn anoma_wallet_cli() -> Result<(cmds::AnomaWallet, Context)> {
 fn anoma_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .author(crate_authors!("\n"))
-        .about("Anoma command line interface.")
+        // .author(crate_authors!("\n"))
+        .about("Namada command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::Anoma::add_sub(args::Global::def(app))
 }
@@ -2772,8 +2772,8 @@ fn anoma_app() -> App {
 fn anoma_node_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .author(crate_authors!("\n"))
-        .about("Anoma node command line interface.")
+        // .author(crate_authors!("\n"))
+        .about("Namada node command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaNode::add_sub(args::Global::def(app))
 }
@@ -2781,8 +2781,8 @@ fn anoma_node_app() -> App {
 fn anoma_client_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .author(crate_authors!("\n"))
-        .about("Anoma client command line interface.")
+        // .author(crate_authors!("\n"))
+        .about("Namada client command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaClient::add_sub(args::Global::def(app))
 }
@@ -2790,8 +2790,8 @@ fn anoma_client_app() -> App {
 fn anoma_wallet_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .author(crate_authors!("\n"))
-        .about("Anoma wallet command line interface.")
+        // .author(crate_authors!("\n"))
+        .about("Namada wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaWallet::add_sub(args::Global::def(app))
 }
