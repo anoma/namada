@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::env;
 use std::fs::File;
-use std::time::Duration;
 
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
@@ -13,7 +12,7 @@ use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
-use namada::types::key::*;
+use namada::types::key::{self, *};
 use namada::types::nft::{self, Nft, NftToken};
 use namada::types::storage::{Epoch, Key};
 use namada::types::token::Amount;
@@ -24,6 +23,7 @@ use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, token};
 use namada::{ledger, vm};
+use tokio::time::{Duration, Instant};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -33,13 +33,9 @@ use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
-use crate::facade::tendermint_rpc::query::{EventType, Query};
 use crate::facade::tendermint_rpc::{Client, HttpClient};
-use crate::node::ledger::events::EventType as NamadaEventType;
 use crate::node::ledger::tendermint_node;
 
-const ACCEPTED_QUERY_KEY: &str = "accepted.hash";
-const APPLIED_QUERY_KEY: &str = "applied.hash";
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
@@ -54,13 +50,14 @@ const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const VP_NFT: &str = "vp_nft.wasm";
 
-/// Timeout for jsonrpc requests to the `/events` endpoint in Tendermint.
-const ENV_VAR_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME: &str =
-    "ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME";
+/// Timeout for requests to the `/accepted` and `/applied`
+/// ABCI query endpoints.
+const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
+    "NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS";
 
-/// Default timeout in seconds for jsonrpc requests to the `/events` endpoint in
-/// Tendermint.
-const DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME: u64 = 30;
+/// Default timeout in seconds for requests to the `/accepted`
+/// and `/applied` ABCI query endpoints.
+const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
@@ -161,6 +158,8 @@ pub async fn submit_init_validator(
         scheme,
         account_key,
         consensus_key,
+        eth_cold_key,
+        eth_hot_key,
         rewards_account_key,
         protocol_key,
         validator_vp_code_path,
@@ -177,6 +176,8 @@ pub async fn submit_init_validator(
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
     let rewards_key_alias = format!("{}-rewards-key", alias);
+    let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
+    let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
     let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
         println!("Generating validator account key...");
         ctx.wallet
@@ -210,6 +211,48 @@ pub async fn submit_init_validator(
                 .1
         });
 
+    let eth_cold_key = ctx
+        .get_opt_cached(&eth_cold_key)
+        .map(|key| match *key {
+            common::SecretKey::Secp256k1(_) => key,
+            common::SecretKey::Ed25519(_) => {
+                eprintln!("Eth cold key can only be secp256k1");
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
+            println!("Generating Eth cold key...");
+            ctx.wallet
+                .gen_key(
+                    // Note that ETH only allows secp256k1
+                    SchemeType::Secp256k1,
+                    Some(eth_cold_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
+                .1
+        });
+
+    let eth_hot_key = ctx
+        .get_opt_cached(&eth_hot_key)
+        .map(|key| match *key {
+            common::SecretKey::Secp256k1(_) => key,
+            common::SecretKey::Ed25519(_) => {
+                eprintln!("Eth hot key can only be secp256k1");
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
+            println!("Generating Eth hot key...");
+            ctx.wallet
+                .gen_key(
+                    // Note that ETH only allows secp256k1
+                    SchemeType::Secp256k1,
+                    Some(eth_hot_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
+                .1
+        });
+
     let rewards_account_key =
         ctx.get_opt_cached(&rewards_account_key).unwrap_or_else(|| {
             println!("Generating staking reward account key...");
@@ -227,9 +270,12 @@ pub async fn submit_init_validator(
     if protocol_key.is_none() {
         println!("Generating protocol signing key...");
     }
+    let eth_hot_pk = eth_hot_key.ref_to();
     // Generate the validator keys
-    let validator_keys =
-        ctx.wallet.gen_validator_keys(protocol_key, scheme).unwrap();
+    let validator_keys = ctx
+        .wallet
+        .gen_validator_keys(Some(eth_hot_pk), protocol_key, scheme)
+        .unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair
@@ -271,6 +317,14 @@ pub async fn submit_init_validator(
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
+        eth_cold_key: key::secp256k1::PublicKey::try_from_pk(
+            &eth_cold_key.ref_to(),
+        )
+        .unwrap(),
+        eth_hot_key: key::secp256k1::PublicKey::try_from_pk(
+            &eth_hot_key.ref_to(),
+        )
+        .unwrap(),
         rewards_account_key,
         protocol_key,
         dkg_key,
@@ -1142,6 +1196,11 @@ pub async fn broadcast_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
+    tracing::debug!(
+        tendermint_rpc_address = ?address,
+        transaction = ?to_broadcast,
+        "Broadcasting transaction",
+    );
     let rpc_cli = HttpClient::new(address)?;
 
     // TODO: configure an explicit timeout value? we need to hack away at
@@ -1184,24 +1243,30 @@ pub async fn submit_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
+    // Broadcast the supplied transaction
+    broadcast_tx(address.clone(), &to_broadcast).await?;
+
     let max_wait_time = Duration::from_secs(
-        env::var(ENV_VAR_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME)
+        env::var(ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS)
             .ok()
             .and_then(|val| val.parse().ok())
-            .unwrap_or(DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME),
+            .unwrap_or(DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS),
     );
-    tracing::debug!("Tenderming address: {:?}", address);
-    let rpc_cli = HttpClient::new(address.clone())?;
+    let deadline = Instant::now() + max_wait_time;
 
-    // Broadcast the supplied transaction
-    broadcast_tx(address, &to_broadcast).await?;
+    tracing::debug!(
+        tendermint_rpc_address = ?address,
+        transaction = ?to_broadcast,
+        ?deadline,
+        "Awaiting transaction approval",
+    );
 
     let parsed = {
-        let wrapper_query = Query::from(EventType::NewBlock)
-            .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
-        let event = rpc_cli.events(wrapper_query, max_wait_time).await?.into();
-        let parsed =
-            TxResponse::parse(event, NamadaEventType::Accepted, wrapper_hash);
+        let wrapper_query = rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
+        let event =
+            rpc::query_tx_status(wrapper_query, address.clone(), deadline)
+                .await;
+        let parsed = TxResponse::from_event(event);
 
         println!(
             "Transaction accepted with result: {}",
@@ -1212,15 +1277,11 @@ pub async fn submit_tx(
         if parsed.code == 0.to_string() {
             // We also listen to the event emitted when the encrypted
             // payload makes its way onto the blockchain
-            let decrypted_query = Query::from(EventType::NewBlock)
-                .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
+            let decrypted_query =
+                rpc::TxEventQuery::Applied(decrypted_hash.as_str());
             let event =
-                rpc_cli.events(decrypted_query, max_wait_time).await?.into();
-            let parsed = TxResponse::parse(
-                event,
-                NamadaEventType::Applied,
-                decrypted_hash.as_str(),
-            );
+                rpc::query_tx_status(decrypted_query, address, deadline).await;
+            let parsed = TxResponse::from_event(event);
             println!(
                 "Transaction applied with result: {}",
                 serde_json::to_string_pretty(&parsed).unwrap()
@@ -1230,6 +1291,11 @@ pub async fn submit_tx(
             Ok(parsed)
         }
     };
+
+    tracing::debug!(
+        transaction = ?to_broadcast,
+        "Transaction approved",
+    );
 
     parsed
 }

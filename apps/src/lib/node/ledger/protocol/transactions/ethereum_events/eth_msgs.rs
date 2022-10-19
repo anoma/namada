@@ -22,11 +22,9 @@ use namada::types::voting_power::FractionalVotingPower;
 pub struct EthMsgUpdate {
     /// The event being seen
     pub body: EthereumEvent,
-    /// Addresses of the validators who have just seen this event
-    /// we use [`BTreeSet`] even though ordering is not important here, so that
-    /// we can derive [`Hash`] for [`EthMsgUpdate`]. This also conveniently
-    /// orders addresses in the order in which they should be stored in
-    /// blockchain storage.
+    /// Addresses of the validators who have just seen this event. We use
+    /// [`BTreeSet`] even though ordering is not important here, so that we
+    /// can derive [`Hash`] for [`EthMsgUpdate`].
     // NOTE(feature = "abcipp"): This can just become BTreeSet<Address> because
     // BlockHeight will always be the previous block
     pub seen_by: BTreeSet<(Address, BlockHeight)>,
@@ -52,15 +50,15 @@ pub struct EthMsg {
     pub body: EthereumEvent,
     /// The total voting power that's voted for this event across all epochs
     pub voting_power: FractionalVotingPower,
-    /// The addresses of validators that voted for this event, in sorted order.
-    pub seen_by: Vec<Address>,
+    /// The addresses of validators that voted for this event
+    pub seen_by: BTreeSet<Address>,
     /// Whether this event has been acted on or not
     pub seen: bool,
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeSet, HashSet};
+    use std::collections::BTreeSet;
 
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
@@ -78,7 +76,7 @@ mod tests {
         let event = arbitrary_single_transfer(arbitrary_nonce(), receiver);
         let with_signers = MultiSignedEthEvent {
             event: event.clone(),
-            signers: HashSet::from_iter(vec![(
+            signers: BTreeSet::from([(
                 sole_validator.clone(),
                 BlockHeight(100),
             )]),

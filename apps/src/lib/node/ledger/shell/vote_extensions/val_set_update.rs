@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::types::storage::BlockHeight;
@@ -45,12 +46,6 @@ where
     /// This method behaves exactly like [`Self::validate_valset_upd_vext`],
     /// with the added bonus of returning the vote extension back, if it
     /// is valid.
-    // TODO:
-    // - verify if the voting powers in the vote extension are the same
-    // as the ones in storage. we can't do this yet, because we need to map
-    // ethereum addresses to namada validator addresses
-    //
-    // - verify signatures with a secp key, instead of an ed25519 key
     pub fn validate_valset_upd_vext_and_get_it_back(
         &self,
         ext: validator_set_update::SignedVext,
@@ -83,8 +78,6 @@ where
             tracing::error!("Dropping vote extension issued at genesis");
             return Err(VoteExtensionError::IssuedAtGenesis);
         }
-        // get the public key associated with this validator
-        let validator = &ext.data.validator_addr;
         // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
         // `last_height` here, instead of `ext.data.block_height`
         let ext_height_epoch = match self
@@ -101,7 +94,38 @@ where
                 return Err(VoteExtensionError::UnexpectedEpoch);
             }
         };
-        let (voting_power, pk) = self
+        // verify if the voting powers in storage match the voting powers in the
+        // vote extensions
+        for (eth_addr_book, namada_addr, namada_power) in self
+            .storage
+            .get_active_eth_addresses(Some(ext_height_epoch))
+        {
+            let &ext_power = match ext.data.voting_powers.get(&eth_addr_book) {
+                Some(voting_power) => voting_power,
+                _ => {
+                    tracing::error!(
+                        ?eth_addr_book,
+                        "Could not find expected Ethereum addresses in valset \
+                         upd vote extension",
+                    );
+                    return Err(
+                        VoteExtensionError::ValidatorMissingFromExtension,
+                    );
+                }
+            };
+            if namada_power != ext_power {
+                tracing::error!(
+                    validator = %namada_addr,
+                    expected = ?namada_power,
+                    got = ?ext_power,
+                    "Found unexpected voting power value in valset upd vote extension",
+                );
+                return Err(VoteExtensionError::DivergesFromStorage);
+            }
+        }
+        // get the public key associated with this validator
+        let validator = &ext.data.validator_addr;
+        let (voting_power, _) = self
             .storage
             .get_validator_from_address(validator, Some(ext_height_epoch))
             .map_err(|err| {
@@ -109,17 +133,24 @@ where
                     ?err,
                     %validator,
                     "Could not get public key from Storage for some validator, \
-                     while validating validator set update vote extension"
+                     while validating valset upd vote extension"
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
+        let epoched_pk = self
+            .storage
+            .read_validator_eth_hot_key(validator)
+            .expect("We should have this hot key in storage");
+        let pk = epoched_pk
+            .get(ext_height_epoch)
+            .expect("We should have the hot key of the given epoch");
         // verify the signature of the vote extension
-        ext.verify(&pk)
+        ext.verify(pk)
             .map_err(|err| {
                 tracing::error!(
                     ?err,
                     %validator,
-                    "Failed to verify the signature of a validator set update vote \
+                    "Failed to verify the signature of a valset upd vote \
                      extension issued by some validator"
                 );
                 VoteExtensionError::VerifySigFailed
@@ -294,34 +325,40 @@ mod test_vote_extensions {
     use crate::wallet;
 
     /// Test if a [`validator_set_update::Vext`] that incorrectly labels what
-    /// block height it was included on in a vote extension is rejected if
-    /// vote extensions are enabled. Else, it accepts.
-    // TODO:
-    // - sign with secp key
-    // - add validator voting powers from storage
+    /// block height it was included on in a vote extension is rejected
     #[test]
     fn test_reject_incorrect_block_height() {
         let (shell, _recv, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 
-        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let eth_bridge_key =
+            shell.mode.get_eth_bridge_keypair().expect("Test failed");
 
+        let voting_powers = {
+            let next_epoch = shell.storage.get_current_epoch().0.next();
+            shell
+                .storage
+                .get_active_eth_addresses(Some(next_epoch))
+                .map(|(eth_addr_book, _, voting_power)| {
+                    (eth_addr_book, voting_power)
+                })
+                .collect()
+        };
         #[allow(clippy::redundant_clone)]
         let validator_set_update = Some(
             validator_set_update::Vext {
-                // TODO: get voting powers from storage, associated with eth
-                // addrs
-                voting_powers: std::collections::HashMap::new(),
+                voting_powers,
                 validator_addr: validator_addr.clone(),
                 // invalid height
                 block_height: shell.storage.get_current_decision_height() + 1,
             }
-            // TODO: sign with secp key
-            .sign(protocol_key),
+            .sign(eth_bridge_key),
         );
         #[cfg(feature = "abcipp")]
         {
+            let protocol_key =
+                shell.mode.get_protocol_key().expect("Test failed");
             let ethereum_events = ethereum_events::Vext::empty(
                 shell.storage.get_current_decision_height(),
                 validator_addr,
@@ -356,22 +393,29 @@ mod test_vote_extensions {
     #[test]
     fn test_valset_upd_must_be_signed_by_validator() {
         let (shell, _recv, _) = test_utils::setup();
-        let (protocol_key, validator_addr) = {
+        let (eth_bridge_key, _protocol_key, validator_addr) = {
             let bertha_key = wallet::defaults::bertha_keypair();
             let bertha_addr = wallet::defaults::bertha_address();
-            (bertha_key, bertha_addr)
+            (test_utils::gen_secp256k1_keypair(), bertha_key, bertha_addr)
         };
-
+        let voting_powers = {
+            let next_epoch = shell.storage.get_current_epoch().0.next();
+            shell
+                .storage
+                .get_active_eth_addresses(Some(next_epoch))
+                .map(|(eth_addr_book, _, voting_power)| {
+                    (eth_addr_book, voting_power)
+                })
+                .collect()
+        };
         #[allow(clippy::redundant_clone)]
         let validator_set_update = Some(
             validator_set_update::Vext {
-                // TODO: get voting powers from storage, associated with eth
-                // addrs
-                voting_powers: std::collections::HashMap::new(),
+                voting_powers,
                 block_height: shell.storage.get_current_decision_height(),
                 validator_addr: validator_addr.clone(),
             }
-            .sign(&protocol_key),
+            .sign(&eth_bridge_key),
         );
         #[cfg(feature = "abcipp")]
         {
@@ -379,7 +423,7 @@ mod test_vote_extensions {
                 shell.storage.get_current_decision_height(),
                 validator_addr,
             )
-            .sign(&protocol_key);
+            .sign(&_protocol_key);
             let req = request::VerifyVoteExtension {
                 vote_extension: VoteExtension {
                     ethereum_events,
@@ -410,20 +454,33 @@ mod test_vote_extensions {
         let (mut shell, _recv, _) = test_utils::setup();
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
+        let eth_bridge_key = shell
+            .mode
+            .get_eth_bridge_keypair()
+            .expect("Test failed")
+            .clone();
         let validator_addr = shell
             .mode
             .get_validator_address()
             .expect("Test failed")
             .clone();
         let signed_height = shell.storage.get_current_decision_height();
+        let voting_powers = {
+            let next_epoch = shell.storage.get_current_epoch().0.next();
+            shell
+                .storage
+                .get_active_eth_addresses(Some(next_epoch))
+                .map(|(eth_addr_book, _, voting_power)| {
+                    (eth_addr_book, voting_power)
+                })
+                .collect()
+        };
         let vote_ext = validator_set_update::Vext {
-            // TODO: get voting powers from storage, associated with eth
-            // addrs
-            voting_powers: std::collections::HashMap::new(),
+            voting_powers,
             block_height: signed_height,
             validator_addr,
         }
-        .sign(&protocol_key);
+        .sign(&eth_bridge_key);
 
         // validators from the current epoch sign over validator
         // set of the next epoch
@@ -470,33 +527,40 @@ mod test_vote_extensions {
 
     /// Test if a [`validator_set_update::Vext`] with an incorrect signature
     /// is rejected
-    // TODO:
-    // - sign with secp key
-    // - add validator voting powers from storage
     #[test]
     fn test_reject_bad_signatures() {
         let (shell, _recv, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 
-        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let eth_bridge_key =
+            shell.mode.get_eth_bridge_keypair().expect("Test failed");
 
         #[allow(clippy::redundant_clone)]
         let validator_set_update = {
+            let voting_powers = {
+                let next_epoch = shell.storage.get_current_epoch().0.next();
+                shell
+                    .storage
+                    .get_active_eth_addresses(Some(next_epoch))
+                    .map(|(eth_addr_book, _, voting_power)| {
+                        (eth_addr_book, voting_power)
+                    })
+                    .collect()
+            };
             let mut ext = validator_set_update::Vext {
-                // TODO: get voting powers from storage, associated with eth
-                // addrs
-                voting_powers: std::collections::HashMap::new(),
+                voting_powers,
                 block_height: shell.storage.get_current_decision_height(),
                 validator_addr: validator_addr.clone(),
             }
-            // TODO: sign with secp key
-            .sign(protocol_key);
+            .sign(eth_bridge_key);
             ext.sig = test_utils::invalidate_signature(ext.sig);
             Some(ext)
         };
         #[cfg(feature = "abcipp")]
         {
+            let protocol_key =
+                shell.mode.get_protocol_key().expect("Test failed");
             let ethereum_events = ethereum_events::Vext::empty(
                 shell.storage.get_current_decision_height(),
                 validator_addr,
@@ -525,7 +589,9 @@ mod test_vote_extensions {
     /// Test if a [`validator_set_update::Vext`] is signed with a secp key
     /// that belongs to an active validator of some previous epoch
     #[test]
+    #[ignore]
     fn test_secp_key_belongs_to_active_validator() {
-        // TODO
+        // TODO: we need to prove ownership of validator keys
+        // https://github.com/anoma/namada/issues/106
     }
 }

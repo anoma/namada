@@ -17,6 +17,7 @@ use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, VerifySigError,
 };
+use crate::types::ethereum_events::EthAddress;
 
 /// secp256k1 public key
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -130,6 +131,23 @@ impl FromStr for PublicKey {
 impl From<libsecp256k1::PublicKey> for PublicKey {
     fn from(pk: libsecp256k1::PublicKey) -> Self {
         Self(pk)
+    }
+}
+
+impl From<&PublicKey> for EthAddress {
+    fn from(pk: &PublicKey) -> Self {
+        use tiny_keccak::Hasher;
+
+        let mut hasher = tiny_keccak::Keccak::v256();
+        // We're removing the first byte with
+        // `libsecp256k1::util::TAG_PUBKEY_FULL`
+        let pk_bytes = &pk.0.serialize()[1..];
+        hasher.update(pk_bytes);
+        let mut output = [0_u8; 32];
+        hasher.finalize(&mut output);
+        let mut addr = [0; 20];
+        addr.copy_from_slice(&output[12..]);
+        EthAddress(addr)
     }
 }
 
@@ -387,6 +405,21 @@ impl PartialOrd for Signature {
     }
 }
 
+impl TryFrom<&[u8; 64]> for Signature {
+    type Error = ParseSignatureError;
+
+    fn try_from(sig: &[u8; 64]) -> Result<Self, Self::Error> {
+        libsecp256k1::Signature::parse_standard(sig)
+            .map(Self)
+            .map_err(|err| {
+                ParseSignatureError::InvalidEncoding(std::io::Error::new(
+                    ErrorKind::Other,
+                    err,
+                ))
+            })
+    }
+}
+
 /// An implementation of the Secp256k1 signature scheme
 #[derive(
     Debug,
@@ -421,14 +454,14 @@ impl super::SigScheme for SigScheme {
 
     /// Sign the data with a key
     fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
-        #[cfg(not(any(test, features = "secp256k1-sign-verify")))]
+        #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
         {
             // to avoid `unused-variables` warn
             let _ = (keypair, data);
             panic!("\"secp256k1-sign-verify\" feature must be enabled");
         }
 
-        #[cfg(any(test, features = "secp256k1-sign-verify"))]
+        #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
             use sha2::{Digest, Sha256};
             let hash = Sha256::digest(data.as_ref());
@@ -443,14 +476,14 @@ impl super::SigScheme for SigScheme {
         data: &T,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
-        #[cfg(not(any(test, features = "secp256k1-sign-verify")))]
+        #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
         {
             // to avoid `unused-variables` warn
             let _ = (pk, data, sig);
             panic!("\"secp256k1-sign-verify\" feature must be enabled");
         }
 
-        #[cfg(any(test, features = "secp256k1-sign-verify"))]
+        #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
             use sha2::{Digest, Sha256};
             let bytes = &data
@@ -476,14 +509,14 @@ impl super::SigScheme for SigScheme {
         data: &[u8],
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
-        #[cfg(not(any(test, features = "secp256k1-sign-verify")))]
+        #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
         {
             // to avoid `unused-variables` warn
             let _ = (pk, data, sig);
             panic!("\"secp256k1-sign-verify\" feature must be enabled");
         }
 
-        #[cfg(any(test, features = "secp256k1-sign-verify"))]
+        #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
             use sha2::{Digest, Sha256};
             let hash = Sha256::digest(data);
@@ -499,5 +532,31 @@ impl super::SigScheme for SigScheme {
                 )))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_eth_address_from_secp() {
+        // test vector from https://bitcoin.stackexchange.com/a/89848
+        let sk_hex =
+            "c2c72dfbff11dfb4e9d5b0a20c620c58b15bb7552753601f043db91331b0db15";
+        let expected_pk_hex = "a225bf565ff4ea039bccba3e26456e910cd74e4616d67ee0a166e26da6e5e55a08d0fa1659b4b547ba7139ca531f62907b9c2e72b80712f1c81ece43c33f4b8b";
+        let expected_eth_addr_hex = "6ea27154616a29708dce7650b475dd6b82eba6a3";
+
+        let sk_bytes = hex::decode(sk_hex).unwrap();
+        let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
+        let pk: PublicKey = sk.ref_to();
+        // We're removing the first byte with
+        // `libsecp256k1::util::TAG_PUBKEY_FULL`
+        let pk_hex = hex::encode(&pk.0.serialize()[1..]);
+        assert_eq!(expected_pk_hex, pk_hex);
+
+        let eth_addr: EthAddress = (&pk).into();
+        let eth_addr_hex = hex::encode(eth_addr.0);
+        assert_eq!(expected_eth_addr_hex, eth_addr_hex);
     }
 }

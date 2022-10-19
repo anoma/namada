@@ -421,6 +421,9 @@ where
             .gas_meter
             .finalize_transaction()
             .map_err(|_| Error::GasOverflow)?;
+
+        self.event_log_mut().log_events(response.events.clone());
+
         Ok(response)
     }
 
@@ -906,7 +909,7 @@ mod test_finalize_block {
             #[cfg(feature = "abcipp")]
             signers: HashSet::from([address.clone()]),
             #[cfg(not(feature = "abcipp"))]
-            signers: HashSet::from([(
+            signers: BTreeSet::from([(
                 address.clone(),
                 shell.storage.last_height,
             )]),

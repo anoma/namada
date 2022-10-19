@@ -8,15 +8,18 @@ use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
 use namada::types::address::Address;
+use namada::types::ethereum_events::EthAddress;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::{Epoch, Key, PrefixValue};
 use namada::types::token::{self, Amount};
+use namada::types::vote_extensions::validator_set_update::EthAddrBook;
 
 use super::*;
 use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tendermint_proto::types::EvidenceParams;
+use crate::node::ledger::events::log::dumb_queries;
 use crate::node::ledger::response;
 
 #[derive(Error, Debug)]
@@ -84,12 +87,39 @@ where
                     self.read_storage_prefix(&storage_key, height, query.prove)
                 }
                 Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
+                Path::Accepted { tx_hash } => {
+                    let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
+                    self.query_event_log(matcher)
+                }
+                Path::Applied { tx_hash } => {
+                    let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
+                    self.query_event_log(matcher)
+                }
             },
             Err(err) => response::Query {
                 code: 1,
                 info: format!("RPC error: {}", err),
                 ..Default::default()
             },
+        }
+    }
+
+    /// Query events in the event log matching the given query.
+    fn query_event_log(
+        &self,
+        matcher: dumb_queries::QueryMatcher,
+    ) -> response::Query {
+        let value = self
+            .event_log()
+            .iter_with_matcher(matcher)
+            .cloned()
+            .collect::<Vec<_>>()
+            .try_to_vec()
+            .unwrap();
+
+        response::Query {
+            value,
+            ..Default::default()
         }
     }
 
@@ -380,6 +410,29 @@ pub(crate) trait QueriesExt {
 
     /// Retrieves the [`BlockHeight`] that is currently being decided.
     fn get_current_decision_height(&self) -> BlockHeight;
+
+    /// For a given Namada validator, return its corresponding Ethereum bridge
+    /// address.
+    fn get_ethbridge_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress>;
+
+    /// For a given Namada validator, return its corresponding Ethereum
+    /// governance address.
+    fn get_ethgov_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress>;
+
+    /// Extension of [`Self::get_active_validators`], which additionally returns
+    /// all Ethereum addresses of some validator.
+    fn get_active_eth_addresses<'db>(
+        &'db self,
+        epoch: Option<Epoch>,
+    ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, VotingPower)> + 'db>;
 }
 
 impl<D, H> QueriesExt for Storage<D, H>
@@ -596,6 +649,66 @@ where
     fn get_current_decision_height(&self) -> BlockHeight {
         self.last_height + 1
     }
+
+    #[inline]
+    fn get_ethbridge_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.read_validator_eth_hot_key(validator)
+            .as_ref()
+            .and_then(|epk| epk.get(epoch).and_then(|pk| pk.try_into().ok()))
+    }
+
+    #[inline]
+    fn get_ethgov_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.read_validator_eth_cold_key(validator)
+            .as_ref()
+            .and_then(|epk| epk.get(epoch).and_then(|pk| pk.try_into().ok()))
+    }
+
+    #[inline]
+    fn get_active_eth_addresses<'db>(
+        &'db self,
+        epoch: Option<Epoch>,
+    ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, VotingPower)> + 'db>
+    {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        Box::new(self.get_active_validators(Some(epoch)).into_iter().map(
+            move |validator| {
+                let hot_key_addr = self
+                    .get_ethbridge_from_namada_addr(
+                        &validator.address,
+                        Some(epoch),
+                    )
+                    .expect(
+                        "All Namada validators should have an Ethereum bridge \
+                         key",
+                    );
+                let cold_key_addr = self
+                    .get_ethgov_from_namada_addr(
+                        &validator.address,
+                        Some(epoch),
+                    )
+                    .expect(
+                        "All Namada validators should have an Ethereum \
+                         governance key",
+                    );
+                let eth_addr_book = EthAddrBook {
+                    hot_key_addr,
+                    cold_key_addr,
+                };
+                (eth_addr_book, validator.address, validator.voting_power)
+            },
+        ))
+    }
 }
 
 /// This enum is used as a parameter to
@@ -624,6 +737,17 @@ mod test_queries {
             /// Test if [`QueriesExt::can_send_validator_set_update`] behaves as
             /// expected.
             #[test]
+            #[ignore]
+            // TODO: we should fix this test to cope with epoch changes only
+            // happening at the first block of a new epoch. an erroneous change
+            // was introduced to the ledger, that updated the epoch correctly
+            // at the first block of the new epoch, but recorded `height + 1`
+            // instead of the actual height of the epoch change. since this
+            // test depended on that erroneous logic to pass, it's busted.
+            //
+            // linked issues:
+            // - <https://github.com/anoma/namada/issues/599>
+            // - <https://github.com/anoma/namada/issues/600>
             fn test_can_send_validator_set_update() {
                 let (mut shell, _recv, _) = test_utils::setup_at_height(0u64);
 
