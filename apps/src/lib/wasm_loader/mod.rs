@@ -356,6 +356,34 @@ impl WasmLoader {
         &self,
         name: impl AsRef<str>,
     ) -> eyre::Result<Vec<u8>> {
-        Ok(vec![])
+        // add .wasm on the end if not already present (TODO: Remove)
+        let name = name.as_ref();
+        let filename = if name.ends_with(".wasm") {
+            name.to_owned()
+        } else {
+            format!("{name}.wasm")
+        };
+        // put checksum in the middle of the filename if necessary
+        let filename = if self.checksums {
+            let checksums = Checksums::read_checksums(&self.directory);
+            match checksums.0.get(&filename) {
+                Some(filename_with_hash) => filename_with_hash,
+                None => {
+                    return Err(eyre!(
+                        "Could not find a checksummed filename for {} in {}",
+                        &filename,
+                        &self.directory.to_string_lossy(),
+                    ));
+                }
+            }
+            .to_owned()
+        } else {
+            filename
+        };
+
+        let path = &self.directory.join(filename);
+        fs::read(&path).wrap_err_with(|| {
+            format!("Failed to read wasm from {}", &path.to_string_lossy())
+        })
     }
 }

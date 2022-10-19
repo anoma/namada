@@ -1,6 +1,5 @@
 use std::convert::TryFrom;
 use std::future::Future;
-use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -24,6 +23,7 @@ use crate::config;
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::abci::RequestBeginBlock;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
+use crate::wasm_loader::WasmLoader;
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -46,7 +46,7 @@ impl AbcippShim {
     /// shell.
     pub fn new(
         config: config::Ledger,
-        wasm_dir: PathBuf,
+        wasm_loader: WasmLoader,
         broadcast_sender: UnboundedSender<Vec<u8>>,
         db_cache: &rocksdb::Cache,
         vp_wasm_compilation_cache: u64,
@@ -60,7 +60,7 @@ impl AbcippShim {
             Self {
                 service: Shell::new(
                     config,
-                    wasm_dir,
+                    wasm_loader,
                     broadcast_sender,
                     Some(db_cache),
                     vp_wasm_compilation_cache,

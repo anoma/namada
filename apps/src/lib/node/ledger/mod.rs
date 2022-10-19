@@ -31,6 +31,7 @@ use crate::node::ledger::config::genesis;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
+use crate::wasm_loader::WasmLoader;
 use crate::{config, wasm_loader};
 
 /// Env. var to set a number of Tokio RT worker threads
@@ -430,7 +431,7 @@ fn start_abci_broadcaster_shell(
     let genesis = genesis::genesis();
     let (shell, abci_service) = AbcippShim::new(
         config,
-        wasm_dir,
+        WasmLoader::new(wasm_dir),
         broadcaster_sender,
         &db_cache,
         vp_wasm_compilation_cache,

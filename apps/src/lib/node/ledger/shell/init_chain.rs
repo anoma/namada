@@ -12,7 +12,6 @@ use super::*;
 use crate::facade::tendermint_proto::abci;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::facade::tendermint_proto::google::protobuf;
-use crate::wasm_loader;
 
 impl<D, H> Shell<D, H>
 where
@@ -133,9 +132,10 @@ where
             let vp_code = match vp_code_cache.get(&vp_code_path).cloned() {
                 Some(vp_code) => vp_code,
                 None => {
-                    let wasm =
-                        wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
-                            .map_err(Error::ReadingWasm)?;
+                    let wasm = self
+                        .wasm_loader
+                        .read_from_disk(&vp_code_path)
+                        .map_err(Error::ReadingWasm)?;
                     vp_code_cache.insert(vp_code_path.clone(), wasm.clone());
                     wasm
                 }
@@ -191,10 +191,9 @@ where
             balances,
         } in genesis.token_accounts
         {
-            let vp_code =
-                vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
-                    wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
-                        .unwrap()
+            let vp_code = vp_code_cache
+                .get_or_insert_with(vp_code_path.clone(), || {
+                    self.wasm_loader.read_from_disk(&vp_code_path).unwrap()
                 });
 
             // In dev, we don't check the hash
@@ -232,11 +231,9 @@ where
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.validator_vp_code_path.clone(),
                 || {
-                    wasm_loader::read_wasm(
-                        &self.wasm_dir,
-                        &validator.validator_vp_code_path,
-                    )
-                    .unwrap()
+                    self.wasm_loader
+                        .read_from_disk(&validator.validator_vp_code_path)
+                        .unwrap()
                 },
             );
 

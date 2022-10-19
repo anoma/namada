@@ -63,6 +63,7 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
 #[allow(unused_imports)]
 use crate::wallet::ValidatorData;
+use crate::wasm_loader::WasmLoader;
 use crate::{config, wallet};
 
 fn key_to_tendermint(
@@ -204,8 +205,8 @@ where
     /// Path to the base directory with DB data and configs
     #[allow(dead_code)]
     base_dir: PathBuf,
-    /// Path to the WASM directory for files used in the genesis block.
-    wasm_dir: PathBuf,
+    /// A loader for *.wasm files used in the genesis block.
+    wasm_loader: WasmLoader,
     /// Information about the running shell instance
     #[allow(dead_code)]
     mode: ShellMode,
@@ -232,7 +233,7 @@ where
     /// up the database with this data and tries to load the last state.
     pub fn new(
         config: config::Ledger,
-        wasm_dir: PathBuf,
+        wasm_loader: WasmLoader,
         broadcast_sender: UnboundedSender<Vec<u8>>,
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
@@ -319,7 +320,7 @@ where
             write_log: WriteLog::default(),
             byzantine_validators: vec![],
             base_dir,
-            wasm_dir,
+            wasm_loader,
             mode,
             vp_wasm_cache: VpCache::new(
                 vp_wasm_cache_dir,
@@ -745,6 +746,13 @@ mod test_utils {
         pub txs: Vec<Vec<u8>>,
     }
 
+    /// Builds a [`WasmLoader`] which will read *.wasm files from the local
+    /// repository's "wasm/" directory, without checking against the
+    /// `checksums.json` file.
+    fn local_wasm_loader() -> WasmLoader {
+        WasmLoader::new_without_checksums(top_level_directory().join("wasm"))
+    }
+
     impl TestShell {
         /// Returns a new shell paired with a broadcast receiver, which will
         /// receives any protocol txs sent by the shell.
@@ -761,7 +769,7 @@ mod test_utils {
                             Default::default(),
                             TendermintMode::Validator,
                         ),
-                        top_level_directory().join("wasm"),
+                        local_wasm_loader(),
                         sender,
                         None,
                         vp_wasm_compilation_cache,
@@ -875,7 +883,7 @@ mod test_utils {
                 Default::default(),
                 TendermintMode::Validator,
             ),
-            top_level_directory().join("wasm"),
+            local_wasm_loader(),
             sender.clone(),
             None,
             vp_wasm_compilation_cache,
@@ -935,7 +943,7 @@ mod test_utils {
                 Default::default(),
                 TendermintMode::Validator,
             ),
-            top_level_directory().join("wasm"),
+            local_wasm_loader(),
             sender,
             None,
             vp_wasm_compilation_cache,
