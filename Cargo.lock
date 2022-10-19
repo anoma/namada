@@ -2902,33 +2902,6 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.14.0"
-source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=5b4dce005958364baa21872d02b5e8feed1a3cf5#5b4dce005958364baa21872d02b5e8feed1a3cf5"
-dependencies = [
- "bytes 1.1.0",
- "derive_more",
- "flex-error",
- "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=5b4dce005958364baa21872d02b5e8feed1a3cf5)",
- "ics23",
- "num-traits 0.2.15",
- "prost 0.9.0",
- "prost-types 0.9.0",
- "safe-regex",
- "serde 1.0.137",
- "serde_derive",
- "serde_json",
- "sha2 0.10.2",
- "subtle-encoding",
- "tendermint 0.23.6",
- "tendermint-light-client-verifier 0.23.6",
- "tendermint-proto 0.23.6",
- "tendermint-testgen 0.23.6",
- "time 0.3.9",
- "tracing 0.1.35",
-]
-
-[[package]]
-name = "ibc"
-version = "0.14.0"
 source = "git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d#9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d"
 dependencies = [
  "bytes 1.1.0",
@@ -2954,16 +2927,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "ibc-proto"
-version = "0.17.1"
-source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=5b4dce005958364baa21872d02b5e8feed1a3cf5#5b4dce005958364baa21872d02b5e8feed1a3cf5"
+name = "ibc"
+version = "0.14.0"
+source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2#f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"
 dependencies = [
- "base64 0.13.0",
  "bytes 1.1.0",
+ "derive_more",
+ "flex-error",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
+ "ics23",
+ "num-traits 0.2.15",
  "prost 0.9.0",
  "prost-types 0.9.0",
+ "safe-regex",
  "serde 1.0.137",
+ "serde_derive",
+ "serde_json",
+ "sha2 0.10.2",
+ "subtle-encoding",
+ "tendermint 0.23.6",
+ "tendermint-light-client-verifier 0.23.6",
  "tendermint-proto 0.23.6",
+ "tendermint-testgen 0.23.6",
+ "time 0.3.9",
+ "tracing 0.1.35",
 ]
 
 [[package]]
@@ -2977,6 +2964,19 @@ dependencies = [
  "prost-types 0.9.0",
  "serde 1.0.137",
  "tendermint-proto 0.23.5",
+]
+
+[[package]]
+name = "ibc-proto"
+version = "0.17.1"
+source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2#f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"
+dependencies = [
+ "base64 0.13.0",
+ "bytes 1.1.0",
+ "prost 0.9.0",
+ "prost-types 0.9.0",
+ "serde 1.0.137",
+ "tendermint-proto 0.23.6",
 ]
 
 [[package]]
@@ -4309,10 +4309,10 @@ dependencies = [
  "ferveo-common",
  "group-threshold-cryptography",
  "hex",
- "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=5b4dce005958364baa21872d02b5e8feed1a3cf5)",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
- "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=5b4dce005958364baa21872d02b5e8feed1a3cf5)",
+ "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
  "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
  "ics23",
  "itertools 0.10.3",
  "libsecp256k1 0.7.0",
@@ -6936,7 +6936,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=8c8935e9b3d901b5f9229e34e5b7f90248397b5d#8c8935e9b3d901b5f9229e34e5b7f90248397b5d"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
 dependencies = [
  "async-trait",
  "bytes 1.1.0",
@@ -6977,7 +6977,7 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=8c8935e9b3d901b5f9229e34e5b7f90248397b5d#8c8935e9b3d901b5f9229e34e5b7f90248397b5d"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
 dependencies = [
  "flex-error",
  "serde 1.0.137",
@@ -7003,7 +7003,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=8c8935e9b3d901b5f9229e34e5b7f90248397b5d#8c8935e9b3d901b5f9229e34e5b7f90248397b5d"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -7032,7 +7032,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=8c8935e9b3d901b5f9229e34e5b7f90248397b5d#8c8935e9b3d901b5f9229e34e5b7f90248397b5d"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
 dependencies = [
  "bytes 1.1.0",
  "flex-error",
@@ -7082,7 +7082,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=8c8935e9b3d901b5f9229e34e5b7f90248397b5d#8c8935e9b3d901b5f9229e34e5b7f90248397b5d"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -7130,7 +7130,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=8c8935e9b3d901b5f9229e34e5b7f90248397b5d#8c8935e9b3d901b5f9229e34e5b7f90248397b5d"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",

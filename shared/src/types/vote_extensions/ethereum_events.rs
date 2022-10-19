@@ -1,7 +1,7 @@
 //! Contains types necessary for processing Ethereum events
 //! in vote extensions.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 
@@ -79,11 +79,11 @@ pub struct MultiSignedEthEvent {
     pub event: EthereumEvent,
     /// List of addresses of validators who signed this event
     #[cfg(feature = "abcipp")]
-    pub signers: HashSet<Address>,
+    pub signers: BTreeSet<Address>,
     /// List of addresses of validators who signed this event
     /// and block height at which they signed it
     #[cfg(not(feature = "abcipp"))]
-    pub signers: HashSet<(Address, BlockHeight)>,
+    pub signers: BTreeSet<(Address, BlockHeight)>,
 }
 
 /// Compresses a set of signed [`Vext`] instances, to save
@@ -162,8 +162,6 @@ impl VextDigest {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
     use crate::proto::Signed;
     use crate::types::address::{self, Address};
@@ -276,7 +274,7 @@ mod tests {
 
         #[cfg(not(feature = "abcipp"))]
         let signers = {
-            let mut s = HashSet::new();
+            let mut s = BTreeSet::new();
             s.insert((validator_1.clone(), last_block_height));
             s.insert((
                 validator_1.clone(),
