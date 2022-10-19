@@ -259,21 +259,16 @@ where
             .begin_block(hash, height)
             .expect("Beginning a block shouldn't fail");
 
+        let header_time = header.time.clone();
         self.storage
             .set_header(header)
             .expect("Setting a header shouldn't fail");
 
         self.byzantine_validators = byzantine_validators;
 
-        let header = self
-            .storage
-            .header
-            .as_ref()
-            .expect("Header must have been set in prepare_proposal.");
-        let time = header.time;
         let new_epoch = self
             .storage
-            .update_epoch(height, time)
+            .update_epoch(height, header_time)
             .expect("Must be able to update epoch");
 
         self.slash();
