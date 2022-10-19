@@ -2,7 +2,7 @@
 use core::borrow::Borrow;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use data_encoding::HEXLOWER;
 use eyre::{eyre, WrapErr};
@@ -324,5 +324,38 @@ async fn download_wasm(url: String) -> Result<Vec<u8>, Error> {
             }
         }
         Err(e) => Err(Error::Download(url, e)),
+    }
+}
+
+/// Handle for reading *.wasm files from a directory
+#[derive(Debug)]
+pub struct WasmLoader {
+    /// The directory on disk where the *.wasm files are to be found
+    directory: PathBuf,
+    /// If `checksums` is true, then there must be a valid `checksums.json`
+    /// file in `directory` in order to load any *.wasm files.
+    checksums: bool,
+}
+
+impl WasmLoader {
+    pub fn new(directory: PathBuf) -> Self {
+        Self {
+            directory,
+            checksums: true,
+        }
+    }
+
+    pub fn new_without_checksums(directory: PathBuf) -> Self {
+        Self {
+            directory,
+            checksums: false,
+        }
+    }
+
+    pub fn read_from_disk(
+        &self,
+        name: impl AsRef<str>,
+    ) -> eyre::Result<Vec<u8>> {
+        Ok(vec![])
     }
 }
