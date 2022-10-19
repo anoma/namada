@@ -6,7 +6,6 @@ use super::governance::execute_governance_proposals;
 use super::*;
 use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
-use crate::facade::tendermint_proto::types::ConsensusParams;
 
 impl<D, H> Shell<D, H>
 where
