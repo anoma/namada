@@ -101,14 +101,17 @@ fn test_node_connectivity() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Anoma ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
+    validator_0.exp_string("Starting RPC HTTP server on")?;
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
     validator_1.exp_string("Anoma ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
+    validator_1.exp_string("Starting RPC HTTP server on")?;
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
     non_validator.exp_string("This node is a fullnode")?;
+    non_validator.exp_string("Starting RPC HTTP server on")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
@@ -168,6 +171,7 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
 
     // 2. Kill the tendermint node
     sleep(1);
@@ -274,7 +278,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
     let _bg_ledger = ledger.background();
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
@@ -448,8 +452,7 @@ fn invalid_transactions() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger.exp_string("Anoma ledger node started")?;
-    // Wait to commit a block
-    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
 
     let bg_ledger = ledger.background();
 
@@ -601,7 +604,7 @@ fn pos_bonds() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -796,7 +799,7 @@ fn pos_init_validator() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -960,7 +963,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     let mut ledger =
         run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
@@ -1050,7 +1053,7 @@ fn proposal_submission() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1399,7 +1402,7 @@ fn proposal_offline() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1553,8 +1556,6 @@ fn generate_proposal_json(
 /// 4. Submit a valid token transfer tx from one validator to the other
 /// 5. Check that all the nodes processed the tx with the same result
 #[test]
-#[ignore]
-// TODO(namada#418): re-enable once working again
 fn test_genesis_validators() -> Result<()> {
     use std::collections::HashMap;
     use std::net::SocketAddr;
@@ -1847,16 +1848,19 @@ fn test_genesis_validators() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Anoma ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
+    validator_0.exp_string("Starting RPC HTTP server on")?;
 
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
     validator_1.exp_string("Anoma ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
+    validator_1.exp_string("Starting RPC HTTP server on")?;
 
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
     non_validator.exp_string("This node is a fullnode")?;
+    non_validator.exp_string("Starting RPC HTTP server on")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
