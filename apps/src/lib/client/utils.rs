@@ -154,6 +154,14 @@ pub async fn join_network(
         } else {
             (PathBuf::from_str(".").unwrap(), false)
         };
+    
+    // For compatibility for releases created with ".anoma" base-dir
+    let old_base_dir = unpack_dir.join(".anoma");
+    if old_base_dir.exists() {
+        fs::rename(&old_base_dir, unpack_dir.join(config::DEFAULT_BASE_DIR))
+            .await
+            .unwrap();
+    }
     archive.unpack(&unpack_dir).unwrap();
 
     // Rename the base-dir from the default and rename wasm-dir, if non-default.

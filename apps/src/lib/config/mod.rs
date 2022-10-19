@@ -20,7 +20,7 @@ use thiserror::Error;
 use crate::cli;
 
 /// Base directory contains global config and chain directories.
-pub const DEFAULT_BASE_DIR: &str = ".anoma";
+pub const DEFAULT_BASE_DIR: &str = ".namada";
 /// Default WASM dir.
 pub const DEFAULT_WASM_DIR: &str = "wasm";
 /// The WASM checksums file contains the hashes of built WASMs. It is inside the
