@@ -387,3 +387,60 @@ impl WasmLoader {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn test_wasm_loader_read_from_disk_with_checksums() {
+        let tmp_dir = tempfile::tempdir()
+            .expect("Couldn't run test - couldn't set up test directory");
+        const WASM_NAME: &str = "tx_foo";
+        let wasm_filename_without_hash = format!("{WASM_NAME}.wasm");
+        let wasm_filename_with_hash = format!(
+            "{WASM_NAME}.\
+             7d7fa4553ccf115cd82ce59d4e1dc8321c41d357d02ccae29a59865aac2bb77d.\
+             wasm"
+        );
+        let wasm_path = tmp_dir.path().join(&wasm_filename_with_hash);
+        const WASM_CONTENTS: &str =
+            "specific contents of the wasm file not relevant to tests";
+        fs::write(&wasm_path, WASM_CONTENTS).unwrap();
+        let checksums_path = tmp_dir.path().join("checksums.json");
+        fs::write(
+            &checksums_path,
+            json!({
+                wasm_filename_without_hash: wasm_filename_with_hash,
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let wasm_loader = WasmLoader::new(tmp_dir.path().to_owned());
+
+        let wasm_contents = wasm_loader.read_from_disk(WASM_NAME).unwrap();
+
+        assert_eq!(wasm_contents, WASM_CONTENTS.as_bytes().to_vec());
+    }
+
+    #[test]
+    fn test_wasm_loader_read_from_disk_no_checksums() {
+        let tmp_dir = tempfile::tempdir()
+            .expect("Couldn't run test - couldn't set up test directory");
+        const WASM_NAME: &str = "tx_foo";
+        let wasm_filename_without_hash = format!("{WASM_NAME}.wasm");
+        let wasm_path = tmp_dir.path().join(&wasm_filename_without_hash);
+        const WASM_CONTENTS: &str =
+            "specific contents of the wasm file not relevant to tests";
+        fs::write(&wasm_path, WASM_CONTENTS).unwrap();
+
+        let wasm_loader =
+            WasmLoader::new_without_checksums(tmp_dir.path().to_owned());
+
+        let wasm_contents = wasm_loader.read_from_disk(WASM_NAME).unwrap();
+
+        assert_eq!(wasm_contents, WASM_CONTENTS.as_bytes().to_vec());
+    }
+}
