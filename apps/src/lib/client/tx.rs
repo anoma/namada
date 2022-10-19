@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::env;
 use std::fs::File;
-use std::time::Duration;
 
 use async_std::io::{self, WriteExt};
 use borsh::BorshSerialize;
@@ -24,6 +23,7 @@ use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, token};
 use namada::{ledger, vm};
+use tokio::time::{Duration, Instant};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -33,13 +33,9 @@ use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
-use crate::facade::tendermint_rpc::query::{EventType, Query};
 use crate::facade::tendermint_rpc::{Client, HttpClient};
-use crate::node::ledger::events::EventType as NamadaEventType;
 use crate::node::ledger::tendermint_node;
 
-const ACCEPTED_QUERY_KEY: &str = "accepted.hash";
-const APPLIED_QUERY_KEY: &str = "applied.hash";
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
@@ -54,13 +50,14 @@ const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const VP_NFT: &str = "vp_nft.wasm";
 
-/// Timeout for jsonrpc requests to the `/events` endpoint in Tendermint.
-const ENV_VAR_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME: &str =
-    "ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME";
+/// Timeout for requests to the `/accepted` and `/applied`
+/// ABCI query endpoints.
+const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
+    "NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS";
 
-/// Default timeout in seconds for jsonrpc requests to the `/events` endpoint in
-/// Tendermint.
-const DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME: u64 = 30;
+/// Default timeout in seconds for requests to the `/accepted`
+/// and `/applied` ABCI query endpoints.
+const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
@@ -1199,6 +1196,11 @@ pub async fn broadcast_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
+    tracing::debug!(
+        tendermint_rpc_address = ?address,
+        transaction = ?to_broadcast,
+        "Broadcasting transaction",
+    );
     let rpc_cli = HttpClient::new(address)?;
 
     // TODO: configure an explicit timeout value? we need to hack away at
@@ -1241,24 +1243,30 @@ pub async fn submit_tx(
         _ => panic!("Cannot broadcast a dry-run transaction"),
     };
 
+    // Broadcast the supplied transaction
+    broadcast_tx(address.clone(), &to_broadcast).await?;
+
     let max_wait_time = Duration::from_secs(
-        env::var(ENV_VAR_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME)
+        env::var(ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS)
             .ok()
             .and_then(|val| val.parse().ok())
-            .unwrap_or(DEFAULT_ANOMA_TENDERMINT_EVENTS_MAX_WAIT_TIME),
+            .unwrap_or(DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS),
     );
-    tracing::debug!("Tenderming address: {:?}", address);
-    let rpc_cli = HttpClient::new(address.clone())?;
+    let deadline = Instant::now() + max_wait_time;
 
-    // Broadcast the supplied transaction
-    broadcast_tx(address, &to_broadcast).await?;
+    tracing::debug!(
+        tendermint_rpc_address = ?address,
+        transaction = ?to_broadcast,
+        ?deadline,
+        "Awaiting transaction approval",
+    );
 
     let parsed = {
-        let wrapper_query = Query::from(EventType::NewBlock)
-            .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
-        let event = rpc_cli.events(wrapper_query, max_wait_time).await?.into();
-        let parsed =
-            TxResponse::parse(event, NamadaEventType::Accepted, wrapper_hash);
+        let wrapper_query = rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
+        let event =
+            rpc::query_tx_status(wrapper_query, address.clone(), deadline)
+                .await;
+        let parsed = TxResponse::from_event(event);
 
         println!(
             "Transaction accepted with result: {}",
@@ -1269,15 +1277,11 @@ pub async fn submit_tx(
         if parsed.code == 0.to_string() {
             // We also listen to the event emitted when the encrypted
             // payload makes its way onto the blockchain
-            let decrypted_query = Query::from(EventType::NewBlock)
-                .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
+            let decrypted_query =
+                rpc::TxEventQuery::Applied(decrypted_hash.as_str());
             let event =
-                rpc_cli.events(decrypted_query, max_wait_time).await?.into();
-            let parsed = TxResponse::parse(
-                event,
-                NamadaEventType::Applied,
-                decrypted_hash.as_str(),
-            );
+                rpc::query_tx_status(decrypted_query, address, deadline).await;
+            let parsed = TxResponse::from_event(event);
             println!(
                 "Transaction applied with result: {}",
                 serde_json::to_string_pretty(&parsed).unwrap()
@@ -1287,6 +1291,11 @@ pub async fn submit_tx(
             Ok(parsed)
         }
     };
+
+    tracing::debug!(
+        transaction = ?to_broadcast,
+        "Transaction approved",
+    );
 
     parsed
 }
