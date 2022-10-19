@@ -64,10 +64,13 @@ mod tests {
     /// Test if query matching is working as expected.
     #[test]
     fn test_tm_query_matching() {
+        const HASH: &str =
+            "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF";
+
         let matcher = QueryMatcher {
             event_type: EventType::Accepted,
             attr: "hash".to_string(),
-            value: "DEADBEEF".try_into().unwrap(),
+            value: HASH.try_into().unwrap(),
         };
 
         let tests = {
@@ -76,7 +79,7 @@ mod tests {
                 level: EventLevel::Block,
                 attributes: {
                     let mut attrs = std::collections::HashMap::new();
-                    attrs.insert("hash".to_string(), "DEADBEEF".to_string());
+                    attrs.insert("hash".to_string(), HASH.to_string());
                     attrs
                 },
             };
@@ -87,7 +90,7 @@ mod tests {
                 level: EventLevel::Block,
                 attributes: {
                     let mut attrs = std::collections::HashMap::new();
-                    attrs.insert("hash".to_string(), "DEADBEEF".to_string());
+                    attrs.insert("hash".to_string(), HASH.to_string());
                     attrs
                 },
             };
