@@ -665,6 +665,7 @@ where
 
     run_cmd
         .env("ANOMA_LOG", log_level)
+        .env("ANOMA_TM_STDOUT", "true")
         .env("TM_LOG_LEVEL", "info")
         .env("ANOMA_LOG_COLOR", "false")
         .current_dir(working_dir)
