@@ -28,7 +28,7 @@ WORKDIR /app
 RUN git clone -b v0.1.1-abcipp --single-branch https://github.com/heliaxdev/tendermint.git && cd tendermint && make build
 
 FROM debian:bullseye-slim AS runtime
-ENV NAMADA_BASE_NADIR=/.namada
+ENV ANOMA_BASE_NADIR=/.namada
 ENV ANOMA_LOG_COLOR=false
 
 RUN apt-get update && apt-get install libcurl4-openssl-dev -y && apt-get clean
