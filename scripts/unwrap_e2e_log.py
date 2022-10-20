@@ -25,7 +25,7 @@ def process_line(line):
         line = line.replace(f'\\u{{{m}}}', f'\\u{int(m, 16):04x}')
     line = \
         try_parse_line_str(line) or \
-        try_parse_line_bytes (line) or \
+        try_parse_line_bytes(line) or \
         ''
     sys.stdout.write(line)
 
