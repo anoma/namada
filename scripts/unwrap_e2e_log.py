@@ -21,11 +21,24 @@ def process_file(f):
     sys.stdout.flush()
 
 def process_line(line):
-    prefix = 'read: '
     for m in UNICODE.findall(line):
         line = line.replace(f'\\u{{{m}}}', f'\\u{int(m, 16):04x}')
-    line = eval(line[len(prefix):])
+    line = \
+        try_parse_line_str(line) or \
+        try_parse_line_bytes (line) or \
+        ''
     sys.stdout.write(line)
+
+def try_parse_line_str(line):
+    prefix_full = 'read: "'
+    prefix = prefix_full[:-1]
+    if line.startswith(prefix_full):
+        return eval(line[len(prefix):])
+
+def try_parse_line_bytes(line):
+    prefix = 'read:(bytes): '
+    if line.startswith(prefix):
+        return bytes(eval(line[len(prefix):])).decode("utf-8", "backslashreplace")
 
 if __name__ == '__main__':
     main()
