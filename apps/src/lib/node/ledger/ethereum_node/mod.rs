@@ -108,7 +108,7 @@ pub mod eth_fullnode {
 
     impl EthereumNode {
         /// Starts the geth process and returns a handle to it as well
-        /// as an oracle that can relay data from geth to the ledger.
+        /// as a channel on which an abort signal can be sent to shut it down.
         ///
         /// First looks up which network to connect to from an env var.
         /// It then starts the process and waits for it to finish
