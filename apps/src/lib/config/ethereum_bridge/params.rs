@@ -2,6 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[repr(transparent)]
 pub struct MinimumConfirmations(u64);
 
 impl Default for MinimumConfirmations {
@@ -22,18 +23,19 @@ pub struct Config {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Addresses {
+    /// The Ethereum address of the ERC20 contract that represents this chain's
+    /// native token e.g. 0x6B175474E89094C44Da98b954EedeAC495271d0F
+    pub native_erc20: String,
     /// The Ethereum address of the bridge contract e.g.
     /// 0x6B175474E89094C44Da98b954EedeAC495271d0F
     pub bridge: EthereumContract,
     /// The Ethereum address of the governance contract e.g.
     /// 0x6B175474E89094C44Da98b954EedeAC495271d0F
     pub governance: EthereumContract,
-    /// The Ethereum address of the ERC20 contract that represents this chain's
-    /// native token e.g. 0x6B175474E89094C44Da98b954EedeAC495271d0F
-    pub native_erc20: String,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[repr(transparent)]
 pub struct ContractVersion(u64);
 
 impl Default for ContractVersion {
