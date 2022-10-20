@@ -1,11 +1,10 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
-use tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use tendermint_proto::abci::{
-    ExecTxResult, RequestProcessProposal, ResponseProcessProposal,
-};
 
 use super::*;
+use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
+use crate::facade::tendermint_proto::abci::RequestProcessProposal;
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
 impl<D, H> Shell<D, H>
 where
@@ -27,28 +26,25 @@ where
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,
-    ) -> ResponseProcessProposal {
+    ) -> ProcessProposal {
         let tx_results = self.process_txs(&req.txs);
 
-        ResponseProcessProposal {
+        ProcessProposal {
             status: if tx_results.iter().any(|res| res.code > 3) {
                 ProposalStatus::Reject as i32
             } else {
                 ProposalStatus::Accept as i32
             },
             tx_results,
-            ..Default::default()
         }
     }
 
     /// Check all the given txs.
-    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<ExecTxResult> {
+    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<TxResult> {
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         txs.iter()
             .map(|tx_bytes| {
-                ExecTxResult::from(
-                    self.process_single_tx(tx_bytes, &mut tx_queue_iter),
-                )
+                self.process_single_tx(tx_bytes, &mut tx_queue_iter)
             })
             .collect()
     }
@@ -200,10 +196,10 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
-    use tendermint_proto::abci::RequestInitChain;
-    use tendermint_proto::google::protobuf::Timestamp;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::RequestInitChain;
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shell::test_utils::{
         gen_keypair, ProcessProposal, TestError, TestShell,
     };

@@ -1,11 +1,11 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
 use namada::types::storage::{BlockHash, Header};
-use tendermint_proto::abci::Misbehavior as Evidence;
-use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 
 use super::governance::execute_governance_proposals;
 use super::*;
+use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
+use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 
 impl<D, H> Shell<D, H>
 where
