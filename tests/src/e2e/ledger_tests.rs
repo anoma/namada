@@ -119,6 +119,7 @@ fn test_node_connectivity() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -607,6 +608,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -629,6 +631,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -650,6 +653,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -672,6 +676,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -713,6 +718,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -733,6 +739,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -804,6 +811,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -829,6 +837,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
     //     Then self-bond the tokens:
@@ -850,6 +859,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -874,6 +884,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -894,6 +905,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1057,6 +1069,7 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1102,6 +1115,7 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1258,6 +1272,7 @@ fn proposal_submission() -> Result<()> {
         submit_proposal_vote,
         Some(15)
     )?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1275,6 +1290,7 @@ fn proposal_submission() -> Result<()> {
 
     let mut client =
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1294,6 +1310,7 @@ fn proposal_submission() -> Result<()> {
     // this is valid because the client filter ALBERT delegation and there are
     // none
     let mut client = run!(test, Bin::Client, submit_proposal_vote, Some(15))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1406,6 +1423,7 @@ fn proposal_offline() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1871,6 +1889,7 @@ fn test_genesis_validators() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
