@@ -167,6 +167,7 @@ pub mod cmds {
                 .subcommand(Withdraw::def().display_order(2))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(3))
+                .subcommand(QueryBlock::def().display_order(3))
                 .subcommand(QueryBalance::def().display_order(3))
                 .subcommand(QueryBonds::def().display_order(3))
                 .subcommand(QueryVotingPower::def().display_order(3))
@@ -198,6 +199,7 @@ pub mod cmds {
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
+            let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_voting_power =
@@ -224,6 +226,7 @@ pub mod cmds {
                 .or(unbond)
                 .or(withdraw)
                 .or(query_epoch)
+                .or(query_block)
                 .or(query_balance)
                 .or(query_bonds)
                 .or(query_voting_power)
@@ -283,6 +286,7 @@ pub mod cmds {
         Unbond(Unbond),
         Withdraw(Withdraw),
         QueryEpoch(QueryEpoch),
+        QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
         QueryVotingPower(QueryVotingPower),
@@ -932,6 +936,25 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the epoch of the last committed block.")
+                .add_args::<args::Query>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryBlock(pub args::Query);
+
+    impl SubCmd for QueryBlock {
+        const CMD: &'static str = "block";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryBlock(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the last committed block.")
                 .add_args::<args::Query>()
         }
     }
