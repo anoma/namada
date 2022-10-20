@@ -7,7 +7,6 @@ use namada::types::ethereum_events::{EthAddress, EthereumEvent};
 use num256::Uint256;
 use tokio::sync::mpsc::Sender as BoundedSender;
 use tokio::sync::oneshot::Sender;
-use tokio::sync::watch;
 use tokio::task::LocalSet;
 #[cfg(not(test))]
 use web30::client::Web3;
@@ -40,8 +39,10 @@ pub struct Oracle {
     abort: Option<Sender<()>>,
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
-    /// If provided, the oracle will put here the latest block it has processed
-    latest_block_processed: Option<watch::Sender<Option<Uint256>>>,
+    /// If provided, the oracle will attempt to send block heights that it has
+    /// processed to this channel, but won't pause if this channel is full
+    /// or disconnected.
+    blocks_processed: Option<BoundedSender<Uint256>>,
 }
 
 impl Deref for Oracle {
@@ -83,7 +84,7 @@ impl Oracle {
             sender,
             abort: Some(abort),
             backoff,
-            latest_block_processed: None,
+            blocks_processed: None,
         }
     }
 
@@ -169,16 +170,10 @@ async fn run_oracle_aux(oracle: Oracle) {
             result = process(&oracle, &mut pending, next_block_to_process.clone()) => {
                 match result {
                     Ok(()) => {
-                        if let Some(blocks_processed) = &oracle.latest_block_processed {
-                            _ = blocks_processed.send_if_modified(|block: &mut Option<Uint256>| {
-                                if let Some(current) = block {
-                                    if *current == next_block_to_process {
-                                        return false;
-                                    }
-                                }
-                                block.replace(next_block_to_process.clone());
-                                true
-                            });
+                        if let Some(blocks_processed) = &oracle.blocks_processed {
+                            if let Err(error) = blocks_processed.try_send(next_block_to_process.clone()) {
+                                tracing::warn!(?error, block = ?next_block_to_process, "Failed to send processed block height to `blocks_processed` channel");
+                            };
                         }
                         next_block_to_process += 1u8.into()
                     },
@@ -376,8 +371,7 @@ mod test_oracle {
         oracle: Oracle,
         admin_channel: tokio::sync::mpsc::UnboundedSender<TestCmd>,
         eth_recv: tokio::sync::mpsc::Receiver<EthereumEvent>,
-        latest_block_processed_recv:
-            tokio::sync::watch::Receiver<Option<Uint256>>,
+        blocks_processed_recv: tokio::sync::mpsc::Receiver<Uint256>,
         abort_recv: Receiver<()>,
     }
 
@@ -385,8 +379,8 @@ mod test_oracle {
     fn setup() -> TestPackage {
         let (admin_channel, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
-        let (latest_block_processed_send, latest_block_processed_recv) =
-            tokio::sync::watch::channel(None);
+        let (blocks_processed, blocks_processed_recv) =
+            tokio::sync::mpsc::channel(1000);
         let (abort, abort_recv) = channel();
         TestPackage {
             oracle: Oracle {
@@ -395,11 +389,11 @@ mod test_oracle {
                 abort: Some(abort),
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
-                latest_block_processed: Some(latest_block_processed_send),
+                blocks_processed: Some(blocks_processed),
             },
             admin_channel,
             eth_recv: eth_receiver,
-            latest_block_processed_recv,
+            blocks_processed_recv,
             abort_recv,
         }
     }
@@ -680,7 +674,7 @@ mod test_oracle {
             oracle,
             eth_recv,
             admin_channel,
-            mut latest_block_processed_recv,
+            mut blocks_processed_recv,
             ..
         } = setup();
         let oracle = std::thread::spawn(move || {
@@ -698,22 +692,22 @@ mod test_oracle {
         }
         // check that the oracle indeed processes the confirmed blocks
         for height in 0u64..confirmed_block_height + 1 {
-            timeout(
-                Duration::from_secs(3),
-                latest_block_processed_recv.changed(),
-            )
-            .await
-            .expect("Timed out waiting for block to be processed")
-            .unwrap();
-            let block_processed = latest_block_processed_recv
-                .borrow_and_update()
-                .to_owned()
-                .expect(&format!("Test failed for height {height}"));
+            let block_processed =
+                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
+                    .await
+                    .expect("Timed out waiting for block to be checked")
+                    .unwrap();
             assert_eq!(block_processed, Uint256::from(height));
         }
 
         // check that the oracle hasn't yet checked any further blocks
-        assert!(!latest_block_processed_recv.has_changed().unwrap());
+        // TODO: check this in a deterministic way rather than just waiting a
+        // bit
+        assert!(
+            timeout(Duration::from_secs(1), blocks_processed_recv.recv())
+                .await
+                .is_err()
+        );
 
         // increase the height of the chain by one, and check that the oracle
         // processed the next confirmed block
@@ -722,17 +716,11 @@ mod test_oracle {
             .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
             .expect("Test failed");
 
-        timeout(
-            Duration::from_secs(3),
-            latest_block_processed_recv.changed(),
-        )
-        .await
-        .expect("Timed out waiting for block to be processed")
-        .unwrap();
-        let block_processed = latest_block_processed_recv
-            .borrow_and_update()
-            .to_owned()
-            .unwrap();
+        let block_processed =
+            timeout(Duration::from_secs(3), blocks_processed_recv.recv())
+                .await
+                .expect("Timed out waiting for block to be checked")
+                .unwrap();
         assert_eq!(block_processed, Uint256::from(confirmed_block_height + 1));
 
         drop(eth_recv);
@@ -748,7 +736,7 @@ mod test_oracle {
             oracle,
             eth_recv,
             admin_channel,
-            mut latest_block_processed_recv,
+            mut blocks_processed_recv,
             ..
         } = setup();
         let oracle = std::thread::spawn(move || {
@@ -764,17 +752,11 @@ mod test_oracle {
         // check that the oracle has indeed processed the first `n` blocks, even
         // though the first latest block that the oracle received was not 0
         for height in 0u64..confirmed_block_height + 1 {
-            timeout(
-                Duration::from_secs(3),
-                latest_block_processed_recv.changed(),
-            )
-            .await
-            .expect("Timed out waiting for block to be processed")
-            .unwrap();
-            let block_processed = latest_block_processed_recv
-                .borrow_and_update()
-                .to_owned()
-                .expect(&format!("Test failed for height {height}"));
+            let block_processed =
+                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
+                    .await
+                    .expect("Timed out waiting for block to be checked")
+                    .unwrap();
             assert_eq!(block_processed, Uint256::from(height));
         }
 
@@ -790,17 +772,11 @@ mod test_oracle {
         for height in (confirmed_block_height + 1)
             ..(confirmed_block_height + difference + 1)
         {
-            timeout(
-                Duration::from_secs(3),
-                latest_block_processed_recv.changed(),
-            )
-            .await
-            .expect("Timed out waiting for block to be processed")
-            .unwrap();
-            let block_processed = latest_block_processed_recv
-                .borrow_and_update()
-                .to_owned()
-                .expect(&format!("Test failed for height {height}"));
+            let block_processed =
+                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
+                    .await
+                    .expect("Timed out waiting for block to be checked")
+                    .unwrap();
             assert_eq!(block_processed, Uint256::from(height));
         }
 
