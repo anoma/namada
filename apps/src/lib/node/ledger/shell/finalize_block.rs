@@ -259,7 +259,7 @@ where
             .begin_block(hash, height)
             .expect("Beginning a block shouldn't fail");
 
-        let header_time = header.time.clone();
+        let header_time = header.time;
         self.storage
             .set_header(header)
             .expect("Setting a header shouldn't fail");
