@@ -11,7 +11,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
 use prost::Message;
-use tendermint::merkle::proof::{Proof, ProofOp};
 use thiserror::Error;
 
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
@@ -22,6 +21,7 @@ use crate::ledger::eth_bridge::storage::bridge_pool::{
 };
 use crate::ledger::storage::ics23_specs::ibc_leaf_spec;
 use crate::ledger::storage::{ics23_specs, types};
+use crate::tendermint::merkle::proof::{Proof, ProofOp};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
