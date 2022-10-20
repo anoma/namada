@@ -19,6 +19,7 @@ use super::*;
 use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tendermint_proto::types::EvidenceParams;
+use crate::node::ledger::events::log::dumb_queries;
 use crate::node::ledger::response;
 
 #[derive(Error, Debug)]
@@ -86,12 +87,39 @@ where
                     self.read_storage_prefix(&storage_key, height, query.prove)
                 }
                 Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
+                Path::Accepted { tx_hash } => {
+                    let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
+                    self.query_event_log(matcher)
+                }
+                Path::Applied { tx_hash } => {
+                    let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
+                    self.query_event_log(matcher)
+                }
             },
             Err(err) => response::Query {
                 code: 1,
                 info: format!("RPC error: {}", err),
                 ..Default::default()
             },
+        }
+    }
+
+    /// Query events in the event log matching the given query.
+    fn query_event_log(
+        &self,
+        matcher: dumb_queries::QueryMatcher,
+    ) -> response::Query {
+        let value = self
+            .event_log()
+            .iter_with_matcher(matcher)
+            .cloned()
+            .collect::<Vec<_>>()
+            .try_to_vec()
+            .unwrap();
+
+        response::Query {
+            value,
+            ..Default::default()
         }
     }
 
@@ -709,6 +737,17 @@ mod test_queries {
             /// Test if [`QueriesExt::can_send_validator_set_update`] behaves as
             /// expected.
             #[test]
+            #[ignore]
+            // TODO: we should fix this test to cope with epoch changes only
+            // happening at the first block of a new epoch. an erroneous change
+            // was introduced to the ledger, that updated the epoch correctly
+            // at the first block of the new epoch, but recorded `height + 1`
+            // instead of the actual height of the epoch change. since this
+            // test depended on that erroneous logic to pass, it's busted.
+            //
+            // linked issues:
+            // - <https://github.com/anoma/namada/issues/599>
+            // - <https://github.com/anoma/namada/issues/600>
             fn test_can_send_validator_set_update() {
                 let (mut shell, _recv, _) = test_utils::setup_at_height(0u64);
 
