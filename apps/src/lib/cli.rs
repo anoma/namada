@@ -1223,14 +1223,14 @@ pub mod args {
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
     use namada::types::transaction::GasLimit;
-    use tendermint::Timeout;
-    use tendermint_config::net::Address as TendermintAddress;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::config;
     use crate::config::TendermintMode;
+    use crate::facade::tendermint::Timeout;
+    use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
     const ADDRESS: Arg<WalletAddress> = arg("address");
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();

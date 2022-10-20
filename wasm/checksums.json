@@ -1,15 +1,15 @@
 {
-    "tx_bond.wasm": "tx_bond.22de0569ec2f97d5eb8a925a61341668f4ee41fc22894ac072bb82cd07f698b2.wasm",
-    "tx_ibc.wasm": "tx_ibc.9cc7355d37f61bb7ba496bf4c936aa8496754850f90edb3353ffab7af6dab67b.wasm",
-    "tx_init_account.wasm": "tx_init_account.2ea97dbe5cf6ce13034c24ec4eaba8103043dc8ef86200b059bb7d51baaf6830.wasm",
-    "tx_init_proposal.wasm": "tx_init_proposal.23e25c8b71939f9e18e53f14cec4f4c3e54cdc3650ef076aae7072630df76fae.wasm",
-    "tx_init_validator.wasm": "tx_init_validator.c1a22c8f911e0ee443738bbf48f68ccfd3ce9a93e21544ba6b67d1b4a532f2c9.wasm",
-    "tx_transfer.wasm": "tx_transfer.252869ed35fe008d12f2850572cc2ad050cb6d472870154881d1af8ffa0ca273.wasm",
-    "tx_unbond.wasm": "tx_unbond.f847c50517d8db615127c08e431137022ec257ab9d03fc9965691c3814799777.wasm",
-    "tx_update_vp.wasm": "tx_update_vp.dd3a4a2580b161b7d6d93ff02e70bc17c83674ad5e28a776f7e4ce490f26f20d.wasm",
-    "tx_vote_proposal.wasm": "tx_vote_proposal.3790f3f26d541a199aafcec220aa777886c9272e2a3c71f3d3bbe17425feef47.wasm",
-    "tx_withdraw.wasm": "tx_withdraw.af35983cd661e7420781beba8f683b874259a388f1c0dde90fd407a6b7af83dc.wasm",
-    "vp_testnet_faucet.wasm": "vp_testnet_faucet.e87d75a0e7a37c289ddb0f7895dd0250a6e323e30a1620a04d8f92f5070e7131.wasm",
-    "vp_token.wasm": "vp_token.39c7efca7f0e0cf2b52eb86cbd0363c21adadd135896796c90344a387b26b921.wasm",
-    "vp_user.wasm": "vp_user.55dcd8db6fd424e82065ae4ae1078ee0ee54cb6c7b9d38458eb11833ef00dd73.wasm"
+    "tx_bond.wasm": "tx_bond.ec5c7c26852854ffbe4c826fe41780433b60065852342ef9a85904cce7d5fb50.wasm",
+    "tx_ibc.wasm": "tx_ibc.0ac19891780a0c8c6e876e348fba7a978ddefa19adaaaab7b2fff6fd671d0ca1.wasm",
+    "tx_init_account.wasm": "tx_init_account.00bdd90b0496d86b663c1c147cc4f3bd13572a4fafca67667e2ba4cb22b29155.wasm",
+    "tx_init_proposal.wasm": "tx_init_proposal.4026a3c9ef24a6407db7e93dfc203217db5169fc7ef0b3b87b8c7fe843bbcc8f.wasm",
+    "tx_init_validator.wasm": "tx_init_validator.493c859f1a56c9e8f3cff4db9a89f0bc2f1bde0ba7cad67a3bf4786d0e6345cf.wasm",
+    "tx_transfer.wasm": "tx_transfer.364958d24e56c2b6c4597e926ba1ab4acf827116dc7cd41963f608dbf4bfb051.wasm",
+    "tx_unbond.wasm": "tx_unbond.cb789fdb95ad07ec93ae59153c7d8675342761d44ccf46965533dbb3b9a43bf1.wasm",
+    "tx_update_vp.wasm": "tx_update_vp.949a94fc1015bc14e51868bf292a111fb5b74272be9a30f9275c1514a12110ef.wasm",
+    "tx_vote_proposal.wasm": "tx_vote_proposal.69521921cbac00924156b18d687d1d201a240dc8fb9d3d61eec4e0fe06b31e71.wasm",
+    "tx_withdraw.wasm": "tx_withdraw.7c5d1dbf3826e4d728adf9f233efd2d0de397b05955f746d16cf29e98a35534b.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.ad781fb1a33ae16982e384c2e93972c2765d6e1fe007b90be1b0270260a5e171.wasm",
+    "vp_token.wasm": "vp_token.862bf604fce8eab18ea0f5cf9221dd9b0e4eb0a2dcbd2a3ee82083e8e9490d19.wasm",
+    "vp_user.wasm": "vp_user.6c4f578fca34c07845960b270ee03c12bc242da246521aa4188d0dac834de298.wasm"
 }

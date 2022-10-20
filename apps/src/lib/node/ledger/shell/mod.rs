@@ -44,17 +44,17 @@ use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
-use tendermint_proto::abci::{
-    Misbehavior as Evidence, MisbehaviorType as EvidenceType,
-    RequestPrepareProposal, ValidatorUpdate,
-};
-use tendermint_proto::crypto::public_key;
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
-use tower_abci::{request, response};
 
 use crate::config::{genesis, TendermintMode};
+#[cfg(feature = "abcipp")]
+use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
+use crate::facade::tendermint_proto::abci::{
+    Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
+};
+use crate::facade::tendermint_proto::crypto::public_key;
+use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -66,15 +66,10 @@ use crate::{config, wallet};
 fn key_to_tendermint(
     pk: &common::PublicKey,
 ) -> std::result::Result<public_key::Sum, ParsePublicKeyError> {
-    println!("\nKEY TO TENDERMINT\n");
     match pk {
-        common::PublicKey::Ed25519(_) => {
-            println!("\nEd25519\n");
-            ed25519::PublicKey::try_from_pk(pk)
-                .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap()))
-        }
+        common::PublicKey::Ed25519(_) => ed25519::PublicKey::try_from_pk(pk)
+            .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap())),
         common::PublicKey::Secp256k1(_) => {
-            println!("\nSecp256k1\n");
             secp256k1::PublicKey::try_from_pk(pk)
                 .map(|pk| public_key::Sum::Secp256k1(pk.try_to_vec().unwrap()))
         }
@@ -498,6 +493,7 @@ where
     }
 
     /// INVARIANT: This method must be stateless.
+    #[cfg(feature = "abcipp")]
     pub fn extend_vote(
         &self,
         _req: request::ExtendVote,
@@ -506,6 +502,7 @@ where
     }
 
     /// INVARIANT: This method must be stateless.
+    #[cfg(feature = "abcipp")]
     pub fn verify_vote_extension(
         &self,
         _req: request::VerifyVoteExtension,
@@ -612,11 +609,13 @@ mod test_utils {
     use namada::types::storage::{BlockHash, Epoch, Header};
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
-    use tendermint_proto::abci::{RequestInitChain, RequestProcessProposal};
-    use tendermint_proto::google::protobuf::Timestamp;
     use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::{
+        RequestInitChain, RequestProcessProposal,
+    };
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
@@ -726,10 +725,10 @@ mod test_utils {
             });
             let results = resp
                 .tx_results
-                .iter()
+                .into_iter()
                 .zip(req.txs.into_iter())
                 .map(|(res, tx_bytes)| ProcessedTx {
-                    result: res.into(),
+                    result: res,
                     tx: tx_bytes,
                 })
                 .collect();
