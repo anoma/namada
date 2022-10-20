@@ -16,7 +16,8 @@ pub use vp::Result;
 
 use self::storage as gov_storage;
 use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{xan as m1t, Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token as token_storage;

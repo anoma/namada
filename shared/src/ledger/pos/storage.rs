@@ -10,8 +10,9 @@ use super::{
     BondId, Bonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
     ADDRESS,
 };
+use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::types::{decode, encode};
-use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::ledger::storage::{self, Storage};
 use crate::types::address::Address;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::{key, token};

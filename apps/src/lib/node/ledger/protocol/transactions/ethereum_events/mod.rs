@@ -14,7 +14,8 @@ use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::{eyre, Result};
 use namada::ledger::eth_bridge::storage::eth_msgs::Keys;
 use namada::ledger::pos::types::WeightedValidator;
-use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::{self, BlockHeight};
@@ -305,7 +306,7 @@ mod tests {
     use namada::ledger::pos::types::ValidatorSet;
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::testing::TestStorage;
-    use namada::ledger::storage::Sha256Hasher;
+    use namada::ledger::storage::traits::Sha256Hasher;
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
