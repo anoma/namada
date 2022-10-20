@@ -108,14 +108,10 @@ impl BridgePoolTree {
         let mut hashes: Vec<KeccakHash> = self.store.iter().cloned().collect();
         while hashes.len() > 1 {
             let mut next_hashes = vec![];
-            let left_leaves = hashes.iter().step_by(2);
-            let mut right_leaves = hashes.iter();
-            _ = right_leaves.next();
-            let mut right_leaves = right_leaves.step_by(2);
-
-            for left in left_leaves {
-                let right = right_leaves.next().cloned().unwrap_or_default();
-                next_hashes.push(hash_pair(left.clone(), right));
+            for pair in hashes.chunks(2) {
+                let left = pair[0].clone();
+                let right = pair.get(1).cloned().unwrap_or_default();
+                next_hashes.push(hash_pair(left, right));
             }
             hashes = next_hashes;
         }
@@ -182,13 +178,10 @@ impl BridgePoolTree {
 
         while hashes.len() > 1 {
             let mut next_hashes = vec![];
-            let left_leaves = hashes.iter().step_by(2);
-            let mut right_leaves = hashes.iter();
-            _ = right_leaves.next();
-            let mut right_leaves = right_leaves.step_by(2);
 
-            for left in left_leaves {
-                let right = right_leaves.next().cloned().unwrap_or_default();
+            for pair in hashes.chunks(2) {
+                let left = pair[0].clone();
+                let right = pair.get(1).cloned().unwrap_or_default();
                 match (left, right) {
                     (Node::OnPath(left), Node::OnPath(right)) => {
                         flags.push(true);
