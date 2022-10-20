@@ -147,4 +147,4 @@ mod tests {
             let _: Hash = hex_hash.try_into().unwrap();
         }
     }
-
+}

@@ -7,7 +7,7 @@ use namada::types::storage;
 use namada::types::token::Amount;
 
 /// Reads the `Amount` from key, applies update then writes it back
-pub(super) fn amount<D, H>(
+pub fn amount<D, H>(
     store: &mut Storage<D, H>,
     key: &storage::Key,
     update: impl FnOnce(&mut Amount),
@@ -24,7 +24,7 @@ where
 
 #[allow(dead_code)]
 /// Reads an arbitrary value, applies update then writes it back
-pub(super) fn value<D, H, T: BorshSerialize + BorshDeserialize>(
+pub fn value<D, H, T: BorshSerialize + BorshDeserialize>(
     store: &mut Storage<D, H>,
     key: &storage::Key,
     update: impl FnOnce(&mut T),
