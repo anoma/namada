@@ -63,7 +63,7 @@ In the execution steps:
 4. After the execution, the affected validity predicates (also mentioned as VP in this document) will check the storage changes and (if relevant) the signature of the transaction: if the signature is not valid, the VP will deem the transaction invalid and the changes won't be applied to the storage
 
 The signature checks effectively prevent any tampering with the transaction data because that would cause the checks to fail and the transaction to be rejected.
-For a more in-depth view, please refer to the [Namada execution spec](https://specs.namada.net/base-ledger/execution.html).
+For a more in-depth view, please refer to the [Namada execution spec](./execution.md).
 
 ### Tendermint replay protection
 
@@ -220,7 +220,7 @@ The wasm transaction will simply read the value from storage and increase its va
 
 The VP of the _source_ address will then check the validity of the signature and, if it's deemed valid, will proceed to check if the pre-value of the counter in storage was equal to the one contained in the `SignedTxData` struct and if the post-value of the key in storage has been incremented by one: if any of these conditions doesn't hold the VP will discard the transactions and prevent the changes from being applied to the storage.
 
-In the specific case of a shielded transfer, since MASP already comes with replay protection as part of the Zcash design (see the [MASP specs](https://specs.namada.net/masp.html) and [Zcash protocol specs](https://zips.z.cash/protocol/protocol.pdf)), the counter in `SignedTxData` is not required and therefore should be optional.
+In the specific case of a shielded transfer, since MASP already comes with replay protection as part of the Zcash design (see the [MASP specs](../masp.md) and [Zcash protocol specs](https://zips.z.cash/protocol/protocol.pdf)), the counter in `SignedTxData` is not required and therefore should be optional.
 
 To implement replay protection for the inner transaction we will need to update all the VPs checking the transaction's signature to include the check on the transaction counter: at the moment the `vp_user` validity predicate is the only one to update. In addition, all the transactions involving `SignedTxData` should increment the counter.
 
