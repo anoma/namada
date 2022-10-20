@@ -618,6 +618,10 @@ async fn maybe_start_ethereum_oracle(
     config: &config::Ledger,
     abort_sender: oneshot::Sender<()>,
 ) -> (Option<mpsc::Receiver<EthereumEvent>>, task::JoinHandle<()>) {
+    if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
+        return (None, spawn_dummy_task(()));
+    }
+
     let ethereum_url = config.ethereum.oracle_rpc_endpoint.clone();
 
     // Start the oracle for listening to Ethereum events
