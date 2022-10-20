@@ -1,4 +1,5 @@
 {
+    "tx_bond.wasm": "tx_bond.bb67d406e6c31218d32667ef8debed9be77dbadb33ee52a30d9fc377e3f6876c.wasm",
     "tx_bridge_pool.wasm": "tx_bridge_pool.e21563260c03cfdab1f195878f49bf93722027ad26fcd097cfebbc5c4d279082.wasm",
     "tx_from_intent.wasm": "tx_from_intent.9915822bea588b0a18b4ec51bc249e88fdc3041bc3eddaaa2cc880dcd23c5eb0.wasm",
     "tx_ibc.wasm": "tx_ibc.913192b268db668ebba6b415eea106c19e742b9b6be6ebb795a661dca82482af.wasm",
