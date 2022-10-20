@@ -3,7 +3,6 @@
 use std::fmt::{self, Display};
 use std::ops::Deref;
 
-use arse_merkle_tree::traits::Value;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use hex::FromHex;
 use serde::{Deserialize, Serialize};
@@ -121,11 +120,6 @@ impl Hash {
     pub fn sha256(data: impl AsRef<[u8]>) -> Self {
         let digest = Sha256::digest(data.as_ref());
         Self(*digest.as_ref())
-    }
-
-    /// Check if the hash is all zeros
-    pub fn is_zero(&self) -> bool {
-        self == &Self::zero()
     }
 }
 
