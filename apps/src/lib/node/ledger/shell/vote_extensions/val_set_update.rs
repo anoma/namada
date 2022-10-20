@@ -95,7 +95,7 @@ where
             }
         };
         // verify if the new epoch validators' voting powers in storage match
-        // the voting powers in the vote extensions
+        // the voting powers in the vote extension
         for (eth_addr_book, namada_addr, namada_power) in self
             .storage
             .get_active_eth_addresses(Some(ext_height_epoch.next()))
