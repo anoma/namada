@@ -32,6 +32,8 @@ pub struct Tally {
     pub seen: bool,
 }
 
+/// Calculate a new [`Tally`] based on some validators' fractional voting powers
+/// as specific block heights
 pub fn calculate_new(
     seen_by: &BTreeSet<(Address, BlockHeight)>,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
@@ -63,6 +65,8 @@ pub fn calculate_new(
     })
 }
 
+/// Calculate an updated [`Tally`] based on one that is in storage under `keys`,
+/// and some new votes
 pub fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
