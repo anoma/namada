@@ -5,7 +5,6 @@ use ethabi::token::Token;
 
 use crate::types::address::Address;
 use crate::types::ethereum_events::{EthAddress, Uint};
-use crate::types::keccak;
 use crate::types::keccak::encode::Encode;
 use crate::types::storage::{DbKeySeg, Key};
 use crate::types::token::Amount;
@@ -55,14 +54,15 @@ pub struct PendingTransfer {
     pub gas_fee: GasFee,
 }
 
-impl keccak::encode::Encode for PendingTransfer {
+impl Encode for PendingTransfer {
     fn tokenize(&self) -> Vec<Token> {
-        let from = Token::String(self.gas_fee.payer.to_string());
+        let from = Token::Address(self.transfer.asset.0.into());
         let fee = Token::Uint(u64::from(self.gas_fee.amount).into());
         let to = Token::Address(self.transfer.recipient.0.into());
         let amount = Token::Uint(u64::from(self.transfer.amount).into());
+        let fee_from = Token::String(self.gas_fee.payer.to_string());
         let nonce = Token::Uint(self.transfer.nonce.clone().into());
-        vec![from, fee, to, amount, nonce]
+        vec![from, fee, to, amount, fee_from, nonce]
     }
 }
 
