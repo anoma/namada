@@ -4,11 +4,19 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_vm_env"
 resolver = "2"
-version = "0.8.0"
+version = "0.8.1"
 
 [features]
-default = []
+default = ["abciplus"]
+
+abciplus = [
+  "namada/abciplus",
+]
+
+abcipp = [
+  "namada/abcipp",
+]
 
 [dependencies]
-namada = {path = "../shared"}
+namada = {path = "../shared", default-features = false}
 borsh = "0.9.0"

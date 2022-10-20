@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.8.1
+
+Namada 0.8.1 is a point release focused on standardizing Tendermint
+compatibility.
+
+### IMPROVEMENTS
+
+- Shim ABCI++ methods for tendermint
+  ([#510](https://github.com/anoma/namada/pull/510))
+
 ## v0.8.0
 
 Namada 0.8.0 is a regular minor release.

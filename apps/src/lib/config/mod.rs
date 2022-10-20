@@ -13,11 +13,11 @@ use std::str::FromStr;
 use namada::types::chain::ChainId;
 use namada::types::time::Rfc3339String;
 use serde::{Deserialize, Serialize};
-use tendermint::Timeout;
-use tendermint_config::net::Address as TendermintAddress;
 use thiserror::Error;
 
 use crate::cli;
+use crate::facade::tendermint::Timeout;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
 /// Base directory contains global config and chain directories.
 pub const DEFAULT_BASE_DIR: &str = ".anoma";
