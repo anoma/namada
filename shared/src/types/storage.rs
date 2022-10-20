@@ -33,8 +33,8 @@ pub enum Error {
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
-    #[error("Could not parse string: '{0}' into requested type: {1}")]
-    ParseError(String, String),
+    #[error("Could not parse string into a key segment: {0}")]
+    ParseError(String),
 }
 
 /// Result for functions that may fail
@@ -248,7 +248,7 @@ pub enum MerkleValue {
     /// raw bytes
     Bytes(Vec<u8>),
     /// A transfer to be put in the Ethereum bridge pool.
-    Transfer(PendingTransfer),
+    BridgePoolTransfer(PendingTransfer),
 }
 
 impl<T> From<T> for MerkleValue
@@ -262,7 +262,7 @@ where
 
 impl From<PendingTransfer> for MerkleValue {
     fn from(transfer: PendingTransfer) -> Self {
-        Self::Transfer(transfer)
+        Self::BridgePoolTransfer(transfer)
     }
 }
 
@@ -626,9 +626,9 @@ impl KeySeg for Address {
 
 impl KeySeg for Hash {
     fn parse(seg: String) -> Result<Self> {
-        seg.clone()
-            .try_into()
-            .map_err(|_| Error::ParseError(seg, "Hash".into()))
+        seg.try_into().map_err(|e: crate::types::hash::Error| {
+            Error::ParseError(e.to_string())
+        })
     }
 
     fn raw(&self) -> String {

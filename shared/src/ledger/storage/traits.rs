@@ -179,7 +179,7 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
         let values = values
             .into_iter()
             .filter_map(|val| match val {
-                MerkleValue::Transfer(transfer) => Some(transfer),
+                MerkleValue::BridgePoolTransfer(transfer) => Some(transfer),
                 _ => None,
             })
             .collect();
@@ -195,8 +195,8 @@ impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
         key: &Key,
         value: MerkleValue,
     ) -> Result<Hash, Error> {
-        if let MerkleValue::Transfer(_) = value {
-            self.update_key(key)
+        if let MerkleValue::BridgePoolTransfer(_) = value {
+            self.insert_key(key)
                 .map_err(|err| Error::MerkleTree(err.to_string()))
         } else {
             Err(Error::InvalidValue)
