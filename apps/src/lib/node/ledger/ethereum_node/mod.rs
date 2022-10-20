@@ -29,37 +29,6 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Represents a subprocess running an Ethereum full node
-pub enum Subprocess {
-    Mock(test_tools::mock_eth_fullnode::EthereumNode),
-    Geth(eth_fullnode::EthereumNode),
-}
-
-/// Starts an Ethereum fullnode in a subprocess and returns a handle for
-/// monitoring it using [`monitor`], as well as a channel for halting it.
-pub async fn start(url: &str, real: bool) -> Result<(Subprocess, Sender<()>)> {
-    if real {
-        let (node, sender) = eth_fullnode::EthereumNode::new(url).await?;
-        Ok((Subprocess::Geth(node), sender))
-    } else {
-        let (node, sender) =
-            test_tools::mock_eth_fullnode::EthereumNode::new().await?;
-        Ok((Subprocess::Mock(node), sender))
-    }
-}
-
-/// Monitor the Ethereum fullnode. If it stops or an abort
-/// signal is sent, the subprocess is halted.
-pub async fn monitor(
-    ethereum_node: Subprocess,
-    abort_recv: Receiver<Sender<()>>,
-) -> Result<()> {
-    match ethereum_node {
-        Subprocess::Mock(node) => monitor_node(node, abort_recv).await,
-        Subprocess::Geth(node) => monitor_node(node, abort_recv).await,
-    }
-}
-
 /// A handle on an Ethereum full node subprocess for monitoring it
 #[async_trait]
 pub trait Monitorable {
@@ -67,7 +36,9 @@ pub trait Monitorable {
     async fn kill(&mut self);
 }
 
-async fn monitor_node(
+/// Monitor the Ethereum fullnode. If it stops or an abort
+/// signal is sent, the subprocess is halted.
+pub async fn monitor(
     mut node: impl Monitorable,
     abort_recv: Receiver<Sender<()>>,
 ) -> Result<()> {

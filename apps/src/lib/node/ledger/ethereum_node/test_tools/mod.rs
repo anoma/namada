@@ -1,57 +1,5 @@
 pub mod events_endpoint;
 
-/// tools for running a mock ethereum fullnode process
-pub mod mock_eth_fullnode {
-    use async_trait::async_trait;
-    use tokio::sync::oneshot::{channel, Receiver, Sender};
-
-    use super::super::Result;
-    use crate::node::ledger::ethereum_node::Monitorable;
-
-    pub struct EthereumNode {
-        #[allow(dead_code)]
-        receiver: Receiver<()>,
-    }
-
-    impl EthereumNode {
-        pub async fn new() -> Result<(EthereumNode, Sender<()>)> {
-            let (abort_sender, receiver) = channel();
-            Ok((Self { receiver }, abort_sender))
-        }
-    }
-
-    #[async_trait]
-    impl Monitorable for EthereumNode {
-        async fn wait(&mut self) -> Result<()> {
-            std::future::pending().await
-        }
-
-        async fn kill(&mut self) {}
-    }
-}
-
-pub mod mock_oracle {
-
-    use namada::types::ethereum_events::EthereumEvent;
-    use tokio::macros::support::poll_fn;
-    use tokio::sync::mpsc::Sender as BoundedSender;
-    use tokio::sync::oneshot::Sender;
-
-    pub fn run_oracle(
-        _: impl AsRef<str>,
-        _: BoundedSender<EthereumEvent>,
-        mut abort: Sender<()>,
-    ) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(async move {
-            tracing::info!("Mock Ethereum event oracle is starting");
-
-            poll_fn(|cx| abort.poll_closed(cx)).await;
-
-            tracing::info!("Mock Ethereum event oracle is no longer running");
-        })
-    }
-}
-
 #[cfg(test)]
 pub mod mock_web3_client {
     use std::cell::RefCell;
