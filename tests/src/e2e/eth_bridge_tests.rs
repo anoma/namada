@@ -35,7 +35,7 @@ fn everything() {
     )
     .unwrap();
     anoman_ledger
-        .exp_string("Anoma ledger node started")
+        .exp_string("Namada ledger node started")
         .unwrap();
     anoman_ledger.exp_string("Tendermint node started").unwrap();
     anoman_ledger.exp_string("Committed block hash").unwrap();

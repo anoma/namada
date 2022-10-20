@@ -1,9 +1,9 @@
-//! The CLI commands that are re-used between the executables `anoma`,
-//! `anoma-node` and `anoma-client`.
+//! The CLI commands that are re-used between the executables `namada`,
+//! `namada-node` and `namada-client`.
 //!
-//! The `anoma` executable groups together the most commonly used commands
+//! The `namada` executable groups together the most commonly used commands
 //! inlined from the node and the client. The other commands for the node or the
-//! client can be dispatched via `anoma node ...` or `anoma client ...`,
+//! client can be dispatched via `namada node ...` or `namada client ...`,
 //! respectively.
 
 pub mod context;

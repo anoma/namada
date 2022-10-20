@@ -1,4 +1,4 @@
-//! Anoma client CLI.
+//! Namada client CLI.
 
 use color_eyre::eyre::Result;
 use namada_apps::cli;

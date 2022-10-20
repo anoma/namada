@@ -248,7 +248,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         }
     }
 
-    tracing::info!("Anoma ledger node has shut down.");
+    tracing::info!("Namada ledger node has shut down.");
 
     let res = task::block_in_place(move || shell_handler.join());
 
@@ -450,7 +450,7 @@ fn start_abci_broadcaster_shell(
     let thread_builder = thread::Builder::new().name("ledger-shell".into());
     let shell_handler = thread_builder
         .spawn(move || {
-            tracing::info!("Anoma ledger node started.");
+            tracing::info!("Namada ledger node started.");
             match tendermint_mode {
                 TendermintMode::Validator => {
                     tracing::info!("This node is a validator");

@@ -1,8 +1,8 @@
-//! Anoma CLI.
+//! Namada CLI.
 //!
 //! This CLI groups together the most commonly used commands inlined from the
 //! node and the client. The other commands for the node, client and wallet can
-//! be dispatched via `anoma node ...`, `anoma client ...` or `anoma wallet
+//! be dispatched via `namada node ...`, `namada client ...` or `namada wallet
 //! ...`, respectively.
 
 use std::env;

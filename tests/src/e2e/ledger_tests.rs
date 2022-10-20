@@ -42,7 +42,7 @@ fn run_ledger() -> Result<()> {
     for args in &cmd_combinations {
         let mut ledger =
             run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-        ledger.exp_string("Anoma ledger node started")?;
+        ledger.exp_string("Namada ledger node started")?;
         ledger.exp_string("This node is a validator")?;
     }
 
@@ -50,7 +50,7 @@ fn run_ledger() -> Result<()> {
     for args in &cmd_combinations {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-        ledger.exp_string("Anoma ledger node started")?;
+        ledger.exp_string("Namada ledger node started")?;
         ledger.exp_string("This node is a fullnode")?;
     }
 
@@ -71,15 +71,15 @@ fn test_node_connectivity() -> Result<()> {
     let args = ["ledger"];
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Anoma ledger node started")?;
+    validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Anoma ledger node started")?;
+    validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-    non_validator.exp_string("Anoma ledger node started")?;
+    non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is a fullnode")?;
 
     let bg_validator_0 = validator_0.background();
@@ -137,7 +137,7 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
 
     // 2. Kill the tendermint node
     sleep(1);
@@ -152,7 +152,7 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
     ledger.exp_string("Tendermint node is no longer running.")?;
 
     // 4. Check that the ledger node shuts down
-    ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_string("Namada ledger node has shut down.")?;
     ledger.exp_eof()?;
 
     Ok(())
@@ -173,7 +173,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     // There should be no previous state
     ledger.exp_string("No state could be found")?;
     // Wait to commit a block
@@ -183,7 +183,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.send_control('c')?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
-    ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_string("Namada ledger node has shut down.")?;
     ledger.exp_eof()?;
     drop(ledger);
 
@@ -191,7 +191,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
@@ -216,7 +216,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     let mut session =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    session.exp_string("Anoma ledger node started")?;
+    session.exp_string("Namada ledger node started")?;
 
     // There should be no previous state
     session.exp_string("No state could be found")?;
@@ -240,7 +240,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     let _bg_ledger = ledger.background();
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
@@ -411,7 +411,7 @@ fn invalid_transactions() -> Result<()> {
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
@@ -472,7 +472,7 @@ fn invalid_transactions() -> Result<()> {
     ledger.send_control('c')?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
-    ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_string("Namada ledger node has shut down.")?;
     ledger.exp_eof()?;
     drop(ledger);
 
@@ -480,7 +480,7 @@ fn invalid_transactions() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
@@ -563,7 +563,7 @@ fn pos_bonds() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -756,7 +756,7 @@ fn pos_init_validator() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -918,7 +918,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     let mut ledger =
         run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
@@ -1025,14 +1025,14 @@ fn proposal_submission() -> Result<()> {
     let anomac_help = vec!["--help"];
 
     let mut client = run!(test, Bin::Client, anomac_help, Some(40))?;
-    client.exp_string("Anoma client command line interface.")?;
+    client.exp_string("Namada client command line interface.")?;
     client.assert_success();
 
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1381,7 +1381,7 @@ fn proposal_offline() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1809,17 +1809,17 @@ fn test_genesis_validators() -> Result<()> {
     let args = ["ledger"];
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Anoma ledger node started")?;
+    validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
 
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Anoma ledger node started")?;
+    validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
 
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-    non_validator.exp_string("Anoma ledger node started")?;
+    non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is a fullnode")?;
 
     let bg_validator_0 = validator_0.background();
@@ -1891,12 +1891,12 @@ fn double_signing_gets_slashed() -> Result<()> {
     let args = ["ledger"];
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Anoma ledger node started")?;
+    validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
     let _bg_validator_0 = validator_0.background();
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Anoma ledger node started")?;
+    validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
     let bg_validator_1 = validator_1.background();
 
@@ -1966,7 +1966,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         "validator",
         loc,
     )?;
-    validator_0_copy.exp_string("Anoma ledger node started")?;
+    validator_0_copy.exp_string("Namada ledger node started")?;
     validator_0_copy.exp_string("This node is a validator")?;
     let _bg_validator_0_copy = validator_0_copy.background();
 
