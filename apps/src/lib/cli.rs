@@ -609,7 +609,7 @@ pub mod cmds {
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about("Run Anoma ledger node.")
+            App::new(Self::CMD).about("Run Namada ledger node.")
         }
     }
 
@@ -625,7 +625,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD).about(
-                "Delete Anoma ledger node's and Tendermint node's storage \
+                "Delete Namada ledger node's and Tendermint node's storage \
                  data.",
             )
         }
@@ -1389,7 +1389,7 @@ pub mod args {
                      configuration and state is stored. This value can also \
                      be set via `ANOMA_BASE_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
-                     `.anoma`.",
+                     `.namada`.",
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
@@ -2691,7 +2691,7 @@ pub mod args {
             app.arg(ALIAS.def().about("The validator address alias."))
                 .arg(NET_ADDRESS.def().about(
                     "Static {host:port} of your validator node's P2P address. \
-                     Anoma uses port `26656` for P2P connections by default, \
+                     Namada uses port `26656` for P2P connections by default, \
                      but you can configure a different value.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
@@ -2763,7 +2763,7 @@ pub fn anoma_wallet_cli() -> Result<(cmds::AnomaWallet, Context)> {
 fn anoma_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .about("Anoma command line interface.")
+        .about("Namada command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::Anoma::add_sub(args::Global::def(app))
 }
@@ -2771,7 +2771,7 @@ fn anoma_app() -> App {
 fn anoma_node_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .about("Anoma node command line interface.")
+        .about("Namada node command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaNode::add_sub(args::Global::def(app))
 }
@@ -2779,7 +2779,7 @@ fn anoma_node_app() -> App {
 fn anoma_client_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .about("Anoma client command line interface.")
+        .about("Namada client command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaClient::add_sub(args::Global::def(app))
 }
@@ -2787,7 +2787,7 @@ fn anoma_client_app() -> App {
 fn anoma_wallet_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .about("Anoma wallet command line interface.")
+        .about("Namada wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaWallet::add_sub(args::Global::def(app))
 }
