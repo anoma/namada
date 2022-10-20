@@ -20,7 +20,7 @@ use crate::ledger::storage::IBC_KEY_LIMIT;
 use crate::types::address::{self, Address};
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::hash::Hash;
-use crate::types::keccak::KeccakHash;
+use crate::types::keccak::{KeccakHash, TryFromError};
 use crate::types::time::DateTimeUtc;
 
 #[allow(missing_docs)]
@@ -643,41 +643,8 @@ impl KeySeg for Hash {
 
 impl KeySeg for KeccakHash {
     fn parse(seg: String) -> Result<Self> {
-        seg.clone()
-            .try_into()
-            .map_err(|_| Error::ParseError(seg, "Hash".into()))
-    }
-
-    fn raw(&self) -> String {
-        self.to_string()
-    }
-
-    fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::StringSeg(self.raw())
-    }
-}
-
-impl KeySeg for KeccakHash {
-    fn parse(seg: String) -> Result<Self> {
-        seg.clone()
-            .try_into()
-            .map_err(|_| Error::ParseError(seg, "Hash".into()))
-    }
-
-    fn raw(&self) -> String {
-        self.to_string()
-    }
-
-    fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::StringSeg(self.raw())
-    }
-}
-
-impl KeySeg for KeccakHash {
-    fn parse(seg: String) -> Result<Self> {
-        seg.clone()
-            .try_into()
-            .map_err(|_| Error::ParseError(seg, "Hash".into()))
+        seg.try_into()
+            .map_err(|e: TryFromError| Error::ParseError(e.to_string()))
     }
 
     fn raw(&self) -> String {
