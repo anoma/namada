@@ -8,8 +8,9 @@ use eyre::Context;
 use thiserror::Error;
 
 use crate::ledger::gas::VpGasMeter;
+use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{Storage, StorageHasher};
+use crate::ledger::storage::Storage;
 use crate::ledger::{storage, vp_env};
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};

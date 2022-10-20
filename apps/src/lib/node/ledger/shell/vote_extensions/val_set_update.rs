@@ -5,7 +5,8 @@ use std::collections::HashMap;
 
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::pos::types::VotingPower;
-use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::{DBIter, DB};
 use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::validator_set_update;
 #[cfg(feature = "abcipp")]
@@ -94,11 +95,11 @@ where
                 return Err(VoteExtensionError::UnexpectedEpoch);
             }
         };
-        // verify if the voting powers in storage match the voting powers in the
-        // vote extensions
+        // verify if the new epoch validators' voting powers in storage match
+        // the voting powers in the vote extension
         for (eth_addr_book, namada_addr, namada_power) in self
             .storage
-            .get_active_eth_addresses(Some(ext_height_epoch))
+            .get_active_eth_addresses(Some(ext_height_epoch.next()))
         {
             let &ext_power = match ext.data.voting_powers.get(&eth_addr_book) {
                 Some(voting_power) => voting_power,

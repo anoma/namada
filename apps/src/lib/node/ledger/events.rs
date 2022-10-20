@@ -1,9 +1,11 @@
+pub mod log;
+
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada::ledger::governance::utils::ProposalEvent;
 use namada::types::ibc::IbcEvent;
 use namada::types::transaction::{hash_tx, TxType};
@@ -13,7 +15,7 @@ use crate::facade::tendermint_proto::abci::EventAttribute;
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 pub enum EventLevel {
     Block,
     Tx,
@@ -21,7 +23,7 @@ pub enum EventLevel {
 
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct Event {
     pub event_type: EventType,
     pub level: EventLevel,
@@ -29,7 +31,7 @@ pub struct Event {
 }
 
 /// The two types of custom events we currently use
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 pub enum EventType {
     // The transaction was accepted to be included in a block
     Accepted,

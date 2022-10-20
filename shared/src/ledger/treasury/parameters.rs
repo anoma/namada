@@ -35,7 +35,7 @@ impl TreasuryParams {
     pub fn init_storage<DB, H>(&self, storage: &mut Storage<DB, H>)
     where
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: storage::StorageHasher,
+        H: storage::traits::StorageHasher,
     {
         let max_proposal_fund_transfer_key =
             treasury_storage::get_max_transferable_fund_key();

@@ -3,9 +3,8 @@
 use std::fmt::{self, Display};
 use std::ops::Deref;
 
-use arse_merkle_tree::traits::Value;
-use arse_merkle_tree::{Hash as TreeHash, H256};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -13,8 +12,11 @@ use thiserror::Error;
 use crate::tendermint::abci::transaction;
 use crate::tendermint::Hash as TmHash;
 
-/// The length of the transaction hash string
+/// The length of the raw transaction hash.
 pub const HASH_LENGTH: usize = 32;
+
+/// The length of the hex encoded transaction hash.
+pub const HEX_HASH_LENGTH: usize = HASH_LENGTH * 2;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -23,6 +25,8 @@ pub enum Error {
     Temporary { error: String },
     #[error("Failed trying to convert slice to a hash: {0}")]
     ConversionFailed(std::array::TryFromSliceError),
+    #[error("Failed to convert string into a hash: {0}")]
+    FromStringError(hex::FromHexError),
 }
 
 /// Result for functions that may fail
@@ -86,6 +90,25 @@ impl TryFrom<&[u8]> for Hash {
     }
 }
 
+impl TryFrom<String> for Hash {
+    type Error = self::Error;
+
+    fn try_from(string: String) -> HashResult<Self> {
+        string.as_str().try_into()
+    }
+}
+
+impl TryFrom<&str> for Hash {
+    type Error = self::Error;
+
+    fn try_from(string: &str) -> HashResult<Self> {
+        Ok(Self(
+            <[u8; HASH_LENGTH]>::from_hex(string)
+                .map_err(Error::FromStringError)?,
+        ))
+    }
+}
+
 impl From<Hash> for transaction::Hash {
     fn from(hash: Hash) -> Self {
         Self::new(hash.0)
@@ -98,11 +121,6 @@ impl Hash {
         let digest = Sha256::digest(data.as_ref());
         Self(*digest.as_ref())
     }
-
-    /// Check if the hash is all zeros
-    pub fn is_zero(&self) -> bool {
-        self == &Self::zero()
-    }
 }
 
 impl From<Hash> for TmHash {
@@ -111,37 +129,22 @@ impl From<Hash> for TmHash {
     }
 }
 
-impl From<H256> for Hash {
-    fn from(hash: H256) -> Self {
-        Hash(hash.into())
-    }
-}
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use proptest::string::{string_regex, RegexGeneratorStrategy};
 
-impl From<&H256> for Hash {
-    fn from(hash: &H256) -> Self {
-        let hash = *hash;
-        Hash(hash.into())
-    }
-}
+    use super::*;
 
-impl From<Hash> for H256 {
-    fn from(hash: Hash) -> H256 {
-        hash.0.into()
-    }
-}
-
-impl From<Hash> for TreeHash {
-    fn from(hash: Hash) -> Self {
-        Self::from(hash.0)
-    }
-}
-
-impl Value for Hash {
-    fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
+    /// Returns a proptest strategy that yields hex encoded hashes.
+    fn hex_encoded_hash_strat() -> RegexGeneratorStrategy<String> {
+        string_regex(r"[a-fA-F0-9]{64}").unwrap()
     }
 
-    fn zero() -> Self {
-        Hash([0u8; 32])
+    proptest! {
+        #[test]
+        fn test_hash_string(hex_hash in hex_encoded_hash_strat()) {
+            let _: Hash = hex_hash.try_into().unwrap();
+        }
     }
-}
+
