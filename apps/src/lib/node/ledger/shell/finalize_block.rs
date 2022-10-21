@@ -293,6 +293,7 @@ where
                         &native_proposer_address,
                     );
                 } else {
+                    eprintln!("WE SHOULD NEVER BE REACHING HERE");
                 }
             }
         }
@@ -516,7 +517,6 @@ where
         // TODO: think about changing the reward to Decimal
         let mut reward_tokens_remaining = pos_minted_tokens.clone();
         for (address, value) in accumulators.iter() {
-            dbg!(reward_tokens_remaining.clone());
             // Get reward token amount for this validator
             let fractional_claim =
                 value / Decimal::from(num_blocks_in_last_epoch);
