@@ -19,6 +19,8 @@ pub struct MinimumConfirmations(NonZeroU64);
 
 impl Default for MinimumConfirmations {
     fn default() -> Self {
+        // SAFETY: The only way the API contract of `NonZeroU64`can be violated
+        // is if we construct values of this type using 0 as argument.
         Self(unsafe { NonZeroU64::new_unchecked(100) })
     }
 }
@@ -55,6 +57,8 @@ pub struct ContractVersion(NonZeroU64);
 
 impl Default for ContractVersion {
     fn default() -> Self {
+        // SAFETY: The only way the API contract of `NonZeroU64`can be violated
+        // is if we construct values of this type using 0 as argument.
         Self(unsafe { NonZeroU64::new_unchecked(1) })
     }
 }
