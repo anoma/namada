@@ -29,7 +29,7 @@ pub enum Mode {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     /// The mode in which to run the Ethereum node and oracle setup of this
-    /// validator
+    /// validator.
     pub mode: Mode,
     /// The Ethereum JSON-RPC endpoint that the Ethereum event oracle will use
     /// to listen for events from the Ethereum bridge smart contracts
