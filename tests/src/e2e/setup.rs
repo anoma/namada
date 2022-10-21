@@ -189,6 +189,10 @@ pub fn network(
     println!("'init-network' output: {}", unread);
     let net = Network { chain_id };
 
+    // release lock on wallet by dropping the
+    // child process
+    drop(init_network);
+
     // Move the "others" accounts wallet in the main base dir, so that we can
     // use them with `Who::NonValidator`
     let chain_dir = test_dir.path().join(net.chain_id.as_str());
