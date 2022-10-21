@@ -39,10 +39,6 @@ pub struct Oracle {
     abort: Option<Sender<()>>,
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
-    /// If provided, the oracle will attempt to send block heights that it has
-    /// processed to this channel, but won't pause if this channel is full
-    /// or disconnected.
-    blocks_processed: Option<BoundedSender<Uint256>>,
 }
 
 impl Deref for Oracle {
@@ -84,7 +80,6 @@ impl Oracle {
             sender,
             abort: Some(abort),
             backoff,
-            blocks_processed: None,
         }
     }
 
@@ -169,14 +164,7 @@ async fn run_oracle_aux(oracle: Oracle) {
         tokio::select! {
             result = process(&oracle, &mut pending, next_block_to_process.clone()) => {
                 match result {
-                    Ok(()) => {
-                        if let Some(blocks_processed) = &oracle.blocks_processed {
-                            if let Err(error) = blocks_processed.try_send(next_block_to_process.clone()) {
-                                tracing::warn!(?error, block = ?next_block_to_process, "Failed to send processed block height to `blocks_processed` channel");
-                            };
-                        }
-                        next_block_to_process += 1u8.into()
-                    },
+                    Ok(()) => next_block_to_process += 1u8.into(),
                     Err(error) => tracing::warn!(
                         ?error,
                         block = ?next_block_to_process,
@@ -371,16 +359,14 @@ mod test_oracle {
         oracle: Oracle,
         admin_channel: tokio::sync::mpsc::UnboundedSender<TestCmd>,
         eth_recv: tokio::sync::mpsc::Receiver<EthereumEvent>,
-        blocks_processed_recv: tokio::sync::mpsc::Receiver<Uint256>,
+        blocks_processed_recv: tokio::sync::mpsc::UnboundedReceiver<Uint256>,
         abort_recv: Receiver<()>,
     }
 
     /// Set up an oracle with a mock web3 client that we can control
     fn setup() -> TestPackage {
-        let (admin_channel, client) = Web3::setup();
+        let (admin_channel, blocks_processed_recv, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
-        let (blocks_processed, blocks_processed_recv) =
-            tokio::sync::mpsc::channel(1000);
         let (abort, abort_recv) = channel();
         TestPackage {
             oracle: Oracle {
@@ -389,7 +375,6 @@ mod test_oracle {
                 abort: Some(abort),
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
-                blocks_processed: Some(blocks_processed),
             },
             admin_channel,
             eth_recv: eth_receiver,
@@ -439,6 +424,7 @@ mod test_oracle {
             oracle,
             mut eth_recv,
             admin_channel,
+            blocks_processed_recv: _processed,
             ..
         } = setup();
         let oracle = std::thread::spawn(move || {
@@ -466,6 +452,7 @@ mod test_oracle {
             oracle,
             mut eth_recv,
             admin_channel,
+            blocks_processed_recv: _processed,
             ..
         } = setup();
         let oracle = std::thread::spawn(move || {
@@ -508,6 +495,7 @@ mod test_oracle {
             oracle,
             eth_recv,
             admin_channel,
+            blocks_processed_recv: _processed,
             ..
         } = setup();
         let oracle = std::thread::spawn(move || {
@@ -564,6 +552,7 @@ mod test_oracle {
             oracle,
             mut eth_recv,
             admin_channel,
+            blocks_processed_recv: _processed,
             ..
         } = setup();
         let oracle = std::thread::spawn(move || {

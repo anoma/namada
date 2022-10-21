@@ -105,6 +105,8 @@ pub mod mock_web3_client {
         active: bool,
         latest_block_height: Uint256,
         events: Vec<(MockEventType, Vec<u8>, u32, Sender<()>)>,
+        blocks_processed: UnboundedSender<Uint256>,
+        last_block_processed: Option<Uint256>,
     }
 
     impl Web3 {
@@ -120,16 +122,23 @@ pub mod mock_web3_client {
 
         /// Return a new client and a separate sender
         /// to send in admin commands
-        pub fn setup() -> (UnboundedSender<TestCmd>, Self) {
+        pub fn setup()
+        -> (UnboundedSender<TestCmd>, UnboundedReceiver<Uint256>, Self)
+        {
             // we can only send one command at a time.
             let (cmd_sender, cmd_channel) = unbounded_channel();
+            let (block_processed_send, block_processed_recv) =
+                unbounded_channel();
             (
                 cmd_sender,
+                block_processed_recv,
                 Self(RefCell::new(Web3Client {
                     cmd_channel,
                     active: true,
                     latest_block_height: Default::default(),
                     events: vec![],
+                    blocks_processed: block_processed_send,
+                    last_block_processed: None,
                 })),
             )
         }
@@ -205,6 +214,13 @@ pub mod mock_web3_client {
                     } else {
                         client.events.push((event_ty, data, height, seen));
                     }
+                }
+                if client.last_block_processed < Some(block_to_check.clone()) {
+                    client
+                        .blocks_processed
+                        .send(block_to_check.clone())
+                        .unwrap();
+                    client.last_block_processed = Some(block_to_check);
                 }
                 Ok(logs)
             } else {
