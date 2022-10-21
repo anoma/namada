@@ -1,4 +1,6 @@
 //! Blockchain-level parameters for the configuration of the Ethereum bridge.
+use std::num::NonZeroU64;
+
 use serde::{Deserialize, Serialize};
 
 /// Represents a configuration value for an Ethereum address e.g.
@@ -11,11 +13,11 @@ pub struct Address(String);
 /// confirmations an Ethereum event must reach before it can be acted on.
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[repr(transparent)]
-pub struct MinimumConfirmations(u64);
+pub struct MinimumConfirmations(NonZeroU64);
 
 impl Default for MinimumConfirmations {
     fn default() -> Self {
-        Self(100)
+        Self(unsafe { NonZeroU64::new_unchecked(100) })
     }
 }
 
@@ -47,11 +49,11 @@ pub struct Contracts {
 /// upgraded. Starts from 1.
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[repr(transparent)]
-pub struct ContractVersion(u64);
+pub struct ContractVersion(NonZeroU64);
 
 impl Default for ContractVersion {
     fn default() -> Self {
-        Self(1)
+        Self(unsafe { NonZeroU64::new_unchecked(1) })
     }
 }
 
