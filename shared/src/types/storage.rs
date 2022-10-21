@@ -269,33 +269,13 @@ impl From<PendingTransfer> for MerkleValue {
 }
 
 impl MerkleValue {
-    /// Get the natural byte repesentation of the value
+    /// Get the natural byte representation of the value
     pub fn to_bytes(self) -> Vec<u8> {
         match self {
             Self::Bytes(bytes) => bytes,
             Self::BridgePoolTransfer(transfer) => {
                 transfer.try_to_vec().unwrap()
             }
-        }
-    }
-}
-
-impl MerkleValue {
-    /// Get the natural byte repesentation of the value
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Bytes(bytes) => bytes,
-            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
-        }
-    }
-}
-
-impl MerkleValue {
-    /// Get the natural byte repesentation of the value
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Bytes(bytes) => bytes,
-            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
         }
     }
 }
