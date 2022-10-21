@@ -16,4 +16,5 @@
     "vp_testnet_faucet.wasm": "vp_testnet_faucet.cc2633219e7fe4a807fb6e25ae8c7248b35dcea239dd6b108293bfee26d3a512.wasm",
     "vp_token.wasm": "vp_token.cee6c283ec93ecf78d473cf382b2ec78a891d705fa48ca5c7393c61b74bb2aa7.wasm",
     "vp_user.wasm": "vp_user.62b8491c45cb9fb1b2b4f4d4590a119ba34fcca8d63539ed2717c3bef365aff1.wasm"
+
 }

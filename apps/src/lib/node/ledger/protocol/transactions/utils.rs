@@ -3,10 +3,33 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use eyre::eyre;
 use itertools::Itertools;
 use namada::ledger::pos::types::{VotingPower, WeightedValidator};
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
 use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
+
+use crate::node::ledger::shell::queries::QueriesExt;
+
+pub(super) fn get_active_validators<D, H>(
+    storage: &Storage<D, H>,
+    block_heights: HashSet<BlockHeight>,
+) -> BTreeMap<BlockHeight, BTreeSet<WeightedValidator<Address>>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut active_validators = BTreeMap::default();
+    for height in block_heights.into_iter() {
+        let epoch = storage.get_epoch(height).expect(
+            "The epoch of the last block height should always be known",
+        );
+        _ = active_validators
+            .insert(height, storage.get_active_validators(Some(epoch)));
+    }
+    active_validators
+}
 
 /// Extract all the voters and the block heights at which they voted from the
 /// given events.
