@@ -5,7 +5,6 @@ use std::process::Command;
 use std::str::FromStr;
 use std::{env, time};
 
-use namada_apps::config::genesis::genesis_config;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use escargot::CargoBuild;
@@ -13,6 +12,7 @@ use eyre::eyre;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
+use namada_apps::config::genesis::genesis_config;
 use namada_apps::config::{Config, TendermintMode};
 
 use super::setup::{Test, ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES};

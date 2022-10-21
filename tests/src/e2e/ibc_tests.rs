@@ -60,7 +60,6 @@ use namada::ibc::core::ics04_channel::packet::Packet;
 use namada::ibc::core::ics04_channel::Version as ChanVersion;
 use namada::ibc::core::ics23_commitment::commitment::CommitmentProofBytes;
 use namada::ibc::core::ics23_commitment::merkle::convert_tm_to_ics_merkle_proof;
-use namada::ibc::core::ics23_commitment::specs::ProofSpecs;
 use namada::ibc::core::ics24_host::identifier::{
     ChainId, ClientId, ConnectionId, PortChannelId, PortId,
 };
@@ -72,7 +71,8 @@ use namada::ibc::tx_msg::Msg;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::ibc::handler::{commitment_prefix, port_channel_id};
 use namada::ledger::ibc::storage::*;
-use namada::ledger::storage::{MerkleTree, Sha256Hasher};
+use namada::ledger::storage::ics23_specs::ibc_proof_specs;
+use namada::ledger::storage::Sha256Hasher;
 use namada::tendermint::block::Header as TmHeader;
 use namada::tendermint::merkle::proof::Proof as TmProof;
 use namada::tendermint::trust_threshold::TrustThresholdFraction;
@@ -246,7 +246,7 @@ fn make_client_state(test: &Test, height: Height) -> AnyClientState {
         unbonding_period,
         max_clock_drift,
         height,
-        proof_specs(),
+        ibc_proof_specs::<Sha256Hasher>().into(),
         vec!["upgrade".to_string(), "upgradedIBCState".to_string()],
         AllowUpdate {
             after_expiry: true,
@@ -263,12 +263,6 @@ fn make_consensus_state(
 ) -> Result<AnyConsensusState> {
     let header = query_header(test, height)?;
     Ok(TmConsensusState::from(header).wrap_any())
-}
-
-fn proof_specs() -> ProofSpecs {
-    MerkleTree::<Sha256Hasher>::default()
-        .ibc_proof_specs()
-        .into()
 }
 
 fn update_client_with_height(
@@ -362,7 +356,7 @@ fn dummy_chain_config(test: &Test) -> ChainConfig {
         max_block_time: Duration::new(5, 0),
         trusting_period: None,
         memo_prefix: Memo::default(),
-        proof_specs: proof_specs(),
+        proof_specs: ibc_proof_specs::<Sha256Hasher>().into(),
         trust_threshold: TrustThresholdFraction::ONE_THIRD,
         gas_price: GasPrice::new(0.0, "dummy".to_string()),
         packet_filter: PacketFilter::default(),
