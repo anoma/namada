@@ -1,32 +1,28 @@
-//! Functionality for accessing the `eth_msgs/...` subspace
+//! Functionality for accessing keys to do with tallying votes
 use crate::types::ethereum_events::EthereumEvent;
 use crate::types::hash::Hash;
 use crate::types::storage::Key;
 
 #[allow(missing_docs)]
-pub const PREFIX_KEY_SEGMENT: &str = "eth_msgs";
-
-/// Get the key prefix corresponding to where details of seen [`EthereumEvent`]s
-/// are stored
-pub fn prefix() -> Key {
-    super::prefix()
-        .push(&PREFIX_KEY_SEGMENT.to_owned())
-        .expect("should always be able to construct this key")
-}
+pub const ETH_MSGS_PREFIX_KEY_SEGMENT: &str = "eth_msgs";
 
 const BODY_KEY_SEGMENT: &str = "body";
 const SEEN_KEY_SEGMENT: &str = "seen";
 const SEEN_BY_KEY_SEGMENT: &str = "seen_by";
 const VOTING_POWER_KEY_SEGMENT: &str = "voting_power";
 
-/// Generator for the keys under which details of an [`EthereumEvent`] is stored
-pub struct Keys {
-    /// The prefix under which the details are an [`EthereumEvent`] is stored
+/// Generator for the keys under which details of votes for some piece of data
+/// is stored
+pub struct Keys<T: 'static> {
+    /// The prefix under which the details of a piece of data for which we are
+    /// tallying votes is stored
     pub prefix: Key,
+    _phantom: std::marker::PhantomData<&'static T>,
 }
 
-impl Keys {
-    /// Get the `body` key- there should be an [`EthereumEvent`] stored here.
+impl<T> Keys<T> {
+    /// Get the `body` key - there should be a Borsh-serialized `T` stored
+    /// here.
     pub fn body(&self) -> Key {
         self.prefix
             .push(&BODY_KEY_SEGMENT.to_owned())
@@ -57,7 +53,7 @@ impl Keys {
     }
 }
 
-impl IntoIterator for &Keys {
+impl<T> IntoIterator for &Keys<T> {
     type IntoIter = std::vec::IntoIter<Self::Item>;
     type Item = Key;
 
@@ -72,7 +68,15 @@ impl IntoIterator for &Keys {
     }
 }
 
-impl From<&EthereumEvent> for Keys {
+/// Get the key prefix corresponding to where details of seen [`EthereumEvent`]s
+/// are stored
+pub fn eth_msgs_prefix() -> Key {
+    super::prefix()
+        .push(&ETH_MSGS_PREFIX_KEY_SEGMENT.to_owned())
+        .expect("should always be able to construct this key")
+}
+
+impl From<&EthereumEvent> for Keys<EthereumEvent> {
     fn from(event: &EthereumEvent) -> Self {
         let hash = event
             .hash()
@@ -81,13 +85,16 @@ impl From<&EthereumEvent> for Keys {
     }
 }
 
-impl From<&Hash> for Keys {
+impl From<&Hash> for Keys<EthereumEvent> {
     fn from(hash: &Hash) -> Self {
         let hex = format!("{}", hash);
-        let prefix = prefix()
+        let prefix = eth_msgs_prefix()
             .push(&hex)
             .expect("should always be able to construct this key");
-        Self { prefix }
+        Keys {
+            prefix,
+            _phantom: std::marker::PhantomData,
+        }
     }
 }
 
@@ -97,32 +104,36 @@ mod test {
     use crate::ledger::eth_bridge::ADDRESS;
     use crate::types::storage::DbKeySeg;
 
-    fn arbitrary_event_with_hash() -> (EthereumEvent, String) {
-        (
-            EthereumEvent::TransfersToNamada {
-                nonce: 1.into(),
-                transfers: vec![],
-            },
-            "06799912C0FD8785EE29E13DFB84FE2778AF6D9CA026BD5B054F86CE9FE8C017"
-                .to_owned(),
-        )
+    mod helpers {
+        use super::*;
+
+        pub(super) fn arbitrary_event_with_hash() -> (EthereumEvent, String) {
+            (
+                EthereumEvent::TransfersToNamada {
+                    nonce: 1.into(),
+                    transfers: vec![],
+                },
+                "06799912C0FD8785EE29E13DFB84FE2778AF6D9CA026BD5B054F86CE9FE8C017"
+                    .to_owned(),
+            )
+        }
     }
 
     #[test]
-    fn test_prefix() {
-        assert_matches!(&prefix().segments[..], [
+    fn test_eth_msgs_prefix() {
+        assert_matches!(&eth_msgs_prefix().segments[..], [
                 DbKeySeg::AddressSeg(ADDRESS),
                 DbKeySeg::StringSeg(s),
-            ] if s == PREFIX_KEY_SEGMENT)
+            ] if s == ETH_MSGS_PREFIX_KEY_SEGMENT)
     }
 
     #[test]
-    fn test_keys_all_keys() {
-        let (event, hash) = arbitrary_event_with_hash();
-        let keys: Keys = (&event).into();
+    fn test_ethereum_event_keys_all_keys() {
+        let (event, hash) = helpers::arbitrary_event_with_hash();
+        let keys: Keys<EthereumEvent> = (&event).into();
         let prefix = vec![
             DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(PREFIX_KEY_SEGMENT.to_owned()),
+            DbKeySeg::StringSeg(ETH_MSGS_PREFIX_KEY_SEGMENT.to_owned()),
             DbKeySeg::StringSeg(hash),
         ];
         let body_key = keys.body();
@@ -155,9 +166,9 @@ mod test {
     }
 
     #[test]
-    fn test_keys_into_iter() {
-        let (event, _) = arbitrary_event_with_hash();
-        let keys: Keys = (&event).into();
+    fn test_ethereum_event_keys_into_iter() {
+        let (event, _) = helpers::arbitrary_event_with_hash();
+        let keys: Keys<EthereumEvent> = (&event).into();
         let as_keys: Vec<_> = keys.into_iter().collect();
         assert_eq!(
             as_keys,
@@ -171,24 +182,24 @@ mod test {
     }
 
     #[test]
-    fn test_keys_from_ethereum_event() {
-        let (event, hash) = arbitrary_event_with_hash();
-        let keys: Keys = (&event).into();
+    fn test_ethereum_event_keys_from_ethereum_event() {
+        let (event, hash) = helpers::arbitrary_event_with_hash();
+        let keys: Keys<EthereumEvent> = (&event).into();
         let expected = vec![
             DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(PREFIX_KEY_SEGMENT.to_owned()),
+            DbKeySeg::StringSeg(ETH_MSGS_PREFIX_KEY_SEGMENT.to_owned()),
             DbKeySeg::StringSeg(hash),
         ];
         assert_eq!(&keys.prefix.segments[..], &expected[..]);
     }
 
     #[test]
-    fn test_keys_from_hash() {
-        let (event, hash) = arbitrary_event_with_hash();
-        let keys: Keys = (&event.hash().unwrap()).into();
+    fn test_ethereum_event_keys_from_hash() {
+        let (event, hash) = helpers::arbitrary_event_with_hash();
+        let keys: Keys<EthereumEvent> = (&event.hash().unwrap()).into();
         let expected = vec![
             DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(PREFIX_KEY_SEGMENT.to_owned()),
+            DbKeySeg::StringSeg(ETH_MSGS_PREFIX_KEY_SEGMENT.to_owned()),
             DbKeySeg::StringSeg(hash),
         ];
         assert_eq!(&keys.prefix.segments[..], &expected[..]);

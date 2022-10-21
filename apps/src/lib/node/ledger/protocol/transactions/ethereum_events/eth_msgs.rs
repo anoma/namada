@@ -5,7 +5,8 @@ use namada::types::address::Address;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
-use namada::types::voting_power::FractionalVotingPower;
+
+use crate::node::ledger::protocol::transactions::votes::Tally;
 
 /// Represents an Ethereum event being seen by some validators
 #[derive(
@@ -48,12 +49,8 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
 pub struct EthMsg {
     /// The event being stored
     pub body: EthereumEvent,
-    /// The total voting power that's voted for this event across all epochs
-    pub voting_power: FractionalVotingPower,
-    /// The addresses of validators that voted for this event
-    pub seen_by: BTreeSet<Address>,
-    /// Whether this event has been acted on or not
-    pub seen: bool,
+    /// Tallying of votes for this event
+    pub votes: Tally,
 }
 
 #[cfg(test)]
