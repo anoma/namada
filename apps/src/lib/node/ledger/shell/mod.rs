@@ -874,10 +874,19 @@ mod test_utils {
                 sig_bytes[0] = sig_bytes[0].wrapping_add(1);
                 common::Signature::Ed25519(ed25519::Signature(sig_bytes.into()))
             }
-            common::Signature::Secp256k1(secp256k1::Signature(ref sig)) => {
+            common::Signature::Secp256k1(secp256k1::Signature(
+                ref sig,
+                ref recovery_id,
+            )) => {
                 let mut sig_bytes = sig.serialize();
+                let recovery_id_bytes = recovery_id.serialize();
                 sig_bytes[0] = sig_bytes[0].wrapping_add(1);
-                common::Signature::Secp256k1((&sig_bytes).try_into().unwrap())
+                let bytes: [u8; 65] =
+                    [sig_bytes.as_slice(), [recovery_id_bytes].as_slice()]
+                        .concat()
+                        .try_into()
+                        .unwrap();
+                common::Signature::Secp256k1((&bytes).try_into().unwrap())
             }
         }
     }
