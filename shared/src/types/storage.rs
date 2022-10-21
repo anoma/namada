@@ -284,17 +284,9 @@ impl MerkleValue {
     pub fn to_bytes(self) -> Vec<u8> {
         match self {
             Self::Bytes(bytes) => bytes,
-            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
-        }
-    }
-}
-
-impl MerkleValue {
-    /// Get the natural byte repesentation of the value
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Bytes(bytes) => bytes,
-            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
+            Self::BridgePoolTransfer(transfer) => {
+                transfer.try_to_vec().unwrap()
+            }
         }
     }
 }
