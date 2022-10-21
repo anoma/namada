@@ -1,4 +1,4 @@
-//! Runtime configuration for a validator node
+//! Runtime configuration for a validator node.
 #[allow(unused_imports)]
 use namada::types::ethereum_events::EthereumEvent;
 use serde::{Deserialize, Serialize};
