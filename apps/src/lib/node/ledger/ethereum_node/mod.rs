@@ -3,7 +3,6 @@ pub mod oracle;
 pub mod test_tools;
 use std::ffi::OsString;
 
-use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::oneshot::{Receiver, Sender};
 
@@ -29,17 +28,10 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// A handle on an Ethereum full node subprocess for monitoring it
-#[async_trait]
-pub trait Monitorable {
-    async fn wait(&mut self) -> Result<()>;
-    async fn kill(&mut self);
-}
-
 /// Monitor the Ethereum fullnode. If it stops or an abort
 /// signal is sent, the subprocess is halted.
 pub async fn monitor(
-    mut node: impl Monitorable,
+    mut node: eth_fullnode::EthereumNode,
     abort_recv: Receiver<Sender<()>>,
 ) -> Result<()> {
     tokio::select! {
@@ -68,13 +60,12 @@ pub async fn monitor(
 pub mod eth_fullnode {
     use std::time::Duration;
 
-    use async_trait::async_trait;
     use tokio::process::{Child, Command};
     use tokio::sync::oneshot::{channel, Receiver, Sender};
     use tokio::task::LocalSet;
     use web30::client::Web3;
 
-    use super::{Error, Monitorable, Result};
+    use super::{Error, Result};
 
     /// A handle to a running geth process and a channel
     /// that indicates it should shut down if the oracle
@@ -171,14 +162,11 @@ pub mod eth_fullnode {
                 })
                 .await
         }
-    }
 
-    #[async_trait]
-    impl Monitorable for EthereumNode {
         /// Wait for the process to finish or an abort message was
         /// received from the Oracle process. If either, return the
         /// status.
-        async fn wait(&mut self) -> Result<()> {
+        pub async fn wait(&mut self) -> Result<()> {
             use futures::future::{self, Either};
 
             let child_proc = self.process.wait();
@@ -197,7 +185,7 @@ pub mod eth_fullnode {
         }
 
         /// Stop the geth process
-        async fn kill(&mut self) {
+        pub async fn kill(&mut self) {
             self.process.kill().await.unwrap();
         }
     }
