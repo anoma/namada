@@ -1,7 +1,8 @@
 //! Helpers for reading from storage
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
-use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::storage;
 use namada::types::token::Amount;
 
@@ -57,7 +58,7 @@ mod tests {
     use namada::types::storage;
     use namada::types::token::Amount;
 
-    use crate::node::ledger::protocol::transactions::ethereum_events::read;
+    use crate::node::ledger::protocol::transactions::read;
 
     #[test]
     fn test_amount_returns_zero_for_uninitialized_storage() {

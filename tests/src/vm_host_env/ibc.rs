@@ -59,7 +59,7 @@ use namada::ledger::ibc::vp::{
 };
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage::mockdb::MockDB;
-use namada::ledger::storage::Sha256Hasher;
+use namada::ledger::storage::traits::Sha256Hasher;
 use namada::proto::Tx;
 use namada::tendermint_proto::Protobuf;
 use namada::types::address::{self, Address, InternalAddress};

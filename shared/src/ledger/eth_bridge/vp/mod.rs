@@ -10,7 +10,7 @@ use itertools::Itertools;
 use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage as ledger_storage;
-use crate::ledger::storage::StorageHasher;
+use crate::ledger::storage::traits::StorageHasher;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token::Amount;

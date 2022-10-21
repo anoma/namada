@@ -26,10 +26,9 @@ use namada::ledger::pos::namada_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
+use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
-use namada::ledger::storage::{
-    DBIter, Sha256Hasher, Storage, StorageHasher, DB,
-};
+use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::ledger::{ibc, parameters, pos};
 use namada::proto::{self, Tx};
 use namada::types::chain::ChainId;
@@ -797,7 +796,8 @@ mod test_utils {
     #[cfg(not(feature = "abcipp"))]
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
+    use namada::ledger::storage::traits::Sha256Hasher;
+    use namada::ledger::storage::{BlockStateWrite, MerkleTree};
     use namada::types::address::{xan, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
@@ -874,10 +874,19 @@ mod test_utils {
                 sig_bytes[0] = sig_bytes[0].wrapping_add(1);
                 common::Signature::Ed25519(ed25519::Signature(sig_bytes.into()))
             }
-            common::Signature::Secp256k1(secp256k1::Signature(ref sig)) => {
+            common::Signature::Secp256k1(secp256k1::Signature(
+                ref sig,
+                ref recovery_id,
+            )) => {
                 let mut sig_bytes = sig.serialize();
+                let recovery_id_bytes = recovery_id.serialize();
                 sig_bytes[0] = sig_bytes[0].wrapping_add(1);
-                common::Signature::Secp256k1((&sig_bytes).try_into().unwrap())
+                let bytes: [u8; 65] =
+                    [sig_bytes.as_slice(), [recovery_id_bytes].as_slice()]
+                        .concat()
+                        .try_into()
+                        .unwrap();
+                common::Signature::Secp256k1((&bytes).try_into().unwrap())
             }
         }
     }
