@@ -963,13 +963,12 @@ pub trait IbcActions {
             ))
         })?;
 
-        let source_addr =
-            Address::decode(data.sender.clone()).map_err(|e| {
-                Error::SendingToken(format!(
-                    "Invalid sender address: sender {}, error {}",
-                    data.sender, e
-                ))
-            })?;
+        let source_addr = Address::decode(&data.sender).map_err(|e| {
+            Error::SendingToken(format!(
+                "Invalid sender address: sender {}, error {}",
+                data.sender, e
+            ))
+        })?;
 
         // check the denomination field
         let prefix = format!(
@@ -1046,13 +1045,12 @@ pub trait IbcActions {
         })?;
         // The receiver should be an address because the origin-specific account
         // key should be assigned internally
-        let dest_addr =
-            Address::decode(data.receiver.clone()).map_err(|e| {
-                Error::ReceivingToken(format!(
-                    "Invalid receiver address: receiver {}, error {}",
-                    data.receiver, e
-                ))
-            })?;
+        let dest_addr = Address::decode(&data.receiver).map_err(|e| {
+            Error::ReceivingToken(format!(
+                "Invalid receiver address: receiver {}, error {}",
+                data.receiver, e
+            ))
+        })?;
 
         let prefix = format!(
             "{}/{}/",
@@ -1131,7 +1129,7 @@ pub trait IbcActions {
             ))
         })?;
 
-        let dest_addr = Address::decode(data.sender.clone()).map_err(|e| {
+        let dest_addr = Address::decode(&data.sender).map_err(|e| {
             Error::SendingToken(format!(
                 "Invalid sender address: sender {}, error {}",
                 data.sender, e
