@@ -110,12 +110,14 @@ where
             %valset_upd_keys.prefix,
             "Validator set update votes already in storage",
         );
-        let mut votes = HashMap::default();
-        seen_by.into_iter().for_each(|(address, block_height)| {
-            let fract_voting_power =
-                voting_powers.get(&(address.clone(), block_height)).unwrap();
+        let mut fractional_voting_powers = HashMap::default();
+        seen_by.iter().for_each(|(address, block_height)| {
+            let fract_voting_power = voting_powers
+                .get(&(address.clone(), block_height.to_owned()))
+                .unwrap();
             if let Some(already_present_fract_voting_power) =
-                votes.insert(address.clone(), fract_voting_power.to_owned())
+                fractional_voting_powers
+                    .insert(address.clone(), fract_voting_power.to_owned())
             {
                 tracing::warn!(
                     ?address,
@@ -126,8 +128,12 @@ where
                 )
             }
         });
-        let (tally, changed) =
-            votes::calculate_updated(storage, &valset_upd_keys, &votes)?;
+        let (tally, changed) = votes::calculate_updated(
+            storage,
+            &valset_upd_keys,
+            &fractional_voting_powers,
+            &seen_by,
+        )?;
         let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
         (tally, changed, confirmed)
     };

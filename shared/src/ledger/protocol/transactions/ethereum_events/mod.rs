@@ -5,7 +5,7 @@ mod events;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use eth_msgs::{EthMsg, EthMsgUpdate};
+use eth_msgs::EthMsgUpdate;
 use eyre::Result;
 
 use super::ChangedKeys;
@@ -140,39 +140,37 @@ where
             %eth_msg_keys.prefix,
             "Ethereum event already exists in storage",
         );
-        let mut votes = HashMap::default();
+        let mut fractional_voting_powers = HashMap::default();
         update.seen_by.iter().for_each(|(address, block_height)| {
-            let voting_power = voting_powers
+            let fract_voting_power = voting_powers
                 .get(&(address.to_owned(), block_height.to_owned()))
                 .unwrap();
-            if let Some(already_present_voting_power) =
-                votes.insert(address.to_owned(), voting_power.to_owned())
+            if let Some(already_present_fract_voting_power) =
+                fractional_voting_powers
+                    .insert(address.to_owned(), fract_voting_power.to_owned())
             {
                 tracing::warn!(
                     ?address,
-                    ?already_present_voting_power,
-                    new_voting_power = ?voting_power,
-                    "Validator voted more than once, arbitrarily using later value",
+                    ?already_present_fract_voting_power,
+                    new_fract_voting_power = ?fract_voting_power,
+                    "Validator voted more than once on Ethereum event, \
+                     arbitrarily using later value"
                 )
             }
         });
-        let (vote_tracking, changed) =
-            calculate_updated(storage, &eth_msg_keys, &votes)?;
+        let (vote_tracking, changed) = calculate_updated(
+            storage,
+            &eth_msg_keys,
+            &fractional_voting_powers,
+            &update.seen_by,
+        )?;
         let confirmed =
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
         (vote_tracking, changed, confirmed)
     };
-    let eth_msg_post = EthMsg {
-        body: update.body,
-        votes: vote_tracking,
-    };
-    tracing::debug!("writing EthMsg - {:#?}", &eth_msg_post);
-    votes::storage::write(
-        storage,
-        &eth_msg_keys,
-        &eth_msg_post.body,
-        &eth_msg_post.votes,
-    )?;
+
+    write(storage, &eth_msg_keys, &update.body, &vote_tracking)?;
+
     Ok((changed, confirmed))
 }
 

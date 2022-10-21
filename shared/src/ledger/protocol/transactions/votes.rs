@@ -78,32 +78,164 @@ pub fn calculate_new(
 pub fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
-    _voters: &HashMap<Address, FractionalVotingPower>,
+    voting_powers: &HashMap<Address, FractionalVotingPower>,
+    votes: &Votes,
 ) -> Result<(Tally, ChangedKeys)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     T: BorshDeserialize,
 {
-    // TODO(namada#515): implement this
-    let _body: T = read::value(store, &keys.body())?;
     let seen: bool = read::value(store, &keys.seen())?;
     let seen_by: Votes = read::value(store, &keys.seen_by())?;
     let voting_power: FractionalVotingPower =
         read::value(store, &keys.voting_power())?;
 
-    let tally = Tally {
+    let tally_pre = Tally {
         voting_power,
         seen_by,
         seen,
     };
+    let tally_post = calculate_update(keys, &tally_pre, voting_powers, votes);
+    let changed_keys = validate_update(keys, &tally_pre, &tally_post)?;
 
     tracing::warn!(
-        ?tally,
-        "Updating events is not implemented yet, so the returned vote tally \
-         will be identical to the one in storage",
+        ?tally_pre,
+        ?tally_post,
+        "Calculated and validated vote tracking updates",
     );
-    Ok((tally, ChangedKeys::default()))
+    Ok((tally_post, changed_keys))
+}
+
+/// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
+/// validators which have seen it. `voting_powers` should map validators who
+/// have newly seen the event to their fractional voting power at a block height
+/// at which they saw the event.
+fn calculate_update<T>(
+    keys: &vote_tallies::Keys<T>,
+    pre: &Tally,
+    voting_powers: &HashMap<Address, FractionalVotingPower>,
+    votes: &Votes,
+) -> Tally {
+    let new_voters: BTreeSet<Address> = voting_powers.keys().cloned().collect();
+
+    // For any event and validator, only the first vote by that validator for
+    // that event counts, later votes we encounter here can just be ignored. We
+    // can warn here when we encounter duplicate votes but these are
+    // reasonably likely to occur so this perhaps shouldn't be a warning unless
+    // it is happening a lot
+    let already_voted: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
+    for validator in already_voted.intersection(&new_voters) {
+        tracing::warn!(
+            ?keys.prefix,
+            ?validator,
+            "Encountered duplicate vote for an event by a validator, ignoring"
+        );
+    }
+
+    let mut voting_power_post = pre.voting_power.clone();
+    let mut seen_by_post = pre.seen_by.clone();
+    for validator in new_voters.difference(&already_voted) {
+        tracing::info!(
+            ?keys.prefix,
+            ?validator,
+            "Recording validator as having voted for this event"
+        );
+        seen_by_post.insert(
+            validator.to_owned(),
+            votes
+                .get(validator)
+                .expect("Validator must be in votes!")
+                .to_owned(),
+        );
+        voting_power_post += voting_powers.get(validator).expect(
+            "voting powers map must have all validators from newly_seen_by",
+        );
+    }
+
+    let seen_post = if voting_power_post > FractionalVotingPower::TWO_THIRDS {
+        tracing::info!(
+            ?keys.prefix,
+            "Event has been seen by a quorum of validators",
+        );
+        true
+    } else {
+        tracing::debug!(
+            ?keys.prefix,
+            "Event is not yet seen by a quorum of validators",
+        );
+        false
+    };
+
+    Tally {
+        voting_power: voting_power_post,
+        seen_by: seen_by_post,
+        seen: seen_post,
+    }
+}
+
+/// Validates that `post` is an updated version of `pre`, and returns keys which
+/// changed. This function serves as a sort of validity predicate for this
+/// native transaction, which is otherwise not checked by anything else.
+fn validate_update<T>(
+    keys: &vote_tallies::Keys<T>,
+    pre: &Tally,
+    post: &Tally,
+) -> Result<ChangedKeys> {
+    let mut keys_changed = ChangedKeys::default();
+
+    let mut seen = false;
+    if pre.seen != post.seen {
+        // the only valid transition for `seen` is from `false` to `true`
+        if pre.seen || !post.seen {
+            return Err(eyre!(
+                "Tally seen changed from {:#?} to {:#?}",
+                &pre.seen,
+                &post.seen,
+            ));
+        }
+        keys_changed.insert(keys.seen());
+        seen = true;
+    }
+    let pre_seen_by: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
+    let post_seen_by: BTreeSet<_> = post.seen_by.keys().cloned().collect();
+
+    if pre_seen_by != post_seen_by {
+        // if seen_by changes, it must be a strict superset of the previous
+        // seen_by
+        if !post_seen_by.is_superset(&pre_seen_by) {
+            return Err(eyre!(
+                "Tally seen changed from {:#?} to {:#?}",
+                &pre_seen_by,
+                &post_seen_by,
+            ));
+        }
+        keys_changed.insert(keys.seen_by());
+    }
+
+    if pre.voting_power != post.voting_power {
+        // if voting_power changes, it must have increased
+        if pre.voting_power >= post.voting_power {
+            return Err(eyre!(
+                "Tally voting_power changed from {:#?} to {:#?}",
+                &pre.voting_power,
+                &post.voting_power,
+            ));
+        }
+        keys_changed.insert(keys.voting_power());
+    }
+
+    if post.voting_power > FractionalVotingPower::TWO_THIRDS
+        && !seen
+        && pre.voting_power >= post.voting_power
+    {
+        return Err(eyre!(
+            "Tally is not seen even though new voting_power is enough: {:#?}",
+            &post.voting_power,
+        ));
+    }
+
+    Ok(keys_changed)
 }
 
 /// Deterministically constructs a [`Votes`] map from a set of validator
