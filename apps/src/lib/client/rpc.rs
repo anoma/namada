@@ -1295,16 +1295,18 @@ pub async fn query_storage_value<T>(
 where
     T: BorshDeserialize,
 {
-    let (value, _proof) =
+    let (bytes, _proof) =
         query_storage_value_bytes(client, key, None, false).await;
-    match value {
-        Some(v) => match T::try_from_slice(&v[..]) {
-            Ok(value) => return Some(value),
-            Err(err) => eprintln!("Error decoding the value: {}", err),
+    match bytes {
+        Some(b) => match T::try_from_slice(&b[..]) {
+            Ok(value) => Some(value),
+            Err(err) => {
+                eprintln!("Error decoding the value: {}", err);
+                cli::safe_exit(1)
+            }
         },
-        None => return None,
+        None => None,
     }
-    cli::safe_exit(1)
 }
 
 /// Query a storage value and the proof without decoding.
