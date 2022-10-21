@@ -3,8 +3,10 @@ use std::num::NonZeroU64;
 
 use serde::{Deserialize, Serialize};
 
-/// Represents a configuration value for an Ethereum address e.g.
-/// 0x6B175474E89094C44Da98b954EedeAC495271d0F
+/// Represents a configuration value for an Ethereum address.
+///
+/// For instance:
+/// `0x6B175474E89094C44Da98b954EedeAC495271d0F`
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[repr(transparent)]
 pub struct Address(String);
