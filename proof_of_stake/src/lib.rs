@@ -976,8 +976,14 @@ pub trait PosBase {
                     "Unable to read native address of validator from \
                      tendermint raw hash",
                 );
-            signer_set.insert(native_address);
-            total_signing_stake += vote.validator_vp;
+            signer_set.insert(native_address.clone());
+
+            // vote.validator_vp is updating at a constant delay relative to the validator deltas
+            // use validator deltas in namada protocol to get voting power instead
+            let deltas = self.read_validator_deltas(&native_address).unwrap();
+            let stake: Self::TokenChange = deltas.get(epoch).unwrap();
+            let stake: u64 = Into::<i128>::into(stake).try_into().unwrap();
+            total_signing_stake += stake;
         }
 
         // Get the block rewards coefficients (proposing, signing/voting,
