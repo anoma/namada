@@ -21,7 +21,7 @@ Each proposal will be stored in a sub-key under the internal proposal address. T
 ```
 /\$GovernanceAddress/proposal/\$id/content: Vec<u8>
 /\$GovernanceAddress/proposal/\$id/author: Address
-/\$GovernanceAddress/proposal/\$id/proposal_type: ProposalType
+/\$GovernanceAddress/proposal/\$id/type: ProposalType
 /\$GovernanceAddress/proposal/\$id/start_epoch: Epoch
 /\$GovernanceAddress/proposal/\$id/end_epoch: Epoch
 /\$GovernanceAddress/proposal/\$id/grace_epoch: Epoch
@@ -50,12 +50,12 @@ Each proposal will be stored in a sub-key under the internal proposal address. T
 
 The `ProposalType` imply different combinations of:
 
-- the optional payload (memo) attached to the vote
+- the optional wasm code attached to the proposal
 - which actors should be allowed to vote (delegators and validators or validators only)
 - the threshold to be used in the tally process
-- the optional wasm code attached to the proposal
+- the optional payload (memo) attached to the vote
 
-The correct logic to handle these different types will be hardcoded in protocol. We'll also rely on type checking to strictly enforce the correctness of a proposal given its type. These two approaches combined will prevent a user from deviating from the intended logic for a certain proposal type (e.g. providing a wasm code when it's not needed or allowing only validators to vote when also delegators should, etc...)
+The correct logic to handle these different types will be hardcoded in protocol. We'll also rely on type checking to strictly enforce the correctness of a proposal given its type. These two approaches combined will prevent a user from deviating from the intended logic for a certain proposal type (e.g. providing a wasm code when it's not needed or allowing only validators to vote when also delegators should, etc...). More details on the specific types supported can be found in the [relative](#supported-proposal-types) section of this document.
 
 `GovernanceAddress` parameters and global storage keys are:
 
@@ -86,13 +86,47 @@ The governance machinery also relies on a subkey stored under the `NAM` token ad
 This is to leverage the `NAM` VP to check that the funds were correctly locked.
 The governance subkey, `/\$GovernanceAddress/proposal/\$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to Treasury.
 
+### Supported proposal types
+
+At the moment, Namada supports 3 types of governance proposals:
+
+```rust
+pub enum ProposalType {
+  /// Carries the optional proposal code path
+  Custom(Option<String>),
+  PGFCouncil,
+  ETHBridge,
+}
+```
+
+`Custom` represents a generic proposal with the following properties:
+
+- Can carry a wasm code to be executed in case the proposal passes
+- Allows both validators and delegators to vote
+- Requires 2/3 of the total voting power to succeed
+- Doesn't expect any memo attached to the votes
+
+`PGFCouncil` is a specific proposal to elect the council for _Public Goods Funding_:
+
+- Doesn't carry any wasm code
+- Allows both validators and delegators to vote
+- Requires 1/3 of the total voting power to vote for the same council
+- Expect every vote to carry a memo in the form of a tuple `(Vec<Address>, BudgetCap)`
+
+`ETHBridge` is aimed at regulating actions on the bridge like the update of the Ethereum smart contracts or the withdrawing of all the funds from the `Vault` :
+
+- Doesn't carry any wasm code
+- Allows only validators to vote
+- Requires 2/3 of the validators' total voting power to succeed
+- Expect every vote to carry a memo in the form of a tuple `(Action, Signature)`
+
 ### GovernanceAddress VP
 
 Just like Pos, also governance has its own storage space. The `GovernanceAddress` validity predicate task is to check the integrity and correctness of new proposals. A proposal, to be correct, must satisfy the following:
 - Mandatory storage writes are:
   - counter
   - author
-  - proposal_type
+  - type
   - funds
   - voting_start epoch
   - voting_end epoch
@@ -129,7 +163,7 @@ struct Proposal {
     id: u64,
     content: Vec<u8>,
     author: Address,
-    proposal_type: ProposalType,
+    r#type: ProposalType,
     votingStartEpoch: Epoch,
     votingEndEpoch: Epoch,
     graceEpoch: Epoch,

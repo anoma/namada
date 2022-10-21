@@ -37,7 +37,7 @@ In order to create a valid proposal, a transaction needs to modify these storage
 ```
 /$GovernanceAddress/proposal/$id/content: Vec<u8>
 /$GovernanceAddress/proposal/$id/author: Address
-/$GovernanceAddress/proposal/$id/proposal_type: ProposalType
+/$GovernanceAddress/proposal/$id/type: ProposalType
 /$GovernanceAddress/proposal/$id/startEpoch: Epoch
 /$GovernanceAddress/proposal/$id/endEpoch: Epoch
 /$GovernanceAddress/proposal/$id/graceEpoch: Epoch
@@ -61,17 +61,17 @@ and follow these rules:
 - `funds` must be equal to `min_proposal_fund` and should be moved to the `governance_address`.
 - `content` should follow the `Namada Improvement Proposal schema` and must be less than `max_proposal_content_size` kibibytes.
 - `author` must be a valid address on-chain
-- `proposal_type` defines:
+- `type` defines:
   - the optional payload (memo) attached to the vote
   - which actors should be allowed to vote (delegators and validators or validators only)
   - the threshold to be used in the tally process
   - the optional wasm code attached to the proposal
 
-A proposal gets accepted if enough `yay` votes (net of the voting power) to match the threshold specified by `proposal_type` (computed at the epoch defined in the `endEpoch` field) are reached. If the proposal is accepted, the locked funds are returned to the address defined in the `proposal_author` field, otherwise are moved to the slash fund address.
+A proposal gets accepted if enough `yay` votes (net of the voting power) to match the threshold specified by `ProposalType` (computed at the epoch defined in the `endEpoch` field) are reached. If the proposal is accepted, the locked funds are returned to the address defined in the `proposal_author` field, otherwise are moved to the slash fund address.
 
 The `proposal_code` field can execute arbitrary code in the form of a wasm transaction. If the proposal gets accepted, the code is executed in the first block of the epoch following the `graceEpoch`.
 
-Proposals can be submitted by any address as long as the above rules are respected. Votes can be cast only by active validators and delegators (at epoch `endEpoch` or less):: `proposal_type` could impose more constraints on this.
+Proposals can be submitted by any address as long as the above rules are respected. Votes can be cast only by active validators and delegators (at epoch `endEpoch` or less): the proposal type could impose more constraints on this.
 Moreover, if delegators are allowed to vote, validators can vote only during the first 2/3 of the voting period (from `startEpoch` and 2/3 of `endEpoch` - `startEpoch`).
 
 The preferred content template (`Namada Improvement Proposal schema`) is the following:
@@ -100,11 +100,11 @@ where `ProposalVote` is an enum representing a `Yay` or `Nay` vote: the yay vari
 
 Vote is valid if it follows these rules:
 
-- vote can be sent only by validator or delegators (also depending on `proposal_type`)
+- vote can be sent only by validator or delegators (also depending on the proposal type)
 - if delegators can vote, validators can vote only during the first 2/3 of the total voting period, delegators can vote for the whole voting period
 
 The outcome of a proposal is computed at the epoch specific in the `endEpoch` field and executed at `graceEpoch` field (if it contains a non-empty `proposalCode` field).
-A proposal is accepted only if enough `yay` votes (net of the voting power) to match the threshold set in `proposal_type` is reached.
+A proposal is accepted only if enough `yay` votes (net of the voting power) to match the threshold set in `ProposalType` is reached.
 If a proposal gets accepted, the locked funds will be reimbursed to the author. In case it gets rejected, the locked funds will be moved to slash fund.
 
 ## Off-chain proposal
