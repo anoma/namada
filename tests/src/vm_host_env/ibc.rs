@@ -65,7 +65,7 @@ use namada::proto::Tx;
 use namada::tendermint_proto::Protobuf;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::ibc::data::{FungibleTokenPacketData, PacketAck};
-use namada::types::storage::{self, BlockHash, BlockHeight};
+use namada::types::storage::{self, BlockHash, BlockHeight, Key};
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_tx_prelude::StorageWrite;
@@ -146,16 +146,16 @@ pub fn validate_ibc_vp_from_tx<'a>(
 pub fn validate_token_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     tx: &'a Tx,
-    addr: &Address,
+    target: &Key,
 ) -> std::result::Result<bool, namada::ledger::ibc::vp::IbcTokenError> {
     let (verifiers, keys_changed) = tx_env
         .write_log
         .verifiers_and_changed_keys(&tx_env.verifiers);
-    if !verifiers.contains(addr) {
+    if !keys_changed.contains(target) {
         panic!(
-            "The given token address {} isn't part of the tx verifiers set: \
+            "The given target address {} isn't part of the tx verifiers set: \
              {:#?}",
-            addr, verifiers
+            target, keys_changed,
         );
     }
     let (vp_wasm_cache, _vp_cache_dir) =
@@ -175,40 +175,6 @@ pub fn validate_token_vp_from_tx<'a>(
 
     TestIbcTokenVp { token }.validate(tx.data.as_ref().unwrap())
 }
-
-// /// Initialize the native token VP for the given address
-// pub fn init_token_vp_from_tx<'a>(
-//     tx_env: &'a TestTxEnv,
-//     tx: &'a Tx,
-//     addr: &Address,
-// ) -> (TestIbcTokenVp<'a>, TempDir) {
-//     let (verifiers, keys_changed) = tx_env
-//         .write_log
-//         .verifiers_and_changed_keys(&tx_env.verifiers);
-//     if !verifiers.contains(addr) {
-//         panic!(
-//             "The given token address {} isn't part of the tx verifiers set: \
-//              {:#?}",
-//             addr, verifiers
-//         );
-//     }
-//     let (vp_wasm_cache, vp_cache_dir) =
-//         wasm::compilation_cache::common::testing::cache();
-
-//     let ctx = Ctx::new(
-//         &ADDRESS,
-//         &tx_env.storage,
-//         &tx_env.write_log,
-//         tx,
-//         VpGasMeter::new(0),
-//         &keys_changed,
-//         &verifiers,
-//         vp_wasm_cache,
-//     );
-//     let token = IbcToken { ctx };
-
-//     (TestIbcTokenVp { token }, vp_cache_dir)
-// }
 
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
 pub fn init_storage() -> (Address, Address) {
