@@ -153,7 +153,7 @@ pos_gain_p = 0.1
 # The D gain factor in the Proof of Stake rewards controller
 pos_gain_d = 0.1
 # The ratio of tokens locked in Proof of Stake to the total token supply
-staked_ratio = 0.4
+staked_ratio = 0
 # The inflation rate for Proof of Stake
 pos_inflation_amount = 0
 
