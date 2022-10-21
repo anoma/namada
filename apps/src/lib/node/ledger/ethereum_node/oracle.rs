@@ -318,7 +318,7 @@ async fn process(
                 pending = pending.len(),
                 confirmed = confirmed.len(),
                 ?MIN_CONFIRMATIONS,
-                "Some events that have reached the minimum number of \
+                "Some events have reached the minimum number of \
                  confirmations and will be sent onwards"
             );
         }
