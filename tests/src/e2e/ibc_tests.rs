@@ -15,75 +15,73 @@ use core::time::Duration;
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
+use ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use ibc::clients::ics07_tendermint::client_state::{
+    AllowUpdate, ClientState as TmClientState,
+};
+use ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
+use ibc::core::ics02_client::client_consensus::{
+    AnyConsensusState, ConsensusState,
+};
+use ibc::core::ics02_client::client_state::{AnyClientState, ClientState};
+use ibc::core::ics02_client::header::Header;
+use ibc::core::ics02_client::height::Height;
+use ibc::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
+use ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
+use ibc::core::ics02_client::trust_threshold::TrustThreshold;
+use ibc::core::ics03_connection::connection::Counterparty as ConnCounterparty;
+use ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
+use ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
+use ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
+use ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
+use ibc::core::ics03_connection::version::Version as ConnVersion;
+use ibc::core::ics04_channel::channel::{
+    ChannelEnd, Counterparty as ChanCounterparty, Order as ChanOrder,
+    State as ChanState,
+};
+use ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
+use ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
+use ibc::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
+use ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
+use ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
+use ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
+use ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
+use ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
+use ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
+use ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
+use ibc::core::ics04_channel::packet::Packet;
+use ibc::core::ics04_channel::Version as ChanVersion;
+use ibc::core::ics23_commitment::commitment::CommitmentProofBytes;
+use ibc::core::ics23_commitment::merkle::convert_tm_to_ics_merkle_proof;
+use ibc::core::ics24_host::identifier::{
+    ChainId, ClientId, ConnectionId, PortChannelId, PortId,
+};
+use ibc::events::{from_tx_response_event, IbcEvent};
+use ibc::proofs::{ConsensusProof, Proofs};
+use ibc::signer::Signer;
+use ibc::timestamp::Timestamp;
+use ibc::tx_msg::Msg;
+use ibc_proto::cosmos::base::v1beta1::Coin;
 use ibc_relayer::config::types::{MaxMsgNum, MaxTxSize, Memo};
 use ibc_relayer::config::{AddressType, ChainConfig, GasPrice, PacketFilter};
 use ibc_relayer::keyring::Store;
 use ibc_relayer::light_client::tendermint::LightClient as TmLightClient;
 use ibc_relayer::light_client::{LightClient, Verified};
-use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-use namada::ibc::clients::ics07_tendermint::client_state::{
-    AllowUpdate, ClientState as TmClientState,
-};
-use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-use namada::ibc::core::ics02_client::client_consensus::{
-    AnyConsensusState, ConsensusState,
-};
-use namada::ibc::core::ics02_client::client_state::{
-    AnyClientState, ClientState,
-};
-use namada::ibc::core::ics02_client::header::Header;
-use namada::ibc::core::ics02_client::height::Height;
-use namada::ibc::core::ics02_client::msgs::create_client::MsgCreateAnyClient;
-use namada::ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
-use namada::ibc::core::ics02_client::trust_threshold::TrustThreshold;
-use namada::ibc::core::ics03_connection::connection::Counterparty as ConnCounterparty;
-use namada::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
-use namada::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
-use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-use namada::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
-use namada::ibc::core::ics03_connection::version::Version as ConnVersion;
-use namada::ibc::core::ics04_channel::channel::{
-    ChannelEnd, Counterparty as ChanCounterparty, Order as ChanOrder,
-    State as ChanState,
-};
-use namada::ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
-use namada::ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
-use namada::ibc::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
-use namada::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
-use namada::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
-use namada::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
-use namada::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-use namada::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
-use namada::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
-use namada::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
-use namada::ibc::core::ics04_channel::packet::Packet;
-use namada::ibc::core::ics04_channel::Version as ChanVersion;
-use namada::ibc::core::ics23_commitment::commitment::CommitmentProofBytes;
-use namada::ibc::core::ics23_commitment::merkle::convert_tm_to_ics_merkle_proof;
-use namada::ibc::core::ics24_host::identifier::{
-    ChainId, ClientId, ConnectionId, PortChannelId, PortId,
-};
-use namada::ibc::events::{from_tx_response_event, IbcEvent};
-use namada::ibc::proofs::{ConsensusProof, Proofs};
-use namada::ibc::signer::Signer;
-use namada::ibc::timestamp::Timestamp;
-use namada::ibc::tx_msg::Msg;
-use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::ibc::handler::{commitment_prefix, port_channel_id};
 use namada::ledger::ibc::storage::*;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::Sha256Hasher;
-use namada::tendermint::block::Header as TmHeader;
-use namada::tendermint::merkle::proof::Proof as TmProof;
-use namada::tendermint::trust_threshold::TrustThresholdFraction;
-use namada::tendermint_proto::Protobuf;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key};
 use namada_apps::client::rpc::query_storage_value_bytes;
 use namada_apps::client::utils::id_from_pk;
 use setup::constants::*;
+use tendermint::block::Header as TmHeader;
+use tendermint::merkle::proof::Proof as TmProof;
+use tendermint::trust_threshold::TrustThresholdFraction;
 use tendermint_config::net::Address as TendermintAddress;
+use tendermint_proto::Protobuf;
 use tendermint_rpc::{Client, HttpClient, Url};
 use tokio::runtime::Runtime;
 
@@ -1244,7 +1242,6 @@ fn check_balances(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    let sender = find_address(test_a, ALBERT)?;
     let token = find_address(test_a, XAN)?;
 
     // Check the balances on Chain A
@@ -1253,7 +1250,7 @@ fn check_balances(
         vec!["balance", "--token", XAN, "--ledger-address", &rpc_a];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the source balance
-    let expected = format!(": 900000, owned by {}", sender);
+    let expected = ": 900000, owned by albert".to_string();
     client.exp_string(&expected)?;
     // Check the escrowed balance
     let key_prefix = ibc_account_prefix(
@@ -1355,7 +1352,6 @@ fn check_balances_after_back(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    let sender = find_address(test_a, ALBERT)?;
     let token = find_address(test_b, XAN)?;
 
     // Check the balances on Chain A
@@ -1364,7 +1360,7 @@ fn check_balances_after_back(
         vec!["balance", "--token", XAN, "--ledger-address", &rpc_a];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the source balance
-    let expected = format!(": 950000, owned by {}", sender);
+    let expected = ": 950000, owned by albert".to_string();
     client.exp_string(&expected)?;
     // Check the escrowed balance
     let key_prefix = ibc_account_prefix(

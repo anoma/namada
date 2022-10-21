@@ -17,14 +17,18 @@ namada_vp_prelude = {path = "../vp_prelude"}
 namada_tx_prelude = {path = "../tx_prelude"}
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 concat-idents = "1.1.2"
+ibc = {version = "0.14.0", default-features = false}
+ibc-proto = {version = "0.17.1", default-features = false}
+ibc-relayer = {version = "0.14.0", default-features = false}
 prost = "0.9.0"
-ibc-relayer = {git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false}
 serde_json = {version = "1.0.65"}
 sha2 = "0.9.3"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tempfile = "3.2.0"
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
+tendermint = "0.23.6"
+tendermint-config = "0.23.6"
+tendermint-proto = "0.23.6"
+tendermint-rpc = {version = "0.23.6", features = ["http-client"]}
 tokio = {version = "1.8.2", features = ["full"]}
 tracing = "0.1.30"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
