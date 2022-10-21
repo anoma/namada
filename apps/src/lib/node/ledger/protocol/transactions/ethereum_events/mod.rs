@@ -3,27 +3,26 @@
 //! transactions.
 mod eth_msgs;
 mod events;
-mod read;
-mod update;
-mod utils;
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
-use borsh::BorshSerialize;
 use eth_msgs::{EthMsg, EthMsgUpdate};
-use eyre::{eyre, Result};
-use namada::ledger::eth_bridge::storage::eth_msgs::Keys;
-use namada::ledger::pos::types::WeightedValidator;
+use eyre::Result;
+use namada::ledger::eth_bridge::storage::vote_tallies;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
-use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::{self, BlockHeight};
 use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
-use crate::node::ledger::shell::queries::QueriesExt;
+use crate::node::ledger::protocol::transactions::utils::{
+    self, get_active_validators,
+};
+use crate::node::ledger::protocol::transactions::votes::{
+    calculate_new, calculate_updated, write,
+};
 
 /// The keys changed while applying a protocol transaction
 type ChangedKeys = BTreeSet<storage::Key>;
@@ -62,25 +61,6 @@ where
         changed_keys,
         ..Default::default()
     })
-}
-
-fn get_active_validators<D, H>(
-    storage: &Storage<D, H>,
-    block_heights: HashSet<BlockHeight>,
-) -> BTreeMap<BlockHeight, BTreeSet<WeightedValidator<Address>>>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    let mut active_validators = BTreeMap::default();
-    for height in block_heights.into_iter() {
-        let epoch = storage.get_epoch(height).expect(
-            "The epoch of the last block height should always be known",
-        );
-        _ = active_validators
-            .insert(height, storage.get_active_validators(Some(epoch)));
-    }
-    active_validators
 }
 
 /// Constructs a map of all validators who voted for an event to their
@@ -170,129 +150,43 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let eth_msg_keys = Keys::from(&update.body);
+    let eth_msg_keys = vote_tallies::Keys::from(&update.body);
 
     // we arbitrarily look at whether the seen key is present to
     // determine if the /eth_msg already exists in storage, but maybe there
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let (eth_msg_post, changed, confirmed) = if !exists_in_storage {
-        let (eth_msg_post, changed) =
-            calculate_new_eth_msg(update, voting_powers)?;
-        let confirmed = eth_msg_post.seen;
-        (eth_msg_post, changed, confirmed)
+    let (vote_tracking, changed, confirmed) = if !exists_in_storage {
+        tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
+        let vote_tracking = calculate_new(&update.seen_by, voting_powers)?;
+        let changed = eth_msg_keys.into_iter().collect();
+        let confirmed = vote_tracking.seen;
+        (vote_tracking, changed, confirmed)
     } else {
-        let (eth_msg_post, changed) =
-            calculate_updated_eth_msg(storage, update, voting_powers)?;
+        tracing::debug!(
+            %eth_msg_keys.prefix,
+            "Ethereum event already exists in storage",
+        );
+        let vote_tracking =
+            calculate_updated(storage, &eth_msg_keys, voting_powers)?;
+        let changed = BTreeSet::default(); // TODO(namada#515): calculate changed keys
         let confirmed =
-            eth_msg_post.seen && changed.contains(&eth_msg_keys.seen());
-        (eth_msg_post, changed, confirmed)
+            vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
+        (vote_tracking, changed, confirmed)
     };
-    write_eth_msg(storage, &eth_msg_keys, &eth_msg_post)?;
-    Ok((changed, confirmed))
-}
-
-fn calculate_new_eth_msg(
-    update: EthMsgUpdate,
-    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<(EthMsg, ChangedKeys)> {
-    let eth_msg_keys = Keys::from(&update.body);
-    tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-
-    let mut seen_by_voting_power = FractionalVotingPower::default();
-    for (validator, block_height) in &update.seen_by {
-        match voting_powers
-            .get(&(validator.to_owned(), block_height.to_owned()))
-        {
-            Some(voting_power) => seen_by_voting_power += voting_power,
-            None => {
-                return Err(eyre!(
-                    "voting power was not provided for validator {}",
-                    validator
-                ));
-            }
-        };
-    }
-
-    let newly_confirmed =
-        seen_by_voting_power > FractionalVotingPower::TWO_THIRDS;
-    Ok((
-        EthMsg {
-            body: update.body,
-            voting_power: seen_by_voting_power,
-            seen_by: update
-                .seen_by
-                .into_iter()
-                .map(|(validator, _)| validator)
-                .collect(),
-            seen: newly_confirmed,
-        },
-        eth_msg_keys.into_iter().collect(),
-    ))
-}
-
-fn calculate_updated_eth_msg<D, H>(
-    store: &mut Storage<D, H>,
-    update: EthMsgUpdate,
-    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<(EthMsg, ChangedKeys)>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    let eth_msg_keys = Keys::from(&update.body);
-    tracing::debug!(
-        %eth_msg_keys.prefix,
-        "Ethereum event already exists in storage",
-    );
-    let body: EthereumEvent = read::value(store, &eth_msg_keys.body())?;
-    let seen: bool = read::value(store, &eth_msg_keys.seen())?;
-    let seen_by: BTreeSet<Address> =
-        read::value(store, &eth_msg_keys.seen_by())?;
-    let voting_power: FractionalVotingPower =
-        read::value(store, &eth_msg_keys.voting_power())?;
-
-    let eth_msg_pre = EthMsg {
-        body,
-        voting_power,
-        seen_by,
-        seen,
+    let eth_msg_post = EthMsg {
+        body: update.body,
+        votes: vote_tracking,
     };
-    tracing::debug!("Read EthMsg - {:#?}", &eth_msg_pre);
-    Ok(calculate_diff(eth_msg_pre, update, voting_powers))
-}
-
-fn calculate_diff(
-    eth_msg: EthMsg,
-    _update: EthMsgUpdate,
-    _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> (EthMsg, ChangedKeys) {
-    tracing::warn!(
-        "Updating Ethereum events is not yet implemented, so this Ethereum \
-         event won't change"
-    );
-    (eth_msg, BTreeSet::default())
-}
-
-fn write_eth_msg<D, H>(
-    storage: &mut Storage<D, H>,
-    eth_msg_keys: &Keys,
-    eth_msg: &EthMsg,
-) -> Result<()>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    tracing::debug!("writing EthMsg - {:#?}", eth_msg);
-    storage.write(&eth_msg_keys.body(), &eth_msg.body.try_to_vec()?)?;
-    storage.write(&eth_msg_keys.seen(), &eth_msg.seen.try_to_vec()?)?;
-    storage.write(&eth_msg_keys.seen_by(), &eth_msg.seen_by.try_to_vec()?)?;
-    storage.write(
-        &eth_msg_keys.voting_power(),
-        &eth_msg.voting_power.try_to_vec()?,
+    tracing::debug!("writing EthMsg - {:#?}", &eth_msg_post);
+    write(
+        storage,
+        &eth_msg_keys,
+        &eth_msg_post.body,
+        &eth_msg_post.votes,
     )?;
-    Ok(())
+    Ok((changed, confirmed))
 }
 
 #[cfg(test)]
@@ -303,7 +197,7 @@ mod tests {
     use namada::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada::ledger::pos::namada_proof_of_stake::epoched::Epoched;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::pos::types::ValidatorSet;
+    use namada::ledger::pos::types::{ValidatorSet, WeightedValidator};
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::testing::TestStorage;
     use namada::ledger::storage::traits::Sha256Hasher;
@@ -350,7 +244,7 @@ mod tests {
 
         let changed_keys = apply_updates(&mut storage, updates, voting_powers)?;
 
-        let eth_msg_keys: Keys = (&body).into();
+        let eth_msg_keys: vote_tallies::Keys<EthereumEvent> = (&body).into();
         let wrapped_erc20_keys: wrapped_erc20s::Keys = (&asset).into();
         assert_eq!(
             BTreeSet::from_iter(vec![
@@ -461,7 +355,7 @@ mod tests {
             tx_result.gas_used, 0,
             "No gas should be used for a derived transaction"
         );
-        let eth_msg_keys = Keys::from(&event);
+        let eth_msg_keys = vote_tallies::Keys::from(&event);
         let dai_keys = wrapped_erc20s::Keys::from(&DAI_ERC20_ETH_ADDRESS);
         assert_eq!(
             tx_result.changed_keys,
@@ -514,7 +408,7 @@ mod tests {
             Err(err) => panic!("unexpected error: {:#?}", err),
         };
 
-        let eth_msg_keys = Keys::from(&event);
+        let eth_msg_keys = vote_tallies::Keys::from(&event);
         assert_eq!(
             tx_result.changed_keys,
             BTreeSet::from_iter(vec![
