@@ -21,7 +21,7 @@ use super::{
 };
 use crate::types::ethereum_events::EthAddress;
 
-/// [`libsecp265k1::util::SIGNATURE_SIZE`] is for a traditional
+/// The provided constant is for a traditional
 /// signature on this curve. For Ethereum, an extra byte is included
 /// that prevents malleability attacks.
 pub const SIGNATURE_LENGTH: usize = libsecp256k1::util::SIGNATURE_SIZE + 1;
