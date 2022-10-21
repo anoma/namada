@@ -318,8 +318,8 @@ async fn process(
                 pending = pending.len(),
                 confirmed = confirmed.len(),
                 ?MIN_CONFIRMATIONS,
-                "Some events have reached the minimum number of \
-                 confirmations and will be sent onwards"
+                "Some events have reached the minimum number of confirmations \
+                 and will be sent onwards"
             );
         }
         if !oracle.send(confirmed).await {
