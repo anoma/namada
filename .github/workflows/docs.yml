@@ -75,6 +75,11 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
           aws-region: eu-west-1
+      - name: Setup protoc (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt install -y protobuf-compiler
+          echo "PROTOC=$(which protoc)" >> $GITHUB_ENV
       - name: Install sccache (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
         env:
@@ -162,6 +167,11 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
           aws-region: eu-west-1
+      - name: Setup protoc (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt install -y protobuf-compiler
+          echo "PROTOC=$(which protoc)" >> $GITHUB_ENV
       - name: Install sccache (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
         env:

@@ -51,6 +51,11 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Setup protoc (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt install -y protobuf-compiler
+          echo "PROTOC=$(which protoc)" >> $GITHUB_ENV
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:

@@ -130,7 +130,7 @@ tendermint-rpc = {version = "0.23.6", features = ["http-client", "websocket-clie
 thiserror = "1.0.30"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
-tonic = "0.6.1"
+tonic = "0.8.2"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 # with a patch for https://github.com/penumbra-zone/tower-abci/issues/7.

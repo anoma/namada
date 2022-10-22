@@ -55,6 +55,11 @@ jobs:
         # to disallow that.
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Setup protoc (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt install -y protobuf-compiler
+          echo "PROTOC=$(which protoc)" >> $GITHUB_ENV
       - name: Duplicate checksums file
         run: cp wasm/checksums.json wasm/original-checksums.json
       - name: Build WASM

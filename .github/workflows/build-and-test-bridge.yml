@@ -53,6 +53,11 @@ jobs:
         # to disallow that.
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Setup protoc (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt install -y protobuf-compiler
+          echo "PROTOC=$(which protoc)" >> $GITHUB_ENV
       - name: Duplicate checksums file
         run: cp wasm/checksums.json wasm/original-checksums.json
       - name: Build WASM
@@ -139,6 +144,16 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
           aws-region: eu-west-1
+      - name: Setup protoc (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt install -y protobuf-compiler
+          echo "PROTOC=$(which protoc)" >> $GITHUB_ENV
+      - name: Setup protoc (macos-latest)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install protobuf
+          echo "PROTOC=$(which protoc)" >> $GITHUB_ENV
       - name: Install sccache (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
         env:

@@ -134,4 +134,4 @@ test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 
 [build-dependencies]
-tonic-build = "0.6.0"
+tonic-build = "0.8.2"
