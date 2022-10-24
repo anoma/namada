@@ -123,7 +123,8 @@ pub mod genesis_config {
         // Treasury parameters
         pub treasury_params: TreasuryParamasConfig,
         // Ethereum bridge config
-        pub ethereum_bridge_params: Option<ethereum_bridge::params::Config>,
+        pub ethereum_bridge_params:
+            Option<ethereum_bridge::params::GenesisConfig>,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }

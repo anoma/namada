@@ -27,7 +27,7 @@ impl Default for MinimumConfirmations {
 
 /// Represents chain parameters for the Ethereum bridge.
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-pub struct Config {
+pub struct GenesisConfig {
     /// Minimum number of confirmations needed to trust an Ethereum branch.
     /// This must be at least one.
     pub min_confirmations: MinimumConfirmations,
@@ -84,7 +84,7 @@ mod tests {
     /// in any of the config structs.
     #[test]
     fn test_round_trip_toml_serde() -> Result<()> {
-        let config = Config {
+        let config = GenesisConfig {
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
                 native_erc20: Address(
@@ -107,7 +107,7 @@ mod tests {
             },
         };
         let serialized = toml::to_string(&config)?;
-        let deserialized: Config = toml::from_str(&serialized)?;
+        let deserialized: GenesisConfig = toml::from_str(&serialized)?;
 
         assert_eq!(config, deserialized);
         Ok(())
