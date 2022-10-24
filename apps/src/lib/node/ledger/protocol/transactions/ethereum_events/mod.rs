@@ -251,7 +251,7 @@ mod tests {
         };
         let update = EthMsgUpdate {
             body: body.clone(),
-            seen_by: BTreeSet::from_iter(vec![(
+            seen_by: BTreeMap::from([(
                 sole_validator.clone(),
                 BlockHeight(100),
             )]),
@@ -290,8 +290,8 @@ mod tests {
         let (seen_by_bytes, _) = storage.read(&eth_msg_keys.seen_by())?;
         let seen_by_bytes = seen_by_bytes.unwrap();
         assert_eq!(
-            Vec::<Address>::try_from_slice(&seen_by_bytes)?,
-            vec![sole_validator]
+            BTreeMap::<Address, BlockHeight>::try_from_slice(&seen_by_bytes)?,
+            BTreeMap::from([(sole_validator.clone(), BlockHeight(100))])
         );
 
         let (voting_power_bytes, _) =

@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada::types::address::Address;
@@ -24,11 +24,11 @@ pub struct EthMsgUpdate {
     /// The event being seen
     pub body: EthereumEvent,
     /// Addresses of the validators who have just seen this event. We use
-    /// [`BTreeSet`] even though ordering is not important here, so that we
+    /// [`BTreeMap`] even though ordering is not important here, so that we
     /// can derive [`Hash`] for [`EthMsgUpdate`].
     // NOTE(feature = "abcipp"): This can just become BTreeSet<Address> because
     // BlockHeight will always be the previous block
-    pub seen_by: BTreeSet<(Address, BlockHeight)>,
+    pub seen_by: BTreeMap<Address, BlockHeight>,
 }
 
 impl From<MultiSignedEthEvent> for EthMsgUpdate {
@@ -80,8 +80,8 @@ mod tests {
         };
         let expected = EthMsgUpdate {
             body: event,
-            seen_by: BTreeSet::from_iter(vec![(
-                sole_validator,
+            seen_by: BTreeMap::from([(
+                sole_validator.clone(),
                 BlockHeight(100),
             )]),
         };
