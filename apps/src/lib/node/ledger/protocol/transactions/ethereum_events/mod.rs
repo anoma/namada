@@ -12,20 +12,18 @@ use namada::ledger::eth_bridge::storage::vote_tallies;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
-use namada::types::storage::{self, BlockHeight};
+use namada::types::storage::BlockHeight;
 use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
+use super::ChangedKeys;
 use crate::node::ledger::protocol::transactions::utils::{
     self, get_active_validators,
 };
 use crate::node::ledger::protocol::transactions::votes::{
     calculate_new, calculate_updated, write,
 };
-
-/// The keys changed while applying a protocol transaction
-type ChangedKeys = BTreeSet<storage::Key>;
 
 /// Applies derived state changes to storage, based on Ethereum `events` which
 /// were newly seen by some active validator(s) in the last epoch. For `events`
@@ -232,7 +230,6 @@ mod tests {
     };
     use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada::types::token::Amount;
-    use storage::BlockHeight;
 
     use super::*;
 

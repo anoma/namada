@@ -1,7 +1,7 @@
 //! Logic and data types relating to tallying validators' votes for pieces of
 //! data stored in the ledger, where those pieces of data should only be acted
 //! on once they have received enough votes
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
@@ -9,13 +9,11 @@ use namada::ledger::eth_bridge::storage::vote_tallies;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
-use namada::types::storage::{self, BlockHeight};
+use namada::types::storage::BlockHeight;
 use namada::types::voting_power::FractionalVotingPower;
 
+use super::ChangedKeys;
 use crate::node::ledger::protocol::transactions::read;
-
-/// The keys changed while applying a protocol transaction
-type ChangedKeys = BTreeSet<storage::Key>;
 
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
