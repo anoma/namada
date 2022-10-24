@@ -410,7 +410,7 @@ where
             }
             None => {
                 #[cfg(feature = "abcipp")]
-                if req.votes.len() == 0 && req.proposer_address.len() > 0 {
+                if req.votes.is_empty() && !req.proposer_address.is_empty() {
                     // Get proposer address from storage based on the consensus
                     // key hash
                     let tm_raw_hash_string =
@@ -530,7 +530,7 @@ where
         &mut self,
         current_epoch: Epoch,
         proposer_address: &Address,
-        votes: &Vec<VoteInfo>,
+        votes: &[VoteInfo],
     ) {
         let last_epoch = current_epoch - 1;
         // Get input values needed for the PD controller for PoS and MASP.
@@ -542,7 +542,7 @@ where
         // block of the previous epoch), which also gives the final
         // accumulator value updates
         self.storage
-            .log_block_rewards(last_epoch, &proposer_address, votes)
+            .log_block_rewards(last_epoch, proposer_address, votes)
             .unwrap();
 
         // TODO: review if the appropriate epoch is being used (last vs now)
@@ -656,16 +656,12 @@ where
         let last_epoch = Epoch::from(last_epoch.0);
 
         // TODO: think about changing the reward to Decimal
-        let mut reward_tokens_remaining = pos_minted_tokens.clone();
+        let mut reward_tokens_remaining = pos_minted_tokens;
         for (address, value) in accumulators.iter() {
-            dbg!(reward_tokens_remaining.clone());
             // Get reward token amount for this validator
             let fractional_claim =
                 value / Decimal::from(num_blocks_in_last_epoch);
-            let reward = decimal_mult_u64(
-                fractional_claim,
-                u64::from(pos_minted_tokens),
-            );
+            let reward = decimal_mult_u64(fractional_claim, pos_minted_tokens);
 
             // Read epoched validator data and rewards products
             let validator_deltas =
@@ -675,17 +671,15 @@ where
             let mut rewards_products = self
                 .storage
                 .read_validator_rewards_products(address)
-                .unwrap_or(std::collections::HashMap::new());
+                .unwrap_or_default();
             let mut delegation_rewards_products = self
                 .storage
                 .read_validator_delegation_rewards_products(address)
-                .unwrap_or(std::collections::HashMap::new());
+                .unwrap_or_default();
 
             // Get validator data at the last epoch
-            let stake = validator_deltas
-                .get(last_epoch)
-                .map(|sum| Decimal::from(sum))
-                .unwrap();
+            let stake =
+                validator_deltas.get(last_epoch).map(Decimal::from).unwrap();
             let last_product =
                 *rewards_products.get(&last_epoch).unwrap_or(&Decimal::ONE);
             let last_delegation_product = *delegation_rewards_products

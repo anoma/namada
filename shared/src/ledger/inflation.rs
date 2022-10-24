@@ -1,10 +1,6 @@
 //! General inflation system that will be used to process rewards for
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
-//!
-//! General inflation system that will be used to process rewards for
-//! proof-of-stake, providing liquity to shielded asset pools, and public goods
-//! funding.
 
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
@@ -16,12 +12,16 @@ use crate::types::token;
 
 /// The domains of inflation
 pub enum RewardsType {
+    /// Proof-of-stake rewards
     Staking,
+    /// Rewards for locking tokens in the multi-asset shielded pool
     Masp,
+    /// Rewards for public goods funding (PGF)
     PubGoodsFunding,
 }
 
 /// Holds the PD controller values that should be updated in storage
+#[allow(missing_docs)]
 pub struct ValsToUpdate {
     pub locked_ratio: Decimal,
     pub inflation: u64,
@@ -43,6 +43,7 @@ pub struct RewardsController {
 
 impl RewardsController {
     /// Initialize a new PD controller
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         locked_tokens: token::Amount,
         total_tokens: token::Amount,
@@ -97,12 +98,10 @@ impl RewardsController {
         let last_inflation_amount = Decimal::from(*last_inflation_amount);
         let inflation = if last_inflation_amount + control_val > max_inflation {
             max_inflation
+        } else if last_inflation_amount + control_val > dec!(0.0) {
+            last_inflation_amount + control_val
         } else {
-            if last_inflation_amount + control_val > dec!(0.0) {
-                last_inflation_amount + control_val
-            } else {
-                dec!(0.0)
-            }
+            dec!(0.0)
         };
         let inflation: u64 = inflation.to_u64().unwrap();
 

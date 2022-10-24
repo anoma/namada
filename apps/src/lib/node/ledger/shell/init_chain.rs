@@ -4,8 +4,8 @@ use std::hash::Hash;
 
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
-use namada::ledger::parameters::Parameters;
 use namada::ledger::parameters::storage::get_staked_ratio_key;
+use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::{into_tm_voting_power, staking_token_address};
 use namada::types::key::*;
 use namada::types::token::total_supply_key;

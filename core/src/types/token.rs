@@ -352,14 +352,7 @@ pub fn total_supply_key(token_address: &Address) -> Key {
 
 /// Is storage key for total supply of a specific token?
 pub fn is_total_supply_key(key: &Key, token_address: &Address) -> bool {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if addr == token_address && key == TOTAL_SUPPLY_STORAGE_KEY =>
-        {
-            true
-        }
-        _ => false,
-    }
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == token_address && key == TOTAL_SUPPLY_STORAGE_KEY)
 }
 
 /// Check if the given storage key is multitoken balance key for the given

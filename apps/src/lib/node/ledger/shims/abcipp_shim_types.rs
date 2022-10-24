@@ -194,9 +194,9 @@ pub mod shim {
     pub mod request {
         use std::convert::TryFrom;
 
+        use namada::ledger::pos::types::VoteInfo;
         #[cfg(not(feature = "abcipp"))]
         use namada::tendermint_proto::abci::RequestBeginBlock;
-        use namada::ledger::pos::types::VoteInfo;
         use namada::types::hash::Hash;
         use namada::types::storage::{BlockHash, Header};
         use namada::types::time::DateTimeUtc;

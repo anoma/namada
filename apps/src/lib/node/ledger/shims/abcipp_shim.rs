@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use futures::future::FutureExt;
 #[cfg(not(feature = "abcipp"))]
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
-use futures::future::FutureExt;
 use namada::types::address::Address;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
@@ -96,7 +96,7 @@ impl AbcippShim {
             let resp = match req {
                 Req::ProcessProposal(proposal) => {
                     #[cfg(not(feature = "abcipp"))]
-                    if proposal.proposer_address.len() > 0 {
+                    if !proposal.proposer_address.is_empty() {
                         let tm_raw_hash_string = tm_raw_hash_to_string(
                             proposal.proposer_address.clone(),
                         );

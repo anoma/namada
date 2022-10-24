@@ -36,18 +36,15 @@ use namada_core::types::token;
 pub use parameters::PosParams;
 use rust_decimal::Decimal;
 use thiserror::Error;
-use types::{
-    ActiveValidator, Bonds, CommissionRates, GenesisValidator, RewardsProducts,
-    Slash, SlashType, Slashes, TotalDeltas, Unbond, Unbonds,
-    ValidatorConsensusKeys, ValidatorDeltas, ValidatorSet, ValidatorSetUpdate,
-    ValidatorSets, ValidatorState, ValidatorStates,
-};
 
 use crate::btree_set::BTreeSetShims;
 use crate::rewards::PosRewardsCalculator;
 use crate::types::{
-    decimal_mult_i128, decimal_mult_u64, Bond, BondId, VoteInfo,
-    WeightedValidator,
+    decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bond, BondId, Bonds,
+    CommissionRates, GenesisValidator, RewardsProducts, Slash, SlashType,
+    Slashes, TotalDeltas, Unbond, Unbonds, ValidatorConsensusKeys,
+    ValidatorDeltas, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
+    ValidatorState, ValidatorStates, VoteInfo, WeightedValidator,
 };
 
 /// Address of the PoS account implemented as a native VP
@@ -939,7 +936,7 @@ pub trait PosBase {
         &mut self,
         epoch: impl Into<Epoch>,
         proposer_address: &Address,
-        votes: &Vec<VoteInfo>,
+        votes: &[VoteInfo],
     ) -> Result<(), InflationError> {
         // TODO: all values collected here need to be consistent with the same
         // block that the voting info corresponds to, which is the
@@ -959,9 +956,9 @@ pub trait PosBase {
             0_u64,
             |sum,
              WeightedValidator {
-                 voting_power,
+                 bonded_stake,
                  address: _,
-             }| { sum + u64::from(*voting_power) },
+             }| { sum + *bonded_stake },
         );
 
         // Get set of signing validator addresses and the combined stake of
@@ -983,10 +980,12 @@ pub trait PosBase {
             signer_set.insert(native_address.clone());
 
             // vote.validator_vp is updating at a constant delay relative to the
-            // validator deltas use validator deltas in namada
-            // protocol to get voting power instead
+            // validator deltas.
+            // Use validator deltas in namada protocol to get voting power
+            // instead
+            // TODO: change this back to get from TM perhaps
             let deltas = self.read_validator_deltas(&native_address).unwrap();
-            let stake: Self::TokenChange = deltas.get(epoch).unwrap();
+            let stake: token::Change = deltas.get(epoch).unwrap();
             let stake: u64 = Into::<i128>::into(stake).try_into().unwrap();
             total_signing_stake += stake;
         }
@@ -1010,7 +1009,7 @@ pub trait PosBase {
         // update the reward accumulators
         let mut validator_accumulators = self
             .read_consensus_validator_rewards_accumulator()
-            .unwrap_or_else(|| HashMap::<Address, Decimal>::new());
+            .unwrap_or_default();
         for validator in validators.active.iter() {
             let mut rewards_frac = Decimal::default();
             let stake: Decimal = validator.bonded_stake.into();

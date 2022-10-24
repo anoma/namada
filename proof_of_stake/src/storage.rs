@@ -429,14 +429,7 @@ pub fn last_block_proposer_key() -> Key {
 
 /// Is storage key for block proposer address of the previous block?
 pub fn is_last_block_proposer_key(key: &Key) -> bool {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if addr == &ADDRESS && key == LAST_BLOCK_PROPOSER_STORAGE_KEY =>
-        {
-            true
-        }
-        _ => false,
-    }
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == LAST_BLOCK_PROPOSER_STORAGE_KEY)
 }
 
 /// Storage key for block proposer address of the current block.
@@ -448,15 +441,7 @@ pub fn current_block_proposer_key() -> Key {
 
 /// Is storage key for block proposer address of the current block?
 pub fn is_current_block_proposer_key(key: &Key) -> bool {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if addr == &ADDRESS
-                && key == CURRENT_BLOCK_PROPOSER_STORAGE_KEY =>
-        {
-            true
-        }
-        _ => false,
-    }
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == CURRENT_BLOCK_PROPOSER_STORAGE_KEY)
 }
 
 /// Get validator address from bond key
@@ -725,7 +710,7 @@ where
             .unwrap();
     }
 
-    fn write_current_block_proposer_address(&mut self, value: &Self::Address) {
+    fn write_current_block_proposer_address(&mut self, value: &Address) {
         self.write(&current_block_proposer_key(), encode(value))
             .unwrap();
     }
