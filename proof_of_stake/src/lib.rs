@@ -710,6 +710,8 @@ pub trait PosBase {
     fn read_total_deltas(&self) -> TotalDeltas<Self::TokenChange>;
     /// Read the last block proposer's namada address
     fn read_last_block_proposer_address(&self) -> Option<Self::Address>;
+    /// Read the current block proposer's namada address
+    fn read_current_block_proposer_address(&self) -> Option<Self::Address>;
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
     /// Write PoS validator's raw hash of its consensus key.
@@ -792,6 +794,8 @@ pub trait PosBase {
     fn write_total_deltas(&mut self, value: &TotalDeltas<Self::TokenChange>);
     /// Write the last block proposer's namada address
     fn write_last_block_proposer_address(&mut self, value: &Self::Address);
+    /// Write the current block proposer's namada address
+    fn write_current_block_proposer_address(&mut self, value: &Self::Address);
     /// Credit tokens to the `target` account. This should only be used at
     /// genesis.
     fn credit_tokens(
