@@ -26,10 +26,6 @@ use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, storage, token};
 use namada::{ledger, vm};
 use rust_decimal::Decimal;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
-use tendermint_rpc::query::{EventType, Query};
-use tendermint_rpc::{Client, HttpClient};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;

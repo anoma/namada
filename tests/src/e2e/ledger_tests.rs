@@ -1042,6 +1042,11 @@ fn proposal_submission() -> Result<()> {
                     &working_dir,
                     Some("tx_"),
                 )),
+                epochs_per_year: 31_526_000,
+                pos_gain_p: dec!(0.1),
+                pos_gain_d: dec!(0.1),
+                staked_ratio: dec!(0),
+                pos_inflation_amount: 0,
             };
 
             GenesisConfig {

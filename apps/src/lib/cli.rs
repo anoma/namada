@@ -1299,9 +1299,6 @@ pub mod args {
     use namada::types::token;
     use namada::types::transaction::GasLimit;
     use rust_decimal::Decimal;
-    use serde::Deserialize;
-    use tendermint::Timeout;
-    use tendermint_config::net::Address as TendermintAddress;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
