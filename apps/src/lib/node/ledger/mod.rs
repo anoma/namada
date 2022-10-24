@@ -25,12 +25,14 @@ use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
 use self::ethereum_node::eth_fullnode;
+use self::ethereum_node::oracle::ControlCommand;
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
 use crate::config::{ethereum_bridge, TendermintMode};
 use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
+use crate::node::ledger::ethereum_node::oracle;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
@@ -231,9 +233,20 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let (eth_node, abort_sender) =
         maybe_start_geth(&mut spawner, &config).await;
 
+    let (oracle_control_send, oracle_control_recv) = mpsc::channel(1);
     // Start oracle if necessary
     let (eth_receiver, oracle) =
-        maybe_start_ethereum_oracle(&config, abort_sender).await;
+        maybe_start_ethereum_oracle(&config, abort_sender, oracle_control_recv);
+    // TODO: pass oracle_control_send to the shell instead of initializing it
+    //  using a hardcoded config
+    if let Err(error) = oracle_control_send
+        .send(oracle::ControlCommand::Initialize {
+            config: oracle::Config::default(),
+        })
+        .await
+    {
+        tracing::error!(?error, "Could not configure the oracle",);
+    }
 
     // Start ABCI server and broadcaster (the latter only if we are a validator
     // node)
@@ -611,9 +624,10 @@ fn start_tendermint(
 ///
 /// An oracle is also returned, along with its associated channel,
 /// for receiving Ethereum events from `geth`.
-async fn maybe_start_ethereum_oracle(
+fn maybe_start_ethereum_oracle(
     config: &config::Ledger,
     abort_sender: oneshot::Sender<()>,
+    control_receiver: mpsc::Receiver<ControlCommand>,
 ) -> (Option<mpsc::Receiver<EthereumEvent>>, task::JoinHandle<()>) {
     if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
         return (None, spawn_dummy_task(()));
@@ -629,6 +643,7 @@ async fn maybe_start_ethereum_oracle(
             ethereum_node::oracle::run_oracle(
                 ethereum_url,
                 eth_sender,
+                control_receiver,
                 abort_sender,
             )
         }

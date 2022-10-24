@@ -5,7 +5,7 @@ use clarity::Address;
 use eyre::{eyre, Result};
 use namada::types::ethereum_events::{EthAddress, EthereumEvent};
 use num256::Uint256;
-use tokio::sync::mpsc::Sender as BoundedSender;
+use tokio::sync::mpsc::{Receiver as BoundedReceiver, Sender as BoundedSender};
 use tokio::sync::oneshot::Sender;
 use tokio::task::LocalSet;
 #[cfg(not(test))]
@@ -15,12 +15,33 @@ use super::events::{signatures, PendingEvent};
 #[cfg(test)]
 use super::test_tools::mock_web3_client::Web3;
 
-/// Minimum number of confirmations needed to trust an Ethereum branch
-pub(crate) const MIN_CONFIRMATIONS: u64 = 100;
+/// Configuration for an [`Oracle`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct Config {
+    pub min_confirmations: u64,
+    pub mint_contract: EthAddress,
+    pub governance_contract: EthAddress,
+}
 
-/// Dummy addresses for smart contracts
-const MINT_CONTRACT: EthAddress = EthAddress([0; 20]);
-const GOVERNANCE_CONTRACT: EthAddress = EthAddress([1; 20]);
+// TODO: this production Default implementation is temporary, there should be no
+//  default config - initialization should always be from storage
+impl std::default::Default for Config {
+    fn default() -> Self {
+        Self {
+            min_confirmations: 100,
+            mint_contract: EthAddress([0; 20]),
+            governance_contract: EthAddress([1; 20]),
+        }
+    }
+}
+
+/// Commands used to configure and control an `Oracle`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub enum ControlCommand {
+    /// Initializes the oracle with the given configuration and immediately
+    /// starts it.
+    Initialize { config: Config },
+}
 
 /// The default amount of time the oracle will wait between processing blocks
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
@@ -39,6 +60,10 @@ pub struct Oracle {
     abort: Option<Sender<()>>,
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
+    /// A channel for controlling and configuring the oracle.
+    control: BoundedReceiver<ControlCommand>,
+    /// Configuration for this oracle.
+    config: Option<Config>,
 }
 
 impl Deref for Oracle {
@@ -68,18 +93,22 @@ impl Drop for Oracle {
 }
 
 impl Oracle {
-    /// Initialize a new [`Oracle`]
+    /// Construct a new [`Oracle`]. Note that it will not start until it has
+    /// been configured via the passed in `control` channel.
     pub fn new(
         url: &str,
         sender: BoundedSender<EthereumEvent>,
         abort: Sender<()>,
         backoff: Duration,
+        control: BoundedReceiver<ControlCommand>,
     ) -> Self {
         Self {
             client: Web3::new(url, std::time::Duration::from_secs(30)),
             sender,
             abort: Some(abort),
             backoff,
+            control,
+            config: None,
         }
     }
 
@@ -112,6 +141,7 @@ impl Oracle {
 pub fn run_oracle(
     url: impl AsRef<str>,
     sender: BoundedSender<EthereumEvent>,
+    control: BoundedReceiver<ControlCommand>,
     abort_sender: Sender<()>,
 ) -> tokio::task::JoinHandle<()> {
     let url = url.as_ref().to_owned();
@@ -124,12 +154,8 @@ pub fn run_oracle(
                 .run_until(async move {
                     tracing::info!(?url, "Ethereum event oracle is starting");
 
-                    let oracle = Oracle::new(
-                        &url,
-                        sender,
-                        abort_sender,
-                        DEFAULT_BACKOFF,
-                    );
+                    let oracle =
+                        Oracle::new(&url, sender, abort_sender, DEFAULT_BACKOFF, control);
                     run_oracle_aux(oracle).await;
 
                     tracing::info!(
@@ -367,6 +393,8 @@ mod test_oracle {
     fn setup() -> TestPackage {
         let (admin_channel, blocks_processed_recv, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
+        let (_control_sender, control_receiver) =
+            tokio::sync::mpsc::channel(1000);
         let (abort, abort_recv) = channel();
         TestPackage {
             oracle: Oracle {
@@ -375,6 +403,8 @@ mod test_oracle {
                 abort: Some(abort),
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
+                control: control_receiver,
+                config: Some(Config::default()),
             },
             admin_channel,
             eth_recv: eth_receiver,
