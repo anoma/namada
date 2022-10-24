@@ -2917,6 +2917,7 @@ dependencies = [
  "ark-ec",
  "ark-serialize",
  "assert_matches",
+ "async-trait",
  "bech32",
  "borsh",
  "byte-unit",
@@ -2938,6 +2939,7 @@ dependencies = [
  "loupe",
  "namada_proof_of_stake",
  "parity-wasm",
+ "paste",
  "pretty_assertions",
  "proptest",
  "prost",
@@ -2945,6 +2947,7 @@ dependencies = [
  "pwasm-utils",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "rayon",
  "rust_decimal",
  "serde 1.0.145",
  "serde_json",
@@ -2955,8 +2958,11 @@ dependencies = [
  "tendermint 0.23.6",
  "tendermint-proto 0.23.5",
  "tendermint-proto 0.23.6",
+ "tendermint-rpc 0.23.5",
+ "tendermint-rpc 0.23.6",
  "test-log",
  "thiserror",
+ "tokio",
  "tonic-build",
  "tracing 0.1.37",
  "tracing-subscriber 0.3.16",
@@ -4083,9 +4089,9 @@ dependencies = [
 
 [[package]]
 name = "rayon"
-version = "1.5.1"
+version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c06aca804d41dbc8ba42dfd964f0d01334eceb64314b9ecf7c5fad5188a06d90"
+checksum = "bd99e5772ead8baa5215278c9b15bf92087709e9c1b2d1f97cdb5a183c933a7d"
 dependencies = [
  "autocfg 1.1.0",
  "crossbeam-deque",
