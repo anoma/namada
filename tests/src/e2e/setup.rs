@@ -21,7 +21,7 @@ use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
-use namada_apps::config::{ethereum, Config};
+use namada_apps::config::{ethereum_bridge, Config};
 use namada_apps::{config, wallet};
 use rand::Rng;
 use tempfile::{tempdir, TempDir};
@@ -77,7 +77,7 @@ pub fn update_actor_config<F>(
 /// Disable the Ethereum fullnode of `who`.
 pub fn disable_eth_fullnode(test: &Test, chain_id: &ChainId, who: &Who) {
     update_actor_config(test, chain_id, who, |config| {
-        config.ledger.ethereum.mode = ethereum::Mode::Off;
+        config.ledger.ethereum_bridge.mode = ethereum_bridge::ledger::Mode::Off;
     });
 }
 
