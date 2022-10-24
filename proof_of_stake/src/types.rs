@@ -320,18 +320,6 @@ pub struct VoteInfo {
     pub signed_last_block: bool,
 }
 
-// TODO: figure out if i64 -> u64 needs to be handled more particularly from TM
-impl From<tendermint_proto::abci::VoteInfo> for VoteInfo {
-    fn from(info: tendermint_proto::abci::VoteInfo) -> VoteInfo {
-        let val_info = info.validator.clone().unwrap();
-        VoteInfo {
-            validator_address: info.validator.unwrap().address,
-            validator_vp: val_info.power as u64,
-            signed_last_block: info.signed_last_block,
-        }
-    }
-}
-
 /// Derive Tendermint raw hash from the public key
 pub trait PublicKeyTmRawHash {
     /// Derive Tendermint raw hash from the public key
