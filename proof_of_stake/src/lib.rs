@@ -667,6 +667,8 @@ pub trait PosBase {
     fn read_total_deltas(&self) -> TotalDeltas;
     /// Read the last block proposer's namada address
     fn read_last_block_proposer_address(&self) -> Option<Address>;
+    /// Read the current block proposer's namada address
+    fn read_current_block_proposer_address(&self) -> Option<Address>;
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
     /// Write PoS validator's raw hash of its consensus key.
@@ -737,6 +739,8 @@ pub trait PosBase {
     fn write_total_deltas(&mut self, value: &TotalDeltas);
     /// Write the last block proposer's namada address
     fn write_last_block_proposer_address(&mut self, value: &Address);
+    /// Write the current block proposer's namada address
+    fn write_current_block_proposer_address(&mut self, value: &Address);
     /// Credit tokens to the `target` account. This should only be used at
     /// genesis.
     fn credit_tokens(
@@ -978,8 +982,9 @@ pub trait PosBase {
                 );
             signer_set.insert(native_address.clone());
 
-            // vote.validator_vp is updating at a constant delay relative to the validator deltas
-            // use validator deltas in namada protocol to get voting power instead
+            // vote.validator_vp is updating at a constant delay relative to the
+            // validator deltas use validator deltas in namada
+            // protocol to get voting power instead
             let deltas = self.read_validator_deltas(&native_address).unwrap();
             let stake: Self::TokenChange = deltas.get(epoch).unwrap();
             let stake: u64 = Into::<i128>::into(stake).try_into().unwrap();

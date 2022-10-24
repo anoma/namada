@@ -4,10 +4,14 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[cfg(not(feature = "abcipp"))]
+use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use futures::future::FutureExt;
 use namada::types::address::Address;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
+#[cfg(not(feature = "abcipp"))]
+use namada::types::key::tm_raw_hash_to_string;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
 #[cfg(not(feature = "abcipp"))]
@@ -90,16 +94,37 @@ impl AbcippShim {
     pub fn run(mut self) {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
-                Req::ProcessProposal(proposal) => self
-                    .service
-                    .call(Request::ProcessProposal(proposal))
-                    .map_err(Error::from)
-                    .and_then(|res| match res {
-                        Response::ProcessProposal(resp) => {
-                            Ok(Resp::ProcessProposal((&resp).into()))
-                        }
-                        _ => unreachable!(),
-                    }),
+                Req::ProcessProposal(proposal) => {
+                    #[cfg(not(feature = "abcipp"))]
+                    if proposal.proposer_address.len() > 0 {
+                        let tm_raw_hash_string = tm_raw_hash_to_string(
+                            proposal.proposer_address.clone(),
+                        );
+                        let native_proposer_address = self
+                            .service
+                            .storage
+                            .read_validator_address_raw_hash(tm_raw_hash_string)
+                            .expect(
+                                "Unable to find native validator address of \
+                                 block proposer from tendermint raw hash",
+                            );
+                        println!("BLOCK PROPOSER: {}", native_proposer_address);
+                        self.service
+                            .storage
+                            .write_current_block_proposer_address(
+                                &native_proposer_address,
+                            );
+                    }
+                    self.service
+                        .call(Request::ProcessProposal(proposal))
+                        .map_err(Error::from)
+                        .and_then(|res| match res {
+                            Response::ProcessProposal(resp) => {
+                                Ok(Resp::ProcessProposal((&resp).into()))
+                            }
+                            _ => unreachable!(),
+                        })
+                }
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
                     let unprocessed_txs = block.txs.clone();

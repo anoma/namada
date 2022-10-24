@@ -32,6 +32,7 @@ const UNBOND_STORAGE_KEY: &str = "unbond";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
+const CURRENT_BLOCK_PROPOSER_STORAGE_KEY: &str = "current_block_proposer";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -438,6 +439,26 @@ pub fn is_last_block_proposer_key(key: &Key) -> bool {
     }
 }
 
+/// Storage key for block proposer address of the current block.
+pub fn current_block_proposer_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&CURRENT_BLOCK_PROPOSER_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for block proposer address of the current block?
+pub fn is_current_block_proposer_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
+            if addr == &ADDRESS
+                && key == CURRENT_BLOCK_PROPOSER_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Get validator address from bond key
 pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
     match key.get_at(3) {
@@ -500,6 +521,11 @@ where
 
     fn read_last_block_proposer_address(&self) -> Option<Address> {
         let (value, _gas) = self.read(&last_block_proposer_key()).unwrap();
+        value.map(|value| decode(value).unwrap())
+    }
+
+    fn read_current_block_proposer_address(&self) -> Option<Address> {
+        let (value, _gas) = self.read(&current_block_proposer_key()).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
@@ -696,6 +722,11 @@ where
 
     fn write_last_block_proposer_address(&mut self, value: &Address) {
         self.write(&last_block_proposer_key(), encode(value))
+            .unwrap();
+    }
+
+    fn write_current_block_proposer_address(&mut self, value: &Self::Address) {
+        self.write(&current_block_proposer_key(), encode(value))
             .unwrap();
     }
 
