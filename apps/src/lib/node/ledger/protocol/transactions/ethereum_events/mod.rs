@@ -4,7 +4,7 @@
 mod eth_msgs;
 mod events;
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::Result;
@@ -157,9 +157,17 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
+    let mut seen_by = BTreeMap::default();
+    for (address, block_height) in update.seen_by.into_iter() {
+        // TODO: more deterministic deduplication
+        if let Some(present) = seen_by.insert(address, block_height) {
+            tracing::warn!(?present, "Duplicate vote in digest");
+        }
+    }
+
     let (vote_tracking, changed, confirmed) = if !exists_in_storage {
         tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-        let vote_tracking = calculate_new(&update.seen_by, voting_powers)?;
+        let vote_tracking = calculate_new(seen_by, voting_powers)?;
         let changed = eth_msg_keys.into_iter().collect();
         let confirmed = vote_tracking.seen;
         (vote_tracking, changed, confirmed)
@@ -168,9 +176,25 @@ where
             %eth_msg_keys.prefix,
             "Ethereum event already exists in storage",
         );
-        let vote_tracking =
-            calculate_updated(storage, &eth_msg_keys, voting_powers)?;
-        let changed = BTreeSet::default(); // TODO(namada#515): calculate changed keys
+        // TODO: move construction of votes map up the call path
+        let mut votes = HashMap::default();
+        seen_by.iter().for_each(|(address, block_height)| {
+            let fvp = voting_powers
+                .get(&(address.to_owned(), block_height.to_owned()))
+                .unwrap();
+            if let Some(already_present_fvp) =
+                votes.insert(address.to_owned(), fvp.to_owned())
+            {
+                tracing::warn!(
+                    ?address,
+                    ?already_present_fvp,
+                    new_fvp = ?fvp,
+                    "Validator voted more than once, arbitrarily using later value",
+                )
+            }
+        });
+        let (vote_tracking, changed) =
+            calculate_updated(storage, &eth_msg_keys, &votes)?;
         let confirmed =
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
         (vote_tracking, changed, confirmed)
