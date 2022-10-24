@@ -215,7 +215,7 @@ pub mod mock_web3_client {
                         client.events.push((event_ty, data, height, seen));
                     }
                 }
-                if client.last_block_processed < Some(block_to_check.clone()) {
+                if client.last_block_processed.as_ref() < Some(&block_to_check) {
                     client
                         .blocks_processed
                         .send(block_to_check.clone())
