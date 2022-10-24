@@ -15,7 +15,7 @@ pub mod shim {
         ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseEndBlock,
         ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
         ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
-        ResponsePrepareProposal, ResponseQuery,
+        ResponsePrepareProposal, ResponseQuery, VoteInfo as TendermintVoteInfo,
     };
     #[cfg(feature = "abcipp")]
     use tendermint_proto_abcipp::abci::{
@@ -28,6 +28,7 @@ pub mod shim {
         ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
         ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
         ResponsePrepareProposal, ResponseQuery, ResponseVerifyVoteExtension,
+        VoteInfo as TendermintVoteInfo,
     };
     use thiserror::Error;
 
@@ -195,7 +196,6 @@ pub mod shim {
 
         #[cfg(not(feature = "abcipp"))]
         use namada::tendermint_proto::abci::RequestBeginBlock;
-        use namada::types::address::Address;
         use namada::ledger::pos::types::VoteInfo;
         use namada::types::hash::Hash;
         use namada::types::storage::{BlockHash, Header};
@@ -206,6 +206,8 @@ pub mod shim {
         use tendermint_proto_abcipp::abci::{
             Misbehavior as Evidence, RequestFinalizeBlock,
         };
+
+        use super::TendermintVoteInfo;
 
         pub struct VerifyHeader;
 
@@ -249,10 +251,19 @@ pub mod shim {
                         .votes
                         .iter()
                         .map(|tm_vote_info| {
-                            VoteInfo::from(tm_vote_info.clone())
+                            vote_info_to_tendermint(tm_vote_info.clone())
                         })
                         .collect(),
                 }
+            }
+        }
+
+        fn vote_info_to_tendermint(info: TendermintVoteInfo) -> VoteInfo {
+            let val_info = info.validator.clone().unwrap();
+            VoteInfo {
+                validator_address: info.validator.unwrap().address,
+                validator_vp: val_info.power as u64,
+                signed_last_block: info.signed_last_block,
             }
         }
 
@@ -274,6 +285,15 @@ pub mod shim {
                     },
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
+                    votes: req
+                        .last_commit_info
+                        .unwrap()
+                        .votes
+                        .iter()
+                        .map(|tm_vote_info| {
+                            vote_info_to_tendermint(tm_vote_info.clone())
+                        })
+                        .collect(),
                 }
             }
         }
