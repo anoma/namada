@@ -22,11 +22,12 @@ use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::task;
 use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
+use self::ethereum_node::eth_fullnode;
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
 use crate::config::{ethereum, TendermintMode};
@@ -229,9 +230,13 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     // Start Tendermint node
     let tendermint_node = start_tendermint(&mut spawner, &config);
 
-    // Start Ethereum full node and its oracle
-    let (eth_node, eth_receiver, oracle) =
-        start_ethereum_node(&mut spawner, &config).await;
+    // Start managed Ethereum node if necessary
+    let (eth_node, abort_sender) =
+        maybe_start_geth(&mut spawner, &config).await;
+
+    // Start oracle if necessary
+    let (eth_receiver, oracle) =
+        maybe_start_ethereum_oracle(&config, abort_sender).await;
 
     // Start ABCI server and broadcaster (the latter only if we are a validator
     // node)
@@ -609,27 +614,63 @@ fn start_tendermint(
 ///
 /// An oracle is also returned, along with its associated channel,
 /// for receiving Ethereum events from `geth`.
-async fn start_ethereum_node(
+async fn maybe_start_ethereum_oracle(
+    config: &config::Ledger,
+    abort_sender: oneshot::Sender<()>,
+) -> (Option<mpsc::Receiver<EthereumEvent>>, task::JoinHandle<()>) {
+    if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
+        return (None, spawn_dummy_task(()));
+    }
+
+    let ethereum_url = config.ethereum.oracle_rpc_endpoint.clone();
+
+    // Start the oracle for listening to Ethereum events
+    let (eth_sender, eth_receiver) = mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+    let oracle = match config.ethereum.mode {
+        ethereum::Mode::Managed | ethereum::Mode::Remote => {
+            ethereum_node::oracle::run_oracle(
+                ethereum_url,
+                eth_sender,
+                abort_sender,
+            )
+        }
+        ethereum::Mode::EventsEndpoint => {
+            ethereum_node::test_tools::events_endpoint::serve(
+                eth_sender,
+                abort_sender,
+            )
+        }
+        ethereum::Mode::Off => spawn_dummy_task(()),
+    };
+
+    (Some(eth_receiver), oracle)
+}
+
+/// Launches a new task managing a `geth` process into the asynchronous
+/// runtime, and returns its [`task::JoinHandle`].
+///
+/// An oracle is also returned, along with its associated channel,
+/// for receiving Ethereum events from `geth`.
+async fn maybe_start_geth(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
 ) -> (
     task::JoinHandle<shell::Result<()>>,
-    Option<mpsc::Receiver<EthereumEvent>>,
-    task::JoinHandle<()>,
+    tokio::sync::oneshot::Sender<()>,
 ) {
-    if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
+    if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator)
+        || !matches!(config.ethereum.mode, ethereum::Mode::Managed)
+    {
         let eth_node = spawn_dummy_task(Ok(()));
-        let oracle = spawn_dummy_task(());
-        return (eth_node, None, oracle);
+        let (abort_sender, _) = tokio::sync::oneshot::channel::<()>();
+        return (eth_node, abort_sender);
     }
 
     let ethereum_url = config.ethereum.oracle_rpc_endpoint.clone();
 
     // Boot up geth and wait for it to finish syncing
-    let start_managed_eth_node =
-        matches!(config.ethereum.mode, ethereum::Mode::Managed);
     let (eth_node, abort_sender) =
-        ethereum_node::start(&ethereum_url, start_managed_eth_node)
+        eth_fullnode::EthereumNode::new(&ethereum_url)
             .await
             .expect("Unable to start the Ethereum fullnode");
 
@@ -662,33 +703,7 @@ async fn start_ethereum_node(
                 }
             }
         });
-
-    // Start the oracle for listening to Ethereum events
-    let (eth_sender, eth_receiver) = mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
-    let oracle = match config.ethereum.mode {
-        ethereum::Mode::Managed | ethereum::Mode::Remote => {
-            ethereum_node::oracle::run_oracle(
-                ethereum_url,
-                eth_sender,
-                abort_sender,
-            )
-        }
-        ethereum::Mode::EventsEndpoint => {
-            ethereum_node::test_tools::events_endpoint::serve(
-                eth_sender,
-                abort_sender,
-            )
-        }
-        ethereum::Mode::Off => {
-            ethereum_node::test_tools::mock_oracle::run_oracle(
-                ethereum_url,
-                eth_sender,
-                abort_sender,
-            )
-        }
-    };
-
-    (eth_node, Some(eth_receiver), oracle)
+    (eth_node, abort_sender)
 }
 
 /// Spawn a dummy asynchronous task into the runtime,

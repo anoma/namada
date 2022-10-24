@@ -3,7 +3,6 @@ pub mod oracle;
 pub mod test_tools;
 use std::ffi::OsString;
 
-use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::oneshot::{Receiver, Sender};
 
@@ -29,46 +28,10 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Represents a subprocess running an Ethereum full node
-pub enum Subprocess {
-    Mock(test_tools::mock_eth_fullnode::EthereumNode),
-    Geth(eth_fullnode::EthereumNode),
-}
-
-/// Starts an Ethereum fullnode in a subprocess and returns a handle for
-/// monitoring it using [`monitor`], as well as a channel for halting it.
-pub async fn start(url: &str, real: bool) -> Result<(Subprocess, Sender<()>)> {
-    if real {
-        let (node, sender) = eth_fullnode::EthereumNode::new(url).await?;
-        Ok((Subprocess::Geth(node), sender))
-    } else {
-        let (node, sender) =
-            test_tools::mock_eth_fullnode::EthereumNode::new().await?;
-        Ok((Subprocess::Mock(node), sender))
-    }
-}
-
 /// Monitor the Ethereum fullnode. If it stops or an abort
 /// signal is sent, the subprocess is halted.
 pub async fn monitor(
-    ethereum_node: Subprocess,
-    abort_recv: Receiver<Sender<()>>,
-) -> Result<()> {
-    match ethereum_node {
-        Subprocess::Mock(node) => monitor_node(node, abort_recv).await,
-        Subprocess::Geth(node) => monitor_node(node, abort_recv).await,
-    }
-}
-
-/// A handle on an Ethereum full node subprocess for monitoring it
-#[async_trait]
-pub trait Monitorable {
-    async fn wait(&mut self) -> Result<()>;
-    async fn kill(&mut self);
-}
-
-async fn monitor_node(
-    mut node: impl Monitorable,
+    mut node: eth_fullnode::EthereumNode,
     abort_recv: Receiver<Sender<()>>,
 ) -> Result<()> {
     tokio::select! {
@@ -97,13 +60,12 @@ async fn monitor_node(
 pub mod eth_fullnode {
     use std::time::Duration;
 
-    use async_trait::async_trait;
     use tokio::process::{Child, Command};
     use tokio::sync::oneshot::{channel, Receiver, Sender};
     use tokio::task::LocalSet;
     use web30::client::Web3;
 
-    use super::{Error, Monitorable, Result};
+    use super::{Error, Result};
 
     /// A handle to a running geth process and a channel
     /// that indicates it should shut down if the oracle
@@ -137,7 +99,7 @@ pub mod eth_fullnode {
 
     impl EthereumNode {
         /// Starts the geth process and returns a handle to it as well
-        /// as an oracle that can relay data from geth to the ledger.
+        /// as a channel on which an abort signal can be sent to shut it down.
         ///
         /// First looks up which network to connect to from an env var.
         /// It then starts the process and waits for it to finish
@@ -200,14 +162,11 @@ pub mod eth_fullnode {
                 })
                 .await
         }
-    }
 
-    #[async_trait]
-    impl Monitorable for EthereumNode {
         /// Wait for the process to finish or an abort message was
         /// received from the Oracle process. If either, return the
         /// status.
-        async fn wait(&mut self) -> Result<()> {
+        pub async fn wait(&mut self) -> Result<()> {
             use futures::future::{self, Either};
 
             let child_proc = self.process.wait();
@@ -226,7 +185,7 @@ pub mod eth_fullnode {
         }
 
         /// Stop the geth process
-        async fn kill(&mut self) {
+        pub async fn kill(&mut self) {
             self.process.kill().await.unwrap();
         }
     }
