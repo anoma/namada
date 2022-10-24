@@ -72,11 +72,11 @@ pub fn calculate_new(
 }
 
 /// Calculate an updated [`Tally`] based on one that is in storage under `keys`,
-/// and some new votes
+/// with some new `voters`.
 pub fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
-    _voting_powers: &HashMap<Address, FractionalVotingPower>,
+    _voters: &HashMap<Address, FractionalVotingPower>,
 ) -> Result<(Tally, ChangedKeys)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
