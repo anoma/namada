@@ -188,15 +188,17 @@ impl AbcippShim {
                             _ => Err(Error::ConvertResp(res)),
                         })
                 }
-                _ => match Request::try_from(req.clone()) {
-                    Ok(request) => self
-                        .service
-                        .call(request)
-                        .map(Resp::try_from)
-                        .map_err(Error::Shell)
-                        .and_then(|inner| inner),
-                    Err(err) => Err(err),
-                },
+                _ => {
+                    match Request::try_from(req.clone()) {
+                        Ok(request) => self
+                            .service
+                            .call(request)
+                            .map(Resp::try_from)
+                            .map_err(Error::Shell)
+                            .and_then(|inner| inner),
+                        Err(err) => Err(err),
+                    }
+                }
             };
             let resp = resp.map_err(|e| e.into());
             if resp_sender.send(resp).is_err() {

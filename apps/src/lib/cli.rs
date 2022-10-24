@@ -1359,7 +1359,8 @@ pub mod args {
 
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
-    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> = arg("max-commission-rate-change");
+    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
+        arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NFT_ADDRESS: Arg<Address> = arg("nft-address");

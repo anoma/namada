@@ -20,6 +20,7 @@ use namada::types::token;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
+use rust_decimal_macros::dec;
 use serde_json::json;
 use setup::constants::*;
 

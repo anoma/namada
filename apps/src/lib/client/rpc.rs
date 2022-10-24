@@ -1968,8 +1968,7 @@ async fn get_validator_stake(
     .expect("Total deltas should be defined");
     let validator_stake = validator_deltas.get(epoch);
 
-    VotePower::try_from(validator_stake.unwrap_or_default())
-        .unwrap_or_default()
+    VotePower::try_from(validator_stake.unwrap_or_default()).unwrap_or_default()
 }
 
 pub async fn get_delegators_delegation(

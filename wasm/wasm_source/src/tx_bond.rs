@@ -228,7 +228,8 @@ mod tests {
             }
         } else {
             // This is a self-bond
-            // Check that a bond already exists from genesis with initial stake for the validator
+            // Check that a bond already exists from genesis with initial stake
+            // for the validator
             let genesis_epoch =
                 namada_tx_prelude::proof_of_stake::types::Epoch::from(0);
             for epoch in 0..pos_params.pipeline_len {
