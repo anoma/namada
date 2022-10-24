@@ -48,3 +48,4 @@ namada_vp_prelude = {path = "../../vp_prelude"}
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
 tracing = "0.1.30"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
+rust_decimal = "1.26.1"
