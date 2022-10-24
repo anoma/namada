@@ -119,7 +119,7 @@ impl BridgePoolTree {
         }
     }
 
-    /// Return the root as a [`struct@Hash`] type.
+    /// Return the root as a [struct@`Hash`] type.
     pub fn root(&self) -> Hash {
         self.root.clone().into()
     }
