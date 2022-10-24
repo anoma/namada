@@ -1366,6 +1366,7 @@ dependencies = [
  "derivative",
  "ed25519-consensus",
  "ferveo-common",
+ "hex",
  "ibc",
  "ibc-proto",
  "ics23",
