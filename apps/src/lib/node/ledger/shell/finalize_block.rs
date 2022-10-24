@@ -7,6 +7,7 @@ use namada::ledger::pos::{
     consensus_validator_set_accumulator_key, staking_token_address,
 };
 use namada::types::address::Address;
+#[cfg(feature = "abcipp")]
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
@@ -267,8 +268,34 @@ where
                         )
                         .unwrap();
                 }
+                #[cfg(feature = "abcipp")]
+                {
+                    let tm_raw_hash_string =
+                        tm_raw_hash_to_string(req.proposer_address);
+                    let native_proposer_address = self
+                        .storage
+                        .read_validator_address_raw_hash(tm_raw_hash_string)
+                        .expect(
+                            "Unable to find native validator address of block \
+                             proposer from tendermint raw hash",
+                        );
+                    self.storage.write_last_block_proposer_address(
+                        &native_proposer_address,
+                    );
+                }
+
+                #[cfg(not(feature = "abcipp"))]
+                {
+                    let cur_proposer = self
+                        .storage
+                        .read_current_block_proposer_address()
+                        .unwrap();
+                    self.storage
+                        .write_last_block_proposer_address(&cur_proposer);
+                }
             }
             None => {
+                #[cfg(feature = "abcipp")]
                 if req.votes.len() == 0 && req.proposer_address.len() > 0 {
                     // Get proposer address from storage based on the consensus
                     // key hash
