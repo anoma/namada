@@ -13,10 +13,7 @@ use namada::ledger::pos::types::{self, decimal_mult_u64, VoteInfo};
 use namada::ledger::pos::{
     consensus_validator_set_accumulator_key, staking_token_address,
 };
-use namada::ledger::storage::types::encode;
-use namada::ledger::treasury::ADDRESS as treasury_address;
-use namada::types::address::{xan as m1t, Address};
-use namada::types::governance::TallyResult;
+use namada::types::address::Address;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
