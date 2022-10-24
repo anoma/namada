@@ -4,7 +4,7 @@
 mod eth_msgs;
 mod events;
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::Result;
@@ -22,7 +22,7 @@ use crate::node::ledger::protocol::transactions::utils::{
     self, get_active_validators,
 };
 use crate::node::ledger::protocol::transactions::votes::{
-    calculate_new, calculate_updated, write,
+    calculate_new, calculate_updated, write, Votes,
 };
 
 /// Applies derived state changes to storage, based on Ethereum `events` which
@@ -155,7 +155,7 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let mut seen_by = BTreeMap::default();
+    let mut seen_by = Votes::default();
     for (address, block_height) in update.seen_by.into_iter() {
         // TODO: more deterministic deduplication
         if let Some(present) = seen_by.insert(address, block_height) {
@@ -251,10 +251,7 @@ mod tests {
         };
         let update = EthMsgUpdate {
             body: body.clone(),
-            seen_by: BTreeMap::from([(
-                sole_validator.clone(),
-                BlockHeight(100),
-            )]),
+            seen_by: Votes::from([(sole_validator.clone(), BlockHeight(100))]),
         };
         let updates = HashSet::from_iter(vec![update]);
         let voting_powers = HashMap::from_iter(vec![(
@@ -290,8 +287,8 @@ mod tests {
         let (seen_by_bytes, _) = storage.read(&eth_msg_keys.seen_by())?;
         let seen_by_bytes = seen_by_bytes.unwrap();
         assert_eq!(
-            BTreeMap::<Address, BlockHeight>::try_from_slice(&seen_by_bytes)?,
-            BTreeMap::from([(sole_validator.clone(), BlockHeight(100))])
+            Votes::try_from_slice(&seen_by_bytes)?,
+            Votes::from([(sole_validator.clone(), BlockHeight(100))])
         );
 
         let (voting_power_bytes, _) =

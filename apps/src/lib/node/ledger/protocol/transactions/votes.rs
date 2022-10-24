@@ -15,6 +15,14 @@ use namada::types::voting_power::FractionalVotingPower;
 use super::ChangedKeys;
 use crate::node::ledger::protocol::transactions::read;
 
+/// The addresses of validators that voted for something, and the block
+/// heights at which they voted. We use a [`BTreeMap`] to enforce that a
+/// validator (as uniquely identified by an [`Address`]) may vote at most once,
+/// and their vote must be associated with a specific [`BlockHeight`]. Their
+/// voting power at that block height is what is used when calculating whether
+/// something has enough voting power behind it or not.
+pub type Votes = BTreeMap<Address, BlockHeight>;
+
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
@@ -23,11 +31,11 @@ use crate::node::ledger::protocol::transactions::read;
 pub struct Tally {
     /// The total voting power that's voted for this event across all epochs
     pub voting_power: FractionalVotingPower,
-    /// The addresses of validators that voted for this event and the block
-    /// heights at which they voted. We use a map type as validators should
-    /// only be able to vote at most once, and [`BTreeMap`] specifically as
-    /// we want this field to be deterministically ordered for storage.
-    pub seen_by: BTreeMap<Address, BlockHeight>,
+    /// The votes which have been counted towards `voting_power`. Note that
+    /// validators may submit multiple votes at different block heights for
+    /// the same thing, but ultimately only one vote per validator will be
+    /// used when tallying voting power.
+    pub seen_by: Votes,
     /// Whether this event has been acted on or not - this should only ever
     /// transition from `false` to `true`, once there is enough voting power
     pub seen: bool,
@@ -36,7 +44,7 @@ pub struct Tally {
 /// Calculate a new [`Tally`] based on some validators' fractional voting powers
 /// as specific block heights
 pub fn calculate_new(
-    seen_by: BTreeMap<Address, BlockHeight>,
+    seen_by: Votes,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<Tally> {
     let mut seen_by_voting_power = FractionalVotingPower::default();
@@ -78,8 +86,7 @@ where
     // TODO(namada#515): implement this
     let _body: T = read::value(store, &keys.body())?;
     let seen: bool = read::value(store, &keys.seen())?;
-    let seen_by: BTreeMap<Address, BlockHeight> =
-        read::value(store, &keys.seen_by())?;
+    let seen_by: Votes = read::value(store, &keys.seen_by())?;
     let voting_power: FractionalVotingPower =
         read::value(store, &keys.voting_power())?;
 

@@ -8,8 +8,10 @@
 use std::collections::BTreeSet;
 
 use namada::types::storage;
+
 #[cfg(not(feature = "abcipp"))]
 pub(super) mod ethereum_events;
+
 #[cfg(not(feature = "abcipp"))]
 mod votes;
 
