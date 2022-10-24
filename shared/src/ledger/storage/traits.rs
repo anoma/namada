@@ -173,7 +173,7 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
 
     fn subtree_membership_proof(
         &self,
-        keys: &[Key],
+        _: &[Key],
         values: Vec<MerkleValue>,
     ) -> Result<MembershipProof, Error> {
         let values = values
@@ -183,7 +183,7 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
                 _ => None,
             })
             .collect();
-        self.get_membership_proof(keys, values)
+        self.get_membership_proof(values)
             .map(Into::into)
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }

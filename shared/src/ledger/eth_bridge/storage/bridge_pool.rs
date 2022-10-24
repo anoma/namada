@@ -60,6 +60,8 @@ pub fn is_protected_storage(key: &Key) -> bool {
 }
 
 /// A simple Merkle tree for the Ethereum bridge pool
+///
+/// Note that an empty tree has root [0u8; 20] by definition.
 #[derive(
     Debug, Default, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
@@ -67,13 +69,16 @@ pub struct BridgePoolTree {
     /// Root of the tree
     root: KeccakHash,
     /// The underlying storage, containing hashes of [`PendingTransfer`]s.
-    store: BTreeSet<KeccakHash>,
+    leaves: BTreeSet<KeccakHash>,
 }
 
 impl BridgePoolTree {
     /// Create a new merkle tree for the Ethereum bridge pool
     pub fn new(root: KeccakHash, store: BTreeSet<KeccakHash>) -> Self {
-        Self { root, store }
+        Self {
+            root,
+            leaves: store,
+        }
     }
 
     /// Parse the key to ensure it is of the correct type.
@@ -81,7 +86,7 @@ impl BridgePoolTree {
     /// If it is, it can be converted to a hash.
     /// Checks if the hash is in the tree.
     pub fn contains_key(&self, key: &Key) -> Result<bool, Error> {
-        Ok(self.store.contains(&Self::parse_key(key)?))
+        Ok(self.leaves.contains(&Self::parse_key(key)?))
     }
 
     /// Update the tree with a new value.
@@ -90,7 +95,7 @@ impl BridgePoolTree {
     /// return an error if the key is malformed.
     pub fn insert_key(&mut self, key: &Key) -> Result<Hash, Error> {
         let hash = Self::parse_key(key)?;
-        _ = self.store.insert(hash);
+        _ = self.leaves.insert(hash);
         self.root = self.compute_root();
         Ok(self.root())
     }
@@ -98,14 +103,14 @@ impl BridgePoolTree {
     /// Delete a key from storage and update the root
     pub fn delete_key(&mut self, key: &Key) -> Result<(), Error> {
         let hash = Self::parse_key(key)?;
-        _ = self.store.remove(&hash);
+        _ = self.leaves.remove(&hash);
         self.root = self.compute_root();
         Ok(())
     }
 
     /// Compute the root of the merkle tree
     fn compute_root(&self) -> KeccakHash {
-        let mut hashes: Vec<KeccakHash> = self.store.iter().cloned().collect();
+        let mut hashes: Vec<KeccakHash> = self.leaves.iter().cloned().collect();
         while hashes.len() > 1 {
             let mut next_hashes = vec![];
             for pair in hashes.chunks(2) {
@@ -130,48 +135,32 @@ impl BridgePoolTree {
 
     /// Get a reference to the backing store
     pub fn store(&self) -> &BTreeSet<KeccakHash> {
-        &self.store
+        &self.leaves
     }
 
     /// Create a batched membership proof for the provided keys
     pub fn get_membership_proof(
         &self,
-        keys: &[Key],
         mut values: Vec<PendingTransfer>,
     ) -> Result<BridgePoolProof, Error> {
-        if values.len() != keys.len() {
-            return Err(eyre!(
-                "The number of leaves and leaf hashes must be equal."
-            )
-            .into());
-        }
         // sort the values according to their hash values
         values.sort_by_key(|transfer| transfer.keccak256());
 
         // get the leaf hashes
-        let mut leaves: BTreeSet<KeccakHash> = Default::default();
-        for (key, value) in keys.iter().zip(values.iter()) {
-            let hash = Self::parse_key(key)?;
-            if hash != value.keccak256() {
-                return Err(eyre!(
-                    "Hashes of keys did not match hashes of values."
-                )
-                .into());
-            }
-            leaves.insert(hash);
-        }
+        let leaves: BTreeSet<KeccakHash> =
+            values.iter().map(|v| v.keccak256()).collect();
 
         let mut proof_hashes = vec![];
         let mut flags = vec![];
         let mut hashes: Vec<_> = self
-            .store
+            .leaves
             .iter()
             .cloned()
             .map(|hash| {
                 if leaves.contains(&hash) {
                     Node::OnPath(hash)
                 } else {
-                    Node::Sibling(hash)
+                    Node::OffPath(hash)
                 }
             })
             .collect();
@@ -188,20 +177,20 @@ impl BridgePoolTree {
                         next_hashes
                             .push(Node::OnPath(hash_pair(left.clone(), right)));
                     }
-                    (Node::OnPath(hash), Node::Sibling(sib)) => {
+                    (Node::OnPath(hash), Node::OffPath(sib)) => {
                         flags.push(false);
                         proof_hashes.push(sib.clone());
                         next_hashes
                             .push(Node::OnPath(hash_pair(hash.clone(), sib)));
                     }
-                    (Node::Sibling(sib), Node::OnPath(hash)) => {
+                    (Node::OffPath(sib), Node::OnPath(hash)) => {
                         flags.push(false);
                         proof_hashes.push(sib.clone());
                         next_hashes
                             .push(Node::OnPath(hash_pair(hash, sib.clone())));
                     }
-                    (Node::Sibling(left), Node::Sibling(right)) => {
-                        next_hashes.push(Node::Sibling(hash_pair(
+                    (Node::OffPath(left), Node::OffPath(right)) => {
+                        next_hashes.push(Node::OffPath(hash_pair(
                             left.clone(),
                             right,
                         )));
@@ -264,12 +253,12 @@ enum Node {
     /// Node is on a path from root to leaf in proof
     OnPath(KeccakHash),
     /// Node is not on a path from root to leaf in proof
-    Sibling(KeccakHash),
+    OffPath(KeccakHash),
 }
 
 impl Default for Node {
     fn default() -> Self {
-        Self::Sibling(Default::default())
+        Self::OffPath(Default::default())
     }
 }
 
@@ -279,7 +268,9 @@ pub struct BridgePoolProof {
     pub proof: Vec<KeccakHash>,
     /// The leaves; must be sorted
     pub leaves: Vec<PendingTransfer>,
-    /// flags to indicate how to combine hashes
+    /// Flags to indicate how to combine hashes.
+    /// Flags are used to indicate which consecutive
+    /// pairs of leaves in `leaves` are siblings.
     pub flags: Vec<bool>,
 }
 
@@ -345,7 +336,6 @@ impl BridgePoolProof {
 
 #[cfg(test)]
 mod test_bridge_pool_tree {
-    use std::array;
 
     use itertools::Itertools;
     use proptest::prelude::*;
@@ -436,7 +426,7 @@ mod test_bridge_pool_tree {
         transfers.sort_by_key(|t| t.keccak256());
         let hashes: BTreeSet<KeccakHash> =
             transfers.iter().map(|t| t.keccak256()).collect();
-        assert_eq!(hashes, tree.store);
+        assert_eq!(hashes, tree.leaves);
 
         let left_hash =
             hash_pair(transfers[0].keccak256(), transfers[1].keccak256());
@@ -605,11 +595,8 @@ mod test_bridge_pool_tree {
     #[test]
     fn test_empty_proof() {
         let tree = BridgePoolTree::default();
-        let keys = vec![];
         let values = vec![];
-        let proof = tree
-            .get_membership_proof(&keys, values)
-            .expect("Test failed");
+        let proof = tree.get_membership_proof(values).expect("Test failed");
         assert!(proof.verify(Default::default()));
     }
 
@@ -632,7 +619,7 @@ mod test_bridge_pool_tree {
         let key = Key::from(&transfer);
         let _ = tree.insert_key(&key).expect("Test failed");
         let proof = tree
-            .get_membership_proof(array::from_ref(&key), vec![transfer])
+            .get_membership_proof(vec![transfer])
             .expect("Test failed");
         assert!(proof.verify(tree.root().into()));
     }
@@ -661,12 +648,8 @@ mod test_bridge_pool_tree {
             transfers.push(transfer);
             let _ = tree.insert_key(&key).expect("Test failed");
         }
-        let key = Key::from(&transfers[0]);
         let proof = tree
-            .get_membership_proof(
-                array::from_ref(&key),
-                vec![transfers.remove(0)],
-            )
+            .get_membership_proof(vec![transfers.remove(0)])
             .expect("Test failed");
         assert!(proof.verify(tree.root().into()));
     }
@@ -695,11 +678,8 @@ mod test_bridge_pool_tree {
             let _ = tree.insert_key(&key).expect("Test failed");
         }
         transfers.sort_by_key(|t| t.keccak256());
-        let keys = vec![Key::from(&transfers[0]), Key::from(&transfers[1])];
         let values = vec![transfers[0].clone(), transfers[1].clone()];
-        let proof = tree
-            .get_membership_proof(&keys, values)
-            .expect("Test failed");
+        let proof = tree.get_membership_proof(values).expect("Test failed");
         assert!(proof.verify(tree.root().into()));
     }
 
@@ -725,11 +705,8 @@ mod test_bridge_pool_tree {
             transfers.push(transfer);
             let _ = tree.insert_key(&key).expect("Test failed");
         }
-        let keys = vec![];
         let values = vec![];
-        let proof = tree
-            .get_membership_proof(&keys, values)
-            .expect("Test failed");
+        let proof = tree.get_membership_proof(values).expect("Test failed");
         assert!(proof.verify(tree.root().into()))
     }
 
@@ -756,10 +733,7 @@ mod test_bridge_pool_tree {
             let _ = tree.insert_key(&key).expect("Test failed");
         }
         transfers.sort_by_key(|t| t.keccak256());
-        let keys: Vec<_> = transfers.iter().map(Key::from).collect();
-        let proof = tree
-            .get_membership_proof(&keys, transfers)
-            .expect("Test failed");
+        let proof = tree.get_membership_proof(transfers).expect("Test failed");
         assert!(proof.verify(tree.root().into()));
     }
 
@@ -786,10 +760,7 @@ mod test_bridge_pool_tree {
             let _ = tree.insert_key(&key).expect("Test failed");
         }
         transfers.sort_by_key(|t| t.keccak256());
-        let keys: Vec<_> = transfers.iter().map(Key::from).collect();
-        let proof = tree
-            .get_membership_proof(&keys, transfers)
-            .expect("Test failed");
+        let proof = tree.get_membership_proof(transfers).expect("Test failed");
         assert!(proof.verify(tree.root().into()));
     }
 
@@ -816,11 +787,8 @@ mod test_bridge_pool_tree {
             let _ = tree.insert_key(&key).expect("Test failed");
         }
         transfers.sort_by_key(|t| t.keccak256());
-        let keys: Vec<_> = transfers.iter().step_by(2).map(Key::from).collect();
         let values: Vec<_> = transfers.iter().step_by(2).cloned().collect();
-        let proof = tree
-            .get_membership_proof(&keys, values)
-            .expect("Test failed");
+        let proof = tree.get_membership_proof(values).expect("Test failed");
         assert!(proof.verify(tree.root().into()));
     }
 
@@ -881,13 +849,7 @@ mod test_bridge_pool_tree {
             }
 
             to_prove.sort_by_key(|t| t.keccak256());
-            let mut keys = vec![];
-            let mut values = vec![];
-            for transfer in to_prove.into_iter() {
-                keys.push(Key::from(&transfer));
-                values.push(transfer);
-            }
-            let proof = tree.get_membership_proof(&keys, values).expect("Test failed");
+            let proof = tree.get_membership_proof(to_prove).expect("Test failed");
             assert!(proof.verify(tree.root().into()));
         }
     }
