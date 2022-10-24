@@ -180,9 +180,7 @@ pub fn validator_self_rewards_product_key(validator: &Address) -> Key {
 }
 
 /// Is storage key for validator's self rewards products?
-pub fn is_validator_self_rewards_product_key(
-    key: &Key,
-) -> Option<&Address> {
+pub fn is_validator_self_rewards_product_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
@@ -582,8 +580,9 @@ where
         &self,
         key: &Self::Address,
     ) -> rust_decimal::Decimal {
-        let (value, _gas) =
-            self.read(&validator_max_commission_rate_change_key(key)).unwrap();
+        let (value, _gas) = self
+            .read(&validator_max_commission_rate_change_key(key))
+            .unwrap();
         decode(value.unwrap()).unwrap()
     }
 
@@ -606,8 +605,13 @@ where
         value.map(|value| decode(value).unwrap())
     }
 
-    fn read_validator_last_known_product_epoch(&self, key: &Self::Address) -> Epoch {
-        let (value, _gas) = self.read(&validator_delegation_rewards_product_key(key)).unwrap();
+    fn read_validator_last_known_product_epoch(
+        &self,
+        key: &Self::Address,
+    ) -> Epoch {
+        let (value, _gas) = self
+            .read(&validator_delegation_rewards_product_key(key))
+            .unwrap();
         decode(value.unwrap()).unwrap()
     }
 
@@ -680,15 +684,18 @@ where
         key: &Self::Address,
         value: &RewardsProducts,
     ) {
-        self.write(&validator_delegation_rewards_product_key(key), encode(value))
-            .unwrap();
+        self.write(
+            &validator_delegation_rewards_product_key(key),
+            encode(value),
+        )
+        .unwrap();
     }
 
     fn write_validator_last_known_product_epoch(
-            &mut self,
-            key: &Self::Address,
-            value: &Epoch,
-        ) {
+        &mut self,
+        key: &Self::Address,
+        value: &Epoch,
+    ) {
         self.write(&validator_last_known_product_epoch_key(key), encode(value))
             .unwrap();
     }

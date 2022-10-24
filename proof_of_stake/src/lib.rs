@@ -34,17 +34,15 @@ use epoched::{
 use parameters::PosParams;
 use rust_decimal::Decimal;
 use thiserror::Error;
-use types::{
-    ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
-    SlashType, Slashes, TotalDeltas, Unbond, Unbonds, ValidatorConsensusKeys,
-    ValidatorDeltas, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
-    ValidatorState, ValidatorStates, RewardsProducts,
-};
 
 use crate::btree_set::BTreeSetShims;
 use crate::rewards::PosRewardsCalculator;
 use crate::types::{
-    decimal_mult_i128, decimal_mult_u64, Bond, BondId, VoteInfo, WeightedValidator,
+    decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bond, BondId, Bonds,
+    CommissionRates, Epoch, GenesisValidator, RewardsProducts, Slash,
+    SlashType, Slashes, TotalDeltas, Unbond, Unbonds, ValidatorConsensusKeys,
+    ValidatorDeltas, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
+    ValidatorState, ValidatorStates, VoteInfo, WeightedValidator,
 };
 
 /// Read-only part of the PoS system
@@ -707,9 +705,14 @@ pub trait PosBase {
         key: &Self::Address,
     ) -> Option<RewardsProducts>;
     /// Read PoS validator's last known epoch with rewards products
-    fn read_validator_last_known_product_epoch(&self, key: &Self::Address) -> Epoch;
+    fn read_validator_last_known_product_epoch(
+        &self,
+        key: &Self::Address,
+    ) -> Epoch;
     /// Read PoS consensus validator's rewards accumulator
-    fn read_consensus_validator_rewards_accumulator(&self) -> Option<std::collections::HashMap<Self::Address, Decimal>>;
+    fn read_consensus_validator_rewards_accumulator(
+        &self,
+    ) -> Option<std::collections::HashMap<Self::Address, Decimal>>;
     /// Read PoS validator set (active and inactive).
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total deltas of all validators (active and inactive).
@@ -1008,7 +1011,7 @@ pub trait PosBase {
         &mut self,
         epoch: impl Into<Epoch>,
         proposer_address: &Self::Address,
-        votes: &Vec<VoteInfo>,
+        votes: &[VoteInfo],
     ) -> Result<(), InflationError> {
         // TODO: all values collected here need to be consistent with the same
         // block that the voting info corresponds to, which is the
@@ -1038,8 +1041,11 @@ pub trait PosBase {
         let mut signer_set: HashSet<Self::Address> = HashSet::new();
         let mut total_signing_stake: u64 = 0;
         for vote in votes.iter() {
-            if !vote.signed_last_block { continue; }
-            let tm_raw_hash_string = hex::encode_upper(vote.validator_address.clone());
+            if !vote.signed_last_block {
+                continue;
+            }
+            let tm_raw_hash_string =
+                hex::encode_upper(vote.validator_address.clone());
             let native_address = self
                 .read_validator_address_raw_hash(tm_raw_hash_string)
                 .expect(
@@ -1048,8 +1054,10 @@ pub trait PosBase {
                 );
             signer_set.insert(native_address.clone());
 
-            // vote.validator_vp is updating at a constant delay relative to the validator deltas
-            // use validator deltas in namada protocol to get voting power instead
+            // vote.validator_vp is updating at a constant delay relative to the
+            // validator deltas.
+            // Use validator deltas in namada protocol to get voting power
+            // instead
             let deltas = self.read_validator_deltas(&native_address).unwrap();
             let stake: Self::TokenChange = deltas.get(epoch).unwrap();
             let stake: u64 = Into::<i128>::into(stake).try_into().unwrap();
@@ -1075,7 +1083,7 @@ pub trait PosBase {
         // update the reward accumulators
         let mut validator_accumulators = self
             .read_consensus_validator_rewards_accumulator()
-            .unwrap_or_else(|| HashMap::<Self::Address, Decimal>::new());
+            .unwrap_or_default();
         for validator in validators.active.iter() {
             let mut rewards_frac = Decimal::default();
             let stake: Decimal = validator.bonded_stake.into();
@@ -1095,8 +1103,11 @@ pub trait PosBase {
             let active_val_frac = stake / active_val_stake;
             rewards_frac += coeffs.active_val_coeff * active_val_frac;
 
-            let prev_val = *validator_accumulators.get(&validator.address).unwrap_or(&Decimal::ZERO);
-            validator_accumulators.insert(validator.address.clone(), prev_val + rewards_frac);
+            let prev_val = *validator_accumulators
+                .get(&validator.address)
+                .unwrap_or(&Decimal::ZERO);
+            validator_accumulators
+                .insert(validator.address.clone(), prev_val + rewards_frac);
         }
 
         // Write the updated map of reward accumulators back to storage

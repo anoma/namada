@@ -1,24 +1,21 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use namada::ledger::pos::types::into_tm_voting_power;
-use namada::ledger::protocol;
-use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::governance::utils::{
-    compute_tally, get_proposal_votes, ProposalEvent,
-};
-use namada::ledger::governance::vp::ADDRESS as gov_address;
 use namada::ledger::inflation::{self, RewardsController};
 use namada::ledger::parameters::storage as params_storage;
-use namada::ledger::pos::types::{self, decimal_mult_u64, VoteInfo};
+use namada::ledger::pos::types::{
+    self, decimal_mult_u64, into_tm_voting_power, VoteInfo,
+};
 use namada::ledger::pos::{
     consensus_validator_set_accumulator_key, staking_token_address,
 };
+use namada::ledger::protocol;
 use namada::types::address::Address;
 #[cfg(feature = "abcipp")]
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
 use rust_decimal::prelude::Decimal;
+
 use super::governance::execute_governance_proposals;
 use super::*;
 use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
@@ -302,7 +299,7 @@ where
             }
             None => {
                 #[cfg(feature = "abcipp")]
-                if req.votes.len() == 0 && req.proposer_address.len() > 0 {
+                if req.votes.is_empty() && !req.proposer_address.is_empty() {
                     // Get proposer address from storage based on the consensus
                     // key hash
                     let tm_raw_hash_string =
@@ -414,7 +411,7 @@ where
         &mut self,
         current_epoch: Epoch,
         proposer_address: &Address,
-        votes: &Vec<VoteInfo>,
+        votes: &[VoteInfo],
     ) {
         let last_epoch = current_epoch - 1;
         // Get input values needed for the PD controller for PoS and MASP.
@@ -426,7 +423,7 @@ where
         // block of the previous epoch), which also gives the final
         // accumulator value updates
         self.storage
-            .log_block_rewards(last_epoch, &proposer_address, votes)
+            .log_block_rewards(last_epoch, proposer_address, votes)
             .unwrap();
 
         // TODO: review if the appropriate epoch is being used (last vs now)
@@ -541,16 +538,12 @@ where
         let last_epoch = types::Epoch::from(last_epoch.0);
 
         // TODO: think about changing the reward to Decimal
-        let mut reward_tokens_remaining = pos_minted_tokens.clone();
+        let mut reward_tokens_remaining = pos_minted_tokens;
         for (address, value) in accumulators.iter() {
-            dbg!(reward_tokens_remaining.clone());
             // Get reward token amount for this validator
             let fractional_claim =
                 value / Decimal::from(num_blocks_in_last_epoch);
-            let reward = decimal_mult_u64(
-                fractional_claim,
-                u64::from(pos_minted_tokens),
-            );
+            let reward = decimal_mult_u64(fractional_claim, pos_minted_tokens);
 
             // Read epoched validator data and rewards products
             let validator_deltas =
@@ -560,17 +553,15 @@ where
             let mut rewards_products = self
                 .storage
                 .read_validator_rewards_products(address)
-                .unwrap_or(std::collections::HashMap::new());
+                .unwrap_or_default();
             let mut delegation_rewards_products = self
                 .storage
                 .read_validator_delegation_rewards_products(address)
-                .unwrap_or(std::collections::HashMap::new());
+                .unwrap_or_default();
 
             // Get validator data at the last epoch
-            let stake = validator_deltas
-                .get(last_epoch)
-                .map(|sum| Decimal::from(sum))
-                .unwrap();
+            let stake =
+                validator_deltas.get(last_epoch).map(Decimal::from).unwrap();
             let last_product =
                 *rewards_products.get(&last_epoch).unwrap_or(&Decimal::ONE);
             let last_delegation_product = *delegation_rewards_products
@@ -586,16 +577,23 @@ where
                     + (Decimal::ONE - commission_rate) * Decimal::from(reward)
                         / stake);
             rewards_products.insert(current_epoch, new_product);
-            delegation_rewards_products.insert(current_epoch, new_delegation_product);
-            self.storage.write_validator_rewards_products(address, &rewards_products);
-            self.storage.write_validator_delegation_rewards_products(address, &delegation_rewards_products);
+            delegation_rewards_products
+                .insert(current_epoch, new_delegation_product);
+            self.storage
+                .write_validator_rewards_products(address, &rewards_products);
+            self.storage.write_validator_delegation_rewards_products(
+                address,
+                &delegation_rewards_products,
+            );
 
             reward_tokens_remaining -= reward;
 
-            // TODO: Figure out how to deal with round-off to a whole number of tokens. May be tricky.
-            // TODO: Storing reward products as a Decimal suggests that no round-off should be done here,
-            // TODO: perhaps only upon withdrawal. But by truncating at withdrawal, may leave tokens in
-            // TDOD: the PoS account that are not accounted for. Is this an issue?
+            // TODO: Figure out how to deal with round-off to a whole number of
+            // tokens. May be tricky. TODO: Storing reward products
+            // as a Decimal suggests that no round-off should be done here,
+            // TODO: perhaps only upon withdrawal. But by truncating at
+            // withdrawal, may leave tokens in TDOD: the PoS account
+            // that are not accounted for. Is this an issue?
         }
 
         if reward_tokens_remaining > 0 {

@@ -1076,7 +1076,7 @@ dependencies = [
  "subtle-encoding",
  "tendermint",
  "tendermint-light-client-verifier",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "tendermint-testgen",
  "time",
  "tracing",
@@ -1092,7 +1092,7 @@ dependencies = [
  "prost",
  "prost-types",
  "serde",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
 ]
 
 [[package]]
@@ -1390,7 +1390,7 @@ dependencies = [
  "sparse-merkle-tree",
  "tempfile",
  "tendermint",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "thiserror",
  "tonic-build",
  "tracing",
@@ -1418,10 +1418,11 @@ version = "0.9.0"
 dependencies = [
  "borsh",
  "derivative",
+ "hex",
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",
- "tendermint-proto",
+ "tendermint-proto 0.23.5",
  "thiserror",
 ]
 
@@ -2361,7 +2362,7 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "time",
  "zeroize",
 ]
@@ -2375,6 +2376,23 @@ dependencies = [
  "flex-error",
  "serde",
  "tendermint",
+ "time",
+]
+
+[[package]]
+name = "tendermint-proto"
+version = "0.23.5"
+source = "git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9#95c52476bc37927218374f94ac8e2a19bd35bec9"
+dependencies = [
+ "bytes",
+ "flex-error",
+ "num-derive",
+ "num-traits",
+ "prost",
+ "prost-types",
+ "serde",
+ "serde_bytes",
+ "subtle-encoding",
  "time",
 ]
 
