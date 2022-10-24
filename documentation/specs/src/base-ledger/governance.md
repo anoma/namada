@@ -1,11 +1,23 @@
 # Namada Governance
 
+Before describing Namada governance, it is useful to define the concepts of validators, delegators, and NAM.
+
+Namada's economic model is based around a single native token, NAM, which is controlled by the protocol.
+
+A Namada validator is an account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
+
+A Namada delegator is an account that delegates some tokens to a validator. A delegator may not also be a validator.
+
 Namada introduces a governance mechanism to propose and apply protocol changes with  or without the need for a hard fork. Anyone holding some `NAM` will be able to propose some changes to which delegators and validators will cast their `yay` or `nay` votes. Governance on Namada supports both `signaling` and `voting` mechanisms. The difference between the the two is that the former is needed when the changes require a hard fork. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain](#off-chain-protocol) signaling to agree on a common move.
+
+Further informtion regarding delegators, validators, and NAM is contained in the [economics section](../economics.md).
 
 ## On-chain protocol
 
 ### Governance Address
+
 Governance adds 2 internal addresses:
+
 - `GovernanceAddress`
 - `SlashFundAddress`
 
@@ -13,6 +25,7 @@ The first internal address contains all the proposals under its address space.
 The second internal address holds the funds of rejected proposals.
 
 ### Governance storage
+
 Each proposal will be stored in a sub-key under the internal proposal address. The storage keys involved are:
 
 ```
@@ -25,6 +38,8 @@ Each proposal will be stored in a sub-key under the internal proposal address. T
 /\$GovernanceAddress/proposal/\$id/funds: u64
 /\$GovernanceAddress/proposal/epoch/\$id: u64
 ```
+
+An epoch is a range of blocks or time that is defined by the base ledger and made available to the PoS system. This document assumes that epochs are identified by consecutive natural numbers. All the data relevant to PoS are [associated with epochs](../economics/proof-of-stake/bonding-mechanism.md#epoched-data).
 
 - `Author` address field will be used to credit the locked funds if the proposal is approved.
 - `/\$GovernanceAddress/proposal/\$epoch/\$id` is used for easing the ledger governance execution. `\$epoch` refers to the same value as the on specific in the `grace_epoch` field.
@@ -74,14 +89,16 @@ This is to leverage the `NAM` VP to check that the funds were correctly locked.
 The governance subkey, `/\$GovernanceAddress/proposal/\$id/funds` will be used after the tally step to know the exact amount of tokens to refund or move to Treasury.
 
 ### GovernanceAddress VP
-Just like Pos, also governance has his own storage space. The `GovernanceAddress` validity predicate task is to check the integrity and correctness of new proposals. A proposal, to be correct, must satisfy the following:
+
+Just like PoS, also governance has its own storage space. The `GovernanceAddress` validity predicate task is to check the integrity and correctness of new proposals. A proposal, to be correct, must satisfy the following:
+
 - Mandatory storage writes are:
-    - counter
-    - author
-    - funds
-    - voting_start epoch
-    - voting_end epoch
-    - grace_epoch
+  - counter
+  - author
+  - funds
+  - voting_start epoch
+  - voting_end epoch
+  - grace_epoch
 - Lock some funds >= `min_proposal_fund`
 - Contains a unique ID
 - Contains a start, end and grace Epoch
@@ -89,8 +106,8 @@ Just like Pos, also governance has his own storage space. The `GovernanceAddress
 - Should contain a text describing the proposal with length < `max_proposal_content_size` characters.
 - Vote can be done only by a delegator or validator
 - Validator can vote only in the initial 2/3 of the whole proposal duration (`end_epoch` - `start_epoch`)
-- Due to the previous requirement, the following must be true,`(EndEpoch - StartEpoch) % 3 == 0` 
-- If defined, `proposalCode` should be the wasm bytecode representation of 
+- Due to the previous requirement, the following must be true,`(EndEpoch - StartEpoch) % 3 == 0`
+- If defined, `proposalCode` should be the wasm bytecode representation of
   the changes. This code is triggered in case the proposal has a position outcome.
 - The difference between `grace_epoch` and `end_epoch` should be of at least `min_proposal_grace_epochs`
 
@@ -100,6 +117,7 @@ If `proposal_code`  is `Empty` or `None` , the proposal upgrade will need to be 
 It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/governance/mod.rs#L69).
 
 Example of `proposalCode` could be:
+
 - storage writes to change some protocol parameter
 - storage writes to restore a slash
 - storage writes to change a non-native vp
@@ -140,19 +158,20 @@ Vote transaction creates or modifies the following storage key:
 /\$GovernanceAddress/proposal/\$id/vote/\$delegation_address/\$voter_address: Enum(yay|nay)
 ```
 
-The storage key will only be created if the transaction is signed either by 
-a validator or a delegator. 
+The storage key will only be created if the transaction is signed either by
+a validator or a delegator.
 Validators will be able to vote only for 2/3 of the total voting period, while delegators can vote until the end of the voting period.
 
-If a delegator votes opposite to its validator, this will *override* the 
+If a delegator votes opposite to its validator, this will *override* the
 corresponding vote of this validator (e.g. if a delegator has a voting power of 200 and votes opposite to the delegator holding these tokens, than 200 will be subtracted from the voting power of the involved validator).
 
 As a small form of space/gas optimization, if a delegator votes accordingly to its validator, the vote will not actually be submitted to the chain. This logic is applied only if the following conditions are satisfied:
 
 - The transaction is not being forced
-- The vote is submitted in the last third of the voting period (the one exclusive to delegators). This second condition is necessary to prevent a validator from changing its vote after a delegator vote has been submitted, effectively stealing the delegator's vote.   
+- The vote is submitted in the last third of the voting period (the one exclusive to delegators). This second condition is necessary to prevent a validator from changing its vote after a delegator vote has been submitted, effectively stealing the delegator's vote.
 
 ### Tally
+
 At the beginning of each new epoch (and only then), in the `FinalizeBlock` event, tallying will occur for all the proposals ending at this epoch (specified via the `grace_epoch` field of the proposal).
 The proposal has a positive outcome if 2/3 of the staked `NAM` total is voting `yay`. Tallying is computed with the following rules:
 
@@ -166,33 +185,39 @@ All the computation above must be made at the epoch specified in the `start_epoc
 It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/governance/utils.rs#L68).
 
 ### Refund and Proposal Execution mechanism
-Together with tallying, in the first block at the beginning of each epoch, in the `FinalizeBlock` event, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). For each proposal that has been rejected, instead, the locked funds will be moved to the `SlashFundAddress`. Moreover, if the proposal had a positive outcome and `proposal_code` is defined, these changes will be executed right away.
+
+Together with tallying, in the first block at the beginning of each epoch, in the `FinalizeBlock` event, the protocol will manage the execution of accepted proposals and refunding. A successful proposal will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). A failed proposal will move locked funds to `SlashFundAddress`. Moreover, if the proposal had a positive outcome and `proposal_code` is defined, these changes will be executed right away.
 To summarize the execution of governance in the `FinalizeBlock` event:
 
 If the proposal outcome is positive and current epoch is equal to the proposal `grace_epoch`, in the `FinalizeBlock` event:
+
 - transfer the locked funds to the proposal `author`
 - execute any changes specified by `proposal_code`
 
 In case the proposal was rejected or if any error, in the `FinalizeBlock` event:
+
 - transfer the locked funds to `SlashFundAddress`
 
-The result is then signaled by creating and inserting a [`Tendermint Event`](https://github.com/tendermint/tendermint/blob/ab0835463f1f89dcadf83f9492e98d85583b0e71/docs/spec/abci/abci.md#events.
-
+The result is then signaled by creating and inserting a [`Tendermint Event`](https://github.com/tendermint/tendermint/blob/ab0835463f1f89dcadf83f9492e98d85583b0e71/docs/spec/abci/abci.md#events).
 
 ## SlashFundAddress
+
 Funds locked in `SlashFundAddress` address should be spendable only by proposals.
 
 ### SlashFundAddress storage
+
 ```
 /\$SlashFundAddress/?: Vec<u8>
 ```
 
 The funds will be stored under:
+
 ```
 /\$NAMAddress/balance/\$SlashFundAddress: u64
 ```
 
 ### SlashFundAddress VP
+
 The slash_fund validity predicate will approve a transfer only if the transfer has been made by the protocol (by checking the existence of `/\$GovernanceAddress/pending/\$proposal_id` storage key)
 
 It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/main/shared/src/ledger/slash_fund/mod.rs#L70).
@@ -200,8 +225,10 @@ It is possible to check the actual implementation [here](https://github.com/anom
 ## Off-chain protocol
 
 ### Create proposal
-A CLI command to create a signed JSON representation of the proposal. The 
+
+A CLI command to create a signed JSON representation of the proposal. The
 JSON will have the following structure:
+
 ```
 {
   content: Base64<Vec<u8>>,
@@ -216,8 +243,9 @@ The signature is produced over the hash of the concatenation of: `content`, `aut
 
 ### Create vote
 
-A CLI command to create a signed JSON representation of a vote. The JSON 
+A CLI command to create a signed JSON representation of a vote. The JSON
 will have the following structure:
+
 ```
 {
   proposalHash: Base64<Vec<u8>>,
@@ -230,6 +258,7 @@ will have the following structure:
 The proposalHash is produced over the concatenation of: `content`, `author`, `votingStart`, `votingEnd`, `voter` and `vote`.
 
 ### Tally
+
 Same mechanism as [on chain](#tally) tally but instead of reading the data from storage it will require a list of serialized json votes.
 
 ## Interfaces

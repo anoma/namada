@@ -152,16 +152,5 @@ The commission rate $c_V(e)$ is the same for all delegations to a validator $V$ 
 While rewards are given out at the end of every epoch, voting power is only updated after the pipeline offset. According to the [proof-of-stake system](bonding-mechanism.md#epoched-data),  at the current epoch `e`, the validator sets an only be updated for epoch `e + pipeline_offset`, and it should remain unchanged from epoch `e` to `e + pipeline_offset - 1`. Updating voting power in the current epoch would violate this rule.
 
 
-## Slashes
-
-Slashes should lead to punishment for delegators who were contributing voting power to the validator at the height of the infraction, _as if_ the delegations were iterated over and slashed individually.
-
-This can be implemented as a negative inflation rate for a particular block.
-
-Instant redelegation is not supported. Redelegations must wait the unbonding period.
-
-<!--## State management
-
-Each $entry_{v,i}$ can be reference-counted by the number of delegations created during that epoch which might need to reference it. As soon as the number of delegations drops to zero, the entry can be deleted.-->
 
 

@@ -320,7 +320,7 @@ struct MintWrappedNam {
 ```
 
 If a user wishes to mint a wrapped Namada token on Ethereum, they must submit a transaction on Namada that:
-- stores `MintWrappedNam` on chain somewhere - TBD
+- stores `MintWrappedNam` on chain somewhere
 - sends the correct amount of Namada token to `#EthBridgeEscrow`
 
 Just as in redeeming Ethereum assets above, it is incumbent on the end user to
@@ -385,7 +385,7 @@ appropriate state change, emit logs, etc.
 ## Starting the bridge
 
 Before the bridge can start running, some storage may need to be initialized in 
-Namada. TBD.
+Namada. 
 
 ## Resources which may be helpful:
 - [Gravity Bridge Solidity contracts](https://github.com/Gravity-Bridge/Gravity-Bridge/tree/main/solidity)
@@ -393,5 +393,3 @@ Namada. TBD.
 - [Rainbow Bridge contracts](https://github.com/aurora-is-near/rainbow-bridge/tree/master/contracts)
 - [IBC in Solidity](https://github.com/hyperledger-labs/yui-ibc-solidity)
 
-Operational notes:
-1. We will bundle the Ethereum full node with the `namada` daemon executable.
