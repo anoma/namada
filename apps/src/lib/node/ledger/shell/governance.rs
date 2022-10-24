@@ -50,11 +50,12 @@ where
             })?;
 
         let votes = get_proposal_votes(&shell.storage, proposal_end_epoch, id);
-        let tally_result =
-            compute_tally(&shell.storage, proposal_end_epoch, votes);
+        let is_accepted = votes.and_then(|votes| {
+            compute_tally(&shell.storage, proposal_end_epoch, votes)
+        });
 
-        let transfer_address = match tally_result {
-            TallyResult::Passed => {
+        let transfer_address = match is_accepted {
+            Ok(true) => {
                 let proposal_author_key = gov_storage::get_author_key(id);
                 let proposal_author = shell
                     .read_storage_key::<Address>(&proposal_author_key)
@@ -161,7 +162,7 @@ where
                     }
                 }
             }
-            TallyResult::Rejected | TallyResult::Unknown => {
+            Ok(false) => {
                 let proposal_event: Event = ProposalEvent::new(
                     EventType::Proposal.to_string(),
                     TallyResult::Rejected,
@@ -172,6 +173,23 @@ where
                 .into();
                 response.events.push(proposal_event);
                 proposals_result.rejected.push(id);
+
+                slash_fund_address
+            }
+            Err(err) => {
+                tracing::error!(
+                    "Unexpectedly failed to tally proposal ID {id} with error \
+                     {err}"
+                );
+                let proposal_event: Event = ProposalEvent::new(
+                    EventType::Proposal.to_string(),
+                    TallyResult::Failed,
+                    id,
+                    false,
+                    false,
+                )
+                .into();
+                response.events.push(proposal_event);
 
                 slash_fund_address
             }

@@ -1056,10 +1056,7 @@ pub async fn is_validator(
     ledger_address: TendermintAddress,
 ) -> bool {
     let client = HttpClient::new(ledger_address).unwrap();
-    let key = pos::validator_state_key(address);
-    let state: Option<pos::ValidatorStates> =
-        query_storage_value(&client, &key).await;
-    state.is_some()
+    unwrap_client_response(RPC.vp().pos().is_validator(&client, address).await)
 }
 
 /// Check if a given address is a known delegator
@@ -1486,8 +1483,10 @@ pub async fn get_proposal_votes(
                 .expect("Vote key should contains the voting address.")
                 .clone();
             if vote.is_yay() && validators.contains(&voter_address) {
-                let amount =
-                    get_validator_stake(client, epoch, &voter_address).await;
+                let amount: VotePower =
+                    get_validator_stake(client, epoch, &voter_address)
+                        .await
+                        .into();
                 yay_validators.insert(voter_address, amount);
             } else if !validators.contains(&voter_address) {
                 let validator_address =
@@ -1561,12 +1560,13 @@ pub async fn get_proposal_offline_votes(
         if proposal_vote.vote.is_yay()
             && validators.contains(&proposal_vote.address)
         {
-            let amount = get_validator_stake(
+            let amount: VotePower = get_validator_stake(
                 client,
                 proposal.tally_epoch,
                 &proposal_vote.address,
             )
-            .await;
+            .await
+            .into();
             yay_validators.insert(proposal_vote.address, amount);
         } else if is_delegator_at(
             client,
@@ -1664,9 +1664,8 @@ pub async fn compute_tally(
     epoch: Epoch,
     votes: Votes,
 ) -> ProposalResult {
-    let validators = get_all_validators(client, epoch).await;
-    let total_stacked_tokens =
-        get_total_staked_tokes(client, epoch, &validators).await;
+    let total_staked_tokens: VotePower =
+        get_total_staked_tokens(client, epoch).await.into();
 
     let Votes {
         yay_validators,
@@ -1674,16 +1673,16 @@ pub async fn compute_tally(
         nay_delegators,
     } = votes;
 
-    let mut total_yay_stacked_tokens = VotePower::from(0_u64);
+    let mut total_yay_staked_tokens = VotePower::from(0_u64);
     for (_, amount) in yay_validators.clone().into_iter() {
-        total_yay_stacked_tokens += amount;
+        total_yay_staked_tokens += amount;
     }
 
     // YAY: Add delegator amount whose validator didn't vote / voted nay
     for (_, vote_map) in yay_delegators.iter() {
         for (validator_address, vote_power) in vote_map.iter() {
             if !yay_validators.contains_key(validator_address) {
-                total_yay_stacked_tokens += vote_power;
+                total_yay_staked_tokens += vote_power;
             }
         }
     }
@@ -1692,23 +1691,23 @@ pub async fn compute_tally(
     for (_, vote_map) in nay_delegators.iter() {
         for (validator_address, vote_power) in vote_map.iter() {
             if yay_validators.contains_key(validator_address) {
-                total_yay_stacked_tokens -= vote_power;
+                total_yay_staked_tokens -= vote_power;
             }
         }
     }
 
-    if total_yay_stacked_tokens >= (total_stacked_tokens / 3) * 2 {
+    if total_yay_staked_tokens >= (total_staked_tokens / 3) * 2 {
         ProposalResult {
             result: TallyResult::Passed,
-            total_voting_power: total_stacked_tokens,
-            total_yay_power: total_yay_stacked_tokens,
+            total_voting_power: total_staked_tokens,
+            total_yay_power: total_yay_staked_tokens,
             total_nay_power: 0,
         }
     } else {
         ProposalResult {
             result: TallyResult::Rejected,
-            total_voting_power: total_stacked_tokens,
-            total_yay_power: total_yay_stacked_tokens,
+            total_voting_power: total_staked_tokens,
+            total_yay_power: total_yay_staked_tokens,
             total_nay_power: 0,
         }
     }
@@ -1770,69 +1769,42 @@ pub async fn get_bond_amount_at(
 pub async fn get_all_validators(
     client: &HttpClient,
     epoch: Epoch,
-) -> Vec<Address> {
-    let validator_set_key = pos::validator_set_key();
-    let validator_sets =
-        query_storage_value::<pos::ValidatorSets>(client, &validator_set_key)
-            .await
-            .expect("Validator set should always be set");
-    let validator_set = validator_sets
-        .get(epoch)
-        .expect("Validator set should be always set in the current epoch");
-    let all_validators = validator_set.active.union(&validator_set.inactive);
-    all_validators
-        .map(|validator| validator.address.clone())
-        .collect()
+) -> HashSet<Address> {
+    unwrap_client_response(
+        RPC.vp()
+            .pos()
+            .validator_addresses(client, &Some(epoch))
+            .await,
+    )
 }
 
-pub async fn get_total_staked_tokes(
+pub async fn get_total_staked_tokens(
     client: &HttpClient,
     epoch: Epoch,
-    validators: &[Address],
-) -> VotePower {
-    let mut total = VotePower::from(0_u64);
-
-    for validator in validators {
-        total += get_validator_stake(client, epoch, validator).await;
-    }
-    total
+) -> token::Amount {
+    unwrap_client_response(
+        RPC.vp().pos().total_stake(client, &Some(epoch)).await,
+    )
 }
 
 async fn get_validator_stake(
     client: &HttpClient,
     epoch: Epoch,
     validator: &Address,
-) -> VotePower {
-    let total_voting_power_key = pos::validator_total_deltas_key(validator);
-    let total_voting_power = query_storage_value::<pos::ValidatorTotalDeltas>(
-        client,
-        &total_voting_power_key,
+) -> token::Amount {
+    unwrap_client_response(
+        RPC.vp()
+            .pos()
+            .validator_stake(client, validator, &Some(epoch))
+            .await,
     )
-    .await
-    .expect("Total deltas should be defined");
-    let epoched_total_voting_power = total_voting_power.get(epoch);
-
-    VotePower::try_from(epoched_total_voting_power.unwrap_or_default())
-        .unwrap_or_default()
 }
 
 pub async fn get_delegators_delegation(
     client: &HttpClient,
     address: &Address,
-    _epoch: Epoch,
-) -> Vec<Address> {
-    let key = pos::bonds_for_source_prefix(address);
-    let bonds_iter = query_storage_prefix::<pos::Bonds>(client, &key).await;
-
-    let mut delegation_addresses: Vec<Address> = Vec::new();
-    if let Some(bonds) = bonds_iter {
-        for (key, _epoched_amount) in bonds {
-            let validator_address = pos::get_validator_address_from_bond(&key)
-                .expect("Delegation key should contain validator address.");
-            delegation_addresses.push(validator_address);
-        }
-    }
-    delegation_addresses
+) -> HashSet<Address> {
+    unwrap_client_response(RPC.vp().pos().delegations(client, address).await)
 }
 
 pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
