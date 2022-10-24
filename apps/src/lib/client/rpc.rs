@@ -46,7 +46,7 @@ use crate::facade::tendermint_rpc::{
 /// Query the epoch of the last committed block
 pub async fn query_epoch(args: args::Query) -> Epoch {
     let client = HttpClient::new(args.ledger_address).unwrap();
-    let epoch = unwrap_client_response(RPC.epoch(&client).await);
+    let epoch = unwrap_client_response(RPC.shell().epoch(&client).await);
     println!("Last committed epoch: {}", epoch);
     epoch
 }
@@ -54,10 +54,12 @@ pub async fn query_epoch(args: args::Query) -> Epoch {
 /// Query the raw bytes of given storage key
 pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let bytes = unwrap_client_response(
-        RPC.storage_value(&client, &args.storage_key).await,
+    let response = unwrap_client_response(
+        RPC.shell()
+            .storage_value(&client, None, None, false, &args.storage_key)
+            .await,
     );
-    match bytes {
+    match response.data {
         Some(bytes) => println!("Found data: 0x{}", HEXLOWER.encode(&bytes)),
         None => println!("No data found for key {}", args.storage_key),
     }
@@ -1032,8 +1034,7 @@ pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
     let client = HttpClient::new(ledger_address.clone()).unwrap();
     let (data, height, prove) = (Some(tx_bytes), None, false);
     let result = unwrap_client_response(
-        RPC.dry_run_tx_with_options(&client, data, height, prove)
-            .await,
+        RPC.shell().dry_run_tx(&client, data, height, prove).await,
     )
     .data;
     println!("Dry-run result: {}", result);
@@ -1248,8 +1249,12 @@ pub async fn query_storage_value<T>(
 where
     T: BorshDeserialize,
 {
-    let bytes = unwrap_client_response(RPC.storage_value(client, key).await);
-    bytes.map(|bytes| {
+    let response = unwrap_client_response(
+        RPC.shell()
+            .storage_value(client, None, None, false, key)
+            .await,
+    );
+    response.data.map(|bytes| {
         T::try_from_slice(&bytes[..]).unwrap_or_else(|err| {
             eprintln!("Error decoding the value: {}", err);
             cli::safe_exit(1)
@@ -1267,7 +1272,11 @@ pub async fn query_storage_prefix<T>(
 where
     T: BorshDeserialize,
 {
-    let values = unwrap_client_response(RPC.storage_prefix(client, key).await);
+    let values = unwrap_client_response(
+        RPC.shell()
+            .storage_prefix(client, None, None, false, key)
+            .await,
+    );
     let decode =
         |PrefixValue { key, value }: PrefixValue| match T::try_from_slice(
             &value[..],
@@ -1281,10 +1290,10 @@ where
             }
             Ok(value) => Some((key, value)),
         };
-    if values.is_empty() {
+    if values.data.is_empty() {
         None
     } else {
-        Some(values.into_iter().filter_map(decode))
+        Some(values.data.into_iter().filter_map(decode))
     }
 }
 
@@ -1293,7 +1302,7 @@ pub async fn query_has_storage_key(
     client: &HttpClient,
     key: &storage::Key,
 ) -> bool {
-    unwrap_client_response(RPC.storage_has_key(client, key).await)
+    unwrap_client_response(RPC.shell().storage_has_key(client, key).await)
 }
 
 /// Represents a query for an event pertaining to the specified transaction
