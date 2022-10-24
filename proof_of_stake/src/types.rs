@@ -315,20 +315,9 @@ pub struct VoteInfo {
     /// from tendermint
     pub validator_address: Vec<u8>,
     /// validator voting power
-    pub validator_vp: VotingPower,
-    /// whether the validator signature was included in the last block
+    pub validator_vp: u64,
+    /// was the validator signature was included in the last block?
     pub signed_last_block: bool,
-}
-
-impl From<tendermint_proto::abci::VoteInfo> for VoteInfo {
-    fn from(info: tendermint_proto::abci::VoteInfo) -> VoteInfo {
-        let val_info = info.validator.clone().unwrap();
-        VoteInfo {
-            validator_address: info.validator.unwrap().address,
-            validator_vp: VotingPower::from(val_info.power as u64),
-            signed_last_block: info.signed_last_block,
-        }
-    }
 }
 
 /// Derive Tendermint raw hash from the public key
