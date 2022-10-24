@@ -1000,7 +1000,7 @@ pub trait PosBase {
         &mut self,
         epoch: impl Into<Epoch>,
         proposer_address: &Self::Address,
-        votes: &Vec<VoteInfo>,
+        votes: &[VoteInfo],
     ) -> Result<(), InflationError> {
         // TODO: all values collected here need to be consistent with the same
         // block that the voting info corresponds to, which is the
@@ -1071,7 +1071,7 @@ pub trait PosBase {
         // update the reward accumulators
         let mut validator_accumulators = self
             .read_consensus_validator_rewards_accumulator()
-            .unwrap_or_else(|| HashMap::<Self::Address, Decimal>::new());
+            .unwrap_or_default();
         for validator in validators.active.iter() {
             let mut rewards_frac = Decimal::default();
             let stake: Decimal = validator.bonded_stake.into();
@@ -1458,7 +1458,7 @@ where
             let consensus_key =
                 Epoched::init_at_genesis(consensus_key.clone(), current_epoch);
             let commission_rate = Epoched::init_at_genesis(
-                commission_rate.clone(),
+                *commission_rate,
                 current_epoch,
             );
             let state = Epoched::init_at_genesis(
@@ -1485,7 +1485,7 @@ where
                 address: address.clone(),
                 consensus_key,
                 commission_rate,
-                max_commission_rate_change: max_commission_rate_change.clone(),
+                max_commission_rate_change: *max_commission_rate_change,
                 state,
                 deltas,
                 bond: (bond_id, bond),
