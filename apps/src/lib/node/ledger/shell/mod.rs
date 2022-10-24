@@ -788,6 +788,7 @@ mod test_utils {
                 },
                 byzantine_validators: vec![],
                 txs: vec![],
+                #[cfg(feature = "abcipp")]
                 proposer_address: vec![],
                 votes: vec![],
             }
