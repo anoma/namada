@@ -7,6 +7,7 @@ use std::fmt::Display;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use hex::FromHex;
 use thiserror::Error;
+use tiny_keccak::{Hasher, Keccak};
 
 use crate::types::hash::{Hash, HASH_LENGTH};
 
@@ -26,6 +27,7 @@ pub enum TryFromError {
 #[derive(
     Clone,
     Debug,
+    Default,
     PartialEq,
     Eq,
     Hash,
@@ -88,6 +90,17 @@ impl TryFrom<&str> for KeccakHash {
     }
 }
 
+/// Hash bytes using Keccak
+pub fn keccak_hash(bytes: &[u8]) -> KeccakHash {
+    let mut output = [0; 32];
+
+    let mut hasher = Keccak::v256();
+    hasher.update(bytes);
+    hasher.finalize(&mut output);
+
+    KeccakHash(output)
+}
+
 /// This module defines encoding methods compatible with Ethereum
 /// smart contracts.
 pub mod encode {
@@ -112,13 +125,7 @@ pub mod encode {
         /// Encodes a slice of [`Token`] instances, and returns the
         /// keccak hash of the encoded string.
         fn keccak256(&self) -> KeccakHash {
-            let mut output = [0; 32];
-
-            let mut state = Keccak::v256();
-            state.update(self.encode().as_slice());
-            state.finalize(&mut output);
-
-            KeccakHash(output)
+            keccak_hash(self.encode().as_slice())
         }
 
         /// Encodes a slice of [`Token`] instances, and returns the

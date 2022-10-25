@@ -177,6 +177,10 @@ where
             tracing::debug!("The bridge pools escrow was not credited.");
             return Ok(false);
         }
+        tracing::info!(
+            "The Ethereum bridge pool VP accepted the transfer {:?}.",
+            transfer
+        );
 
         Ok(true)
     }

@@ -11,7 +11,6 @@ pub mod write_log;
 use core::fmt::Debug;
 use std::array;
 
-use tendermint::merkle::proof::Proof;
 use thiserror::Error;
 
 use super::parameters;
@@ -25,6 +24,7 @@ pub use crate::ledger::storage::merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
 use crate::ledger::storage::traits::StorageHasher;
+use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 #[cfg(feature = "ferveo-tpke")]
@@ -506,7 +506,12 @@ where
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
     }
 
-    /// Get the existence proof
+    /// Get a Tendermint-compatible existence proof.
+    ///
+    /// Proofs from the Ethereum bridge pool are not
+    /// Tendermint-compatible. Requesting for a key
+    /// belonging to the bridge pool will cause this
+    /// method to error.
     pub fn get_existence_proof(
         &self,
         key: &Key,
@@ -514,27 +519,37 @@ where
         height: BlockHeight,
     ) -> Result<Proof> {
         if height >= self.get_block_height().0 {
-            let MembershipProof::ICS23(proof) = self
+            if let MembershipProof::ICS23(proof) = self
                 .block
                 .tree
                 .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
-                .map_err(Error::MerkleTreeError)?;
-            self.block
-                .tree
-                .get_tendermint_proof(key, proof)
-                .map_err(Error::MerkleTreeError)
+                .map_err(Error::MerkleTreeError)?
+            {
+                self.block
+                    .tree
+                    .get_tendermint_proof(key, proof)
+                    .map_err(Error::MerkleTreeError)
+            } else {
+                Err(Error::MerkleTreeError(MerkleTreeError::TendermintProof))
+            }
         } else {
             match self.db.read_merkle_tree_stores(height)? {
                 Some(stores) => {
                     let tree = MerkleTree::<H>::new(stores);
-                    let MembershipProof::ICS23(proof) = tree
+                    if let MembershipProof::ICS23(proof) = tree
                         .get_sub_tree_existence_proof(
                             array::from_ref(key),
                             vec![value],
                         )
-                        .map_err(Error::MerkleTreeError)?;
-                    tree.get_tendermint_proof(key, proof)
-                        .map_err(Error::MerkleTreeError)
+                        .map_err(Error::MerkleTreeError)?
+                    {
+                        tree.get_tendermint_proof(key, proof)
+                            .map_err(Error::MerkleTreeError)
+                    } else {
+                        Err(Error::MerkleTreeError(
+                            MerkleTreeError::TendermintProof,
+                        ))
+                    }
                 }
                 None => Err(Error::NoMerkleTree { height }),
             }

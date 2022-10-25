@@ -15,8 +15,10 @@ use thiserror::Error;
 #[cfg(feature = "ferveo-tpke")]
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
+use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::ledger::storage::IBC_KEY_LIMIT;
 use crate::types::address::{self, Address};
+use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
 
@@ -31,8 +33,8 @@ pub enum Error {
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
-    #[error("Could not parse string: '{0}' into requested type: {1}")]
-    ParseError(String, String),
+    #[error("Could not parse string into a key segment: {0}")]
+    ParseError(String),
 }
 
 /// Result for functions that may fail
@@ -245,6 +247,8 @@ impl FromStr for Key {
 pub enum MerkleValue {
     /// raw bytes
     Bytes(Vec<u8>),
+    /// A transfer to be put in the Ethereum bridge pool.
+    BridgePoolTransfer(PendingTransfer),
 }
 
 impl<T> From<T> for MerkleValue
@@ -253,6 +257,12 @@ where
 {
     fn from(bytes: T) -> Self {
         Self::Bytes(bytes.as_ref().to_owned())
+    }
+}
+
+impl From<PendingTransfer> for MerkleValue {
+    fn from(transfer: PendingTransfer) -> Self {
+        Self::BridgePoolTransfer(transfer)
     }
 }
 
@@ -339,11 +349,19 @@ impl From<TreeBytes> for Vec<u8> {
 pub enum MembershipProof {
     /// ICS23 compliant membership proof
     ICS23(CommitmentProof),
+    /// Bespoke membership proof for the Ethereum bridge pool
+    BridgePool(BridgePoolProof),
 }
 
 impl From<CommitmentProof> for MembershipProof {
     fn from(proof: CommitmentProof) -> Self {
         Self::ICS23(proof)
+    }
+}
+
+impl From<BridgePoolProof> for MembershipProof {
+    fn from(proof: BridgePoolProof) -> Self {
+        Self::BridgePool(proof)
     }
 }
 
@@ -603,6 +621,22 @@ impl KeySeg for Address {
 
     fn to_db_key(&self) -> DbKeySeg {
         DbKeySeg::AddressSeg(self.clone())
+    }
+}
+
+impl KeySeg for Hash {
+    fn parse(seg: String) -> Result<Self> {
+        seg.try_into().map_err(|e: crate::types::hash::Error| {
+            Error::ParseError(e.to_string())
+        })
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
     }
 }
 

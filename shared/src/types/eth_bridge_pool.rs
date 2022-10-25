@@ -1,9 +1,12 @@
 //! The necessary type definitions for the contents of the
 //! Ethereum bridge pool
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use ethabi::token::Token;
 
 use crate::types::address::Address;
 use crate::types::ethereum_events::{EthAddress, Uint};
+use crate::types::keccak::encode::Encode;
+use crate::types::storage::{DbKeySeg, Key};
 use crate::types::token::Amount;
 
 /// A transfer message to be submitted to Ethereum
@@ -17,6 +20,7 @@ use crate::types::token::Amount;
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
 )]
 pub struct TransferToEthereum {
     /// The type of token
@@ -40,6 +44,7 @@ pub struct TransferToEthereum {
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
 )]
 pub struct PendingTransfer {
     /// The message to send to Ethereum to
@@ -47,6 +52,28 @@ pub struct PendingTransfer {
     /// The amount of gas fees (in NAM)
     /// paid by the user sending this transfer
     pub gas_fee: GasFee,
+}
+
+impl Encode for PendingTransfer {
+    fn tokenize(&self) -> Vec<Token> {
+        let from = Token::Address(self.transfer.asset.0.into());
+        let fee = Token::Uint(u64::from(self.gas_fee.amount).into());
+        let to = Token::Address(self.transfer.recipient.0.into());
+        let amount = Token::Uint(u64::from(self.transfer.amount).into());
+        let fee_from = Token::String(self.gas_fee.payer.to_string());
+        let nonce = Token::Uint(self.transfer.nonce.clone().into());
+        vec![from, fee, to, amount, fee_from, nonce]
+    }
+}
+
+impl From<&PendingTransfer> for Key {
+    fn from(transfer: &PendingTransfer) -> Self {
+        Key {
+            segments: vec![DbKeySeg::StringSeg(
+                transfer.keccak256().to_string(),
+            )],
+        }
+    }
 }
 
 /// The amount of NAM to be payed to the relayer of
@@ -61,6 +88,7 @@ pub struct PendingTransfer {
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
 )]
 pub struct GasFee {
     /// The amount of fees (in NAM)

@@ -411,7 +411,8 @@ mod tests {
             // Use the tx_env to run PoS VP
             let tx_env = tx_host_env::take();
             let vp_env = TestNativeVpEnv::new(tx_env);
-            let result = vp_env.validate_tx(PosVP::new, |_tx_data| {});
+            let result: Result<bool, namada::ledger::pos::vp::Error> =
+                vp_env.validate_tx(PosVP::new, |_tx_data| {});
             // Put the tx_env back before checking the result
             tx_host_env::set(vp_env.tx_env);
             let result =

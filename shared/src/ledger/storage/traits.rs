@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 
 use super::merkle_tree::{Amt, Error, Smt};
 use super::{ics23_specs, IBC_KEY_LIMIT};
+use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolTree;
 use crate::types::hash::Hash;
 use crate::types::storage::{
     Key, MembershipProof, MerkleValue, StringKey, TreeBytes,
@@ -59,7 +60,10 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
             return Err(Error::Ics23MultiLeaf);
         }
         let key: &Key = &keys[0];
-        let MerkleValue::Bytes(value) = values.remove(0);
+        let value = match values.remove(0) {
+            MerkleValue::Bytes(b) => b,
+            _ => return Err(Error::InvalidValue),
+        };
         let cp = self.membership_proof(&H::hash(key.to_string()).into())?;
         // Replace the values and the leaf op for the verification
         match cp.proof.expect("The proof should exist") {
@@ -86,6 +90,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
     ) -> Result<Hash, Error> {
         let value = match value {
             MerkleValue::Bytes(bytes) => H::hash(bytes.as_slice()),
+            _ => return Err(Error::InvalidValue),
         };
         self.update(H::hash(key.to_string()).into(), value.into())
             .map(Hash::from)
@@ -144,6 +149,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
         let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
         let value = match value {
             MerkleValue::Bytes(bytes) => TreeBytes::from(bytes),
+            _ => return Err(Error::InvalidValue),
         };
         self.update(key, value)
             .map(Into::into)
@@ -156,6 +162,51 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
         self.update(key, value)
             .map(Hash::from)
             .map_err(|err| Error::MerkleTree(format!("{:?}", err)))
+    }
+}
+
+impl<'a> SubTreeRead for &'a BridgePoolTree {
+    fn subtree_has_key(&self, key: &Key) -> Result<bool, Error> {
+        self.contains_key(key)
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+
+    fn subtree_membership_proof(
+        &self,
+        _: &[Key],
+        values: Vec<MerkleValue>,
+    ) -> Result<MembershipProof, Error> {
+        let values = values
+            .into_iter()
+            .filter_map(|val| match val {
+                MerkleValue::BridgePoolTransfer(transfer) => Some(transfer),
+                _ => None,
+            })
+            .collect();
+        self.get_membership_proof(values)
+            .map(Into::into)
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+}
+
+impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
+    fn subtree_update(
+        &mut self,
+        key: &Key,
+        value: MerkleValue,
+    ) -> Result<Hash, Error> {
+        if let MerkleValue::BridgePoolTransfer(_) = value {
+            self.insert_key(key)
+                .map_err(|err| Error::MerkleTree(err.to_string()))
+        } else {
+            Err(Error::InvalidValue)
+        }
+    }
+
+    fn subtree_delete(&mut self, key: &Key) -> Result<Hash, Error> {
+        self.delete_key(key)
+            .map_err(|err| Error::MerkleTree(err.to_string()))?;
+        Ok(self.root())
     }
 }
 
