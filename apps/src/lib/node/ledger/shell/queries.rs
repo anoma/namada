@@ -1216,7 +1216,6 @@ mod test_queries {
         );
         let proof = tree
             .get_membership_proof(
-                std::array::from_ref(&Key::from(&transfer)),
                 vec![transfer],
             )
             .expect("Test failed");
