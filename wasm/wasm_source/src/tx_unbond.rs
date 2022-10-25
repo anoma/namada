@@ -207,8 +207,8 @@ mod tests {
                 "The total deltas at and after the unbonding offset must have \
                  changed - checking in epoch: {epoch}"
             );
-            assert_ne!(
-                validator_sets_post.get(epoch),
+            assert_eq!(
+                validator_sets_pre.get(epoch),
                 validator_sets_post.get(epoch),
                 "Validator set at and after pipeline offset must have changed \
                  - checking epoch {epoch}"
