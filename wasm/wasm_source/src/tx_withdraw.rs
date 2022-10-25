@@ -73,13 +73,10 @@ mod tests {
     ) -> TxResult {
         let is_delegation = matches!(
             &withdraw.source, Some(source) if *source != withdraw.validator);
-        let staking_reward_address = address::testing::established_address_1();
         let consensus_key = key::testing::keypair_1().ref_to();
-        let staking_reward_key = key::testing::keypair_2().ref_to();
 
         let genesis_validators = [GenesisValidator {
             address: withdraw.validator.clone(),
-            staking_reward_address,
             tokens: if is_delegation {
                 // If we're withdrawing a delegation, we'll give the initial
                 // stake to the delegation instead of the
@@ -89,7 +86,6 @@ mod tests {
                 initial_stake
             },
             consensus_key,
-            staking_reward_key,
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));

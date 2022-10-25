@@ -107,11 +107,6 @@ pub trait PosReadOnly {
 
     /// Read PoS parameters.
     fn read_pos_params(&self) -> Result<PosParams, Self::Error>;
-    /// Read PoS validator's staking reward address.
-    fn read_validator_staking_reward_address(
-        &self,
-        key: &Self::Address,
-    ) -> Result<Option<Self::Address>, Self::Error>;
     /// Read PoS validator's consensus key (used for signing block votes).
     fn read_validator_consensus_key(
         &self,
@@ -185,13 +180,6 @@ pub trait PosActions: PosReadOnly {
         &mut self,
         address: &Self::Address,
         consensus_key: &Self::PublicKey,
-    ) -> Result<(), Self::Error>;
-    /// Write PoS validator's staking reward address, into which staking rewards
-    /// will be credited.
-    fn write_validator_staking_reward_address(
-        &mut self,
-        key: &Self::Address,
-        value: Self::Address,
     ) -> Result<(), Self::Error>;
     /// Write PoS validator's consensus key (used for signing block votes).
     fn write_validator_consensus_key(
@@ -267,7 +255,6 @@ pub trait PosActions: PosReadOnly {
     fn become_validator(
         &mut self,
         address: &Self::Address,
-        staking_reward_address: &Self::Address,
         consensus_key: &Self::PublicKey,
         current_epoch: impl Into<Epoch>,
     ) -> Result<(), Self::BecomeValidatorError> {
@@ -276,13 +263,6 @@ pub trait PosActions: PosReadOnly {
         let mut validator_set = self.read_validator_set()?;
         if self.is_validator(address)? {
             Err(BecomeValidatorError::AlreadyValidator(address.clone()))?;
-        }
-        if address == staking_reward_address {
-            Err(
-                BecomeValidatorError::StakingRewardAddressEqValidatorAddress(
-                    address.clone(),
-                ),
-            )?;
         }
         let consensus_key_clone = consensus_key.clone();
         let BecomeValidatorData {
@@ -297,10 +277,6 @@ pub trait PosActions: PosReadOnly {
             &mut validator_set,
             current_epoch,
         );
-        self.write_validator_staking_reward_address(
-            address,
-            staking_reward_address.clone(),
-        )?;
         self.write_validator_consensus_key(address, consensus_key)?;
         self.write_validator_state(address, state)?;
         self.write_validator_set(validator_set)?;
@@ -626,13 +602,6 @@ pub trait PosBase {
         address: &Self::Address,
         consensus_key: &Self::PublicKey,
     );
-    /// Write PoS validator's staking reward address, into which staking rewards
-    /// will be credited.
-    fn write_validator_staking_reward_address(
-        &mut self,
-        key: &Self::Address,
-        value: &Self::Address,
-    );
     /// Write PoS validator's consensus key (used for signing block votes).
     fn write_validator_consensus_key(
         &mut self,
@@ -674,12 +643,6 @@ pub trait PosBase {
     fn write_validator_set(&mut self, value: &ValidatorSets<Self::Address>);
     /// Read PoS total voting power of all validators (active and inactive).
     fn write_total_voting_power(&mut self, value: &TotalVotingPowers);
-    /// Initialize staking reward account with the given public key.
-    fn init_staking_reward_account(
-        &mut self,
-        address: &Self::Address,
-        pk: &Self::PublicKey,
-    );
     /// Credit tokens to the `target` account. This should only be used at
     /// genesis.
     fn credit_tokens(
@@ -727,9 +690,7 @@ pub trait PosBase {
         for res in validators {
             let GenesisValidatorData {
                 ref address,
-                staking_reward_address,
                 consensus_key,
-                staking_reward_key,
                 state,
                 total_deltas,
                 voting_power,
@@ -741,19 +702,11 @@ pub trait PosBase {
                     .get(current_epoch)
                     .expect("Consensus key must be set"),
             );
-            self.write_validator_staking_reward_address(
-                address,
-                &staking_reward_address,
-            );
             self.write_validator_consensus_key(address, &consensus_key);
             self.write_validator_state(address, &state);
             self.write_validator_total_deltas(address, &total_deltas);
             self.write_validator_voting_power(address, &voting_power);
             self.write_bond(&bond_id, &bond);
-            self.init_staking_reward_account(
-                &staking_reward_address,
-                &staking_reward_key,
-            );
         }
         self.write_validator_set(&validator_set);
         self.write_total_voting_power(&total_voting_power);
@@ -955,11 +908,6 @@ pub enum GenesisError {
 pub enum BecomeValidatorError<Address: Display + Debug> {
     #[error("The given address {0} is already a validator")]
     AlreadyValidator(Address),
-    #[error(
-        "The staking reward address must be different from the validator's \
-         address {0}"
-    )]
-    StakingRewardAddressEqValidatorAddress(Address),
 }
 
 #[allow(missing_docs)]
@@ -1104,9 +1052,7 @@ where
     PK: Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema,
 {
     address: Address,
-    staking_reward_address: Address,
     consensus_key: ValidatorConsensusKeys<PK>,
-    staking_reward_key: PK,
     state: ValidatorStates,
     total_deltas: ValidatorTotalDeltas<TokenChange>,
     voting_power: ValidatorVotingPowers,
@@ -1205,11 +1151,8 @@ where
     let validators = validators.map(
         move |GenesisValidator {
                   address,
-                  staking_reward_address,
-
                   tokens,
                   consensus_key,
-                  staking_reward_key,
               }| {
             let consensus_key =
                 Epoched::init_at_genesis(consensus_key.clone(), current_epoch);
@@ -1240,9 +1183,7 @@ where
             );
             Ok(GenesisValidatorData {
                 address: address.clone(),
-                staking_reward_address: staking_reward_address.clone(),
                 consensus_key,
-                staking_reward_key: staking_reward_key.clone(),
                 state,
                 total_deltas,
                 voting_power,
