@@ -23,6 +23,11 @@ use super::{
 use crate::types::ethereum_events::EthAddress;
 use crate::types::keccak::encode::Encode;
 
+/// The provided constant is for a traditional
+/// signature on this curve. For Ethereum, an extra byte is included
+/// that prevents malleability attacks.
+pub const SIGNATURE_LENGTH: usize = libsecp256k1::util::SIGNATURE_SIZE + 1;
+
 /// secp256k1 public key
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PublicKey(pub libsecp256k1::PublicKey);
@@ -308,7 +313,7 @@ impl Serialize for Signature {
         // TODO: implement the line below, currently cannot support [u8; 64]
         // serde::Serialize::serialize(&arr, serializer)
 
-        let mut seq = serializer.serialize_tuple(arr.len())?;
+        let mut seq = serializer.serialize_tuple(arr.len() + 1)?;
         for elem in &arr[..] {
             seq.serialize_element(elem)?;
         }
@@ -325,12 +330,13 @@ impl<'de> Deserialize<'de> for Signature {
         struct ByteArrayVisitor;
 
         impl<'de> Visitor<'de> for ByteArrayVisitor {
-            type Value = [u8; libsecp256k1::util::SIGNATURE_SIZE + 1];
+            type Value = [u8; SIGNATURE_LENGTH];
+
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str(&format!(
                     "an array of length {}",
-                    libsecp256k1::util::SIGNATURE_SIZE
+                    SIGNATURE_LENGTH,
                 ))
             }
 
@@ -338,9 +344,9 @@ impl<'de> Deserialize<'de> for Signature {
             where
                 A: SeqAccess<'de>,
             {
-                let mut arr = [0u8; libsecp256k1::util::SIGNATURE_SIZE + 1];
+                let mut arr = [0u8; SIGNATURE_LENGTH];
                 #[allow(clippy::needless_range_loop)]
-                for i in 0..libsecp256k1::util::SIGNATURE_SIZE + 1 {
+                for i in 0..SIGNATURE_LENGTH {
                     arr[i] = seq
                         .next_element()?
                         .ok_or_else(|| Error::invalid_length(i, &self))?;
@@ -349,10 +355,8 @@ impl<'de> Deserialize<'de> for Signature {
             }
         }
 
-        let arr_res = deserializer.deserialize_tuple(
-            libsecp256k1::util::SIGNATURE_SIZE + 1,
-            ByteArrayVisitor,
-        )?;
+        let arr_res = deserializer
+            .deserialize_tuple(SIGNATURE_LENGTH, ByteArrayVisitor)?;
         let sig_array: [u8; 64] = arr_res[..64].try_into().unwrap();
         let sig = libsecp256k1::Signature::parse_standard(&sig_array)
             .map_err(D::Error::custom);
@@ -586,15 +590,18 @@ impl super::SigScheme for SigScheme {
 mod test {
     use super::*;
 
+    /// test vector from https://bitcoin.stackexchange.com/a/89848
+    const SECRET_KEY_HEX: &str =
+        "c2c72dfbff11dfb4e9d5b0a20c620c58b15bb7552753601f043db91331b0db15";
+
+    /// Test that we can recover an Ethereum address from
+    /// a public secp key.
     #[test]
     fn test_eth_address_from_secp() {
-        // test vector from https://bitcoin.stackexchange.com/a/89848
-        let sk_hex =
-            "c2c72dfbff11dfb4e9d5b0a20c620c58b15bb7552753601f043db91331b0db15";
         let expected_pk_hex = "a225bf565ff4ea039bccba3e26456e910cd74e4616d67ee0a166e26da6e5e55a08d0fa1659b4b547ba7139ca531f62907b9c2e72b80712f1c81ece43c33f4b8b";
         let expected_eth_addr_hex = "6ea27154616a29708dce7650b475dd6b82eba6a3";
 
-        let sk_bytes = hex::decode(sk_hex).unwrap();
+        let sk_bytes = hex::decode(SECRET_KEY_HEX).unwrap();
         let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
         let pk: PublicKey = sk.ref_to();
         // We're removing the first byte with
@@ -605,5 +612,35 @@ mod test {
         let eth_addr: EthAddress = (&pk).into();
         let eth_addr_hex = hex::encode(eth_addr.0);
         assert_eq!(expected_eth_addr_hex, eth_addr_hex);
+    }
+
+    /// Test serializing and then de-serializing a signature
+    /// with Serde is idempotent.
+    #[test]
+    fn test_roundtrip_serde() {
+        let sk_bytes = hex::decode(SECRET_KEY_HEX).unwrap();
+        let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
+        let to_sign = "test".as_bytes();
+        let mut signature = SigScheme::sign(&sk, to_sign);
+        signature.1 = RecoveryId::parse(3).expect("Test failed");
+        let sig_json = serde_json::to_string(&signature).expect("Test failed");
+        let sig: Signature =
+            serde_json::from_str(&sig_json).expect("Test failed");
+        assert_eq!(sig, signature)
+    }
+
+    /// Test serializing and then de-serializing a signature
+    /// with Borsh is idempotent.
+    #[test]
+    fn test_roundtrip_borsh() {
+        let sk_bytes = hex::decode(SECRET_KEY_HEX).unwrap();
+        let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
+        let to_sign = "test".as_bytes();
+        let mut signature = SigScheme::sign(&sk, to_sign);
+        signature.1 = RecoveryId::parse(3).expect("Test failed");
+        let sig_bytes = signature.try_to_vec().expect("Test failed");
+        let sig = Signature::try_from_slice(sig_bytes.as_slice())
+            .expect("Test failed");
+        assert_eq!(sig, signature);
     }
 }

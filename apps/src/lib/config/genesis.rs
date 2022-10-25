@@ -44,6 +44,7 @@ pub mod genesis_config {
         EstablishedAccount, Genesis, ImplicitAccount, TokenAccount, Validator,
     };
     use crate::cli;
+    use crate::config::ethereum_bridge;
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct HexString(pub String);
@@ -121,6 +122,9 @@ pub mod genesis_config {
         pub gov_params: GovernanceParamsConfig,
         // Treasury parameters
         pub treasury_params: TreasuryParamasConfig,
+        // Ethereum bridge config
+        pub ethereum_bridge_params:
+            Option<ethereum_bridge::params::GenesisConfig>,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }
