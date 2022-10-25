@@ -166,17 +166,6 @@ mod macros {
                 Ok($crate::ledger::storage::types::decode(value).unwrap())
             }
 
-            fn read_validator_staking_reward_address(
-                &self,
-                key: &Self::Address,
-            ) -> std::result::Result<Option<Self::Address>, Self::Error> {
-                let value = $crate::ledger::storage_api::StorageRead::read_bytes(
-                    self,
-                    &validator_staking_reward_address_key(key),
-                )?;
-                Ok(value.map(|value| $crate::ledger::storage::types::decode(value).unwrap()))
-            }
-
             fn read_validator_consensus_key(
                 &self,
                 key: &Self::Address,

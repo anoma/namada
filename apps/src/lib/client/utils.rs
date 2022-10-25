@@ -475,10 +475,7 @@ pub fn init_network(
 
         // Generate account and reward addresses
         let address = address::gen_established_address("validator account");
-        let reward_address =
-            address::gen_established_address("validator reward account");
         config.address = Some(address.to_string());
-        config.staking_reward_address = Some(reward_address.to_string());
 
         // Generate the consensus, account and reward keys, unless they're
         // pre-defined.
@@ -510,24 +507,6 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-account-key", name);
             println!("Generating validator {} account key...", name);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                unsafe_dont_encrypt,
-            );
-            keypair.ref_to()
-        });
-
-        let staking_reward_pk = try_parse_public_key(
-            format!("validator {name} staking reward key"),
-            &config.staking_reward_public_key,
-        )
-        .unwrap_or_else(|| {
-            let alias = format!("{}-reward-key", name);
-            println!(
-                "Generating validator {} staking reward account key...",
-                name
-            );
             let (_alias, keypair) = wallet.gen_key(
                 SchemeType::Ed25519,
                 Some(alias),
@@ -583,8 +562,6 @@ pub fn init_network(
             Some(genesis_config::HexString(consensus_pk.to_string()));
         config.account_public_key =
             Some(genesis_config::HexString(account_pk.to_string()));
-        config.staking_reward_public_key =
-            Some(genesis_config::HexString(staking_reward_pk.to_string()));
 
         config.protocol_public_key =
             Some(genesis_config::HexString(protocol_pk.to_string()));
@@ -593,7 +570,6 @@ pub fn init_network(
 
         // Write keypairs to wallet
         wallet.add_address(name.clone(), address);
-        wallet.add_address(format!("{}-reward", &name), reward_address);
 
         wallet.save().unwrap();
     });
@@ -939,9 +915,6 @@ pub fn init_genesis_validator(
                 )),
                 account_public_key: Some(HexString(
                     pre_genesis.account_key.ref_to().to_string(),
-                )),
-                staking_reward_public_key: Some(HexString(
-                    pre_genesis.rewards_key.ref_to().to_string(),
                 )),
                 protocol_public_key: Some(HexString(
                     pre_genesis
