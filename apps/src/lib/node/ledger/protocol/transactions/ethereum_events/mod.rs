@@ -288,7 +288,7 @@ mod tests {
         let seen_by_bytes = seen_by_bytes.unwrap();
         assert_eq!(
             Votes::try_from_slice(&seen_by_bytes)?,
-            Votes::from([(sole_validator.clone(), BlockHeight(100))])
+            Votes::from([(sole_validator, BlockHeight(100))])
         );
 
         let (voting_power_bytes, _) =

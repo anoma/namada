@@ -74,7 +74,7 @@ mod tests {
         };
         let expected = EthMsgUpdate {
             body: event,
-            seen_by: Votes::from([(sole_validator.clone(), BlockHeight(100))]),
+            seen_by: Votes::from([(sole_validator, BlockHeight(100))]),
         };
 
         let update: EthMsgUpdate = with_signers.into();
