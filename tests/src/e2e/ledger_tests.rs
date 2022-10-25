@@ -18,13 +18,14 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use namada::types::token;
+use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
 use serde_json::json;
 use setup::constants::*;
 
-use super::setup::working_dir;
+use super::setup::{disable_eth_fullnode, working_dir};
 use crate::e2e::helpers::{
     find_address, find_voting_power, get_actor_rpc, get_epoch,
 };
@@ -37,6 +38,9 @@ use crate::{run, run_as};
 #[test]
 fn run_ledger() -> Result<()> {
     let test = setup::single_node_net()?;
+
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
     // Start the ledger as a validator
@@ -68,20 +72,26 @@ fn test_node_connectivity() -> Result<()> {
     let test =
         setup::network(|genesis| setup::add_validators(1, genesis), None)?;
 
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(1));
+
     // 1. Run 2 genesis validator ledger nodes and 1 non-validator node
     let args = ["ledger"];
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Anoma ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
+    validator_0.exp_string("Starting RPC HTTP server on")?;
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
     validator_1.exp_string("Anoma ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
+    validator_1.exp_string("Starting RPC HTTP server on")?;
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
     non_validator.exp_string("This node is a fullnode")?;
+    non_validator.exp_string("Starting RPC HTTP server on")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
@@ -109,6 +119,7 @@ fn test_node_connectivity() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -134,11 +145,14 @@ fn test_node_connectivity() -> Result<()> {
 fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
     let test = setup::single_node_net()?;
 
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
 
     // 2. Kill the tendermint node
     sleep(1);
@@ -169,6 +183,8 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 #[test]
 fn run_ledger_load_state_and_reset() -> Result<()> {
     let test = setup::single_node_net()?;
+
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
 
     // 1. Run the ledger node
     let mut ledger =
@@ -237,11 +253,13 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 fn ledger_txs_and_queries() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
     let _bg_ledger = ledger.background();
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
@@ -409,12 +427,13 @@ fn ledger_txs_and_queries() -> Result<()> {
 fn invalid_transactions() -> Result<()> {
     let test = setup::single_node_net()?;
 
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger.exp_string("Anoma ledger node started")?;
-    // Wait to commit a block
-    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
 
     let bg_ledger = ledger.background();
 
@@ -536,8 +555,6 @@ fn invalid_transactions() -> Result<()> {
 /// 7. Submit a withdrawal of the self-bond
 /// 8. Submit a withdrawal of the delegation
 #[test]
-#[ignore]
-// TODO(namada#418): re-enable once working again
 fn pos_bonds() -> Result<()> {
     let unbonding_len = 2;
     let test = setup::network(
@@ -562,11 +579,13 @@ fn pos_bonds() -> Result<()> {
         None,
     )?;
 
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -589,6 +608,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -611,6 +631,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -632,6 +653,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -654,6 +676,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -695,6 +718,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -715,6 +739,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -731,8 +756,6 @@ fn pos_bonds() -> Result<()> {
 /// 6. Wait for the pipeline epoch
 /// 7. Check the new validator's voting power
 #[test]
-#[ignore]
-// TODO(namada#418): re-enable once working again
 fn pos_init_validator() -> Result<()> {
     let pipeline_len = 1;
     let test = setup::network(
@@ -757,11 +780,13 @@ fn pos_init_validator() -> Result<()> {
         None,
     )?;
 
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -786,6 +811,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -811,6 +837,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
     //     Then self-bond the tokens:
@@ -832,6 +859,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -856,6 +884,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -876,6 +905,7 @@ fn pos_init_validator() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -919,11 +949,13 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         Some("10s"),
     )?);
 
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
@@ -998,10 +1030,10 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 /// 12. Wait proposal grace and check proposal author funds
 /// 13. Check governance address funds are 0
 #[test]
-#[ignore]
-// TODO(namada#418): re-enable once working again
 fn proposal_submission() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
+
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
 
     let anomac_help = vec!["--help"];
 
@@ -1013,7 +1045,7 @@ fn proposal_submission() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1037,6 +1069,7 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1082,6 +1115,7 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1238,6 +1272,7 @@ fn proposal_submission() -> Result<()> {
         submit_proposal_vote,
         Some(15)
     )?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1255,6 +1290,7 @@ fn proposal_submission() -> Result<()> {
 
     let mut client =
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1274,6 +1310,7 @@ fn proposal_submission() -> Result<()> {
     // this is valid because the client filter ALBERT delegation and there are
     // none
     let mut client = run!(test, Bin::Client, submit_proposal_vote, Some(15))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1353,16 +1390,16 @@ fn proposal_submission() -> Result<()> {
 /// 3. Create an offline vote
 /// 4. Tally offline
 #[test]
-#[ignore]
-// TODO(namada#418): re-enable once working again
 fn proposal_offline() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
+
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
 
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server on")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1386,6 +1423,7 @@ fn proposal_offline() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1516,8 +1554,6 @@ fn generate_proposal_json(
 /// 4. Submit a valid token transfer tx from one validator to the other
 /// 5. Check that all the nodes processed the tx with the same result
 #[test]
-#[ignore]
-// TODO(namada#418): re-enable once working again
 fn test_genesis_validators() -> Result<()> {
     use std::collections::HashMap;
     use std::net::SocketAddr;
@@ -1766,6 +1802,8 @@ fn test_genesis_validators() -> Result<()> {
 
     // We have to update the ports in the configs again, because the ones from
     // `join-network` use the defaults
+    //
+    // TODO: use `update_actor_config` from `setup`, instead
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
         config.ledger.tendermint.p2p_address.set_port(first_port);
@@ -1775,6 +1813,8 @@ fn test_genesis_validators() -> Result<()> {
             .rpc_address
             .set_port(first_port + 1);
         config.ledger.shell.ledger_address.set_port(first_port + 2);
+        // disable eth full node
+        config.ledger.ethereum_bridge.mode = ethereum_bridge::ledger::Mode::Off;
         config
     };
 
@@ -1808,16 +1848,19 @@ fn test_genesis_validators() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Anoma ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
+    validator_0.exp_string("Starting RPC HTTP server on")?;
 
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
     validator_1.exp_string("Anoma ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
+    validator_1.exp_string("Starting RPC HTTP server on")?;
 
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
     non_validator.exp_string("This node is a fullnode")?;
+    non_validator.exp_string("Starting RPC HTTP server on")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
@@ -1846,6 +1889,7 @@ fn test_genesis_validators() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
