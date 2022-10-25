@@ -525,8 +525,10 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let mut config = Config::default();
-        config.min_confirmations = 100;
+        let config = Config {
+            min_confirmations: 100,
+            ..Config::default()
+        };
         let oracle =
             start_with_default_config(oracle, control_sender, config).await;
         // Increase height above the configured minimum confirmations
@@ -570,8 +572,10 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let mut config = Config::default();
-        config.min_confirmations = 100;
+        let config = Config {
+            min_confirmations: 100,
+            ..Config::default()
+        };
         let oracle =
             start_with_default_config(oracle, control_sender, config).await;
         // Increase height above the configured minimum confirmations
@@ -629,8 +633,10 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let mut config = Config::default();
-        config.min_confirmations = 100;
+        let config = Config {
+            min_confirmations: 100,
+            ..Config::default()
+        };
         let oracle =
             start_with_default_config(oracle, control_sender, config).await;
         // Increase height above the configured minimum confirmations

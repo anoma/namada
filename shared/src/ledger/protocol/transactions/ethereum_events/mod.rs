@@ -247,7 +247,7 @@ mod tests {
             nonce: arbitrary_nonce(),
             transfers: vec![TransferToNamada {
                 amount,
-                asset: asset.clone(),
+                asset,
                 receiver: receiver.clone(),
             }],
         };
