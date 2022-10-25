@@ -23,13 +23,13 @@ build-test:
 	$(cargo) build --tests
 
 build-release:
-	NAMADA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
+	$(cargo) build --release --package namada_apps --manifest-path Cargo.toml
 
 install-release:
-	NAMADA_DEV=false $(cargo) install --path ./apps --locked
+	$(cargo) install --path ./apps --locked
 
 check-release:
-	NAMADA_DEV=false $(cargo) check --release --package namada_apps
+	$(cargo) check --release --package namada_apps
 
 package: build-release
 	scripts/make-package.sh
@@ -55,13 +55,13 @@ check-mainnet:
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
-	NAMADA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
+	$(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
 clippy-abcipp:
-	NAMADA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
+	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
 		--features "std testing abcipp" && \
@@ -86,7 +86,7 @@ clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
 install: tendermint
-	NAMADA_DEV=false $(cargo) install --path ./apps --locked
+	$(cargo) install --path ./apps --locked
 
 tendermint:
 	./scripts/get_tendermint.sh

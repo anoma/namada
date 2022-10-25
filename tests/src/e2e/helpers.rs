@@ -295,7 +295,6 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
             .manifest_path(manifest_path)
             // Explicitly disable dev, in case it's enabled when a test is
             // invoked
-            .env("NAMADA_DEV", "false")
             .bin(bin_name);
 
         let build_cmd = if run_debug {

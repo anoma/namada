@@ -48,10 +48,6 @@ Guide.
 ```shell
 # Build the provided validity predicate and transaction wasm modules
 make build-wasm-scripts-docker
-
-# Development (debug) build Namada, which includes a validator and some default 
-# accounts, whose keys and addresses are available in the wallet
-NAMADA_DEV=true make
 ```
 
 ### Before submitting a PR, pls make sure to run the following

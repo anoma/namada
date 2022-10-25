@@ -443,10 +443,7 @@ fn start_abci_broadcaster_shell(
     // Construct our ABCI application.
     let tendermint_mode = config.tendermint.tendermint_mode.clone();
     let ledger_address = config.shell.ledger_address;
-    #[cfg(not(feature = "dev"))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
-    #[cfg(feature = "dev")]
-    let genesis = genesis::genesis();
     let (shell, abci_service) = AbcippShim::new(
         config,
         wasm_dir,

@@ -270,47 +270,24 @@ where
         // load in keys and address from wallet if mode is set to `Validator`
         let mode = match mode {
             TendermintMode::Validator => {
-                #[cfg(not(feature = "dev"))]
-                {
-                    let wallet_path = &base_dir.join(chain_id.as_str());
-                    let genesis_path =
-                        &base_dir.join(format!("{}.toml", chain_id.as_str()));
-                    tracing::debug!(
-                        "{}",
-                        wallet_path.as_path().to_str().unwrap()
-                    );
-                    let wallet = wallet::Wallet::load_or_new_from_genesis(
-                        wallet_path,
-                        genesis::genesis_config::open_genesis_config(
-                            genesis_path,
-                        )
+                let wallet_path = &base_dir.join(chain_id.as_str());
+                let genesis_path =
+                    &base_dir.join(format!("{}.toml", chain_id.as_str()));
+                tracing::debug!("{}", wallet_path.as_path().to_str().unwrap());
+                let wallet = wallet::Wallet::load_or_new_from_genesis(
+                    wallet_path,
+                    genesis::genesis_config::open_genesis_config(genesis_path)
                         .unwrap(),
-                    );
-                    wallet
-                        .take_validator_data()
-                        .map(|data| ShellMode::Validator {
-                            data,
-                            broadcast_sender,
-                        })
-                        .expect(
-                            "Validator data should have been stored in the \
-                             wallet",
-                        )
-                }
-                #[cfg(feature = "dev")]
-                {
-                    let validator_keys = wallet::defaults::validator_keys();
-                    ShellMode::Validator {
-                        data: wallet::ValidatorData {
-                            address: wallet::defaults::validator_address(),
-                            keys: wallet::ValidatorKeys {
-                                protocol_keypair: validator_keys.0,
-                                dkg_keypair: Some(validator_keys.1),
-                            },
-                        },
+                );
+                wallet
+                    .take_validator_data()
+                    .map(|data| ShellMode::Validator {
+                        data,
                         broadcast_sender,
-                    }
-                }
+                    })
+                    .expect(
+                        "Validator data should have been stored in the wallet",
+                    )
             }
             TendermintMode::Full => ShellMode::Full,
             TendermintMode::Seed => ShellMode::Seed,

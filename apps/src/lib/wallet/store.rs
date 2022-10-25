@@ -82,14 +82,14 @@ pub enum LoadStoreError {
 }
 
 impl Store {
-    #[cfg(not(feature = "dev"))]
+    #[cfg(not(test))]
     fn new(genesis: GenesisConfig) -> Self {
         let mut store = Self::default();
         store.add_genesis_addresses(genesis);
         store
     }
 
-    #[cfg(feature = "dev")]
+    #[cfg(test)]
     fn new() -> Self {
         let mut store = Self::default();
         // Pre-load the default keys without encryption
@@ -148,9 +148,9 @@ impl Store {
         genesis_cfg: GenesisConfig,
     ) -> Result<Self, LoadStoreError> {
         Self::load(store_dir).or_else(|_| {
-            #[cfg(not(feature = "dev"))]
+            #[cfg(not(test))]
             let store = Self::new(genesis_cfg);
-            #[cfg(feature = "dev")]
+            #[cfg(test)]
             let store = {
                 // The function is unused in dev
                 let _ = genesis_cfg;
@@ -756,7 +756,7 @@ pub fn gen_sk(scheme: SchemeType) -> common::SecretKey {
     }
 }
 
-#[cfg(all(test, feature = "dev"))]
+#[cfg(test)]
 mod test_wallet {
     use super::*;
 

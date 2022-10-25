@@ -215,8 +215,6 @@ impl ChainContext {
     }
 
     /// Get the wasm directory configured for the chain.
-    ///
-    /// TODO(Tomas): Note that in "dev" build, this may be the root `wasm` dir.
     pub fn wasm_dir(&self) -> PathBuf {
         self.config.ledger.chain_dir().join(&self.config.wasm_dir)
     }

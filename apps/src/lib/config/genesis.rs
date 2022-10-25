@@ -1,7 +1,6 @@
 //! The parameters used for the chain's genesis
 
 use std::collections::HashMap;
-#[cfg(not(feature = "dev"))]
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -12,9 +11,7 @@ use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{GenesisValidator, PosParams};
 use namada::types::address::Address;
-#[cfg(not(feature = "dev"))]
-use namada::types::chain::ChainId;
-use namada::types::chain::ProposalBytes;
+use namada::types::chain::{ChainId, ProposalBytes};
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
@@ -849,145 +846,11 @@ pub struct Parameters {
     pub wrapper_tx_fees: Option<token::Amount>,
 }
 
-#[cfg(not(feature = "dev"))]
 pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
     let path = base_dir
         .as_ref()
         .join(format!("{}.toml", chain_id.as_str()));
     genesis_config::read_genesis_config(path)
-}
-#[cfg(feature = "dev")]
-pub fn genesis() -> Genesis {
-    use namada::types::address;
-    use rust_decimal_macros::dec;
-
-    use crate::wallet;
-
-    let vp_implicit_path = "vp_implicit.wasm";
-    let vp_token_path = "vp_token.wasm";
-    let vp_user_path = "vp_user.wasm";
-
-    // NOTE When the validator's key changes, tendermint must be reset with
-    // `namada reset` command. To generate a new validator, use the
-    // `tests::gen_genesis_validator` below.
-    let consensus_keypair = wallet::defaults::validator_keypair();
-    let account_keypair = wallet::defaults::validator_keypair();
-    let address = wallet::defaults::validator_address();
-    let (protocol_keypair, dkg_keypair) = wallet::defaults::validator_keys();
-    let validator = Validator {
-        pos_data: GenesisValidator {
-            address,
-            tokens: token::Amount::whole(200_000),
-            consensus_key: consensus_keypair.ref_to(),
-            commission_rate: dec!(0.05),
-            max_commission_rate_change: dec!(0.01),
-        },
-        account_key: account_keypair.ref_to(),
-        protocol_key: protocol_keypair.ref_to(),
-        dkg_public_key: dkg_keypair.public(),
-        non_staked_balance: token::Amount::whole(100_000),
-        // TODO replace with https://github.com/anoma/namada/issues/25)
-        validator_vp_code_path: vp_user_path.into(),
-        validator_vp_sha256: Default::default(),
-    };
-    let parameters = Parameters {
-        epoch_duration: EpochDuration {
-            min_num_of_blocks: 10,
-            min_duration: namada::types::time::Duration::seconds(600).into(),
-        },
-        max_expected_time_per_block: namada::types::time::DurationSecs(30),
-        max_proposal_bytes: Default::default(),
-        vp_whitelist: vec![],
-        tx_whitelist: vec![],
-        implicit_vp_code_path: vp_implicit_path.into(),
-        implicit_vp_sha256: Default::default(),
-        epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
-                                   * per epoch (60 = min_duration) */
-        pos_gain_p: dec!(0.1),
-        pos_gain_d: dec!(0.1),
-        staked_ratio: dec!(0.0),
-        pos_inflation_amount: 0,
-        wrapper_tx_fees: Some(token::Amount::whole(0)),
-    };
-    let albert = EstablishedAccount {
-        address: wallet::defaults::albert_address(),
-        vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::albert_keypair().ref_to()),
-        storage: HashMap::default(),
-    };
-    let bertha = EstablishedAccount {
-        address: wallet::defaults::bertha_address(),
-        vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::bertha_keypair().ref_to()),
-        storage: HashMap::default(),
-    };
-    let christel = EstablishedAccount {
-        address: wallet::defaults::christel_address(),
-        vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::christel_keypair().ref_to()),
-        storage: HashMap::default(),
-    };
-    let masp = EstablishedAccount {
-        address: namada::types::address::masp(),
-        vp_code_path: "vp_masp.wasm".into(),
-        vp_sha256: Default::default(),
-        public_key: None,
-        storage: HashMap::default(),
-    };
-    let implicit_accounts = vec![ImplicitAccount {
-        public_key: wallet::defaults::daewon_keypair().ref_to(),
-    }];
-    let default_user_tokens = token::Amount::whole(1_000_000);
-    let default_key_tokens = token::Amount::whole(1_000);
-    let balances: HashMap<Address, token::Amount> = HashMap::from_iter([
-        // established accounts' balances
-        (wallet::defaults::albert_address(), default_user_tokens),
-        (wallet::defaults::bertha_address(), default_user_tokens),
-        (wallet::defaults::christel_address(), default_user_tokens),
-        // implicit accounts' balances
-        (wallet::defaults::daewon_address(), default_user_tokens),
-        // implicit accounts derived from public keys balances
-        (
-            bertha.public_key.as_ref().unwrap().into(),
-            default_key_tokens,
-        ),
-        (
-            albert.public_key.as_ref().unwrap().into(),
-            default_key_tokens,
-        ),
-        (
-            christel.public_key.as_ref().unwrap().into(),
-            default_key_tokens,
-        ),
-        ((&validator.account_key).into(), default_key_tokens),
-    ]);
-    let token_accounts = address::tokens()
-        .into_keys()
-        .map(|address| TokenAccount {
-            address,
-            vp_code_path: vp_token_path.into(),
-            vp_sha256: Default::default(),
-            balances: balances.clone(),
-        })
-        .collect();
-    Genesis {
-        genesis_time: DateTimeUtc::now(),
-        validators: vec![validator],
-        established_accounts: vec![albert, bertha, christel, masp],
-        implicit_accounts,
-        token_accounts,
-        parameters,
-        pos_params: PosParams::default(),
-        gov_params: GovParams::default(),
-        native_token: address::nam(),
-        #[cfg(not(feature = "mainnet"))]
-        faucet_pow_difficulty: None,
-        #[cfg(not(feature = "mainnet"))]
-        faucet_withdrawal_limit: None,
-    }
 }
 
 #[cfg(test)]

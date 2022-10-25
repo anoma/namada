@@ -82,13 +82,6 @@ pub async fn run(
     let tendermint_path = from_env_or_default()?;
     let mode = config.tendermint_mode.to_str().to_owned();
 
-    #[cfg(feature = "dev")]
-    // This has to be checked before we run tendermint init
-    let has_validator_key = {
-        let path = home_dir.join("config").join("priv_validator_key.json");
-        Path::new(&path).exists()
-    };
-
     // init and run a tendermint node child process
     let output = Command::new(&tendermint_path)
         .args(["init", &mode, "--home", &home_dir_string])
@@ -99,14 +92,6 @@ pub async fn run(
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
 
-    #[cfg(feature = "dev")]
-    {
-        let consensus_key = crate::wallet::defaults::validator_keypair();
-        // write the validator key file if it didn't already exist
-        if !has_validator_key {
-            write_validator_key_async(&home_dir, &consensus_key).await;
-        }
-    }
     #[cfg(feature = "abcipp")]
     write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
     #[cfg(not(feature = "abcipp"))]
@@ -321,9 +306,7 @@ async fn update_tendermint_config(
     config.p2p.pex = tendermint_config.p2p_pex;
     config.p2p.allow_duplicate_ip = tendermint_config.p2p_allow_duplicate_ip;
 
-    // In "dev", only produce blocks when there are txs or when the AppHash
-    // changes
-    config.consensus.create_empty_blocks = true; // !cfg!(feature = "dev");
+    config.consensus.create_empty_blocks = true;
 
     // We set this to true as we don't want any invalid tx be re-applied. This
     // also implies that it's not possible for an invalid tx to become valid
