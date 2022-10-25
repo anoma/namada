@@ -349,6 +349,7 @@ mod test_bridge_pool_tree {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([1; 20]),
+                sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
                 amount: 1.into(),
                 nonce: 42u64.into(),
@@ -372,6 +373,7 @@ mod test_bridge_pool_tree {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
                     asset: EthAddress([i; 20]),
+                    sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
                     nonce: 42u64.into(),
@@ -400,6 +402,7 @@ mod test_bridge_pool_tree {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
                     asset: EthAddress([i; 20]),
+                    sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
                     nonce: 42u64.into(),
@@ -434,6 +437,7 @@ mod test_bridge_pool_tree {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([1; 20]),
+                sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
                 amount: 1.into(),
                 nonce: 42u64.into(),
@@ -460,6 +464,7 @@ mod test_bridge_pool_tree {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
                     asset: EthAddress([i; 20]),
+                    sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
                     nonce: 42u64.into(),
@@ -490,6 +495,7 @@ mod test_bridge_pool_tree {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([1; 20]),
+                sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
                 amount: 1u64.into(),
                 nonce: 42u64.into(),
@@ -513,6 +519,7 @@ mod test_bridge_pool_tree {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([1; 20]),
+                sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
                 amount: 1u64.into(),
                 nonce: 42u64.into(),
@@ -548,6 +555,7 @@ mod test_bridge_pool_tree {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([1; 20]),
+                sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
                 amount: 1.into(),
                 nonce: 42u64.into(),
@@ -565,6 +573,7 @@ mod test_bridge_pool_tree {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([1; 20]),
+                sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
                 amount: 1u64.into(),
                 nonce: 42u64.into(),
@@ -596,6 +605,7 @@ mod test_bridge_pool_tree {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
+                sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
                 amount: 0.into(),
                 nonce: 0.into(),
@@ -624,6 +634,7 @@ mod test_bridge_pool_tree {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
                     asset: EthAddress([i; 20]),
+                    sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
                     nonce: 42u64.into(),
@@ -653,6 +664,7 @@ mod test_bridge_pool_tree {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
                     asset: EthAddress([i; 20]),
+                    sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
                     nonce: 42u64.into(),
@@ -682,6 +694,7 @@ mod test_bridge_pool_tree {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
                     asset: EthAddress([i; 20]),
+                    sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
                     nonce: 42u64.into(),
@@ -709,6 +722,7 @@ mod test_bridge_pool_tree {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
                     asset: EthAddress([i; 20]),
+                    sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
                     nonce: 42u64.into(),
@@ -736,6 +750,7 @@ mod test_bridge_pool_tree {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
                     asset: EthAddress([i; 20]),
+                    sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
                     nonce: 42u64.into(),
@@ -763,6 +778,7 @@ mod test_bridge_pool_tree {
             let transfer = PendingTransfer {
                 transfer: TransferToEthereum {
                     asset: EthAddress([i; 20]),
+                    sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
                     nonce: 42u64.into(),
@@ -797,6 +813,7 @@ mod test_bridge_pool_tree {
                     .map(|(addr, nonce)| PendingTransfer {
                         transfer: TransferToEthereum {
                             asset: EthAddress(addr),
+                            sender: bertha_address(),
                             recipient: EthAddress(addr),
                             amount: Default::default(),
                             nonce: nonce.into(),
