@@ -1,16 +1,20 @@
 //! Configuration for an oracle.
 use namada::types::ethereum_events::EthAddress;
 
-/// Configuration for an [`Oracle`].
+/// Configuration for an oracle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Config {
+    /// The minimum number of block confirmations an Ethereum block must have
+    /// before it will be checked for bridge events.
     pub min_confirmations: u64,
+    /// The Ethereum address of the current bridge contract.
     pub mint_contract: EthAddress,
+    /// The Ethereum address of the current governance contract.
     pub governance_contract: EthAddress,
 }
 
 // TODO: this production Default implementation is temporary, there should be no
-//  default config - initialization should always be from storage
+//  default config - initialization should always be from storage.
 impl std::default::Default for Config {
     fn default() -> Self {
         Self {

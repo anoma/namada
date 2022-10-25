@@ -67,8 +67,8 @@ impl Drop for Oracle {
 }
 
 impl Oracle {
-    /// Construct a new [`Oracle`]. Note that it will not start until it has
-    /// been configured via the passed in `control` channel.
+    /// Construct a new [`Oracle`]. Note that it can not do anything until it
+    /// has been sent a configuration via the passed in `control` channel.
     pub fn new(
         url: &str,
         sender: BoundedSender<EthereumEvent>,
@@ -117,7 +117,7 @@ async fn await_initial_configuration(
 ) -> Option<Config> {
     match receiver.recv().await {
         Some(cmd) => match cmd {
-            control::Command::Initialize { config } => Some(config),
+            control::Command::SendConfig { config } => Some(config),
         },
         None => None,
     }
@@ -415,7 +415,7 @@ mod test_oracle {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
         control_sender
-            .send(control::Command::Initialize { config })
+            .send(control::Command::SendConfig { config })
             .await
             .unwrap();
         handle

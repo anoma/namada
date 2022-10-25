@@ -240,7 +240,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     // storage, rather than using a hardcoded config
     if let Some(oracle_control_sender) = oracle_control_sender {
         if let Err(error) = oracle_control_sender
-            .send(oracle::control::Command::Initialize {
+            .send(oracle::control::Command::SendConfig {
                 config: oracle::config::Config::default(),
             })
             .await
