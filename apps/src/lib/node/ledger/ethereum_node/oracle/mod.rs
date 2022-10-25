@@ -410,14 +410,13 @@ mod test_oracle {
     async fn start_with_default_config(
         oracle: Oracle,
         control_sender: tokio::sync::mpsc::Sender<control::Command>,
+        config: Config,
     ) -> JoinHandle<()> {
         let handle = std::thread::spawn(move || {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
         control_sender
-            .send(control::Command::Initialize {
-                config: Config::default(),
-            })
+            .send(control::Command::Initialize { config })
             .await
             .unwrap();
         handle
@@ -470,7 +469,12 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let oracle = start_with_default_config(oracle, control_sender).await;
+        let oracle = start_with_default_config(
+            oracle,
+            control_sender,
+            Config::default(),
+        )
+        .await;
         admin_channel
             .send(TestCmd::Unresponsive)
             .expect("Test failed");
@@ -490,7 +494,12 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let oracle = start_with_default_config(oracle, control_sender).await;
+        let oracle = start_with_default_config(
+            oracle,
+            control_sender,
+            Config::default(),
+        )
+        .await;
         admin_channel
             .send(TestCmd::NewHeight(Uint256::from(150u32)))
             .expect("Test failed");
@@ -517,7 +526,12 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let oracle = start_with_default_config(oracle, control_sender).await;
+        let oracle = start_with_default_config(
+            oracle,
+            control_sender,
+            Config::default(),
+        )
+        .await;
         // Increase height above [`MIN_CONFIRMATIONS`]
         admin_channel
             .send(TestCmd::NewHeight(100u32.into()))
@@ -559,7 +573,12 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let oracle = start_with_default_config(oracle, control_sender).await;
+        let oracle = start_with_default_config(
+            oracle,
+            control_sender,
+            Config::default(),
+        )
+        .await;
         // Increase height above [`MIN_CONFIRMATIONS`]
         admin_channel
             .send(TestCmd::NewHeight(100u32.into()))
@@ -615,7 +634,12 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let oracle = start_with_default_config(oracle, control_sender).await;
+        let oracle = start_with_default_config(
+            oracle,
+            control_sender,
+            Config::default(),
+        )
+        .await;
         // Increase height above [`MIN_CONFIRMATIONS`]
         admin_channel
             .send(TestCmd::NewHeight(100u32.into()))
@@ -725,13 +749,15 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let min_confirmations = 100u64; // TODO
-        let oracle = start_with_default_config(oracle, control_sender).await;
+        let config = Config::default();
+        let oracle =
+            start_with_default_config(oracle, control_sender, config).await;
 
         // set the height of the chain such that there are some blocks deep
         // enough to be considered confirmed by the oracle
         let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
-        let synced_block_height = min_confirmations + confirmed_block_height;
+        let synced_block_height =
+            config.min_confirmations + confirmed_block_height;
         for height in 0..synced_block_height + 1 {
             admin_channel
                 .send(TestCmd::NewHeight(Uint256::from(height)))
@@ -787,11 +813,13 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let min_confirmations = 100u64; // TODO
-        let oracle = start_with_default_config(oracle, control_sender).await;
+        let config = Config::default();
+        let oracle =
+            start_with_default_config(oracle, control_sender, config).await;
 
         let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
-        let synced_block_height = min_confirmations + confirmed_block_height;
+        let synced_block_height =
+            config.min_confirmations + confirmed_block_height;
         admin_channel
             .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
             .expect("Test failed");
