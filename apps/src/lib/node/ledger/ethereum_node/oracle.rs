@@ -195,6 +195,7 @@ pub fn run_oracle(
 /// It also checks that once the specified number of confirmations
 /// is reached, an event is forwarded to the ledger process
 async fn run_oracle_aux(mut oracle: Oracle) {
+    tracing::info!("Oracle is awaiting initial configuration");
     match oracle.await_initial_configuration().await {
         Some(config) => {
             tracing::info!(?config, "Oracle received initial configuration")
