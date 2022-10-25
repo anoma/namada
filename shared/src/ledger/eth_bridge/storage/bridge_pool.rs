@@ -268,7 +268,6 @@ pub struct BridgePoolProof {
     pub proof: Vec<KeccakHash>,
     /// The leaves; must be sorted
     pub leaves: Vec<PendingTransfer>,
-    /// Flags to indicate how to combine hashes.
     /// Flags are used to indicate which consecutive
     /// pairs of leaves in `leaves` are siblings.
     pub flags: Vec<bool>,
