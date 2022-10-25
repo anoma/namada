@@ -8,6 +8,7 @@ pub mod validation;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 
+use crate::types::address::Address;
 use crate::types::storage::{self, BlockHash, BlockHeight, Epoch};
 
 /// Common storage read interface
@@ -96,6 +97,9 @@ pub trait StorageRead<'iter> {
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch>;
+
+    /// Get the native token address
+    fn get_native_token(&self) -> Result<Address>;
 }
 
 /// Common storage write interface

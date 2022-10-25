@@ -193,8 +193,6 @@ where
     /// The id of the current chain
     #[allow(dead_code)]
     chain_id: ChainId,
-    /// The address of the native token
-    native_token: Address,
     /// The persistent storage
     pub(super) storage: Storage<D, H>,
     /// Gas meter for the current block
@@ -245,7 +243,8 @@ where
                 .expect("Creating directory for Anoma should not fail");
         }
         // load last state from storage
-        let mut storage = Storage::open(db_path, chain_id.clone(), db_cache);
+        let mut storage =
+            Storage::open(db_path, chain_id.clone(), native_token, db_cache);
         storage
             .load_last_state()
             .map_err(|e| {
@@ -308,7 +307,6 @@ where
 
         Self {
             chain_id,
-            native_token,
             storage,
             gas_meter: BlockGasMeter::default(),
             write_log: WriteLog::default(),

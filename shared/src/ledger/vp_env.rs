@@ -13,6 +13,7 @@ use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
 use crate::proto::Tx;
+use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::key::common;
 use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key};
@@ -432,6 +433,19 @@ where
     let (epoch, gas) = storage.get_current_epoch();
     add_gas(gas_meter, gas)?;
     Ok(epoch)
+}
+
+/// Getting the chain ID.
+pub fn get_native_token<DB, H>(
+    gas_meter: &mut VpGasMeter,
+    storage: &Storage<DB, H>,
+) -> EnvResult<Address>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    add_gas(gas_meter, MIN_STORAGE_GAS)?;
+    Ok(storage.native_token.clone())
 }
 
 /// Storage prefix iterator, ordered by storage keys. It will try to get an

@@ -228,6 +228,10 @@ where
     fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
         self.ctx.get_block_epoch()
     }
+
+    fn get_native_token(&self) -> Result<Address, storage_api::Error> {
+        Ok(self.ctx.storage.native_token.clone())
+    }
 }
 
 impl<'view, 'a, DB, H, CA> StorageRead<'view>
@@ -308,6 +312,10 @@ where
 
     fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
         self.ctx.get_block_epoch()
+    }
+
+    fn get_native_token(&self) -> Result<Address, storage_api::Error> {
+        Ok(self.ctx.storage.native_token.clone())
     }
 }
 

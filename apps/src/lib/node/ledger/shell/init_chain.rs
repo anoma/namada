@@ -222,7 +222,7 @@ where
             // Account balance (tokens no staked in PoS)
             self.storage
                 .write(
-                    &token::balance_key(&self.native_token, addr),
+                    &token::balance_key(&self.storage.native_token, addr),
                     validator
                         .non_staked_balance
                         .try_to_vec()

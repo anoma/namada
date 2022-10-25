@@ -12,7 +12,7 @@ use super::wasm::TxCache;
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
-use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter, MIN_STORAGE_GAS};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_env;
@@ -1555,6 +1555,28 @@ where
     Ok(epoch.0)
 }
 
+/// Get the native token's address
+pub fn tx_get_native_token<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+    result_ptr: u64,
+) -> TxResult<()>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let storage = unsafe { env.ctx.storage.get() };
+    tx_add_gas(env, MIN_STORAGE_GAS)?;
+    let native_token = storage.native_token.clone();
+    let native_token_bytes = native_token.try_to_vec().unwrap();
+    let gas = env
+        .memory
+        .write_bytes(result_ptr, native_token_bytes)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_add_gas(env, gas)
+}
+
 /// Getting the chain ID function exposed to the wasm VM VP environment.
 pub fn vp_get_chain_id<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
@@ -1802,6 +1824,29 @@ where
     Ok(eval_runner
         .eval(env.ctx.clone(), vp_code, input_data)
         .to_i64())
+}
+
+/// Get the native token's address
+pub fn vp_get_native_token<MEM, DB, H, EVAL, CA>(
+    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    result_ptr: u64,
+) -> vp_env::EnvResult<()>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+    CA: WasmCacheAccess,
+{
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    let storage = unsafe { env.ctx.storage.get() };
+    let native_token = vp_env::get_native_token(gas_meter, storage)?;
+    let native_token_bytes = native_token.try_to_vec().unwrap();
+    let gas = env
+        .memory
+        .write_bytes(result_ptr, native_token_bytes)
+        .map_err(|e| vp_env::RuntimeError::MemoryError(Box::new(e)))?;
+    vp_env::add_gas(gas_meter, gas)
 }
 
 /// Log a string from exposed to the wasm VM VP environment. The message will be

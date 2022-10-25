@@ -361,6 +361,10 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
     fn get_block_epoch(&self) -> Result<Epoch, Error> {
         get_block_epoch()
     }
+
+    fn get_native_token(&self) -> Result<Address, Error> {
+        get_native_token()
+    }
 }
 
 impl StorageRead<'_> for CtxPostStorageRead<'_> {
@@ -422,6 +426,10 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
     fn get_block_epoch(&self) -> Result<Epoch, Error> {
         get_block_epoch()
     }
+
+    fn get_native_token(&self) -> Result<Address, Error> {
+        get_native_token()
+    }
 }
 
 fn iter_prefix_impl(
@@ -473,4 +481,14 @@ fn get_block_hash() -> Result<BlockHash, Error> {
 
 fn get_block_epoch() -> Result<Epoch, Error> {
     Ok(Epoch(unsafe { anoma_vp_get_block_epoch() }))
+}
+
+fn get_native_token() -> Result<Address, Error> {
+    let result = Vec::with_capacity(address::ADDRESS_LEN);
+    unsafe {
+        anoma_vp_get_native_token(result.as_ptr() as _);
+    }
+    let slice =
+        unsafe { slice::from_raw_parts(result.as_ptr(), address::ADDRESS_LEN) };
+    Ok(Address::try_from_slice(slice).expect("Cannot decode native address"))
 }
