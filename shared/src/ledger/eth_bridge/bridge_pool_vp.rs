@@ -17,6 +17,8 @@ use eyre::eyre;
 use crate::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
+use crate::ledger::eth_bridge::storage::wrapped_erc20s;
+use crate::ledger::eth_bridge::vp::check_balance_changes;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
@@ -116,11 +118,29 @@ where
         };
 
         let pending_key = get_pending_key(&transfer);
+        // check that transfer is not already in the pool
+        match (&self.ctx).read_pre(&pending_key) {
+            Ok(Some(_)) => {
+                tracing::debug!(
+                    "Rejecting transaction as the transfer is already in the \
+                     Ethereum bridge pool."
+                );
+                return Ok(false);
+            }
+            Err(_) => {
+                return Err(eyre!(
+                    "Could not read the storage key associated with the \
+                     transfer."
+                )
+                .into());
+            }
+            _ => {}
+        }
         for key in keys_changed.iter().filter(|k| is_bridge_pool_key(k)) {
             if *key != pending_key {
                 tracing::debug!(
                     "Rejecting transaction as it is attempting to change an \
-                     incorrect key in the pending transaction pool: {}.\n \
+                     incorrect key in the Ethereum bridge pool: {}.\n \
                      Expected key: {}",
                     key,
                     pending_key
@@ -131,12 +151,12 @@ where
         let pending: PendingTransfer =
             (&self.ctx).read_post_value(&pending_key)?.ok_or(eyre!(
                 "Rejecting transaction as the transfer wasn't added to the \
-                 pending transfers"
+                 pool of pending transfers"
             ))?;
         if pending != transfer {
             tracing::debug!(
-                "An incorrect transfer was added to the pool: {:?}.\n \
-                 Expected: {:?}",
+                "An incorrect transfer was added to the Ethereum bridge pool: \
+                 {:?}.\n Expected: {:?}",
                 transfer,
                 pending
             );
@@ -164,13 +184,49 @@ where
                 return Ok(false);
             }
         } else {
-            tracing::debug!("The bridge pools escrow was not credited.");
+            tracing::debug!(
+                "The Ethereum bridge pool's gas escrow was not credited."
+            );
             return Ok(false);
         }
         tracing::info!(
             "The Ethereum bridge pool VP accepted the transfer {:?}.",
             transfer
         );
+
+        // check that the assets to be transferred were escrowed
+        let asset_key = wrapped_erc20s::Keys::from(&transfer.transfer.asset);
+        let owner_key = asset_key.balance(&transfer.transfer.sender);
+        let escrow_key = asset_key.balance(&BRIDGE_POOL_ADDRESS);
+        if keys_changed.contains(&owner_key)
+            && keys_changed.contains(&escrow_key)
+        {
+            match check_balance_changes(
+                &self.ctx,
+                (&escrow_key).try_into().expect("This should not fail"),
+                (&owner_key).try_into().expect("This should not fail"),
+            ) {
+                Ok(Some(delta))
+                    if delta
+                        == (
+                            transfer.transfer.sender,
+                            transfer.transfer.amount,
+                        ) => {}
+                _ => {
+                    tracing::debug!(
+                        "The assets of the transfer were not properly \
+                         escrowed into the Ethereum bridge pool."
+                    );
+                    return Ok(false);
+                }
+            }
+        } else {
+            tracing::debug!(
+                "The assets of the transfer were not properly escrowed into \
+                 the Ethereum bridge pool."
+            );
+            return Ok(false);
+        }
 
         Ok(true)
     }
@@ -226,6 +282,7 @@ mod test_bridge_pool_vp {
         PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
+                sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
                 amount: 0.into(),
                 nonce: 0u64.into(),
@@ -313,8 +370,9 @@ mod test_bridge_pool_vp {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
+                sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
-                amount: 100.into(),
+                amount: 0.into(),
                 nonce: 1u64.into(),
             },
             gas_fee: GasFee {
@@ -503,6 +561,7 @@ mod test_bridge_pool_vp {
                 let t = PendingTransfer {
                     transfer: TransferToEthereum {
                         asset: EthAddress([0; 20]),
+                        sender: bertha_address(),
                         recipient: EthAddress([1; 20]),
                         amount: 100.into(),
                         nonce: 10u64.into(),
@@ -531,6 +590,7 @@ mod test_bridge_pool_vp {
                 let t = PendingTransfer {
                     transfer: TransferToEthereum {
                         asset: EthAddress([0; 20]),
+                        sender: bertha_address(),
                         recipient: EthAddress([1; 20]),
                         amount: 100.into(),
                         nonce: 10u64.into(),
@@ -570,6 +630,69 @@ mod test_bridge_pool_vp {
         );
     }
 
+    /// Test that adding a transfer to the pool
+    /// that is already in the pool fails.
+    #[test]
+    fn test_adding_transfer_twice_fails() {
+        // setup
+        let mut write_log = new_writelog();
+        let storage = Storage::<MockDB, Sha256Hasher>::open(
+            std::path::Path::new(""),
+            ChainId::default(),
+            None,
+        );
+        let tx = Tx::new(vec![], None);
+
+        // the transfer to be added to the pool
+        let transfer = initial_pool();
+        // change the payers account
+        let bertha_account_key = balance_key(&xan(), &bertha_address());
+        let new_bertha_balance = (Amount::from(BERTHA_WEALTH) - GAS_FEE.into())
+            .try_to_vec()
+            .expect("Test failed");
+        write_log
+            .write(&bertha_account_key, new_bertha_balance)
+            .expect("Test failed");
+        // change the escrow account
+        let escrow = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        let new_escrow_balance = (Amount::from(ESCROWED_AMOUNT)
+            + GAS_FEE.into())
+        .try_to_vec()
+        .expect("Test failed");
+        write_log
+            .write(&escrow, new_escrow_balance)
+            .expect("Test failed");
+
+        // add transfer to pool
+        let keys_changed = {
+            write_log
+                .write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+            BTreeSet::from([get_pending_key(&transfer)])
+        };
+
+        // create the data to be given to the vp
+        let vp = BridgePoolVp {
+            ctx: setup_ctx(&tx, &storage, &write_log),
+        };
+
+        let to_sign = transfer.try_to_vec().expect("Test failed");
+        let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
+        let signed = SignedTxData {
+            data: Some(to_sign),
+            sig,
+        }
+        .try_to_vec()
+        .expect("Test failed");
+
+        let verifiers = BTreeSet::default();
+        let res = vp.validate_tx(&signed, &keys_changed, &verifiers);
+        assert!(!res.expect("Test failed"));
+    }
+
     /// Test that a transfer added to the pool with zero gas fees
     /// is rejected.
     #[test]
@@ -587,6 +710,7 @@ mod test_bridge_pool_vp {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
+                sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
                 amount: 100.into(),
                 nonce: 1u64.into(),
