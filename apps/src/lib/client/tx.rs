@@ -11,7 +11,7 @@ use itertools::Either::*;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
 use namada::proto::Tx;
-use namada::types::address::{nam, Address};
+use namada::types::address::Address;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
@@ -639,9 +639,13 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1)
         };
 
-        let balance = rpc::get_token_balance(&client, &nam(), &proposal.author)
-            .await
-            .unwrap_or_default();
+        let balance = rpc::get_token_balance(
+            &client,
+            &ctx.native_token,
+            &proposal.author,
+        )
+        .await
+        .unwrap_or_default();
         if balance
             < token::Amount::from(governance_parameters.min_proposal_fund)
         {

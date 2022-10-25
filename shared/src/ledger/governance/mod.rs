@@ -15,9 +15,10 @@ use std::collections::BTreeSet;
 pub use vp::Result;
 
 use self::storage as gov_storage;
+use super::storage_api::StorageRead;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::types::address::{nam, Address, InternalAddress};
+use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token as token_storage;
 use crate::vm::WasmCacheAccess;
@@ -55,10 +56,11 @@ where
             return Ok(false);
         };
 
+        let native_token = self.ctx.pre().get_native_token()?;
         let result = keys_changed.iter().all(|key| {
             let proposal_id = gov_storage::get_proposal_id(key);
 
-            let key_type: KeyType<DB, H, CA> = key.into();
+            let key_type: KeyType<DB, H, CA> = get_key_type(key, &native_token);
             match (key_type, proposal_id) {
                 (KeyType::VOTE(validate), Some(proposal_id)) => {
                     validate(&self.ctx, proposal_id, key, verifiers)
@@ -206,41 +208,42 @@ where
     UNKNOWN(fn() -> bool),
 }
 
-impl<'a, DB, H, CA> From<&Key> for KeyType<'a, DB, H, CA>
+fn get_key_type<'a, DB, H, CA>(
+    value: &Key,
+    native_token: &Address,
+) -> KeyType<'a, DB, H, CA>
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    fn from(value: &Key) -> Self {
-        if gov_storage::is_vote_key(value) {
-            KeyType::VOTE(vp::validate_vote_key)
-        } else if gov_storage::is_content_key(value) {
-            KeyType::CONTENT(vp::validate_content_key)
-        } else if gov_storage::is_proposal_code_key(value) {
-            KeyType::PROPOSAL_CODE(vp::validate_proposal_code_key)
-        } else if gov_storage::is_grace_epoch_key(value) {
-            KeyType::GRACE_EPOCH(vp::validate_grace_epoch_key)
-        } else if gov_storage::is_start_epoch_key(value) {
-            KeyType::START_EPOCH(vp::validate_start_epoch_key)
-        } else if gov_storage::is_commit_proposal_key(value) {
-            KeyType::PROPOSAL_COMMIT(vp::validate_commit_key)
-        } else if gov_storage::is_end_epoch_key(value) {
-            KeyType::END_EPOCH(vp::validate_end_epoch_key)
-        } else if gov_storage::is_balance_key(value) {
-            KeyType::FUNDS(vp::validate_funds_key)
-        } else if gov_storage::is_author_key(value) {
-            KeyType::AUTHOR(vp::validate_author_key)
-        } else if gov_storage::is_counter_key(value) {
-            KeyType::COUNTER(vp::validate_counter_key)
-        } else if gov_storage::is_parameter_key(value) {
-            KeyType::PARAMETER(vp::validate_parameter_key)
-        } else if token_storage::is_balance_key(&nam(), value).is_some() {
-            KeyType::BALANCE(vp::validate_balance_key)
-        } else if gov_storage::is_governance_key(value) {
-            KeyType::UNKNOWN_GOVERNANCE(vp::validate_unknown_governance_key)
-        } else {
-            KeyType::UNKNOWN(vp::validate_unknown_key)
-        }
+    if gov_storage::is_vote_key(value) {
+        KeyType::VOTE(vp::validate_vote_key)
+    } else if gov_storage::is_content_key(value) {
+        KeyType::CONTENT(vp::validate_content_key)
+    } else if gov_storage::is_proposal_code_key(value) {
+        KeyType::PROPOSAL_CODE(vp::validate_proposal_code_key)
+    } else if gov_storage::is_grace_epoch_key(value) {
+        KeyType::GRACE_EPOCH(vp::validate_grace_epoch_key)
+    } else if gov_storage::is_start_epoch_key(value) {
+        KeyType::START_EPOCH(vp::validate_start_epoch_key)
+    } else if gov_storage::is_commit_proposal_key(value) {
+        KeyType::PROPOSAL_COMMIT(vp::validate_commit_key)
+    } else if gov_storage::is_end_epoch_key(value) {
+        KeyType::END_EPOCH(vp::validate_end_epoch_key)
+    } else if gov_storage::is_balance_key(value) {
+        KeyType::FUNDS(vp::validate_funds_key)
+    } else if gov_storage::is_author_key(value) {
+        KeyType::AUTHOR(vp::validate_author_key)
+    } else if gov_storage::is_counter_key(value) {
+        KeyType::COUNTER(vp::validate_counter_key)
+    } else if gov_storage::is_parameter_key(value) {
+        KeyType::PARAMETER(vp::validate_parameter_key)
+    } else if token_storage::is_balance_key(native_token, value).is_some() {
+        KeyType::BALANCE(vp::validate_balance_key)
+    } else if gov_storage::is_governance_key(value) {
+        KeyType::UNKNOWN_GOVERNANCE(vp::validate_unknown_governance_key)
+    } else {
+        KeyType::UNKNOWN(vp::validate_unknown_key)
     }
 }

@@ -6,7 +6,7 @@ use namada::ledger::governance::vp::ADDRESS as gov_address;
 use namada::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
-use namada::types::address::{nam, Address};
+use namada::types::address::Address;
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
 use namada::types::token;
@@ -176,10 +176,14 @@ where
             }
         };
 
+        let native_token = shell.storage.native_token.clone();
         // transfer proposal locked funds
-        shell
-            .storage
-            .transfer(&nam(), funds, &gov_address, &transfer_address);
+        shell.storage.transfer(
+            &native_token,
+            funds,
+            &gov_address,
+            &transfer_address,
+        );
     }
 
     Ok(proposals_result)
