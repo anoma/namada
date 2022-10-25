@@ -1215,9 +1215,7 @@ mod test_queries {
             BTreeSet::from([transfer.keccak256()]),
         );
         let proof = tree
-            .get_membership_proof(
-                vec![transfer],
-            )
+            .get_membership_proof(vec![transfer])
             .expect("Test failed");
 
         let proof = RelayProof {
