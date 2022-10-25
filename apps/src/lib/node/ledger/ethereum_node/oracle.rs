@@ -19,7 +19,7 @@ use super::test_tools::mock_web3_client::Web3;
 pub(crate) const MIN_CONFIRMATIONS: u64 = 100;
 
 /// Dummy addresses for smart contracts
-// const MINT_CONTRACT: EthAddress = EthAddress([0; 20]);
+const MINT_CONTRACT: EthAddress = EthAddress([0; 20]);
 const GOVERNANCE_CONTRACT: EthAddress = EthAddress([1; 20]);
 
 /// The default amount of time the oracle will wait between processing blocks
