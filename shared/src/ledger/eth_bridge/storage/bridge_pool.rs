@@ -126,8 +126,8 @@ impl BridgePoolTree {
     }
 
     /// Return the root as a [`struct@Hash`] type.
-    pub fn root(&self) -> Hash {
-        self.root.clone().into()
+    pub fn root(&self) -> KeccakHash {
+        self.root.clone()
     }
 
     /// Get a reference to the backing store

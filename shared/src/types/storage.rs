@@ -280,36 +280,6 @@ impl MerkleValue {
     }
 }
 
-impl MerkleValue {
-    /// Get the natural byte repesentation of the value
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Bytes(bytes) => bytes,
-            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
-        }
-    }
-}
-
-impl MerkleValue {
-    /// Get the natural byte repesentation of the value
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Bytes(bytes) => bytes,
-            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
-        }
-    }
-}
-
-impl MerkleValue {
-    /// Get the natural byte repesentation of the value
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Bytes(bytes) => bytes,
-            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
-        }
-    }
-}
-
 /// Storage keys that are utf8 encoded strings
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub struct StringKey {
@@ -688,22 +658,6 @@ impl KeySeg for KeccakHash {
     fn parse(seg: String) -> Result<Self> {
         seg.try_into()
             .map_err(|e: TryFromError| Error::ParseError(e.to_string()))
-    }
-
-    fn raw(&self) -> String {
-        self.to_string()
-    }
-
-    fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::StringSeg(self.raw())
-    }
-}
-
-impl KeySeg for KeccakHash {
-    fn parse(seg: String) -> Result<Self> {
-        seg.clone()
-            .try_into()
-            .map_err(|_| Error::ParseError(seg, "Hash".into()))
     }
 
     fn raw(&self) -> String {
