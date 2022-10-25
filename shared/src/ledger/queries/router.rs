@@ -15,7 +15,7 @@ pub enum Error {
     WrongPath(String),
 }
 
-/// Find the index of a next slash after the given `start` index in the path.
+/// Find the index of a next forward slash after the given `start` index in the path.
 /// When there are no more slashes, returns the index after the end of the path.
 ///
 /// # Panics
@@ -646,7 +646,7 @@ mod test_rpc_handlers {
     use crate::types::storage::Epoch;
     use crate::types::token;
 
-    /// A little macro to generate boilerplate fo RPC handler functions.
+    /// A little macro to generate boilerplate for RPC handler functions.
     /// These are implemented to return their name as a String, joined by
     /// slashes with their argument values turned `to_string()`, if any.
     macro_rules! handlers {

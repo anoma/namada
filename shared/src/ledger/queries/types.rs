@@ -27,7 +27,7 @@ where
 }
 
 /// A `Router` handles parsing read-only query requests and dispatching them to
-/// their  handler functions. A valid query returns a borsh-encoded result.
+/// their handler functions. A valid query returns a borsh-encoded result.
 pub trait Router {
     /// Handle a given request using the provided context. This must be invoked
     /// on the root `Router` to be able to match the `request.path` fully.
