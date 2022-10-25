@@ -62,7 +62,8 @@ pub struct Oracle {
     backoff: Duration,
     /// A channel for controlling and configuring the oracle.
     control: BoundedReceiver<ControlCommand>,
-    /// Configuration for this oracle.
+    /// Configuration for this oracle. The oracle cannot run if it is not
+    /// configured.
     config: Option<Config>,
 }
 
@@ -134,6 +135,21 @@ impl Oracle {
     async fn sleep(&self) {
         tokio::time::sleep(self.backoff).await;
     }
+
+    /// Block until the oracle is configured via the command channel. Returns
+    /// the initial config once configured, or `None` if the command channel is
+    /// closed.
+    async fn await_initial_configuration(&mut self) -> Option<Config> {
+        match self.control.recv().await {
+            Some(cmd) => match cmd {
+                ControlCommand::Initialize { config } => {
+                    self.config = Some(config);
+                    self.config
+                }
+            },
+            None => None,
+        }
+    }
 }
 
 /// Set up an Oracle and run the process where the Oracle
@@ -178,7 +194,17 @@ pub fn run_oracle(
 ///
 /// It also checks that once the specified number of confirmations
 /// is reached, an event is forwarded to the ledger process
-async fn run_oracle_aux(oracle: Oracle) {
+async fn run_oracle_aux(mut oracle: Oracle) {
+    match oracle.await_initial_configuration().await {
+        Some(config) => {
+            tracing::info!(?config, "Oracle received initial configuration")
+        }
+        None => tracing::debug!(
+            "Oracle control channel was closed before the oracle could be \
+             configured"
+        ),
+    }
+
     // Initialize a queue to keep events which are awaiting a certain number of
     // confirmations
     let mut pending: Vec<PendingEvent> = Vec::new();
