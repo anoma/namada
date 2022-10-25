@@ -14,7 +14,7 @@ pub struct Config {
 impl std::default::Default for Config {
     fn default() -> Self {
         Self {
-            min_confirmations: 100,
+            min_confirmations: 10,
             mint_contract: EthAddress([0; 20]),
             governance_contract: EthAddress([1; 20]),
         }

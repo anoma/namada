@@ -257,8 +257,8 @@ async fn process(
         ?latest_block,
         "Got latest Ethereum block height"
     );
-    // check for events with at least `[MIN_CONFIRMATIONS]`
-    // confirmations.
+    // check for events in Ethereum blocks that have reached the minimum number
+    // of confirmations
     for sig in signatures::SIGNATURES {
         let addr: Address = match signatures::SigType::from(sig) {
             signatures::SigType::Bridge => config.mint_contract.0.into(),
@@ -525,15 +525,13 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let oracle = start_with_default_config(
-            oracle,
-            control_sender,
-            Config::default(),
-        )
-        .await;
-        // Increase height above [`MIN_CONFIRMATIONS`]
+        let mut config = Config::default();
+        config.min_confirmations = 100;
+        let oracle =
+            start_with_default_config(oracle, control_sender, config).await;
+        // Increase height above the configured minimum confirmations
         admin_channel
-            .send(TestCmd::NewHeight(100u32.into()))
+            .send(TestCmd::NewHeight(config.min_confirmations.into()))
             .expect("Test failed");
 
         let new_event = ChangedContract {
@@ -572,15 +570,13 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let oracle = start_with_default_config(
-            oracle,
-            control_sender,
-            Config::default(),
-        )
-        .await;
-        // Increase height above [`MIN_CONFIRMATIONS`]
+        let mut config = Config::default();
+        config.min_confirmations = 100;
+        let oracle =
+            start_with_default_config(oracle, control_sender, config).await;
+        // Increase height above the configured minimum confirmations
         admin_channel
-            .send(TestCmd::NewHeight(100u32.into()))
+            .send(TestCmd::NewHeight(config.min_confirmations.into()))
             .expect("Test failed");
 
         // set the oracle to be unresponsive
@@ -633,15 +629,13 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
-        let oracle = start_with_default_config(
-            oracle,
-            control_sender,
-            Config::default(),
-        )
-        .await;
-        // Increase height above [`MIN_CONFIRMATIONS`]
+        let mut config = Config::default();
+        config.min_confirmations = 100;
+        let oracle =
+            start_with_default_config(oracle, control_sender, config).await;
+        // Increase height above the configured minimum confirmations
         admin_channel
-            .send(TestCmd::NewHeight(100u32.into()))
+            .send(TestCmd::NewHeight(config.min_confirmations.into()))
             .expect("Test failed");
 
         // confirmed after 100 blocks
