@@ -174,7 +174,6 @@ where
             %eth_msg_keys.prefix,
             "Ethereum event already exists in storage",
         );
-        // TODO: move construction of votes map up the call path
         let mut votes = HashMap::default();
         seen_by.iter().for_each(|(address, block_height)| {
             let fvp = voting_powers
