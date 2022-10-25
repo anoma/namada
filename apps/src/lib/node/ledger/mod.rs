@@ -232,7 +232,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let (eth_node, abort_sender) =
         maybe_start_geth(&mut spawner, &config).await;
 
-    let (oracle_control_send, oracle_control_recv) = mpsc::channel(1);
+    let (oracle_control_send, oracle_control_recv) = oracle::control::channel();
     // Start oracle if necessary
     let (eth_receiver, oracle) =
         maybe_start_ethereum_oracle(&config, abort_sender, oracle_control_recv);
