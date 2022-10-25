@@ -25,7 +25,6 @@ use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
 use self::ethereum_node::eth_fullnode;
-use self::ethereum_node::oracle::ControlCommand;
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
 use crate::config::{ethereum_bridge, TendermintMode};
@@ -240,8 +239,8 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     // TODO: pass oracle_control_send to the shell instead of initializing it
     //  using a hardcoded config
     if let Err(error) = oracle_control_send
-        .send(oracle::ControlCommand::Initialize {
-            config: oracle::Config::default(),
+        .send(oracle::control::Command::Initialize {
+            config: oracle::config::Config::default(),
         })
         .await
     {
@@ -619,15 +618,11 @@ fn start_tendermint(
         })
 }
 
-/// Launches a new task managing a `geth` process into the asynchronous
-/// runtime, and returns its [`task::JoinHandle`].
-///
-/// An oracle is also returned, along with its associated channel,
-/// for receiving Ethereum events from `geth`.
+/// Potentially starts an Ethereum event oracle.
 fn maybe_start_ethereum_oracle(
     config: &config::Ledger,
     abort_sender: oneshot::Sender<()>,
-    control_receiver: mpsc::Receiver<ControlCommand>,
+    control_receiver: mpsc::Receiver<oracle::control::Command>,
 ) -> (Option<mpsc::Receiver<EthereumEvent>>, task::JoinHandle<()>) {
     if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
         return (None, spawn_dummy_task(()));

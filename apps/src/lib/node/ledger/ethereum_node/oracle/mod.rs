@@ -1,9 +1,12 @@
+pub mod config;
+pub mod control;
+
 use std::ops::Deref;
 use std::time::Duration;
 
 use clarity::Address;
 use eyre::{eyre, Result};
-use namada::types::ethereum_events::{EthAddress, EthereumEvent};
+use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
 use tokio::sync::mpsc::{Receiver as BoundedReceiver, Sender as BoundedSender};
 use tokio::sync::oneshot::Sender;
@@ -11,37 +14,10 @@ use tokio::task::LocalSet;
 #[cfg(not(test))]
 use web30::client::Web3;
 
+use self::config::Config;
 use super::events::{signatures, PendingEvent};
 #[cfg(test)]
 use super::test_tools::mock_web3_client::Web3;
-
-/// Configuration for an [`Oracle`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct Config {
-    pub min_confirmations: u64,
-    pub mint_contract: EthAddress,
-    pub governance_contract: EthAddress,
-}
-
-// TODO: this production Default implementation is temporary, there should be no
-//  default config - initialization should always be from storage
-impl std::default::Default for Config {
-    fn default() -> Self {
-        Self {
-            min_confirmations: 100,
-            mint_contract: EthAddress([0; 20]),
-            governance_contract: EthAddress([1; 20]),
-        }
-    }
-}
-
-/// Commands used to configure and control an `Oracle`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub enum ControlCommand {
-    /// Initializes the oracle with the given configuration and immediately
-    /// starts it.
-    Initialize { config: Config },
-}
 
 /// The default amount of time the oracle will wait between processing blocks
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
@@ -61,7 +37,7 @@ pub struct Oracle {
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
     /// A channel for controlling and configuring the oracle.
-    control: BoundedReceiver<ControlCommand>,
+    control: BoundedReceiver<control::Command>,
     /// Configuration for this oracle. The oracle cannot run if it is not
     /// configured.
     config: Option<Config>,
@@ -101,7 +77,7 @@ impl Oracle {
         sender: BoundedSender<EthereumEvent>,
         abort: Sender<()>,
         backoff: Duration,
-        control: BoundedReceiver<ControlCommand>,
+        control: BoundedReceiver<control::Command>,
     ) -> Self {
         Self {
             client: Web3::new(url, std::time::Duration::from_secs(30)),
@@ -142,7 +118,7 @@ impl Oracle {
     async fn await_initial_configuration(&mut self) -> Option<Config> {
         match self.control.recv().await {
             Some(cmd) => match cmd {
-                ControlCommand::Initialize { config } => {
+                control::Command::Initialize { config } => {
                     self.config = Some(config);
                     self.config
                 }
@@ -157,7 +133,7 @@ impl Oracle {
 pub fn run_oracle(
     url: impl AsRef<str>,
     sender: BoundedSender<EthereumEvent>,
-    control: BoundedReceiver<ControlCommand>,
+    control: BoundedReceiver<control::Command>,
     abort_sender: Sender<()>,
 ) -> tokio::task::JoinHandle<()> {
     let url = url.as_ref().to_owned();
@@ -404,7 +380,7 @@ fn process_queue(
 
 #[cfg(test)]
 mod test_oracle {
-    use namada::types::ethereum_events::TransferToEthereum;
+    use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
     use tokio::sync::oneshot::{channel, Receiver};
     use tokio::time::timeout;
 
