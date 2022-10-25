@@ -232,19 +232,21 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let (eth_node, abort_sender) =
         maybe_start_geth(&mut spawner, &config).await;
 
-    let (oracle_control_send, oracle_control_recv) = oracle::control::channel();
     // Start oracle if necessary
-    let (eth_receiver, oracle) =
-        maybe_start_ethereum_oracle(&config, abort_sender, oracle_control_recv);
-    // TODO: pass oracle_control_send to the shell instead of initializing it
-    //  using a hardcoded config
-    if let Err(error) = oracle_control_send
-        .send(oracle::control::Command::Initialize {
-            config: oracle::config::Config::default(),
-        })
-        .await
-    {
-        tracing::error!(?error, "Could not configure the oracle",);
+    let (eth_receiver, oracle_control_sender, oracle) =
+        maybe_start_ethereum_oracle(&config, abort_sender);
+
+    // TODO: pass `oracle_control_sender` to the shell for initialization from
+    // storage, rather than using a hardcoded config
+    if let Some(oracle_control_sender) = oracle_control_sender {
+        if let Err(error) = oracle_control_sender
+            .send(oracle::control::Command::Initialize {
+                config: oracle::config::Config::default(),
+            })
+            .await
+        {
+            tracing::error!(?error, "Could not configure the oracle",);
+        }
     }
 
     // Start ABCI server and broadcaster (the latter only if we are a validator
@@ -622,36 +624,43 @@ fn start_tendermint(
 fn maybe_start_ethereum_oracle(
     config: &config::Ledger,
     abort_sender: oneshot::Sender<()>,
-    control_receiver: mpsc::Receiver<oracle::control::Command>,
-) -> (Option<mpsc::Receiver<EthereumEvent>>, task::JoinHandle<()>) {
+) -> (
+    Option<mpsc::Receiver<EthereumEvent>>,
+    Option<mpsc::Sender<oracle::control::Command>>,
+    task::JoinHandle<()>,
+) {
     if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
-        return (None, spawn_dummy_task(()));
+        return (None, None, spawn_dummy_task(()));
     }
 
     let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
 
     // Start the oracle for listening to Ethereum events
     let (eth_sender, eth_receiver) = mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
-    let oracle = match config.ethereum_bridge.mode {
+
+    match config.ethereum_bridge.mode {
         ethereum_bridge::ledger::Mode::Managed
         | ethereum_bridge::ledger::Mode::Remote => {
-            ethereum_node::oracle::run_oracle(
+            let (control_sender, control_receiver) = oracle::control::channel();
+            let oracle = ethereum_node::oracle::run_oracle(
                 ethereum_url,
                 eth_sender,
                 control_receiver,
                 abort_sender,
-            )
+            );
+            (Some(eth_receiver), Some(control_sender), oracle)
         }
         ethereum_bridge::ledger::Mode::EventsEndpoint => {
-            ethereum_node::test_tools::events_endpoint::serve(
+            let oracle = ethereum_node::test_tools::events_endpoint::serve(
                 eth_sender,
                 abort_sender,
-            )
+            );
+            (Some(eth_receiver), None, oracle)
         }
-        ethereum_bridge::ledger::Mode::Off => spawn_dummy_task(()),
-    };
-
-    (Some(eth_receiver), oracle)
+        ethereum_bridge::ledger::Mode::Off => {
+            (None, None, spawn_dummy_task(()))
+        }
+    }
 }
 
 /// Launches a new task managing a `geth` process into the asynchronous
