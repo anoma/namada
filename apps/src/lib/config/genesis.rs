@@ -877,6 +877,7 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
+        native_token: address::nam(),
     }
 }
 

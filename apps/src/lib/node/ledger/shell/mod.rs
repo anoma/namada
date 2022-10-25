@@ -644,7 +644,7 @@ mod test_utils {
 
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
-    use namada::types::address::{nam, EstablishedAddressGen};
+    use namada::types::address::EstablishedAddressGen;
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -742,6 +742,7 @@ mod test_utils {
                         None,
                         vp_wasm_compilation_cache,
                         tx_wasm_compilation_cache,
+                        address::nam(),
                     ),
                 },
                 receiver,
@@ -866,7 +867,7 @@ mod test_utils {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: native_token.clone(),
+                token: native_token,
             },
             &keypair,
             Epoch(0),
@@ -914,6 +915,7 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
+            address::nam(),
         );
         assert!(!shell.storage.tx_queue.is_empty());
     }
