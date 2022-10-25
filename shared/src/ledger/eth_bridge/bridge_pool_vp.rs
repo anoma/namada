@@ -9,13 +9,13 @@
 //! This VP checks that additions to the pool are handled
 //! correctly. This means that the appropriate data is
 //! added to the pool and gas fees are submitted appropriately.
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
 use eyre::eyre;
 
 use crate::ledger::eth_bridge::storage::bridge_pool::{
-    get_pending_key, is_protected_storage, BRIDGE_POOL_ADDRESS,
+    get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
@@ -115,42 +115,32 @@ where
             }
         };
 
-        // check that only the pending_key value is changed
-        if keys_changed.iter().any(is_protected_storage) {
-            tracing::debug!(
-                "Rejecting transaction as it is attempting to change the \
-                 bridge pool storage other than the pending transaction pool"
-            );
-            return Ok(false);
-        }
-        // check that the pending transfer (and only that) was added to the pool
-        // TODO: This will change slightly when we merkelize the pool,
-        // but that will be a separate PR.
-        let pending_key = get_pending_key();
-        let pending_pre: HashSet<PendingTransfer> =
-            (&self.ctx).read_pre_value(&pending_key)?.ok_or(eyre!(
-                "The bridge pool transfers are missing from storage"
-            ))?;
-        let pending_post: HashSet<PendingTransfer> =
-            (&self.ctx).read_post_value(&pending_key)?.ok_or(eyre!(
-                "The bridge pool transfers are missing from storage"
-            ))?;
-        if !pending_post.contains(&transfer) {
-            tracing::debug!(
-                "Rejecting transaction as the transfer wasn't added to the \
-                 pending transfers"
-            );
-            return Ok(false);
-        }
-        for item in pending_pre.symmetric_difference(&pending_post) {
-            if item != &transfer {
+        let pending_key = get_pending_key(&transfer);
+        for key in keys_changed.iter().filter(|k| is_bridge_pool_key(k)) {
+            if *key != pending_key {
                 tracing::debug!(
-                    ?item,
-                    "Rejecting transaction as an unrecognized item was added \
-                     to the pending transfers"
+                    "Rejecting transaction as it is attempting to change an \
+                     incorrect key in the pending transaction pool: {}.\n \
+                     Expected key: {}",
+                    key,
+                    pending_key
                 );
                 return Ok(false);
             }
+        }
+        let pending: PendingTransfer =
+            (&self.ctx).read_post_value(&pending_key)?.ok_or(eyre!(
+                "Rejecting transaction as the transfer wasn't added to the \
+                 pending transfers"
+            ))?;
+        if pending != transfer {
+            tracing::debug!(
+                "An incorrect transfer was added to the pool: {:?}.\n \
+                 Expected: {:?}",
+                transfer,
+                pending
+            );
+            return Ok(false);
         }
 
         // check that gas fees were put into escrow
@@ -232,8 +222,8 @@ mod test_bridge_pool_vp {
     }
 
     /// The bridge pool at the beginning of all tests
-    fn initial_pool() -> HashSet<PendingTransfer> {
-        let transfer = PendingTransfer {
+    fn initial_pool() -> PendingTransfer {
+        PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
@@ -244,9 +234,7 @@ mod test_bridge_pool_vp {
                 amount: 0.into(),
                 payer: bertha_address(),
             },
-        };
-
-        HashSet::<PendingTransfer>::from([transfer])
+        }
     }
 
     /// Create a new storage
@@ -256,9 +244,9 @@ mod test_bridge_pool_vp {
         writelog
             .write(&get_signed_root_key(), Hash([0; 32]).try_to_vec().unwrap())
             .unwrap();
-
+        let transfer = initial_pool();
         writelog
-            .write(&get_pending_key(), initial_pool().try_to_vec().unwrap())
+            .write(&get_pending_key(&transfer), transfer.try_to_vec().unwrap())
             .unwrap();
         let escrow_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
         let amount: Amount = ESCROWED_AMOUNT.into();
@@ -291,19 +279,21 @@ mod test_bridge_pool_vp {
         )
     }
 
+    enum Expect {
+        True,
+        False,
+        Error,
+    }
+
     /// Helper function that tests various ways gas can be escrowed,
     /// either correctly or incorrectly, is handled appropriately
     fn assert_bridge_pool<F>(
         payer_delta: SignedAmount,
         escrow_delta: SignedAmount,
         insert_transfer: F,
-        keys_changed: BTreeSet<Key>,
-        expect: bool,
+        expect: Expect,
     ) where
-        F: FnOnce(
-            PendingTransfer,
-            HashSet<PendingTransfer>,
-        ) -> HashSet<PendingTransfer>,
+        F: FnOnce(PendingTransfer, &mut WriteLog) -> BTreeSet<Key>,
     {
         // setup
         let mut write_log = new_writelog();
@@ -359,10 +349,7 @@ mod test_bridge_pool_vp {
             .expect("Test failed");
 
         // add transfer to pool
-        let pool = insert_transfer(transfer.clone(), initial_pool());
-        write_log
-            .write(&get_pending_key(), pool.try_to_vec().expect("Test failed"))
-            .expect("Test failed");
+        let keys_changed = insert_transfer(transfer.clone(), &mut write_log);
 
         // create the data to be given to the vp
         let vp = BridgePoolVp {
@@ -379,10 +366,12 @@ mod test_bridge_pool_vp {
         .expect("Test failed");
 
         let verifiers = BTreeSet::default();
-        let res = vp
-            .validate_tx(&signed, &keys_changed, &verifiers)
-            .expect("Test failed");
-        assert_eq!(res, expect);
+        let res = vp.validate_tx(&signed, &keys_changed, &verifiers);
+        match expect {
+            Expect::True => assert!(res.expect("Test failed")),
+            Expect::False => assert!(!res.expect("Test failed")),
+            Expect::Error => assert!(res.is_err()),
+        }
     }
 
     /// Test adding a transfer to the pool and escrowing gas passes vp
@@ -391,13 +380,15 @@ mod test_bridge_pool_vp {
         assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
-            |transfer, pool| {
-                let mut pool = pool;
-                pool.insert(transfer);
-                pool
+            |transfer, log| {
+                log.write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+                BTreeSet::from([get_pending_key(&transfer)])
             },
-            BTreeSet::default(),
-            true,
+            Expect::True,
         );
     }
 
@@ -408,13 +399,15 @@ mod test_bridge_pool_vp {
         assert_bridge_pool(
             SignedAmount::Negative(10.into()),
             SignedAmount::Positive(GAS_FEE.into()),
-            |transfer, pool| {
-                let mut pool = pool;
-                pool.insert(transfer);
-                pool
+            |transfer, log| {
+                log.write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+                BTreeSet::from([get_pending_key(&transfer)])
             },
-            BTreeSet::default(),
-            false,
+            Expect::False,
         );
     }
 
@@ -425,13 +418,15 @@ mod test_bridge_pool_vp {
         assert_bridge_pool(
             SignedAmount::Positive(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
-            |transfer, pool| {
-                let mut pool = pool;
-                pool.insert(transfer);
-                pool
+            |transfer, log| {
+                log.write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+                BTreeSet::from([get_pending_key(&transfer)])
             },
-            BTreeSet::default(),
-            false,
+            Expect::False,
         );
     }
 
@@ -442,13 +437,15 @@ mod test_bridge_pool_vp {
         assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(10.into()),
-            |transfer, pool| {
-                let mut pool = pool;
-                pool.insert(transfer);
-                pool
+            |transfer, log| {
+                log.write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+                BTreeSet::from([get_pending_key(&transfer)])
             },
-            BTreeSet::default(),
-            false,
+            Expect::False,
         );
     }
 
@@ -459,26 +456,15 @@ mod test_bridge_pool_vp {
         assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Negative(GAS_FEE.into()),
-            |transfer, pool| {
-                let mut pool = pool;
-                pool.insert(transfer);
-                pool
+            |transfer, log| {
+                log.write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+                BTreeSet::from([get_pending_key(&transfer)])
             },
-            BTreeSet::default(),
-            false,
-        );
-    }
-
-    /// Test that if a transaction is removed from
-    /// the pool, the tx is rejected.
-    #[test]
-    fn test_remove_transfer_rejected() {
-        assert_bridge_pool(
-            SignedAmount::Negative(GAS_FEE.into()),
-            SignedAmount::Positive(GAS_FEE.into()),
-            |transfer, _pool| HashSet::from([transfer]),
-            BTreeSet::default(),
-            false,
+            Expect::False,
         );
     }
 
@@ -489,9 +475,8 @@ mod test_bridge_pool_vp {
         assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
-            |_transfer, pool| pool,
-            BTreeSet::default(),
-            false,
+            |transfer, _| BTreeSet::from([get_pending_key(&transfer)]),
+            Expect::Error,
         );
     }
 
@@ -502,15 +487,52 @@ mod test_bridge_pool_vp {
         assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
-            |_transfer, pool| {
-                let mut pool = pool;
-                let wrong_transfer =
-                    initial_pool().into_iter().next().expect("Test failed");
-                pool.insert(wrong_transfer);
-                pool
+            |transfer, log| {
+                let t = PendingTransfer {
+                    transfer: TransferToEthereum {
+                        asset: EthAddress([0; 20]),
+                        recipient: EthAddress([1; 20]),
+                        amount: 100.into(),
+                        nonce: 10u64.into(),
+                    },
+                    gas_fee: GasFee {
+                        amount: GAS_FEE.into(),
+                        payer: bertha_address(),
+                    },
+                };
+                log.write(&get_pending_key(&transfer), t.try_to_vec().unwrap())
+                    .unwrap();
+                BTreeSet::from([get_pending_key(&transfer)])
             },
-            BTreeSet::default(),
-            false,
+            Expect::False,
+        );
+    }
+
+    /// Test that if the wrong transaction was added
+    /// to the pool, it is rejected.
+    #[test]
+    fn test_add_wrong_key() {
+        assert_bridge_pool(
+            SignedAmount::Negative(GAS_FEE.into()),
+            SignedAmount::Positive(GAS_FEE.into()),
+            |transfer, log| {
+                let t = PendingTransfer {
+                    transfer: TransferToEthereum {
+                        asset: EthAddress([0; 20]),
+                        recipient: EthAddress([1; 20]),
+                        amount: 100.into(),
+                        nonce: 10u64.into(),
+                    },
+                    gas_fee: GasFee {
+                        amount: GAS_FEE.into(),
+                        payer: bertha_address(),
+                    },
+                };
+                log.write(&get_pending_key(&t), transfer.try_to_vec().unwrap())
+                    .unwrap();
+                BTreeSet::from([get_pending_key(&transfer)])
+            },
+            Expect::Error,
         );
     }
 
@@ -521,13 +543,18 @@ mod test_bridge_pool_vp {
         assert_bridge_pool(
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Positive(GAS_FEE.into()),
-            |transfer, pool| {
-                let mut pool = pool;
-                pool.insert(transfer);
-                pool
+            |transfer, log| {
+                log.write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+                BTreeSet::from([
+                    get_pending_key(&transfer),
+                    get_signed_root_key(),
+                ])
             },
-            BTreeSet::from([get_signed_root_key()]),
-            false,
+            Expect::False,
         );
     }
 
@@ -558,11 +585,11 @@ mod test_bridge_pool_vp {
             },
         };
 
-        // add transfer to pool
-        let mut pool = initial_pool();
-        pool.insert(transfer.clone());
         write_log
-            .write(&get_pending_key(), pool.try_to_vec().expect("Test failed"))
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // create the data to be given to the vp
