@@ -108,15 +108,10 @@ pub struct VotingPowerDelta(i64);
 pub struct GenesisValidator<Address, Token, PK> {
     /// Validator's address
     pub address: Address,
-    /// An address to which any staking rewards will be credited, must be
-    /// different from the `address`
-    pub staking_reward_address: Address,
     /// Staked tokens are put into a self-bond
     pub tokens: Token,
     /// A public key used for signing validator's consensus actions
     pub consensus_key: PK,
-    /// An public key associated with the staking reward address
-    pub staking_reward_key: PK,
 }
 
 /// An update of the active and inactive validator set.

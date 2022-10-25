@@ -154,10 +154,8 @@ pub async fn submit_init_validator(
         scheme,
         account_key,
         consensus_key,
-        rewards_account_key,
         protocol_key,
         validator_vp_code_path,
-        rewards_vp_code_path,
         unsafe_dont_encrypt,
     }: args::TxInitValidator,
 ) {
@@ -169,7 +167,6 @@ pub async fn submit_init_validator(
 
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
-    let rewards_key_alias = format!("{}-rewards-key", alias);
     let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
         println!("Generating validator account key...");
         ctx.wallet
@@ -203,18 +200,6 @@ pub async fn submit_init_validator(
                 .1
         });
 
-    let rewards_account_key =
-        ctx.get_opt_cached(&rewards_account_key).unwrap_or_else(|| {
-            println!("Generating staking reward account key...");
-            ctx.wallet
-                .gen_key(
-                    scheme,
-                    Some(rewards_key_alias.clone()),
-                    unsafe_dont_encrypt,
-                )
-                .1
-                .ref_to()
-        });
     let protocol_key = ctx.get_opt_cached(&protocol_key);
 
     if protocol_key.is_none() {
@@ -245,30 +230,14 @@ pub async fn submit_init_validator(
             safe_exit(1)
         }
     }
-    let rewards_vp_code = rewards_vp_code_path
-        .map(|path| ctx.read_wasm(path))
-        .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
-    // Validate the rewards VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&rewards_vp_code) {
-        eprintln!(
-            "Staking reward account validity predicate code validation failed \
-             with {}",
-            err
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
     let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
 
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
-        rewards_account_key,
         protocol_key,
         dkg_key,
         validator_vp_code,
-        rewards_vp_code,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
@@ -364,7 +333,6 @@ pub async fn submit_init_validator(
         println!("  Staking reward address \"{}\"", rewards_address_alias);
         println!("  Validator account key \"{}\"", validator_key_alias);
         println!("  Consensus key \"{}\"", consensus_key_alias);
-        println!("  Staking reward key \"{}\"", rewards_key_alias);
         println!(
             "The ledger node has been setup to use this validator's address \
              and consensus key."

@@ -1289,8 +1289,6 @@ pub mod args {
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
-    const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
-    const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
@@ -1528,10 +1526,8 @@ pub mod args {
         pub scheme: SchemeType,
         pub account_key: Option<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
-        pub rewards_account_key: Option<WalletPublicKey>,
         pub protocol_key: Option<WalletPublicKey>,
         pub validator_vp_code_path: Option<PathBuf>,
-        pub rewards_vp_code_path: Option<PathBuf>,
         pub unsafe_dont_encrypt: bool,
     }
 
@@ -1542,10 +1538,8 @@ pub mod args {
             let scheme = SCHEME.parse(matches);
             let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
-            let rewards_account_key = REWARDS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
-            let rewards_vp_code_path = REWARDS_CODE_PATH.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 tx,
@@ -1553,10 +1547,8 @@ pub mod args {
                 scheme,
                 account_key,
                 consensus_key,
-                rewards_account_key,
                 protocol_key,
                 validator_vp_code_path,
-                rewards_vp_code_path,
                 unsafe_dont_encrypt,
             }
         }
@@ -1578,10 +1570,6 @@ pub mod args {
                     "A consensus key for the validator account. A new one \
                      will be generated if none given.",
                 ))
-                .arg(REWARDS_KEY.def().about(
-                    "A public key for the staking reward account. A new one \
-                     will be generated if none given.",
-                ))
                 .arg(PROTOCOL_KEY.def().about(
                     "A public key for signing protocol transactions. A new \
                      one will be generated if none given.",
@@ -1590,11 +1578,6 @@ pub mod args {
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
                      if none specified.",
-                ))
-                .arg(REWARDS_CODE_PATH.def().about(
-                    "The path to the validity predicate WASM code to be used \
-                     for the staking reward account. Uses the default staking \
-                     reward VP if none specified.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \

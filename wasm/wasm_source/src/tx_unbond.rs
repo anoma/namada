@@ -67,13 +67,10 @@ mod tests {
     ) -> TxResult {
         let is_delegation = matches!(
             &unbond.source, Some(source) if *source != unbond.validator);
-        let staking_reward_address = address::testing::established_address_1();
         let consensus_key = key::testing::keypair_1().ref_to();
-        let staking_reward_key = key::testing::keypair_2().ref_to();
 
         let genesis_validators = [GenesisValidator {
             address: unbond.validator.clone(),
-            staking_reward_address,
             tokens: if is_delegation {
                 // If we're unbonding a delegation, we'll give the initial stake
                 // to the delegation instead of the validator
@@ -82,7 +79,6 @@ mod tests {
                 initial_stake
             },
             consensus_key,
-            staking_reward_key,
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
