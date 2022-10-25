@@ -177,6 +177,8 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
+      - name: Install mold linker
+        uses: rui314/setup-mold@v1
       - name: Build
         run: make build${{ matrix.make.suffix }}
       - name: Build test
@@ -316,6 +318,8 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
+      - name: Install mold linker
+        uses: rui314/setup-mold@v1
       - name: Build
         run: make build-release${{ matrix.make.suffix }}
       - name: Upload target binaries
