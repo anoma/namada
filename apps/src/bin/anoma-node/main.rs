@@ -11,7 +11,7 @@ fn main() -> Result<()> {
     color_eyre::install()?;
 
     // init logging
-    let default_directive = Directive::from_str("anoma=info")?;
+    let default_directive = Directive::from_str("namada=info")?;
     logging::init_from_env_or(default_directive)?;
 
     // run the CLI
