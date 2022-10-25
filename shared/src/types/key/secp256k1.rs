@@ -332,7 +332,6 @@ impl<'de> Deserialize<'de> for Signature {
         impl<'de> Visitor<'de> for ByteArrayVisitor {
             type Value = [u8; SIGNATURE_LENGTH];
 
-
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str(&format!(
                     "an array of length {}",
