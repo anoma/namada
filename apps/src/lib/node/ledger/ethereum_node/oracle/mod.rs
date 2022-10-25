@@ -306,7 +306,7 @@ async fn process(
                         sig,
                         block_to_process.clone(),
                         log.data.0.as_slice(),
-                        config.min_confirmations,
+                        config.min_confirmations.into(),
                     ) {
                         Ok(event) => Some(event),
                         Err(error) => {
