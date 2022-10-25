@@ -218,14 +218,23 @@ where
     H: 'static + StorageHasher + Sync,
 {
     match tx {
-        ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
-            events,
-            ..
-        }) => self::transactions::ethereum_events::apply_derived_tx(
-            storage, events,
-        )
-        .map_err(Error::ProtocolTxError),
-        ProtocolTxType::ValidatorSetUpdate(_) => Ok(TxResult::default()),
+        ProtocolTxType::EthereumEvents(ext) => {
+            let ethereum_events::VextDigest { events, .. } = ext;
+            self::transactions::ethereum_events::apply_derived_tx(
+                storage, events,
+            )
+            .map_err(Error::ProtocolTxError)
+        }
+        ProtocolTxType::ValidatorSetUpdate(ext) => {
+            // NOTE(feature = "abcipp"): we will not need to apply any
+            // storage changes when we rollback to ABCI++; we could emit
+            // some kind of event, notifying a relayer process of a newly
+            // available validator set update, though
+            self::transactions::validator_set_update::aggregate_votes(
+                storage, ext,
+            )
+            .map_err(Error::ProtocolTxError)
+        }
         _ => {
             tracing::error!(
                 "Attempt made to apply an unsupported protocol transaction! - \
