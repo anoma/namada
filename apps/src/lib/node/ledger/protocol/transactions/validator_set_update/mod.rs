@@ -2,8 +2,11 @@
 //! [`namada::types::transaction::protocol::ProtocolTxType::ValidatorSetUpdate`]
 //! transactions.
 
+use eyre::Result;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
+use namada::types::transaction::TxResult;
+use namada::types::vote_extensions::validator_set_update;
 
 pub(crate) fn aggregate_votes<D, H>(
     _storage: &mut Storage<D, H>,
