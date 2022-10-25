@@ -8,7 +8,9 @@ use clarity::Address;
 use eyre::{eyre, Result};
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
-use tokio::sync::mpsc::{Receiver as BoundedReceiver, Sender as BoundedSender};
+use tokio::sync::mpsc::{
+    self, Receiver as BoundedReceiver, Sender as BoundedSender,
+};
 use tokio::sync::oneshot::Sender;
 use tokio::task::LocalSet;
 #[cfg(not(test))]
@@ -38,9 +40,6 @@ pub struct Oracle {
     backoff: Duration,
     /// A channel for controlling and configuring the oracle.
     control: BoundedReceiver<control::Command>,
-    /// Configuration for this oracle. The oracle cannot run if it is not
-    /// configured.
-    config: Option<Config>,
 }
 
 impl Deref for Oracle {
@@ -85,7 +84,6 @@ impl Oracle {
             abort: Some(abort),
             backoff,
             control,
-            config: None,
         }
     }
 
@@ -111,20 +109,19 @@ impl Oracle {
     async fn sleep(&self) {
         tokio::time::sleep(self.backoff).await;
     }
+}
 
-    /// Block until the oracle is configured via the command channel. Returns
-    /// the initial config once configured, or `None` if the command channel is
-    /// closed.
-    async fn await_initial_configuration(&mut self) -> Option<Config> {
-        match self.control.recv().await {
-            Some(cmd) => match cmd {
-                control::Command::Initialize { config } => {
-                    self.config = Some(config);
-                    self.config
-                }
-            },
-            None => None,
-        }
+/// Block until an initial configuration is received via the command channel.
+/// Returns the initial config once received, or `None` if the command channel
+/// is closed.
+async fn await_initial_configuration(
+    receiver: &mut mpsc::Receiver<control::Command>,
+) -> Option<Config> {
+    match receiver.recv().await {
+        Some(cmd) => match cmd {
+            control::Command::Initialize { config } => Some(config),
+        },
+        None => None,
     }
 }
 
@@ -172,15 +169,19 @@ pub fn run_oracle(
 /// is reached, an event is forwarded to the ledger process
 async fn run_oracle_aux(mut oracle: Oracle) {
     tracing::info!("Oracle is awaiting initial configuration");
-    match oracle.await_initial_configuration().await {
+    let config = match await_initial_configuration(&mut oracle.control).await {
         Some(config) => {
-            tracing::info!(?config, "Oracle received initial configuration")
+            tracing::info!(?config, "Oracle received initial configuration");
+            config
         }
-        None => tracing::debug!(
-            "Oracle control channel was closed before the oracle could be \
-             configured"
-        ),
-    }
+        None => {
+            tracing::debug!(
+                "Oracle control channel was closed before the oracle could be \
+                 configured"
+            );
+            return;
+        }
+    };
 
     // Initialize a queue to keep events which are awaiting a certain number of
     // confirmations
@@ -196,7 +197,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
             "Checking Ethereum block for bridge events"
         );
         tokio::select! {
-            result = process(&oracle, &mut pending, next_block_to_process.clone()) => {
+            result = process(&oracle, &config, &mut pending, next_block_to_process.clone()) => {
                 match result {
                     Ok(()) => next_block_to_process += 1u8.into(),
                     Err(error) => tracing::warn!(
@@ -222,6 +223,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
 /// sends them to the oracle's `sender` channel
 async fn process(
     oracle: &Oracle,
+    config: &Config,
     pending: &mut Vec<PendingEvent>,
     block_to_process: Uint256,
 ) -> Result<()> {
@@ -236,8 +238,8 @@ async fn process(
                 ));
             }
         };
-        let minimum_latest_block = block_to_process.clone()
-            + Uint256::from(oracle.config.unwrap().min_confirmations);
+        let minimum_latest_block =
+            block_to_process.clone() + Uint256::from(config.min_confirmations);
         if minimum_latest_block > latest_block {
             tracing::debug!(
                 ?block_to_process,
@@ -261,11 +263,9 @@ async fn process(
     // confirmations.
     for sig in signatures::SIGNATURES {
         let addr: Address = match signatures::SigType::from(sig) {
-            signatures::SigType::Bridge => {
-                oracle.config.unwrap().mint_contract.0.into()
-            }
+            signatures::SigType::Bridge => config.mint_contract.0.into(),
             signatures::SigType::Governance => {
-                oracle.config.unwrap().governance_contract.0.into()
+                config.governance_contract.0.into()
             }
         };
         tracing::debug!(
@@ -343,7 +343,7 @@ async fn process(
                 ?sig,
                 pending = pending.len(),
                 confirmed = confirmed.len(),
-                min_confirmations = ?oracle.config.unwrap().min_confirmations,
+                min_confirmations = ?config.min_confirmations,
                 "Some events that have reached the minimum number of \
                  confirmations and will be sent onwards"
             );
@@ -380,6 +380,8 @@ fn process_queue(
 
 #[cfg(test)]
 mod test_oracle {
+    use std::thread::JoinHandle;
+
     use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
     use tokio::sync::oneshot::{channel, Receiver};
     use tokio::time::timeout;
@@ -397,16 +399,35 @@ mod test_oracle {
         oracle: Oracle,
         admin_channel: tokio::sync::mpsc::UnboundedSender<TestCmd>,
         eth_recv: tokio::sync::mpsc::Receiver<EthereumEvent>,
+        control_sender: tokio::sync::mpsc::Sender<control::Command>,
         blocks_processed_recv: tokio::sync::mpsc::UnboundedReceiver<Uint256>,
         abort_recv: Receiver<()>,
+    }
+
+    /// Helper function that starts running the oracle in a new thread, and
+    /// initializes it with a simple default configuration that is appropriate
+    /// for tests.
+    async fn start_with_default_config(
+        oracle: Oracle,
+        control_sender: tokio::sync::mpsc::Sender<control::Command>,
+    ) -> JoinHandle<()> {
+        let handle = std::thread::spawn(move || {
+            tokio_test::block_on(run_oracle_aux(oracle));
+        });
+        control_sender
+            .send(control::Command::Initialize {
+                config: Config::default(),
+            })
+            .await
+            .unwrap();
+        handle
     }
 
     /// Set up an oracle with a mock web3 client that we can control
     fn setup() -> TestPackage {
         let (admin_channel, blocks_processed_recv, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
-        let (_control_sender, control_receiver) =
-            tokio::sync::mpsc::channel(1000);
+        let (control_sender, control_receiver) = control::channel();
         let (abort, abort_recv) = channel();
         TestPackage {
             oracle: Oracle {
@@ -416,10 +437,10 @@ mod test_oracle {
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
                 control: control_receiver,
-                config: Some(Config::default()),
             },
             admin_channel,
             eth_recv: eth_receiver,
+            control_sender,
             blocks_processed_recv,
             abort_recv,
         }
@@ -440,17 +461,16 @@ mod test_oracle {
 
     /// Test that if the fullnode stops, the oracle
     /// shuts down, even if the web3 client is unresponsive
-    #[test]
-    fn test_shutdown() {
+    #[tokio::test]
+    async fn test_shutdown() {
         let TestPackage {
             oracle,
             eth_recv,
             admin_channel,
+            control_sender,
             ..
         } = setup();
-        let oracle = std::thread::spawn(move || {
-            tokio_test::block_on(run_oracle_aux(oracle));
-        });
+        let oracle = start_with_default_config(oracle, control_sender).await;
         admin_channel
             .send(TestCmd::Unresponsive)
             .expect("Test failed");
@@ -460,18 +480,17 @@ mod test_oracle {
 
     /// Test that if no logs are received from the web3
     /// client, no events are sent out
-    #[test]
-    fn test_no_logs_no_op() {
+    #[tokio::test]
+    async fn test_no_logs_no_op() {
         let TestPackage {
             oracle,
             mut eth_recv,
             admin_channel,
             blocks_processed_recv: _processed,
+            control_sender,
             ..
         } = setup();
-        let oracle = std::thread::spawn(move || {
-            tokio_test::block_on(run_oracle_aux(oracle));
-        });
+        let oracle = start_with_default_config(oracle, control_sender).await;
         admin_channel
             .send(TestCmd::NewHeight(Uint256::from(150u32)))
             .expect("Test failed");
@@ -488,18 +507,17 @@ mod test_oracle {
     /// Test that if a new block height doesn't increase,
     /// no events are sent out even if there are
     /// some in the logs.
-    #[test]
-    fn test_cant_get_new_height() {
+    #[tokio::test]
+    async fn test_cant_get_new_height() {
         let TestPackage {
             oracle,
             mut eth_recv,
             admin_channel,
             blocks_processed_recv: _processed,
+            control_sender,
             ..
         } = setup();
-        let oracle = std::thread::spawn(move || {
-            tokio_test::block_on(run_oracle_aux(oracle));
-        });
+        let oracle = start_with_default_config(oracle, control_sender).await;
         // Increase height above [`MIN_CONFIRMATIONS`]
         admin_channel
             .send(TestCmd::NewHeight(100u32.into()))
@@ -531,18 +549,17 @@ mod test_oracle {
 
     /// Test that the oracle waits until new logs
     /// are received before sending them on.
-    #[test]
-    fn test_wait_on_new_logs() {
+    #[tokio::test]
+    async fn test_wait_on_new_logs() {
         let TestPackage {
             oracle,
             eth_recv,
             admin_channel,
             blocks_processed_recv: _processed,
+            control_sender,
             ..
         } = setup();
-        let oracle = std::thread::spawn(move || {
-            tokio_test::block_on(run_oracle_aux(oracle));
-        });
+        let oracle = start_with_default_config(oracle, control_sender).await;
         // Increase height above [`MIN_CONFIRMATIONS`]
         admin_channel
             .send(TestCmd::NewHeight(100u32.into()))
@@ -581,25 +598,24 @@ mod test_oracle {
         }
         // check that when web3 becomes responsive, oracle sends event
         admin_channel.send(TestCmd::Normal).expect("Test failed");
-        seen.blocking_recv().expect("Test failed");
+        seen.await.expect("Test failed");
         drop(eth_recv);
         oracle.join().expect("Test failed");
     }
 
     /// Test that events are only sent when they
     /// reach the required number of confirmations
-    #[test]
-    fn test_finality_gadget() {
+    #[tokio::test]
+    async fn test_finality_gadget() {
         let TestPackage {
             oracle,
             mut eth_recv,
             admin_channel,
             blocks_processed_recv: _processed,
+            control_sender,
             ..
         } = setup();
-        let oracle = std::thread::spawn(move || {
-            tokio_test::block_on(run_oracle_aux(oracle));
-        });
+        let oracle = start_with_default_config(oracle, control_sender).await;
         // Increase height above [`MIN_CONFIRMATIONS`]
         admin_channel
             .send(TestCmd::NewHeight(100u32.into()))
@@ -650,7 +666,7 @@ mod test_oracle {
             .send(TestCmd::NewHeight(Uint256::from(200u32)))
             .expect("Test failed");
         // check the correct event is received
-        let event = eth_recv.blocking_recv().expect("Test failed");
+        let event = eth_recv.recv().await.expect("Test failed");
         if let EthereumEvent::NewContract { name, address } = event {
             assert_eq!(name.as_str(), "Test");
             assert_eq!(address, EthAddress([0; 20]));
@@ -670,13 +686,13 @@ mod test_oracle {
             .send(TestCmd::NewHeight(Uint256::from(225u32)))
             .expect("Test failed");
         // wait until event is emitted
-        seen_second.blocking_recv().expect("Test failed");
+        seen_second.await.expect("Test failed");
         // increase block height so second event is confirmed
         admin_channel
             .send(TestCmd::NewHeight(Uint256::from(250u32)))
             .expect("Test failed");
         // check correct event is received
-        let event = eth_recv.blocking_recv().expect("Test failed");
+        let event = eth_recv.recv().await.expect("Test failed");
         if let EthereumEvent::TransfersToEthereum { mut transfers, .. } = event
         {
             assert_eq!(transfers.len(), 1);
@@ -706,12 +722,11 @@ mod test_oracle {
             eth_recv,
             admin_channel,
             mut blocks_processed_recv,
+            control_sender,
             ..
         } = setup();
-        let min_confirmations = oracle.config.unwrap().min_confirmations;
-        let oracle = std::thread::spawn(move || {
-            tokio_test::block_on(run_oracle_aux(oracle));
-        });
+        let min_confirmations = 100u64; // TODO
+        let oracle = start_with_default_config(oracle, control_sender).await;
 
         // set the height of the chain such that there are some blocks deep
         // enough to be considered confirmed by the oracle
@@ -769,12 +784,11 @@ mod test_oracle {
             eth_recv,
             admin_channel,
             mut blocks_processed_recv,
+            control_sender,
             ..
         } = setup();
-        let min_confirmations = oracle.config.unwrap().min_confirmations;
-        let oracle = std::thread::spawn(move || {
-            tokio_test::block_on(run_oracle_aux(oracle));
-        });
+        let min_confirmations = 100u64; // TODO
+        let oracle = start_with_default_config(oracle, control_sender).await;
 
         let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
         let synced_block_height = min_confirmations + confirmed_block_height;
