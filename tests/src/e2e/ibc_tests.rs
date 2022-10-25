@@ -15,7 +15,6 @@ use core::time::Duration;
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
-use ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use ibc::clients::ics07_tendermint::client_state::{
     AllowUpdate, ClientState as TmClientState,
 };
@@ -59,9 +58,7 @@ use ibc::core::ics24_host::identifier::{
 use ibc::events::{from_tx_response_event, IbcEvent};
 use ibc::proofs::{ConsensusProof, Proofs};
 use ibc::signer::Signer;
-use ibc::timestamp::Timestamp;
 use ibc::tx_msg::Msg;
-use ibc_proto::cosmos::base::v1beta1::Coin;
 use ibc_relayer::config::types::{MaxMsgNum, MaxTxSize, Memo};
 use ibc_relayer::config::{AddressType, ChainConfig, GasPrice, PacketFilter};
 use ibc_relayer::keyring::Store;
@@ -73,7 +70,8 @@ use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::Sha256Hasher;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::key::PublicKey;
-use namada::types::storage::{BlockHeight, Key};
+use namada::types::storage::{BlockHeight, Key, RESERVED_ADDRESS_PREFIX};
+use namada::types::token::Amount;
 use namada_apps::client::rpc::query_storage_value_bytes;
 use namada_apps::client::utils::id_from_pk;
 use setup::constants::*;
@@ -86,7 +84,7 @@ use tendermint_rpc::{Client, HttpClient, Url};
 use tokio::runtime::Runtime;
 
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
-use crate::e2e::setup::{self, sleep, Bin, Test, Who};
+use crate::e2e::setup::{self, sleep, AnomaCmd, Bin, Test, Who};
 use crate::{run, run_as};
 
 #[test]
@@ -689,25 +687,18 @@ fn transfer_token(
     client_id_b: &ClientId,
     port_channel_id_a: &PortChannelId,
 ) -> Result<()> {
-    let xan = find_address(test_a, XAN)?;
-    let sender = find_address(test_a, ALBERT)?;
-    let receiver = find_address(test_b, BERTHA)?;
-
-    let token = Some(Coin {
-        denom: xan.to_string(),
-        amount: "100000".to_string(),
-    });
-    let msg = MsgTransfer {
-        source_port: port_channel_id_a.port_id.clone(),
-        source_channel: port_channel_id_a.channel_id,
-        token,
-        sender: Signer::new(sender.to_string()),
-        receiver: Signer::new(receiver.to_string()),
-        timeout_height: Height::new(100, 100),
-        timeout_timestamp: (Timestamp::now() + Duration::new(30, 0)).unwrap(),
-    };
     // Send a token from Chain A
-    let height = submit_ibc_tx(test_a, msg, ALBERT)?;
+    let receiver = find_address(test_b, BERTHA)?;
+    let height = transfer(
+        test_a,
+        ALBERT,
+        &receiver,
+        XAN,
+        &Amount::from(100000_f64),
+        port_channel_id_a,
+        None,
+        None,
+    )?;
     let packet = match get_event(test_a, height)? {
         Some(IbcEvent::SendPacket(event)) => event.packet,
         _ => return Err(eyre!("Transaction failed")),
@@ -801,8 +792,7 @@ fn transfer_back(
     client_id_b: &ClientId,
     port_channel_id_b: &PortChannelId,
 ) -> Result<()> {
-    let xan = find_address(test_b, XAN)?;
-    let sender = find_address(test_b, BERTHA)?;
+    let xan = find_address(test_b, XAN)?.to_string();
     let receiver = find_address(test_a, ALBERT)?;
 
     // Chain A was the source for the sent token
@@ -812,21 +802,22 @@ fn transfer_back(
     );
     let hash = calc_hash(&denom_raw);
     let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
-    let token = Some(Coin {
-        denom: format!("{}/{}", MULTITOKEN_STORAGE_KEY, ibc_token),
-        amount: "50000".to_string(),
-    });
-    let msg = MsgTransfer {
-        source_port: port_channel_id_b.port_id.clone(),
-        source_channel: port_channel_id_b.channel_id,
-        token,
-        sender: Signer::new(sender.to_string()),
-        receiver: Signer::new(receiver.to_string()),
-        timeout_height: Height::new(100, 100),
-        timeout_timestamp: (Timestamp::now() + Duration::new(30, 0)).unwrap(),
-    };
+    // Need the address prefix for ibc-transfer command
+    let sub_prefix = format!(
+        "{}/{}{}",
+        MULTITOKEN_STORAGE_KEY, RESERVED_ADDRESS_PREFIX, ibc_token
+    );
     // Send a token from Chain B
-    let height = submit_ibc_tx(test_b, msg, BERTHA)?;
+    let height = transfer(
+        test_b,
+        BERTHA,
+        &receiver,
+        XAN,
+        &Amount::from(50000_f64),
+        port_channel_id_b,
+        Some(sub_prefix),
+        None,
+    )?;
     let packet = match get_event(test_b, height)? {
         Some(IbcEvent::SendPacket(event)) => event.packet,
         _ => return Err(eyre!("Transaction failed")),
@@ -873,25 +864,19 @@ fn transfer_timeout(
     client_id_a: &ClientId,
     port_channel_id_a: &PortChannelId,
 ) -> Result<()> {
-    let xan = find_address(test_a, XAN)?;
-    let sender = find_address(test_a, ALBERT)?;
     let receiver = find_address(test_b, BERTHA)?;
 
-    let token = Some(Coin {
-        denom: xan.to_string(),
-        amount: "100000".to_string(),
-    });
-    let msg = MsgTransfer {
-        source_port: port_channel_id_a.port_id.clone(),
-        source_channel: port_channel_id_a.channel_id,
-        token,
-        sender: Signer::new(sender.to_string()),
-        receiver: Signer::new(receiver.to_string()),
-        timeout_height: Height::new(0, 1000),
-        timeout_timestamp: (Timestamp::now() + Duration::new(5, 0)).unwrap(),
-    };
     // Send a token from Chain A
-    let height = submit_ibc_tx(test_a, msg, ALBERT)?;
+    let height = transfer(
+        test_a,
+        ALBERT,
+        &receiver,
+        XAN,
+        &Amount::from(100000_f64),
+        port_channel_id_a,
+        None,
+        Some(Duration::new(5, 0)),
+    )?;
     let packet = match get_event(test_a, height)? {
         Some(IbcEvent::SendPacket(event)) => event.packet,
         _ => return Err(eyre!("Transaction failed")),
@@ -924,25 +909,19 @@ fn transfer_timeout_on_close(
     port_channel_id_a: &PortChannelId,
     port_channel_id_b: &PortChannelId,
 ) -> Result<()> {
-    let xan = find_address(test_b, XAN)?;
-    let sender = find_address(test_b, BERTHA)?;
     let receiver = find_address(test_a, ALBERT)?;
 
-    let token = Some(Coin {
-        denom: xan.to_string(),
-        amount: "100000".to_string(),
-    });
-    let msg = MsgTransfer {
-        source_port: port_channel_id_b.port_id.clone(),
-        source_channel: port_channel_id_b.channel_id,
-        token,
-        sender: Signer::new(sender.to_string()),
-        receiver: Signer::new(receiver.to_string()),
-        timeout_height: Height::new(0, 1000),
-        timeout_timestamp: (Timestamp::now() + Duration::new(1000, 0)).unwrap(),
-    };
     // Send a token from Chain B
-    let height = submit_ibc_tx(test_b, msg, BERTHA)?;
+    let height = transfer(
+        test_b,
+        BERTHA,
+        &receiver,
+        XAN,
+        &Amount::from(100000_f64),
+        port_channel_id_b,
+        None,
+        None,
+    )?;
     let packet = match get_event(test_b, height)? {
         Some(IbcEvent::SendPacket(event)) => event.packet,
         _ => return Err(eyre!("Transaction failed")),
@@ -980,25 +959,18 @@ fn try_transfer_on_close(
     test_b: &Test,
     port_channel_id_a: &PortChannelId,
 ) -> Result<()> {
-    let xan = find_address(test_a, XAN)?;
-    let sender = find_address(test_a, ALBERT)?;
     let receiver = find_address(test_b, BERTHA)?;
-
-    let token = Some(Coin {
-        denom: xan.to_string(),
-        amount: "100000".to_string(),
-    });
-    let msg = MsgTransfer {
-        source_port: port_channel_id_a.port_id.clone(),
-        source_channel: port_channel_id_a.channel_id,
-        token,
-        sender: Signer::new(sender.to_string()),
-        receiver: Signer::new(receiver.to_string()),
-        timeout_height: Height::new(100, 100),
-        timeout_timestamp: (Timestamp::now() + Duration::new(30, 0)).unwrap(),
-    };
     // Send a token from Chain A
-    match submit_ibc_tx(test_a, msg, ALBERT) {
+    match transfer(
+        test_a,
+        ALBERT,
+        &receiver,
+        XAN,
+        &Amount::from(100000_f64),
+        port_channel_id_a,
+        None,
+        None,
+    ) {
         Ok(_) => Err(eyre!(
             "Sending a token succeeded in spite of closing the channel"
         )),
@@ -1069,7 +1041,7 @@ fn submit_ibc_tx(
     signer: &str,
 ) -> Result<u32> {
     let data_path = test.test_dir.path().join("tx.data");
-    let data = make_ibc_data(message.clone());
+    let data = make_ibc_data(message);
     std::fs::write(&data_path, data).expect("writing data failed");
 
     let code_path = wasm_abs_path(TX_IBC_WASM);
@@ -1099,6 +1071,62 @@ fn submit_ibc_tx(
         Some(40)
     )?;
     client.exp_string("Transaction applied")?;
+    check_tx_height(test, &mut client)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn transfer(
+    test: &Test,
+    sender: impl AsRef<str>,
+    receiver: &Address,
+    token: impl AsRef<str>,
+    amount: &Amount,
+    port_channel_id: &PortChannelId,
+    sub_prefix: Option<String>,
+    timeout_sec: Option<Duration>,
+) -> Result<u32> {
+    let rpc = get_actor_rpc(test, &Who::Validator(0));
+
+    let receiver = receiver.to_string();
+    let amount = amount.to_string();
+    let port_id = port_channel_id.port_id.to_string();
+    let channel_id = port_channel_id.channel_id.to_string();
+    let mut tx_args = vec![
+        "ibc-transfer",
+        "--source",
+        sender.as_ref(),
+        "--receiver",
+        &receiver,
+        "--signer",
+        sender.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--amount",
+        &amount,
+        "--channel-id",
+        &channel_id,
+        "--port-id",
+        &port_id,
+        "--ledger-address",
+        &rpc,
+    ];
+    let sp = sub_prefix.clone().unwrap_or_default();
+    if sub_prefix.is_some() {
+        tx_args.push("--sub-prefix");
+        tx_args.push(&sp);
+    }
+    let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
+    if timeout_sec.is_some() {
+        tx_args.push("--timeout-sec-offset");
+        tx_args.push(&timeout);
+    }
+
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied")?;
+    check_tx_height(test, &mut client)
+}
+
+fn check_tx_height(test: &Test, client: &mut AnomaCmd) -> Result<u32> {
     let (unread, matched) = client.exp_regex("\"height\": .*,")?;
     let height_str = matched
         .trim()
@@ -1119,8 +1147,7 @@ fn submit_ibc_tx(
         .replace(',', "");
     if code != "0" {
         return Err(eyre!(
-            "The transaction failed: message {:?}, unread {}",
-            message,
+            "The IBC transfer transaction failed: unread {}",
             unread
         ));
     }
