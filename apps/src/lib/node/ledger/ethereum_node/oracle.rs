@@ -154,8 +154,13 @@ pub fn run_oracle(
                 .run_until(async move {
                     tracing::info!(?url, "Ethereum event oracle is starting");
 
-                    let oracle =
-                        Oracle::new(&url, sender, abort_sender, DEFAULT_BACKOFF, control);
+                    let oracle = Oracle::new(
+                        &url,
+                        sender,
+                        abort_sender,
+                        DEFAULT_BACKOFF,
+                        control,
+                    );
                     run_oracle_aux(oracle).await;
 
                     tracing::info!(
@@ -228,8 +233,8 @@ async fn process(
                 ));
             }
         };
-        let minimum_latest_block =
-            block_to_process.clone() + Uint256::from(MIN_CONFIRMATIONS);
+        let minimum_latest_block = block_to_process.clone()
+            + Uint256::from(oracle.config.unwrap().min_confirmations);
         if minimum_latest_block > latest_block {
             tracing::debug!(
                 ?block_to_process,
@@ -253,8 +258,12 @@ async fn process(
     // confirmations.
     for sig in signatures::SIGNATURES {
         let addr: Address = match signatures::SigType::from(sig) {
-            signatures::SigType::Bridge => MINT_CONTRACT.0.into(),
-            signatures::SigType::Governance => GOVERNANCE_CONTRACT.0.into(),
+            signatures::SigType::Bridge => {
+                oracle.config.unwrap().mint_contract.0.into()
+            }
+            signatures::SigType::Governance => {
+                oracle.config.unwrap().governance_contract.0.into()
+            }
         };
         tracing::debug!(
             ?block_to_process,
@@ -331,7 +340,7 @@ async fn process(
                 ?sig,
                 pending = pending.len(),
                 confirmed = confirmed.len(),
-                ?MIN_CONFIRMATIONS,
+                min_confirmations = ?oracle.config.unwrap().min_confirmations,
                 "Some events that have reached the minimum number of \
                  confirmations and will be sent onwards"
             );
@@ -696,6 +705,7 @@ mod test_oracle {
             mut blocks_processed_recv,
             ..
         } = setup();
+        let min_confirmations = oracle.config.unwrap().min_confirmations;
         let oracle = std::thread::spawn(move || {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
@@ -703,7 +713,7 @@ mod test_oracle {
         // set the height of the chain such that there are some blocks deep
         // enough to be considered confirmed by the oracle
         let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
-        let synced_block_height = MIN_CONFIRMATIONS + confirmed_block_height;
+        let synced_block_height = min_confirmations + confirmed_block_height;
         for height in 0..synced_block_height + 1 {
             admin_channel
                 .send(TestCmd::NewHeight(Uint256::from(height)))
@@ -758,12 +768,13 @@ mod test_oracle {
             mut blocks_processed_recv,
             ..
         } = setup();
+        let min_confirmations = oracle.config.unwrap().min_confirmations;
         let oracle = std::thread::spawn(move || {
             tokio_test::block_on(run_oracle_aux(oracle));
         });
 
         let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
-        let synced_block_height = MIN_CONFIRMATIONS + confirmed_block_height;
+        let synced_block_height = min_confirmations + confirmed_block_height;
         admin_channel
             .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
             .expect("Test failed");
