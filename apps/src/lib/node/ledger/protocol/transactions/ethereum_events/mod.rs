@@ -176,16 +176,16 @@ where
         );
         let mut votes = HashMap::default();
         seen_by.iter().for_each(|(address, block_height)| {
-            let fvp = voting_powers
+            let voting_power = voting_powers
                 .get(&(address.to_owned(), block_height.to_owned()))
                 .unwrap();
-            if let Some(already_present_fvp) =
-                votes.insert(address.to_owned(), fvp.to_owned())
+            if let Some(already_present_voting_power) =
+                votes.insert(address.to_owned(), voting_power.to_owned())
             {
                 tracing::warn!(
                     ?address,
-                    ?already_present_fvp,
-                    new_fvp = ?fvp,
+                    ?already_present_voting_power,
+                    new_voting_power = ?voting_power,
                     "Validator voted more than once, arbitrarily using later value",
                 )
             }
