@@ -8,9 +8,7 @@ use clarity::Address;
 use eyre::{eyre, Result};
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
-use tokio::sync::mpsc::{
-    self, Receiver as BoundedReceiver, Sender as BoundedSender,
-};
+use tokio::sync::mpsc::Sender as BoundedSender;
 use tokio::sync::oneshot::Sender;
 use tokio::task::LocalSet;
 #[cfg(not(test))]
@@ -39,7 +37,7 @@ pub struct Oracle {
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
     /// A channel for controlling and configuring the oracle.
-    control: BoundedReceiver<control::Command>,
+    control: control::Receiver,
 }
 
 impl Deref for Oracle {
@@ -76,7 +74,7 @@ impl Oracle {
         sender: BoundedSender<EthereumEvent>,
         abort: Sender<()>,
         backoff: Duration,
-        control: BoundedReceiver<control::Command>,
+        control: control::Receiver,
     ) -> Self {
         Self {
             client: Web3::new(url, std::time::Duration::from_secs(30)),
@@ -115,7 +113,7 @@ impl Oracle {
 /// Returns the initial config once received, or `None` if the command channel
 /// is closed.
 async fn await_initial_configuration(
-    receiver: &mut mpsc::Receiver<control::Command>,
+    receiver: &mut control::Receiver,
 ) -> Option<Config> {
     match receiver.recv().await {
         Some(cmd) => match cmd {
@@ -130,7 +128,7 @@ async fn await_initial_configuration(
 pub fn run_oracle(
     url: impl AsRef<str>,
     sender: BoundedSender<EthereumEvent>,
-    control: BoundedReceiver<control::Command>,
+    control: control::Receiver,
     abort_sender: Sender<()>,
 ) -> tokio::task::JoinHandle<()> {
     let url = url.as_ref().to_owned();
@@ -399,7 +397,7 @@ mod test_oracle {
         oracle: Oracle,
         admin_channel: tokio::sync::mpsc::UnboundedSender<TestCmd>,
         eth_recv: tokio::sync::mpsc::Receiver<EthereumEvent>,
-        control_sender: tokio::sync::mpsc::Sender<control::Command>,
+        control_sender: control::Sender,
         blocks_processed_recv: tokio::sync::mpsc::UnboundedReceiver<Uint256>,
         abort_recv: Receiver<()>,
     }
@@ -409,7 +407,7 @@ mod test_oracle {
     /// for tests.
     async fn start_with_default_config(
         oracle: Oracle,
-        control_sender: tokio::sync::mpsc::Sender<control::Command>,
+        control_sender: control::Sender,
         config: Config,
     ) -> JoinHandle<()> {
         let handle = std::thread::spawn(move || {

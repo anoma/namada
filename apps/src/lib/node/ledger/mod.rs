@@ -626,7 +626,7 @@ fn maybe_start_ethereum_oracle(
     abort_sender: oneshot::Sender<()>,
 ) -> (
     Option<mpsc::Receiver<EthereumEvent>>,
-    Option<mpsc::Sender<oracle::control::Command>>,
+    Option<oracle::control::Sender>,
     task::JoinHandle<()>,
 ) {
     if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {

@@ -4,9 +4,14 @@ use tokio::sync::mpsc;
 
 use super::config::Config;
 
+/// Used to send commands to an oracle.
+pub type Sender = mpsc::Sender<Command>;
+/// Used by an oracle to receive commands.
+pub type Receiver = mpsc::Receiver<Command>;
+
 /// Returns two sides of a [`mpsc`] channel that can be used for controlling an
 /// oracle.
-pub fn channel() -> (mpsc::Sender<Command>, mpsc::Receiver<Command>) {
+pub fn channel() -> (Sender, Receiver) {
     mpsc::channel(1)
 }
 
