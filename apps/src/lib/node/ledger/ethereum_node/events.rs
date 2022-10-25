@@ -121,10 +121,8 @@ pub mod eth_events {
             signature: &str,
             block_height: Uint256,
             data: &[u8],
+            min_confirmations: u64,
         ) -> Result<Self> {
-            // TODO: use the value from storage rather than this hardcoded
-            //  const!
-            const MIN_CONFIRMATIONS: u64 = 100;
             match signature {
                 signatures::TRANSFER_TO_NAMADA_SIG => {
                     RawTransfersToNamada::decode(data).map(|txs| PendingEvent {
@@ -155,7 +153,7 @@ pub mod eth_events {
                              bridge_validator_hash,
                              governance_validator_hash,
                          }| PendingEvent {
-                            confirmations: MIN_CONFIRMATIONS.into(),
+                            confirmations: min_confirmations.into(),
                             block_height,
                             event: EthereumEvent::ValidatorSetUpdate {
                                 nonce,
@@ -167,7 +165,7 @@ pub mod eth_events {
                 }
                 signatures::NEW_CONTRACT_SIG => ChangedContract::decode(data)
                     .map(|ChangedContract { name, address }| PendingEvent {
-                        confirmations: MIN_CONFIRMATIONS.into(),
+                        confirmations: min_confirmations.into(),
                         block_height,
                         event: EthereumEvent::NewContract { name, address },
                     }),
@@ -175,7 +173,7 @@ pub mod eth_events {
                     data,
                 )
                 .map(|ChangedContract { name, address }| PendingEvent {
-                    confirmations: MIN_CONFIRMATIONS.into(),
+                    confirmations: min_confirmations.into(),
                     block_height,
                     event: EthereumEvent::UpgradedContract { name, address },
                 }),
@@ -183,7 +181,7 @@ pub mod eth_events {
                     UpdateBridgeWhitelist::decode(data).map(
                         |UpdateBridgeWhitelist { nonce, whitelist }| {
                             PendingEvent {
-                                confirmations: MIN_CONFIRMATIONS.into(),
+                                confirmations: min_confirmations.into(),
                                 block_height,
                                 event: EthereumEvent::UpdateBridgeWhitelist {
                                     nonce,
