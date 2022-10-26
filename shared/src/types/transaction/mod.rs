@@ -191,7 +191,8 @@ pub struct InitValidator {
     pub dkg_key: DkgPublicKey,
     /// The initial commission rate charged for delegation rewards
     pub commission_rate: Decimal,
-    /// The maximum change allowed per epoch to the commission rate. This is immutable once set here.
+    /// The maximum change allowed per epoch to the commission rate. This is
+    /// immutable once set here.
     pub max_commission_rate_change: Decimal,
     /// The VP code for validator account
     pub validator_vp_code: Vec<u8>,

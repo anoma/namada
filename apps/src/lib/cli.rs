@@ -1009,7 +1009,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
                 QueryCommissionRate(args::QueryCommissionRate::parse(matches))
-            }) 
+            })
         }
 
         fn def() -> App {
@@ -1238,9 +1238,6 @@ pub mod args {
     use namada::types::token;
     use namada::types::transaction::GasLimit;
     use rust_decimal::Decimal;
-    use serde::Deserialize;
-    use tendermint::Timeout;
-    use tendermint_config::net::Address as TendermintAddress;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
@@ -1301,7 +1298,8 @@ pub mod args {
 
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
-    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> = arg("max-commission-rate-change");
+    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
+        arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
@@ -1568,7 +1566,8 @@ pub mod args {
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
-            let max_commission_rate_change = MAX_COMMISSION_RATE_CHANGE.parse(matches);
+            let max_commission_rate_change =
+                MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
@@ -1607,10 +1606,13 @@ pub mod args {
                      one will be generated if none given.",
                 ))
                 .arg(COMMISSION_RATE.def().about(
-                    "The commission rate charged by the validator for delegation rewards. This is a required parameter.",
+                    "The commission rate charged by the validator for \
+                     delegation rewards. This is a required parameter.",
                 ))
                 .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
-                    "The maximum change per epoch in the commission rate charged by the validator for delegation rewards. This is a required parameter.",
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. This is \
+                     a required parameter.",
                 ))
                 .arg(VALIDATOR_CODE_PATH.def().about(
                     "The path to the validity predicate WASM code to be used \
@@ -2125,7 +2127,7 @@ pub mod args {
                 ))
         }
     }
-    
+
     /// Query PoS slashes
     #[derive(Clone, Debug)]
     pub struct QuerySlashes {
@@ -2636,7 +2638,8 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
-            let max_commission_rate_change = MAX_COMMISSION_RATE_CHANGE.parse(matches);
+            let max_commission_rate_change =
+                MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let key_scheme = SCHEME.parse(matches);
@@ -2646,7 +2649,7 @@ pub mod args {
                 unsafe_dont_encrypt,
                 key_scheme,
                 commission_rate,
-                max_commission_rate_change
+                max_commission_rate_change,
             }
         }
 
@@ -2658,10 +2661,13 @@ pub mod args {
                      but you can configure a different value.",
                 ))
                 .arg(COMMISSION_RATE.def().about(
-                    "The commission rate charged by the validator for delegation rewards. This is a required parameter.",
+                    "The commission rate charged by the validator for \
+                     delegation rewards. This is a required parameter.",
                 ))
                 .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
-                    "The maximum change per epoch in the commission rate charged by the validator for delegation rewards. This is a required parameter.",
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. This is \
+                     a required parameter.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \

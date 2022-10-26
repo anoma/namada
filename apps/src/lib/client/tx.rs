@@ -24,10 +24,6 @@ use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, storage, token};
 use namada::{ledger, vm};
 use rust_decimal::Decimal;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
-use tendermint_rpc::query::{EventType, Query};
-use tendermint_rpc::{Client, HttpClient};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -230,10 +226,18 @@ pub async fn submit_init_validator(
 
     // Validate the commission rate data
     if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
-        eprintln!("The validator commission rate must not exceed 1.0 or 100%, and it must be 0 or positive");
+        eprintln!(
+            "The validator commission rate must not exceed 1.0 or 100%, and \
+             it must be 0 or positive"
+        );
     }
-    if max_commission_rate_change > Decimal::ONE || max_commission_rate_change < Decimal::ZERO {
-        eprintln!("The validator maximum change in commission rate per epoch must not exceed 1.0 or 100%");
+    if max_commission_rate_change > Decimal::ONE
+        || max_commission_rate_change < Decimal::ZERO
+    {
+        eprintln!(
+            "The validator maximum change in commission rate per epoch must \
+             not exceed 1.0 or 100%"
+        );
     }
     // Validate the validator VP code
     if let Err(err) = vm::validate_untrusted_wasm(&validator_vp_code) {

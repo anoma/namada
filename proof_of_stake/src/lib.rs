@@ -34,10 +34,11 @@ use parameters::PosParams;
 use rust_decimal::Decimal;
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash, SlashType, Slashes,
-    TotalVotingPowers, Unbond, Unbonds, ValidatorConsensusKeys, ValidatorSet,
-    ValidatorSetUpdate, ValidatorSets, ValidatorState, ValidatorStates,
-    ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
+    ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
+    SlashType, Slashes, TotalVotingPowers, Unbond, Unbonds,
+    ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
+    ValidatorState, ValidatorStates, ValidatorTotalDeltas,
+    ValidatorVotingPowers, VotingPower, VotingPowerDelta,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -282,7 +283,7 @@ pub trait PosActions: PosReadOnly {
         consensus_key: &Self::PublicKey,
         current_epoch: impl Into<Epoch>,
         commission_rate: Decimal,
-        max_commission_rate_change: Decimal
+        max_commission_rate_change: Decimal,
     ) -> Result<(), Self::BecomeValidatorError> {
         let current_epoch = current_epoch.into();
         let params = self.read_pos_params()?;
@@ -297,7 +298,7 @@ pub trait PosActions: PosReadOnly {
             total_deltas,
             voting_power,
             commission_rate,
-            max_commission_rate_change
+            max_commission_rate_change,
         } = become_validator(
             &params,
             address,
@@ -305,7 +306,7 @@ pub trait PosActions: PosReadOnly {
             &mut validator_set,
             current_epoch,
             commission_rate,
-            max_commission_rate_change
+            max_commission_rate_change,
         );
         self.write_validator_consensus_key(address, consensus_key)?;
         self.write_validator_state(address, state)?;
@@ -562,11 +563,7 @@ pub trait PosActions: PosReadOnly {
                 }
             };
         let rate_at_pipeline = *commission_rates
-            .get_at_offset(
-                current_epoch,
-                DynEpochOffset::PipelineLen,
-                params,
-            )
+            .get_at_offset(current_epoch, DynEpochOffset::PipelineLen, params)
             .expect("Could not find a rate in given epoch");
         if new_rate == rate_at_pipeline {
             return Err(CommissionRateChangeError::ChangeIsZero(
@@ -576,7 +573,7 @@ pub trait PosActions: PosReadOnly {
 
         let rate_before_pipeline = *commission_rates
             .get_at_offset(
-                current_epoch-1,
+                current_epoch - 1,
                 DynEpochOffset::PipelineLen,
                 params,
             )
@@ -596,13 +593,10 @@ pub trait PosActions: PosReadOnly {
             DynEpochOffset::PipelineLen,
             params,
         );
-        self.write_validator_commission_rate(
-            validator,
-            commission_rates,
-        )
-        .map_err(|_| CommissionRateChangeError::CannotWrite(validator))
-        .unwrap();
-        
+        self.write_validator_commission_rate(validator, commission_rates)
+            .map_err(|_| CommissionRateChangeError::CannotWrite(validator))
+            .unwrap();
+
         Ok(())
     }
 }
@@ -1327,10 +1321,8 @@ where
               }| {
             let consensus_key =
                 Epoched::init_at_genesis(consensus_key.clone(), current_epoch);
-            let commission_rate = Epoched::init_at_genesis(
-                commission_rate.clone(),
-                current_epoch,
-            );
+            let commission_rate =
+                Epoched::init_at_genesis(*commission_rate, current_epoch);
             let state = Epoched::init_at_genesis(
                 ValidatorState::Candidate,
                 current_epoch,
@@ -1360,7 +1352,7 @@ where
                 address: address.clone(),
                 consensus_key,
                 commission_rate,
-                max_commission_rate_change: max_commission_rate_change.clone(),
+                max_commission_rate_change: *max_commission_rate_change,
                 state,
                 total_deltas,
                 voting_power,
@@ -1554,7 +1546,7 @@ where
         total_deltas,
         voting_power,
         commission_rate,
-        max_commission_rate_change
+        max_commission_rate_change,
     }
 }
 

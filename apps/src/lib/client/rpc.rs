@@ -976,7 +976,10 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
 }
 
 /// Query PoS commssion rate
-pub async fn query_commission_rate(ctx: Context, args: args::QueryCommissionRate) {
+pub async fn query_commission_rate(
+    ctx: Context,
+    args: args::QueryCommissionRate,
+) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
         None => query_epoch(args.query.clone()).await,
@@ -986,14 +989,15 @@ pub async fn query_commission_rate(ctx: Context, args: args::QueryCommissionRate
     match args.validator {
         Some(validator) => {
             let validator = ctx.get(&validator);
-            let validator_commission_key = pos::validator_commission_rate_key(&validator);
+            let validator_commission_key =
+                pos::validator_commission_rate_key(&validator);
             let commission_rates = query_storage_value::<pos::CommissionRates>(
                 &client,
                 &validator_commission_key,
             )
             .await;
-            let commission_rates = commission_rates
-                .expect("No commission rate found ");
+            let commission_rates =
+                commission_rates.expect("No commission rate found ");
             match commission_rates.get(epoch) {
                 Some(rate) => {
                     println!(
@@ -1003,7 +1007,8 @@ pub async fn query_commission_rate(ctx: Context, args: args::QueryCommissionRate
                     )
                 }
                 None => {
-                    println!("No commission rate found for {} in epoch {}",
+                    println!(
+                        "No commission rate found for {} in epoch {}",
                         validator.encode(),
                         epoch
                     )
