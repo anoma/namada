@@ -111,14 +111,20 @@ impl TestTxEnv {
         );
     }
 
-    /// Fake accounts existence by initializating their VP storage.
+    /// Fake accounts' existence by initializing their VP storage.
     /// This is needed for accounts that are being modified by a tx test to
-    /// pass account existence check in `tx_write` function.
+    /// pass account existence check in `tx_write` function. Any internal
+    /// addresses ([`Address::Internal`]) passed in are ignored, as those
+    /// should not have wasm VPs in storage in any case.
     pub fn spawn_accounts(
         &mut self,
         addresses: impl IntoIterator<Item = impl Borrow<Address>>,
     ) {
         for address in addresses {
+            if matches!(address.borrow(), Address::Internal(_)) {
+                // don't write a VP for internal addresses
+                continue;
+            }
             let key = Key::validity_predicate(address.borrow());
             let vp_code = vec![];
             self.storage
