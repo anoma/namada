@@ -54,5 +54,6 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    todo!()
+    tracing::warn!("Called apply_updates() with no side effects");
+    Ok(ChangedKeys::new())
 }
