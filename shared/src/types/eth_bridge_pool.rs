@@ -138,7 +138,7 @@ impl Encode<2> for MultiSignedMerkleRoot {
 pub struct RelayProof {
     /// Information about the signing validators
     pub validator_args: ValidatorSetArgs,
-    /// A merkle root signed by ta quorum of validators
+    /// A merkle root signed by a quorum of validators
     pub root: MultiSignedMerkleRoot,
     /// A membership proof
     pub proof: BridgePoolProof,
