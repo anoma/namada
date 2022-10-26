@@ -18,12 +18,20 @@ use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
 use super::ChangedKeys;
-use crate::node::ledger::protocol::transactions::utils::{
-    self, get_active_validators,
-};
+use crate::node::ledger::protocol::transactions::utils;
 use crate::node::ledger::protocol::transactions::votes::{
     calculate_new, calculate_updated, write, Votes,
 };
+
+impl utils::GetVoters for [MultiSignedEthEvent] {
+    #[inline]
+    fn get_voters(&self) -> HashSet<(Address, BlockHeight)> {
+        self.iter().fold(HashSet::new(), |mut voters, event| {
+            voters.extend(event.signers.iter().cloned());
+            voters
+        })
+    }
+}
 
 /// Applies derived state changes to storage, based on Ethereum `events` which
 /// were newly seen by some active validator(s) in the last epoch. For `events`
@@ -49,7 +57,7 @@ where
          protocol transaction"
     );
 
-    let voting_powers = get_voting_powers(storage, &events)?;
+    let voting_powers = utils::get_voting_powers(storage, events.as_slice())?;
 
     let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
 
@@ -59,39 +67,6 @@ where
         changed_keys,
         ..Default::default()
     })
-}
-
-/// Constructs a map of all validators who voted for an event to their
-/// fractional voting power for block heights at which they voted for an event
-fn get_voting_powers<D, H>(
-    storage: &Storage<D, H>,
-    events: &[MultiSignedEthEvent],
-) -> Result<HashMap<(Address, BlockHeight), FractionalVotingPower>>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    let voters = utils::get_votes_for_events(events.iter());
-    tracing::debug!(?voters, "Got validators who voted on at least one event");
-
-    let active_validators = get_active_validators(
-        storage,
-        voters.iter().map(|(_, h)| h.to_owned()).collect(),
-    );
-    tracing::debug!(
-        n = active_validators.len(),
-        "got active validators - {:#?}",
-        active_validators,
-    );
-
-    let voting_powers =
-        utils::get_voting_powers_for_selected(&active_validators, voters)?;
-    tracing::debug!(
-        ?voting_powers,
-        "got voting powers for relevant validators"
-    );
-
-    Ok(voting_powers)
 }
 
 /// Apply an Ethereum state update + act on any events which are confirmed
@@ -225,12 +200,13 @@ mod tests {
     use namada::types::address;
     use namada::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
-        DAI_ERC20_ETH_ADDRESS,
+        arbitrary_single_transfer, DAI_ERC20_ETH_ADDRESS,
     };
     use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada::types::token::Amount;
 
     use super::*;
+    use crate::node::ledger::protocol::transactions::utils::GetVoters;
 
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer
@@ -438,5 +414,62 @@ mod tests {
              should have happened yet as it has only been seen by 1/2 the \
              voting power so far"
         );
+    }
+
+    #[test]
+    /// Assert we don't return anything if we try to get the votes for an empty
+    /// vec of events
+    pub fn test_get_votes_for_events_empty() {
+        let events = vec![];
+        assert!(events.as_slice().get_voters().is_empty());
+    }
+
+    #[test]
+    /// Test that we correctly get the votes from a vec of events
+    pub fn test_get_votes_for_events() {
+        let events = vec![
+            MultiSignedEthEvent {
+                event: arbitrary_single_transfer(
+                    1.into(),
+                    address::testing::established_address_1(),
+                ),
+                signers: BTreeSet::from([
+                    (
+                        address::testing::established_address_1(),
+                        BlockHeight(100),
+                    ),
+                    (
+                        address::testing::established_address_2(),
+                        BlockHeight(102),
+                    ),
+                ]),
+            },
+            MultiSignedEthEvent {
+                event: arbitrary_single_transfer(
+                    2.into(),
+                    address::testing::established_address_2(),
+                ),
+                signers: BTreeSet::from([
+                    (
+                        address::testing::established_address_1(),
+                        BlockHeight(101),
+                    ),
+                    (
+                        address::testing::established_address_3(),
+                        BlockHeight(100),
+                    ),
+                ]),
+            },
+        ];
+        let voters = events.as_slice().get_voters();
+        assert_eq!(
+            voters,
+            HashSet::from_iter(vec![
+                (address::testing::established_address_1(), BlockHeight(100)),
+                (address::testing::established_address_1(), BlockHeight(101)),
+                (address::testing::established_address_2(), BlockHeight(102)),
+                (address::testing::established_address_3(), BlockHeight(100))
+            ])
+        )
     }
 }

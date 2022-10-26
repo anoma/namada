@@ -7,13 +7,14 @@ use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
 use namada::types::storage::BlockHeight;
-use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
-use namada::types::vote_extensions::validator_set_update;
 use namada::types::voting_power::FractionalVotingPower;
 
 use crate::node::ledger::shell::queries::QueriesExt;
 
+/// Proof of some arbitrary tally whose voters can be queried.
 pub(super) trait GetVoters {
+    /// Extract all the voters and the block heights at which they voted from
+    /// the given proof.
     fn get_voters(&self) -> HashSet<(Address, BlockHeight)>;
 }
 
@@ -21,17 +22,17 @@ pub(super) trait GetVoters {
 /// a validator set update to their respective voting power at the given height.
 pub(super) fn get_voting_powers<D, H, P>(
     storage: &Storage<D, H>,
-    proof: P,
-) -> Result<HashMap<(Address, BlockHeight), FractionalVotingPower>>
+    proof: &P,
+) -> eyre::Result<HashMap<(Address, BlockHeight), FractionalVotingPower>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    P: GetVoters,
+    P: GetVoters + ?Sized,
 {
-    let voters = utils::get_votes_for_valset_upd(ext);
+    let voters = proof.get_voters();
     tracing::debug!(?voters, "Got validators who voted on at least one event");
 
-    let active_validators = utils::get_active_validators(
+    let active_validators = get_active_validators(
         storage,
         voters.iter().map(|(_, h)| h.to_owned()).collect(),
     );
@@ -42,7 +43,7 @@ where
     );
 
     let voting_powers =
-        utils::get_voting_powers_for_selected(&active_validators, voters)?;
+        get_voting_powers_for_selected(&active_validators, voters)?;
     tracing::debug!(
         ?voting_powers,
         "Got voting powers for relevant validators"
@@ -68,26 +69,6 @@ where
             .insert(height, storage.get_active_validators(Some(epoch)));
     }
     active_validators
-}
-
-/// Extract all the voters and the block heights at which they voted from the
-/// given events.
-pub(super) fn get_votes_for_events<'a>(
-    events: impl Iterator<Item = &'a MultiSignedEthEvent>,
-) -> HashSet<(Address, BlockHeight)> {
-    events.fold(HashSet::new(), |mut validators, event| {
-        validators.extend(event.signers.iter().cloned());
-        validators
-    })
-}
-
-/// Extract all the voters and the block heights at which they voted from the
-/// given validator set update.
-#[inline]
-pub(super) fn get_votes_for_valset_upd(
-    ext: &validator_set_update::VextDigest,
-) -> HashSet<(Address, BlockHeight)> {
-    ext.signatures.keys().cloned().collect()
 }
 
 /// Gets the voting power of `selected` from `all_active`. Errors if a
@@ -165,9 +146,7 @@ mod tests {
 
     use assert_matches::assert_matches;
     use namada::types::address;
-    use namada::types::ethereum_events::testing::{
-        arbitrary_single_transfer, arbitrary_voting_power,
-    };
+    use namada::types::ethereum_events::testing::arbitrary_voting_power;
 
     use super::*;
 
@@ -332,63 +311,5 @@ mod tests {
         let total = sum_voting_powers(&validators);
 
         assert_eq!(total, VotingPower::from(300));
-    }
-
-    #[test]
-    /// Assert we don't return anything if we try to get the votes for an empty
-    /// vec of events
-    pub fn test_get_votes_for_events_empty() {
-        let events = vec![];
-        let votes = get_votes_for_events(events.iter());
-        assert!(votes.is_empty());
-    }
-
-    #[test]
-    /// Test that we correctly get the votes from a vec of events
-    pub fn test_get_votes_for_events() {
-        let events = vec![
-            MultiSignedEthEvent {
-                event: arbitrary_single_transfer(
-                    1.into(),
-                    address::testing::established_address_1(),
-                ),
-                signers: BTreeSet::from([
-                    (
-                        address::testing::established_address_1(),
-                        BlockHeight(100),
-                    ),
-                    (
-                        address::testing::established_address_2(),
-                        BlockHeight(102),
-                    ),
-                ]),
-            },
-            MultiSignedEthEvent {
-                event: arbitrary_single_transfer(
-                    2.into(),
-                    address::testing::established_address_2(),
-                ),
-                signers: BTreeSet::from([
-                    (
-                        address::testing::established_address_1(),
-                        BlockHeight(101),
-                    ),
-                    (
-                        address::testing::established_address_3(),
-                        BlockHeight(100),
-                    ),
-                ]),
-            },
-        ];
-        let votes = get_votes_for_events(events.iter());
-        assert_eq!(
-            votes,
-            HashSet::from_iter(vec![
-                (address::testing::established_address_1(), BlockHeight(100)),
-                (address::testing::established_address_1(), BlockHeight(101)),
-                (address::testing::established_address_2(), BlockHeight(102)),
-                (address::testing::established_address_3(), BlockHeight(100))
-            ])
-        )
     }
 }
