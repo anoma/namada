@@ -353,8 +353,8 @@ impl VotingPower {
     /// Convert token amount into a voting power.
     pub fn from_tokens(tokens: impl Into<u64>, params: &PosParams) -> Self {
         // The token amount is expected to be in micro units
-        let whole_tokens = tokens.into() / 1_000_000;
-        Self(params.votes_per_token * whole_tokens)
+        let vp = decimal_mult_u64(params.votes_per_token, tokens.into());
+        Self(vp)
     }
 }
 
@@ -381,9 +381,8 @@ impl VotingPowerDelta {
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
         // The token amount is expected to be in micro units
-        let whole_tokens = change.into() / 1_000_000;
-        let delta: i128 = params.votes_per_token * whole_tokens;
-        let delta: i64 = TryFrom::try_from(delta)?;
+        let vp = decimal_mult_i128(params.votes_per_token, change.into());
+        let delta: i64 = vp.to_i64().unwrap();
         Ok(Self(delta))
     }
 
@@ -393,9 +392,8 @@ impl VotingPowerDelta {
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
         // The token amount is expected to be in micro units
-        let whole_tokens = tokens.into() / 1_000_000;
-        let delta: i64 =
-            TryFrom::try_from(params.votes_per_token * whole_tokens)?;
+        let vp = decimal_mult_u64(params.votes_per_token, tokens.into());
+        let delta: i64 = vp.to_i64().unwrap();
         Ok(Self(delta))
     }
 }
