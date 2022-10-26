@@ -19,8 +19,7 @@ pub struct PosParams {
     /// `n + slashable_period_len` epoch.
     /// The value must be greater or equal to `pipeline_len`.
     pub unbonding_len: u64,
-    /// Used in validators' voting power calculation. Given in basis points
-    /// (voting power per ten thousand tokens).
+    /// Used in validators' voting power calculation.
     pub votes_per_token: Decimal,
     /// Amount of tokens rewarded to a validator for proposing a block
     pub block_proposer_reward: Decimal,
@@ -28,10 +27,10 @@ pub struct PosParams {
     /// proposal
     pub block_vote_reward: Decimal,
     /// Portion of validator's stake that should be slashed on a duplicate
-    /// vote. Given in basis points (slashed amount per ten thousand tokens).
+    /// vote.
     pub duplicate_vote_slash_rate: Decimal,
     /// Portion of validator's stake that should be slashed on a light client
-    /// attack. Given in basis points (slashed amount per ten thousand tokens).
+    /// attack.
     pub light_client_attack_slash_rate: Decimal,
 }
 
