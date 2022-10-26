@@ -1299,6 +1299,7 @@ pub mod args {
     use namada::types::token;
     use namada::types::transaction::GasLimit;
     use rust_decimal::Decimal;
+    use rust_decimal_macros::dec;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
@@ -1327,7 +1328,8 @@ pub mod args {
     const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
-    const COMMISSION_RATE: Arg<Decimal> = arg("commission-rate");
+    const COMMISSION_RATE: ArgDefault<Decimal> =
+        arg_default("commission-rate", DefaultFn(|| dec!(0.05)));
     const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
@@ -1359,8 +1361,8 @@ pub mod args {
 
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
-    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
-        arg("max-commission-rate-change");
+    const MAX_COMMISSION_RATE_CHANGE: ArgDefault<Decimal> =
+        arg_default("max-commission-rate-change", DefaultFn(|| dec!(0.01)));
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NFT_ADDRESS: Arg<Address> = arg("nft-address");
