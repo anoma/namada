@@ -245,7 +245,7 @@ pub mod genesis_config {
         // Unbonding length (in epochs).
         // XXX: u64 doesn't work with toml-rs!
         pub unbonding_len: u64,
-        // Votes per token (in basis points).
+        // Votes per token.
         // XXX: u64 doesn't work with toml-rs!
         pub tm_votes_per_token: Decimal,
         // Reward for proposing a block.
@@ -260,11 +260,11 @@ pub mod genesis_config {
         // Target ratio of staked NAM tokens to total NAM tokens
         pub target_staked_ratio: u64,
         // Portion of a validator's stake that should be slashed on a
-        // duplicate vote (in basis points).
+        // duplicate vote.
         // XXX: u64 doesn't work with toml-rs!
         pub duplicate_vote_slash_rate: Decimal,
         // Portion of a validator's stake that should be slashed on a
-        // light client attack (in basis points).
+        // light client attack.
         // XXX: u64 doesn't work with toml-rs!
         pub light_client_attack_slash_rate: Decimal,
     }

@@ -32,10 +32,10 @@ pub struct PosParams {
     /// Target ratio of staked NAM tokens to total NAM tokens
     pub target_staked_ratio: Decimal,
     /// Portion of validator's stake that should be slashed on a duplicate
-    /// vote. Given in basis points (slashed amount per ten thousand tokens).
+    /// vote.
     pub duplicate_vote_slash_rate: Decimal,
     /// Portion of validator's stake that should be slashed on a light client
-    /// attack. Given in basis points (slashed amount per ten thousand tokens).
+    /// attack.
     pub light_client_attack_slash_rate: Decimal,
 }
 
