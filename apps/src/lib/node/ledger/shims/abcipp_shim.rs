@@ -104,7 +104,7 @@ impl AbcippShim {
                 Req::FinalizeBlock(block) => {
                     let unprocessed_txs = block.txs.clone();
                     let (processing_results, _) =
-                        self.service.process_proposed_txs(&block.txs);
+                        self.service.check_proposal(&block.txs);
                     let mut txs = Vec::with_capacity(unprocessed_txs.len());
                     for (result, tx) in processing_results
                         .into_iter()
@@ -138,7 +138,7 @@ impl AbcippShim {
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
                     let (processing_results, _) =
-                        self.service.process_proposed_txs(&self.delivered_txs);
+                        self.service.check_proposal(&self.delivered_txs);
                     let mut txs = Vec::with_capacity(self.delivered_txs.len());
                     let mut delivered = vec![];
                     std::mem::swap(&mut self.delivered_txs, &mut delivered);

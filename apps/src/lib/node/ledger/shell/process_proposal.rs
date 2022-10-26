@@ -50,7 +50,7 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let (tx_results, counters) = self.process_proposed_txs(&req.txs);
+        let (tx_results, counters) = self.check_proposal(&req.txs);
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
@@ -115,12 +115,12 @@ where
         }
     }
 
-    /// Calculates what the [`TxResult`]s would be for the transactions in a
+    /// Checks what the [`TxResult`]s would be for the transactions in a
     /// proposed block, as well as counting the number of digest transactions
     /// present. `ProcessProposal` should be able to make a decision on whether
     /// a proposed block is acceptable or not based solely on what this function
     /// returns.
-    pub fn process_proposed_txs(
+    pub fn check_proposal(
         &self,
         txs: &[Vec<u8>],
     ) -> (Vec<TxResult>, DigestCounters) {
@@ -130,7 +130,7 @@ where
         let tx_results: Vec<_> = txs
             .iter()
             .map(|tx_bytes| {
-                self.process_proposed_tx(
+                self.check_proposal_tx(
                     tx_bytes,
                     &mut tx_queue_iter,
                     &mut counters,
@@ -227,7 +227,7 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    pub(crate) fn process_proposed_tx<'a>(
+    pub(crate) fn check_proposal_tx<'a>(
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
