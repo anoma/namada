@@ -329,7 +329,7 @@ impl Encode<1> for ValidatorSetArgs {
                 .collect(),
         );
         let nonce = Token::Uint(self.nonce.clone().into());
-        [Token::FixedArray(vec![addrs, powers, nonce])]
+        [Token::Tuple(vec![addrs, powers, nonce])]
     }
 }
 
