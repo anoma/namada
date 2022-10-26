@@ -8,6 +8,7 @@ use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
 use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
+use namada::types::vote_extensions::validator_set_update;
 use namada::types::voting_power::FractionalVotingPower;
 
 use crate::node::ledger::shell::queries::QueriesExt;
@@ -40,6 +41,15 @@ pub(super) fn get_votes_for_events<'a>(
         validators.extend(event.signers.iter().cloned());
         validators
     })
+}
+
+/// Extract all the voters and the block heights at which they voted from the
+/// given validator set update.
+#[inline]
+pub(super) fn get_votes_for_valset_upd(
+    ext: &validator_set_update::VextDigest,
+) -> HashSet<(Address, BlockHeight)> {
+    ext.signatures.keys().cloned().collect()
 }
 
 /// Gets the voting power of `selected` from `all_active`. Errors if a
