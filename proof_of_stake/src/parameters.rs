@@ -103,7 +103,8 @@ impl PosParams {
         // Check maximum total voting power cannot get larger than what
         // Tendermint allows
         let max_total_voting_power = Decimal::from(self.max_validator_slots)
-            * self.votes_per_token * Decimal::from(TOKEN_MAX_AMOUNT);
+            * self.votes_per_token
+            * Decimal::from(TOKEN_MAX_AMOUNT);
         match i64::try_from(max_total_voting_power) {
             Ok(max_total_voting_power_i64) => {
                 if max_total_voting_power_i64 > MAX_TOTAL_VOTING_POWER {
