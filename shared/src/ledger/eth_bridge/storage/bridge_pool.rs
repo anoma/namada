@@ -36,7 +36,6 @@ pub fn get_key_from_hash(hash: &KeccakHash) -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
             hash.to_db_key(),
-
         ],
     }
 }
@@ -129,7 +128,6 @@ impl BridgePoolTree {
     /// Return the root as a [`struct@Hash`] type.
     pub fn root(&self) -> KeccakHash {
         self.root.clone()
-
     }
 
     /// Get a reference to the backing store

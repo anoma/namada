@@ -1,5 +1,7 @@
 //! The necessary type definitions for the contents of the
 //! Ethereum bridge pool
+use std::collections::BTreeSet;
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::token::Token;
 
@@ -11,6 +13,9 @@ use crate::types::keccak::KeccakHash;
 use crate::types::storage::{BlockHeight, DbKeySeg, Key};
 use crate::types::token::Amount;
 use crate::types::vote_extensions::validator_set_update::ValidatorSetArgs;
+
+/// A namespace used in our Ethereuem smart contracts
+const NAMESPACE: &str = "transfer";
 
 /// A transfer message to be submitted to Ethereum
 /// to move assets from Namada across the bridge.
@@ -61,8 +66,9 @@ pub struct PendingTransfer {
 
 impl Encode<8> for PendingTransfer {
     fn tokenize(&self) -> [Token; 8] {
+        // TODO: This version should be looked up from storage
         let version = Token::Uint(1.into());
-        let namespace = Token::String("transfer".into());
+        let namespace = Token::String(NAMESPACE.into());
         let from = Token::Address(self.transfer.asset.0.into());
         let fee = Token::Uint(u64::from(self.gas_fee.amount).into());
         let to = Token::Address(self.transfer.recipient.0.into());
@@ -111,7 +117,7 @@ pub struct GasFee {
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct MultiSignedMerkleRoot {
     /// The signatures from validators
-    pub sigs: Vec<crate::types::key::secp256k1::Signature>,
+    pub sigs: BTreeSet<crate::types::key::secp256k1::Signature>,
     /// The Merkle root being signed
     pub root: KeccakHash,
     /// The block height at which this root was valid
