@@ -20,10 +20,12 @@ use super::{
     bond_key, is_bond_key, is_params_key, is_total_voting_power_key,
     is_unbond_key, is_validator_set_key, is_validator_total_deltas_key,
     is_validator_voting_power_key, params_key, staking_token_address,
-    total_voting_power_key, unbond_key, validator_consensus_key_key,
+    total_voting_power_key, unbond_key, validator_commission_rate_key,
+    validator_consensus_key_key, validator_max_commission_rate_change_key,
     validator_set_key, validator_slashes_key, validator_state_key,
     validator_total_deltas_key, validator_voting_power_key, BondId, Bonds,
-    Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas, validator_commission_rate_key, max_commission_rate_change_key,
+    CommissionRates, Unbonds, ValidatorConsensusKeys, ValidatorSets,
+    ValidatorTotalDeltas,
 };
 use crate::impl_pos_read_only;
 use crate::ledger::governance::vp::is_proposal_accepted;
