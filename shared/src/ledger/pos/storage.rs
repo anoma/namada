@@ -171,7 +171,7 @@ pub fn is_validator_max_commission_rate_change_key(
 }
 
 /// Storage key for validator's consensus key.
-pub fn validator_consensus_key_key(validator: &Address) -> Key {
+pub fn validator_state_key(validator: &Address) -> Key {
     validator_prefix(validator)
         .push(&VALIDATOR_STATE_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
@@ -474,17 +474,19 @@ where
     ) -> CommissionRates {
         let (value, _gas) =
             self.read(&validator_commission_rate_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap()).unwrap()
+        decode(value.unwrap()).unwrap()
     }
 
     fn read_validator_max_commission_rate_change(
         &self,
         key: &Self::Address,
     ) -> rust_decimal::Decimal {
-        let (value, _gas) =
-            self.read(&validator_commission_rate_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap()).unwrap()
+        let (value, _gas) = self
+            .read(&validator_max_commission_rate_change_key(key))
+            .unwrap();
+        decode(value.unwrap()).unwrap()
     }
+
     fn read_validator_set(&self) -> ValidatorSets {
         let (value, _gas) = self.read(&validator_set_key()).unwrap();
         decode(value.unwrap()).unwrap()
