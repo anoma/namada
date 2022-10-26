@@ -840,8 +840,8 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Send a signed transaction to create a new validator and \
-                     its staking reward account.",
+                    "Send a signed transaction to create a new validator \
+                     account.",
                 )
                 .add_args::<args::TxInitValidator>()
         }
@@ -1194,9 +1194,9 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Initialize genesis validator's address, staking reward \
-                     address, consensus key, validator account key and \
-                     staking rewards key and use it in the ledger's node.",
+                    "Initialize genesis validator's address, consensus key \
+                     and validator account key and use it in the ledger's \
+                     node.",
                 )
                 .add_args::<args::InitGenesisValidator>()
         }
