@@ -13,6 +13,44 @@ use namada::types::voting_power::FractionalVotingPower;
 
 use crate::node::ledger::shell::queries::QueriesExt;
 
+pub(super) trait GetVoters {
+    fn get_voters(&self) -> HashSet<(Address, BlockHeight)>;
+}
+
+/// Constructs a map of validators and the block height at which they signed
+/// a validator set update to their respective voting power at the given height.
+pub(super) fn get_voting_powers<D, H, P>(
+    storage: &Storage<D, H>,
+    proof: P,
+) -> Result<HashMap<(Address, BlockHeight), FractionalVotingPower>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    P: GetVoters,
+{
+    let voters = utils::get_votes_for_valset_upd(ext);
+    tracing::debug!(?voters, "Got validators who voted on at least one event");
+
+    let active_validators = utils::get_active_validators(
+        storage,
+        voters.iter().map(|(_, h)| h.to_owned()).collect(),
+    );
+    tracing::debug!(
+        n = active_validators.len(),
+        ?active_validators,
+        "Got active validators in valset upd vote aggregation"
+    );
+
+    let voting_powers =
+        utils::get_voting_powers_for_selected(&active_validators, voters)?;
+    tracing::debug!(
+        ?voting_powers,
+        "Got voting powers for relevant validators"
+    );
+
+    Ok(voting_powers)
+}
+
 pub(super) fn get_active_validators<D, H>(
     storage: &Storage<D, H>,
     block_heights: HashSet<BlockHeight>,
