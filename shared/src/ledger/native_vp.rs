@@ -230,7 +230,7 @@ where
     }
 
     fn get_native_token(&self) -> Result<Address, storage_api::Error> {
-        Ok(self.ctx.storage.native_token.clone())
+        self.ctx.get_native_token()
     }
 }
 
@@ -385,6 +385,14 @@ where
     fn get_block_epoch(&'view self) -> Result<Epoch, storage_api::Error> {
         vp_env::get_block_epoch(&mut *self.gas_meter.borrow_mut(), self.storage)
             .into_storage_result()
+    }
+
+    fn get_native_token(&'view self) -> Result<Address, storage_api::Error> {
+        vp_env::get_native_token(
+            &mut *self.gas_meter.borrow_mut(),
+            self.storage,
+        )
+        .into_storage_result()
     }
 
     fn iter_prefix(

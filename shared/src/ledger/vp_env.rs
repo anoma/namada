@@ -66,6 +66,9 @@ pub trait VpEnv<'view> {
     /// current transaction is being applied.
     fn get_block_epoch(&'view self) -> Result<Epoch, storage_api::Error>;
 
+    /// Get the address of the native token.
+    fn get_native_token(&'view self) -> Result<Address, storage_api::Error>;
+
     /// Storage prefix iterator, ordered by storage keys. It will try to get an
     /// iterator from the storage.
     fn iter_prefix(

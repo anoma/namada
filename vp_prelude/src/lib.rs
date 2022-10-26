@@ -241,6 +241,11 @@ impl<'view> VpEnv<'view> for Ctx {
         get_block_epoch()
     }
 
+    fn get_native_token(&'view self) -> Result<Address, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_native_token()
+    }
+
     fn iter_prefix(
         &self,
         prefix: &storage::Key,
@@ -490,5 +495,7 @@ fn get_native_token() -> Result<Address, Error> {
     }
     let slice =
         unsafe { slice::from_raw_parts(result.as_ptr(), address::ADDRESS_LEN) };
-    Ok(Address::try_from_slice(slice).expect("Cannot decode native address"))
+    let address_str =
+        std::str::from_utf8(slice).expect("Cannot decode native address");
+    Ok(Address::decode(address_str).expect("Cannot decode native address"))
 }

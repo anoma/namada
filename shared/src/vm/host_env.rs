@@ -1569,10 +1569,10 @@ where
     let storage = unsafe { env.ctx.storage.get() };
     tx_add_gas(env, MIN_STORAGE_GAS)?;
     let native_token = storage.native_token.clone();
-    let native_token_bytes = native_token.try_to_vec().unwrap();
+    let native_token_string = native_token.encode();
     let gas = env
         .memory
-        .write_bytes(result_ptr, native_token_bytes)
+        .write_string(result_ptr, native_token_string)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)
 }
@@ -1841,10 +1841,10 @@ where
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let native_token = vp_env::get_native_token(gas_meter, storage)?;
-    let native_token_bytes = native_token.try_to_vec().unwrap();
+    let native_token_string = native_token.encode();
     let gas = env
         .memory
-        .write_bytes(result_ptr, native_token_bytes)
+        .write_string(result_ptr, native_token_string)
         .map_err(|e| vp_env::RuntimeError::MemoryError(Box::new(e)))?;
     vp_env::add_gas(gas_meter, gas)
 }

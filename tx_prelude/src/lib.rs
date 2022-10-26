@@ -177,8 +177,9 @@ impl StorageRead<'_> for Ctx {
         let slice = unsafe {
             slice::from_raw_parts(result.as_ptr(), address::ADDRESS_LEN)
         };
-        Ok(Address::try_from_slice(slice)
-            .expect("Cannot decode native address"))
+        let address_str =
+            std::str::from_utf8(slice).expect("Cannot decode native address");
+        Ok(Address::decode(address_str).expect("Cannot decode native address"))
     }
 
     fn iter_prefix(
