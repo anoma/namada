@@ -431,7 +431,7 @@ impl Encode<1> for Signature {
         let r = Token::FixedBytes(sig_serialized[..32].to_vec());
         let s = Token::FixedBytes(sig_serialized[32..].to_vec());
         let v = Token::FixedBytes(vec![self.1.serialize()]);
-        [Token::FixedArray(vec![r, s, v])]
+        [Token::Tuple(vec![r, s, v])]
     }
 }
 
