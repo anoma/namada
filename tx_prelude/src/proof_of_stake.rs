@@ -3,10 +3,10 @@
 pub use namada::ledger::pos::*;
 use namada::ledger::pos::{
     bond_key, namada_proof_of_stake, params_key, total_voting_power_key,
-    unbond_key, validator_address_raw_hash_key, validator_consensus_key_key,
+    unbond_key, validator_address_raw_hash_key, validator_commission_rate_key,
+    validator_consensus_key_key, validator_max_commission_rate_change_key,
     validator_set_key, validator_slashes_key, validator_state_key,
     validator_total_deltas_key, validator_voting_power_key,
-    validator_commission_rate_key, validator_max_commission_rate_change_key
 };
 use namada::types::address::Address;
 use namada::types::transaction::InitValidator;
@@ -14,8 +14,8 @@ use namada::types::{key, token};
 pub use namada_proof_of_stake::{
     epoched, parameters, types, PosActions as PosWrite, PosReadOnly as PosRead,
 };
-
 use rust_decimal::Decimal;
+
 use super::*;
 
 impl Ctx {
@@ -103,7 +103,7 @@ impl Ctx {
             &consensus_key,
             current_epoch,
             commission_rate,
-            max_commission_rate_change
+            max_commission_rate_change,
         )?;
 
         Ok(validator_address)
@@ -162,10 +162,10 @@ impl namada_proof_of_stake::PosActions for Ctx {
     }
 
     fn write_validator_max_commission_rate_change(
-            &mut self,
-            key: &Self::Address,
-            value: Decimal,
-        ) -> Result<(), Self::Error> {
+        &mut self,
+        key: &Self::Address,
+        value: Decimal,
+    ) -> Result<(), Self::Error> {
         self.write(&validator_max_commission_rate_change_key(key), &value)
     }
 

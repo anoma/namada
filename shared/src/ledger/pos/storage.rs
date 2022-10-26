@@ -7,8 +7,8 @@ use namada_proof_of_stake::types::{
 use namada_proof_of_stake::{types, PosBase};
 
 use super::{
-    BondId, Bonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
-    ADDRESS, CommissionRates
+    BondId, Bonds, CommissionRates, ValidatorConsensusKeys, ValidatorSets,
+    ValidatorTotalDeltas, ADDRESS,
 };
 use crate::ledger::storage::types::{decode, encode};
 use crate::ledger::storage::{self, Storage, StorageHasher};
@@ -525,9 +525,12 @@ where
         key: &Self::Address,
         value: &rust_decimal::Decimal,
     ) {
-    self.write(&validator_max_commission_rate_change_key(key), encode(value))
+        self.write(
+            &validator_max_commission_rate_change_key(key),
+            encode(value),
+        )
         .unwrap();
-}
+    }
 
     fn write_validator_consensus_key(
         &mut self,
