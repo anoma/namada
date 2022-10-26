@@ -874,9 +874,8 @@ fn init_established_account(
     }
 }
 
-/// Initialize genesis validator's address, staking reward address,
-/// consensus key, validator account key and staking rewards key and use
-/// it in the ledger's node.
+/// Initialize genesis validator's address, consensus key and validator account
+/// key and use it in the ledger's node.
 pub fn init_genesis_validator(
     global_args: args::Global,
     args::InitGenesisValidator {

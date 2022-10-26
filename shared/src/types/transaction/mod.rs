@@ -166,8 +166,7 @@ pub struct InitAccount {
     pub vp_code: Vec<u8>,
 }
 
-/// A tx data type to initialize a new validator account and its staking reward
-/// account.
+/// A tx data type to initialize a new validator account.
 #[derive(
     Debug,
     Clone,
