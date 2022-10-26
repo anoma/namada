@@ -16,5 +16,6 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    todo!()
+    tracing::warn!("Called aggregate_votes() with no side effects");
+    Ok(TxResult::default())
 }
