@@ -29,13 +29,15 @@ use namada::types::governance::{
     VotePower,
 };
 use namada::types::key::*;
-use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
+use namada::types::storage::{BlockHeight, Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
 use crate::facade::tendermint::abci::Code;
+use crate::facade::tendermint::block::Height;
+use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::error::Error as TError;
 use crate::facade::tendermint_rpc::query::Query;
@@ -1293,20 +1295,39 @@ pub async fn query_storage_value<T>(
 where
     T: BorshDeserialize,
 {
+    let (bytes, _proof) =
+        query_storage_value_bytes(client, key, None, false).await;
+    match bytes {
+        Some(b) => match T::try_from_slice(&b[..]) {
+            Ok(value) => Some(value),
+            Err(err) => {
+                eprintln!("Error decoding the value: {}", err);
+                cli::safe_exit(1)
+            }
+        },
+        None => None,
+    }
+}
+
+/// Query a storage value and the proof without decoding.
+pub async fn query_storage_value_bytes(
+    client: &HttpClient,
+    key: &storage::Key,
+    height: Option<BlockHeight>,
+    prove: bool,
+) -> (Option<Vec<u8>>, Option<Proof>) {
     let path = Path::Value(key.to_owned());
     let data = vec![];
+    let height = height.map(|h| Height::try_from(h.0).unwrap());
     let response = client
-        .abci_query(Some(path.into()), data, None, false)
+        .abci_query(Some(path.into()), data, height, prove)
         .await
         .unwrap();
     match response.code {
-        Code::Ok => match T::try_from_slice(&response.value[..]) {
-            Ok(value) => return Some(value),
-            Err(err) => eprintln!("Error decoding the value: {}", err),
-        },
+        Code::Ok => return (Some(response.value), response.proof),
         Code::Err(err) => {
             if err == 1 {
-                return None;
+                return (None, response.proof);
             } else {
                 eprintln!(
                     "Error in the query {} (error code {})",

@@ -48,7 +48,7 @@ pub const ENV_VAR_USE_PREBUILT_BINARIES: &str =
 
 /// The E2E tests genesis config source.
 /// This file must contain a single validator with alias "validator-0".
-/// To add more validators, use the [`add_validators`] function in the call to
+/// To add more validators, use the [`set_validators`] function in the call to
 /// setup the [`network`].
 pub const SINGLE_NODE_NET_GENESIS: &str = "genesis/e2e-tests-single-node.toml";
 /// An E2E test network.
@@ -57,13 +57,28 @@ pub struct Network {
     pub chain_id: ChainId,
 }
 
-/// Add `num` validators to the genesis config. Note that called from inside
-/// the [`network`]'s first argument's closure, there is 1 validator already
-/// present to begin with, so e.g. `add_validators(1, _)` will configure a
-/// network with 2 validators.
+/// Offset the ports used in the network configuration to avoid shared resources
+pub const ANOTHER_CHAIN_PORT_OFFSET: u16 = 1000;
+
+/// Default functions for offsetting ports when
+/// adding multiple validators to a network
+pub fn default_port_offset(ix: u8) -> u16 {
+    6 * ix as u16
+}
+
+/// Set `num` validators to the genesis config. Note that called from inside
+/// the [`network`]'s first argument's closure, e.g. `set_validators(2, _)` will
+/// configure a network with 2 validators.
 ///
 /// INVARIANT: Do not call this function more than once on the same config.
-pub fn add_validators(num: u8, mut genesis: GenesisConfig) -> GenesisConfig {
+pub fn set_validators<F>(
+    num: u8,
+    mut genesis: GenesisConfig,
+    port_offset: F,
+) -> GenesisConfig
+where
+    F: Fn(u8) -> u16,
+{
     let validator_0 = genesis.validator.get_mut("validator-0").unwrap();
     // Clone the first validator before modifying it
     let other_validators = validator_0.clone();
@@ -75,10 +90,10 @@ pub fn add_validators(num: u8, mut genesis: GenesisConfig) -> GenesisConfig {
         let mut validator = other_validators.clone();
         let mut net_address = net_address_0;
         // 6 ports for each validator
-        let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
+        let first_port = net_address_port_0 + port_offset(ix);
         net_address.set_port(first_port);
         validator.net_address = Some(net_address.to_string());
-        let name = format!("validator-{}", ix + 1);
+        let name = format!("validator-{}", ix);
         genesis.validator.insert(name, validator);
     }
     genesis
@@ -89,8 +104,20 @@ pub fn single_node_net() -> Result<Test> {
     network(|genesis| genesis, None)
 }
 
+/// Setup two networks with a single genesis validator node.
+pub fn two_single_node_nets() -> Result<(Test, Test)> {
+    Ok((
+        network(|genesis| genesis, None)?,
+        network(
+            |genesis| set_validators(1, genesis, |_| ANOTHER_CHAIN_PORT_OFFSET),
+            None,
+        )?,
+    ))
+}
+
+/// Setup a configurable network.
 pub fn network(
-    update_genesis: impl Fn(GenesisConfig) -> GenesisConfig,
+    mut update_genesis: impl FnMut(GenesisConfig) -> GenesisConfig,
     consensus_timeout_commit: Option<&'static str>,
 ) -> Result<Test> {
     INIT.call_once(|| {
@@ -783,6 +810,7 @@ pub mod constants {
     pub const TX_INIT_PROPOSAL: &str = "wasm_for_tests/tx_init_proposal.wasm";
     pub const TX_WRITE_STORAGE_KEY_WASM: &str =
         "wasm_for_tests/tx_write_storage_key.wasm";
+    pub const TX_IBC_WASM: &str = "wasm/tx_ibc.wasm";
     pub const VP_ALWAYS_TRUE_WASM: &str = "wasm_for_tests/vp_always_true.wasm";
     pub const VP_ALWAYS_FALSE_WASM: &str =
         "wasm_for_tests/vp_always_false.wasm";
