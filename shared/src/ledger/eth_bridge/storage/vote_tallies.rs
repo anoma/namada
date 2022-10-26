@@ -1,10 +1,17 @@
 //! Functionality for accessing keys to do with tallying votes
+
 use crate::types::ethereum_events::EthereumEvent;
 use crate::types::hash::Hash;
-use crate::types::storage::Key;
+use crate::types::storage::{Epoch, Key};
+use crate::types::vote_extensions::validator_set_update::VotingPowersMap;
 
-#[allow(missing_docs)]
+/// Storage sub-key space reserved to keeping track of the
+/// voting power assigned to Ethereum events.
 pub const ETH_MSGS_PREFIX_KEY_SEGMENT: &str = "eth_msgs";
+
+/// Storage sub-key space reserved to keeping track of the
+/// voting power assigned to validator set updates.
+pub const VALSET_UPDS_PREFIX_KEY_SEGMENT: &str = "validator_set_updates";
 
 const BODY_KEY_SEGMENT: &str = "body";
 const SEEN_KEY_SEGMENT: &str = "seen";
@@ -68,8 +75,8 @@ impl<T> IntoIterator for &Keys<T> {
     }
 }
 
-/// Get the key prefix corresponding to where details of seen [`EthereumEvent`]s
-/// are stored
+/// Get the key prefix corresponding to the storage location of
+/// [`EthereumEvent`]s whose "seen" state is being tracked.
 pub fn eth_msgs_prefix() -> Key {
     super::prefix()
         .push(&ETH_MSGS_PREFIX_KEY_SEGMENT.to_owned())
@@ -90,6 +97,26 @@ impl From<&Hash> for Keys<EthereumEvent> {
         let hex = format!("{}", hash);
         let prefix = eth_msgs_prefix()
             .push(&hex)
+            .expect("should always be able to construct this key");
+        Keys {
+            prefix,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+/// Get the key prefix corresponding to the storage location of validator set
+/// updates whose "seen" state is being tracked.
+pub fn valset_upds_prefix() -> Key {
+    super::prefix()
+        .push(&VALSET_UPDS_PREFIX_KEY_SEGMENT.to_owned())
+        .expect("should always be able to construct this key")
+}
+
+impl From<&Epoch> for Keys<VotingPowersMap> {
+    fn from(epoch: &Epoch) -> Self {
+        let prefix = valset_upds_prefix()
+            .push(epoch)
             .expect("should always be able to construct this key");
         Keys {
             prefix,

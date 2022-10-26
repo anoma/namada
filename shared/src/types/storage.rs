@@ -586,6 +586,32 @@ impl KeySeg for BlockHeight {
     }
 }
 
+impl KeySeg for Epoch {
+    fn parse(string: String) -> Result<Self> {
+        string
+            .split_once('=')
+            .and_then(|(prefix, epoch)| (prefix == "E").then(|| epoch))
+            .ok_or_else(|| Error::Temporary {
+                error: format!("Invalid epoch prefix on key: {string}"),
+            })
+            .and_then(|epoch| {
+                epoch.parse::<u64>().map_err(|e| Error::Temporary {
+                    error: format!("Unexpected epoch value {epoch}, {e}"),
+                })
+            })
+            .map(Epoch)
+    }
+
+    fn raw(&self) -> String {
+        let &Epoch(epoch) = self;
+        format!("E={epoch}")
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
 impl KeySeg for Address {
     fn parse(mut seg: String) -> Result<Self> {
         match seg.chars().next() {
@@ -873,6 +899,19 @@ mod tests {
             let addr = address::testing::established_address_1();
             let key = Key::from(addr.to_db_key()).push(&s).expect("cannnot push the segment");
             assert_eq!(key.segments[1].raw(), s);
+        }
+
+        /// Test roundtrip parsing of key segments derived from [`Epoch`]
+        /// values.
+        #[test]
+        fn test_parse_epoch_key_segment(e in 0..=u64::MAX) {
+            let original_epoch = Epoch(e);
+            let key_seg = match original_epoch.to_db_key() {
+                DbKeySeg::StringSeg(s) => s,
+                _ => panic!("Test failed"),
+            };
+            let parsed_epoch: Epoch = KeySeg::parse(key_seg).expect("Test failed");
+            assert_eq!(original_epoch, parsed_epoch);
         }
     }
 
