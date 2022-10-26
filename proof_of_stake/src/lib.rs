@@ -846,6 +846,11 @@ pub trait PosBase {
             self.write_validator_total_deltas(address, &total_deltas);
             self.write_validator_voting_power(address, &voting_power);
             self.write_bond(&bond_id, &bond);
+            self.write_validator_commission_rate(address, &commission_rate);
+            self.write_validator_max_commission_rate_change(
+                address,
+                &max_commission_rate_change,
+            );
         }
         self.write_validator_set(&validator_set);
         self.write_total_voting_power(&total_voting_power);
