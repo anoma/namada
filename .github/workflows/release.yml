@@ -74,8 +74,6 @@ jobs:
           restore-keys: ${{ runner.os }}-anoma-release-${{ matrix.anoma_cache_version }}
       - name: Start sccache server
         run: sccache --start-server
-      - name: Install mold linker
-        uses: rui314/setup-mold@v1
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
       - name: Upload binaries package

@@ -109,6 +109,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         nightly_version: [nightly-2022-05-20]
+        mold_version: [1.6.0]
         make:
           - name: ABCI
             suffix: ''
@@ -178,11 +179,17 @@ jobs:
       - name: Start sccache server
         run: sccache --start-server
       - name: Install mold linker
-        uses: rui314/setup-mold@v1
+        run: |
+          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
       - name: Build
         run: make build${{ matrix.make.suffix }}
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Build test
         run: make build-test${{ matrix.make.suffix }}
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
@@ -190,6 +197,8 @@ jobs:
           path: ./wasm
       - name: Run unit test
         run: make test-unit${{ matrix.make.suffix }}
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Wait for release binaries
         uses: lewagon/wait-on-check-action@master
         with:
@@ -234,6 +243,7 @@ jobs:
           ANOMA_LOG_COLOR: "false"
           ANOMA_MASP_PARAMS_DIR: "/home/runner/work/masp"
           ANOMA_LOG: "info"
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload e2e logs
         if: success() || failure()
         uses: actions/upload-artifact@v3
@@ -242,7 +252,7 @@ jobs:
           path: |
             /tmp/.*/logs/
             /tmp/.*/e2e-test.*/setup/validator-*/.anoma/logs/*.log
-          retention-days: 5
+          retention-days: 3
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats
@@ -257,6 +267,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
+        mold_version: [1.6.0]
         make:
           - name: ABCI Release build
             suffix: ''
@@ -319,9 +330,13 @@ jobs:
       - name: Start sccache server
         run: sccache --start-server
       - name: Install mold linker
-        uses: rui314/setup-mold@v1
+        run: |
+          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
       - name: Build
         run: make build-release${{ matrix.make.suffix }}
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload target binaries
         uses: actions/upload-artifact@v3
         with:
