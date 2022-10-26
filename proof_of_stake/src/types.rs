@@ -9,6 +9,7 @@ use std::num::TryFromIntError;
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use rust_decimal::Decimal;
 
 use crate::epoched::{
     Epoched, EpochedDelta, OffsetPipelineLen, OffsetUnbondingLen,

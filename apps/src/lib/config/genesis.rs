@@ -36,6 +36,7 @@ pub mod genesis_config {
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
     use namada::types::{storage, token};
+    use rust_decimal::Decimal;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
@@ -721,6 +722,7 @@ pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
 pub fn genesis() -> Genesis {
     use namada::ledger::parameters::EpochDuration;
     use namada::types::address;
+    use rust_decimal_macros::dec;
 
     use crate::wallet;
 
