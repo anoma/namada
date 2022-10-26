@@ -1,5 +1,6 @@
 //! secp256k1 keys and related functionality
 
+use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
@@ -443,7 +444,18 @@ impl Hash for Signature {
 
 impl PartialOrd for Signature {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.serialize().partial_cmp(&other.0.serialize())
+        match self.0.serialize().partial_cmp(&other.0.serialize()) {
+            Some(Ordering::Equal) => {
+                self.1.serialize().partial_cmp(&other.1.serialize())
+            }
+            res => res,
+        }
+    }
+}
+
+impl Ord for Signature {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
     }
 }
 

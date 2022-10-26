@@ -360,43 +360,36 @@ where
     /// Read the current contents of the Ethereum bridge
     /// pool.
     fn read_ethereum_bridge_pool(&self) -> response::Query {
-        if let Ok(Some(stores)) = self
+        let stores = self
             .storage
             .db
             .read_merkle_tree_stores(self.storage.last_height)
-        {
-            let store = match stores.get_store(StoreType::BridgePool) {
-                StoreRef::BridgePool(store) => store,
-                _ => unreachable!(),
-            };
-            let transfers: Vec<PendingTransfer> = store
-                .iter()
-                .map(|hash| {
-                    let res = self
-                        .storage
-                        .read(&get_key_from_hash(hash))
-                        .unwrap()
-                        .0
-                        .unwrap();
-                    BorshDeserialize::try_from_slice(res.as_slice()).unwrap()
-                })
-                .collect();
-            response::Query {
-                code: 0,
-                value: transfers.try_to_vec().unwrap(),
-                ..Default::default()
-            }
-        } else {
-            response::Query {
-                code: 1,
-                log: "Could not retrieve the Ethereum bridge pool for the \
-                      latest height"
-                    .into(),
-                info: "Could not retrieve the Ethereum bridge pool for the \
-                       latest height"
-                    .into(),
-                ..Default::default()
-            }
+            .expect("We should always be able to read the database")
+            .expect(
+                "Every signed root should correspond to an existing block \
+                 height",
+            );
+        let store = match stores.get_store(StoreType::BridgePool) {
+            StoreRef::BridgePool(store) => store,
+            _ => unreachable!(),
+        };
+
+        let transfers: Vec<PendingTransfer> = store
+            .iter()
+            .map(|hash| {
+                let res = self
+                    .storage
+                    .read(&get_key_from_hash(hash))
+                    .unwrap()
+                    .0
+                    .unwrap();
+                BorshDeserialize::try_from_slice(res.as_slice()).unwrap()
+            })
+            .collect();
+        response::Query {
+            code: 0,
+            value: transfers.try_to_vec().unwrap(),
+            ..Default::default()
         }
     }
 
@@ -410,42 +403,39 @@ where
             <Vec<PendingTransfer>>::try_from_slice(request_bytes.as_slice())
         {
             // get the latest signed merkle root of the Ethereum bridge pool
-            let signed_root: MultiSignedMerkleRoot =
-                match self.storage.read(&get_signed_root_key()) {
-                    Ok((Some(bytes), _)) => {
-                        BorshDeserialize::try_from_slice(bytes.as_slice())
-                            .unwrap()
-                    }
-                    _ => {
-                        return response::Query {
-                            code: 1,
-                            log: "Could not deserialize the signed Ethereum \
-                                  bridge pool merkle root"
-                                .into(),
-                            info: "Could not deserialize the signed Ethereum \
-                                   bridge pool merkle root"
-                                .into(),
-                            ..Default::default()
-                        };
-                    }
-                };
-            // get the merkle tree corresponding to the above root.
-            let tree = if let Ok(Some(stores)) =
-                self.storage.db.read_merkle_tree_stores(signed_root.height)
+            let signed_root: MultiSignedMerkleRoot = match self
+                .storage
+                .read(&get_signed_root_key())
+                .expect("Reading the database should not faile")
             {
-                MerkleTree::<H>::new(stores)
-            } else {
-                return response::Query {
-                    code: 1,
-                    log: "Could not retrieve the Ethereum bridge pool for the \
-                          latest signed root"
-                        .into(),
-                    info: "Could not retrieve the Ethereum bridge pool for \
-                           the latest signed root"
-                        .into(),
-                    ..Default::default()
-                };
+                (Some(bytes), _) => {
+                    BorshDeserialize::try_from_slice(bytes.as_slice()).unwrap()
+                }
+                _ => {
+                    return response::Query {
+                        code: 1,
+                        log: "No signed root for the Ethereum bridge pool \
+                              exists in storage."
+                            .into(),
+                        info: "No signed root for the Ethereum bridge pool \
+                               exists in storage."
+                            .into(),
+                        ..Default::default()
+                    };
+                }
             };
+
+            // get the merkle tree corresponding to the above root.
+            let tree = MerkleTree::<H>::new(
+                self.storage
+                    .db
+                    .read_merkle_tree_stores(signed_root.height)
+                    .expect("We should always be able to read the database")
+                    .expect(
+                        "Every signed root should correspond to an existing \
+                         block height",
+                    ),
+            );
 
             // get the membership proof
             let keys: Vec<_> = transfers.iter().map(get_pending_key).collect();
@@ -1181,7 +1171,7 @@ mod test_queries {
 
         // create a signed Merkle root for this pool
         let signed_root = MultiSignedMerkleRoot {
-            sigs: vec![],
+            sigs: Default::default(),
             root: transfer.keccak256(),
             height: Default::default(),
         };
@@ -1260,7 +1250,7 @@ mod test_queries {
 
         // create a signed Merkle root for this pool
         let signed_root = MultiSignedMerkleRoot {
-            sigs: vec![],
+            sigs: Default::default(),
             root: transfer.keccak256(),
             height: Default::default(),
         };
