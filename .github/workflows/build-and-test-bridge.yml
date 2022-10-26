@@ -115,7 +115,7 @@ jobs:
             suffix: ''
             cache_key: anoma
             cache_version: v1
-            wait_for: anoma-release-eth (ubuntu-latest, ABCI Release build, anoma-e2e-release, v1)
+            wait_for: anoma-release-eth (ubuntu-latest, 1.6.0, ABCI Release build, anoma-e2e-release, v1)
             tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
 
     env:
@@ -200,7 +200,7 @@ jobs:
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Wait for release binaries
-        uses: lewagon/wait-on-check-action@master
+        uses: lewagon/wait-on-check-action@@v1.2.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           check-name: ${{ matrix.make.wait_for }}
