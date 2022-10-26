@@ -39,7 +39,7 @@ where
     tracing::debug!(
         n = active_validators.len(),
         ?active_validators,
-        "Got active validators in valset upd vote aggregation"
+        "Got active validators"
     );
 
     let voting_powers =
