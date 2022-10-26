@@ -159,7 +159,6 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: CommissionRates,
     ) -> Result<(), Self::Error> {
         self.write(&validator_commission_rate_key(key), &value)
-            .into_env_result()
     }
 
     fn write_validator_max_commission_rate_change(
@@ -168,7 +167,6 @@ impl namada_proof_of_stake::PosActions for Ctx {
             value: Decimal,
         ) -> Result<(), Self::Error> {
         self.write(&validator_max_commission_rate_change_key(key), &value)
-            .into_env_result()
     }
 
     fn write_validator_total_deltas(
