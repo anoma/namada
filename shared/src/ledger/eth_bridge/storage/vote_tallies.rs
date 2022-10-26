@@ -3,7 +3,7 @@
 use crate::types::ethereum_events::EthereumEvent;
 use crate::types::hash::Hash;
 use crate::types::storage::{Epoch, Key};
-use crate::types::vote_extensions::validator_set_update;
+use crate::types::vote_extensions::validator_set_update::VotingPowersMap;
 
 /// Storage sub-key space reserved to keeping track of the
 /// voting power assigned to Ethereum events.
@@ -113,7 +113,7 @@ pub fn valset_upds_prefix() -> Key {
         .expect("should always be able to construct this key")
 }
 
-impl From<&Epoch> for Keys<validator_set_update::VextDigest> {
+impl From<&Epoch> for Keys<VotingPowersMap> {
     fn from(epoch: &Epoch) -> Self {
         let prefix = valset_upds_prefix()
             .push(epoch)
