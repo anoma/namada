@@ -31,6 +31,7 @@ use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
 use parameters::PosParams;
+use rust_decimal::Decimal;
 use thiserror::Error;
 use types::{
     ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash, SlashType, Slashes,

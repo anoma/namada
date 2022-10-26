@@ -39,6 +39,7 @@ mod tests {
         staking_token_address, BondId, GenesisValidator, PosVP,
     };
     use proptest::prelude::*;
+    use rust_decimal;
 
     use super::*;
 
