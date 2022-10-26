@@ -18,8 +18,9 @@ pub(super) trait GetVoters {
     fn get_voters(&self) -> HashSet<(Address, BlockHeight)>;
 }
 
-/// Constructs a map of validators and the block height at which they signed
-/// a validator set update to their respective voting power at the given height.
+/// Returns a map whose keys are addresses of validators and the block height at
+/// which they signed some arbitrary object, and whose values are the voting
+/// powers of these validators at the key's given block height.
 pub(super) fn get_voting_powers<D, H, P>(
     storage: &Storage<D, H>,
     proof: &P,
