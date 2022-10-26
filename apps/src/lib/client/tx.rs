@@ -249,21 +249,10 @@ pub async fn submit_init_validator(
     let (mut ctx, initialized_accounts) =
         process_tx(ctx, &tx_args, tx, Some(&source)).await;
     if !tx_args.dry_run {
-        let (validator_address_alias, validator_address, rewards_address_alias) =
+        let (validator_address_alias, validator_address) =
             match &initialized_accounts[..] {
-                // There should be 2 accounts, one for the validator itself, one
-                // for its staking reward address.
-                [account_1, account_2] => {
-                    // We need to find out which address is which
-                    let (validator_address, rewards_address) =
-                        if rpc::is_validator(account_1, tx_args.ledger_address)
-                            .await
-                        {
-                            (account_1, account_2)
-                        } else {
-                            (account_2, account_1)
-                        };
-
+                // There should be 1 account for the validator itself
+                [validator_address] => {
                     let validator_address_alias = match tx_args
                         .initialized_account_alias
                     {
@@ -298,23 +287,7 @@ pub async fn submit_init_validator(
                             validator_address.encode()
                         );
                     }
-                    let rewards_address_alias =
-                        format!("{}-rewards", validator_address_alias);
-                    if let Some(new_alias) = ctx.wallet.add_address(
-                        rewards_address_alias.clone(),
-                        rewards_address.clone(),
-                    ) {
-                        println!(
-                            "Added alias {} for address {}.",
-                            new_alias,
-                            rewards_address.encode()
-                        );
-                    }
-                    (
-                        validator_address_alias,
-                        validator_address.clone(),
-                        rewards_address_alias,
-                    )
+                    (validator_address_alias, validator_address.clone())
                 }
                 _ => {
                     eprintln!("Expected two accounts to be created");
@@ -335,7 +308,6 @@ pub async fn submit_init_validator(
             "The validator's addresses and keys were stored in the wallet:"
         );
         println!("  Validator address \"{}\"", validator_address_alias);
-        println!("  Staking reward address \"{}\"", rewards_address_alias);
         println!("  Validator account key \"{}\"", validator_key_alias);
         println!("  Consensus key \"{}\"", consensus_key_alias);
         println!(
