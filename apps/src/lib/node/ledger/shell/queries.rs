@@ -599,10 +599,9 @@ where
     // set update at the second block of an epoch
     #[cfg(feature = "abcipp")]
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
-        let (check_prev_heights, height) = match can_send {
-            SendValsetUpd::Now => (false, self.get_current_decision_height()),
-            SendValsetUpd::AtPrevHeight => (false, self.last_height),
-            SendValsetUpd::AtFixedHeight(h) => (true, h),
+        let height = match can_send {
+            SendValsetUpd::Now => self.get_current_decision_height(),
+            SendValsetUpd::AtPrevHeight => self.last_height,
         };
 
         // handle genesis block corner case
@@ -613,30 +612,19 @@ where
         let fst_heights_of_each_epoch =
             self.block.pred_epochs.first_block_heights();
 
-        // tentatively check if the last stored height
+        // check if the last stored height
         // is the one we are looking for
-        if fst_heights_of_each_epoch
+        fst_heights_of_each_epoch
             .last()
             .map(|&h| h == height)
             .unwrap_or(false)
-        {
-            return true;
-        }
-
-        // the values in `fst_block_heights_of_each_epoch` are stored in
-        // ascending order, so we can just do a binary search over them
-        check_prev_heights
-            && fst_heights_of_each_epoch.binary_search(&height).is_ok()
     }
 
     #[cfg(not(feature = "abcipp"))]
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
         // when checking vote extensions in Prepare
         // and ProcessProposal, we simply return true
-        if matches!(
-            can_send,
-            SendValsetUpd::AtPrevHeight | SendValsetUpd::AtFixedHeight(_)
-        ) {
+        if matches!(can_send, SendValsetUpd::AtPrevHeight) {
             return true;
         }
 
@@ -743,10 +731,6 @@ pub enum SendValsetUpd {
     /// Check if it is possible to send a validator set update
     /// vote extension at the previous block height.
     AtPrevHeight,
-    /// Check if it is possible to send a validator set update
-    /// vote extension at any given block height.
-    #[allow(dead_code)]
-    AtFixedHeight(BlockHeight),
 }
 
 #[cfg(test)]
@@ -833,24 +817,6 @@ mod test_queries {
                         shell.commit();
                         shell.storage.next_epoch_min_start_time = time;
                     }
-                }
-
-                // test `SendValsetUpd::AtFixedHeight`
-                for (curr_epoch, curr_block_height, can_send) in
-                    epoch_assertions.iter().copied()
-                {
-                    assert_eq!(
-                        shell.storage.get_epoch(curr_block_height.into()),
-                        Some(Epoch(curr_epoch))
-                    );
-                    assert_eq!(
-                        shell.storage.can_send_validator_set_update(
-                            SendValsetUpd::AtFixedHeight(
-                                curr_block_height.into()
-                            )
-                        ),
-                        extract(can_send)
-                    );
                 }
             }
         };
