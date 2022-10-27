@@ -236,8 +236,8 @@ async fn process(
                 ));
             }
         };
-        let minimum_latest_block =
-            block_to_process.clone() + Uint256::from(config.min_confirmations);
+        let minimum_latest_block = block_to_process.clone()
+            + Uint256::from(u64::from(config.min_confirmations));
         if minimum_latest_block > latest_block {
             tracing::debug!(
                 ?block_to_process,
@@ -306,7 +306,7 @@ async fn process(
                         sig,
                         block_to_process.clone(),
                         log.data.0.as_slice(),
-                        config.min_confirmations.into(),
+                        u64::from(config.min_confirmations).into(),
                     ) {
                         Ok(event) => Some(event),
                         Err(error) => {
@@ -379,6 +379,7 @@ fn process_queue(
 
 #[cfg(test)]
 mod test_oracle {
+    use std::num::NonZeroU64;
     use std::thread::JoinHandle;
 
     use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
@@ -526,14 +527,17 @@ mod test_oracle {
             ..
         } = setup();
         let config = Config {
-            min_confirmations: 100,
+            min_confirmations: NonZeroU64::try_from(100)
+                .expect("Test wasn't set up correctly"),
             ..Config::default()
         };
         let oracle =
             start_with_default_config(oracle, control_sender, config).await;
         // Increase height above the configured minimum confirmations
         admin_channel
-            .send(TestCmd::NewHeight(config.min_confirmations.into()))
+            .send(TestCmd::NewHeight(
+                u64::from(config.min_confirmations).into(),
+            ))
             .expect("Test failed");
 
         let new_event = ChangedContract {
@@ -573,14 +577,17 @@ mod test_oracle {
             ..
         } = setup();
         let config = Config {
-            min_confirmations: 100,
+            min_confirmations: NonZeroU64::try_from(100)
+                .expect("Test wasn't set up correctly"),
             ..Config::default()
         };
         let oracle =
             start_with_default_config(oracle, control_sender, config).await;
         // Increase height above the configured minimum confirmations
         admin_channel
-            .send(TestCmd::NewHeight(config.min_confirmations.into()))
+            .send(TestCmd::NewHeight(
+                u64::from(config.min_confirmations).into(),
+            ))
             .expect("Test failed");
 
         // set the oracle to be unresponsive
@@ -634,14 +641,17 @@ mod test_oracle {
             ..
         } = setup();
         let config = Config {
-            min_confirmations: 100,
+            min_confirmations: NonZeroU64::try_from(100)
+                .expect("Test wasn't set up correctly"),
             ..Config::default()
         };
         let oracle =
             start_with_default_config(oracle, control_sender, config).await;
         // Increase height above the configured minimum confirmations
         admin_channel
-            .send(TestCmd::NewHeight(config.min_confirmations.into()))
+            .send(TestCmd::NewHeight(
+                u64::from(config.min_confirmations).into(),
+            ))
             .expect("Test failed");
 
         // confirmed after 100 blocks
@@ -756,7 +766,7 @@ mod test_oracle {
         // enough to be considered confirmed by the oracle
         let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
         let synced_block_height =
-            config.min_confirmations + confirmed_block_height;
+            u64::from(config.min_confirmations) + confirmed_block_height;
         for height in 0..synced_block_height + 1 {
             admin_channel
                 .send(TestCmd::NewHeight(Uint256::from(height)))
@@ -818,7 +828,7 @@ mod test_oracle {
 
         let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
         let synced_block_height =
-            config.min_confirmations + confirmed_block_height;
+            u64::from(config.min_confirmations) + confirmed_block_height;
         admin_channel
             .send(TestCmd::NewHeight(Uint256::from(synced_block_height)))
             .expect("Test failed");
