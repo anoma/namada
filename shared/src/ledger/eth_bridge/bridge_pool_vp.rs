@@ -127,10 +127,11 @@ where
                 );
                 return Ok(false);
             }
-            Err(_) => {
+            Err(e) => {
                 return Err(eyre!(
                     "Could not read the storage key associated with the \
-                     transfer."
+                     transfer: {:?}",
+                    e
                 )
                 .into());
             }
@@ -212,10 +213,11 @@ where
                             transfer.transfer.sender,
                             transfer.transfer.amount,
                         ) => {}
-                _ => {
+                other => {
                     tracing::debug!(
                         "The assets of the transfer were not properly \
-                         escrowed into the Ethereum bridge pool."
+                         escrowed into the Ethereum bridge pool: {:?}",
+                        other
                     );
                     return Ok(false);
                 }
