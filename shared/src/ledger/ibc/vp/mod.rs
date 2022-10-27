@@ -889,6 +889,109 @@ mod tests {
     }
 
     #[test]
+    fn test_try_connection_existing_id_error() {
+        let (mut storage, mut write_log) = insert_init_states();
+        let client_id = get_client_id();
+        let conn_ids_key = connection_ids_key(&client_id);
+        // `connection-0` value will be returned by a call to
+        // `get_connection_id` below
+        write_log
+            .write(
+                &conn_ids_key,
+                "42,connection-0".to_string().as_bytes().to_vec(),
+            )
+            .expect("write failed");
+        write_log.commit_tx();
+        write_log.commit_block(&mut storage).expect("commit failed");
+
+        // prepare data
+        let height = Height::new(0, 1);
+        let header = MockHeader {
+            height,
+            timestamp: Timestamp::now(),
+        };
+        let client_state = MockClientState::new(header).wrap_any();
+        let proof_conn = CommitmentProofBytes::try_from(vec![0]).unwrap();
+        let proof_client = CommitmentProofBytes::try_from(vec![0]).unwrap();
+        let proof_consensus = ConsensusProof::new(
+            CommitmentProofBytes::try_from(vec![0]).unwrap(),
+            height,
+        )
+        .unwrap();
+        let proofs = Proofs::new(
+            proof_conn,
+            Some(proof_client),
+            Some(proof_consensus),
+            None,
+            Height::new(0, 1),
+        )
+        .unwrap();
+        let msg = MsgConnectionOpenTry {
+            previous_connection_id: None,
+            client_id: client_id.clone(),
+            client_state: Some(client_state),
+            counterparty: get_conn_counterparty(),
+            counterparty_versions: vec![ConnVersion::default()],
+            proofs,
+            delay_period: Duration::new(100, 0),
+            signer: Signer::new("account0"),
+        };
+
+        // insert a TryOpen connection
+        let conn_id = get_connection_id();
+        let conn_key = connection_key(&conn_id);
+        let conn = try_connection(&msg);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        write_log.write(&conn_key, bytes).expect("write failed");
+        let event = make_open_try_connection_event(&conn_id, &msg);
+        write_log.set_ibc_event(event.try_into().unwrap());
+        let (old_conn_ids, _) =
+            storage.read(&conn_ids_key).expect("read failed");
+        write_log
+            .write(
+                &conn_ids_key,
+                format!(
+                    "{},{}",
+                    String::from_utf8(old_conn_ids.unwrap())
+                        .expect("decoding failed"),
+                    conn_id.as_str()
+                )
+                .as_bytes()
+                .to_vec(),
+            )
+            .expect("write failed");
+
+        let tx_code = vec![];
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
+        let gas_meter = VpGasMeter::new(0);
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
+
+        let mut keys_changed = BTreeSet::new();
+        keys_changed.insert(conn_key);
+        keys_changed.insert(conn_ids_key);
+
+        let verifiers = BTreeSet::new();
+
+        let ibc = Ibc { ctx };
+        // the call to `ibc.validate_tx()` should return error because
+        // `connection-0` is already contained in the connection ID list
+        assert_matches!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            ),
+            Err(Error::ConnectionError(
+                connection::Error::InvalidConnection(_)
+            ))
+        );
+    }
+
+    #[test]
     fn test_ack_connection() {
         let (mut storage, mut write_log) = insert_init_states();
         // insert an Init connection
