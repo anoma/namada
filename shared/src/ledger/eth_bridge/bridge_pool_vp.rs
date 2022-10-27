@@ -270,11 +270,16 @@ mod test_bridge_pool_vp {
         storage: &'a Storage<MockDB, Sha256Hasher>,
         write_log: &'a WriteLog,
     ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
+        let verifiers = BTreeSet::default();
+        let keys_changed = BTreeSet::default();
         Ctx::new(
+            &BRIDGE_POOL_ADDRESS,
             storage,
             write_log,
             tx,
             VpGasMeter::new(0u64),
+            &keys_changed,
+            &verifiers,
             VpCache::new(temp_dir(), 100usize),
         )
     }

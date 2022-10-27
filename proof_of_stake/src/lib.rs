@@ -298,7 +298,7 @@ pub trait PosActions: PosReadOnly {
         eth_cold_key: &Self::PublicKey,
         eth_hot_key: &Self::PublicKey,
         current_epoch: impl Into<Epoch>,
-    ) -> Result<(), BecomeValidatorError<Self::Address>>
+    ) -> Result<(), Self::BecomeValidatorError>
     where
         Self::PublicKey: TryRefTo<EthAddress>,
     {

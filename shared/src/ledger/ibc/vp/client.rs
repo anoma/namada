@@ -31,6 +31,7 @@ use crate::ibc::core::ics04_channel::context::ChannelReader;
 use crate::ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use crate::ibc::core::ics24_host::identifier::ClientId;
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
+use crate::ledger::native_vp::VpEnv;
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{self};
 use crate::tendermint_proto::Protobuf;
@@ -556,7 +557,7 @@ where
     fn host_height(&self) -> Height {
         let height = self.ctx.storage.get_block_height().0.0;
         // the revision number is always 0
-        Height::new(0, height)
+        Height::new(0, height.into())
     }
 
     fn host_consensus_state(

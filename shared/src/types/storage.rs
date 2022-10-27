@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::BASE32HEX_NOPAD;
 use ics23::CommitmentProof;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -34,6 +35,8 @@ pub enum Error {
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
+    #[error("Error parsing key segment {0}")]
+    ParseKeySeg(String),
     #[error("Could not parse string into a key segment: {0}")]
     ParseError(String),
 }

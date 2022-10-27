@@ -15,10 +15,9 @@ use namada_proof_of_stake::PosBase;
 pub use storage::*;
 pub use vp::PosVP;
 
+use super::storage_api;
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{self as ledger_storage, Storage};
-use super::storage_api;
-use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
 use crate::types::address::{self, Address, InternalAddress};
 use crate::types::ethereum_events::EthAddress;
 use crate::types::key::common;
@@ -284,6 +283,24 @@ mod macros {
             ) -> std::result::Result<TotalVotingPowers, Self::Error> {
                 let value =
                     $crate::ledger::storage_api::StorageRead::read_bytes(self, &total_voting_power_key())?.unwrap();
+                Ok($crate::ledger::storage::types::decode(value).unwrap())
+            }
+
+            fn read_validator_eth_cold_key(
+                &self,
+                key: &Self::Address,
+            ) -> Option<types::ValidatorEthKey<Self::PublicKey>> {
+                let value =
+                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_cold_key_key(key))?.unwrap();
+                Ok($crate::ledger::storage::types::decode(value).unwrap())
+            }
+
+            fn read_validator_eth_hot_key(
+                &self,
+                key: &Self::Address,
+            ) -> Option<types::ValidatorEthKey<Self::PublicKey>> {
+                let value =
+                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_hot_key_key(key))?.unwrap();
                 Ok($crate::ledger::storage::types::decode(value).unwrap())
             }
         }

@@ -63,24 +63,6 @@ abciplus = [
     "namada/abciplus"
 ]
 
-abcipp = [
-    "tendermint-abcipp",
-    "tendermint-config-abcipp",
-    "tendermint-proto-abcipp",
-    "tendermint-rpc-abcipp",
-    "tower-abci-abcipp",
-    "namada/abcipp"
-]
-
-abciplus = [
-    "tendermint",
-    "tendermint-config",
-    "tendermint-rpc",
-    "tendermint-proto",
-    "tower-abci",
-    "namada/abciplus"
-]
-
 [dependencies]
 namada = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand", "secp256k1-sign-verify"]}
 ark-serialize = "0.3.0"

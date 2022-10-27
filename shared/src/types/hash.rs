@@ -4,7 +4,6 @@ use std::fmt::{self, Display};
 use std::ops::Deref;
 
 use arse_merkle_tree::traits::Value;
-use arse_merkle_tree::Hash as TreeHash;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use hex::FromHex;
 use serde::{Deserialize, Serialize};

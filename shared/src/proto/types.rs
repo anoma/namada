@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;

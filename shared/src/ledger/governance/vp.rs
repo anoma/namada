@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
+use native_vp::VpEnv;
 use thiserror::Error;
 
 use super::storage as gov_storage;

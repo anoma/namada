@@ -10,7 +10,7 @@ use wasmer::{
 
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{self};
-use crate::vm::host_env::{TxEnv, VpEnv, VpEvaluator};
+use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{host_env, WasmCacheAccess};
 

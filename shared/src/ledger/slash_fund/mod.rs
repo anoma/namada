@@ -10,8 +10,9 @@ use thiserror::Error;
 
 use self::storage as slash_fund_storage;
 use super::governance::vp::is_proposal_accepted;
+use super::storage::traits::StorageHasher;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{xan as nam, Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token;

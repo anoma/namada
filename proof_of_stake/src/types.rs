@@ -36,8 +36,7 @@ pub type Unbonds<TokenAmount> =
 pub type ValidatorSets<Address> =
     Epoched<ValidatorSet<Address>, OffsetUnbondingLen>;
 /// Epoched total voting power.
-pub type TotalVotingPowers =
-    EpochedDelta<VotingPowerDelta, OffsetUnboundingLen>;
+pub type TotalVotingPowers = EpochedDelta<VotingPowerDelta, OffsetUnbondingLen>;
 /// Epoched validator's eth key.
 pub type ValidatorEthKey<PublicKey> = Epoched<PublicKey, OffsetPipelineLen>;
 

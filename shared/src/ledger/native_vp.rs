@@ -5,7 +5,6 @@ use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
 use eyre::Context;
-use thiserror::Error;
 
 use super::storage_api::{self, ResultExt, StorageRead};
 pub use super::vp_env::VpEnv;
