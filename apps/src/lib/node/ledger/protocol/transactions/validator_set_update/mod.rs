@@ -16,6 +16,7 @@ use namada::types::voting_power::FractionalVotingPower;
 
 use super::ChangedKeys;
 use crate::node::ledger::protocol::transactions::utils;
+use crate::node::ledger::protocol::transactions::votes::{self, Votes};
 use crate::node::ledger::shell::queries::QueriesExt;
 
 impl utils::GetVoters for validator_set_update::VextDigest {
@@ -55,7 +56,7 @@ where
 fn apply_update<D, H>(
     storage: &mut Storage<D, H>,
     ext: validator_set_update::VextDigest,
-    _voting_powers: HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    voting_powers: HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<ChangedKeys>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -83,8 +84,35 @@ where
     };
 
     let valset_upd_keys = vote_tallies::Keys::from(&epoch);
-    let _ = valset_upd_keys;
+    let (exists_in_storage, _) = storage.has_key(&valset_upd_keys.seen())?;
 
-    tracing::warn!("Called apply_update() with no side effects");
-    Ok(ChangedKeys::new())
+    let mut seen_by = Votes::default();
+    for (address, block_height) in ext.signatures.into_keys() {
+        // TODO: more deterministic deduplication
+        if let Some(present) = seen_by.insert(address, block_height) {
+            tracing::warn!(?present, "Duplicate vote in digest");
+        }
+    }
+
+    let (tally, changed) = if !exists_in_storage {
+        tracing::debug!(
+            %valset_upd_keys.prefix,
+            ?ext.voting_powers,
+            "New validator set update vote aggregation started"
+        );
+        let tally = votes::calculate_new(seen_by, &voting_powers)?;
+        let changed = valset_upd_keys.into_iter().collect();
+        (tally, changed)
+    } else {
+        todo!()
+    };
+
+    tracing::debug!(
+        ?tally,
+        ?ext.voting_powers,
+        "Applying validator set update state changes"
+    );
+    votes::write(storage, &valset_upd_keys, &ext.voting_powers, &tally)?;
+
+    Ok(changed)
 }
