@@ -189,11 +189,15 @@ pub trait DB: std::fmt::Debug {
     /// Read the latest value for account subspace key from the DB
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>>;
 
-    /// Read the value for account subspace key at the given height from the DB
+    /// Read the value for account subspace key at the given height from the DB.
+    /// In our `PersistentStorage` (rocksdb), to find a value from arbitrary
+    /// height requires looking for diffs from the given `height`, possibly
+    /// up to the `last_height`.
     fn read_subspace_val_with_height(
         &self,
         key: &Key,
-        _height: BlockHeight,
+        height: BlockHeight,
+        last_height: BlockHeight,
     ) -> Result<Option<Vec<u8>>>;
 
     /// Write the value with the given height and account subspace key to the
@@ -412,7 +416,11 @@ where
         if height >= self.get_block_height().0 {
             self.read(key)
         } else {
-            match self.db.read_subspace_val_with_height(key, height)? {
+            match self.db.read_subspace_val_with_height(
+                key,
+                height,
+                self.last_height,
+            )? {
                 Some(v) => {
                     let gas = key.len() + v.len();
                     Ok((Some(v), gas as _))

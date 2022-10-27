@@ -336,6 +336,7 @@ impl DB for MockDB {
         &self,
         _key: &Key,
         _height: BlockHeight,
+        _last_height: BlockHeight,
     ) -> Result<Option<Vec<u8>>> {
         // Mock DB can read only the latest value for now
         unimplemented!()
