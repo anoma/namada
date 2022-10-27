@@ -115,7 +115,6 @@ impl TestTxEnv {
                 address.borrow(),
                 Address::Internal(_) | Address::Implicit(_)
             ) {
-                // don't write a VP for internal addresses
                 continue;
             }
             let key = Key::validity_predicate(address.borrow());
