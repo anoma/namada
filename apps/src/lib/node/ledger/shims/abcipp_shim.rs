@@ -8,11 +8,17 @@ use futures::future::FutureExt;
 use namada::types::ethereum_events::EthereumEvent;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
+#[cfg(not(feature = "abcipp"))]
+use namada::types::storage::BlockHash;
+#[cfg(not(feature = "abcipp"))]
+use namada::types::transaction::hash_tx;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 use tower::Service;
 
 use super::super::Shell;
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
+#[cfg(not(feature = "abcipp"))]
+use super::abcipp_shim_types::shim::TxBytes;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
 #[cfg(not(feature = "abcipp"))]
@@ -27,7 +33,8 @@ pub struct AbcippShim {
     service: Shell,
     #[cfg(not(feature = "abcipp"))]
     begin_block_request: Option<RequestBeginBlock>,
-    processed_txs: Vec<ProcessedTx>,
+    #[cfg(not(feature = "abcipp"))]
+    delivered_txs: Vec<TxBytes>,
     shell_recv: std::sync::mpsc::Receiver<(
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
@@ -62,7 +69,8 @@ impl AbcippShim {
                 ),
                 #[cfg(not(feature = "abcipp"))]
                 begin_block_request: None,
-                processed_txs: vec![],
+                #[cfg(not(feature = "abcipp"))]
+                delivered_txs: vec![],
                 shell_recv,
             },
             AbciService { shell_send },
@@ -72,12 +80,8 @@ impl AbcippShim {
     #[cfg(not(feature = "abcipp"))]
     /// Get the hash of the txs in the block
     pub fn get_hash(&self) -> Hash {
-        use namada::types::transaction::hash_tx;
-        let bytes: Vec<u8> = self
-            .processed_txs
-            .iter()
-            .flat_map(|processed| processed.tx.clone())
-            .collect();
+        let bytes: Vec<u8> =
+            self.delivered_txs.iter().flat_map(Clone::clone).collect();
         hash_tx(bytes.as_slice())
     }
 
@@ -86,32 +90,28 @@ impl AbcippShim {
     pub fn run(mut self) {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
-                Req::ProcessProposal(proposal) => {
-                    let txs = proposal.txs.clone();
-                    self.service
-                        .call(Request::ProcessProposal(proposal))
-                        .map_err(Error::from)
-                        .and_then(|res| match res {
-                            Response::ProcessProposal(resp) => {
-                                let response =
-                                    Ok(Resp::ProcessProposal((&resp).into()));
-                                for (result, tx) in resp
-                                    .tx_results
-                                    .into_iter()
-                                    .zip(txs.into_iter())
-                                {
-                                    self.processed_txs
-                                        .push(ProcessedTx { tx, result });
-                                }
-                                response
-                            }
-                            _ => unreachable!(),
-                        })
-                }
+                Req::ProcessProposal(proposal) => self
+                    .service
+                    .call(Request::ProcessProposal(proposal))
+                    .map_err(Error::from)
+                    .and_then(|res| match res {
+                        Response::ProcessProposal(resp) => {
+                            Ok(Resp::ProcessProposal((&resp).into()))
+                        }
+                        _ => unreachable!(),
+                    }),
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
-                    let mut txs = vec![];
-                    std::mem::swap(&mut txs, &mut self.processed_txs);
+                    let unprocessed_txs = block.txs.clone();
+                    let (processing_results, _) =
+                        self.service.check_proposal(&block.txs);
+                    let mut txs = Vec::with_capacity(unprocessed_txs.len());
+                    for (result, tx) in processing_results
+                        .into_iter()
+                        .zip(unprocessed_txs.into_iter())
+                    {
+                        txs.push(ProcessedTx { tx, result });
+                    }
                     let mut finalize_req: FinalizeBlock = block.into();
                     finalize_req.txs = txs;
                     self.service
@@ -131,12 +131,23 @@ impl AbcippShim {
                     Ok(Resp::BeginBlock(Default::default()))
                 }
                 #[cfg(not(feature = "abcipp"))]
-                Req::DeliverTx(_) => Ok(Resp::DeliverTx(Default::default())),
+                Req::DeliverTx(tx) => {
+                    self.delivered_txs.push(tx.tx);
+                    Ok(Resp::DeliverTx(Default::default()))
+                }
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
-                    use namada::types::storage::BlockHash;
-                    let mut txs = vec![];
-                    std::mem::swap(&mut txs, &mut self.processed_txs);
+                    let (processing_results, _) =
+                        self.service.check_proposal(&self.delivered_txs);
+                    let mut txs = Vec::with_capacity(self.delivered_txs.len());
+                    let mut delivered = vec![];
+                    std::mem::swap(&mut self.delivered_txs, &mut delivered);
+                    for (result, tx) in processing_results
+                        .into_iter()
+                        .zip(delivered.into_iter())
+                    {
+                        txs.push(ProcessedTx { tx, result });
+                    }
                     let mut end_block_request: FinalizeBlock =
                         self.begin_block_request.take().unwrap().into();
                     let hash = self.get_hash();

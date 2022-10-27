@@ -11,14 +11,19 @@ use crate::types::ethereum_events::EthereumEvent;
 use crate::types::key::common::{self, Signature};
 use crate::types::storage::BlockHeight;
 
+/// Type alias for an [`EthereumEventsVext`].
+pub type Vext = EthereumEventsVext;
+
 /// Represents a set of [`EthereumEvent`] instances
 /// seen by some validator.
 ///
 /// This struct will be created and signed over by each
 /// active validator, to be included as a vote extension at the end of a
 /// Tendermint PreCommit phase.
-#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-pub struct Vext {
+#[derive(
+    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
+pub struct EthereumEventsVext {
     /// The block height for which this [`Vext`] was made.
     pub block_height: BlockHeight,
     /// TODO: the validator's address is temporarily being included
@@ -47,28 +52,6 @@ impl Vext {
     }
 }
 
-impl BorshSchema for Vext {
-    fn add_definitions_recursively(
-        definitions: &mut HashMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        let fields =
-            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
-                BlockHeight::declaration(),
-                Address::declaration(),
-                Vec::<EthereumEvent>::declaration(),
-            ]);
-        let definition = borsh::schema::Definition::Struct { fields };
-        Self::add_definition(Self::declaration(), definition, definitions);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "ethereum_events::Vext".into()
-    }
-}
-
 /// Aggregates an Ethereum event with the corresponding
 /// validators who saw this event.
 #[derive(
@@ -86,10 +69,15 @@ pub struct MultiSignedEthEvent {
     pub signers: BTreeSet<(Address, BlockHeight)>,
 }
 
+/// Type alias for an [`EthereumEventsVextDigest`].
+pub type VextDigest = EthereumEventsVextDigest;
+
 /// Compresses a set of signed [`Vext`] instances, to save
 /// space on a block.
-#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-pub struct VextDigest {
+#[derive(
+    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
+pub struct EthereumEventsVextDigest {
     /// The signatures and signing address of each [`Vext`]
     #[cfg(feature = "abcipp")]
     pub signatures: HashMap<Address, Signature>,
@@ -99,27 +87,6 @@ pub struct VextDigest {
     pub signatures: HashMap<(Address, BlockHeight), Signature>,
     /// The events that were reported
     pub events: Vec<MultiSignedEthEvent>,
-}
-
-impl BorshSchema for VextDigest {
-    fn add_definitions_recursively(
-        definitions: &mut HashMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        let fields =
-            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
-                HashMap::<Address, Signature>::declaration(),
-                Vec::<MultiSignedEthEvent>::declaration()
-            ]);
-        let definition = borsh::schema::Definition::Struct { fields };
-        Self::add_definition(Self::declaration(), definition, definitions);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "ethereum_events::VextDigest".into()
-    }
 }
 
 impl VextDigest {

@@ -1,5 +1,4 @@
 {
-
     "tx_bond.wasm": "tx_bond.9f5da714d7c05d2d6b798b1848268533440ca3a5643ee9504af129f43ba331df.wasm",
     "tx_bridge_pool.wasm": "tx_bridge_pool.e21563260c03cfdab1f195878f49bf93722027ad26fcd097cfebbc5c4d279082.wasm",
     "tx_from_intent.wasm": "tx_from_intent.9eea194231154a47f5266f616b082b64af17a74b1d82f9f66c48faeac1edabff.wasm",
@@ -18,5 +17,4 @@
     "vp_testnet_faucet.wasm": "vp_testnet_faucet.4ee358a72aefbb00f5aa1733a9d225d07953a131a4416e1d56073835cf7f05c5.wasm",
     "vp_token.wasm": "vp_token.3f30ca81205217bb60fc9104ca95a2e863c5e65b32f9ade683d01f0b6343080e.wasm",
     "vp_user.wasm": "vp_user.44c574f2e92400a118d7e5c4af736a23485e4316fda2984ddae5201344826b36.wasm"
-
 }

@@ -46,10 +46,15 @@ impl Encode<1> for NormalizedVotingPower {
     }
 }
 
+/// Type alias for a [`ValidatorSetUpdateVextDigest`].
+pub type VextDigest = ValidatorSetUpdateVextDigest;
+
 /// Contains the digest of all signatures from a quorum of
 /// validators for a [`Vext`].
-#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-pub struct VextDigest {
+#[derive(
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
+pub struct ValidatorSetUpdateVextDigest {
     #[cfg(feature = "abcipp")]
     /// A mapping from a validator address to a [`Signature`].
     pub signatures: HashMap<Address, Signature>,
@@ -62,27 +67,6 @@ pub struct VextDigest {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     pub voting_powers: VotingPowersMap,
-}
-
-impl BorshSchema for VextDigest {
-    fn add_definitions_recursively(
-        definitions: &mut HashMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        let fields =
-            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
-                HashMap::<Address, Signature>::declaration(),
-                VotingPowersMap::declaration()
-            ]);
-        let definition = borsh::schema::Definition::Struct { fields };
-        Self::add_definition(Self::declaration(), definition, definitions);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "validator_set_update::VextDigest".into()
-    }
 }
 
 impl VextDigest {
@@ -126,9 +110,14 @@ impl VextDigest {
 /// an Ethereum key.
 pub type SignedVext = Signed<Vext, SerializeWithAbiEncode>;
 
+/// Type alias for a [`ValidatorSetUpdateVext`].
+pub type Vext = ValidatorSetUpdateVext;
+
 /// Represents a validator set update, for some new [`Epoch`].
-#[derive(Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize)]
-pub struct Vext {
+#[derive(
+    Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
+pub struct ValidatorSetUpdateVext {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     ///
@@ -164,28 +153,6 @@ impl Vext {
     #[inline]
     pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
         SignedVext::new(sk, self.clone())
-    }
-}
-
-impl BorshSchema for Vext {
-    fn add_definitions_recursively(
-        definitions: &mut HashMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        let fields =
-            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
-                VotingPowersMap::declaration(),
-                Address::declaration(),
-                BlockHeight::declaration(),
-            ]);
-        let definition = borsh::schema::Definition::Struct { fields };
-        Self::add_definition(Self::declaration(), definition, definitions);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "validator_set_update::Vext".into()
     }
 }
 
