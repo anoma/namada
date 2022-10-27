@@ -45,8 +45,10 @@ pub enum Error {
     StoreType(String),
     #[error("Non-existence proofs not supported for store type: {0}")]
     NonExistenceProof(String),
-    #[error("Invalid value given to sub-tree storage")]
-    InvalidValue,
+    #[error("Expected a bytes value")]
+    ExpectedBytesValue,
+    #[error("Expected a bridge pool transfer value")]
+    ExpectedBridgePoolTransferValue,
     #[error("ICS23 commitment proofs do not support multiple leaves")]
     Ics23MultiLeaf,
     #[error("A Tendermint proof can only be constructed from an ICS23 proof.")]

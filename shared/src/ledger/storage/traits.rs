@@ -62,7 +62,7 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
         let key: &Key = &keys[0];
         let value = match values.remove(0) {
             MerkleValue::Bytes(b) => b,
-            _ => return Err(Error::InvalidValue),
+            _ => return Err(Error::ExpectedBytesValue),
         };
         let cp = self.membership_proof(&H::hash(key.to_string()).into())?;
         // Replace the values and the leaf op for the verification
@@ -90,7 +90,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
     ) -> Result<Hash, Error> {
         let value = match value {
             MerkleValue::Bytes(bytes) => H::hash(bytes.as_slice()),
-            _ => return Err(Error::InvalidValue),
+            _ => return Err(Error::ExpectedBytesValue),
         };
         self.update(H::hash(key.to_string()).into(), value.into())
             .map(Hash::from)
@@ -149,7 +149,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
         let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
         let value = match value {
             MerkleValue::Bytes(bytes) => TreeBytes::from(bytes),
-            _ => return Err(Error::InvalidValue),
+            _ => return Err(Error::ExpectedBytesValue),
         };
         self.update(key, value)
             .map(Into::into)
@@ -199,7 +199,7 @@ impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
             self.insert_key(key)
                 .map_err(|err| Error::MerkleTree(err.to_string()))
         } else {
-            Err(Error::InvalidValue)
+            Err(Error::ExpectedBridgePoolTransferValue)
         }
     }
 
