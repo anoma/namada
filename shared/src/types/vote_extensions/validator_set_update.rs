@@ -21,6 +21,31 @@ use crate::types::storage::Epoch;
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
 const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
 
+/// Voting power that has been normalized. Needed
+/// for interacting with smart contracts.
+///
+/// https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
+#[derive(Debug, Clone, Default)]
+pub struct NormalizedVotingPower(ethereum::U256);
+
+impl NormalizedVotingPower {
+    fn new(voting_power: VotingPower, total_voting_power: VotingPower) -> Self {
+        let voting_power: u64 = voting_power.into();
+        const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
+
+        let voting_power = Ratio::new(voting_power, total_voting_power.into())
+            * NORMALIZED_VOTING_POWER;
+        let voting_power = voting_power.round().to_integer();
+        Self(voting_power.into())
+    }
+}
+
+impl Encode<1> for NormalizedVotingPower {
+    fn tokenize(&self) -> [Token; 1] {
+        [Token::Uint(self.0)]
+    }
+}
+
 /// Contains the digest of all signatures from a quorum of
 /// validators for a [`Vext`].
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
@@ -236,25 +261,21 @@ impl VotingPowersMapExt for VotingPowersMap {
         });
 
         let sorted = unsorted;
-        let total_voting_power: u64 = sorted
+        let total_voting_power: VotingPower = sorted
             .iter()
             .map(|&(_, &voting_power)| u64::from(voting_power))
-            .sum();
+            .sum::<u64>()
+            .into();
 
         // split the vec into three portions
         sorted.into_iter().fold(
             Default::default(),
             |accum, (addr_book, &voting_power)| {
-                let voting_power: u64 = voting_power.into();
-
-                // normalize the voting power
-                // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
-                const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
-
-                let voting_power = Ratio::new(voting_power, total_voting_power)
-                    * NORMALIZED_VOTING_POWER;
-                let voting_power = voting_power.round().to_integer();
-                let voting_power: ethereum::U256 = voting_power.into();
+                let voting_power = NormalizedVotingPower::new(
+                    voting_power,
+                    total_voting_power,
+                );
+                let [voting_power] = voting_power.tokenize();
 
                 let (mut hot_key_addrs, mut cold_key_addrs, mut voting_powers) =
                     accum;
@@ -267,7 +288,7 @@ impl VotingPowersMapExt for VotingPowersMap {
                     .push(Token::Address(ethereum::H160(hot_key_addr)));
                 cold_key_addrs
                     .push(Token::Address(ethereum::H160(cold_key_addr)));
-                voting_powers.push(Token::Uint(voting_power));
+                voting_powers.push(voting_power);
 
                 (hot_key_addrs, cold_key_addrs, voting_powers)
             },
@@ -309,7 +330,7 @@ pub struct ValidatorSetArgs {
     /// Ethereum address of validators
     pub validators: Vec<EthAddress>,
     /// Voting powers of validators
-    pub powers: Vec<Uint>,
+    pub powers: Vec<NormalizedVotingPower>,
     /// A nonce
     pub nonce: Uint,
 }
@@ -325,7 +346,10 @@ impl Encode<1> for ValidatorSetArgs {
         let powers = Token::Array(
             self.powers
                 .iter()
-                .map(|power| Token::Uint(power.clone().into()))
+                .map(|power| {
+                    let [power] = power.tokenize();
+                    power
+                })
                 .collect(),
         );
         let nonce = Token::Uint(self.nonce.clone().into());
