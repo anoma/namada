@@ -2,6 +2,9 @@
 
 This document describes the different wallet concepts and options that are available to users of Namada who want to be able to [send, receive and interact](#send-and-receive-nam-tokens) with NAM tokens on the Namada blockchain.
 
+
+<!-- I want to either hyperlink or delete the below. I don't understand-->
+
 Check out the different options to generate a wallet:
 
 - File System Wallet
@@ -11,7 +14,7 @@ Check out the different options to generate a wallet:
 
 ## Manage keypairs
 
-Namada uses ed25519 keypairs for signing cryptographic operations on the blockchain.
+Namada uses [ed25519](https://en.wikipedia.org/wiki/EdDSA#Ed25519) keypairs for signing cryptographic operations on the blockchain.
 
 To manage your keys, various sub-commands are available under:
 
@@ -21,7 +24,7 @@ namada wallet key
 
 ### Generate a keypair
 
-Generate a keypair with a given alias and derive the implicit address from its public key:
+It is possible to generate keys using the CLI. Generate a keypair with a given alias and derive the implicit address from its public key:
 
 ```shell
 namada wallet key gen --alias my-key
