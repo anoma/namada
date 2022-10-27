@@ -75,8 +75,8 @@ where
     Ok(())
 }
 
-/// For queries that only support latest height, check that the given height is
-/// not different from latest height, otherwise return an error.
+/// For queries that do not support proofs, check that proof is not requested,
+/// otherwise return an error.
 pub fn require_no_proof(request: &RequestQuery) -> storage_api::Result<()> {
     if request.prove {
         return Err(storage_api::Error::new_const(
