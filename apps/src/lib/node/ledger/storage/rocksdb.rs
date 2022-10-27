@@ -736,7 +736,7 @@ impl DB for RocksDB {
         // Check the length of previous value, if any
         let prev_len = match self
             .0
-            .get(key.to_string())
+            .get(subspace_key.to_string())
             .map_err(|e| Error::DBError(e.into_string()))?
         {
             Some(prev_value) => {
