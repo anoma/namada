@@ -453,6 +453,16 @@ impl BalanceOwner {
     }
 }
 
+impl Display for BalanceOwner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BalanceOwner::Address(addr) => addr.fmt(f),
+            BalanceOwner::FullViewingKey(fvk) => fvk.fmt(f),
+            BalanceOwner::PaymentAddress(pa) => pa.fmt(f),
+        }
+    }
+}
+
 /// Represents any MASP value
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]

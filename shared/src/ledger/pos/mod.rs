@@ -13,6 +13,7 @@ use namada_proof_of_stake::PosBase;
 pub use storage::*;
 pub use vp::PosVP;
 
+use super::storage_api;
 use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
 use crate::types::address::{self, Address, InternalAddress};
 use crate::types::storage::Epoch;
@@ -88,6 +89,40 @@ impl From<namada_proof_of_stake::types::Epoch> for Epoch {
     }
 }
 
+// The error conversions are needed to implement `PosActions` in
+// `tx_prelude/src/proof_of_stake.rs`
+impl From<namada_proof_of_stake::BecomeValidatorError<Address>>
+    for storage_api::Error
+{
+    fn from(err: namada_proof_of_stake::BecomeValidatorError<Address>) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<namada_proof_of_stake::BondError<Address>> for storage_api::Error {
+    fn from(err: namada_proof_of_stake::BondError<Address>) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<namada_proof_of_stake::UnbondError<Address, token::Amount>>
+    for storage_api::Error
+{
+    fn from(
+        err: namada_proof_of_stake::UnbondError<Address, token::Amount>,
+    ) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<namada_proof_of_stake::WithdrawError<Address>>
+    for storage_api::Error
+{
+    fn from(err: namada_proof_of_stake::WithdrawError<Address>) -> Self {
+        Self::new(err)
+    }
+}
+
 #[macro_use]
 mod macros {
     /// Implement `PosReadOnly` for a type that implements
@@ -115,7 +150,6 @@ mod macros {
         $( $any )*
         {
             type Address = $crate::types::address::Address;
-            // type Error = $crate::ledger::native_vp::Error;
             type $error = $err_ty;
             type PublicKey = $crate::types::key::common::PublicKey;
             type TokenAmount = $crate::types::token::Amount;

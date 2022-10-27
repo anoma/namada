@@ -1,5 +1,4 @@
-//! Virtual machine modules for running transactions, validity predicates,
-//! matchmaker and matchmaker's filter.
+//! Virtual machine modules for running transactions and validity predicates.
 
 use std::ffi::c_void;
 use std::marker::PhantomData;

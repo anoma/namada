@@ -1,8 +1,8 @@
 //! Anoma node CLI.
 
 use eyre::{Context, Result};
-use namada_apps::cli::{self, args, cmds};
-use namada_apps::node::{gossip, ledger, matchmaker};
+use namada_apps::cli::{self, cmds};
+use namada_apps::node::ledger;
 
 pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::anoma_node_cli()?;
@@ -20,55 +20,6 @@ pub fn main() -> Result<()> {
                     .wrap_err("Failed to reset Anoma node")?;
             }
         },
-        cmds::AnomaNode::Gossip(sub) => match sub {
-            cmds::Gossip::Run(cmds::GossipRun(args::GossipRun {
-                addr,
-                rpc,
-            })) => {
-                let config = ctx.config;
-                let mut gossip_cfg = config.intent_gossiper;
-                gossip_cfg.update(addr, rpc);
-                gossip::run(
-                    gossip_cfg,
-                    &config
-                        .ledger
-                        .shell
-                        .base_dir
-                        .join(ctx.global_config.default_chain_id.as_str()),
-                )
-                .wrap_err("Failed to run gossip service")?;
-            }
-        },
-        cmds::AnomaNode::Matchmaker(cmds::Matchmaker(args::Matchmaker {
-            intent_gossiper_addr,
-            matchmaker_path,
-            tx_code_path,
-            ledger_addr,
-            tx_signing_key,
-            tx_source_address,
-        })) => {
-            let tx_signing_key = ctx.get_cached(&tx_signing_key);
-            let tx_source_address = ctx.get(&tx_source_address);
-
-            let wasm_dir = ctx.wasm_dir();
-            let config = ctx.config;
-            let mut mm_config = config.matchmaker;
-            if matchmaker_path.is_some() {
-                mm_config.matchmaker_path = matchmaker_path;
-            }
-            if tx_code_path.is_some() {
-                mm_config.tx_code_path = tx_code_path;
-            }
-
-            matchmaker::run(
-                mm_config,
-                intent_gossiper_addr,
-                ledger_addr,
-                tx_signing_key,
-                tx_source_address,
-                wasm_dir,
-            );
-        }
         cmds::AnomaNode::Config(sub) => match sub {
             cmds::Config::Gen(cmds::ConfigGen) => {
                 // If the config doesn't exit, it gets generated in the context.

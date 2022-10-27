@@ -12,13 +12,6 @@ use namada::types::token::Amount;
 use crate::token::transfer;
 use crate::Ctx;
 
-// This is needed to use `ibc::Handler::Error` with `IbcActions` below
-impl From<Error> for crate::Error {
-    fn from(err: Error) -> Self {
-        crate::Error::new(err)
-    }
-}
-
 impl IbcActions for Ctx {
     type Error = crate::Error;
 
@@ -62,7 +55,7 @@ impl IbcActions for Ctx {
         token: &Address,
         amount: Amount,
     ) -> std::result::Result<(), Self::Error> {
-        transfer(self, src, dest, token, amount, &None, &None)?;
+        transfer(self, src, dest, token, None, amount, &None, &None)?;
         Ok(())
     }
 

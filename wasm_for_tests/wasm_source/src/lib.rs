@@ -36,10 +36,6 @@ pub mod main {
         let target_key = gov_storage::get_min_proposal_grace_epoch_key();
         ctx.write(&target_key, 9_u64)?;
 
-        // treasury
-        let target_key = treasury_storage::get_max_transferable_fund_key();
-        ctx.write(&target_key, token::Amount::whole(20_000))?;
-
         // parameters
         let target_key = parameters_storage::get_tx_whitelist_storage_key();
         ctx.write(&target_key, vec!["hash"])?;
@@ -88,7 +84,7 @@ pub mod main {
     #[transaction]
     fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         let signed = SignedTxData::try_from_slice(&tx_data[..])
-            .err_msg("failed to decode SignedTxData")?;
+            .wrap_err("failed to decode SignedTxData")?;
         let data = match signed.data {
             Some(data) => {
                 log(&format!("got data ({} bytes)", data.len()));
@@ -134,7 +130,7 @@ pub mod main {
     #[transaction]
     fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         let signed = SignedTxData::try_from_slice(&tx_data[..])
-            .err_msg("failed to decode SignedTxData")?;
+            .wrap_err("failed to decode SignedTxData")?;
         let transfer =
             token::Transfer::try_from_slice(&signed.data.unwrap()[..]).unwrap();
         log_string(format!("apply_tx called to mint tokens: {:#?}", transfer));
@@ -142,6 +138,7 @@ pub mod main {
             source: _,
             target,
             token,
+            sub_prefix: _,
             amount,
             key: _,
             shielded: _,

@@ -1,11 +1,11 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
 use namada::types::storage::{BlockHash, BlockResults, Header};
-use tendermint_proto::abci::Misbehavior as Evidence;
-use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 
 use super::governance::execute_governance_proposals;
 use super::*;
+use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
+use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 
 impl<D, H> Shell<D, H>
 where
@@ -44,8 +44,10 @@ where
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
 
-        let _proposals_result =
-            execute_governance_proposals(self, new_epoch, &mut response)?;
+        if new_epoch {
+            let _proposals_result =
+                execute_governance_proposals(self, &mut response)?;
+        }
 
         // Tracks the accepted transactions
         self.storage.block.results = BlockResults::with_len(req.txs.len());

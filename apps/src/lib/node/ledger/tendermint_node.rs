@@ -8,15 +8,17 @@ use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
-use tendermint::Genesis;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_config::{Error as TendermintError, TendermintConfig};
 use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 use crate::config;
+use crate::facade::tendermint::Genesis;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_config::{
+    Error as TendermintError, TendermintConfig,
+};
 
 /// Env. var to output Tendermint log to stdout
 pub const ENV_VAR_TM_STDOUT: &str = "ANOMA_TM_STDOUT";
@@ -100,16 +102,17 @@ pub async fn run(
             write_validator_key_async(&home_dir, &consensus_key).await;
         }
     }
+    #[cfg(feature = "abcipp")]
     write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
+    #[cfg(not(feature = "abcipp"))]
+    write_tm_genesis(&home_dir, chain_id, genesis_time).await;
 
     update_tendermint_config(&home_dir, config).await?;
 
     let mut tendermint_node = Command::new(&tendermint_path);
     tendermint_node.args(&[
         "start",
-        "--mode",
-        &mode,
-        "--proxy-app",
+        "--proxy_app",
         &ledger_address,
         "--home",
         &home_dir_string,
@@ -168,7 +171,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     // reset all the Tendermint state, if any
     std::process::Command::new(tendermint_path)
         .args(&[
-            "reset",
+            "reset-state",
             "unsafe-all",
             // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
             // "--log-level=\"*debug\"",
@@ -187,6 +190,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
 fn validator_key_to_json(
     sk: &common::SecretKey,
 ) -> std::result::Result<serde_json::Value, ParseSecretKeyError> {
+    let raw_hash = tm_consensus_key_raw_hash(&sk.ref_to());
     let (id_str, pk_arr, kp_arr) = match sk {
         common::SecretKey::Ed25519(_) => {
             let sk_ed: ed25519::SecretKey = sk.try_to_sk().unwrap();
@@ -208,6 +212,7 @@ fn validator_key_to_json(
     };
 
     Ok(json!({
+        "address": raw_hash,
         "pub_key": {
             "type": format!("tendermint/PubKey{}",id_str),
             "value": base64::encode(pk_arr),
@@ -331,15 +336,6 @@ async fn update_tendermint_config(
     config.instrumentation.namespace =
         tendermint_config.instrumentation_namespace;
 
-    // setup the events log
-    {
-        // keep events for one minute
-        config.rpc.event_log_window_size =
-            std::time::Duration::from_secs(59).into();
-        // we do not limit the size of the events log
-        config.rpc.event_log_max_items = 0;
-    }
-
     let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
@@ -357,7 +353,7 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    config: &config::Tendermint,
+    #[cfg(feature = "abcipp")] config: &config::Tendermint,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
@@ -378,8 +374,11 @@ async fn write_tm_genesis(
     genesis.genesis_time = genesis_time
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
-    genesis.consensus_params.timeout.commit =
-        config.consensus_timeout_commit.into();
+    #[cfg(feature = "abcipp")]
+    {
+        genesis.consensus_params.timeout.commit =
+            config.consensus_timeout_commit.into();
+    }
 
     let mut file = OpenOptions::new()
         .write(true)

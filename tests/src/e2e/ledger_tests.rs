@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use namada::types::address::{btc, eth, masp_rewards};
+use data_encoding::HEXLOWER;
 use namada::types::token;
 use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{
@@ -26,6 +27,7 @@ use namada_apps::config::genesis::genesis_config::{
 use serde_json::json;
 use setup::constants::*;
 
+use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_voting_power, get_actor_rpc, get_epoch,
 };
@@ -53,7 +55,7 @@ fn run_ledger() -> Result<()> {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
         ledger.exp_string("Anoma ledger node started")?;
-        ledger.exp_string("This node is a fullnode")?;
+        ledger.exp_string("This node is not a validator")?;
     }
 
     Ok(())
@@ -96,11 +98,11 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
-    non_validator.exp_string("This node is a fullnode")?;
+    non_validator.exp_string("This node is not a validator")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
-    let bg_non_validator = non_validator.background();
+    let _bg_non_validator = non_validator.background();
 
     // 2. Cross over epoch to check for consensus with multiple nodes
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -133,12 +135,35 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     // 4. Check that all the nodes processed the tx with the same result
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
-    let mut non_validator = bg_non_validator.foreground();
-
     let expected_result = "all VPs accepted transaction";
+    // We cannot check this on non-validator node as it might sync without
+    // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;
     validator_1.exp_string(expected_result)?;
-    non_validator.exp_string(expected_result)?;
+    let _bg_validator_0 = validator_0.background();
+    let _bg_validator_1 = validator_1.background();
+
+    let query_balance_args = |ledger_rpc| {
+        vec![
+            "balance",
+            "--owner",
+            ALBERT,
+            "--token",
+            XAN,
+            "--ledger-address",
+            ledger_rpc,
+        ]
+    };
+
+    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
+    let non_validator_rpc = get_actor_rpc(&test, &Who::NonValidator);
+    for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
+        let mut client =
+            run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
+        client.exp_string("XAN: 1000010.1")?;
+        client.assert_success();
+    }
 
     Ok(())
 }
@@ -404,7 +429,7 @@ fn ledger_txs_and_queries() -> Result<()> {
                 &validator_one_rpc,
             ],
             // expect hex encoded of borsh encoded bytes
-            hex::encode(christel_balance.try_to_vec().unwrap()),
+            HEXLOWER.encode(&christel_balance.try_to_vec().unwrap()),
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {
@@ -1591,6 +1616,7 @@ fn invalid_transactions() -> Result<()> {
         source: find_address(&test, DAEWON)?,
         target: find_address(&test, ALBERT)?,
         token: find_address(&test, XAN)?,
+        sub_prefix: None,
         amount: token::Amount::whole(1),
         key: None,
         shielded: None,
@@ -2164,13 +2190,24 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 /// 13. Check governance address funds are 0
 #[test]
 fn proposal_submission() -> Result<()> {
+    let working_dir = setup::working_dir();
+
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 1,
                 min_duration: 1,
                 max_expected_time_per_block: 1,
-                ..genesis.parameters
+                vp_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("vp_"),
+                )),
+                // Enable tx whitelist to test the execution of a
+                // non-whitelisted tx by governance
+                tx_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("tx_"),
+                )),
             };
 
             GenesisConfig {
@@ -2219,7 +2256,6 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // 2. Submit valid proposal
-    let test_dir = tempfile::tempdir_in(test.test_dir.path()).unwrap();
     let proposal_code = wasm_abs_path(TX_PROPOSAL_CODE);
 
     let albert = find_address(&test, ALBERT)?;
@@ -2237,24 +2273,25 @@ fn proposal_submission() -> Result<()> {
                 "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 12,
-            "voting_end_epoch": 24,
-            "grace_epoch": 30,
+            "voting_start_epoch": 12_u64,
+            "voting_end_epoch": 24_u64,
+            "grace_epoch": 30_u64,
             "proposal_code_path": proposal_code.to_str().unwrap()
         }
     );
-    let proposal_file =
-        tempfile::NamedTempFile::new_in(test_dir.path()).unwrap();
-    serde_json::to_writer(&proposal_file, &valid_proposal_json).unwrap();
-    let proposal_path = proposal_file.path();
-    let proposal_ref = proposal_path.to_string_lossy();
+    let valid_proposal_json_path =
+        test.test_dir.path().join("valid_proposal.json");
+    generate_proposal_json_file(
+        valid_proposal_json_path.as_path(),
+        &valid_proposal_json,
+    );
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let submit_proposal_args = vec![
         "init-proposal",
         "--data-path",
-        &proposal_ref,
+        valid_proposal_json_path.to_str().unwrap(),
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2337,29 +2374,30 @@ fn proposal_submission() -> Result<()> {
     eros.",             "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 9999,
-            "voting_end_epoch": 10000,
-            "grace_epoch": 10009,
+            "voting_start_epoch": 9999_u64,
+            "voting_end_epoch": 10000_u64,
+            "grace_epoch": 10009_u64,
         }
     );
-    let invalid_proposal_file =
-        tempfile::NamedTempFile::new_in(test_dir.path()).unwrap();
-    serde_json::to_writer(&invalid_proposal_file, &invalid_proposal_json)
-        .unwrap();
-    let invalid_proposal_path = invalid_proposal_file.path();
-    let invalid_proposal_ref = invalid_proposal_path.to_string_lossy();
+    let invalid_proposal_json_path =
+        test.test_dir.path().join("invalid_proposal.json");
+    generate_proposal_json_file(
+        invalid_proposal_json_path.as_path(),
+        &invalid_proposal_json,
+    );
 
     let submit_proposal_args = vec![
         "init-proposal",
         "--data-path",
-        &invalid_proposal_ref,
+        invalid_proposal_json_path.to_str().unwrap(),
         "--ledger-address",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string(
         "Invalid proposal end epoch: difference between proposal start and \
-         end epoch must be at least 3 and end epoch must be a multiple of 3",
+         end epoch must be at least 3 and at max 27 and end epoch must be a \
+         multiple of 3",
     )?;
     client.assert_failure();
 
@@ -2566,9 +2604,7 @@ fn proposal_offline() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 2. Create an offline proposal
-    let test_dir = tempfile::tempdir_in(test.test_dir.path()).unwrap();
-
+    // 2. Create an offline
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json = json!(
         {
@@ -2584,23 +2620,24 @@ fn proposal_offline() -> Result<()> {
                 "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 3,
-            "voting_end_epoch": 9,
-            "grace_epoch": 18
+            "voting_start_epoch": 3_u64,
+            "voting_end_epoch": 9_u64,
+            "grace_epoch": 18_u64
         }
     );
-    let proposal_file =
-        tempfile::NamedTempFile::new_in(test_dir.path()).unwrap();
-    serde_json::to_writer(&proposal_file, &valid_proposal_json).unwrap();
-    let proposal_path = proposal_file.path();
-    let proposal_ref = proposal_path.to_string_lossy();
+    let valid_proposal_json_path =
+        test.test_dir.path().join("valid_proposal.json");
+    generate_proposal_json_file(
+        valid_proposal_json_path.as_path(),
+        &valid_proposal_json,
+    );
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let offline_proposal_args = vec![
         "init-proposal",
         "--data-path",
-        &proposal_ref,
+        valid_proposal_json_path.to_str().unwrap(),
         "--offline",
         "--ledger-address",
         &validator_one_rpc,
@@ -2617,12 +2654,12 @@ fn proposal_offline() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    let proposal_path = test_dir.path().join("proposal");
-    let proposal_ref = proposal_path.to_string_lossy();
+    let proposal_path = test.test_dir.path().join("proposal");
+
     let submit_proposal_vote = vec![
         "vote-proposal",
         "--data-path",
-        &proposal_ref,
+        proposal_path.to_str().unwrap(),
         "--vote",
         "yay",
         "--signer",
@@ -2637,17 +2674,14 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     let expected_file_name = format!("proposal-vote-{}", albert);
-    let expected_path_vote = test_dir.path().join(&expected_file_name);
+    let expected_path_vote = test.test_dir.path().join(&expected_file_name);
     assert!(expected_path_vote.exists());
-
-    let expected_path_proposal = test_dir.path().join("proposal");
-    assert!(expected_path_proposal.exists());
 
     // 4. Compute offline tally
     let tally_offline = vec![
         "query-proposal-result",
         "--data-path",
-        test_dir.path().to_str().unwrap(),
+        test.test_dir.path().to_str().unwrap(),
         "--offline",
         "--ledger-address",
         &validator_one_rpc,
@@ -2658,6 +2692,20 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     Ok(())
+}
+
+fn generate_proposal_json_file(
+    proposal_path: &std::path::Path,
+    proposal_content: &serde_json::Value,
+) {
+    let intent_writer = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(proposal_path)
+        .unwrap();
+
+    serde_json::to_writer(intent_writer, proposal_content).unwrap();
 }
 
 /// In this test we:
@@ -2968,7 +3016,7 @@ fn test_genesis_validators() -> Result<()> {
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
-    non_validator.exp_string("This node is a fullnode")?;
+    non_validator.exp_string("This node is not a validator")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();

@@ -344,13 +344,12 @@ mod tests {
     use crate::ibc::Height;
     use crate::ibc_proto::cosmos::base::v1beta1::Coin;
     use prost::Message;
-    use sha2::Digest;
-    use crate::tendermint_proto::Protobuf;
     use crate::tendermint::time::Time as TmTime;
+    use crate::tendermint_proto::Protobuf;
 
     use super::get_dummy_header;
     use super::super::handler::{
-        commitment_prefix, init_connection, make_create_client_event,
+        self, commitment_prefix, init_connection, make_create_client_event,
         make_open_ack_channel_event, make_open_ack_connection_event,
         make_open_confirm_channel_event, make_open_confirm_connection_event,
         make_open_init_channel_event, make_open_init_connection_event,
@@ -457,7 +456,7 @@ mod tests {
     }
 
     fn get_channel_id() -> ChannelId {
-        ChannelId::from_str("test_channel").unwrap()
+        ChannelId::from_str("channel-42").unwrap()
     }
 
     fn get_connection(conn_state: ConnState) -> ConnectionEnd {
@@ -497,9 +496,8 @@ mod tests {
     fn get_channel_counterparty() -> ChanCounterparty {
         let counterpart_port_id = PortId::from_str("counterpart_test_port")
             .expect("Creating a port ID failed");
-        let counterpart_channel_id =
-            ChannelId::from_str("counterpart_test_channel")
-                .expect("Creating a channel ID failed");
+        let counterpart_channel_id = ChannelId::from_str("channel-0")
+            .expect("Creating a channel ID failed");
         ChanCounterparty::new(counterpart_port_id, Some(counterpart_channel_id))
     }
 
@@ -534,15 +532,6 @@ mod tests {
         write_log
             .write(key, seq_num.to_be_bytes().to_vec())
             .expect("write failed");
-    }
-
-    fn hash(packet: &Packet) -> String {
-        let input = format!(
-            "{:?},{:?},{:?}",
-            packet.timeout_timestamp, packet.timeout_height, packet.data,
-        );
-        let r = sha2::Sha256::digest(input.as_bytes());
-        format!("{:x}", r)
     }
 
     #[test]
@@ -730,7 +719,7 @@ mod tests {
         let msg = MsgConnectionOpenInit {
             client_id: get_client_id(),
             counterparty: get_conn_counterparty(),
-            version: ConnVersion::default(),
+            version: None,
             delay_period: Duration::new(100, 0),
             signer: Signer::new("account0"),
         };
@@ -789,7 +778,7 @@ mod tests {
         let msg = MsgConnectionOpenInit {
             client_id: get_client_id(),
             counterparty: get_conn_counterparty(),
-            version: ConnVersion::default(),
+            version: None,
             delay_period: Duration::new(100, 0),
             signer: Signer::new("account0"),
         };
@@ -1258,10 +1247,9 @@ mod tests {
         let msg = MsgChannelOpenAck {
             port_id: get_port_id(),
             channel_id: get_channel_id(),
-            counterparty_channel_id: get_channel_counterparty()
+            counterparty_channel_id: *get_channel_counterparty()
                 .channel_id()
-                .unwrap()
-                .clone(),
+                .unwrap(),
             counterparty_version: ChanVersion::ics20(),
             proofs,
             signer: Signer::new("account0"),
@@ -1271,7 +1259,8 @@ mod tests {
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.encode_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        let event = make_open_ack_channel_event(&msg);
+        let event =
+            make_open_ack_channel_event(&msg, &channel).expect("no connection");
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
@@ -1354,7 +1343,9 @@ mod tests {
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.encode_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        let event = make_open_confirm_channel_event(&msg);
+
+        let event = make_open_confirm_channel_event(&msg, &channel)
+            .expect("no connection");
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
@@ -1518,14 +1509,10 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
-        let commitment = hash(&packet);
-        let mut commitment_bytes = vec![];
-        commitment
-            .encode(&mut commitment_bytes)
-            .expect("encoding shouldn't fail");
+        let commitment = handler::commitment(&packet);
         let key = commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
-            .write(&key, commitment_bytes)
+            .write(&key, commitment.into_vec())
             .expect("write failed");
 
         let tx_index = TxIndex::default();
@@ -1591,7 +1578,7 @@ mod tests {
         let packet = Packet {
             sequence,
             source_port: counterparty.port_id().clone(),
-            source_channel: counterparty.channel_id().unwrap().clone(),
+            source_channel: *counterparty.channel_id().unwrap(),
             destination_port: get_port_id(),
             destination_channel: get_channel_id(),
             data: vec![0],
@@ -1667,7 +1654,7 @@ mod tests {
             source_port: get_port_id(),
             source_channel: get_channel_id(),
             destination_port: counterparty.port_id().clone(),
-            destination_channel: counterparty.channel_id().unwrap().clone(),
+            destination_channel: *counterparty.channel_id().unwrap(),
             data: vec![0],
             timeout_height: Height::new(0, 100),
             timeout_timestamp,
@@ -1684,11 +1671,11 @@ mod tests {
         let bytes = channel.encode_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
         // insert a commitment
-        let commitment = hash(&packet);
+        let commitment = handler::commitment(&packet);
         let commitment_key =
             commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
-            .write(&commitment_key, commitment.as_bytes().to_vec())
+            .write(&commitment_key, commitment.into_vec())
             .expect("write failed");
         write_log.commit_tx();
         write_log.commit_block(&mut storage).expect("commit failed");
@@ -1701,7 +1688,7 @@ mod tests {
                 .unwrap();
         let msg = MsgAcknowledgement {
             packet,
-            acknowledgement: ack,
+            acknowledgement: ack.into(),
             proofs,
             signer: Signer::new("account0"),
         };
@@ -1785,18 +1772,14 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
-        let commitment = hash(&packet);
+        let commitment = handler::commitment(&packet);
         let commitment_key = commitment_key(
             &packet.source_port,
             &packet.source_channel,
             sequence,
         );
-        let mut commitment_bytes = vec![];
-        commitment
-            .encode(&mut commitment_bytes)
-            .expect("encoding shouldn't fail");
         write_log
-            .write(&commitment_key, commitment_bytes)
+            .write(&commitment_key, commitment.into_vec())
             .expect("write failed");
         let event = make_send_packet_event(packet);
         write_log.set_ibc_event(event.try_into().unwrap());
@@ -1860,7 +1843,7 @@ mod tests {
         let packet = Packet {
             sequence: Sequence::from(1),
             source_port: counterparty.port_id().clone(),
-            source_channel: counterparty.channel_id().unwrap().clone(),
+            source_channel: *counterparty.channel_id().unwrap(),
             destination_port: get_port_id(),
             destination_channel: get_channel_id(),
             data: vec![0],

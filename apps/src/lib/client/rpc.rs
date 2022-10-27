@@ -13,6 +13,7 @@ use async_std::fs;
 use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
+use data_encoding::HEXLOWER;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
@@ -30,7 +31,6 @@ use namada::ledger::pos::types::{
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
-use namada::ledger::treasury::storage as treasury_storage;
 use namada::ledger::storage::ConversionState;
 use namada::proto::{SignedTxData, Tx};
 use namada::types::address::{masp, tokens, Address};
@@ -41,7 +41,7 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, PrefixValue, TxIndex, KeySeg, Key,
+    BlockHeight, Epoch, PrefixValue, TxIndex, KeySeg, Key,
 };
 use namada::types::token::{balance_key, Transfer};
 use namada::types::transaction::{
@@ -49,18 +49,18 @@ use namada::types::transaction::{
     WrapperTx,
 };
 use namada::types::{address, storage, token};
-use tendermint::abci::Code;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::error::Error as TError;
-use tendermint_rpc::query::Query;
-use tendermint_rpc::{
-    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
-};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
 use crate::client::tx::{
     Conversions, PinnedBalanceError, TransactionDelta, TransferDelta,
+};
+use crate::facade::tendermint::abci::Code;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_rpc::error::Error as TError;
+use crate::facade::tendermint_rpc::query::Query;
+use crate::facade::tendermint_rpc::{
+    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
 };
 use crate::node::ledger::rpc::Path;
 
@@ -123,265 +123,6 @@ fn extract_payload(
     }
 }
 
-/// Query the results of the last committed block
-pub async fn query_results(args: args::Query) -> Vec<BlockResults> {
-    let client = HttpClient::new(args.ledger_address).unwrap();
-    let path = Path::Results;
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => {
-            match Vec::<BlockResults>::try_from_slice(&response.value[..]) {
-                Ok(results) => {
-                    return results;
-                }
-
-                Err(err) => {
-                    eprintln!("Error decoding the results value: {}", err)
-                }
-            }
-        }
-        Code::Err(err) => eprintln!(
-            "Error in the query {} (error code {})",
-            response.info, err
-        ),
-    }
-    cli::safe_exit(1)
-}
-
-/// Obtain the known effects of all accepted shielded and transparent
-/// transactions. If an owner is specified, then restrict the set to only
-/// transactions crediting/debiting the given owner. If token is specified, then
-/// restrict set to only transactions involving the given token.
-pub async fn query_tx_deltas(
-    ctx: &mut Context,
-    ledger_address: TendermintAddress,
-    query_owner: &Option<BalanceOwner>,
-    query_token: &Option<Address>,
-) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, TransferDelta, TransactionDelta)>
-{
-    const TXS_PER_PAGE: u8 = 100;
-    // Connect to the Tendermint server holding the transactions
-    let client = HttpClient::new(ledger_address.clone()).unwrap();
-    // Build up the context that will be queried for transactions
-    let _ = ctx.shielded.load();
-    let vks = ctx.wallet.get_viewing_keys();
-    let fvks: Vec<_> = vks
-        .values()
-        .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-        .collect();
-    ctx.shielded.fetch(&ledger_address, &[], &fvks).await;
-    // Save the update state so that future fetches can be short-circuited
-    let _ = ctx.shielded.save();
-    // Required for filtering out rejected transactions from Tendermint
-    // responses
-    let block_results = query_results(args::Query { ledger_address }).await;
-    let mut transfers = ctx.shielded.get_tx_deltas().clone();
-    // Construct the set of addresses relevant to user's query
-    let relevant_addrs = match &query_owner {
-        Some(BalanceOwner::Address(owner)) => vec![owner.clone()],
-        // MASP objects are dealt with outside of tx_search
-        Some(BalanceOwner::FullViewingKey(_viewing_key)) => vec![],
-        Some(BalanceOwner::PaymentAddress(_owner)) => vec![],
-        // Unspecified owner means all known addresses are considered relevant
-        None => ctx.wallet.get_addresses().into_values().collect(),
-    };
-    // Find all transactions to or from the relevant address set
-    for addr in relevant_addrs {
-        for prop in ["transfer.source", "transfer.target"] {
-            // Query transactions involving the current address
-            let mut tx_query = Query::eq(prop, addr.encode());
-            // Elaborate the query if requested by the user
-            if let Some(token) = &query_token {
-                tx_query = tx_query.and_eq("transfer.token", token.encode());
-            }
-            for page in 1.. {
-                let txs = &client
-                    .tx_search(
-                        tx_query.clone(),
-                        true,
-                        page,
-                        TXS_PER_PAGE,
-                        Order::Ascending,
-                    )
-                    .await
-                    .expect("Unable to query for transactions")
-                    .txs;
-                for response_tx in txs {
-                    let height = BlockHeight(response_tx.height.value());
-                    let idx = TxIndex(response_tx.index);
-                    // Only process yet unprocessed transactions which have been
-                    // accepted by node VPs
-                    let should_process = !transfers
-                        .contains_key(&(height, idx))
-                        && block_results[u64::from(height) as usize]
-                            .is_accepted(idx.0 as usize);
-                    if !should_process {
-                        continue;
-                    }
-                    let tx = Tx::try_from(response_tx.tx.as_ref())
-                        .expect("Ill-formed Tx");
-                    let mut wrapper = None;
-                    let mut transfer = None;
-                    extract_payload(tx, &mut wrapper, &mut transfer);
-                    // Epoch data is not needed for transparent transactions
-                    let epoch = wrapper.map(|x| x.epoch).unwrap_or_default();
-                    if let Some(transfer) = transfer {
-                        // Skip MASP addresses as they are already handled by
-                        // ShieldedContext
-                        if transfer.source == masp()
-                            || transfer.target == masp()
-                        {
-                            continue;
-                        }
-                        // Describe how a Transfer simply subtracts from one
-                        // account and adds the same to another
-                        let mut delta = TransferDelta::default();
-                        let tfer_delta = Amount::from_nonnegative(
-                            transfer.token.clone(),
-                            u64::from(transfer.amount),
-                        )
-                        .expect("invalid value for amount");
-                        delta.insert(
-                            transfer.source,
-                            Amount::zero() - &tfer_delta,
-                        );
-                        delta.insert(transfer.target, tfer_delta);
-                        // No shielded accounts are affected by this Transfer
-                        transfers.insert(
-                            (height, idx),
-                            (epoch, delta, TransactionDelta::new()),
-                        );
-                    }
-                }
-                // An incomplete page signifies no more transactions
-                if (txs.len() as u8) < TXS_PER_PAGE {
-                    break;
-                }
-            }
-        }
-    }
-    transfers
-}
-
-/// Query the specified accepted transfers from the ledger
-pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
-    let query_token = args.token.as_ref().map(|x| ctx.get(x));
-    let query_owner = args.owner.as_ref().map(|x| ctx.get_cached(x));
-    // Obtain the effects of all shielded and transparent transactions
-    let transfers = query_tx_deltas(
-        &mut ctx,
-        args.query.ledger_address.clone(),
-        &query_owner,
-        &query_token,
-    )
-    .await;
-    // To facilitate lookups of human-readable token names
-    let tokens = tokens();
-    let vks = ctx.wallet.get_viewing_keys();
-    // To enable ExtendedFullViewingKeys to be displayed instead of ViewingKeys
-    let fvk_map: HashMap<_, _> = vks
-        .values()
-        .map(|fvk| (ExtendedFullViewingKey::from(*fvk).fvk.vk, fvk))
-        .collect();
-    // Connect to the Tendermint server holding the transactions
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    // Now display historical shielded and transparent transactions
-    for ((height, idx), (epoch, tfer_delta, tx_delta)) in transfers {
-        // Check if this transfer pertains to the supplied owner
-        let mut relevant = match &query_owner {
-            Some(BalanceOwner::FullViewingKey(fvk)) => tx_delta
-                .contains_key(&ExtendedFullViewingKey::from(*fvk).fvk.vk),
-            Some(BalanceOwner::Address(owner)) => {
-                tfer_delta.contains_key(owner)
-            }
-            Some(BalanceOwner::PaymentAddress(_owner)) => false,
-            None => true,
-        };
-        // Realize and decode the shielded changes to enable relevance check
-        let mut shielded_accounts = HashMap::new();
-        for (acc, amt) in tx_delta {
-            // Realize the rewards that would have been attained upon the
-            // transaction's reception
-            let amt = ctx
-                .shielded
-                .compute_exchanged_amount(
-                    client.clone(),
-                    amt,
-                    epoch,
-                    Conversions::new(),
-                )
-                .await
-                .0;
-            let dec =
-                ctx.shielded.decode_amount(client.clone(), amt, epoch).await;
-            shielded_accounts.insert(acc, dec);
-        }
-        // Check if this transfer pertains to the supplied token
-        relevant &= match &query_token {
-            Some(token) => {
-                tfer_delta.values().any(|x| x[token] != 0)
-                    || shielded_accounts.values().any(|x| x[token] != 0)
-            }
-            None => true,
-        };
-        // Filter out those entries that do not satisfy user query
-        if !relevant {
-            continue;
-        }
-        println!("Height: {}, Index: {}, Transparent Transfer:", height, idx);
-        // Display the transparent changes first
-        for (account, amt) in tfer_delta {
-            if account != masp() {
-                print!("  {}:", account);
-                for (addr, val) in amt.components() {
-                    let addr_enc = addr.encode();
-                    let readable =
-                        tokens.get(addr).cloned().unwrap_or(addr_enc.as_str());
-                    let sign = match val.cmp(&0) {
-                        Ordering::Greater => "+",
-                        Ordering::Less => "-",
-                        Ordering::Equal => "",
-                    };
-                    print!(
-                        " {}{} {}",
-                        sign,
-                        token::Amount::from(val.unsigned_abs()),
-                        readable
-                    );
-                }
-                println!();
-            }
-        }
-        // Then display the shielded changes afterwards
-        for (account, amt) in shielded_accounts {
-            if fvk_map.contains_key(&account) {
-                print!("  {}:", fvk_map[&account]);
-                for (addr, val) in amt.components() {
-                    let addr_enc = addr.encode();
-                    let readable =
-                        tokens.get(addr).cloned().unwrap_or(addr_enc.as_str());
-                    let sign = match val.cmp(&0) {
-                        Ordering::Greater => "+",
-                        Ordering::Less => "-",
-                        Ordering::Equal => "",
-                    };
-                    print!(
-                        " {}{} {}",
-                        sign,
-                        token::Amount::from(val.unsigned_abs()),
-                        readable
-                    );
-                }
-                println!();
-            }
-        }
-    }
-}
-
 /// Query the raw bytes of given storage key
 pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
@@ -393,7 +134,7 @@ pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
         .unwrap();
     match response.code {
         Code::Ok => {
-            println!("{}", hex::encode(&response.value));
+            println!("{}", HEXLOWER.encode(&response.value));
         }
         Code::Err(err) => {
             eprintln!(
@@ -440,94 +181,66 @@ pub async fn query_transparent_balance(
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
             let token = ctx.get(&token);
-            let owner = ctx
-                .get_cached(&owner)
-                .address()
-                .expect("a transparent address");
-            let key = token::balance_key(&token, &owner);
+            let owner = ctx.get_cached(&owner);
+            let key = match &args.sub_prefix {
+                Some(sub_prefix) => {
+                    let sub_prefix = Key::parse(sub_prefix).unwrap();
+                    let prefix =
+                        token::multitoken_balance_prefix(&token, &sub_prefix);
+                    token::multitoken_balance_key(&prefix, &owner.address().unwrap())
+                }
+                None => token::balance_key(&token, &owner.address().unwrap()),
+            };
             let currency_code = tokens
                 .get(&token)
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
             match query_storage_value::<token::Amount>(&client, &key).await {
-                Some(balance) => {
-                    println!("{}: {}", currency_code, balance);
-                }
+                Some(balance) => match &args.sub_prefix {
+                    Some(sub_prefix) => {
+                        println!(
+                            "{} with {}: {}",
+                            currency_code, sub_prefix, balance
+                        );
+                    }
+                    None => println!("{}: {}", currency_code, balance),
+                },
                 None => {
                     println!("No {} balance found for {}", currency_code, owner)
                 }
             }
         }
         (None, Some(owner)) => {
-            let owner = ctx
-                .get_cached(&owner)
-                .address()
-                .expect("a transparent address");
-            let mut found_any = false;
-            for (token, currency_code) in tokens {
-                let key = token::balance_key(&token, &owner);
-                if let Some(balance) =
-                    query_storage_value::<token::Amount>(&client, &key).await
-                {
-                    println!("{}: {}", currency_code, balance);
-                    found_any = true;
+            let owner = ctx.get_cached(&owner);
+            for (token, _) in tokens {
+                let prefix = token.to_db_key().into();
+                let balances = query_storage_prefix::<token::Amount>(
+                    client.clone(),
+                    prefix,
+                )
+                .await;
+                if let Some(balances) = balances {
+                    print_balances(&ctx, balances, &token, owner.address().as_ref());
                 }
-            }
-            if !found_any {
-                println!("No balance found for {}", owner);
             }
         }
         (Some(token), None) => {
             let token = ctx.get(&token);
-            let key = token::balance_prefix(&token);
+            let prefix = token.to_db_key().into();
             let balances =
-                query_storage_prefix::<token::Amount>(client, key).await;
-            match balances {
-                Some(balances) => {
-                    let currency_code = tokens
-                        .get(&token)
-                        .map(|c| Cow::Borrowed(*c))
-                        .unwrap_or_else(|| Cow::Owned(token.to_string()));
-                    let stdout = io::stdout();
-                    let mut w = stdout.lock();
-                    writeln!(w, "Token {}:", currency_code).unwrap();
-                    for (key, balance) in balances {
-                        let owner =
-                            token::is_any_token_balance_key(&key).unwrap();
-                        writeln!(w, "  {}, owned by {}", balance, owner)
-                            .unwrap();
-                    }
-                }
-                None => {
-                    println!("No balances for token {}", token.encode())
-                }
+                query_storage_prefix::<token::Amount>(client, prefix).await;
+            if let Some(balances) = balances {
+                print_balances(&ctx, balances, &token, None);
             }
         }
         (None, None) => {
-            let stdout = io::stdout();
-            let mut w = stdout.lock();
-            for (token, currency_code) in tokens {
+            for (token, _) in tokens {
                 let key = token::balance_prefix(&token);
                 let balances =
                     query_storage_prefix::<token::Amount>(client.clone(), key)
                         .await;
-                match balances {
-                    Some(balances) => {
-                        writeln!(w, "Token {}:", currency_code).unwrap();
-                        for (key, balance) in balances {
-                            let owner =
-                                token::is_any_token_balance_key(&key).unwrap();
-                            let owner = match ctx.wallet.find_alias(owner) {
-                                Some(alias) => format!("{}", alias),
-                                None => format!("{}", owner),
-                            };
-                            writeln!(w, "  {}, owned by {}", balance, owner)
-                                .unwrap();
-                        }
-                    }
-                    None => {
-                        println!("No balances for token {}", token.encode())
-                    }
+                if let Some(balances) = balances {
+                    print_balances(&ctx, balances, &token, None);
                 }
             }
         }
@@ -667,6 +380,70 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                         owner, epoch
                     );
                 }
+            }
+        }
+    }
+}
+
+fn print_balances(
+    ctx: &Context,
+    balances: impl Iterator<Item = (storage::Key, token::Amount)>,
+    token: &Address,
+    target: Option<&Address>,
+) {
+    let stdout = io::stdout();
+    let mut w = stdout.lock();
+
+    // Token
+    let tokens = address::tokens();
+    let currency_code = tokens
+        .get(token)
+        .map(|c| Cow::Borrowed(*c))
+        .unwrap_or_else(|| Cow::Owned(token.to_string()));
+    writeln!(w, "Token {}", currency_code).unwrap();
+
+    let print_num = balances
+        .filter_map(
+            |(key, balance)| match token::is_any_multitoken_balance_key(&key) {
+                Some((sub_prefix, owner)) => Some((
+                    owner.clone(),
+                    format!(
+                        "with {}: {}, owned by {}",
+                        sub_prefix,
+                        balance,
+                        lookup_alias(ctx, owner)
+                    ),
+                )),
+                None => token::is_any_token_balance_key(&key).map(|owner| {
+                    (
+                        owner.clone(),
+                        format!(
+                            ": {}, owned by {}",
+                            balance,
+                            lookup_alias(ctx, owner)
+                        ),
+                    )
+                }),
+            },
+        )
+        .filter_map(|(o, s)| match target {
+            Some(t) if o == *t => Some(s),
+            Some(_) => None,
+            None => Some(s),
+        })
+        .map(|s| {
+            writeln!(w, "{}", s).unwrap();
+        })
+        .count();
+
+    if print_num == 0 {
+        match target {
+            Some(t) => {
+                writeln!(w, "No balances owned by {}", lookup_alias(ctx, t))
+                    .unwrap()
+            }
+            None => {
+                writeln!(w, "No balances for token {}", currency_code).unwrap()
             }
         }
     }
@@ -1095,20 +872,17 @@ pub async fn query_proposal_result(
 
     match args.proposal_id {
         Some(id) => {
-            let start_epoch_key = gov_storage::get_voting_start_epoch_key(id);
             let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
-            let start_epoch =
-                query_storage_value::<Epoch>(&client, &start_epoch_key).await;
             let end_epoch =
                 query_storage_value::<Epoch>(&client, &end_epoch_key).await;
 
-            match (start_epoch, end_epoch) {
-                (Some(start_epoch), Some(end_epoch)) => {
+            match end_epoch {
+                Some(end_epoch) => {
                     if current_epoch > end_epoch {
                         let votes =
-                            get_proposal_votes(&client, start_epoch, id).await;
+                            get_proposal_votes(&client, end_epoch, id).await;
                         let proposal_result =
-                            compute_tally(&client, start_epoch, votes).await;
+                            compute_tally(&client, end_epoch, votes).await;
                         println!("Proposal: {}", id);
                         println!("{:4}Result: {}", "", proposal_result);
                     } else {
@@ -1116,7 +890,7 @@ pub async fn query_proposal_result(
                         cli::safe_exit(1)
                     }
                 }
-                _ => {
+                None => {
                     eprintln!("Error while retriving proposal.");
                     cli::safe_exit(1)
                 }
@@ -1264,17 +1038,6 @@ pub async fn query_protocol_parameters(
         .await
         .expect("Parameter should be definied.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
-
-    println!("Treasury parameters");
-    let key = treasury_storage::get_max_transferable_fund_key();
-    let max_transferable_amount =
-        query_storage_value::<token::Amount>(&client, &key)
-            .await
-            .expect("Parameter should be definied.");
-    println!(
-        "{:4}Max. transferable amount: {}",
-        "", max_transferable_amount
-    );
 
     println!("PoS parameters");
     let key = pos::params_key();
@@ -2201,14 +1964,7 @@ where
                 Ok(values) => {
                     let decode = |PrefixValue { key, value }: PrefixValue| {
                         match T::try_from_slice(&value[..]) {
-                            Err(err) => {
-                                eprintln!(
-                                    "Skipping a value for key {}. Error in \
-                                     decoding: {}",
-                                    key, err
-                                );
-                                None
-                            }
+                            Err(_) => None,
                             Ok(value) => Some((key, value)),
                         }
                     };
@@ -2458,45 +2214,15 @@ pub async fn get_proposal_votes(
                 .await;
                 if let Some(amount) = delegator_token_amount {
                     if vote.is_yay() {
-                        match yay_delegators.get_mut(&voter_address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                )]);
-                                yay_delegators
-                                    .insert(voter_address, delegations_map);
-                            }
-                        }
+                        let entry =
+                            yay_delegators.entry(voter_address).or_default();
+                        entry
+                            .insert(validator_address, VotePower::from(amount));
                     } else {
-                        match nay_delegators.get_mut(&voter_address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(amount),
-                                )]);
-                                nay_delegators
-                                    .insert(voter_address, delegations_map);
-                            }
-                        }
+                        let entry =
+                            nay_delegators.entry(voter_address).or_default();
+                        entry
+                            .insert(validator_address, VotePower::from(amount));
                     }
                 }
             }
@@ -2613,49 +2339,21 @@ pub async fn get_proposal_offline_votes(
                             "Delegation key should contain validator address.",
                         );
                     if proposal_vote.vote.is_yay() {
-                        match yay_delegators.get_mut(&proposal_vote.address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(delegated_amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(delegated_amount),
-                                )]);
-                                yay_delegators.insert(
-                                    proposal_vote.address.clone(),
-                                    delegations_map,
-                                );
-                            }
-                        }
+                        let entry = yay_delegators
+                            .entry(proposal_vote.address.clone())
+                            .or_default();
+                        entry.insert(
+                            validator_address,
+                            VotePower::from(delegated_amount),
+                        );
                     } else {
-                        match nay_delegators.get_mut(&proposal_vote.address) {
-                            Some(map) => {
-                                map.insert(
-                                    validator_address,
-                                    VotePower::from(delegated_amount),
-                                );
-                            }
-                            None => {
-                                let delegations_map: HashMap<
-                                    Address,
-                                    VotePower,
-                                > = HashMap::from([(
-                                    validator_address,
-                                    VotePower::from(delegated_amount),
-                                )]);
-                                nay_delegators.insert(
-                                    proposal_vote.address.clone(),
-                                    delegations_map,
-                                );
-                            }
-                        }
+                        let entry = nay_delegators
+                            .entry(proposal_vote.address.clone())
+                            .or_default();
+                        entry.insert(
+                            validator_address,
+                            VotePower::from(delegated_amount),
+                        );
                     }
                 }
             }
@@ -2822,14 +2520,9 @@ async fn get_validator_stake(
     .await
     .expect("Total deltas should be defined");
     let epoched_total_voting_power = total_voting_power.get(epoch);
-    if let Some(epoched_total_voting_power) = epoched_total_voting_power {
-        match VotePower::try_from(epoched_total_voting_power) {
-            Ok(voting_power) => voting_power,
-            Err(_) => VotePower::from(0_u64),
-        }
-    } else {
-        VotePower::from(0_u64)
-    }
+
+    VotePower::try_from(epoched_total_voting_power.unwrap_or_default())
+        .unwrap_or_default()
 }
 
 pub async fn get_delegators_delegation(
@@ -2879,11 +2572,26 @@ pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
         .await
         .expect("Parameter should be definied.");
 
+    let key = gov_storage::get_max_proposal_period_key();
+    let max_proposal_period = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
     GovParams {
         min_proposal_fund: u64::from(min_proposal_fund),
         max_proposal_code_size,
         min_proposal_period,
+        max_proposal_period,
         max_proposal_content_size,
         min_proposal_grace_epochs,
+    }
+}
+
+/// Try to find an alias for a given address from the wallet. If not found,
+/// formats the address into a string.
+fn lookup_alias(ctx: &Context, addr: &Address) -> String {
+    match ctx.wallet.find_alias(addr) {
+        Some(alias) => format!("{}", alias),
+        None => format!("{}", addr),
     }
 }

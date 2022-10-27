@@ -10,7 +10,6 @@ pub mod client;
 pub mod config;
 pub mod logging;
 pub mod node;
-pub mod proto;
 pub mod wallet;
 pub mod wasm_loader;
 
@@ -18,3 +17,21 @@ pub mod wasm_loader;
 // Taken from <https://github.com/rust-lang/rfcs/issues/2324#issuecomment-502437904>.
 #[doc(inline)]
 pub use std;
+
+pub mod facade {
+    //! Facade module to reason about `abcipp` feature flag logic.
+
+    #[cfg(not(feature = "abcipp"))]
+    pub use {
+        tendermint, tendermint_config, tendermint_proto, tendermint_rpc,
+        tower_abci,
+    };
+    #[cfg(feature = "abcipp")]
+    pub use {
+        tendermint_abcipp as tendermint,
+        tendermint_config_abcipp as tendermint_config,
+        tendermint_proto_abcipp as tendermint_proto,
+        tendermint_rpc_abcipp as tendermint_rpc,
+        tower_abci_abcipp as tower_abci,
+    };
+}

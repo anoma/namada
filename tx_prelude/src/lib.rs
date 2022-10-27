@@ -6,10 +6,8 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-mod error;
 pub mod governance;
 pub mod ibc;
-pub mod intent;
 pub mod nft;
 pub mod proof_of_stake;
 pub mod token;
@@ -18,15 +16,15 @@ use core::slice;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
-pub use error::*;
 pub use namada::ledger::governance::storage as gov_storage;
 pub use namada::ledger::parameters::storage as parameters_storage;
+pub use namada::ledger::slash_fund::storage as slash_fund_storage;
 pub use namada::ledger::storage::types::encode;
-use namada::ledger::storage_api;
 pub use namada::ledger::storage_api::{
-    iter_prefix, iter_prefix_bytes, StorageRead, StorageWrite,
+    self, iter_prefix, iter_prefix_bytes, rev_iter_prefix,
+    rev_iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
+    StorageWrite,
 };
-pub use namada::ledger::treasury::storage as treasury_storage;
 pub use namada::ledger::tx_env::TxEnv;
 pub use namada::proto::{Signed, SignedTxData};
 pub use namada::types::address::Address;
@@ -103,6 +101,10 @@ impl Ctx {
     }
 }
 
+/// Result of `TxEnv`, `storage_api::StorageRead` or `storage_api::StorageWrite`
+/// method call
+pub type EnvResult<T> = Result<T, Error>;
+
 /// Transaction result
 pub type TxResult = EnvResult<()>;
 
@@ -115,7 +117,7 @@ impl StorageRead<'_> for Ctx {
     fn read_bytes(
         &self,
         key: &namada::types::storage::Key,
-    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
+    ) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
         let read_result =
             unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
@@ -125,14 +127,14 @@ impl StorageRead<'_> for Ctx {
     fn has_key(
         &self,
         key: &namada::types::storage::Key,
-    ) -> Result<bool, storage_api::Error> {
+    ) -> Result<bool, Error> {
         let key = key.to_string();
         let found =
             unsafe { anoma_tx_has_key(key.as_ptr() as _, key.len() as _) };
         Ok(HostEnvResult::is_success(found))
     }
 
-    fn get_chain_id(&self) -> Result<String, storage_api::Error> {
+    fn get_chain_id(&self) -> Result<String, Error> {
         let result = Vec::with_capacity(CHAIN_ID_LENGTH);
         unsafe {
             anoma_tx_get_chain_id(result.as_ptr() as _);
@@ -145,13 +147,13 @@ impl StorageRead<'_> for Ctx {
 
     fn get_block_height(
         &self,
-    ) -> Result<namada::types::storage::BlockHeight, storage_api::Error> {
+    ) -> Result<namada::types::storage::BlockHeight, Error> {
         Ok(BlockHeight(unsafe { anoma_tx_get_block_height() }))
     }
 
     fn get_block_hash(
         &self,
-    ) -> Result<namada::types::storage::BlockHash, storage_api::Error> {
+    ) -> Result<namada::types::storage::BlockHash, Error> {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
         unsafe {
             anoma_tx_get_block_hash(result.as_ptr() as _);
@@ -162,16 +164,14 @@ impl StorageRead<'_> for Ctx {
         Ok(BlockHash::try_from(slice).expect("Cannot convert the hash"))
     }
 
-    fn get_block_epoch(
-        &self,
-    ) -> Result<namada::types::storage::Epoch, storage_api::Error> {
+    fn get_block_epoch(&self) -> Result<namada::types::storage::Epoch, Error> {
         Ok(Epoch(unsafe { anoma_tx_get_block_epoch() }))
     }
 
     fn iter_prefix(
         &self,
         prefix: &namada::types::storage::Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
+    ) -> Result<Self::PrefixIter, Error> {
         let prefix = prefix.to_string();
         let iter_id = unsafe {
             anoma_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
@@ -179,10 +179,21 @@ impl StorageRead<'_> for Ctx {
         Ok(KeyValIterator(iter_id, PhantomData))
     }
 
+    fn rev_iter_prefix(
+        &self,
+        prefix: &storage::Key,
+    ) -> Result<Self::PrefixIter, Error> {
+        let prefix = prefix.to_string();
+        let iter_id = unsafe {
+            anoma_tx_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        };
+        Ok(KeyValIterator(iter_id, PhantomData))
+    }
+
     fn iter_next(
         &self,
         iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+    ) -> Result<Option<(String, Vec<u8>)>, Error> {
         let read_result = unsafe { anoma_tx_iter_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
             read_result,
@@ -227,8 +238,6 @@ impl StorageWrite for Ctx {
 }
 
 impl TxEnv<'_> for Ctx {
-    type Error = Error;
-
     fn get_block_time(&self) -> Result<time::Rfc3339String, Error> {
         let read_result = unsafe { anoma_tx_get_block_time() };
         let time_value = read_from_buffer(read_result, anoma_tx_result_buffer)

@@ -69,7 +69,7 @@ pub struct Context {
     pub wallet: Wallet,
     /// The global configuration
     pub global_config: GlobalConfig,
-    /// The ledger & intent gossip configuration for a specific chain ID
+    /// The ledger configuration for a specific chain ID
     pub config: Config,
     /// The context fr shielded operations
     pub shielded: ShieldedContext,

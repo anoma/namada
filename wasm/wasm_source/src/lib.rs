@@ -1,7 +1,5 @@
 #[cfg(feature = "tx_bond")]
 pub mod tx_bond;
-#[cfg(feature = "tx_from_intent")]
-pub mod tx_from_intent;
 #[cfg(feature = "tx_ibc")]
 pub mod tx_ibc;
 #[cfg(feature = "tx_init_account")]

@@ -5,11 +5,11 @@ use std::hash::Hash;
 use namada::types::key::*;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
-use tendermint_proto::abci;
-use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
-use tendermint_proto::google::protobuf;
 
 use super::*;
+use crate::facade::tendermint_proto::abci;
+use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+use crate::facade::tendermint_proto::google::protobuf;
 use crate::wasm_loader;
 
 impl<D, H> Shell<D, H>
@@ -20,7 +20,6 @@ where
     /// Create a new genesis for the chain with specified id. This includes
     /// 1. A set of initial users and tokens
     /// 2. Setting up the validity predicates for both users and tokens
-    /// 3. A matchmaker
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
@@ -60,7 +59,6 @@ where
 
         genesis.parameters.init_storage(&mut self.storage);
         genesis.gov_params.init_storage(&mut self.storage);
-        genesis.treasury_params.init_storage(&mut self.storage);
 
         // Depends on parameters being initialized
         self.storage

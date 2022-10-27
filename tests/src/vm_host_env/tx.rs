@@ -18,6 +18,8 @@ use namada::vm::{self, WasmCacheRwAccess};
 use namada_tx_prelude::{BorshSerialize, Ctx};
 use tempfile::TempDir;
 
+use crate::vp::TestVpEnv;
+
 /// Tx execution context provides access to host env functions
 static mut CTX: Ctx = unsafe { Ctx::new() };
 
@@ -237,6 +239,29 @@ mod native_tx_host_env {
         with(|env| env.commit_tx_and_block())
     }
 
+    /// Set the [`TestTxEnv`] back from a [`TestVpEnv`]. This is useful when
+    /// testing validation with multiple transactions that accumulate some state
+    /// changes.
+    pub fn set_from_vp_env(vp_env: TestVpEnv) {
+        let TestVpEnv {
+            storage,
+            write_log,
+            tx,
+            vp_wasm_cache,
+            vp_cache_dir,
+            ..
+        } = vp_env;
+        let tx_env = TestTxEnv {
+            storage,
+            write_log,
+            vp_wasm_cache,
+            vp_cache_dir,
+            tx,
+            ..Default::default()
+        };
+        set(tx_env);
+    }
+
     /// A helper macro to create implementations of the host environment
     /// functions exported to wasm, which uses the environment from the
     /// `ENV` variable.
@@ -341,6 +366,7 @@ mod native_tx_host_env {
     ));
     native_host_fn!(tx_delete(key_ptr: u64, key_len: u64));
     native_host_fn!(tx_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
+    native_host_fn!(tx_rev_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
     native_host_fn!(tx_iter_next(iter_id: u64) -> i64);
     native_host_fn!(tx_insert_verifier(addr_ptr: u64, addr_len: u64));
     native_host_fn!(tx_update_validity_predicate(

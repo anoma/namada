@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use data_encoding::HEXLOWER;
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -118,15 +119,15 @@ pub struct EncryptedKeypair<T: BorshSerialize + BorshDeserialize>(
 
 impl<T: BorshSerialize + BorshDeserialize> Display for EncryptedKeypair<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
+        write!(f, "{}", HEXLOWER.encode(self.0.as_ref()))
     }
 }
 
 impl<T: BorshSerialize + BorshDeserialize> FromStr for EncryptedKeypair<T> {
-    type Err = hex::FromHexError;
+    type Err = data_encoding::DecodeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        hex::decode(s).map(|x| Self(x, PhantomData))
+        HEXLOWER.decode(s.as_ref()).map(|x| Self(x, PhantomData))
     }
 }
 

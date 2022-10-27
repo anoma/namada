@@ -6,11 +6,11 @@ use masp_primitives::asset_type::AssetType;
 use namada::types::address::Address;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::storage::{BlockResults, Key, PrefixValue};
+use namada::types::storage::{Key, PrefixValue};
 use namada::types::token::{self, Amount};
-use tendermint_proto::crypto::{ProofOp, ProofOps};
 
 use super::*;
+use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
 use crate::node::ledger::response;
 
 impl<D, H> Shell<D, H>
@@ -49,7 +49,6 @@ where
                         ..Default::default()
                     }
                 }
-                Path::Results => self.read_results(),
                 Path::Conversion(asset_type) => {
                     self.read_conversion(&asset_type)
                 }
@@ -66,28 +65,6 @@ where
                 info: format!("RPC error: {}", err),
                 ..Default::default()
             },
-        }
-    }
-
-    /// Query to read block results from storage
-    pub fn read_results(&self) -> response::Query {
-        let (iter, _gas) = self.storage.iter_results();
-        let mut results = vec![
-            BlockResults::default();
-            self.storage.block.height.0 as usize + 1
-        ];
-        iter.for_each(|(key, value, _gas)| {
-            let key = key
-                .parse::<usize>()
-                .expect("expected integer for block height");
-            let value = BlockResults::try_from_slice(&value)
-                .expect("expected BlockResults bytes");
-            results[key] = value;
-        });
-        let value = namada::ledger::storage::types::encode(&results);
-        response::Query {
-            value,
-            ..Default::default()
         }
     }
 
@@ -163,7 +140,7 @@ where
                 let proof_ops = if is_proven {
                     match self.storage.get_existence_proof(
                         key,
-                        value.clone(),
+                        value.clone().into(),
                         height,
                     ) {
                         Ok(proof) => Some(proof.into()),
@@ -258,14 +235,27 @@ where
                         for PrefixValue { key, value } in &values {
                             match self.storage.get_existence_proof(
                                 key,
-                                value.clone(),
+                                value.clone().into(),
                                 height,
                             ) {
                                 Ok(p) => {
                                     let mut cur_ops: Vec<ProofOp> = p
                                         .ops
                                         .into_iter()
-                                        .map(|op| op.into())
+                                        .map(|op| {
+                                            #[cfg(feature = "abcipp")]
+                                            {
+                                                ProofOp {
+                                                    r#type: op.field_type,
+                                                    key: op.key,
+                                                    data: op.data,
+                                                }
+                                            }
+                                            #[cfg(not(feature = "abcipp"))]
+                                            {
+                                                op.into()
+                                            }
+                                        })
                                         .collect();
                                     ops.append(&mut cur_ops);
                                 }

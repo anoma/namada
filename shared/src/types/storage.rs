@@ -1,7 +1,6 @@
 //! Storage types
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
-use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
@@ -11,12 +10,14 @@ use bit_vec::BitVec;
 use borsh::maybestd::io::Write;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use data_encoding::BASE32HEX_NOPAD;
+use ics23::CommitmentProof;
 use thiserror::Error;
 
 #[cfg(feature = "ferveo-tpke")]
 use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
-use crate::ledger::storage::{StorageHasher, IBC_KEY_LIMIT};
+use crate::ledger::storage::IBC_KEY_LIMIT;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
@@ -32,6 +33,10 @@ pub enum Error {
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
+    #[error("Error parsing key segment {0}")]
+    ParseKeySeg(String),
+    #[error("Could not parse string: '{0}' into requested type: {1}")]
+    ParseError(String, String),
 }
 
 /// Result for functions that may fail
@@ -165,6 +170,7 @@ impl BorshDeserialize for BlockResults {
     Copy,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -215,6 +221,12 @@ pub struct BlockHash(pub [u8; BLOCK_HASH_LENGTH]);
 impl From<Hash> for BlockHash {
     fn from(hash: Hash) -> Self {
         BlockHash(hash.0)
+    }
+}
+
+impl From<u64> for BlockHeight {
+    fn from(height: u64) -> Self {
+        BlockHeight(height)
     }
 }
 
@@ -307,6 +319,7 @@ impl Header {
     BorshDeserialize,
     BorshSchema,
     Debug,
+    Default,
     Eq,
     PartialEq,
     Ord,
@@ -318,6 +331,13 @@ impl Header {
 pub struct Key {
     /// The segments of the key in the original (left-to-right) order.
     pub segments: Vec<DbKeySeg>,
+}
+
+/// A [`Key`] made of borrowed key segments [`DbKeySeg`].
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct KeyRef<'a> {
+    /// Reference of key segments
+    pub segments: &'a [DbKeySeg],
 }
 
 impl From<DbKeySeg> for Key {
@@ -336,14 +356,25 @@ impl FromStr for Key {
     }
 }
 
-/// A type for converting an Anoma storage key
-/// to that of the right type for the different
-/// merkle trees used.
-pub enum MerkleKey<H: StorageHasher> {
-    /// A key that needs to be hashed
-    Sha256(Key, PhantomData<H>),
-    /// A key that can be given as raw bytes
-    Raw(Key),
+/// An enum representing the different types of values
+/// that can be passed into Anoma's storage.
+///
+/// This is a multi-store organized as
+/// several Merkle trees, each of which is
+/// responsible for understanding how to parse
+/// this value.
+pub enum MerkleValue {
+    /// raw bytes
+    Bytes(Vec<u8>),
+}
+
+impl<T> From<T> for MerkleValue
+where
+    T: AsRef<[u8]>,
+{
+    fn from(bytes: T) -> Self {
+        Self::Bytes(bytes.as_ref().to_owned())
+    }
 }
 
 /// Storage keys that are utf8 encoded strings
@@ -425,6 +456,18 @@ impl From<TreeBytes> for Vec<u8> {
     }
 }
 
+/// Type of membership proof from a merkle tree
+pub enum MembershipProof {
+    /// ICS23 compliant membership proof
+    ICS23(CommitmentProof),
+}
+
+impl From<CommitmentProof> for MembershipProof {
+    fn from(proof: CommitmentProof) -> Self {
+        Self::ICS23(proof)
+    }
+}
+
 impl Key {
     /// Parses string and returns a key
     pub fn parse(string: impl AsRef<str>) -> Result<Self> {
@@ -477,7 +520,24 @@ impl Key {
         self.len() == 0
     }
 
-    /// Returns a key of the validity predicate of the given address.
+    /// Returns the first segment of the key, or `None` if it is empty.
+    pub fn first(&self) -> Option<&DbKeySeg> {
+        self.segments.first()
+    }
+
+    /// Returns the last segment of the key, or `None` if it is empty.
+    pub fn last(&self) -> Option<&DbKeySeg> {
+        self.segments.last()
+    }
+
+    /// Returns the prefix before the last segment and last segment of the key,
+    /// or `None` if it is empty.
+    pub fn split_last(&self) -> Option<(KeyRef<'_>, &DbKeySeg)> {
+        let (last, prefix) = self.segments.split_last()?;
+        Some((KeyRef { segments: prefix }, last))
+    }
+
+    /// Returns a key of the validity predicate of the given address
     /// Only this function can push "?" segment for validity predicate
     pub fn validity_predicate(addr: &Address) -> Self {
         let mut segments = Self::from(addr.to_db_key()).segments;
@@ -520,8 +580,11 @@ impl Key {
                     .split_off(2)
                     .join(&KEY_SEGMENT_SEPARATOR.to_string()),
             )
-            .map_err(|e| Error::Temporary {
-                error: format!("Cannot parse key segments {}: {}", db_key, e),
+            .map_err(|e| {
+                Error::ParseKeySeg(format!(
+                    "Cannot parse key segments {}: {}",
+                    db_key, e
+                ))
             })?,
         };
         Ok(key)
@@ -549,6 +612,28 @@ impl Key {
             }),
         }
     }
+
+    /// Check if the key begins with the given prefix and returns:
+    ///   - `Some(Some(suffix))` the suffix after the match with, if any, or
+    ///   - `Some(None)` if the prefix is matched, but it has no suffix, or
+    ///   - `None` if it doesn't match
+    pub fn split_prefix(&self, prefix: &Self) -> Option<Option<Self>> {
+        if self.segments.len() < prefix.segments.len() {
+            return None;
+        } else if self == prefix {
+            return Some(None);
+        }
+        // This is safe, because we check that the length of segments in self >=
+        // in prefix above
+        let (self_prefix, rest) = self.segments.split_at(prefix.segments.len());
+        if self_prefix == prefix.segments {
+            Some(Some(Key {
+                segments: rest.to_vec(),
+            }))
+        } else {
+            None
+        }
+    }
 }
 
 impl Display for Key {
@@ -560,6 +645,20 @@ impl Display for Key {
             .collect::<Vec<String>>()
             .join(&KEY_SEGMENT_SEPARATOR.to_string());
         f.write_str(&key)
+    }
+}
+
+impl KeyRef<'_> {
+    /// Check if [`KeyRef`] is equal to a [`Key`].
+    pub fn eq_owned(&self, other: &Key) -> bool {
+        self.segments == other.segments
+    }
+
+    /// Returns the prefix before the last segment and last segment of the key,
+    /// or `None` if it is empty.
+    pub fn split_last(&self) -> Option<(KeyRef<'_>, &DbKeySeg)> {
+        let (last, prefix) = self.segments.split_last()?;
+        Some((KeyRef { segments: prefix }, last))
     }
 }
 
@@ -649,14 +748,17 @@ impl KeySeg for String {
 
 impl KeySeg for BlockHeight {
     fn parse(string: String) -> Result<Self> {
-        let h = string.parse::<u64>().map_err(|e| Error::Temporary {
-            error: format!("Unexpected height value {}, {}", string, e),
+        let h = string.parse::<u64>().map_err(|e| {
+            Error::ParseKeySeg(format!(
+                "Unexpected height value {}, {}",
+                string, e
+            ))
         })?;
         Ok(BlockHeight(h))
     }
 
     fn raw(&self) -> String {
-        format!("{}", self.0)
+        self.0.raw()
     }
 
     fn to_db_key(&self) -> DbKeySeg {
@@ -683,6 +785,67 @@ impl KeySeg for Address {
         DbKeySeg::AddressSeg(self.clone())
     }
 }
+
+/// Implement [`KeySeg`] for a type via base32hex of its BE bytes (using
+/// `to_le_bytes()` and `from_le_bytes` methods) that maintains sort order of
+/// the original data.
+// TODO this could be a bit more efficient without the string conversion (atm
+// with base32hex), if we can use bytes for storage key directly (which we can
+// with rockDB, but atm, we're calling `to_string()` using the custom `Display`
+// impl from here)
+macro_rules! impl_int_key_seg {
+    ($unsigned:ty, $signed:ty, $len:literal) => {
+        impl KeySeg for $unsigned {
+            fn parse(string: String) -> Result<Self> {
+                let bytes =
+                    BASE32HEX_NOPAD.decode(string.as_ref()).map_err(|err| {
+                        Error::ParseKeySeg(format!(
+                            "Failed parsing {} with {}",
+                            string, err
+                        ))
+                    })?;
+                let mut fixed_bytes = [0; $len];
+                fixed_bytes.copy_from_slice(&bytes);
+                Ok(<$unsigned>::from_be_bytes(fixed_bytes))
+            }
+
+            fn raw(&self) -> String {
+                BASE32HEX_NOPAD.encode(&self.to_be_bytes())
+            }
+
+            fn to_db_key(&self) -> DbKeySeg {
+                DbKeySeg::StringSeg(self.raw())
+            }
+        }
+
+        impl KeySeg for $signed {
+            fn parse(string: String) -> Result<Self> {
+                // get signed int from a unsigned int complemented with a min
+                // value
+                let complemented = <$unsigned>::parse(string)?;
+                let signed = (complemented as $signed) ^ <$signed>::MIN;
+                Ok(signed)
+            }
+
+            fn raw(&self) -> String {
+                // signed int is converted to unsigned int that preserves the
+                // order by complementing it with a min value
+                let complemented = (*self ^ <$signed>::MIN) as $unsigned;
+                complemented.raw()
+            }
+
+            fn to_db_key(&self) -> DbKeySeg {
+                DbKeySeg::StringSeg(self.raw())
+            }
+        }
+    };
+}
+
+impl_int_key_seg!(u8, i8, 1);
+impl_int_key_seg!(u16, i16, 2);
+impl_int_key_seg!(u32, i32, 4);
+impl_int_key_seg!(u64, i64, 8);
+impl_int_key_seg!(u128, i128, 16);
 
 /// Epoch identifier. Epochs are identified by consecutive numbers.
 #[derive(

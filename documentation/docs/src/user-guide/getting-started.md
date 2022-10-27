@@ -3,7 +3,7 @@
 This guide assumes that the Namada binaries are [installed](./install.md) and available on path. These are:
 
 - `namada`: The main binary that can be used to interact with all the components of Namada
-- `namadan`: The ledger and intent gossiper node
+- `namadan`: The ledger node
 - `namadac`: The client
 - `namadaw`: The wallet
 
@@ -23,7 +23,7 @@ After you installed Namada, you will need to join a live network (e.g. testnet) 
 namada client utils join-network --chain-id=<network-chain-id>
 ```
 
-To join a testnet, head over to the [testnets](../testnets) section for details on how to do this.
+To join a testnet, head over to the [testnets](../testnets/README.md) section for details on how to do this.
 
 ## Start your node
 

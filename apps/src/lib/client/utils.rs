@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -18,8 +18,6 @@ use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tendermint::node::Id as TendermintNodeId;
-use tendermint_config::net::Address as TendermintAddress;
 
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::cli::{self, args};
@@ -27,10 +25,9 @@ use crate::config::genesis::genesis_config::{
     self, HexString, ValidatorPreGenesisConfig,
 };
 use crate::config::global::GlobalConfig;
-use crate::config::{
-    self, Config, IntentGossiper, PeerAddress, TendermintMode,
-};
-use crate::node::gossip;
+use crate::config::{self, Config, TendermintMode};
+use crate::facade::tendermint::node::Id as TendermintNodeId;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{pre_genesis, Wallet};
 use crate::wasm_loader;
@@ -435,25 +432,10 @@ pub fn init_network(
 
     let mut rng: ThreadRng = thread_rng();
 
+    // Accumulator of validators' Tendermint P2P addresses
     let mut persistent_peers: Vec<TendermintAddress> =
         Vec::with_capacity(config.validator.len());
-    // Intent gossiper config bootstrap peers where we'll add the address for
-    // each validator's node
-    let mut seed_peers: HashSet<PeerAddress> =
-        HashSet::with_capacity(config.validator.len());
-    let mut gossiper_configs: HashMap<String, config::IntentGossiper> =
-        HashMap::with_capacity(config.validator.len());
-    let mut matchmaker_configs: HashMap<String, config::Matchmaker> =
-        HashMap::with_capacity(config.validator.len());
-    // Other accounts owned by one of the validators
-    let mut validator_owned_accounts: HashMap<
-        String,
-        genesis_config::EstablishedAccountConfig,
-    > = HashMap::default();
 
-    // We need a temporary copy to be able to use this inside the validator
-    // loop, which has mutable borrow on the config.
-    let established_accounts = config.established.clone();
     // Iterate over each validator, generating keys and addresses
     config.validator.iter_mut().for_each(|(name, config)| {
         let validator_dir = accounts_dir.join(name);
@@ -490,36 +472,6 @@ pub fn init_network(
         ))
         .expect("Validator address must be valid");
         persistent_peers.push(peer);
-        // Add a Intent gossiper bootstrap peer from the validator's IP
-        let mut gossiper_config = IntentGossiper::default();
-        // Generate P2P identity
-        let p2p_identity = gossip::p2p::Identity::gen(&chain_dir);
-        let peer_id = p2p_identity.peer_id();
-        let ledger_addr =
-            SocketAddr::from_str(config.net_address.as_ref().unwrap()).unwrap();
-        let ip = ledger_addr.ip().to_string();
-        let first_port = ledger_addr.port();
-        let intent_peer_address = libp2p::Multiaddr::from_str(
-            format!("/ip4/{}/tcp/{}", ip, first_port + 3).as_str(),
-        )
-        .unwrap();
-
-        gossiper_config.address = if localhost {
-            intent_peer_address.clone()
-        } else {
-            libp2p::Multiaddr::from_str(
-                format!("/ip4/0.0.0.0/tcp/{}", first_port + 3).as_str(),
-            )
-            .unwrap()
-        };
-        if let Some(discover) = gossiper_config.discover_peer.as_mut() {
-            // Disable mDNS local network peer discovery on the validator nodes
-            discover.mdns = false;
-        }
-        let intent_peer = PeerAddress {
-            address: intent_peer_address,
-            peer_id,
-        };
 
         // Generate account and reward addresses
         let address = address::gen_established_address("validator account");
@@ -643,93 +595,20 @@ pub fn init_network(
         wallet.add_address(name.clone(), address);
         wallet.add_address(format!("{}-reward", &name), reward_address);
 
-        // Check if there's a matchmaker configured for this validator node
-        match (
-            &config.matchmaker_account,
-            &config.matchmaker_code,
-            &config.matchmaker_tx,
-        ) {
-            (Some(account), Some(mm_code), Some(tx_code)) => {
-                if config.intent_gossip_seed.unwrap_or_default() {
-                    eprintln!("A bootstrap node cannot run matchmakers");
-                    cli::safe_exit(1)
-                }
-                match established_accounts.as_ref().and_then(|e| e.get(account))
-                {
-                    Some(matchmaker) => {
-                        let mut matchmaker = matchmaker.clone();
-
-                        init_established_account(
-                            account,
-                            &mut wallet,
-                            &mut matchmaker,
-                            unsafe_dont_encrypt,
-                        );
-                        validator_owned_accounts
-                            .insert(account.clone(), matchmaker);
-
-                        let matchmaker_config = config::Matchmaker {
-                            matchmaker_path: Some(mm_code.clone().into()),
-                            tx_code_path: Some(tx_code.clone().into()),
-                        };
-                        matchmaker_configs
-                            .insert(name.clone(), matchmaker_config);
-                    }
-                    None => {
-                        eprintln!(
-                            "Misconfigured validator's matchmaker. No \
-                             established account with alias {} found",
-                            account
-                        );
-                        cli::safe_exit(1)
-                    }
-                }
-            }
-            (None, None, None) => {}
-            _ => {
-                eprintln!(
-                    "Misconfigured validator's matchmaker. \
-                     `matchmaker_account`, `matchmaker_code` and \
-                     `matchmaker_tx` must be all or none present."
-                );
-                cli::safe_exit(1)
-            }
-        }
-
-        // Store the gossip config
-        gossiper_configs.insert(name.clone(), gossiper_config);
-        if config.intent_gossip_seed.unwrap_or_default() {
-            seed_peers.insert(intent_peer);
-        }
-
         wallet.save().unwrap();
     });
-
-    if seed_peers.is_empty() && config.validator.len() > 1 {
-        tracing::warn!(
-            "At least 1 validator with `intent_gossip_seed = true` is needed \
-             to established connection between the intent gossiper nodes"
-        );
-    }
 
     // Create a wallet for all accounts other than validators
     let mut wallet =
         Wallet::load_or_new(&accounts_dir.join(NET_OTHER_ACCOUNTS_DIR));
     if let Some(established) = &mut config.established {
         established.iter_mut().for_each(|(name, config)| {
-            match validator_owned_accounts.get(name) {
-                Some(validator_owned) => {
-                    *config = validator_owned.clone();
-                }
-                None => {
-                    init_established_account(
-                        name,
-                        &mut wallet,
-                        config,
-                        unsafe_dont_encrypt,
-                    );
-                }
-            }
+            init_established_account(
+                name,
+                &mut wallet,
+                config,
+                unsafe_dont_encrypt,
+            );
         })
     }
 
@@ -846,7 +725,7 @@ pub fn init_network(
         wallet.save().unwrap();
     });
 
-    // Generate the validators' ledger and intent gossip config
+    // Generate the validators' ledger config
     config.validator.iter_mut().enumerate().for_each(
         |(ix, (name, validator_config))| {
             let accounts_dir = chain_dir.join(NET_ACCOUNTS_DIR);
@@ -910,26 +789,6 @@ pub fn init_network(
             // Validator node should turned off peer exchange reactor
             config.ledger.tendermint.p2p_pex = false;
 
-            // Configure the intent gossiper, matchmaker (if any) and RPC
-            config.intent_gossiper = gossiper_configs.remove(name).unwrap();
-            config.intent_gossiper.seed_peers = seed_peers.clone();
-            config.matchmaker =
-                matchmaker_configs.remove(name).unwrap_or_default();
-            config.intent_gossiper.rpc = Some(config::RpcServer {
-                address: SocketAddr::new(
-                    IpAddr::V4(if localhost {
-                        Ipv4Addr::new(127, 0, 0, 1)
-                    } else {
-                        Ipv4Addr::new(0, 0, 0, 0)
-                    }),
-                    first_port + 4,
-                ),
-            });
-            config
-                .intent_gossiper
-                .matchmakers_server_addr
-                .set_port(first_port + 5);
-
             config.write(&validator_dir, &chain_id, true).unwrap();
         },
     );
@@ -950,7 +809,6 @@ pub fn init_network(
     }
     config.ledger.tendermint.p2p_addr_book_strict = !localhost;
     config.ledger.genesis_time = genesis.genesis_time.into();
-    config.intent_gossiper.seed_peers = seed_peers;
     config
         .write(&global_args.base_dir, &chain_id, true)
         .unwrap();

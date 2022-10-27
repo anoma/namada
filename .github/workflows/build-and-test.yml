@@ -4,8 +4,12 @@ on:
   push:
     branches:
       - main
+      - "!eth-bridge-integration"
   # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
   pull_request_target:
+    branches:
+      - main
+      - "!eth-bridge-integration"
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
@@ -27,7 +31,7 @@ jobs:
     timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     container: 
-      image: ghcr.io/anoma/namada:wasm-0.6.1
+      image: ghcr.io/anoma/namada:wasm-0.8.0
     strategy:
       fail-fast: false
       matrix:
@@ -113,7 +117,7 @@ jobs:
             cache_key: anoma
             cache_version: v1
             wait_for: anoma-release (ubuntu-latest, ABCI Release build, anoma-e2e-release, v1)
-            tendermint_artifact: tendermint-unreleased-559fb33ff9b27503ce7ac1c7d8589fe1d8b3e900
+            tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
 
     env:
       CARGO_INCREMENTAL: 0

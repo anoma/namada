@@ -25,20 +25,14 @@ build-test:
 build-release:
 	ANOMA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
 
+install-release:
+	ANOMA_DEV=false $(cargo) install --path ./apps --locked
+
 check-release:
 	ANOMA_DEV=false $(cargo) check --release --package namada_apps
 
 package: build-release
 	scripts/make-package.sh
-
-build-release-image-docker:
-	docker build -t namada-build - < docker/namada-build/Dockerfile
-
-build-release-docker: build-release-image-docker
-	docker run --rm -v ${PWD}:/var/build namada-build make build-release
-
-package-docker: build-release-image-docker
-	docker run --rm -v ${PWD}:/var/build namada-build make package
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
@@ -53,6 +47,26 @@ clippy:
 	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
+	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+
+clippy-abcipp:
+	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./apps/Cargo.toml \
+		--no-default-features \
+		--features "std testing abcipp" && \
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./proof_of_stake/Cargo.toml \
+		--features "testing" && \
+	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./shared/Cargo.toml \
+		--no-default-features \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" && \
+	$(cargo) +$(nightly) clippy \
+		--all-targets \
+		--manifest-path ./vm_env/Cargo.toml \
+		--no-default-features \
+		--features "abcipp" && \
+	make -C $(wasms) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
 clippy-fix:
@@ -87,9 +101,35 @@ test-e2e:
 		--test-threads=1 \
 		-Z unstable-options --report-time
 
+test-unit-abcipp:
+	$(cargo) test \
+		--manifest-path ./apps/Cargo.toml \
+		--no-default-features \
+		--features "testing std abcipp" \
+			$(TEST_FILTER) -- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
+		--manifest-path \
+		./proof_of_stake/Cargo.toml \
+		--features "testing" \
+			$(TEST_FILTER) -- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
+		--manifest-path ./shared/Cargo.toml \
+		--no-default-features \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" \
+			$(TEST_FILTER) -- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
+		--manifest-path ./vm_env/Cargo.toml \
+		--no-default-features \
+		--features "abcipp" \
+			$(TEST_FILTER) -- \
+			-Z unstable-options --report-time
+
 test-unit:
 	$(cargo) test \
-			-- \
+			$(TEST_FILTER) -- \
 			--skip e2e \
 			-Z unstable-options --report-time
 
@@ -143,7 +183,7 @@ build-wasm-scripts-docker: build-wasm-image-docker
 debug-wasm-scripts-docker: build-wasm-image-docker
 	docker run --rm -v ${PWD}:/usr/local/rust/wasm anoma-wasm make debug-wasm-scripts
 
-# Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
+# Build the validity predicate and transactions wasm
 build-wasm-scripts:
 	make -C $(wasms)
 	make opt-wasm
@@ -178,4 +218,4 @@ test-miri:
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 
-.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri
+.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit test-unit-abcipp clippy-abcipp
