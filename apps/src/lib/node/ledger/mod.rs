@@ -233,21 +233,8 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         maybe_start_geth(&mut spawner, &config).await;
 
     // Start oracle if necessary
-    let (eth_receiver, oracle_control_sender, oracle) =
+    let (eth_receiver, _oracle_control_sender, oracle) =
         maybe_start_ethereum_oracle(&config, abort_sender);
-
-    // TODO: pass `oracle_control_sender` to the shell for initialization from
-    // storage, rather than using a hardcoded config
-    if let Some(oracle_control_sender) = oracle_control_sender {
-        if let Err(error) = oracle_control_sender
-            .send(oracle::control::Command::SendConfig {
-                config: oracle::config::Config::default(),
-            })
-            .await
-        {
-            tracing::error!(?error, "Could not configure the oracle",);
-        }
-    }
 
     // Start ABCI server and broadcaster (the latter only if we are a validator
     // node)
@@ -648,6 +635,17 @@ fn maybe_start_ethereum_oracle(
                 control_receiver,
                 abort_sender,
             );
+
+            // TODO(namada#686): pass `oracle_control_sender` to the shell for
+            // initialization from storage, rather than using a
+            // hardcoded config
+            if let Err(error) = control_sender.blocking_send(
+                oracle::control::Command::SendConfig {
+                    config: oracle::config::Config::default(),
+                },
+            ) {
+                tracing::error!(?error, "Could not configure the oracle",);
+            }
             (Some(eth_receiver), Some(control_sender), oracle)
         }
         ethereum_bridge::ledger::Mode::EventsEndpoint => {
