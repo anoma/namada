@@ -1,0 +1,6 @@
+[build]
+rustflags = ["-C", "target-cpu=native", "-C", "link-arg=-fuse-ld=mold", "--cfg", "tokio_unstable"]
+
+[target.aarch64-apple-darwin]
+# always use system-provided clang to avoid odd linker errors
+linker = "/usr/bin/clang"

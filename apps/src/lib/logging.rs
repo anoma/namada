@@ -31,14 +31,16 @@ pub fn set_subscriber(filter: EnvFilter) -> Result<()> {
         true
     };
 
-    let my_collector = Subscriber::builder()
-        .with_ansi(with_color)
-        .with_env_filter(filter)
-        .finish();
-    tracing::subscriber::set_global_default(my_collector)
-        .wrap_err("Failed to set log subscriber")
+    // let my_collector = Subscriber::builder()
+    //     .with_ansi(with_color)
+    //     .with_env_filter(filter)
+    //     .finish();
+    // tracing::subscriber::set_global_default(my_collector)
+    //     .wrap_err("Failed to set log subscriber")
+    Ok(())
 }
 
 pub fn init_log_tracer() -> Result<()> {
-    LogTracer::init().wrap_err("Failed to initialize log adapter")
+    console_subscriber::init();
+    Ok(())
 }
