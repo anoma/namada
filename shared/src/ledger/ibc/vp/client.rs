@@ -27,6 +27,7 @@ use crate::ibc::core::ics02_client::height::Height;
 use crate::ibc::core::ics02_client::msgs::update_client::MsgUpdateAnyClient;
 use crate::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeAnyClient;
 use crate::ibc::core::ics02_client::msgs::ClientMsg;
+use crate::ibc::core::ics03_connection::msgs::ConnectionMsg;
 use crate::ibc::core::ics04_channel::context::ChannelReader;
 use crate::ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use crate::ibc::core::ics24_host::identifier::ClientId;
@@ -58,6 +59,8 @@ pub enum Error {
     DecodingClientData(std::io::Error),
     #[error("IBC data error: {0}")]
     InvalidIbcData(IbcDataError),
+    #[error("IBC message type error: {0}")]
+    InvalidIbcMessageType(String),
     #[error("IBC event error: {0}")]
     IbcEvent(String),
 }
@@ -88,6 +91,24 @@ where
             _ => Err(Error::InvalidStateChange(format!(
                 "The state change of the client is invalid: ID {}",
                 client_id
+            ))),
+        }
+    }
+
+    // Checks if the given transaction data encodes an IBC message of type
+    // OpenInit / OpenTry.
+    pub(super) fn check_connection_message(
+        &self,
+        tx_data: &[u8],
+    ) -> Result<()> {
+        let ibc_msg = IbcMessage::decode(tx_data)?;
+        match ibc_msg.0 {
+            Ics26Envelope::Ics3Msg(ConnectionMsg::ConnectionOpenInit(_))
+            | Ics26Envelope::Ics3Msg(ConnectionMsg::ConnectionOpenTry(_)) => {
+                Ok(())
+            }
+            _ => Err(Error::InvalidIbcMessageType(format!(
+                "Unexpected IBC encoded IBC message type"
             ))),
         }
     }
