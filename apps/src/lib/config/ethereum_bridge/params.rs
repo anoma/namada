@@ -1,6 +1,7 @@
 //! Blockchain-level parameters for the configuration of the Ethereum bridge.
 use std::num::NonZeroU64;
 
+use namada::types::ethereum_events::EthAddress;
 use serde::{Deserialize, Serialize};
 
 /// Represents a configuration value for an Ethereum address.
@@ -42,7 +43,7 @@ pub struct GenesisConfig {
 pub struct Contracts {
     /// The Ethereum address of the ERC20 contract that represents this chain's
     /// native token.
-    pub native_erc20: Address,
+    pub native_erc20: EthAddress,
     /// The Ethereum address of the bridge contract.
     pub bridge: UpgradeableContract,
     /// The Ethereum address of the governance contract.
@@ -87,9 +88,7 @@ mod tests {
         let config = GenesisConfig {
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
-                native_erc20: Address(
-                    "0x1721b337BBdd2b11f9Eef736d9192a8E9Cba5872".to_string(),
-                ),
+                native_erc20: EthAddress([42; 20]),
                 bridge: UpgradeableContract {
                     address: Address(
                         "0x237d915037A1ba79365E84e2b8574301B6D25Ea0"
