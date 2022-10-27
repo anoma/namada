@@ -57,7 +57,7 @@ macro_rules! handle_match {
             // ignore trailing slashes
             $end == $request.path.len() - 1 && &$request.path[$end..] == "/") {
                 // we're not at the end, no match
-                println!("Not fully matched");
+                // println!("Not fully matched");
                 break
         }
         // If you get a compile error from here with `expected function, found
@@ -186,12 +186,12 @@ macro_rules! try_match_segments {
         $end = $request.path.len();
         match $request.path[$start..$end].parse::<$arg_ty>() {
             Ok(parsed) => {
-                println!("Parsed {}", parsed);
+                // println!("Parsed {}", parsed);
                 $arg = parsed
             },
             Err(_) =>
             {
-                println!("Cannot parse {} from {}", stringify!($arg_ty), &$request.path[$start..$end]);
+                // println!("Cannot parse {} from {}", stringify!($arg_ty), &$request.path[$start..$end]);
                 // If arg cannot be parsed, try to skip to next pattern
                 break
             }
@@ -218,7 +218,7 @@ macro_rules! try_match_segments {
             },
             Err(_) =>
             {
-                println!("Cannot parse {} from {}", stringify!($arg_ty), &$request.path[$start..$end]);
+                // println!("Cannot parse {} from {}", stringify!($arg_ty), &$request.path[$start..$end]);
                 // If arg cannot be parsed, try to skip to next pattern
                 break
             }
@@ -244,10 +244,10 @@ macro_rules! try_match_segments {
     ) => {
         if &$request.path[$start..$end] == $expected {
             // Advanced index past the matched arg
-            println!("Matched literal {}", $expected);
+            // println!("Matched literal {}", $expected);
             $start = $end;
         } else {
-            println!("{} doesn't match literal {}", &$request.path[$start..$end], $expected);
+            // println!("{} doesn't match literal {}", &$request.path[$start..$end], $expected);
             // Try to skip to next pattern
             break;
         }
@@ -269,14 +269,14 @@ macro_rules! try_match {
     ($ctx:ident, $request:ident, $start:ident, $handle:tt, $segments:tt) => {
         // check that the initial char is '/'
         if $request.path.is_empty() || &$request.path[..1] != "/" {
-            println!("Missing initial slash");
+            // println!("Missing initial slash");
             break;
         }
         // advance past initial '/'
         $start += 1;
         // Path is too short to match
         if $start >= $request.path.len() {
-            println!("Path is too short");
+            // println!("Path is too short");
             break;
         }
         let mut end = find_next_slash_index(&$request.path, $start);
