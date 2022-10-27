@@ -20,13 +20,15 @@ exclude = [
 ]
 
 [patch.crates-io]
-# TODO backported patch in the noise protocl for <https://github.com/libp2p/rust-libp2p/pull/2264>, blocked on libp2p upgrade <https://github.com/anoma/anoma/pull/751>
-libp2p = {git = "https://github.com/heliaxdev/rust-libp2p.git", rev = "1abe349c231eb307d3dbe03f3ffffc6cf5e9084d"}
 # TODO temp patch for <https://github.com/near/borsh-rs/issues/82>, <https://github.com/near/borsh-rs/issues/84> and more tba.
 borsh = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-derive = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
 borsh-schema-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
+# The following 3 crates patch a work-around for https://github.com/smol-rs/polling/issues/38 breaking namada tooling build with nightly 2022-05-20
+polling = {git = "https://github.com/heliaxdev/polling.git", rev = "02a655775282879459a3460e2646b60c005bca2c"}
+async-io = {git = "https://github.com/heliaxdev/async-io.git", rev = "9285dad39c9a37ecd0dbd498c5ce5b0e65b02489"}
+async-process = {git = "https://github.com/heliaxdev/async-process.git", rev = "e42c527e87d937da9e01aaeb563c0b948580dc89"}
 # borsh = {path = "../borsh-rs/borsh"}
 # borsh-derive = {path = "../borsh-rs/borsh-derive"}
 # borsh-derive-internal = {path = "../borsh-rs/borsh-derive-internal"}

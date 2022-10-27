@@ -10,7 +10,6 @@ pub mod client;
 pub mod config;
 pub mod logging;
 pub mod node;
-pub mod proto;
 pub mod wallet;
 pub mod wasm_loader;
 

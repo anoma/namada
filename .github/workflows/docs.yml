@@ -117,6 +117,13 @@ jobs:
             cd ${{ matrix.make.folder }} && mdbook-admonish install
       - name: ${{ matrix.make.name }}
         run: ${{ matrix.make.command }}
+      - name: Zip doc folder
+        run: tar -cvf ${{ matrix.make.bucket }}.tar ${{ matrix.make.folder }}/book
+      - name: Upload rendered docs
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.make.bucket }}-${{ github.sha }}.tar
+          path: ${{ matrix.make.bucket }}.tar
       - name: Publish docs
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: aws s3 sync ${{ matrix.make.folder }}/book/html/ s3://${{ matrix.make.bucket }} --region eu-west-1 --delete

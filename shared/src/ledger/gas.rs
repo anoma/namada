@@ -10,7 +10,7 @@ use thiserror::Error;
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     #[error("Transaction gas limit exceeded")]
-    TransactionGasExceedededError,
+    TransactionGasExceededError,
     #[error("Block gas limit exceeded")]
     BlockGasExceeded,
     #[error("Overflow during gas operations")]
@@ -69,7 +69,7 @@ impl BlockGasMeter {
             .ok_or(Error::GasOverflow)?;
 
         if self.transaction_gas > TRANSACTION_GAS_LIMIT {
-            return Err(Error::TransactionGasExceedededError);
+            return Err(Error::TransactionGasExceededError);
         }
         Ok(())
     }
@@ -148,7 +148,7 @@ impl VpGasMeter {
             .ok_or(Error::GasOverflow)?;
 
         if current_total > TRANSACTION_GAS_LIMIT {
-            return Err(Error::TransactionGasExceedededError);
+            return Err(Error::TransactionGasExceededError);
         }
         Ok(())
     }
@@ -258,7 +258,7 @@ mod tests {
             meter
                 .add(TRANSACTION_GAS_LIMIT)
                 .expect_err("unexpectedly succeeded"),
-            Error::TransactionGasExceedededError
+            Error::TransactionGasExceededError
         );
     }
 
@@ -279,7 +279,7 @@ mod tests {
             meter
                 .add(TRANSACTION_GAS_LIMIT + 1)
                 .expect_err("unexpectedly succeeded"),
-            Error::TransactionGasExceedededError
+            Error::TransactionGasExceededError
         );
     }
 

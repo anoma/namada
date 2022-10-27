@@ -325,7 +325,7 @@ where
         conn_id: &ConnectionId,
     ) -> Result<ConnectionEnd> {
         let key = connection_key(conn_id);
-        match self.ctx.read_pre(&key) {
+        match self.ctx.read_bytes_pre(&key) {
             Ok(Some(value)) => ConnectionEnd::decode_vec(&value).map_err(|e| {
                 Error::InvalidConnection(format!(
                     "Decoding the connection failed: {}",
@@ -357,7 +357,7 @@ where
         conn_id: &ConnectionId,
     ) -> Ics03Result<ConnectionEnd> {
         let key = connection_key(conn_id);
-        match self.ctx.read_post(&key) {
+        match self.ctx.read_bytes_post(&key) {
             Ok(Some(value)) => ConnectionEnd::decode_vec(&value)
                 .map_err(|_| Ics03Error::implementation_specific()),
             Ok(None) => Err(Ics03Error::connection_not_found(conn_id.clone())),

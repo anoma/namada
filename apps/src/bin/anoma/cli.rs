@@ -39,10 +39,7 @@ fn handle_command(cmd: cli::cmds::Anoma, raw_sub_cmd: String) -> Result<()> {
     }
 
     match cmd {
-        cli::cmds::Anoma::Node(_)
-        | cli::cmds::Anoma::Ledger(_)
-        | cli::cmds::Anoma::Gossip(_)
-        | cli::cmds::Anoma::Matchmaker(_) => {
+        cli::cmds::Anoma::Node(_) | cli::cmds::Anoma::Ledger(_) => {
             handle_subcommand("namadan", sub_args)
         }
         cli::cmds::Anoma::Client(_)
@@ -52,8 +49,9 @@ fn handle_command(cmd: cli::cmds::Anoma, raw_sub_cmd: String) -> Result<()> {
         | cli::cmds::Anoma::TxInitNft(_)
         | cli::cmds::Anoma::TxMintNft(_)
         | cli::cmds::Anoma::TxInitProposal(_)
-        | cli::cmds::Anoma::TxVoteProposal(_)
-        | cli::cmds::Anoma::Intent(_) => handle_subcommand("namadac", sub_args),
+        | cli::cmds::Anoma::TxVoteProposal(_) => {
+            handle_subcommand("namadac", sub_args)
+        }
         cli::cmds::Anoma::Wallet(_) => handle_subcommand("namadaw", sub_args),
     }
 }

@@ -16,6 +16,7 @@ const PROPOSAL_COMMITTING_EPOCH: &str = "epoch";
 const MIN_PROPOSAL_FUND_KEY: &str = "min_fund";
 const MAX_PROPOSAL_CODE_SIZE_KEY: &str = "max_code_size";
 const MIN_PROPOSAL_PERIOD_KEY: &str = "min_period";
+const MAX_PROPOSAL_PERIOD_KEY: &str = "max_period";
 const MAX_PROPOSAL_CONTENT_SIZE_KEY: &str = "max_content";
 const MIN_GRACE_EPOCH_KEY: &str = "min_grace_epoch";
 const COUNTER_KEY: &str = "counter";
@@ -242,6 +243,21 @@ pub fn is_min_proposal_period_key(key: &Key) -> bool {
     }
 }
 
+/// Check if key is a max proposal period param key
+pub fn is_max_proposal_period_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(max_proposal_period_param),
+        ] if addr == &ADDRESS
+            && max_proposal_period_param == MAX_PROPOSAL_PERIOD_KEY =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Check if key is a min grace epoch key
 pub fn is_commit_proposal_key(key: &Key) -> bool {
     match &key.segments[..] {
@@ -282,6 +298,7 @@ pub fn is_parameter_key(key: &Key) -> bool {
         || is_max_content_size_key(key)
         || is_max_proposal_code_size_key(key)
         || is_min_proposal_period_key(key)
+        || is_max_proposal_period_key(key)
         || is_min_grace_epoch_key(key)
 }
 
@@ -315,6 +332,13 @@ pub fn get_max_proposal_code_size_key() -> Key {
 pub fn get_min_proposal_period_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&MIN_PROPOSAL_PERIOD_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get maximum proposal period key
+pub fn get_max_proposal_period_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&MAX_PROPOSAL_PERIOD_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

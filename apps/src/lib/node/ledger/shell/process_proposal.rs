@@ -441,6 +441,8 @@ mod test_process_proposal {
     };
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::RequestInitChain;
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError, TestShell,
     };

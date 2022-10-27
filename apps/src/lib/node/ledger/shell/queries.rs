@@ -1,5 +1,4 @@
 //! Shell methods for querying state
-use std::cmp::max;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;

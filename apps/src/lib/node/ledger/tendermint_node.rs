@@ -168,23 +168,10 @@ pub async fn run(
 
     #[cfg(feature = "dev")]
     {
-        let genesis = &crate::config::genesis::genesis();
         let consensus_key = crate::wallet::defaults::validator_keypair();
         // write the validator key file if it didn't already exist
         if !has_validator_key {
-            write_validator_key_async(
-                &home_dir,
-                &genesis
-                    .validators
-                    .first()
-                    .expect(
-                        "There should be one genesis validator in \"dev\" mode",
-                    )
-                    .pos_data
-                    .address,
-                &consensus_key,
-            )
-            .await;
+            write_validator_key_async(&home_dir, &consensus_key).await;
         }
     }
     #[cfg(feature = "abcipp")]
@@ -273,11 +260,9 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
 /// Convert a common signing scheme validator key into JSON for
 /// Tendermint
 fn validator_key_to_json(
-    address: &Address,
     sk: &common::SecretKey,
 ) -> std::result::Result<serde_json::Value, ParseSecretKeyError> {
-    let address = address.raw_hash().unwrap();
-
+    let raw_hash = tm_consensus_key_raw_hash(&sk.ref_to());
     let (id_str, pk_arr, kp_arr) = match sk {
         common::SecretKey::Ed25519(_) => {
             let sk_ed: ed25519::SecretKey = sk.try_to_sk().unwrap();
@@ -299,7 +284,7 @@ fn validator_key_to_json(
     };
 
     Ok(json!({
-        "address": address,
+        "address": raw_hash,
         "pub_key": {
             "type": format!("tendermint/PubKey{}",id_str),
             "value": base64::encode(pk_arr),
@@ -314,7 +299,6 @@ fn validator_key_to_json(
 /// Initialize validator private key for Tendermint
 pub async fn write_validator_key_async(
     home_dir: impl AsRef<Path>,
-    address: &Address,
     consensus_key: &common::SecretKey,
 ) {
     let home_dir = home_dir.as_ref();
@@ -331,7 +315,7 @@ pub async fn write_validator_key_async(
         .open(&path)
         .await
         .expect("Couldn't create private validator key file");
-    let key = validator_key_to_json(address, consensus_key).unwrap();
+    let key = validator_key_to_json(consensus_key).unwrap();
     let data = serde_json::to_vec_pretty(&key)
         .expect("Couldn't encode private validator key file");
     file.write_all(&data[..])
@@ -342,7 +326,6 @@ pub async fn write_validator_key_async(
 /// Initialize validator private key for Tendermint
 pub fn write_validator_key(
     home_dir: impl AsRef<Path>,
-    address: &Address,
     consensus_key: &common::SecretKey,
 ) {
     let home_dir = home_dir.as_ref();
@@ -357,7 +340,7 @@ pub fn write_validator_key(
         .truncate(true)
         .open(&path)
         .expect("Couldn't create private validator key file");
-    let key = validator_key_to_json(address, consensus_key).unwrap();
+    let key = validator_key_to_json(consensus_key).unwrap();
     serde_json::to_writer_pretty(file, &key)
         .expect("Couldn't write private validator key file");
 }

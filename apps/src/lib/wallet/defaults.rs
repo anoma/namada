@@ -4,8 +4,7 @@
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair, keys,
-    matchmaker_address, matchmaker_keypair, validator_address,
-    validator_keypair, validator_keys,
+    validator_address, validator_keypair, validator_keys,
 };
 use namada::ledger::{eth_bridge, governance, pos};
 use namada::types::address::Address;
@@ -119,7 +118,6 @@ mod dev {
             ("bertha".into(), bertha_keypair()),
             ("christel".into(), christel_keypair()),
             ("daewon".into(), daewon_keypair()),
-            ("matchmaker".into(), matchmaker_keypair()),
             ("validator".into(), validator_keypair()),
         ]
     }
@@ -130,7 +128,6 @@ mod dev {
             ("pos".into(), pos::ADDRESS),
             ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
             ("governance".into(), governance::vp::ADDRESS),
-            ("matchmaker".into(), matchmaker_address()),
             ("validator".into(), validator_address()),
             ("albert".into(), albert_address()),
             ("bertha".into(), bertha_address()),
@@ -168,11 +165,6 @@ mod dev {
     /// An established validator address for testing & development
     pub fn validator_address() -> Address {
         Address::decode("atest1v4ehgw36ggcnsdee8qerswph8y6ry3p5xgunvve3xaqngd3kxc6nqwz9gseyydzzg5unys3ht2n48q").expect("The token address decoding shouldn't fail")
-    }
-
-    /// An established matchmaker address for testing & development
-    pub fn matchmaker_address() -> Address {
-        Address::decode("atest1v4ehgw36x5mnswphx565gv2yxdprzvf5gdp523jpxy6rvv6zxaznzsejxeznzseh8pp5ywz93xwala").expect("The address decoding shouldn't fail")
     }
 
     pub fn albert_keypair() -> common::SecretKey {
@@ -230,18 +222,6 @@ mod dev {
             80, 110, 166, 33, 135, 254, 34, 138, 253, 44, 214, 71, 50, 230, 39,
             246, 124, 201, 68, 138, 194, 251, 192, 36, 55, 160, 211, 68, 65,
             189, 121, 217,
-        ];
-        let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_to_sk().unwrap()
-    }
-
-    pub fn matchmaker_keypair() -> common::SecretKey {
-        // generated from
-        // [`namada::types::key::ed25519::gen_keypair`]
-        let bytes = [
-            91, 67, 244, 37, 241, 33, 157, 218, 37, 172, 191, 122, 75, 2, 44,
-            219, 28, 123, 44, 34, 9, 240, 244, 49, 112, 192, 180, 98, 142, 160,
-            182, 14,
         ];
         let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
         ed_sk.try_to_sk().unwrap()

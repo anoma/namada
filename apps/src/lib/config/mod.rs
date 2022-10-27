@@ -5,17 +5,12 @@ pub mod genesis;
 pub mod global;
 pub mod utils;
 
-use std::collections::HashSet;
-use std::fmt::Display;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use libp2p::multiaddr::{Multiaddr, Protocol};
-use libp2p::multihash::Multihash;
-use libp2p::PeerId;
 use namada::types::chain::ChainId;
 use namada::types::time::Rfc3339String;
 use regex::Regex;
@@ -28,7 +23,7 @@ use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
 /// Base directory contains global config and chain directories.
 pub const DEFAULT_BASE_DIR: &str = ".anoma";
-/// Default WASM dir. Note that WASM dirs are nested in chain dirs.
+/// Default WASM dir.
 pub const DEFAULT_WASM_DIR: &str = "wasm";
 /// The WASM checksums file contains the hashes of built WASMs. It is inside the
 /// WASM dir.
@@ -44,9 +39,6 @@ pub const DB_DIR: &str = "db";
 pub struct Config {
     pub wasm_dir: PathBuf,
     pub ledger: Ledger,
-    pub intent_gossiper: IntentGossiper,
-    // TODO allow to configure multiple matchmakers
-    pub matchmaker: Matchmaker,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -128,32 +120,6 @@ pub struct Tendermint {
     pub instrumentation_namespace: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct IntentGossiper {
-    // Simple values
-    pub address: Multiaddr,
-    pub topics: HashSet<String>,
-    /// The server address to which matchmakers can connect to receive intents
-    pub matchmakers_server_addr: SocketAddr,
-
-    // Nested structures ⚠️ no simple values below any of these ⚠️
-    pub subscription_filter: SubscriptionFilter,
-    pub seed_peers: HashSet<PeerAddress>,
-    pub rpc: Option<RpcServer>,
-    pub discover_peer: Option<DiscoverPeer>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct RpcServer {
-    pub address: SocketAddr,
-}
-
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
-pub struct Matchmaker {
-    pub matchmaker_path: Option<PathBuf>,
-    pub tx_code_path: Option<PathBuf>,
-}
-
 impl Ledger {
     pub fn new(
         base_dir: impl AsRef<Path>,
@@ -231,38 +197,6 @@ impl Shell {
     }
 }
 
-// TODO maybe add also maxCount for a maximum number of subscription for a
-// filter.
-
-// TODO toml failed to serialize without "untagged" because does not support
-// enum with nested data, unless with the untagged flag. This might be a source
-// of confusion in the future... Another approach would be to have multiple
-// field for each filter possibility but it's less nice.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(untagged)]
-pub enum SubscriptionFilter {
-    RegexFilter(#[serde(with = "serde_regex")] Regex),
-    WhitelistFilter(Vec<String>),
-}
-
-// TODO peer_id can be part of Multiaddr, mayby this splitting is not useful ?
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub struct PeerAddress {
-    pub address: Multiaddr,
-    pub peer_id: PeerId,
-}
-
-// TODO add reserved_peers: explicit peers for gossipsub network, to not be
-// added to kademlia
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DiscoverPeer {
-    pub max_discovery_peers: u64,
-    /// Toggle Kademlia remote peer discovery, on by default
-    pub kademlia: bool,
-    /// Toggle local network mDNS peer discovery, off by default
-    pub mdns: bool,
-}
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Error while reading config: {0}")]
@@ -305,8 +239,6 @@ impl Config {
         Self {
             wasm_dir: DEFAULT_WASM_DIR.into(),
             ledger: Ledger::new(base_dir, chain_id, mode),
-            intent_gossiper: IntentGossiper::default(),
-            matchmaker: Matchmaker::default(),
         }
     }
 
@@ -412,97 +344,6 @@ impl Config {
     ) -> PathBuf {
         // Join base dir to the chain ID
         base_dir.as_ref().join(chain_id.to_string()).join(FILENAME)
-    }
-}
-
-impl Default for IntentGossiper {
-    fn default() -> Self {
-        Self {
-            address: Multiaddr::from_str("/ip4/0.0.0.0/tcp/26659").unwrap(),
-            topics: vec!["asset_v0"].into_iter().map(String::from).collect(),
-            matchmakers_server_addr: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                26661,
-            ),
-            subscription_filter: SubscriptionFilter::RegexFilter(
-                Regex::new("asset_v\\d{1,2}").unwrap(),
-            ),
-            seed_peers: HashSet::default(),
-            rpc: None,
-            discover_peer: Some(DiscoverPeer::default()),
-        }
-    }
-}
-
-impl IntentGossiper {
-    pub fn update(&mut self, addr: Option<Multiaddr>, rpc: Option<SocketAddr>) {
-        if let Some(addr) = addr {
-            self.address = addr;
-        }
-        if let Some(address) = rpc {
-            self.rpc = Some(RpcServer { address });
-        }
-    }
-}
-
-impl Default for RpcServer {
-    fn default() -> Self {
-        Self {
-            address: SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                26660,
-            ),
-        }
-    }
-}
-
-impl Serialize for PeerAddress {
-    fn serialize<S>(
-        &self,
-        serializer: S,
-    ) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut address = self.address.clone();
-        address.push(Protocol::P2p(Multihash::from(self.peer_id)));
-        address.serialize(serializer)
-    }
-}
-
-impl de::Error for SerdeError {
-    fn custom<T: Display>(msg: T) -> Self {
-        SerdeError::Message(msg.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for PeerAddress {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::Error;
-
-        let mut address = Multiaddr::deserialize(deserializer)
-            .map_err(|err| SerdeError::BadBootstrapPeerFormat(err.to_string()))
-            .map_err(D::Error::custom)?;
-        if let Some(Protocol::P2p(mh)) = address.pop() {
-            let peer_id = PeerId::from_multihash(mh).unwrap();
-            Ok(Self { address, peer_id })
-        } else {
-            Err(SerdeError::BadBootstrapPeerFormat(address.to_string()))
-                .map_err(D::Error::custom)
-        }
-    }
-}
-
-impl Default for DiscoverPeer {
-    fn default() -> Self {
-        Self {
-            max_discovery_peers: 16,
-            kademlia: true,
-            mdns: false,
-        }
     }
 }
 

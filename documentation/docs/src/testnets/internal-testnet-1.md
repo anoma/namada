@@ -165,7 +165,7 @@ specified. However, any transparent account can sign these transactions.
 
 ### Build from Source
 
-Build the provided validity predicate, transaction and matchmaker wasm modules
+Build the provided validity predicate and transaction wasm modules
 
 ```shell
 make build-wasm-scripts-docker

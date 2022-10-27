@@ -65,7 +65,7 @@ pub trait PosReadOnly {
         + Copy
         + Add<Output = Self::TokenAmount>
         + AddAssign
-        + Sub
+        + Sub<Output = Self::TokenAmount>
         + PartialOrd
         + Into<u64>
         + From<u64>
@@ -95,58 +95,68 @@ pub trait PosReadOnly {
         + BorshSerialize
         + BorshSchema;
 
+    /// Underlying read (and write in [`PosActions`]) interface errors
+    type Error;
+
     /// Address of the PoS account
     const POS_ADDRESS: Self::Address;
+
     /// Address of the staking token
     /// TODO: this should be `const`, but in the ledger `address::xan` is not a
     /// `const fn`
     fn staking_token_address() -> Self::Address;
 
     /// Read PoS parameters.
-    fn read_pos_params(&self) -> PosParams;
+    fn read_pos_params(&self) -> Result<PosParams, Self::Error>;
     /// Read PoS validator's staking reward address.
     fn read_validator_staking_reward_address(
         &self,
         key: &Self::Address,
-    ) -> Option<Self::Address>;
+    ) -> Result<Option<Self::Address>, Self::Error>;
     /// Read PoS validator's consensus key (used for signing block votes).
     fn read_validator_consensus_key(
         &self,
         key: &Self::Address,
-    ) -> Option<ValidatorConsensusKeys<Self::PublicKey>>;
+    ) -> Result<Option<ValidatorConsensusKeys<Self::PublicKey>>, Self::Error>;
     /// Read PoS validator's state.
     fn read_validator_state(
         &self,
         key: &Self::Address,
-    ) -> Option<ValidatorStates>;
+    ) -> Result<Option<ValidatorStates>, Self::Error>;
     /// Read PoS validator's total deltas of their bonds (validator self-bonds
     /// and delegations).
     fn read_validator_total_deltas(
         &self,
         key: &Self::Address,
-    ) -> Option<ValidatorTotalDeltas<Self::TokenChange>>;
+    ) -> Result<Option<ValidatorTotalDeltas<Self::TokenChange>>, Self::Error>;
     /// Read PoS validator's voting power.
     fn read_validator_voting_power(
         &self,
         key: &Self::Address,
-    ) -> Option<ValidatorVotingPowers>;
+    ) -> Result<Option<ValidatorVotingPowers>, Self::Error>;
     /// Read PoS slashes applied to a validator.
-    fn read_validator_slashes(&self, key: &Self::Address) -> Vec<Slash>;
+    fn read_validator_slashes(
+        &self,
+        key: &Self::Address,
+    ) -> Result<Vec<Slash>, Self::Error>;
     /// Read PoS bond (validator self-bond or a delegation).
     fn read_bond(
         &self,
         key: &BondId<Self::Address>,
-    ) -> Option<Bonds<Self::TokenAmount>>;
+    ) -> Result<Option<Bonds<Self::TokenAmount>>, Self::Error>;
     /// Read PoS unbond (unbonded tokens from validator self-bond or a
     /// delegation).
     fn read_unbond(
         &self,
         key: &BondId<Self::Address>,
-    ) -> Option<Unbonds<Self::TokenAmount>>;
+    ) -> Result<Option<Unbonds<Self::TokenAmount>>, Self::Error>;
     /// Read PoS validator set (active and inactive).
-    fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
+    fn read_validator_set(
+        &self,
+    ) -> Result<ValidatorSets<Self::Address>, Self::Error>;
     /// Read PoS total voting power of all validators (active and inactive).
-    fn read_total_voting_power(&self) -> TotalVotingPowers;
+    fn read_total_voting_power(&self)
+    -> Result<TotalVotingPowers, Self::Error>;
 
     /// Read PoS validator's Eth bridge governance key
     fn read_validator_eth_cold_key(
@@ -164,59 +174,86 @@ pub trait PosReadOnly {
 /// PoS system trait to be implemented in integration that can read and write
 /// PoS data.
 pub trait PosActions: PosReadOnly {
+    /// Error in `PosActions::become_validator`
+    type BecomeValidatorError: From<Self::Error>
+        + From<BecomeValidatorError<Self::Address>>;
+
+    /// Error in `PosActions::bond_tokens`
+    type BondError: From<Self::Error> + From<BondError<Self::Address>>;
+
+    /// Error in `PosActions::unbond_tokens`
+    type UnbondError: From<Self::Error>
+        + From<UnbondError<Self::Address, Self::TokenAmount>>;
+
+    /// Error in `PosActions::withdraw_tokens`
+    type WithdrawError: From<Self::Error> + From<WithdrawError<Self::Address>>;
+
     /// Write PoS parameters.
-    fn write_pos_params(&mut self, params: &PosParams);
-    /// Write PoS validator's raw hash its address.
-    fn write_validator_address_raw_hash(&mut self, address: &Self::Address);
+    fn write_pos_params(
+        &mut self,
+        params: &PosParams,
+    ) -> Result<(), Self::Error>;
+    /// Write PoS validator's raw hash of its consensus key.
+    fn write_validator_address_raw_hash(
+        &mut self,
+        address: &Self::Address,
+        consensus_key: &Self::PublicKey,
+    ) -> Result<(), Self::Error>;
     /// Write PoS validator's staking reward address, into which staking rewards
     /// will be credited.
     fn write_validator_staking_reward_address(
         &mut self,
         key: &Self::Address,
         value: Self::Address,
-    );
+    ) -> Result<(), Self::Error>;
     /// Write PoS validator's consensus key (used for signing block votes).
     fn write_validator_consensus_key(
         &mut self,
         key: &Self::Address,
         value: ValidatorConsensusKeys<Self::PublicKey>,
-    );
+    ) -> Result<(), Self::Error>;
     /// Write PoS validator's state.
     fn write_validator_state(
         &mut self,
         key: &Self::Address,
         value: ValidatorStates,
-    );
+    ) -> Result<(), Self::Error>;
     /// Write PoS validator's total deltas of their bonds (validator self-bonds
     /// and delegations).
     fn write_validator_total_deltas(
         &mut self,
         key: &Self::Address,
         value: ValidatorTotalDeltas<Self::TokenChange>,
-    );
+    ) -> Result<(), Self::Error>;
     /// Write PoS validator's voting power.
     fn write_validator_voting_power(
         &mut self,
         key: &Self::Address,
         value: ValidatorVotingPowers,
-    );
+    ) -> Result<(), Self::Error>;
     /// Write PoS bond (validator self-bond or a delegation).
     fn write_bond(
         &mut self,
         key: &BondId<Self::Address>,
         value: Bonds<Self::TokenAmount>,
-    );
+    ) -> Result<(), Self::Error>;
     /// Write PoS unbond (unbonded tokens from validator self-bond or a
     /// delegation).
     fn write_unbond(
         &mut self,
         key: &BondId<Self::Address>,
         value: Unbonds<Self::TokenAmount>,
-    );
+    ) -> Result<(), Self::Error>;
     /// Write PoS validator set (active and inactive).
-    fn write_validator_set(&mut self, value: ValidatorSets<Self::Address>);
+    fn write_validator_set(
+        &mut self,
+        value: ValidatorSets<Self::Address>,
+    ) -> Result<(), Self::Error>;
     /// Write PoS total voting power of all validators (active and inactive).
-    fn write_total_voting_power(&mut self, value: TotalVotingPowers);
+    fn write_total_voting_power(
+        &mut self,
+        value: TotalVotingPowers,
+    ) -> Result<(), Self::Error>;
     /// Write PoS validator's Eth bridge governance key
     fn write_validator_eth_cold_key(
         &mut self,
@@ -232,10 +269,16 @@ pub trait PosActions: PosReadOnly {
     );
 
     /// Delete an emptied PoS bond (validator self-bond or a delegation).
-    fn delete_bond(&mut self, key: &BondId<Self::Address>);
+    fn delete_bond(
+        &mut self,
+        key: &BondId<Self::Address>,
+    ) -> Result<(), Self::Error>;
     /// Delete an emptied PoS unbond (unbonded tokens from validator self-bond
     /// or a delegation).
-    fn delete_unbond(&mut self, key: &BondId<Self::Address>);
+    fn delete_unbond(
+        &mut self,
+        key: &BondId<Self::Address>,
+    ) -> Result<(), Self::Error>;
 
     /// Transfer tokens from the `src` to the `dest`.
     fn transfer(
@@ -244,7 +287,7 @@ pub trait PosActions: PosReadOnly {
         amount: Self::TokenAmount,
         src: &Self::Address,
         dest: &Self::Address,
-    );
+    ) -> Result<(), Self::Error>;
 
     /// Attempt to update the given account to become a validator.
     fn become_validator(
@@ -260,20 +303,19 @@ pub trait PosActions: PosReadOnly {
         Self::PublicKey: TryRefTo<EthAddress>,
     {
         let current_epoch = current_epoch.into();
-        let params = self.read_pos_params();
-        let mut validator_set = self.read_validator_set();
-        if self.is_validator(address) {
-            return Err(BecomeValidatorError::AlreadyValidator(
-                address.clone(),
-            ));
+        let params = self.read_pos_params()?;
+        let mut validator_set = self.read_validator_set()?;
+        if self.is_validator(address)? {
+            Err(BecomeValidatorError::AlreadyValidator(address.clone()))?;
         }
         if address == staking_reward_address {
-            return Err(
+            Err(
                 BecomeValidatorError::StakingRewardAddressEqValidatorAddress(
                     address.clone(),
                 ),
-            );
+            )?;
         }
+        let consensus_key_clone = consensus_key.clone();
         let BecomeValidatorData {
             consensus_key,
             eth_cold_key,
@@ -293,22 +335,26 @@ pub trait PosActions: PosReadOnly {
         self.write_validator_staking_reward_address(
             address,
             staking_reward_address.clone(),
-        );
-        self.write_validator_consensus_key(address, consensus_key);
+        )?;
+        self.write_validator_consensus_key(address, consensus_key)?;
         self.write_validator_eth_cold_key(address, eth_cold_key);
         self.write_validator_eth_hot_key(address, eth_hot_key);
-        self.write_validator_state(address, state);
-        self.write_validator_set(validator_set);
-        self.write_validator_address_raw_hash(address);
-        self.write_validator_total_deltas(address, total_deltas);
-        self.write_validator_voting_power(address, voting_power);
+        self.write_validator_state(address, state)?;
+        self.write_validator_set(validator_set)?;
+        self.write_validator_address_raw_hash(address, &consensus_key_clone)?;
+        self.write_validator_total_deltas(address, total_deltas)?;
+        self.write_validator_voting_power(address, voting_power)?;
         Ok(())
     }
 
     /// Check if the given address is a validator by checking that it has some
     /// state.
-    fn is_validator(&self, address: &Self::Address) -> bool {
-        self.read_validator_state(address).is_some()
+    fn is_validator(
+        &self,
+        address: &Self::Address,
+    ) -> Result<bool, Self::Error> {
+        let state = self.read_validator_state(address)?;
+        Ok(state.is_some())
     }
 
     /// Self-bond tokens to a validator when `source` is `None` or equal to
@@ -320,29 +366,27 @@ pub trait PosActions: PosReadOnly {
         validator: &Self::Address,
         amount: Self::TokenAmount,
         current_epoch: impl Into<Epoch>,
-    ) -> Result<(), BondError<Self::Address>> {
+    ) -> Result<(), Self::BondError> {
         let current_epoch = current_epoch.into();
         if let Some(source) = source {
-            if source != validator && self.is_validator(source) {
-                return Err(BondError::SourceMustNotBeAValidator(
-                    source.clone(),
-                ));
+            if source != validator && self.is_validator(source)? {
+                Err(BondError::SourceMustNotBeAValidator(source.clone()))?;
             }
         }
-        let params = self.read_pos_params();
-        let validator_state = self.read_validator_state(validator);
+        let params = self.read_pos_params()?;
+        let validator_state = self.read_validator_state(validator)?;
         let source = source.unwrap_or(validator);
         let bond_id = BondId {
             source: source.clone(),
             validator: validator.clone(),
         };
-        let bond = self.read_bond(&bond_id);
+        let bond = self.read_bond(&bond_id)?;
         let validator_total_deltas =
-            self.read_validator_total_deltas(validator);
+            self.read_validator_total_deltas(validator)?;
         let validator_voting_power =
-            self.read_validator_voting_power(validator);
-        let mut total_voting_power = self.read_total_voting_power();
-        let mut validator_set = self.read_validator_set();
+            self.read_validator_voting_power(validator)?;
+        let mut total_voting_power = self.read_total_voting_power()?;
+        let mut validator_set = self.read_validator_set()?;
 
         let BondData {
             bond,
@@ -360,12 +404,11 @@ pub trait PosActions: PosReadOnly {
             &mut validator_set,
             current_epoch,
         )?;
-
-        self.write_bond(&bond_id, bond);
-        self.write_validator_total_deltas(validator, validator_total_deltas);
-        self.write_validator_voting_power(validator, validator_voting_power);
-        self.write_total_voting_power(total_voting_power);
-        self.write_validator_set(validator_set);
+        self.write_bond(&bond_id, bond)?;
+        self.write_validator_total_deltas(validator, validator_total_deltas)?;
+        self.write_validator_voting_power(validator, validator_voting_power)?;
+        self.write_total_voting_power(total_voting_power)?;
+        self.write_validator_set(validator_set)?;
 
         // Transfer the bonded tokens from the source to PoS
         self.transfer(
@@ -373,8 +416,7 @@ pub trait PosActions: PosReadOnly {
             amount,
             source,
             &Self::POS_ADDRESS,
-        );
-
+        )?;
         Ok(())
     }
 
@@ -387,28 +429,32 @@ pub trait PosActions: PosReadOnly {
         validator: &Self::Address,
         amount: Self::TokenAmount,
         current_epoch: impl Into<Epoch>,
-    ) -> Result<(), UnbondError<Self::Address, Self::TokenAmount>> {
+    ) -> Result<(), Self::UnbondError> {
         let current_epoch = current_epoch.into();
-        let params = self.read_pos_params();
+        let params = self.read_pos_params()?;
         let source = source.unwrap_or(validator);
         let bond_id = BondId {
             source: source.clone(),
             validator: validator.clone(),
         };
-        let mut bond =
-            self.read_bond(&bond_id).ok_or(UnbondError::NoBondFound)?;
-        let unbond = self.read_unbond(&bond_id);
-        let mut validator_total_deltas =
-            self.read_validator_total_deltas(validator).ok_or_else(|| {
+        let mut bond = match self.read_bond(&bond_id)? {
+            Some(val) => val,
+            None => Err(UnbondError::NoBondFound)?,
+        };
+        let unbond = self.read_unbond(&bond_id)?;
+        let mut validator_total_deltas = self
+            .read_validator_total_deltas(validator)?
+            .ok_or_else(|| {
                 UnbondError::ValidatorHasNoBonds(validator.clone())
             })?;
-        let mut validator_voting_power =
-            self.read_validator_voting_power(validator).ok_or_else(|| {
+        let mut validator_voting_power = self
+            .read_validator_voting_power(validator)?
+            .ok_or_else(|| {
                 UnbondError::ValidatorHasNoVotingPower(validator.clone())
             })?;
-        let slashes = self.read_validator_slashes(validator);
-        let mut total_voting_power = self.read_total_voting_power();
-        let mut validator_set = self.read_validator_set();
+        let slashes = self.read_validator_slashes(validator)?;
+        let mut total_voting_power = self.read_total_voting_power()?;
+        let mut validator_set = self.read_validator_set()?;
 
         let UnbondData { unbond } = unbond_tokens(
             &params,
@@ -431,18 +477,18 @@ pub trait PosActions: PosReadOnly {
         );
         match total_bonds {
             Some(total_bonds) if total_bonds.sum() != 0.into() => {
-                self.write_bond(&bond_id, bond);
+                self.write_bond(&bond_id, bond)?;
             }
             _ => {
                 // If the bond is left empty, delete it
-                self.delete_bond(&bond_id)
+                self.delete_bond(&bond_id)?
             }
         }
-        self.write_unbond(&bond_id, unbond);
-        self.write_validator_total_deltas(validator, validator_total_deltas);
-        self.write_validator_voting_power(validator, validator_voting_power);
-        self.write_total_voting_power(total_voting_power);
-        self.write_validator_set(validator_set);
+        self.write_unbond(&bond_id, unbond)?;
+        self.write_validator_total_deltas(validator, validator_total_deltas)?;
+        self.write_validator_voting_power(validator, validator_voting_power)?;
+        self.write_total_voting_power(total_voting_power)?;
+        self.write_validator_set(validator_set)?;
 
         Ok(())
     }
@@ -455,17 +501,17 @@ pub trait PosActions: PosReadOnly {
         source: Option<&Self::Address>,
         validator: &Self::Address,
         current_epoch: impl Into<Epoch>,
-    ) -> Result<Self::TokenAmount, WithdrawError<Self::Address>> {
+    ) -> Result<Self::TokenAmount, Self::WithdrawError> {
         let current_epoch = current_epoch.into();
-        let params = self.read_pos_params();
+        let params = self.read_pos_params()?;
         let source = source.unwrap_or(validator);
         let bond_id = BondId {
             source: source.clone(),
             validator: validator.clone(),
         };
 
-        let unbond = self.read_unbond(&bond_id);
-        let slashes = self.read_validator_slashes(&bond_id.validator);
+        let unbond = self.read_unbond(&bond_id)?;
+        let slashes = self.read_validator_slashes(&bond_id.validator)?;
 
         let WithdrawData {
             unbond,
@@ -486,11 +532,11 @@ pub trait PosActions: PosReadOnly {
         );
         match total_unbonds {
             Some(total_unbonds) if total_unbonds.sum() != 0.into() => {
-                self.write_unbond(&bond_id, unbond);
+                self.write_unbond(&bond_id, unbond)?;
             }
             _ => {
                 // If the unbond is left empty, delete it
-                self.delete_unbond(&bond_id)
+                self.delete_unbond(&bond_id)?
             }
         }
 
@@ -500,7 +546,7 @@ pub trait PosActions: PosReadOnly {
             withdrawn,
             &Self::POS_ADDRESS,
             source,
-        );
+        )?;
 
         Ok(slashed)
     }
@@ -576,7 +622,7 @@ pub trait PosBase {
 
     /// Read PoS parameters.
     fn read_pos_params(&self) -> PosParams;
-    /// Read PoS raw hash of validator's address.
+    /// Read PoS raw hash of validator's consensus key.
     fn read_validator_address_raw_hash(
         &self,
         raw_hash: impl AsRef<str>,
@@ -622,8 +668,12 @@ pub trait PosBase {
 
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
-    /// Write PoS validator's raw hash its address.
-    fn write_validator_address_raw_hash(&mut self, address: &Self::Address);
+    /// Write PoS validator's raw hash of its consensus key.
+    fn write_validator_address_raw_hash(
+        &mut self,
+        address: &Self::Address,
+        consensus_key: &Self::PublicKey,
+    );
     /// Write PoS validator's staking reward address, into which staking rewards
     /// will be credited.
     fn write_validator_staking_reward_address(
@@ -750,7 +800,12 @@ pub trait PosBase {
                 eth_cold_key,
                 eth_hot_key,
             } = res?;
-            self.write_validator_address_raw_hash(address);
+            self.write_validator_address_raw_hash(
+                address,
+                consensus_key
+                    .get(current_epoch)
+                    .expect("Consensus key must be set"),
+            );
             self.write_validator_staking_reward_address(
                 address,
                 &staking_reward_address,
@@ -800,12 +855,12 @@ pub trait PosBase {
         let prev_validators =
             previous_epoch.and_then(|epoch| validators.get(epoch));
 
-        // If the validator never been active before and it doesn't have more
-        // than 0 voting power, we should not tell Tendermint to update it until
-        // it does. Tendermint uses 0 voting power as a way to signal
-        // that a validator has been removed from the validator set, but
-        // fails if we attempt to give it a new validator with 0 voting
-        // power.
+        // If the validator has never been active before and it doesn't have
+        // more than 0 voting power, we should not tell Tendermint to
+        // update it until it does. Tendermint uses 0 voting power as a
+        // way to signal that a validator has been removed from the
+        // validator set, but fails if we attempt to give it a new
+        // validator with 0 voting power.
         // For active validators, this would only ever happen until all the
         // validator slots are filled with non-0 voting power validators, but we
         // still need to guard against it.
@@ -992,7 +1047,7 @@ pub enum BondError<Address: Display + Debug> {
     InactiveValidator(Address),
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
-    #[error("Given zero amount to unbond")]
+    #[error("Given zero amount to bond")]
     ZeroAmount,
 }
 
@@ -1259,10 +1314,15 @@ where
                 source: address.clone(),
                 validator: address.clone(),
             };
-            let mut deltas = HashMap::default();
-            deltas.insert(current_epoch, *tokens);
-            let bond =
-                EpochedDelta::init_at_genesis(Bond { deltas }, current_epoch);
+            let mut pos_deltas = HashMap::default();
+            pos_deltas.insert(current_epoch, *tokens);
+            let bond = EpochedDelta::init_at_genesis(
+                Bond {
+                    pos_deltas,
+                    neg_deltas: Default::default(),
+                },
+                current_epoch,
+            );
             Ok(GenesisValidatorData {
                 address: address.clone(),
                 staking_reward_address: staking_reward_address.clone(),
@@ -1581,15 +1641,21 @@ where
 
     // Update or create the bond
     let mut value = Bond {
-        deltas: HashMap::default(),
+        pos_deltas: HashMap::default(),
+        neg_deltas: TokenAmount::default(),
     };
     value
-        .deltas
+        .pos_deltas
         .insert(current_epoch + update_offset.value(params), amount);
     let bond = match current_bond {
-        None => EpochedDelta::init(value, current_epoch, params),
+        None => EpochedDelta::init_at_offset(
+            value,
+            current_epoch,
+            update_offset,
+            params,
+        ),
         Some(mut bond) => {
-            bond.add(value, current_epoch, params);
+            bond.add_at_offset(value, current_epoch, update_offset, params);
             bond
         }
     };
@@ -1707,6 +1773,7 @@ where
         + AddAssign
         + Into<u64>
         + From<u64>
+        + Sub<Output = TokenAmount>
         + SubAssign
         + BorshDeserialize
         + BorshSerialize
@@ -1717,7 +1784,7 @@ where
         + Clone
         + Copy
         + Add<Output = TokenChange>
-        + Sub
+        + Sub<Output = TokenChange>
         + From<TokenAmount>
         + Neg<Output = TokenChange>
         + Into<i128>
@@ -1752,27 +1819,25 @@ where
     let mut slashed_amount = TokenAmount::default();
     // Decrement the bond deltas starting from the rightmost value (a bond in a
     // future-most epoch) until whole amount is decremented
-    bond.rev_update_while(
+    bond.rev_while(
         |bonds, _epoch| {
-            bonds.deltas.retain(|epoch_start, bond_delta| {
+            for (epoch_start, bond_delta) in bonds.pos_deltas.iter() {
                 if *to_unbond == 0.into() {
                     return true;
                 }
                 let mut unbonded = HashMap::default();
                 let unbond_end =
                     current_epoch + update_offset.value(params) - 1;
-                // We need to accumulate the slashed delta for multiple slashes
-                // applicable to a bond, where each slash should be
-                // calculated from the delta reduced by the previous slash.
-                let applied_delta = if to_unbond > bond_delta {
+                // We need to accumulate the slashed delta for multiple
+                // slashes applicable to a bond, where
+                // each slash should be calculated from
+                // the delta reduced by the previous slash.
+                let applied_delta = if *to_unbond > *bond_delta {
                     unbonded.insert((*epoch_start, unbond_end), *bond_delta);
                     *to_unbond -= *bond_delta;
-                    let applied_delta = *bond_delta;
-                    *bond_delta = 0.into();
-                    applied_delta
+                    *bond_delta
                 } else {
                     unbonded.insert((*epoch_start, unbond_end), *to_unbond);
-                    *bond_delta -= *to_unbond;
                     let applied_delta = *to_unbond;
                     *to_unbond = 0.into();
                     applied_delta
@@ -1792,13 +1857,21 @@ where
 
                 // For each decremented bond value write a new unbond
                 unbond.add(Unbond { deltas: unbonded }, current_epoch, params);
-                // Remove bonds with no tokens left
-                *bond_delta != 0.into()
-            });
+            }
             // Stop the update once all the tokens are unbonded
             *to_unbond != 0.into()
         },
         current_epoch,
+        params,
+    );
+
+    bond.add_at_offset(
+        Bond {
+            pos_deltas: Default::default(),
+            neg_deltas: amount,
+        },
+        current_epoch,
+        update_offset,
         params,
     );
 

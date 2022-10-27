@@ -59,8 +59,8 @@ mod internal {
         "ano::Protocol Parameters                     ";
     pub const GOVERNANCE: &str =
         "ano::Governance                              ";
-    pub const TREASURY: &str =
-        "ano::Treasury                                ";
+    pub const SLASH_FUND: &str =
+        "ano::Slash Fund                              ";
     pub const IBC_BURN: &str =
         "ano::IBC Burn Address                        ";
     pub const IBC_MINT: &str =
@@ -187,7 +187,9 @@ impl Address {
                     InternalAddress::Governance => {
                         internal::GOVERNANCE.to_string()
                     }
-                    InternalAddress::Treasury => internal::TREASURY.to_string(),
+                    InternalAddress::SlashFund => {
+                        internal::SLASH_FUND.to_string()
+                    }
                     InternalAddress::IbcEscrow(hash) => {
                         format!("{}::{}", PREFIX_INTERNAL, hash)
                     }
@@ -250,8 +252,8 @@ impl Address {
                 internal::GOVERNANCE => {
                     Ok(Address::Internal(InternalAddress::Governance))
                 }
-                internal::TREASURY => {
-                    Ok(Address::Internal(InternalAddress::Treasury))
+                internal::SLASH_FUND => {
+                    Ok(Address::Internal(InternalAddress::SlashFund))
                 }
                 internal::IBC_MINT => {
                     Ok(Address::Internal(InternalAddress::IbcMint))
@@ -455,8 +457,8 @@ pub enum InternalAddress {
     IbcMint,
     /// Governance address
     Governance,
-    /// Treasury address
-    Treasury,
+    /// SlashFund address for governance
+    SlashFund,
     /// Bridge to Ethereum
     EthBridge,
     /// The pool of transactions to be relayed to Ethereum
@@ -485,7 +487,7 @@ impl Display for InternalAddress {
                 Self::Ibc => "IBC".to_string(),
                 Self::Parameters => "Parameters".to_string(),
                 Self::Governance => "Governance".to_string(),
-                Self::Treasury => "Treasury".to_string(),
+                Self::SlashFund => "SlashFund".to_string(),
                 Self::IbcEscrow(hash) => format!("IbcEscrow: {}", hash),
                 Self::IbcBurn => "IbcBurn".to_string(),
                 Self::IbcMint => "IbcMint".to_string(),
@@ -723,7 +725,7 @@ pub mod testing {
             InternalAddress::PosSlashPool => {}
             InternalAddress::Ibc => {}
             InternalAddress::Governance => {}
-            InternalAddress::Treasury => {}
+            InternalAddress::SlashFund => {}
             InternalAddress::Parameters => {}
             InternalAddress::IbcEscrow(_) => {}
             InternalAddress::IbcBurn => {}
@@ -742,7 +744,7 @@ pub mod testing {
             Just(InternalAddress::IbcBurn),
             Just(InternalAddress::IbcMint),
             Just(InternalAddress::Governance),
-            Just(InternalAddress::Treasury),
+            Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::EthBridgePool),
         ]

@@ -25,6 +25,9 @@ build-test:
 build-release:
 	ANOMA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
 
+install-release:
+	ANOMA_DEV=false $(cargo) install --path ./apps --locked
+
 check-release:
 	ANOMA_DEV=false $(cargo) check --release --package namada_apps
 
@@ -124,6 +127,32 @@ test-unit-abcipp:
 			$(TEST_FILTER) -- \
 			-Z unstable-options --report-time
 
+test-unit-abcipp:
+	$(cargo) test \
+		--manifest-path ./apps/Cargo.toml \
+		--no-default-features \
+		--features "testing std abcipp" \
+			$(TEST_FILTER) -- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
+		--manifest-path \
+		./proof_of_stake/Cargo.toml \
+		--features "testing" \
+			$(TEST_FILTER) -- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
+		--manifest-path ./shared/Cargo.toml \
+		--no-default-features \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" \
+			$(TEST_FILTER) -- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
+		--manifest-path ./vm_env/Cargo.toml \
+		--no-default-features \
+		--features "abcipp" \
+			$(TEST_FILTER) -- \
+			-Z unstable-options --report-time
+
 test-unit:
 	$(cargo) test \
 			$(TEST_FILTER) -- \
@@ -177,9 +206,18 @@ build-wasm-image-docker:
 build-wasm-scripts-docker: build-wasm-image-docker
 	docker run --rm -v ${PWD}:/__w/namada/namada namada-wasm make build-wasm-scripts
 
-# Build the validity predicate, transactions, matchmaker and matchmaker filter wasm
+debug-wasm-scripts-docker: build-wasm-image-docker
+	docker run --rm -v ${PWD}:/usr/local/rust/wasm anoma-wasm make debug-wasm-scripts
+
+# Build the validity predicate and transactions wasm
 build-wasm-scripts:
 	make -C $(wasms)
+	make opt-wasm
+	make checksum-wasm
+
+# Debug build the validity predicate, transactions, matchmaker and matchmaker filter wasm
+debug-wasm-scripts:
+	make -C $(wasms) debug
 	make opt-wasm
 	make checksum-wasm
 
@@ -206,4 +244,4 @@ test-miri:
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 
-.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker build-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit test-unit-abcipp clippy-abcipp
+.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit test-unit-abcipp clippy-abcipp

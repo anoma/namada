@@ -77,6 +77,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_READ_ORG_TOKEN: ${{ secrets.GT_READ_ORG }}
           GITHUB_DISPATCH_TOKEN: ${{ secrets.GT_DISPATCH }}
+          SLACK_DEVNET_SECRET: ${{ secrets.SLACK_DEVNET_SECRET }}
           BINARIES_COMMIT_SHA: ${{ steps.comment-branch.outputs.head_sha }}
       - name: Upload load tester logs
         if: ${{ matrix.make.logs == 'true' && steps.check.outputs.triggered == 'true' }}

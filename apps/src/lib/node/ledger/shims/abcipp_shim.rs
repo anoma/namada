@@ -13,6 +13,13 @@ use namada::types::storage::BlockHash;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
+#[cfg(not(feature = "abcipp"))]
+use namada::types::hash::Hash;
+#[cfg(not(feature = "abcipp"))]
+use namada::types::storage::BlockHash;
+#[cfg(not(feature = "abcipp"))]
+use namada::types::transaction::hash_tx;
+use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
 
 use super::super::Shell;

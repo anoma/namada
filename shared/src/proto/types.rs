@@ -1,7 +1,4 @@
-use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
-use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
@@ -20,12 +17,8 @@ use crate::types::transaction::hash_tx;
 pub enum Error {
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(prost::DecodeError),
-    #[error("Error decoding an IntentGossipMessage from bytes: {0}")]
-    IntentDecodingError(prost::DecodeError),
     #[error("Error decoding an DkgGossipMessage from bytes: {0}")]
     DkgDecodingError(prost::DecodeError),
-    #[error("Intent is empty")]
-    NoIntentError,
     #[error("Dkg is empty")]
     NoDkgError,
     #[error("Timestamp is empty")]
@@ -42,7 +35,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// Because the signature is not checked by the ledger, we don't inline it into
 /// the `Tx` type directly. Instead, the signature is attached to the `tx.data`,
-/// which is can then be checked by a validity predicate wasm.
+/// which can then be checked by a validity predicate wasm.
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct SignedTxData {
     /// The original tx data bytes, if any
@@ -265,53 +258,6 @@ impl Tx {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct IntentGossipMessage {
-    pub intent: Intent,
-}
-
-impl TryFrom<&[u8]> for IntentGossipMessage {
-    type Error = Error;
-
-    fn try_from(intent_bytes: &[u8]) -> Result<Self> {
-        let intent = types::IntentGossipMessage::decode(intent_bytes)
-            .map_err(Error::IntentDecodingError)?;
-        match &intent.msg {
-            Some(types::intent_gossip_message::Msg::Intent(intent)) => {
-                Ok(IntentGossipMessage {
-                    intent: intent.clone().try_into()?,
-                })
-            }
-            None => Err(Error::NoIntentError),
-        }
-    }
-}
-
-impl From<IntentGossipMessage> for types::IntentGossipMessage {
-    fn from(message: IntentGossipMessage) -> Self {
-        types::IntentGossipMessage {
-            msg: Some(types::intent_gossip_message::Msg::Intent(
-                message.intent.into(),
-            )),
-        }
-    }
-}
-
-impl IntentGossipMessage {
-    pub fn new(intent: Intent) -> Self {
-        IntentGossipMessage { intent }
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = vec![];
-        let message: types::IntentGossipMessage = self.clone().into();
-        message
-            .encode(&mut bytes)
-            .expect("encoding an intent gossip message failed");
-        bytes
-    }
-}
-
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DkgGossipMessage {
@@ -358,67 +304,6 @@ impl DkgGossipMessage {
             .encode(&mut bytes)
             .expect("encoding a DKG gossip message failed");
         bytes
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub struct Intent {
-    pub data: Vec<u8>,
-    pub timestamp: DateTimeUtc,
-}
-
-impl TryFrom<types::Intent> for Intent {
-    type Error = Error;
-
-    fn try_from(intent: types::Intent) -> Result<Self> {
-        let timestamp = match intent.timestamp {
-            Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
-            None => return Err(Error::NoTimestampError),
-        };
-        Ok(Intent {
-            data: intent.data,
-            timestamp,
-        })
-    }
-}
-
-impl From<Intent> for types::Intent {
-    fn from(intent: Intent) -> Self {
-        let timestamp = Some(intent.timestamp.into());
-        types::Intent {
-            data: intent.data,
-            timestamp,
-        }
-    }
-}
-
-impl Intent {
-    pub fn new(data: Vec<u8>) -> Self {
-        Intent {
-            data,
-            timestamp: DateTimeUtc::now(),
-        }
-    }
-
-    pub fn id(&self) -> IntentId {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        IntentId::from(hasher.finish().to_string())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct IntentId(pub Vec<u8>);
-
-impl<T: Into<Vec<u8>>> From<T> for IntentId {
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
-
-impl Display for IntentId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
     }
 }
 
@@ -476,18 +361,6 @@ mod tests {
     }
 
     #[test]
-    fn test_intent_gossip_message() {
-        let data = "arbitrary data".as_bytes().to_owned();
-        let intent = Intent::new(data);
-        let message = IntentGossipMessage::new(intent);
-
-        let bytes = message.to_bytes();
-        let message_from_bytes = IntentGossipMessage::try_from(bytes.as_ref())
-            .expect("decoding failed");
-        assert_eq!(message_from_bytes, message);
-    }
-
-    #[test]
     fn test_dkg_gossip_message() {
         let data = "arbitrary string".to_owned();
         let dkg = Dkg::new(data);
@@ -497,26 +370,6 @@ mod tests {
         let message_from_bytes = DkgGossipMessage::try_from(bytes.as_ref())
             .expect("decoding failed");
         assert_eq!(message_from_bytes, message);
-    }
-
-    #[test]
-    fn test_intent() {
-        let data = "arbitrary data".as_bytes().to_owned();
-        let intent = Intent::new(data.clone());
-
-        let types_intent: types::Intent = intent.clone().into();
-        let intent_from_types =
-            Intent::try_from(types_intent).expect("no timestamp");
-        assert_eq!(intent_from_types, intent);
-
-        let types_intent = types::Intent {
-            data,
-            timestamp: None,
-        };
-        match Intent::try_from(types_intent) {
-            Err(Error::NoTimestampError) => {}
-            _ => panic!("unexpected result"),
-        }
     }
 
     #[test]
