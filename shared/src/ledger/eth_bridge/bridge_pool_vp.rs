@@ -8,7 +8,8 @@
 //!
 //! This VP checks that additions to the pool are handled
 //! correctly. This means that the appropriate data is
-//! added to the pool and gas fees are submitted appropriately.
+//! added to the pool and gas fees are submitted appropriately
+//! and that tokens to be transferred are escrowed.
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
@@ -23,7 +24,7 @@ use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::proto::SignedTxData;
-use crate::types::address::{xan, Address, InternalAddress};
+use crate::types::address::{wnam, xan, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
@@ -79,11 +80,44 @@ where
             Some(SignedAmount::Positive(after - before))
         }
     }
-}
 
-/// Check if a delta matches the delta given by a transfer
-fn check_delta(delta: &(Address, Amount), transfer: &PendingTransfer) -> bool {
-    delta.0 == transfer.transfer.sender && delta.1 == transfer.transfer.amount
+    /// Check that the correct amount of Nam was sent
+    /// from the correct account into escrow
+    fn check_nam_escrowed(
+        &self,
+        payer_account: &Address,
+        escrow_account: &Address,
+        expected_debit: Amount,
+        expected_credit: Amount,
+    ) -> bool {
+        // check that the correct amount was deducted from the fee payer
+        if let Some(SignedAmount::Negative(amount)) =
+            self.account_balance_delta(payer_account)
+        {
+            if amount != expected_debit {
+                return false;
+            }
+        } else {
+            tracing::debug!("The account {} was not debited.", payer_account);
+            return false;
+        }
+        // check that the correct amount was credited to escrow
+        if let Some(SignedAmount::Positive(amount)) =
+            self.account_balance_delta(escrow_account)
+        {
+            if amount != expected_credit {
+                return false;
+            }
+        } else {
+            tracing::debug!(
+                "The Ethereum bridge pool's escrow was not credited from \
+                 account {}.",
+                payer_account
+            );
+            return false;
+        }
+        true
+    }
 }
 
 impl<'a, D, H, CA> NativeVp for BridgePoolVp<'a, D, H, CA>
@@ -124,7 +158,7 @@ where
 
         let pending_key = get_pending_key(&transfer);
         // check that transfer is not already in the pool
-        match (&self.ctx).read_pre_value::<PendingTransfer>(&pending_key) {
+        match (&self.ctx).read_pre(&pending_key) {
             Ok(Some(_)) => {
                 tracing::debug!(
                     "Rejecting transaction as the transfer is already in the \
@@ -132,11 +166,10 @@ where
                 );
                 return Ok(false);
             }
-            Err(e) => {
+            Err(_) => {
                 return Err(eyre!(
                     "Could not read the storage key associated with the \
-                     transfer: {:?}",
-                    e
+                     transfer."
                 )
                 .into());
             }
@@ -169,36 +202,41 @@ where
             return Ok(false);
         }
 
-        // check that gas fees were put into escrow
-
-        // check that the correct amount was deducted from the fee payer
-        if let Some(SignedAmount::Negative(amount)) =
-            self.account_balance_delta(&transfer.gas_fee.payer)
-        {
-            if amount != transfer.gas_fee.amount {
+        // if we are going to mint wNam on Ethereum, the appropriate
+        // amount of Nam must be escrowed in the Ethereum bridge VP's storage.
+        // TODO: We should look this address up from storage
+        if transfer.transfer.asset == wnam() {
+            // check that correct amount of Nam was put into escrow.
+            return if !self.check_nam_escrowed(
+                &transfer.gas_fee.payer,
+                &BRIDGE_POOL_ADDRESS,
+                transfer.gas_fee.amount + transfer.transfer.amount,
+                transfer.gas_fee.amount,
+            ) || !self.check_nam_escrowed(
+                &transfer.transfer.sender,
+                &Address::Internal(InternalAddress::EthBridge),
+                transfer.gas_fee.amount + transfer.transfer.amount,
+                transfer.transfer.amount,
+            ) {
+                Ok(false)
+            } else {
+                tracing::info!(
+                    "The Ethereum bridge pool VP accepted the transfer {:?}.",
+                    transfer
+                );
+                Ok(true)
+            };
+        } else {
+            // check that the correct amounnt of gas fees were escrowed
+            if !self.check_nam_escrowed(
+                &transfer.gas_fee.payer,
+                &BRIDGE_POOL_ADDRESS,
+                transfer.gas_fee.amount,
+                transfer.gas_fee.amount,
+            ) {
                 return Ok(false);
             }
-        } else {
-            tracing::debug!("The gas fee payers account was not debited.");
-            return Ok(false);
         }
-        // check that the correct amount was credited to escrow
-        if let Some(SignedAmount::Positive(amount)) =
-            self.account_balance_delta(&BRIDGE_POOL_ADDRESS)
-        {
-            if amount != transfer.gas_fee.amount {
-                return Ok(false);
-            }
-        } else {
-            tracing::debug!(
-                "The Ethereum bridge pool's gas escrow was not credited."
-            );
-            return Ok(false);
-        }
-        tracing::info!(
-            "The Ethereum bridge pool VP accepted the transfer {:?}.",
-            transfer
-        );
 
         // check that the assets to be transferred were escrowed
         let asset_key = wrapped_erc20s::Keys::from(&transfer.transfer.asset);
@@ -212,12 +250,13 @@ where
                 (&escrow_key).try_into().expect("This should not fail"),
                 (&owner_key).try_into().expect("This should not fail"),
             ) {
-                Ok(Some(delta)) if check_delta(&delta, &transfer) => {}
-                other => {
+                Ok(Some((addr, amt)))
+                    if addr == transfer.transfer.sender
+                        && amt == transfer.transfer.amount => {}
+                _ => {
                     tracing::debug!(
                         "The assets of the transfer were not properly \
-                         escrowed into the Ethereum bridge pool: {:?}",
-                        other
+                         escrowed into the Ethereum bridge pool."
                     );
                     return Ok(false);
                 }
@@ -230,6 +269,10 @@ where
             return Ok(false);
         }
 
+        tracing::info!(
+            "The Ethereum bridge pool VP accepted the transfer {:?}.",
+            transfer
+        );
         Ok(true)
     }
 }
@@ -393,17 +436,12 @@ mod test_bridge_pool_vp {
         tx: &'a Tx,
         storage: &'a Storage<MockDB, Sha256Hasher>,
         write_log: &'a WriteLog,
-        keys_changed: &'a BTreeSet<Key>,
-        verifiers: &'a BTreeSet<Address>,
     ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
         Ctx::new(
-            &BRIDGE_POOL_ADDRESS,
             storage,
             write_log,
             tx,
             VpGasMeter::new(0u64),
-            keys_changed,
-            verifiers,
             VpCache::new(temp_dir(), 100usize),
         )
     }
@@ -478,16 +516,10 @@ mod test_bridge_pool_vp {
             escrow_delta,
         );
         keys_changed.append(&mut new_keys_changed);
-        let verifiers = BTreeSet::default();
+
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(
-                &tx,
-                &storage,
-                &write_log,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &storage, &write_log),
         };
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
@@ -499,6 +531,7 @@ mod test_bridge_pool_vp {
         .try_to_vec()
         .expect("Test failed");
 
+        let verifiers = BTreeSet::default();
         let res = vp.validate_tx(&signed, &keys_changed, &verifiers);
         match expect {
             Expect::True => assert!(res.expect("Test failed")),
@@ -827,17 +860,10 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(TOKENS.into()),
         );
         keys_changed.append(&mut new_keys_changed);
-        let verifiers = BTreeSet::default();
 
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(
-                &tx,
-                &storage,
-                &write_log,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &storage, &write_log),
         };
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
@@ -849,6 +875,7 @@ mod test_bridge_pool_vp {
         .try_to_vec()
         .expect("Test failed");
 
+        let verifiers = BTreeSet::default();
         let res = vp.validate_tx(&signed, &keys_changed, &verifiers);
         assert!(!res.expect("Test failed"));
     }
@@ -899,20 +926,204 @@ mod test_bridge_pool_vp {
             wrapped_erc20s::Keys::from(&ASSET).balance(&BRIDGE_POOL_ADDRESS),
         );
 
-        // inform the vp that the merkle root changed
-        let keys_changed = BTreeSet::default();
+        // create the data to be given to the vp
+        let vp = BridgePoolVp {
+            ctx: setup_ctx(&tx, &storage, &write_log),
+        };
         let verifiers = BTreeSet::default();
+
+        let to_sign = transfer.try_to_vec().expect("Test failed");
+        let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
+        let signed = SignedTxData {
+            data: Some(to_sign),
+            sig,
+        }
+        .try_to_vec()
+        .expect("Test failed");
+
+        let res = vp
+            .validate_tx(&signed, &keys_changed, &verifiers)
+            .expect("Test failed");
+        assert!(!res);
+    }
+
+    /// Test that we can escrow Nam if we
+    /// want to mint wNam on Ethereum.
+    #[test]
+    fn test_mint_wnam() {
+        // setup
+        let mut write_log = new_writelog();
+        // initialize the eth bridge balance to 0
+        let eb_account_key =
+            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
+        write_log
+            .write(
+                &eb_account_key,
+                Amount::default().try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        write_log.commit_tx();
+        let storage = Storage::<MockDB, Sha256Hasher>::open(
+            std::path::Path::new(""),
+            ChainId::default(),
+            None,
+        );
+        let tx = Tx::new(vec![], None);
+
+        // the transfer to be added to the pool
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: wnam(),
+                sender: bertha_address(),
+                recipient: EthAddress([1; 20]),
+                amount: 100.into(),
+                nonce: 1u64.into(),
+            },
+            gas_fee: GasFee {
+                amount: 100.into(),
+                payer: bertha_address(),
+            },
+        };
+
+        // add transfer to pool
+        let keys_changed = {
+            write_log
+                .write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+            BTreeSet::from([get_pending_key(&transfer)])
+        };
+        // We escrow 100 Nam into the bridge pool VP
+        // and 100 Nam in the Eth bridge VP
+        let account_key = balance_key(&xan(), &bertha_address());
+        write_log
+            .write(
+                &account_key,
+                Amount::from(BERTHA_WEALTH - 200)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        let bp_account_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        write_log
+            .write(
+                &bp_account_key,
+                Amount::from(ESCROWED_AMOUNT + 100)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        write_log
+            .write(
+                &eb_account_key,
+                Amount::from(100).try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
 
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(
-                &tx,
-                &storage,
-                &write_log,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &storage, &write_log),
         };
+        let verifiers = BTreeSet::default();
+
+        let to_sign = transfer.try_to_vec().expect("Test failed");
+        let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
+        let signed = SignedTxData {
+            data: Some(to_sign),
+            sig,
+        }
+        .try_to_vec()
+        .expect("Test failed");
+
+        let res = vp
+            .validate_tx(&signed, &keys_changed, &verifiers)
+            .expect("Test failed");
+        assert!(res);
+    }
+
+    /// Test that we can rejecte a transfer that
+    /// mints wNam if we don't escrow the correct
+    /// amount of Nam.
+    #[test]
+    fn test_reject_mint_wnam() {
+        // setup
+        let mut write_log = new_writelog();
+        // initialize the eth bridge balance to 0
+        let eb_account_key =
+            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
+        write_log
+            .write(
+                &eb_account_key,
+                Amount::default().try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        write_log.commit_tx();
+        let storage = Storage::<MockDB, Sha256Hasher>::open(
+            std::path::Path::new(""),
+            ChainId::default(),
+            None,
+        );
+        let tx = Tx::new(vec![], None);
+
+        // the transfer to be added to the pool
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: wnam(),
+                sender: bertha_address(),
+                recipient: EthAddress([1; 20]),
+                amount: 100.into(),
+                nonce: 1u64.into(),
+            },
+            gas_fee: GasFee {
+                amount: 100.into(),
+                payer: bertha_address(),
+            },
+        };
+
+        // add transfer to pool
+        let keys_changed = {
+            write_log
+                .write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+            BTreeSet::from([get_pending_key(&transfer)])
+        };
+        // We escrow 100 Nam into the bridge pool VP
+        // and 100 Nam in the Eth bridge VP
+        let account_key = balance_key(&xan(), &bertha_address());
+        write_log
+            .write(
+                &account_key,
+                Amount::from(BERTHA_WEALTH - 200)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        let bp_account_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        write_log
+            .write(
+                &bp_account_key,
+                Amount::from(ESCROWED_AMOUNT + 100)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        write_log
+            .write(
+                &eb_account_key,
+                Amount::from(10).try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // create the data to be given to the vp
+        let vp = BridgePoolVp {
+            ctx: setup_ctx(&tx, &storage, &write_log),
+        };
+        let verifiers = BTreeSet::default();
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
