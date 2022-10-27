@@ -11,7 +11,7 @@ At the end of each epoch, in order to process any slashes scheduled for processi
 1. Iterate over all slashes for infractions committed within a range of (-1, +1) epochs worth of block heights (this may need to be a protocol parameter) of the infraction in question.
 2. Calculate the slash rate according to the following formula:
 
-$$ \sum_{i \in \text{validators}} \max \{ 0.01, \big(\frac{i_{voting\_power}}{\sum_{i \in \text{validators}}i_{voting\_power}} \big)^2\} $$
+$$ \sum_{i \in \text{validators}} \max \{ 0.01, \big(\frac{i_{voting-power}}{\sum_{i \in \text{validators}}i_{voting-power}}\big)^2\} $$
 
 Or, in pseudocode:
 <!-- I want to make these two code blocks toggleable as in  https://rdmd.readme.io/docs/code-blocks#tabbed-code-blocks but can't seem to get it to work-->
@@ -25,7 +25,7 @@ calculateSlashRate slashes =
   -- then exponential between 0 & 1/3 voting power
   -- we can make this a more complex function later
 ```
-```python
+<!-- ```python
 class PoS:
     def __init__(self, genesis_validators : list):
         self.update_validators(genesis_validators)
@@ -48,9 +48,11 @@ class PoS:
     def calc_slash_rate(voting_power_fraction):
         slash_rate = max(0.01, (voting_power_fraction ** 2) * 9)
         return slash_rate
-```
+``` -->
 
-As a function, it can be drawn as ![cubic_slash](../../../assets/cubic_slash.png)
+As a function, it can be drawn as:
+
+![cubic_slash](../images/cubic_slash.png)
 
 > Note: The voting power of a slash is the voting power of the validator **when they violated the protocol**, not the voting power now or at the time of any of the other infractions. This does mean that these voting powers may not sum to 1, but this method should still be close to the incentives we want, and can't really be changed without making the system easier to game.
 
