@@ -393,17 +393,9 @@ pub(crate) trait QueriesExt {
     ) -> std::result::Result<Address, Error>;
 
     /// Determines if it is possible to send a validator set update vote
-    /// extension at the provided [`BlockHeight`].
+    /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
     ///
-    /// This is done by checking if we are at the first block of a new epoch,
-    /// or if we are at block height 1 of the first epoch.
-    ///
-    /// The genesis block will not have vote extensions,
-    /// therefore it is a special case, which we account for
-    /// by checking if the block height is 1. Otherwise,
-    /// validator set update votes will always extend
-    /// Tendermint's PreCommit phase of the first block of
-    /// an epoch.
+    /// This is done by checking if we are at the second block of a new epoch.
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
@@ -603,6 +595,8 @@ where
             })
     }
 
+    // TODO: fix this method; should only be able to send a validator
+    // set update at the second block of an epoch
     #[cfg(feature = "abcipp")]
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
         let (check_prev_heights, height) = match can_send {
@@ -636,9 +630,37 @@ where
     }
 
     #[cfg(not(feature = "abcipp"))]
-    #[inline(always)]
-    fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
-        true
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
+        // when checking vote extensions in Prepare
+        // and ProcessProposal, we simply return true
+        if matches!(
+            can_send,
+            SendValsetUpd::AtPrevHeight | SendValsetUpd::AtFixedHeight(_)
+        ) {
+            return true;
+        }
+
+        let current_decision_height = self.get_current_decision_height();
+
+        // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
+        // is 0, because of a bug (should be 1), so this code needs to
+        // handle that case
+        //
+        // we can remove this check once that's fixed
+        if current_decision_height == BlockHeight(2) {
+            return true;
+        }
+
+        let fst_heights_of_each_epoch =
+            self.block.pred_epochs.first_block_heights();
+
+        fst_heights_of_each_epoch
+            .last()
+            .map(|&h| {
+                let second_height_of_epoch = h + 1;
+                current_decision_height == second_height_of_epoch
+            })
+            .unwrap_or(false)
     }
 
     #[inline]
