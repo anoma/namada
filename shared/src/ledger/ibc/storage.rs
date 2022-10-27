@@ -47,6 +47,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// IBC prefix
 #[allow(missing_docs)]
+#[derive(PartialEq)]
 pub enum IbcPrefix {
     Client,
     Connection,

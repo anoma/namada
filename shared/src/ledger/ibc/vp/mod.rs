@@ -25,6 +25,7 @@ use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::proto::SignedTxData;
 use crate::types::address::{Address, InternalAddress};
+use crate::types::ibc::data::{Error as IbcDataError};
 use crate::types::ibc::IbcEvent as WrappedIbcEvent;
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -54,10 +55,14 @@ pub enum Error {
     DenomError(denom::Error),
     #[error("IBC event error: {0}")]
     IbcEvent(String),
+    #[error("Invalid connection list update: {0}")]
+    InvalidConnectionIdListUpdate(String),
     #[error("Decoding transaction data error: {0}")]
     TxDataDecoding(std::io::Error),
     #[error("IBC message is required as transaction data")]
     NoTxData,
+    #[error("Decoding IBC message error: {0}")]
+    IbcMessageDecoding(IbcDataError),
 }
 
 /// IBC functions result
@@ -96,8 +101,8 @@ where
         let mut clients = HashSet::new();
 
         for key in keys_changed {
-            if let Some(ibc_prefix) = ibc_prefix(key) {
-                match ibc_prefix {
+            if let Some(prefix) = ibc_prefix(key) {
+                match prefix {
                     IbcPrefix::Client => {
                         if is_client_counter_key(key) {
                             let counter =
@@ -115,7 +120,30 @@ where
                         } else {
                             let client_id = client_id(key)
                                 .map_err(|e| Error::KeyError(e.to_string()))?;
-                            if !is_connection_ids_key(key, &client_id) {
+                            if is_connection_ids_key(key, &client_id) {
+                                // In the current implementation of IBC VP, only
+                                // transactions with at most one IBC message are
+                                // allowed.
+                                // In order to validate the changed connection
+                                // ids key, we check that the transaction data
+                                // contains an IBC message of type OpenInit /
+                                // OpenTry, since only these types of IBC
+                                // messages may affect the IBC connection ID
+                                // list.
+                                // Otherwise, the transaction is considered
+                                // invalid.
+                                self.check_connection_message(tx_data)
+                                    .map_err(|_| {
+                                        Error::InvalidConnectionIdListUpdate(
+                                            format!(
+                                                "Invalid update of the \
+                                                 connection ID list for \
+                                                 client {}",
+                                                client_id
+                                            ),
+                                        )
+                                    })?;
+                            } else {
                                 if !clients.insert(client_id.clone()) {
                                     // this client has been checked
                                     continue;
