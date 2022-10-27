@@ -6,6 +6,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::Uint as ethUint;
 use eyre::{eyre, Context};
+use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
 use crate::types::hash::Hash;
@@ -55,6 +56,8 @@ impl From<u64> for Uint {
     PartialOrd,
     Ord,
     Hash,
+    Serialize,
+    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
