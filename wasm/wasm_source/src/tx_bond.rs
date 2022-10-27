@@ -329,9 +329,9 @@ mod tests {
         /// overflow.
         fn arb_initial_stake_and_bond()
             // Generate initial stake
-            (initial_stake in token::testing::arb_amount())
+            (initial_stake in token::testing::arb_amount_ceiled((i64::MAX/8) as u64))
             // Use the initial stake to limit the bond amount
-            (bond in arb_bond(u64::MAX - u64::from(initial_stake)),
+            (bond in arb_bond(((i64::MAX/8) as u64) - u64::from(initial_stake)),
             // Use the generated initial stake too
             initial_stake in Just(initial_stake),
         ) -> (token::Amount, transaction::pos::Bond) {

@@ -385,12 +385,14 @@ mod tests {
     fn arb_initial_stake_and_unbond()
     -> impl Strategy<Value = (token::Amount, transaction::pos::Unbond)> {
         // Generate initial stake
-        token::testing::arb_amount().prop_flat_map(|initial_stake| {
-            // Use the initial stake to limit the bond amount
-            let unbond = arb_unbond(u64::from(initial_stake));
-            // Use the generated initial stake too too
-            (Just(initial_stake), unbond)
-        })
+        token::testing::arb_amount_ceiled((i64::MAX / 8) as u64).prop_flat_map(
+            |initial_stake| {
+                // Use the initial stake to limit the bond amount
+                let unbond = arb_unbond(u64::from(initial_stake));
+                // Use the generated initial stake too too
+                (Just(initial_stake), unbond)
+            },
+        )
     }
 
     /// Generates an initial validator stake and a unbond, while making sure
