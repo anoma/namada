@@ -15,7 +15,7 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessPropos
 /// Contains stateful data about the number of vote extension
 /// digests found as protocol transactions in a proposed block.
 #[derive(Default)]
-pub(crate) struct DigestCounters {
+pub struct DigestCounters {
     /// The number of Ethereum events vote extensions found thus far.
     eth_ev_digest_num: usize,
     /// The number of validator set update vote extensions found thus far.
@@ -43,7 +43,6 @@ where
         &self,
         req: RequestProcessProposal,
     ) -> ProcessProposal {
-        let mut tx_queue_iter = self.storage.tx_queue.iter();
         tracing::info!(
             proposer = ?hex::encode(&req.proposer_address),
             height = req.height,
@@ -51,19 +50,7 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        // the number of vote extension digests included in the block proposal
-        let mut counters = DigestCounters::default();
-        let tx_results: Vec<_> = req
-            .txs
-            .iter()
-            .map(|tx_bytes| {
-                self.process_single_tx(
-                    tx_bytes,
-                    &mut tx_queue_iter,
-                    &mut counters,
-                )
-            })
-            .collect();
+        let (tx_results, counters) = self.check_proposal(&req.txs);
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
@@ -126,6 +113,31 @@ where
             status: status as i32,
             tx_results,
         }
+    }
+
+    /// Checks what the [`TxResult`]s would be for the transactions in a
+    /// proposed block, as well as counting the number of digest transactions
+    /// present. `ProcessProposal` should be able to make a decision on whether
+    /// a proposed block is acceptable or not based solely on what this function
+    /// returns.
+    pub fn check_proposal(
+        &self,
+        txs: &[Vec<u8>],
+    ) -> (Vec<TxResult>, DigestCounters) {
+        let mut tx_queue_iter = self.storage.tx_queue.iter();
+        // the number of vote extension digests included in the block proposal
+        let mut counters = DigestCounters::default();
+        let tx_results: Vec<_> = txs
+            .iter()
+            .map(|tx_bytes| {
+                self.check_proposal_tx(
+                    tx_bytes,
+                    &mut tx_queue_iter,
+                    &mut counters,
+                )
+            })
+            .collect();
+        (tx_results, counters)
     }
 
     /// Validates a list of vote extensions, included in PrepareProposal.
@@ -215,7 +227,7 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    pub(crate) fn process_single_tx<'a>(
+    pub(crate) fn check_proposal_tx<'a>(
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
