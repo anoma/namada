@@ -233,8 +233,19 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         maybe_start_geth(&mut spawner, &config).await;
 
     // Start oracle if necessary
-    let (eth_receiver, _oracle_control_sender, oracle) =
-        maybe_start_ethereum_oracle(&config, abort_sender);
+    let (eth_receiver, oracle) =
+        match maybe_start_ethereum_oracle(&config, abort_sender) {
+            EthereumOracle::NotEnabled { handle } => (None, handle),
+            EthereumOracle::Oracle {
+                handle,
+                eth_receiver,
+                ..
+            }
+            | EthereumOracle::EventsEndpoint {
+                handle,
+                eth_receiver,
+            } => (Some(eth_receiver), handle),
+        };
 
     // Start ABCI server and broadcaster (the latter only if we are a validator
     // node)
@@ -607,17 +618,31 @@ fn start_tendermint(
         })
 }
 
+enum EthereumOracle {
+    NotEnabled {
+        handle: task::JoinHandle<()>,
+    },
+    Oracle {
+        handle: task::JoinHandle<()>,
+        eth_receiver: mpsc::Receiver<EthereumEvent>,
+        // TODO(namada#686): will be used by the Shell
+        _control_sender: oracle::control::Sender,
+    },
+    EventsEndpoint {
+        handle: task::JoinHandle<()>,
+        eth_receiver: mpsc::Receiver<EthereumEvent>,
+    },
+}
+
 /// Potentially starts an Ethereum event oracle.
 fn maybe_start_ethereum_oracle(
     config: &config::Ledger,
     abort_sender: oneshot::Sender<()>,
-) -> (
-    Option<mpsc::Receiver<EthereumEvent>>,
-    Option<oracle::control::Sender>,
-    task::JoinHandle<()>,
-) {
+) -> EthereumOracle {
     if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
-        return (None, None, spawn_dummy_task(()));
+        return EthereumOracle::NotEnabled {
+            handle: spawn_dummy_task(()),
+        };
     }
 
     let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
@@ -629,7 +654,7 @@ fn maybe_start_ethereum_oracle(
         ethereum_bridge::ledger::Mode::Managed
         | ethereum_bridge::ledger::Mode::Remote => {
             let (control_sender, control_receiver) = oracle::control::channel();
-            let oracle = ethereum_node::oracle::run_oracle(
+            let handle = ethereum_node::oracle::run_oracle(
                 ethereum_url,
                 eth_sender,
                 control_receiver,
@@ -644,18 +669,25 @@ fn maybe_start_ethereum_oracle(
                     config: oracle::config::Config::default(),
                 })
                 .expect("Could not send initial configuration to the oracle!");
-            (Some(eth_receiver), Some(control_sender), oracle)
+            EthereumOracle::Oracle {
+                handle,
+                eth_receiver,
+                _control_sender: control_sender,
+            }
         }
         ethereum_bridge::ledger::Mode::EventsEndpoint => {
-            let oracle = ethereum_node::test_tools::events_endpoint::serve(
+            let handle = ethereum_node::test_tools::events_endpoint::serve(
                 eth_sender,
                 abort_sender,
             );
-            (Some(eth_receiver), None, oracle)
+            EthereumOracle::EventsEndpoint {
+                handle,
+                eth_receiver,
+            }
         }
-        ethereum_bridge::ledger::Mode::Off => {
-            (None, None, spawn_dummy_task(()))
-        }
+        ethereum_bridge::ledger::Mode::Off => EthereumOracle::NotEnabled {
+            handle: spawn_dummy_task(()),
+        },
     }
 }
 
