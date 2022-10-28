@@ -235,13 +235,13 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     // Start oracle if necessary
     let (eth_receiver, oracle) =
         match maybe_start_ethereum_oracle(&config, abort_sender) {
-            EthereumOracle::NotEnabled { handle } => (None, handle),
-            EthereumOracle::Oracle {
+            EthereumOracleTask::NotEnabled { handle } => (None, handle),
+            EthereumOracleTask::Oracle {
                 handle,
                 eth_receiver,
                 ..
             }
-            | EthereumOracle::EventsEndpoint {
+            | EthereumOracleTask::EventsEndpoint {
                 handle,
                 eth_receiver,
             } => (Some(eth_receiver), handle),
@@ -618,7 +618,8 @@ fn start_tendermint(
         })
 }
 
-enum EthereumOracle {
+/// Represents an Ethereum oracle task and associated channels.
+enum EthereumOracleTask {
     NotEnabled {
         handle: task::JoinHandle<()>,
     },
@@ -638,9 +639,9 @@ enum EthereumOracle {
 fn maybe_start_ethereum_oracle(
     config: &config::Ledger,
     abort_sender: oneshot::Sender<()>,
-) -> EthereumOracle {
+) -> EthereumOracleTask {
     if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
-        return EthereumOracle::NotEnabled {
+        return EthereumOracleTask::NotEnabled {
             handle: spawn_dummy_task(()),
         };
     }
@@ -669,7 +670,7 @@ fn maybe_start_ethereum_oracle(
                     config: oracle::config::Config::default(),
                 })
                 .expect("Could not send initial configuration to the oracle!");
-            EthereumOracle::Oracle {
+            EthereumOracleTask::Oracle {
                 handle,
                 eth_receiver,
                 _control_sender: control_sender,
@@ -680,12 +681,12 @@ fn maybe_start_ethereum_oracle(
                 eth_sender,
                 abort_sender,
             );
-            EthereumOracle::EventsEndpoint {
+            EthereumOracleTask::EventsEndpoint {
                 handle,
                 eth_receiver,
             }
         }
-        ethereum_bridge::ledger::Mode::Off => EthereumOracle::NotEnabled {
+        ethereum_bridge::ledger::Mode::Off => EthereumOracleTask::NotEnabled {
             handle: spawn_dummy_task(()),
         },
     }
