@@ -230,6 +230,9 @@ pub async fn submit_init_validator(
             "The validator commission rate must not exceed 1.0 or 100%, and \
              it must be 0 or positive"
         );
+        if !tx_args.force {
+            safe_exit(1)
+        }
     }
     if max_commission_rate_change > Decimal::ONE
         || max_commission_rate_change < Decimal::ZERO
@@ -238,6 +241,9 @@ pub async fn submit_init_validator(
             "The validator maximum change in commission rate per epoch must \
              not exceed 1.0 or 100%"
         );
+        if !tx_args.force {
+            safe_exit(1)
+        }
     }
     // Validate the validator VP code
     if let Err(err) = vm::validate_untrusted_wasm(&validator_vp_code) {
