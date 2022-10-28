@@ -1,33 +1,22 @@
 //! Blockchain-level parameters for the configuration of the Ethereum bridge.
-use std::num::NonZeroU64;
-
+use borsh::{BorshDeserialize, BorshSerialize};
+use namada::ledger::parameters::ethereum_bridge::{
+    MinimumConfirmations, UpgradeableContract,
+};
 use namada::types::ethereum_events::EthAddress;
 use serde::{Deserialize, Serialize};
 
-/// Represents a configuration value for an Ethereum address.
-///
-/// For instance:
-/// `0x6B175474E89094C44Da98b954EedeAC495271d0F`
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[repr(transparent)]
-pub struct Address(String);
-
-/// Represents a configuration value for the minimum number of
-/// confirmations an Ethereum event must reach before it can be acted on.
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[repr(transparent)]
-pub struct MinimumConfirmations(NonZeroU64);
-
-impl Default for MinimumConfirmations {
-    fn default() -> Self {
-        // SAFETY: The only way the API contract of `NonZeroU64` can be violated
-        // is if we construct values of this type using 0 as argument.
-        Self(unsafe { NonZeroU64::new_unchecked(100) })
-    }
-}
-
 /// Represents chain parameters for the Ethereum bridge.
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+)]
 pub struct GenesisConfig {
     /// Minimum number of confirmations needed to trust an Ethereum branch.
     /// This must be at least one.
@@ -39,7 +28,16 @@ pub struct GenesisConfig {
 
 /// Represents all the Ethereum contracts that need to be directly know about by
 /// validators.
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+)]
 pub struct Contracts {
     /// The Ethereum address of the ERC20 contract that represents this chain's
     /// native token.
@@ -50,33 +48,10 @@ pub struct Contracts {
     pub governance: UpgradeableContract,
 }
 
-/// Represents a configuration value for the version of a contract that can be
-/// upgraded. Starts from 1.
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize)]
-#[repr(transparent)]
-pub struct ContractVersion(NonZeroU64);
-
-impl Default for ContractVersion {
-    fn default() -> Self {
-        // SAFETY: The only way the API contract of `NonZeroU64` can be
-        // violated is if we construct values of this type using 0 as
-        // argument.
-        Self(unsafe { NonZeroU64::new_unchecked(1) })
-    }
-}
-
-/// Represents an Ethereum contract that may be upgraded.
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-pub struct UpgradeableContract {
-    /// The Ethereum address of the contract.
-    pub address: Address,
-    /// The version of the contract. Starts from 1.
-    pub version: ContractVersion,
-}
-
 #[cfg(test)]
 mod tests {
     use eyre::Result;
+    use namada::ledger::parameters::ethereum_bridge::ContractVersion;
 
     use super::*;
 
@@ -90,17 +65,11 @@ mod tests {
             contracts: Contracts {
                 native_erc20: EthAddress([42; 20]),
                 bridge: UpgradeableContract {
-                    address: Address(
-                        "0x237d915037A1ba79365E84e2b8574301B6D25Ea0"
-                            .to_string(),
-                    ),
+                    address: EthAddress([23; 20]),
                     version: ContractVersion::default(),
                 },
                 governance: UpgradeableContract {
-                    address: Address(
-                        "0x308728EEa73538d0edEfd95EF148Eb678F71c71D"
-                            .to_string(),
-                    ),
+                    address: EthAddress([18; 20]),
                     version: ContractVersion::default(),
                 },
             },
