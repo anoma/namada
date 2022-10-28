@@ -523,8 +523,8 @@ where
     where
         T: BorshDeserialize,
     {
-        let maybe_bytes = Ctx::read_post(self, key)
-            .wrap_err_with(|| format!("couldn't read_post {}", key))?;
+        let maybe_bytes = Ctx::read_bytes_post(self, key)
+            .wrap_err_with(|| format!("couldn't read_bytes_post {}", key))?;
         Self::deserialize_if_present(maybe_bytes)
     }
 
@@ -534,8 +534,8 @@ where
     where
         T: BorshDeserialize,
     {
-        let maybe_bytes = Ctx::read_pre(self, key)
-            .wrap_err_with(|| format!("couldn't read_pre {}", key))?;
+        let maybe_bytes = Ctx::read_bytes_pre(self, key)
+            .wrap_err_with(|| format!("couldn't read_bytes_pre {}", key))?;
         Self::deserialize_if_present(maybe_bytes)
     }
 }
