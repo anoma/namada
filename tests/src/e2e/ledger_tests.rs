@@ -779,8 +779,6 @@ fn pos_bonds() -> Result<()> {
 /// 6. Wait for the pipeline epoch
 /// 7. Check the new validator's voting power
 #[test]
-#[ignore]
-// TODO: fix and enable for eth-bridge-integration
 fn pos_init_validator() -> Result<()> {
     let pipeline_len = 1;
     let test = setup::network(
@@ -1955,8 +1953,6 @@ fn test_genesis_validators() -> Result<()> {
 /// 5. Submit a valid token transfer tx to validator 0
 /// 6. Wait for double signing evidence
 #[test]
-#[ignore]
-// TODO: fix and enable for eth-bridge-integration
 fn double_signing_gets_slashed() -> Result<()> {
     use std::net::SocketAddr;
     use std::str::FromStr;
