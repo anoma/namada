@@ -3119,6 +3119,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "rust_decimal",
+ "rust_decimal_macros",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",

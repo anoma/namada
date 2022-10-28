@@ -569,9 +569,7 @@ pub mod genesis_config {
             tm_votes_per_token: config.pos_params.tm_votes_per_token,
             block_proposer_reward: config.pos_params.block_proposer_reward,
             block_vote_reward: config.pos_params.block_vote_reward,
-            max_inflation_rate: config
-                .pos_params
-                .max_inflation_rate,
+            max_inflation_rate: config.pos_params.max_inflation_rate,
             target_staked_ratio: config.pos_params.target_staked_ratio,
             duplicate_vote_slash_rate: config
                 .pos_params

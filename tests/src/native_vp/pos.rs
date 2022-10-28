@@ -962,8 +962,14 @@ pub mod testing {
                         .unwrap_or_default();
                     // We convert the tokens from micro units to whole tokens
                     // with division by 10^6
-                    let vp_before = decimal_mult_i128(params.tm_votes_per_token, total_delta);
-                    let vp_after = decimal_mult_i128(params.tm_votes_per_token, total_delta + token_delta);
+                    let vp_before = decimal_mult_i128(
+                        params.tm_votes_per_token,
+                        total_delta,
+                    );
+                    let vp_after = decimal_mult_i128(
+                        params.tm_votes_per_token,
+                        total_delta + token_delta,
+                    );
                     // voting power delta
                     let vp_delta = vp_after - vp_before;
 
@@ -1098,8 +1104,14 @@ pub mod testing {
                         .unwrap_or_default();
                     // We convert the tokens from micro units to whole tokens
                     // with division by 10^6
-                    let vp_before = decimal_mult_i128(params.tm_votes_per_token, total_delta_cur);
-                    let vp_after = decimal_mult_i128(params.tm_votes_per_token, total_delta_cur + token_delta);
+                    let vp_before = decimal_mult_i128(
+                        params.tm_votes_per_token,
+                        total_delta_cur,
+                    );
+                    let vp_after = decimal_mult_i128(
+                        params.tm_votes_per_token,
+                        total_delta_cur + token_delta,
+                    );
                     // voting power delta
                     let vp_delta = vp_after - vp_before;
 

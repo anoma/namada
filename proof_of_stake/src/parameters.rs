@@ -6,7 +6,8 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use thiserror::Error;
 
-/// Proof-of-Stake system parameters, set at genesis and can only be changed via governance
+/// Proof-of-Stake system parameters, set at genesis and can only be changed via
+/// governance
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
 pub struct PosParams {
     /// A maximum number of active validators
@@ -20,7 +21,8 @@ pub struct PosParams {
     /// The value must be greater or equal to `pipeline_len`.
     pub unbonding_len: u64,
     /// The voting power per fundamental unit of the staking token (namnam).
-    /// Used in validators' voting power calculation to interface with tendermint.
+    /// Used in validators' voting power calculation to interface with
+    /// tendermint.
     pub tm_votes_per_token: Decimal,
     /// Amount of tokens rewarded to a validator for proposing a block
     pub block_proposer_reward: Decimal,
@@ -112,7 +114,8 @@ impl PosParams {
         // Check maximum total voting power cannot get larger than what
         // Tendermint allows
         let max_total_voting_power = Decimal::from(self.max_validator_slots)
-            * self.tm_votes_per_token * Decimal::from(TOKEN_MAX_AMOUNT);
+            * self.tm_votes_per_token
+            * Decimal::from(TOKEN_MAX_AMOUNT);
         match i64::try_from(max_total_voting_power) {
             Ok(max_total_voting_power_i64) => {
                 if max_total_voting_power_i64 > MAX_TOTAL_VOTING_POWER {

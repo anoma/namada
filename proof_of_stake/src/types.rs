@@ -5,8 +5,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::num::TryFromIntError;
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use rust_decimal::prelude::ToPrimitive;
@@ -395,8 +395,7 @@ impl VotingPowerDelta {
         // The token amount is expected to be in micro units
         let tokens: u64 = tokens.into();
         let delta = decimal_mult_u64(params.tm_votes_per_token, tokens);
-        let delta: i64 =
-            TryFrom::try_from(delta)?;
+        let delta: i64 = TryFrom::try_from(delta)?;
         Ok(Self(delta))
     }
 }
