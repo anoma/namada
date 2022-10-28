@@ -639,13 +639,11 @@ fn maybe_start_ethereum_oracle(
             // TODO(namada#686): pass `oracle_control_sender` to the shell for
             // initialization from storage, rather than using a
             // hardcoded config
-            if let Err(error) = control_sender.blocking_send(
-                oracle::control::Command::SendConfig {
+            control_sender
+                .blocking_send(oracle::control::Command::SendConfig {
                     config: oracle::config::Config::default(),
-                },
-            ) {
-                tracing::error!(?error, "Could not configure the oracle",);
-            }
+                })
+                .expect("Could not send initial configuration to the oracle!");
             (Some(eth_receiver), Some(control_sender), oracle)
         }
         ethereum_bridge::ledger::Mode::EventsEndpoint => {
