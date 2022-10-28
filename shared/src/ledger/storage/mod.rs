@@ -17,6 +17,9 @@ use super::parameters::Parameters;
 use super::storage_api::{ResultExt, StorageRead, StorageWrite};
 use super::{parameters, storage_api};
 use crate::ledger::gas::MIN_STORAGE_GAS;
+use crate::ledger::parameters::ethereum_bridge::{
+    MinimumConfirmations, UpgradeableContract,
+};
 use crate::ledger::parameters::EpochDuration;
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
@@ -28,6 +31,7 @@ use crate::ledger::storage::traits::StorageHasher;
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
+use crate::types::ethereum_events::EthAddress;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::storage::TxQueue;
 use crate::types::storage::{
@@ -69,6 +73,16 @@ where
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
+    /// Minimum number of confirmations needed for the
+    /// Ethereum bridge to consider an event final
+    pub min_confirmations: Option<MinimumConfirmations>,
+    /// The Ethereum address of the ERC20 contract that represents this chain's
+    /// native token.
+    pub native_erc20: Option<EthAddress>,
+    /// The Ethereum address of the bridge contract.
+    pub bridge_contract: Option<UpgradeableContract>,
+    /// The Ethereum address of the governance contract.
+    pub governance_contract: Option<UpgradeableContract>,
 }
 
 /// The block storage data
@@ -128,6 +142,16 @@ pub struct BlockStateRead {
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
+    /// Minimum number of confirmations needed for the
+    /// Ethereum bridge to consider an event final
+    pub min_confirmations: Option<MinimumConfirmations>,
+    /// The Ethereum address of the ERC20 contract that represents this chain's
+    /// native token.
+    pub native_erc20: Option<EthAddress>,
+    /// The Ethereum address of the bridge contract.
+    pub bridge_contract: Option<UpgradeableContract>,
+    /// The Ethereum address of the governance contract.
+    pub governance_contract: Option<UpgradeableContract>,
 }
 
 /// The block's state to write into the database.
@@ -153,6 +177,16 @@ pub struct BlockStateWrite<'a> {
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: &'a TxQueue,
+    /// Minimum number of confirmations needed for the
+    /// Ethereum bridge to consider an event final
+    pub min_confirmations: Option<MinimumConfirmations>,
+    /// The Ethereum address of the ERC20 contract that represents this chain's
+    /// native token.
+    pub native_erc20: Option<EthAddress>,
+    /// The Ethereum address of the bridge contract.
+    pub bridge_contract: Option<UpgradeableContract>,
+    /// The Ethereum address of the governance contract.
+    pub governance_contract: Option<UpgradeableContract>,
 }
 
 /// A database backend.
@@ -302,6 +336,10 @@ where
             ),
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
+            min_confirmations: None,
+            native_erc20: None,
+            bridge_contract: None,
+            governance_contract: None,
         }
     }
 
@@ -319,6 +357,10 @@ where
             address_gen,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue,
+            min_confirmations,
+            native_erc20,
+            bridge_contract: bridge,
+            governance_contract: governance,
         }) = self.db.read_last_block()?
         {
             self.block.tree = MerkleTree::new(merkle_tree_stores);
@@ -335,6 +377,10 @@ where
             {
                 self.tx_queue = tx_queue;
             }
+            self.min_confirmations = min_confirmations;
+            self.native_erc20 = native_erc20;
+            self.bridge_contract = bridge;
+            self.governance_contract = governance;
             tracing::debug!("Loaded storage from DB");
         } else {
             tracing::info!("No state could be found");
@@ -366,6 +412,10 @@ where
             address_gen: &self.address_gen,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: &self.tx_queue,
+            min_confirmations: self.min_confirmations,
+            native_erc20: self.native_erc20.clone(),
+            bridge_contract: self.bridge_contract.clone(),
+            governance_contract: self.governance_contract.clone(),
         };
         self.db.write_block(state)?;
         self.last_height = self.block.height;
@@ -922,6 +972,10 @@ pub mod testing {
                 ),
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
+                min_confirmations: None,
+                native_erc20: None,
+                bridge_contract: None,
+                governance_contract: None,
             }
         }
     }

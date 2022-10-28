@@ -1121,6 +1121,10 @@ mod test_utils {
                 next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: &address_gen,
                 tx_queue: &shell.storage.tx_queue,
+                min_confirmations: None,
+                native_erc20: None,
+                bridge_contract: None,
+                governance_contract: None,
             })
             .expect("Test failed");
 

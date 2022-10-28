@@ -12,7 +12,11 @@ use super::merkle_tree::{MerkleTreeStoresRead, StoreType};
 use super::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
+use crate::ledger::parameters::ethereum_bridge::{
+    MinimumConfirmations, UpgradeableContract,
+};
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
+use crate::types::ethereum_events::EthAddress;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::storage::TxQueue;
 use crate::types::storage::{
@@ -68,6 +72,34 @@ impl DB for MockDB {
             };
         let next_epoch_min_start_time: DateTimeUtc =
             match self.0.borrow().get("next_epoch_min_start_time") {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
+        let min_confirmations: Option<MinimumConfirmations> =
+            match self.0.borrow().get("min_confirmations") {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
+        let native_erc20: Option<EthAddress> =
+            match self.0.borrow().get("native_erc20") {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
+        let bridge_contract: Option<UpgradeableContract> =
+            match self.0.borrow().get("bridge_contract") {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
+        let governance_contract: Option<UpgradeableContract> =
+            match self.0.borrow().get("governance_contract") {
                 Some(bytes) => {
                     types::decode(bytes).map_err(Error::CodingError)?
                 }
@@ -153,6 +185,10 @@ impl DB for MockDB {
                     address_gen,
                     #[cfg(feature = "ferveo-tpke")]
                     tx_queue,
+                    min_confirmations,
+                    native_erc20,
+                    bridge_contract,
+                    governance_contract,
                 }))
             }
             _ => Err(Error::Temporary {
@@ -175,6 +211,10 @@ impl DB for MockDB {
             address_gen,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue,
+            min_confirmations,
+            native_erc20,
+            bridge_contract,
+            governance_contract,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -185,6 +225,20 @@ impl DB for MockDB {
         self.0.borrow_mut().insert(
             "next_epoch_min_start_time".into(),
             types::encode(&next_epoch_min_start_time),
+        );
+        self.0.borrow_mut().insert(
+            "min_confirmations".into(),
+            types::encode(&min_confirmations),
+        );
+        self.0
+            .borrow_mut()
+            .insert("native_erc20".into(), types::encode(&native_erc20));
+        self.0
+            .borrow_mut()
+            .insert("bridge_contract".into(), types::encode(&bridge_contract));
+        self.0.borrow_mut().insert(
+            "goverenance_contract".into(),
+            types::encode(&governance_contract),
         );
         #[cfg(feature = "ferveo-tpke")]
         {

@@ -1,4 +1,5 @@
 //! Protocol parameters
+pub mod ethereum_bridge;
 pub mod storage;
 
 use std::collections::BTreeSet;

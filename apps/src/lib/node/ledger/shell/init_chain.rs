@@ -5,6 +5,8 @@ use std::hash::Hash;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::{ibc, pos};
+use namada::ledger::parameters::Parameters;
+use namada::ledger::pos::PosParams;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token;
@@ -12,6 +14,7 @@ use namada::types::token;
 use sha2::{Digest, Sha256};
 
 use super::*;
+use crate::config::ethereum_bridge;
 use crate::facade::tendermint_proto::abci;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::facade::tendermint_proto::google::protobuf;
@@ -26,11 +29,13 @@ where
     /// Create a new genesis for the chain with specified id. This includes
     /// 1. A set of initial users and tokens
     /// 2. Setting up the validity predicates for both users and tokens
+    /// 3. Validators
+    /// 4. The PoS system
+    /// 5. The Ethereum bridge parameters
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
     ) -> Result<response::InitChain> {
-        let mut response = response::InitChain::default();
         let (current_chain_id, _) = self.storage.get_chain_id();
         if current_chain_id != init.chain_id {
             return Err(Error::ChainId(format!(
@@ -79,13 +84,46 @@ where
         let mut vp_code_cache: HashMap<String, Vec<u8>> = HashMap::default();
 
         // Initialize genesis established accounts
+        self.initialize_established_accounts(
+            genesis.established_accounts,
+            &mut vp_code_cache,
+        );
+
+        // Initialize genesis implicit
+        self.initialize_implicit_accounts(genesis.implicit_accounts);
+
+        // Initialize genesis token accounts
+        self.initialize_token_accounts(
+            genesis.token_accounts,
+            &mut vp_code_cache,
+        );
+        // configure the Ethereum bridge if the configuration is set.
+        if let Some(config) = genesis.ethereum_bridge_params {
+            self.configure_ethereuem_bridge(config);
+        }
+        // Initialize genesis validator accounts
+        self.initialize_validators(&genesis.validators, &mut vp_code_cache);
+        // set the initial validators set
+        Ok(self.set_initial_validators(
+            genesis.validators,
+            &genesis.parameters,
+            &genesis.pos_params,
+        ))
+    }
+
+    /// Initialize genesis established accounts
+    fn initialize_established_accounts(
+        &mut self,
+        accounts: Vec<genesis::EstablishedAccount>,
+        vp_code_cache: &mut HashMap<String, Vec<u8>>,
+    ) {
         for genesis::EstablishedAccount {
             address,
             vp_code_path,
             vp_sha256,
             public_key,
             storage,
-        } in genesis.established_accounts
+        } in accounts
         {
             let vp_code = match vp_code_cache.get(&vp_code_path).cloned() {
                 Some(vp_code) => vp_code,
@@ -129,24 +167,36 @@ where
                 self.storage.write(&key, value).unwrap();
             }
         }
+    }
 
+    /// Initialize genesis implicit accounts
+    fn initialize_implicit_accounts(
+        &mut self,
+        accounts: Vec<genesis::ImplicitAccount>,
+    ) {
         // Initialize genesis implicit
-        for genesis::ImplicitAccount { public_key } in genesis.implicit_accounts
-        {
+        for genesis::ImplicitAccount { public_key } in accounts {
             let address: address::Address = (&public_key).into();
             let pk_storage_key = pk_key(&address);
             self.storage
                 .write(&pk_storage_key, public_key.try_to_vec().unwrap())
                 .unwrap();
         }
+    }
 
+    /// Initialize genesis token accounts
+    fn initialize_token_accounts(
+        &mut self,
+        accounts: Vec<genesis::TokenAccount>,
+        vp_code_cache: &mut HashMap<String, Vec<u8>>,
+    ) {
         // Initialize genesis token accounts
         for genesis::TokenAccount {
             address,
             vp_code_path,
             vp_sha256,
             balances,
-        } in genesis.token_accounts
+        } in accounts
         {
             let vp_code =
                 vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
@@ -183,9 +233,16 @@ where
                     .unwrap();
             }
         }
+    }
 
+    /// Initialize genesis validator accounts
+    fn initialize_validators(
+        &mut self,
+        validators: &[genesis::Validator],
+        vp_code_cache: &mut HashMap<String, Vec<u8>>,
+    ) {
         // Initialize genesis validator accounts
-        for validator in &genesis.validators {
+        for validator in validators {
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.validator_vp_code_path.clone(),
                 || {
@@ -255,22 +312,28 @@ where
                 )
                 .expect("Unable to set genesis user public DKG session key");
         }
+    }
 
+    /// Initialize the PoS and set the initial validator set
+    fn set_initial_validators(
+        &mut self,
+        validators: Vec<genesis::Validator>,
+        parameters: &Parameters,
+        pos_params: &PosParams,
+    ) -> response::InitChain {
+        let mut response = response::InitChain::default();
         // PoS system depends on epoch being initialized
         let (current_epoch, _gas) = self.storage.get_current_epoch();
         pos::init_genesis_storage(
             &mut self.storage,
-            &genesis.pos_params,
-            genesis
-                .validators
-                .iter()
-                .map(|validator| &validator.pos_data),
+            pos_params,
+            validators.iter().map(|validator| &validator.pos_data),
             current_epoch,
         );
         ibc::init_genesis_storage(&mut self.storage);
 
         // Set the initial validator set
-        for validator in genesis.validators {
+        for validator in validators {
             let mut abci_validator = abci::ValidatorUpdate::default();
             let consensus_key: common::PublicKey =
                 validator.pos_data.consensus_key.clone();
@@ -278,14 +341,33 @@ where
                 sum: Some(key_to_tendermint(&consensus_key).unwrap()),
             };
             abci_validator.pub_key = Some(pub_key);
-            let power: u64 =
-                validator.pos_data.voting_power(&genesis.pos_params).into();
+            let power: u64 = validator.pos_data.voting_power(pos_params).into();
             abci_validator.power = power
                 .try_into()
                 .expect("unexpected validator's voting power");
             response.validators.push(abci_validator);
         }
-        Ok(response)
+        response
+    }
+
+    /// Set the parameters for the Ethereum bridge
+    fn configure_ethereuem_bridge(
+        &mut self,
+        config: ethereum_bridge::params::GenesisConfig,
+    ) {
+        let ethereum_bridge::params::GenesisConfig {
+            min_confirmations,
+            contracts:
+                ethereum_bridge::params::Contracts {
+                    native_erc20,
+                    bridge,
+                    governance,
+                },
+        } = config;
+        self.storage.min_confirmations = Some(min_confirmations);
+        self.storage.native_erc20 = Some(native_erc20);
+        self.storage.bridge_contract = Some(bridge);
+        self.storage.governance_contract = Some(governance);
     }
 }
 
