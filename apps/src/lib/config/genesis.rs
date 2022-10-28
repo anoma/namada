@@ -18,6 +18,8 @@ use namada::types::key::*;
 use namada::types::time::DateTimeUtc;
 use namada::types::{storage, token};
 
+use crate::config::ethereum_bridge;
+
 /// Genesis configuration file format
 pub mod genesis_config {
     use std::array::TryFromSliceError;
@@ -41,10 +43,10 @@ pub mod genesis_config {
     use thiserror::Error;
 
     use super::{
-        EstablishedAccount, Genesis, ImplicitAccount, TokenAccount, Validator,
+        ethereum_bridge, EstablishedAccount, Genesis, ImplicitAccount,
+        TokenAccount, Validator,
     };
     use crate::cli;
-    use crate::config::ethereum_bridge;
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct HexString(pub String);
@@ -609,6 +611,7 @@ pub mod genesis_config {
             pos_params,
             gov_params,
             treasury_params,
+            ethereum_bridge_params: config.ethereum_bridge_params,
         };
         genesis.init();
         genesis
@@ -644,6 +647,8 @@ pub struct Genesis {
     pub pos_params: PosParams,
     pub gov_params: GovParams,
     pub treasury_params: TreasuryParams,
+    // Ethereum bridge config
+    pub ethereum_bridge_params: Option<ethereum_bridge::params::GenesisConfig>,
 }
 
 impl Genesis {
@@ -892,6 +897,7 @@ pub fn genesis() -> Genesis {
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
         treasury_params: TreasuryParams::default(),
+        ethereum_bridge_params: None,
     }
 }
 
