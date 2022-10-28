@@ -604,6 +604,7 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
 
+        // inform the vp that the merkle root changed
         let keys_changed = BTreeSet::default();
         let verifiers = BTreeSet::default();
 
@@ -617,9 +618,6 @@ mod test_bridge_pool_vp {
                 &verifiers,
             ),
         };
-        // inform the vp that the merkle root changed
-        let keys_changed = BTreeSet::default();
-        let verifiers = BTreeSet::default();
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
