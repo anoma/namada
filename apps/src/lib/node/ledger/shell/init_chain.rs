@@ -10,12 +10,12 @@ use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
-use tower_abci::{request, response};
 
 use super::*;
 use crate::facade::tendermint_proto::abci;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::facade::tendermint_proto::google::protobuf;
+use crate::facade::tower_abci::{request, response};
 use crate::wasm_loader;
 
 impl<D, H> Shell<D, H>
