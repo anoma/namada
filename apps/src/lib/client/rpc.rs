@@ -59,9 +59,10 @@ pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
             .storage_value(&client, None, None, false, &args.storage_key)
             .await,
     );
-    match response.data {
-        Some(bytes) => println!("Found data: 0x{}", HEXLOWER.encode(&bytes)),
-        None => println!("No data found for key {}", args.storage_key),
+    if !response.data.is_empty() {
+        println!("Found data: 0x{}", HEXLOWER.encode(&response.data));
+    } else {
+        println!("No data found for key {}", args.storage_key);
     }
 }
 
@@ -1249,17 +1250,34 @@ pub async fn query_storage_value<T>(
 where
     T: BorshDeserialize,
 {
+    // In case `T` is a unit (only thing that encodes to 0 bytes), we have to
+    // use `storage_has_key` instead of `storage_value`, because `storage_value`
+    // returns 0 bytes when the key is not found.
+    let maybe_unit = T::try_from_slice(&[]);
+    if let Ok(unit) = maybe_unit {
+        return if unwrap_client_response(
+            RPC.shell().storage_has_key(client, key).await,
+        ) {
+            Some(unit)
+        } else {
+            None
+        };
+    }
+
     let response = unwrap_client_response(
         RPC.shell()
             .storage_value(client, None, None, false, key)
             .await,
     );
-    response.data.map(|bytes| {
-        T::try_from_slice(&bytes[..]).unwrap_or_else(|err| {
+    if response.data.is_empty() {
+        return None;
+    }
+    T::try_from_slice(&response.data[..])
+        .map(Some)
+        .unwrap_or_else(|err| {
             eprintln!("Error decoding the value: {}", err);
             cli::safe_exit(1)
         })
-    })
 }
 
 /// Query a range of storage values with a matching prefix and decode them with

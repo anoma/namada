@@ -1,7 +1,8 @@
+use borsh::BorshSerialize;
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 
-use crate::ledger::queries::require_latest_height;
-use crate::ledger::queries::types::{RequestCtx, RequestQuery, ResponseQuery};
+use crate::ledger::queries::types::{RequestCtx, RequestQuery};
+use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::types::storage::{self, Epoch, PrefixValue};
@@ -15,7 +16,7 @@ router! {SHELL,
 
     // Raw storage access - read value
     ( "value" / [storage_key: storage::Key] )
-        -> Option<Vec<u8>> = (with_options storage_value),
+        -> Vec<u8> = (with_options storage_value),
 
     // Dry run a transaction
     ( "dry_run_tx" ) -> TxResult = (with_options dry_run_tx),
@@ -35,7 +36,7 @@ router! {SHELL,
 fn dry_run_tx<D, H>(
     mut ctx: RequestCtx<'_, D, H>,
     request: &RequestQuery,
-) -> storage_api::Result<ResponseQuery<TxResult>>
+) -> storage_api::Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -59,9 +60,11 @@ where
         &mut ctx.tx_wasm_cache,
     )
     .into_storage_result()?;
-    Ok(ResponseQuery {
+    let data = data.try_to_vec().into_storage_result()?;
+    Ok(EncodedResponseQuery {
         data,
-        ..ResponseQuery::default()
+        proof_ops: None,
+        info: Default::default(),
     })
 }
 
@@ -69,7 +72,7 @@ where
 fn dry_run_tx<D, H>(
     _ctx: RequestCtx<'_, D, H>,
     _request: &RequestQuery,
-) -> storage_api::Result<ResponseQuery<TxResult>>
+) -> storage_api::Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -89,11 +92,15 @@ where
     Ok(data)
 }
 
+/// Returns data with `vec![]` when the storage key is not found. For all
+/// borsh-encoded types, it is safe to check `data.is_empty()` to see if the
+/// value was found, except for unit - see `fn query_storage_value` in
+/// `apps/src/lib/client/rpc.rs` for unit type handling via `storage_has_key`.
 fn storage_value<D, H>(
     ctx: RequestCtx<'_, D, H>,
     request: &RequestQuery,
     storage_key: storage::Key,
-) -> storage_api::Result<ResponseQuery<Option<Vec<u8>>>>
+) -> storage_api::Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -117,10 +124,10 @@ where
             } else {
                 None
             };
-            Ok(ResponseQuery {
-                data: Some(value),
+            Ok(EncodedResponseQuery {
+                data: value,
                 proof_ops: proof,
-                ..Default::default()
+                info: Default::default(),
             })
         }
         (None, _gas) => {
@@ -133,8 +140,8 @@ where
             } else {
                 None
             };
-            Ok(ResponseQuery {
-                data: None,
+            Ok(EncodedResponseQuery {
+                data: vec![],
                 proof_ops: proof,
                 info: format!("No value found for key: {}", storage_key),
             })
@@ -146,7 +153,7 @@ fn storage_prefix<D, H>(
     ctx: RequestCtx<'_, D, H>,
     request: &RequestQuery,
     storage_key: storage::Key,
-) -> storage_api::Result<ResponseQuery<Vec<storage::PrefixValue>>>
+) -> storage_api::Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -177,7 +184,8 @@ where
     } else {
         None
     };
-    Ok(ResponseQuery {
+    let data = data.try_to_vec().into_storage_result()?;
+    Ok(EncodedResponseQuery {
         data,
         proof_ops,
         ..Default::default()
@@ -261,7 +269,7 @@ mod test {
             .storage_value(&client, None, None, false, &balance_key)
             .await
             .unwrap();
-        assert!(read_balance.data.is_none());
+        assert!(read_balance.data.is_empty());
 
         // Request storage prefix iterator
         let balance_prefix = token::balance_prefix(&token_addr);
@@ -291,7 +299,7 @@ mod test {
             .unwrap();
         assert_eq!(
             balance,
-            token::Amount::try_from_slice(&read_balance.data.unwrap()).unwrap()
+            token::Amount::try_from_slice(&read_balance.data).unwrap()
         );
 
         // Request storage prefix iterator

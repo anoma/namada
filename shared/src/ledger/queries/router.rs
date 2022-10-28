@@ -62,12 +62,10 @@ macro_rules! handle_match {
                 break
         }
         let result = $handle($ctx, $request, $( $matched_args ),* )?;
-        let data = borsh::BorshSerialize::try_to_vec(&result.data).into_storage_result()?;
-        return Ok($crate::ledger::queries::EncodedResponseQuery {
-            data,
-            info: result.info,
-            proof_ops: result.proof_ops,
-        });
+        // The handle must take care of encoding if needed and return `Vec<u8>`.
+        // This is because for `storage_value` the bytes are returned verbatim
+        // as read from storage.
+        return Ok(result);
     };
 
     // Handler function that doesn't use the request, just the path args, if any
@@ -91,6 +89,7 @@ macro_rules! handle_match {
         // If you get a compile error from here with `expected function, found
         // queries::Storage`, you're probably missing the marker `(sub _)`
         let data = $handle($ctx, $( $matched_args ),* )?;
+        // Encode the returned data with borsh
         let data = borsh::BorshSerialize::try_to_vec(&data).into_storage_result()?;
         return Ok($crate::ledger::queries::EncodedResponseQuery {
             data,
@@ -372,6 +371,61 @@ macro_rules! pattern_to_prefix {
 /// Turn patterns and their handlers into methods for the router, where each
 /// dynamic pattern is turned into a parameter for the method.
 macro_rules! pattern_and_handler_to_method {
+    // Special terminal rule for `storage_value` handle from
+    // `shared/src/ledger/queries/shell.rs` that returns `Vec<u8>` which should
+    // not be decoded from response.data, but instead return as is
+    (
+        ( $( $param:tt: $param_ty:ty ),* )
+        [ $( { $prefix:expr } ),* ]
+        $return_type:path,
+        (with_options storage_value),
+        ()
+    ) => {
+        // paste! used to construct the `fn $handle_path`'s name.
+        paste::paste! {
+            #[allow(dead_code)]
+            #[doc = "Get a path to query `storage_value`."]
+            pub fn storage_value_path(&self, $( $param: &$param_ty ),* ) -> String {
+                itertools::join(
+                    [ Some(std::borrow::Cow::from(&self.prefix)), $( $prefix ),* ]
+                    .into_iter()
+                    .filter_map(|x| x), "/")
+            }
+
+            #[allow(dead_code)]
+            #[allow(clippy::too_many_arguments)]
+            #[cfg(any(test, feature = "async-client"))]
+            #[doc = "Request value with optional data (used for e.g. \
+                `dry_run_tx`), optionally specified height (supported for \
+                `storage_value`) and optional proof (supported for \
+                `storage_value` and `storage_prefix`) from `storage_value`."]
+            pub async fn storage_value<CLIENT>(&self, client: &CLIENT,
+                data: Option<Vec<u8>>,
+                height: Option<$crate::types::storage::BlockHeight>,
+                prove: bool,
+                $( $param: &$param_ty ),*
+            )
+                -> std::result::Result<
+                    $crate::ledger::queries::ResponseQuery<Vec<u8>>,
+                    <CLIENT as $crate::ledger::queries::Client>::Error
+                >
+                where CLIENT: $crate::ledger::queries::Client + std::marker::Sync {
+                    println!("IMMA VEC!!!!!!");
+                    let path = self.storage_value_path( $( $param ),* );
+
+                    let $crate::ledger::queries::ResponseQuery {
+                        data, info, proof_ops
+                    } = client.request(path, data, height, prove).await?;
+
+                    Ok($crate::ledger::queries::ResponseQuery {
+                        data,
+                        info,
+                        proof_ops,
+                    })
+            }
+        }
+    };
+
     // terminal rule for $handle that uses request (`with_options`)
     (
         ( $( $param:tt: $param_ty:ty ),* )
@@ -409,6 +463,7 @@ macro_rules! pattern_and_handler_to_method {
                     <CLIENT as $crate::ledger::queries::Client>::Error
                 >
                 where CLIENT: $crate::ledger::queries::Client + std::marker::Sync {
+                    println!("IMMA not a VEC!!!!!!");
                     let path = self.[<$handle _path>]( $( $param ),* );
 
                     let $crate::ledger::queries::ResponseQuery {
@@ -682,7 +737,8 @@ macro_rules! router_type {
 ///
 ///   // The handler additionally receives the `RequestQuery`, which can have
 ///   // some data attached, specified block height and ask for a proof. It
-///   // returns `ResponseQuery`, which can have some `info` string and a proof.
+///   // returns `EncodedResponseQuery` (the `data` must be encoded, if
+///   // necessary), which can have some `info` string and a proof.
 ///   ( "pattern_d" ) -> ReturnType = (with_options handler),
 ///
 ///   ( "another" / "pattern" / "that" / "goes" / "deep" ) -> ReturnType = handler,
@@ -780,9 +836,13 @@ macro_rules! router {
 /// ```
 #[cfg(test)]
 mod test_rpc_handlers {
-    use crate::ledger::queries::{RequestCtx, RequestQuery, ResponseQuery};
+    use borsh::BorshSerialize;
+
+    use crate::ledger::queries::{
+        EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery,
+    };
     use crate::ledger::storage::{DBIter, StorageHasher, DB};
-    use crate::ledger::storage_api;
+    use crate::ledger::storage_api::{self, ResultExt};
     use crate::types::storage::Epoch;
     use crate::types::token;
 
@@ -874,12 +934,12 @@ mod test_rpc_handlers {
     pub fn c<D, H>(
         _ctx: RequestCtx<'_, D, H>,
         _request: &RequestQuery,
-    ) -> storage_api::Result<ResponseQuery<String>>
+    ) -> storage_api::Result<EncodedResponseQuery>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
-        let data = "c".to_owned();
+        let data = "c".to_owned().try_to_vec().into_storage_result()?;
         Ok(ResponseQuery {
             data,
             ..ResponseQuery::default()
@@ -1010,6 +1070,9 @@ mod test {
             .await
             .unwrap();
         assert_eq!(result, format!("b3iiii/{a1}/{a2}"));
+
+        let result = TEST_RPC.c(&client, None, None, false).await.unwrap();
+        assert_eq!(result.data, format!("c"));
 
         let result = TEST_RPC.test_sub_rpc().x(&client).await.unwrap();
         assert_eq!(result, format!("x"));
