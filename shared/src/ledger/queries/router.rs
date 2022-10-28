@@ -15,8 +15,9 @@ pub enum Error {
     WrongPath(String),
 }
 
-/// Find the index of a next forward slash after the given `start` index in the path.
-/// When there are no more slashes, returns the index after the end of the path.
+/// Find the index of a next forward slash after the given `start` index in the
+/// path. When there are no more slashes, returns the index after the end of the
+/// path.
 ///
 /// # Panics
 /// The given `start` must be < `path.len()`.
