@@ -557,7 +557,7 @@ where
     fn host_height(&self) -> Height {
         let height = self.ctx.storage.get_block_height().0.0;
         // the revision number is always 0
-        Height::new(0, height.into())
+        Height::new(0, height)
     }
 
     fn host_consensus_state(
