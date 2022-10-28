@@ -269,17 +269,17 @@ mod test_bridge_pool_vp {
         tx: &'a Tx,
         storage: &'a Storage<MockDB, Sha256Hasher>,
         write_log: &'a WriteLog,
+        keys_changed: &'a BTreeSet<Key>,
+        verifiers: &'a BTreeSet<Address>,
     ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
-        let verifiers = BTreeSet::default();
-        let keys_changed = BTreeSet::default();
         Ctx::new(
             &BRIDGE_POOL_ADDRESS,
             storage,
             write_log,
             tx,
             VpGasMeter::new(0u64),
-            &keys_changed,
-            &verifiers,
+            keys_changed,
+            verifiers,
             VpCache::new(temp_dir(), 100usize),
         )
     }
@@ -354,11 +354,18 @@ mod test_bridge_pool_vp {
             .expect("Test failed");
 
         // add transfer to pool
+        let verifiers = BTreeSet::new();
         let keys_changed = insert_transfer(transfer.clone(), &mut write_log);
 
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
@@ -597,9 +604,18 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
 
+        let keys_changed = BTreeSet::default();
+        let verifiers = BTreeSet::default();
+
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
         // inform the vp that the merkle root changed
         let keys_changed = BTreeSet::default();

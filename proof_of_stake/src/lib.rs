@@ -263,7 +263,7 @@ pub trait PosActions: PosReadOnly {
 
     /// Write PoS validator's Eth validator set update signing key
     fn write_validator_eth_hot_key(
-        &self,
+        &mut self,
         address: &Self::Address,
         value: ValidatorEthKey<Self::PublicKey>,
     );

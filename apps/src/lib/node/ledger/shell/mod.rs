@@ -23,6 +23,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::ledger::gas::BlockGasMeter;
+use namada::ledger::pos;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
@@ -30,18 +31,16 @@ use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, DB};
-use namada::ledger::{ibc, parameters, pos};
 use namada::proto::{self, Tx};
+use namada::types::address;
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key};
-use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
-use namada::types::{address, token};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -56,8 +55,6 @@ use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
 use crate::facade::tendermint_proto::crypto::public_key;
-#[cfg(not(feature = "abcipp"))]
-use crate::facade::tendermint_proto::types::ConsensusParams;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::facade::tower_abci::{request, response};
@@ -801,6 +798,7 @@ mod test_utils {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, Epoch, Header};
+    use namada::types::time::DateTimeUtc;
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};

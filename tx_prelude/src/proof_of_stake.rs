@@ -4,9 +4,10 @@ pub use namada::ledger::pos::*;
 use namada::ledger::pos::{
     bond_key, namada_proof_of_stake, params_key, total_voting_power_key,
     unbond_key, validator_address_raw_hash_key, validator_consensus_key_key,
-    validator_set_key, validator_slashes_key,
-    validator_staking_reward_address_key, validator_state_key,
-    validator_total_deltas_key, validator_voting_power_key,
+    validator_eth_cold_key_key, validator_eth_hot_key_key, validator_set_key,
+    validator_slashes_key, validator_staking_reward_address_key,
+    validator_state_key, validator_total_deltas_key,
+    validator_voting_power_key,
 };
 use namada::types::address::Address;
 use namada::types::transaction::InitValidator;
@@ -80,6 +81,8 @@ impl Ctx {
         InitValidator {
             account_key,
             consensus_key,
+            eth_cold_key,
+            eth_hot_key,
             rewards_account_key,
             protocol_key,
             dkg_key,
@@ -102,10 +105,14 @@ impl Ctx {
         let pk_key = key::pk_key(&rewards_address);
         self.write(&pk_key, &rewards_account_key)?;
 
+        let eth_cold_key = key::common::PublicKey::Secp256k1(eth_cold_key);
+        let eth_hot_key = key::common::PublicKey::Secp256k1(eth_hot_key);
         self.become_validator(
             &validator_address,
             &rewards_address,
             &consensus_key,
+            &eth_cold_key,
+            &eth_hot_key,
             current_epoch,
         )?;
 
@@ -208,6 +215,24 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: TotalVotingPowers,
     ) -> Result<(), Self::Error> {
         self.write(&total_voting_power_key(), &value)
+    }
+
+    fn write_validator_eth_cold_key(
+        &mut self,
+        address: &Self::Address,
+        value: types::ValidatorEthKey<Self::PublicKey>,
+    ) {
+        self.write(&validator_eth_cold_key_key(address), encode(&value))
+            .unwrap();
+    }
+
+    fn write_validator_eth_hot_key(
+        &mut self,
+        address: &Self::Address,
+        value: types::ValidatorEthKey<Self::PublicKey>,
+    ) {
+        self.write(&validator_eth_hot_key_key(address), encode(&value))
+            .unwrap();
     }
 
     fn delete_bond(&mut self, key: &BondId) -> Result<(), Self::Error> {

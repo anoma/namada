@@ -1255,7 +1255,6 @@ pub mod args {
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
     use namada::types::transaction::GasLimit;
-    use serde::Deserialize;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;

@@ -13,16 +13,8 @@ use namada::types::storage::BlockHash;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
-#[cfg(not(feature = "abcipp"))]
-use namada::types::hash::Hash;
-#[cfg(not(feature = "abcipp"))]
-use namada::types::storage::BlockHash;
-#[cfg(not(feature = "abcipp"))]
-use namada::types::transaction::hash_tx;
-use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
 
-use super::super::Shell;
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 #[cfg(not(feature = "abcipp"))]
 use super::abcipp_shim_types::shim::TxBytes;
@@ -31,6 +23,7 @@ use crate::config;
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::abci::RequestBeginBlock;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
+use crate::node::ledger::shell::Shell;
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used

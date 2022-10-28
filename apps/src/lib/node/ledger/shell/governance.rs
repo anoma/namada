@@ -5,7 +5,7 @@ use namada::ledger::governance::utils::{
 use namada::ledger::governance::vp::ADDRESS as gov_address;
 use namada::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::ledger::storage::types::encode;
-use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::ledger::storage::{DBIter, DB};
 use namada::types::address::{xan as m1t, Address};
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
@@ -78,14 +78,14 @@ where
                             .storage
                             .write(&pending_execution_key, "")
                             .expect("Should be able to write to storage.");
-                        let tx_result = protocol::apply_tx(
+                        let tx_result = protocol::dispatch_tx(
                             tx_type,
                             0, /*  this is used to compute the fee
                                 * based on the code size. We dont
                                 * need it here. */
                             &mut BlockGasMeter::default(),
                             &mut shell.write_log,
-                            &shell.storage,
+                            &mut shell.storage,
                             &mut shell.vp_wasm_cache,
                             &mut shell.tx_wasm_cache,
                         );

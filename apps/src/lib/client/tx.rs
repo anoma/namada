@@ -16,13 +16,12 @@ use namada::types::governance::{
 use namada::types::key::{self, *};
 use namada::types::nft::{self, Nft, NftToken};
 use namada::types::storage::{Epoch, Key};
-use namada::types::token::Amount;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use namada::types::{address, storage, token};
+use namada::types::{address, token};
 use namada::{ledger, vm};
 use tokio::time::{Duration, Instant};
 

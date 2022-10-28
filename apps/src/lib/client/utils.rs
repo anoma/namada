@@ -25,12 +25,9 @@ use crate::config::genesis::genesis_config::{
     self, HexString, ValidatorPreGenesisConfig,
 };
 use crate::config::global::GlobalConfig;
-use crate::config::{
-    self, Config, IntentGossiper, PeerAddress, TendermintMode,
-};
+use crate::config::{self, Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
-use crate::node::gossip;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{pre_genesis, Wallet};
 use crate::wasm_loader;

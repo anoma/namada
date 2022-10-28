@@ -5,10 +5,9 @@ use std::collections::BTreeSet;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::traits::Sha256Hasher;
-use namada::vm::wasm::compilation_cache;
-use namada::vm::wasm::compilation_cache::common::Cache;
-use namada::vm::{wasm, WasmCacheRwAccess};
-use tempfile::TempDir;
+use namada::types::address::Address;
+use namada::types::storage;
+use namada::vm::WasmCacheRwAccess;
 
 use crate::tx::TestTxEnv;
 

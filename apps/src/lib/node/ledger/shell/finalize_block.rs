@@ -1,22 +1,12 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::governance::utils::{
-    compute_tally, get_proposal_votes, ProposalEvent,
-};
-use namada::ledger::governance::vp::ADDRESS as gov_address;
-use namada::ledger::storage::types::encode;
-use namada::ledger::treasury::ADDRESS as treasury_address;
-use namada::types::address::{xan as m1t, Address};
-use namada::types::governance::TallyResult;
-use namada::types::storage::{BlockHash, Epoch, Header};
+use namada::types::storage::{BlockHash, Header};
 use namada::types::transaction::protocol::ProtocolTxType;
 
-use super::queries::QueriesExt;
+use super::governance::execute_governance_proposals;
 use super::*;
 use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
-use crate::node::ledger::events::EventType;
 
 impl<D, H> Shell<D, H>
 where

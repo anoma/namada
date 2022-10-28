@@ -5,9 +5,11 @@ use std::str::FromStr;
 
 use borsh::BorshSerialize;
 use eyre::{eyre, Context};
-use namada::types::address::Address;
 use namada::types::chain::ChainId;
-use namada::types::key::*;
+use namada::types::key::{
+    common, ed25519, secp256k1, tm_consensus_key_raw_hash, ParseSecretKeyError,
+    RefTo, SecretKey,
+};
 use namada::types::time::DateTimeUtc;
 use semver::{Version, VersionReq};
 use serde_json::json;

@@ -13,8 +13,7 @@ use std::str::FromStr;
 
 use namada::types::chain::ChainId;
 use namada::types::time::Rfc3339String;
-use regex::Regex;
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::cli;

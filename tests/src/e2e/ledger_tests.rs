@@ -24,8 +24,7 @@ use namada_apps::config::genesis::genesis_config::{
 use serde_json::json;
 use setup::constants::*;
 
-use super::setup::{disable_eth_fullnode, working_dir};
-use super::setup::get_all_wasms_hashes;
+use super::setup::{disable_eth_fullnode, get_all_wasms_hashes};
 use crate::e2e::helpers::{
     find_address, find_voting_power, get_actor_rpc, get_epoch,
 };

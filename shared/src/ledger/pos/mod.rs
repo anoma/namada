@@ -286,22 +286,24 @@ mod macros {
                 Ok($crate::ledger::storage::types::decode(value).unwrap())
             }
 
+            // TODO: return result
             fn read_validator_eth_cold_key(
                 &self,
                 key: &Self::Address,
             ) -> Option<types::ValidatorEthKey<Self::PublicKey>> {
                 let value =
-                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_cold_key_key(key))?.unwrap();
-                Ok($crate::ledger::storage::types::decode(value).unwrap())
+                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_cold_key_key(key)).unwrap().unwrap();
+                Some($crate::ledger::storage::types::decode(value).unwrap())
             }
 
+            // TODO: return result
             fn read_validator_eth_hot_key(
                 &self,
                 key: &Self::Address,
             ) -> Option<types::ValidatorEthKey<Self::PublicKey>> {
                 let value =
-                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_hot_key_key(key))?.unwrap();
-                Ok($crate::ledger::storage::types::decode(value).unwrap())
+                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_hot_key_key(key)).unwrap().unwrap();
+                Some($crate::ledger::storage::types::decode(value).unwrap())
             }
         }
     }
