@@ -202,8 +202,8 @@ mod tests {
         Ok(())
     }
 
-    fn arb_initial_stake_and_unbonded_amount(
-    ) -> impl Strategy<Value = (token::Amount, token::Amount)> {
+    fn arb_initial_stake_and_unbonded_amount()
+    -> impl Strategy<Value = (token::Amount, token::Amount)> {
         // Generate initial stake
         token::testing::arb_amount().prop_flat_map(|initial_stake| {
             // Use the initial stake to limit the unbonded amount from the stake
