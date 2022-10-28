@@ -233,7 +233,7 @@ mod tests {
         .collect();
         #[cfg(feature = "abcipp")]
         let signers = {
-            let mut s = HashSet::new();
+            let mut s = BTreeSet::new();
             s.insert(validator_1.clone());
             s.insert(validator_2);
             s

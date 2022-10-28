@@ -30,7 +30,7 @@ pub const ENV_VAR_TM_STDOUT: &str = "ANOMA_TM_STDOUT";
 
 #[cfg(feature = "abciplus")]
 pub const VERSION_REQUIREMENTS: &str = ">= 0.37.0-alpha.2, <0.38.0";
-#[cfg(feature = "abcipp")]
+#[cfg(not(feature = "abciplus"))]
 // TODO: update from our v0.36-based fork to v0.38 for full ABCI++
 pub const VERSION_REQUIREMENTS: &str = "= 0.1.1-abcipp";
 

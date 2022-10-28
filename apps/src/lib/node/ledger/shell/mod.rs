@@ -55,8 +55,6 @@ use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
 use crate::facade::tendermint_proto::crypto::public_key;
-#[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::events::log::EventLog;
 use crate::node::ledger::events::Event;
@@ -804,6 +802,7 @@ mod test_utils {
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
+    #[cfg(feature = "abciplus")]
     use crate::facade::tendermint_proto::abci::{
         RequestInitChain, RequestProcessProposal,
     };

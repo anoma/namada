@@ -725,7 +725,7 @@ mod test_finalize_block {
         let signed = MultiSignedEthEvent {
             event,
             #[cfg(feature = "abcipp")]
-            signers: HashSet::from([address.clone()]),
+            signers: BTreeSet::from([address.clone()]),
             #[cfg(not(feature = "abcipp"))]
             signers: BTreeSet::from([(
                 address.clone(),
