@@ -2,17 +2,23 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use namada::ledger::storage::traits::StorageHasher;
+use namada::ledger::storage::{DBIter, DB};
+use namada::ledger::{ibc, pos};
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::PosParams;
 use namada::types::key::*;
+use namada::types::time::{DateTimeUtc, TimeZone, Utc};
+use namada::types::token;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
 
-use super::queries::QueriesExt;
 use super::*;
+use crate::config::ethereum_bridge;
 use crate::facade::tendermint_proto::abci;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::facade::tendermint_proto::google::protobuf;
+use crate::facade::tower_abci::{request, response};
 use crate::wasm_loader;
 
 impl<D, H> Shell<D, H>
@@ -64,11 +70,6 @@ where
 
         genesis.parameters.init_storage(&mut self.storage);
         genesis.gov_params.init_storage(&mut self.storage);
-        genesis.treasury_params.init_storage(&mut self.storage);
-        // configure the Ethereum bridge if the configuration is set.
-        if let Some(config) = genesis.ethereum_bridge_params {
-            config.init_storage(&mut self.storage);
-        }
 
         // Depends on parameters being initialized
         self.storage
@@ -96,7 +97,10 @@ where
             genesis.token_accounts,
             &mut vp_code_cache,
         );
-
+        // configure the Ethereum bridge if the configuration is set.
+        if let Some(config) = genesis.ethereum_bridge_params {
+            self.configure_ethereuem_bridge(config);
+        }
         // Initialize genesis validator accounts
         self.initialize_validators(&genesis.validators, &mut vp_code_cache);
         // set the initial validators set
@@ -121,10 +125,16 @@ where
             storage,
         } in accounts
         {
-            let vp_code = vp_code_cache
-                .get_or_insert_with(vp_code_path.clone(), || {
-                    wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
-                });
+            let vp_code = match vp_code_cache.get(&vp_code_path).cloned() {
+                Some(vp_code) => vp_code,
+                None => {
+                    let wasm =
+                        wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
+                            .map_err(Error::ReadingWasm)?;
+                    vp_code_cache.insert(vp_code_path.clone(), wasm.clone());
+                    wasm
+                }
+            };
 
             // In dev, we don't check the hash
             #[cfg(feature = "dev")]
@@ -188,9 +198,10 @@ where
             balances,
         } in accounts
         {
-            let vp_code = vp_code_cache
-                .get_or_insert_with(vp_code_path.clone(), || {
+            let vp_code =
+                vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
                     wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
+                        .unwrap()
                 });
 
             // In dev, we don't check the hash
@@ -239,6 +250,7 @@ where
                         &self.wasm_dir,
                         &validator.validator_vp_code_path,
                     )
+                    .unwrap()
                 },
             );
 
@@ -320,13 +332,6 @@ where
         );
         ibc::init_genesis_storage(&mut self.storage);
 
-        let evidence_params = self
-            .storage
-            .get_evidence_params(&parameters.epoch_duration, pos_params);
-        response.consensus_params = Some(ConsensusParams {
-            evidence: Some(evidence_params),
-            ..response.consensus_params.unwrap_or_default()
-        });
         // Set the initial validator set
         for validator in validators {
             let mut abci_validator = abci::ValidatorUpdate::default();
@@ -343,6 +348,26 @@ where
             response.validators.push(abci_validator);
         }
         response
+    }
+
+    /// Set the parameters for the Ethereum bridge
+    fn configure_ethereuem_bridge(
+        &mut self,
+        config: ethereum_bridge::params::GenesisConfig,
+    ) {
+        let ethereum_bridge::params::GenesisConfig {
+            min_confirmations,
+            contracts:
+                ethereum_bridge::params::Contracts {
+                    native_erc20,
+                    bridge,
+                    governance,
+                },
+        } = config;
+        self.storage.min_confirmations = Some(min_confirmations);
+        self.storage.native_erc20 = Some(native_erc20);
+        self.storage.bridge_contract = Some(bridge);
+        self.storage.governance_contract = Some(governance);
     }
 }
 
