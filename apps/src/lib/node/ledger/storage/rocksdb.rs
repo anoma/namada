@@ -5,13 +5,7 @@
 //! - `height`: the last committed block height
 //! - `tx_queue`: txs to be decrypted in the next block
 //! - `pred`: predecessor values of the top-level keys of the same name
-//! - `tx_queue`
-//! - `min_confirmations`: Minimum number of confirmations needed for the
-//!   Ethereum bridge to consider an event final.
-//! - `native_erc20`: The Ethereum address of the ERC20 contract that represents
-//!   this chain's native token.
-//! - `bridge_contract`:  The Ethereum address of the bridge contract.
-//! - `governance_contract`: The Ethereum address of the governance contract.
+//!   - `tx_queue`
 //! - `next_epoch_min_start_height`: minimum block height from which the next
 //!   epoch can start
 //! - `next_epoch_min_start_time`: minimum block time from which the next epoch
@@ -38,15 +32,11 @@ use std::path::Path;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada::ledger::parameters::ethereum_bridge::{
-    MinimumConfirmations, UpgradeableContract,
-};
 use namada::ledger::storage::types::PrefixIterator;
 use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
     MerkleTreeStoresRead, Result, StoreType, DB,
 };
-use namada::types::ethereum_events::EthAddress;
 use namada::types::storage::{
     BlockHeight, Header, Key, KeySeg, TxQueue, KEY_SEGMENT_SEPARATOR,
 };
@@ -310,61 +300,6 @@ impl DB for RocksDB {
                 return Ok(None);
             }
         };
-        let min_confirmations: Option<MinimumConfirmations> = match self
-            .0
-            .get("min_confirmations")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load the minimum confirmations from the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let native_erc20: Option<EthAddress> = match self
-            .0
-            .get("native_erc20")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load the Ethereum address for wrapped Nam from \
-                     the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let bridge_contract: Option<UpgradeableContract> = match self
-            .0
-            .get("bridge_contract")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load the Ethereum bridge contract address from \
-                     the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let governance_contract: Option<UpgradeableContract> = match self
-            .0
-            .get("governance_contract")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load the Ethereum governance contract from the \
-                     DB"
-                );
-                return Ok(None);
-            }
-        };
         let tx_queue: TxQueue = match self
             .0
             .get("tx_queue")
@@ -463,10 +398,6 @@ impl DB for RocksDB {
                     next_epoch_min_start_time,
                     address_gen,
                     tx_queue,
-                    min_confirmations,
-                    native_erc20,
-                    bridge_contract,
-                    governance_contract,
                 }))
             }
             _ => Err(Error::Temporary {
@@ -489,10 +420,6 @@ impl DB for RocksDB {
             next_epoch_min_start_time,
             address_gen,
             tx_queue,
-            min_confirmations,
-            native_erc20,
-            bridge_contract,
-            governance_contract,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -521,10 +448,6 @@ impl DB for RocksDB {
             "next_epoch_min_start_time",
             types::encode(&next_epoch_min_start_time),
         );
-        batch.put("min_confirmations", types::encode(&min_confirmations));
-        batch.put("native_erc20", types::encode(&native_erc20));
-        batch.put("bridge_contract", types::encode(&bridge_contract));
-        batch.put("governance_contract", types::encode(&governance_contract));
         // Tx queue
         if let Some(pred_tx_queue) = self
             .0
@@ -1053,10 +976,6 @@ mod test {
             next_epoch_min_start_time,
             address_gen: &address_gen,
             tx_queue: &tx_queue,
-            min_confirmations: None,
-            native_erc20: None,
-            bridge_contract: None,
-            governance_contract: None,
         };
 
         db.write_block(block).unwrap();

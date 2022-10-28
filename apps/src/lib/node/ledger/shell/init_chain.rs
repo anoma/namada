@@ -10,7 +10,6 @@ use sha2::{Digest, Sha256};
 
 use super::queries::QueriesExt;
 use super::*;
-use crate::config::ethereum_bridge;
 use crate::facade::tendermint_proto::abci;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::facade::tendermint_proto::google::protobuf;
@@ -66,6 +65,10 @@ where
         genesis.parameters.init_storage(&mut self.storage);
         genesis.gov_params.init_storage(&mut self.storage);
         genesis.treasury_params.init_storage(&mut self.storage);
+        // configure the Ethereum bridge if the configuration is set.
+        if let Some(config) = genesis.ethereum_bridge_params {
+            config.init_storage(&mut self.storage);
+        }
 
         // Depends on parameters being initialized
         self.storage
@@ -93,10 +96,7 @@ where
             genesis.token_accounts,
             &mut vp_code_cache,
         );
-        // configure the Ethereum bridge if the configuration is set.
-        if let Some(config) = genesis.ethereum_bridge_params {
-            self.configure_ethereuem_bridge(config);
-        }
+
         // Initialize genesis validator accounts
         self.initialize_validators(&genesis.validators, &mut vp_code_cache);
         // set the initial validators set
@@ -343,26 +343,6 @@ where
             response.validators.push(abci_validator);
         }
         response
-    }
-
-    /// Set the parameters for the Ethereum bridge
-    fn configure_ethereuem_bridge(
-        &mut self,
-        config: ethereum_bridge::params::GenesisConfig,
-    ) {
-        let ethereum_bridge::params::GenesisConfig {
-            min_confirmations,
-            contracts:
-                ethereum_bridge::params::Contracts {
-                    native_erc20,
-                    bridge,
-                    governance,
-                },
-        } = config;
-        self.storage.min_confirmations = Some(min_confirmations);
-        self.storage.native_erc20 = Some(native_erc20);
-        self.storage.bridge_contract = Some(bridge);
-        self.storage.governance_contract = Some(governance);
     }
 }
 
