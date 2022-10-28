@@ -753,7 +753,7 @@ pub trait PosBase {
         key: &Self::Address,
         value: &CommissionRates,
     );
-    /// Write PoS validator's commission rate.
+    /// Write PoS validator's maximum change in the commission rate.
     fn write_validator_max_commission_rate_change(
         &mut self,
         key: &Self::Address,

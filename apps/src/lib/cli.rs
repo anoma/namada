@@ -1607,12 +1607,14 @@ pub mod args {
                 ))
                 .arg(COMMISSION_RATE.def().about(
                     "The commission rate charged by the validator for \
-                     delegation rewards. This is a required parameter.",
+                     delegation rewards. Expressed as a decimal between 0 and \
+                     1. This is a required parameter.",
                 ))
                 .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
                     "The maximum change per epoch in the commission rate \
-                     charged by the validator for delegation rewards. This is \
-                     a required parameter.",
+                     charged by the validator for delegation rewards. \
+                     Expressed as a decimal between 0 and 1. This is a \
+                     required parameter.",
                 ))
                 .arg(VALIDATOR_CODE_PATH.def().about(
                     "The path to the validity predicate WASM code to be used \
