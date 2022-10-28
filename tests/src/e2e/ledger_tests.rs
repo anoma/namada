@@ -932,7 +932,7 @@ fn pos_init_validator() -> Result<()> {
     // 7. Check the new validator's voting power
     let voting_power =
         find_voting_power(&test, new_validator, &validator_one_rpc)?;
-    assert_eq!(voting_power, 11);
+    assert_eq!(voting_power, 11_000_500_000);
 
     Ok(())
 }
