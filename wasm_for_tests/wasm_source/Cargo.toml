@@ -44,12 +44,6 @@ tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", re
 tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "87be41b8c9cc2850830f4d8028c1fe1bd9f96284"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "87be41b8c9cc2850830f4d8028c1fe1bd9f96284"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "87be41b8c9cc2850830f4d8028c1fe1bd9f96284"}
-tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "87be41b8c9cc2850830f4d8028c1fe1bd9f96284"}
-tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "87be41b8c9cc2850830f4d8028c1fe1bd9f96284"}
-
-# patched to a commit on the `eth-bridge-integration` branch of our fork
 ibc = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"}
 ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"}
 
