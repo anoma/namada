@@ -261,7 +261,7 @@ async fn process(
     // of confirmations
     for sig in signatures::SIGNATURES {
         let addr: Address = match signatures::SigType::from(sig) {
-            signatures::SigType::Bridge => config.mint_contract.0.into(),
+            signatures::SigType::Bridge => config.bridge_contract.0.into(),
             signatures::SigType::Governance => {
                 config.governance_contract.0.into()
             }

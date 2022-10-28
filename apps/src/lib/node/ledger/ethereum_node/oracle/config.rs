@@ -10,7 +10,7 @@ pub struct Config {
     /// before it will be checked for bridge events.
     pub min_confirmations: NonZeroU64,
     /// The Ethereum address of the current bridge contract.
-    pub mint_contract: EthAddress,
+    pub bridge_contract: EthAddress,
     /// The Ethereum address of the current governance contract.
     pub governance_contract: EthAddress,
 }
@@ -23,7 +23,7 @@ impl std::default::Default for Config {
             // SAFETY: we must always call NonZeroU64::new_unchecked here with a
             // value that is >= 1
             min_confirmations: unsafe { NonZeroU64::new_unchecked(100) },
-            mint_contract: EthAddress([0; 20]),
+            bridge_contract: EthAddress([0; 20]),
             governance_contract: EthAddress([1; 20]),
         }
     }
