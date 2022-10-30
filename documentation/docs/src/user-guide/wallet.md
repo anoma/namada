@@ -7,10 +7,21 @@ This document describes the different wallet concepts and options that are avail
 
 Check out the different options to generate a wallet:
 
-- File System Wallet
-- Web Wallet
-- Paper Wallet
-- Hardware Wallet
+- [File System Wallet](#file-system-wallet)
+- [Web Wallet](#web-wallet)
+- [Paper Wallet](#paper-wallet)
+- [Hardware Wallet](#hardware-wallet)
+
+## An introduction to Namada Addresses
+The purpose of the Namada wallet is to provide a user-interface to store and manage both keys and addresses. In this context, keys are (potentially) very large integers that have some meaning on an eliptic curve. Keys are the fundamental building blocks for accounts on Namada. Keys come in the form of *pairs* (secret and public), can be used to derive the **account address** (first 40 chars of the SHA256 hash of the public key).
+
+
+All accounts in Namada have a unique address, exactly one Validity Predicate and optionally any additional data in its dynamic storage sub-space.
+
+There are currently 3 types of account addresses:
+- **Implicit *(not fully supported yet)*:** An implicit account is derived from your keypair and can be used to authorize certain transactions from the account. They can be used as recipients of transactions even if the account has not been used on-chain before.
+- **Established:** Used for accounts that allow the deployment of custom validation logic. These must be created on-chain via a transaction (e.g. [initialize an account](#initialize-an-established-account)). The address is generated on-chain and is not known until the transaction is applied (the user provides randomness).
+- **Internal:** Special internal accounts, such as protocol parameters account, PoS and IBC.
 
 ## Manage keypairs
 
@@ -24,7 +35,7 @@ namada wallet key
 
 ### Generate a keypair
 
-It is possible to generate keys using the CLI. Generate a keypair with a given alias and derive the implicit address from its public key:
+It is possible to generate keys using the CLI. By doing so, an implicit account address is also derived in the process and added to storage.
 
 ```shell
 namada wallet key gen --alias my-key
@@ -42,13 +53,6 @@ namada wallet key list
 
 ## Manage addresses
 
-All accounts in Namada have an unique address, exactly one Validity Predicate and optionally any additional data in its dynamic storage sub-space.
-
-There are currently 3 types of account addresses:
-
-- **Established:** Used for accounts that allow the deployment of custom validation logic. These must be created on-chain via a transaction (e.g. [initialize an account](#initialize-an-established-account)). The address is generated on-chain and is not known until the transaction is applied.
-- **Implicit *(not fully supported yet)*:** Derived from your kepair, it can be used to authorize certain transactions from the account. They can be used as recipients of transactions even if the account has not been used on-chain before.
-- **Internal:** Special internal accounts, such as protocol parameters account, PoS and IBC.
 
 To manage addresses, similar to keys, various sub-commands are available:
 
@@ -75,7 +79,7 @@ namada wallet address list
 
 ## File System Wallet
 
-By default, the Namada Wallet is stored under `.anoma/{chain_id}/wallet.toml` where keys are stored encrypted. You can change the default base directory path with `--base-dir` and you can allow the storage of unencrypted keypairs with the flag `--unsafe-dont-encrypt`.
+By default, the Namada Wallet is stored under `.namada/{chain_id}/wallet.toml` where keys are stored encrypted. You can change the default base directory path with `--base-dir` and you can allow the storage of unencrypted keypairs with the flag `--unsafe-dont-encrypt`.
 
 If the wallet doesn't already exist, it will be created for you as soon as you run a command that tries to access the wallet. A newly created wallet will be pre-loaded with some internal addresses like `pos`, `pos_slash_pool`, `masp` and more.
 

@@ -4,7 +4,7 @@ In Namada, shielded transfers are enabled by the Multi-Asset Shielded Pool (MASP
 
 ## Using MASP
 
-If you are familiar to Zcash, the set of interactions you can execute with the MASP are similar:
+If you are familiar with Zcash, the set of interactions you can execute with the MASP are similar:
 
 - [**Shielding transfers:** transparent to shielded addresses](#shielding-transfers)
 - [**Shielded transfers:** shielded to shielded addresses](#shielded-transfers)
@@ -28,7 +28,7 @@ Generate an implicit account:
 namadaw address gen --alias [your-implicit-account-alias]
 ```
 
-Then, create an established account on chain using the implicit account you've just generated:
+Then, create an established account on-chain using the implicit account you've just generated:
 
 ```shell
 namadac init-account \
@@ -40,7 +40,7 @@ namadac init-account \
 #### Get tokens from the Testnet Faucet
 
 ```admonish info "Testnet Faucet Tokens"
-The testnet tokens which the faucet can provide you are named `NAM`,
+The testnet tokens which the faucet can provide you have the aliases `NAM`,
 `BTC`, `ETH`, `DOT`, `Schnitzel`, `Apfel`, and `Kartoffel`. The faucet
 will transfer these in increments of 1000 maximum at a time.
 ```
