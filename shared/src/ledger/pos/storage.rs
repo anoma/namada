@@ -24,8 +24,10 @@ const VALIDATOR_COMMISSION_RATE_STORAGE_KEY: &str = "commission_rate";
 const VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY: &str =
     "max_commission_rate_change";
 const VALIDATOR_SELF_REWARDS_PRODUCT_KEY: &str = "validator_rewards_product";
-const VALIDATOR_DELEGATION_REWARDS_PRODUCT_KEY: &str = "delegation_rewards_product";
-const VALIDATOR_LAST_KNOWN_PRODUCT_EPOCH_KEY: &str = "last_known_rewards_product_epoch";
+const VALIDATOR_DELEGATION_REWARDS_PRODUCT_KEY: &str =
+    "delegation_rewards_product";
+const VALIDATOR_LAST_KNOWN_PRODUCT_EPOCH_KEY: &str =
+    "last_known_rewards_product_epoch";
 const SLASHES_PREFIX: &str = "slash";
 const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
@@ -33,6 +35,11 @@ const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
 const CURRENT_BLOCK_PROPOSER_STORAGE_KEY: &str = "current_block_proposer";
+const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
+    "reward_accumulator";
+const VALIDATOR_SET_STORAGE_PREFIX: &str = "validator_set";
+const CONSENSUS_VALIDATOR_SET_STORAGE_PREFIX: &str = "consensus";
+const CONSENSUS_VALIDATOR_SET_STORAGE_KEY: &str = "set";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -420,6 +427,27 @@ pub fn is_validator_set_key(key: &Key) -> bool {
     }
 }
 
+/// Storage key prefix for validator sets.
+pub fn validator_set_prefix() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&VALIDATOR_SET_STORAGE_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key prefix for the consensus validator set.
+pub fn consensus_validator_set_prefix() -> Key {
+    validator_set_prefix()
+        .push(&CONSENSUS_VALIDATOR_SET_STORAGE_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for consensus validator set.
+pub fn consensus_validator_set_key() -> Key {
+    consensus_validator_set_prefix()
+        .push(&CONSENSUS_VALIDATOR_SET_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Storage key for total deltas of all validators.
 pub fn total_deltas_key() -> Key {
     Key::from(ADDRESS.to_db_key())
@@ -471,6 +499,32 @@ pub fn is_current_block_proposer_key(key: &Key) -> bool {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if addr == &ADDRESS
                 && key == CURRENT_BLOCK_PROPOSER_STORAGE_KEY =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Storage key for the consensus validator set rewards accumulator.
+pub fn consensus_validator_set_accumulator_key() -> Key {
+    consensus_validator_set_prefix()
+        .push(&CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for the consensus validator set?
+pub fn is_consensus_validator_set_accumulator_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(set),
+            DbKeySeg::StringSeg(field),
+        ] if addr == &ADDRESS
+            && key == VALIDATOR_SET_STORAGE_PREFIX
+            && set == CONSENSUS_VALIDATOR_SET_STORAGE_PREFIX
+            && field == CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY =>
         {
             true
         }
