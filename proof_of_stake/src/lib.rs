@@ -34,15 +34,16 @@ use parameters::PosParams;
 use rust_decimal::Decimal;
 use thiserror::Error;
 use types::{
-    decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
-    SlashType, Slashes, TotalVotingPowers, Unbond, Unbonds,
-    ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
-    ValidatorState, ValidatorStates, ValidatorDeltas,
-    TotalDeltas
+    ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
+    SlashType, Slashes, TotalDeltas, Unbond, Unbonds, ValidatorConsensusKeys,
+    ValidatorDeltas, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
+    ValidatorState, ValidatorStates,
 };
 
 use crate::btree_set::BTreeSetShims;
-use crate::types::{Bond, BondId, WeightedValidator};
+use crate::types::{
+    decimal_mult_i128, decimal_mult_u64, Bond, BondId, WeightedValidator,
+};
 
 /// Read-only part of the PoS system
 pub trait PosReadOnly {
@@ -158,7 +159,9 @@ pub trait PosReadOnly {
         &self,
     ) -> Result<ValidatorSets<Self::Address>, Self::Error>;
     /// Read PoS total deltas for all validators (active and inactive)
-    fn read_total_deltas(&self) -> Result<TotalDeltas<Self::TokenChange>, Self::Error>;
+    fn read_total_deltas(
+        &self,
+    ) -> Result<TotalDeltas<Self::TokenChange>, Self::Error>;
 }
 
 /// PoS system trait to be implemented in integration that can read and write
@@ -247,7 +250,6 @@ pub trait PosActions: PosReadOnly {
     fn write_total_deltas(
         &mut self,
         value: TotalDeltas<Self::TokenChange>,
-    ) -> Result<(), Self::Error>;
     ) -> Result<(), Self::Error>;
     /// Delete an emptied PoS bond (validator self-bond or a delegation).
     fn delete_bond(
@@ -353,8 +355,7 @@ pub trait PosActions: PosReadOnly {
             validator: validator.clone(),
         };
         let bond = self.read_bond(&bond_id)?;
-        let validator_deltas =
-            self.read_validator_deltas(validator)?;
+        let validator_deltas = self.read_validator_deltas(validator)?;
         let mut total_deltas = self.read_total_deltas()?;
         let mut validator_set = self.read_validator_set()?;
 
@@ -409,9 +410,8 @@ pub trait PosActions: PosReadOnly {
             None => return Err(UnbondError::NoBondFound.into()),
         };
         let unbond = self.read_unbond(&bond_id)?;
-        let mut validator_deltas = self
-            .read_validator_deltas(validator)?
-            .ok_or_else(|| {
+        let mut validator_deltas =
+            self.read_validator_deltas(validator)?.ok_or_else(|| {
                 UnbondError::ValidatorHasNoBonds(validator.clone())
             })?;
         let slashes = self.read_validator_slashes(validator)?;
@@ -1267,7 +1267,8 @@ where
     } in validators.clone()
     {
         total_bonded_balance += *tokens;
-        // is some extra error handling needed here for casting the delta as i64? (TokenChange)
+        // is some extra error handling needed here for casting the delta as
+        // i64? (TokenChange)
         let delta = TokenChange::from(*tokens);
         total_bonded_delta = total_bonded_delta + delta;
         active.insert(WeightedValidator {

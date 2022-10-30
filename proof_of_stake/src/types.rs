@@ -5,12 +5,10 @@ use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::num::TryFromIntError;
-use std::ops::{Add, AddAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use rust_decimal::prelude::ToPrimitive;
-use rust_decimal::Decimal;
+use rust_decimal::prelude::{Decimal, ToPrimitive};
 
 use crate::epoched::{
     Epoched, EpochedDelta, OffsetPipelineLen, OffsetUnbondingLen,
@@ -36,7 +34,8 @@ pub type Unbonds<TokenAmount> =
 pub type ValidatorSets<Address> =
     Epoched<ValidatorSet<Address>, OffsetUnbondingLen>;
 /// Epoched total deltas.
-pub type TotalDeltas<TokenChange> = EpochedDelta<TokenChange, OffsetUnbondingLen>;
+pub type TotalDeltas<TokenChange> =
+    EpochedDelta<TokenChange, OffsetUnbondingLen>;
 /// Epoched validator commission rate
 pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
 
@@ -546,8 +545,12 @@ pub fn decimal_mult_i128(dec: Decimal, int: i128) -> i128 {
     prod.to_i128().expect("Product is out of bounds")
 }
 
-/// Calculate voting power in the tendermint context (which is stored as i64) from the number of tokens
-pub fn into_tm_voting_power(votes_per_token: Decimal, tokens: impl Into<u64>) -> i64 {
+/// Calculate voting power in the tendermint context (which is stored as i64)
+/// from the number of tokens
+pub fn into_tm_voting_power(
+    votes_per_token: Decimal,
+    tokens: impl Into<u64>,
+) -> i64 {
     let prod = decimal_mult_u64(votes_per_token, tokens.into());
     i64::try_from(prod).expect("Invalid voting power")
 }

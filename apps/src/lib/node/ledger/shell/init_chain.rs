@@ -273,7 +273,10 @@ where
                 sum: Some(key_to_tendermint(&consensus_key).unwrap()),
             };
             abci_validator.pub_key = Some(pub_key);
-            abci_validator.power = into_tm_voting_power(genesis.pos_params.tm_votes_per_token, validator.pos_data.tokens);
+            abci_validator.power = into_tm_voting_power(
+                genesis.pos_params.tm_votes_per_token,
+                validator.pos_data.tokens,
+            );
             response.validators.push(abci_validator);
         }
         Ok(response)

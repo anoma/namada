@@ -2,6 +2,7 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
+use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
 use namada::ledger::storage_api;
 use namada::types::address::Address;

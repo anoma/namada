@@ -17,10 +17,10 @@ use crate::btree_set::BTreeSetShims;
 use crate::epoched::DynEpochOffset;
 use crate::parameters::PosParams;
 use crate::types::{
-    decimal_mult_i128, decimal_mult_u64, BondId, Bonds, CommissionRates, Epoch, PublicKeyTmRawHash, Slash, Slashes,
-    Unbonds, ValidatorConsensusKeys, ValidatorSets,
-    ValidatorState, ValidatorStates, ValidatorDeltas,
-    WeightedValidator, TotalDeltas,
+    decimal_mult_i128, decimal_mult_u64, BondId, Bonds, CommissionRates, Epoch,
+    PublicKeyTmRawHash, Slash, Slashes, TotalDeltas, Unbonds,
+    ValidatorConsensusKeys, ValidatorDeltas, ValidatorSets, ValidatorState,
+    ValidatorStates, WeightedValidator,
 };
 
 #[allow(missing_docs)]
@@ -487,7 +487,9 @@ where
                                     // Any validator who's total deltas changed,
                                     // should
                                     // be up-to-date
-                                    if validator.bonded_stake != Into::<u64>::into(*stake_post) {
+                                    if validator.bonded_stake
+                                        != Into::<u64>::into(*stake_post)
+                                    {
                                         errors.push(
                                             Error::InvalidActiveValidator(
                                                 validator.clone(),
@@ -529,7 +531,9 @@ where
                                             {
                                                 is_valid = validator
                                                     .bonded_stake
-                                                    == Into::<u64>::into(*last_total_stake);
+                                                    == Into::<u64>::into(
+                                                        *last_total_stake,
+                                                    );
                                                 break;
                                             } else {
                                                 search_epoch -= 1;
@@ -552,7 +556,9 @@ where
                             // be up-to-date
                             match total_stakes.get(&validator.address) {
                                 Some((_stake_pre, stake_post)) => {
-                                    if validator.bonded_stake != Into::<u64>::into(*stake_post) {
+                                    if validator.bonded_stake
+                                        != Into::<u64>::into(*stake_post)
+                                    {
                                         errors.push(
                                             Error::InvalidInactiveValidator(
                                                 validator.clone(),
@@ -594,7 +600,9 @@ where
                                             {
                                                 is_valid = validator
                                                     .bonded_stake
-                                                    == Into::<u64>::into(*last_total_stake);
+                                                    == Into::<u64>::into(
+                                                        *last_total_stake,
+                                                    );
                                                 break;
                                             } else {
                                                 search_epoch -= 1;
@@ -1948,10 +1956,7 @@ where
     fn total_deltas(
         constants: &Constants,
         errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
-        total_delta_by_epoch: &mut HashMap<
-            Epoch,
-            TokenChange,
-        >,
+        total_delta_by_epoch: &mut HashMap<Epoch, TokenChange>,
         data: Data<TotalDeltas<TokenChange>>,
     ) {
         match (data.pre, data.post) {
