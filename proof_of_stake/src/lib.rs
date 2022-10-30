@@ -122,7 +122,7 @@ pub trait PosReadOnly {
         &self,
         key: &Self::Address,
     ) -> Result<Option<ValidatorStates>, Self::Error>;
-    /// Read PoS validator's total deltas of their bonds (validator self-bonds
+    /// Read PoS validator's deltas of their bonds (validator self-bonds
     /// and delegations).
     fn read_validator_deltas(
         &self,
@@ -361,6 +361,7 @@ pub trait PosActions: PosReadOnly {
         let mut total_deltas = self.read_total_deltas()?;
         let mut validator_set = self.read_validator_set()?;
 
+        // Update/initialize and then write the bond data to storage
         let BondData {
             bond,
             validator_deltas,
@@ -1072,7 +1073,10 @@ pub trait PosBase {
         }
 
         // Write the updated map fo reward accumulators back to storage
-        self.write_consensus_validator_rewards_accumulator(&validator_accumulators);
+        self.write_consensus_validator_rewards_accumulator(
+            &validator_accumulators,
+        );
+
         Ok(())
     }
 
@@ -1121,8 +1125,6 @@ pub trait PosBase {
         self.write_validator_slash(validator, validator_slash);
         self.write_validator_set(&validator_set);
         self.write_total_deltas(&total_deltas);
-
-        // TODO: write total staked tokens (Amount) to storage?
 
         // Transfer the slashed tokens to the PoS slash pool
         self.transfer(
@@ -1749,11 +1751,13 @@ where
         pos_deltas: HashMap::default(),
         neg_deltas: TokenAmount::default(),
     };
-    // Initialize the bond at the pipeline offset
+    // Initialize the new bond at the pipeline offset
     let update_offset = DynEpochOffset::PipelineLen;
     value
         .pos_deltas
         .insert(current_epoch + update_offset.value(params), amount);
+    // If bond deltas do not exist, initialize them; otherwise, add to existing
+    // ones
     let bond = match current_bond {
         None => EpochedDelta::init_at_offset(
             value,
@@ -1767,9 +1771,7 @@ where
         }
     };
 
-    // Update validator set. This has to be done before we update the
-    // `validator_deltas`, because we need to look-up the validator with
-    // its voting power before the change.
+    // Update validator set.
     let token_change = TokenChange::from(amount);
     update_validator_set(
         params,
@@ -1905,7 +1907,7 @@ where
     let to_unbond = &mut to_unbond;
     let mut slashed_amount = TokenAmount::default();
     // Decrement the bond deltas starting from the rightmost value (a bond in a
-    // future-most epoch) until whole amount is decremented
+    // future-most epoch) until the entire amount is decremented
     bond.rev_while(
         |bonds, _epoch| {
             for (epoch_start, bond_delta) in bonds.pos_deltas.iter() {

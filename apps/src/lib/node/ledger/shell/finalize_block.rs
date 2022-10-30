@@ -53,11 +53,12 @@ where
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
-        // reset gas meter before we start
+        // Reset the gas meter before we start
         self.gas_meter.reset();
 
         let mut response = shim::response::FinalizeBlock::default();
-        // begin the next block and check if a new epoch began
+
+        // Begin the next block and check if a new epoch began
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
         let (current_epoch, _gas) = self.storage.get_current_epoch();
@@ -355,7 +356,9 @@ where
                  from tendermint raw hash",
             );
 
-        self.storage.log_block_rewards(*current_epoch, &native_proposer_address, votes).unwrap();
+        self.storage
+            .log_block_rewards(*current_epoch, &native_proposer_address, votes)
+            .unwrap();
     }
 
     /// Calculate the new inflation rate, mint the new tokens to the PoS
@@ -372,7 +375,7 @@ where
         //
         // MASP is included below just for some completeness.
 
-        // read from Parameters storage
+        // Read from Parameters storage
         let epochs_per_year: u64 = self
             .read_storage_key(&params_storage::get_epochs_per_year_key())
             .unwrap();
@@ -389,7 +392,7 @@ where
             .read_storage_key(&params_storage::get_pos_gain_d_key())
             .unwrap();
 
-        // read from PoS storage
+        // Read from PoS storage
         let total_tokens = self
             .read_storage_key(&total_supply_key(&staking_token_address()))
             .unwrap();
@@ -499,8 +502,8 @@ where
                  from tendermint raw hash",
             );
 
-        // Calculate the fraction block rewards and update the accumulator amounts
-        // for each of the consensus validators
+        // Calculate the fractional block rewards and update the accumulator
+        // amounts for each of the consensus validators
         self.storage
             .log_block_rewards(
                 *current_epoch,
@@ -512,12 +515,30 @@ where
         // Calculate the reward token amount for each consensus validator and
         // update the rewards products
         //
-        // TODO: update implementation using lazy DS and be more memory-efficient
-        let first_block_of_this_epoch: u64 = self.storage.block.pred_epochs.first_block_heights.as_slice().last().unwrap().0;
-        let num_blocks_in_this_epoch = current_epoch.0 - first_block_of_this_epoch + 1;
-        
-        let accumulators = self.storage.read_consensus_validator_rewards_accumulator().expect("Accumulators should exist since we are applying the inflation in the last block of an epoch");
-        
+        // TODO: update implementation using lazy DS and be more
+        // memory-efficient
+
+        // Get the number of blocks in this past epoch
+        let first_block_of_this_epoch: u64 = self
+            .storage
+            .block
+            .pred_epochs
+            .first_block_heights
+            .as_slice()
+            .last()
+            .unwrap()
+            .0;
+        let num_blocks_in_this_epoch =
+            current_epoch.0 - first_block_of_this_epoch + 1;
+
+        let accumulators = self
+            .storage
+            .read_consensus_validator_rewards_accumulator()
+            .expect(
+                "Accumulators should exist since we are applying the \
+                 inflation in the last block of an epoch",
+            );
+
         let mut reward_tokens_remaining = pos_minted_tokens.clone();
         let current_epoch = namada::ledger::pos::types::Epoch::from(current_epoch.0);
         let last_epoch = namada::ledger::pos::types::Epoch::from(last_epoch.0);
