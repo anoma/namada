@@ -34,7 +34,7 @@ use namada::types::key::*;
 use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
-use rust_decimal::Decimal;
+use rust_decimal::prelude::{Decimal, ToPrimitive};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
@@ -896,6 +896,14 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
     let validator_set = validator_sets
         .get(epoch)
         .expect("Validator set should be always set in the current epoch");
+
+    // Get the PoS params
+    let pos_params_key = pos::params_key();
+    let pos_params =
+        query_storage_value::<pos::PosParams>(&client, &pos_params_key)
+            .await
+            .expect("PoS parameters should always exist in storage");
+
     match args.validator {
         Some(validator) => {
             let validator = ctx.get(&validator);
@@ -923,10 +931,15 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
                         );
                     }
                     println!(
-                        "Validator {} is {}, bonded stake: {}",
+                        "Validator {} is {}, bonded stake: {}, voting power: \
+                         {}",
                         validator.encode(),
                         if is_active { "active" } else { "inactive" },
-                        bonded_stake
+                        bonded_stake,
+                        (Decimal::from(bonded_stake)
+                            * pos_params.tm_votes_per_token)
+                            .to_u64()
+                            .unwrap(),
                     )
                 }
                 None => {
@@ -971,10 +984,6 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
     let total_bonded_stake = total_deltas
         .get(epoch)
         .expect("Total bonded stake should be always set in the current epoch");
-    let pos_params_key = pos::params_key();
-    let pos_params = query_storage_value::<pos::PosParams>(&client, &pos_params_key)
-        .await
-        .expect("PoS parameters should always exist in storage");
     let total_bonded_stake: u64 = total_bonded_stake
         .try_into()
         .expect("total_bonded_stake should be a positive value");
