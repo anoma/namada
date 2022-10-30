@@ -1031,9 +1031,9 @@ pub trait PosBase {
             0_u64,
             |sum,
              WeightedValidator {
-                 voting_power,
+                 bonded_stake,
                  address: _,
-             }| { sum + u64::from(*voting_power) },
+             }| { sum + *bonded_stake },
         );
 
         // Get set of signing validator addresses and the combined stake of
