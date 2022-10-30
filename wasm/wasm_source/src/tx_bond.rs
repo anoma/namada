@@ -97,7 +97,8 @@ mod tests {
         let signed_tx = tx.sign(&key);
         let tx_data = signed_tx.data.unwrap();
 
-        // Ensure that the initial stake of the sole validator is equal to the PoS account balance
+        // Ensure that the initial stake of the sole validator is equal to the
+        // PoS account balance
         let pos_balance_key = token::balance_key(
             &staking_token_address(),
             &Address::Internal(InternalAddress::PoS),
@@ -109,13 +110,15 @@ mod tests {
 
         // Read some data before the tx is executed
         let total_deltas_pre = ctx().read_total_deltas()?;
-        let validator_deltas_pre = ctx().read_validator_deltas(&bond.validator)?.unwrap();
+        let validator_deltas_pre =
+            ctx().read_validator_deltas(&bond.validator)?.unwrap();
         let validator_sets_pre = ctx().read_validator_set()?;
 
         apply_tx(ctx(), tx_data)?;
 
         // Read the data after the tx is executed.
-        let validator_deltas_post = ctx().read_validator_deltas(&bond.validator)?.unwrap();
+        let validator_deltas_post =
+            ctx().read_validator_deltas(&bond.validator)?.unwrap();
         let total_deltas_post = ctx().read_total_deltas()?;
         let validator_sets_post = ctx().read_validator_set()?;
 
@@ -125,8 +128,10 @@ mod tests {
         //     - `#{PoS}/total_deltas`
         //     - `#{PoS}/validator_set`
 
-        // Check that the validator set and deltas are unchanged before pipeline length and that they are
-        // updated between the pipeline and unbonding lengths
+        // Check that the validator set and deltas are unchanged before pipeline
+        // length and that they are updated between the pipeline and
+        // unbonding lengths
+        //
         // TODO: should end be pipeline + unbonding now?
         if bond.amount == token::Amount::from(0) {
             // None of the optional storage fields should have been updated
@@ -138,20 +143,20 @@ mod tests {
                 assert_eq!(
                     validator_deltas_post.get(epoch),
                     Some(initial_stake.into()),
-                    "The validator deltas before the pipeline offset must not change \
-                     - checking in epoch: {epoch}"
+                    "The validator deltas before the pipeline offset must not \
+                     change - checking in epoch: {epoch}"
                 );
                 assert_eq!(
                     total_deltas_post.get(epoch),
                     Some(initial_stake.into()),
-                    "The total deltas before the pipeline offset must not change \
-                     - checking in epoch: {epoch}"
+                    "The total deltas before the pipeline offset must not \
+                     change - checking in epoch: {epoch}"
                 );
                 assert_eq!(
                     validator_sets_pre.get(epoch),
                     validator_sets_post.get(epoch),
                     "Validator set before pipeline offset must not change - \
-                    checking epoch {epoch}"
+                     checking epoch {epoch}"
                 );
             }
             for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
@@ -160,19 +165,20 @@ mod tests {
                 assert_eq!(
                     validator_deltas_post.get(epoch),
                     Some(expected_stake),
-                    "The total deltas at and after the pipeline offset epoch must \
-                     be incremented by the bonded amount - checking in epoch: \
-                     {epoch}"
+                    "The total deltas at and after the pipeline offset epoch \
+                     must be incremented by the bonded amount - checking in \
+                     epoch: {epoch}"
                 );
                 assert_eq!(
                     total_deltas_post.get(epoch),
                     Some(expected_stake),
-                    "The total deltas at and after the pipeline offset epoch must \
-                     be incremented by the bonded amount - checking in epoch: \
-                     {epoch}"
+                    "The total deltas at and after the pipeline offset epoch \
+                     must be incremented by the bonded amount - checking in \
+                     epoch: {epoch}"
                 );
                 assert_ne!(
-                    validator_sets_pre.get(epoch), validator_sets_post.get(epoch),
+                    validator_sets_pre.get(epoch),
+                    validator_sets_post.get(epoch),
                     "Validator set at and after pipeline offset must have \
                      changed - checking epoch {epoch}"
                 );
@@ -224,7 +230,8 @@ mod tests {
             }
         } else {
             // This is a self-bond
-            // Check that a bond already exists from genesis with initial stake for the validator
+            // Check that a bond already exists from genesis with initial stake
+            // for the validator
             let genesis_epoch =
                 namada_tx_prelude::proof_of_stake::types::Epoch::from(0);
             for epoch in 0..pos_params.pipeline_len {

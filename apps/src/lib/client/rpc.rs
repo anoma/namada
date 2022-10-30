@@ -21,7 +21,8 @@ use namada::ledger::pos::types::{
     decimal_mult_u64, Epoch as PosEpoch, WeightedValidator,
 };
 use namada::ledger::pos::{
-    self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds, into_tm_voting_power,
+    self, into_tm_voting_power, is_validator_slashes_key, BondId, Bonds,
+    PosParams, Slash, Unbonds,
 };
 use namada::ledger::queries::{self, RPC};
 use namada::types::address::Address;
@@ -899,17 +900,18 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
         Some(validator) => {
             let validator = ctx.get(&validator);
             // Find voting power for the given validator
-            let validator_deltas_key =
-                pos::validator_deltas_key(&validator);
-            let validator_deltas = query_storage_value::<
-                pos::ValidatorDeltas,
-            >(&client, &validator_deltas_key)
+            let validator_deltas_key = pos::validator_deltas_key(&validator);
+            let validator_deltas = query_storage_value::<pos::ValidatorDeltas>(
+                &client,
+                &validator_deltas_key,
+            )
             .await;
             match validator_deltas.and_then(|data| data.get(epoch)) {
                 Some(val_stake) => {
                     let bonded_stake: u64 = val_stake.try_into().expect(
-                            "The sum of the bonded stake deltas shouldn't be negative",
-                        );
+                        "The sum of the bonded stake deltas shouldn't be \
+                         negative",
+                    );
                     let weighted = WeightedValidator {
                         address: validator.clone(),
                         bonded_stake,
@@ -962,12 +964,10 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
         }
     }
     let total_deltas_key = pos::total_deltas_key();
-    let total_deltas = query_storage_value::<pos::TotalDeltas>(
-        &client,
-        &total_deltas_key,
-    )
-    .await
-    .expect("Total bonded stake should always be set");
+    let total_deltas =
+        query_storage_value::<pos::TotalDeltas>(&client, &total_deltas_key)
+            .await
+            .expect("Total bonded stake should always be set");
     let total_bonded_stake = total_deltas
         .get(epoch)
         .expect("Total bonded stake should be always set in the current epoch");
@@ -975,9 +975,12 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
     let pos_params = query_storage_value::<pos::PosParams>(&client, &pos_params_key)
         .await
         .expect("PoS parameters should always exist in storage");
-    let total_bonded_stake: u64 = total_bonded_stake.try_into().expect("total_bonded_stake should be a positive value");
-    let total_voting_power = into_tm_voting_power(pos_params.tm_votes_per_token, total_bonded_stake);
-    
+    let total_bonded_stake: u64 = total_bonded_stake
+        .try_into()
+        .expect("total_bonded_stake should be a positive value");
+    let total_voting_power =
+        into_tm_voting_power(pos_params.tm_votes_per_token, total_bonded_stake);
+
     println!("Total voting power: {}", total_voting_power);
 }
 
@@ -1908,8 +1911,7 @@ async fn get_validator_stake(
     .expect("Total deltas should be defined");
     let validator_stake = validator_deltas.get(epoch);
 
-    VotePower::try_from(validator_stake.unwrap_or_default())
-        .unwrap_or_default()
+    VotePower::try_from(validator_stake.unwrap_or_default()).unwrap_or_default()
 }
 
 pub async fn get_delegators_delegation(

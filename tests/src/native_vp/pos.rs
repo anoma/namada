@@ -573,7 +573,6 @@ pub mod testing {
     use derivative::Derivative;
     use itertools::Either;
     use namada::ledger::pos::namada_proof_of_stake::btree_set::BTreeSetShims;
-    use namada::ledger::pos::types::decimal_mult_i128;
     use namada::types::key::common::PublicKey;
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;
@@ -583,8 +582,7 @@ pub mod testing {
     };
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_rate;
     use namada_tx_prelude::proof_of_stake::types::{
-        Bond, Unbond, ValidatorState,
-        WeightedValidator,
+        Bond, Unbond, ValidatorState, WeightedValidator,
     };
     use namada_tx_prelude::proof_of_stake::{
         staking_token_address, BondId, Bonds, PosParams, Unbonds,
@@ -991,13 +989,12 @@ pub mod testing {
                     let offset = DynEpochOffset::UnbondingLen;
                     let token_delta = -amount.change();
 
-
                     let mut changes = Vec::with_capacity(6);
 
-                    // IMPORTANT: we have to update `ValidatorSet` and
-                    // `TotalVotingPower` before we update
-                    // `ValidatorTotalDeltas`, because they needs to
-                    // read the total deltas before they change.
+                    // IMPORTANT: we have to update `ValidatorSet` before we
+                    // update `ValidatorDeltas`, because
+                    // they needs to read the total deltas
+                    // before they change.
                     changes.extend([
                         PosStorageChange::ValidatorSet {
                             validator: validator.clone(),
@@ -1011,11 +1008,11 @@ pub mod testing {
                         PosStorageChange::ValidatorDeltas {
                             validator: validator.clone(),
                             delta: token_delta,
-                            offset: offset,
+                            offset,
                         },
                     ]);
 
-                    // do I need ValidatorDeltas in here again?? 
+                    // do I need ValidatorDeltas in here again??
                     changes.extend([
                         // IMPORTANT: we have to update `Unbond` before we
                         // update `Bond`, because it needs to read the bonds to
@@ -1227,8 +1224,7 @@ pub mod testing {
                 tx::ctx().write_unbond(&bond_id, unbonds).unwrap();
             }
             PosStorageChange::TotalDeltas { delta, offset } => {
-                let mut total_deltas =
-                    tx::ctx().read_total_deltas().unwrap();
+                let mut total_deltas = tx::ctx().read_total_deltas().unwrap();
                 match offset {
                     Either::Left(offset) => {
                         total_deltas.add_at_offset(
@@ -1247,9 +1243,7 @@ pub mod testing {
                         );
                     }
                 }
-                tx::ctx()
-                    .write_total_deltas(total_deltas)
-                    .unwrap()
+                tx::ctx().write_total_deltas(total_deltas).unwrap()
             }
             PosStorageChange::ValidatorAddressRawHash {
                 address,
@@ -1408,7 +1402,8 @@ pub mod testing {
                     .and_then(|deltas| deltas.get(epoch));
                 match validator_stake {
                     Some(validator_stake) => {
-                        let tokens_pre: u64 = validator_stake.try_into().unwrap();
+                        let tokens_pre: u64 =
+                            validator_stake.try_into().unwrap();
                         let tokens_post: u64 =
                             (validator_stake + token_delta).try_into().unwrap();
                         let weighed_validator_pre = WeightedValidator {

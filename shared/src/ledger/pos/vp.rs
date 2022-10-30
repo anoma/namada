@@ -7,23 +7,21 @@ use borsh::BorshDeserialize;
 use itertools::Itertools;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
-pub use namada_proof_of_stake::types::{
-    self, Slash, Slashes, ValidatorStates
-};
+pub use namada_proof_of_stake::types::{self, Slash, Slashes, ValidatorStates};
 use namada_proof_of_stake::validation::validate;
 use namada_proof_of_stake::{validation, PosReadOnly};
 use rust_decimal::Decimal;
 use thiserror::Error;
 
 use super::{
-    bond_key, is_bond_key, is_params_key, is_total_deltas_key,
-    is_unbond_key, is_validator_set_key, is_validator_deltas_key,
-    params_key, staking_token_address, unbond_key, validator_commission_rate_key,
-    validator_consensus_key_key, validator_max_commission_rate_change_key,
-    validator_set_key, validator_slashes_key, validator_state_key, total_deltas_key,
-    validator_deltas_key, BondId, Bonds,
-    CommissionRates, Unbonds, ValidatorConsensusKeys, ValidatorSets,
-    ValidatorDeltas,
+    bond_key, is_bond_key, is_params_key, is_total_deltas_key, is_unbond_key,
+    is_validator_deltas_key, is_validator_set_key, params_key,
+    staking_token_address, total_deltas_key, unbond_key,
+    validator_commission_rate_key, validator_consensus_key_key,
+    validator_deltas_key, validator_max_commission_rate_change_key,
+    validator_set_key, validator_slashes_key, validator_state_key, BondId,
+    Bonds, CommissionRates, Unbonds, ValidatorConsensusKeys, ValidatorDeltas,
+    ValidatorSets,
 };
 use crate::impl_pos_read_only;
 use crate::ledger::governance::vp::is_proposal_accepted;
