@@ -309,6 +309,7 @@ pub enum SlashType {
 }
 
 /// VoteInfo inspired from tendermint
+#[derive(Debug, Clone)]
 pub struct VoteInfo {
     /// the first 20 bytes of the validator public key hash (SHA-256) taken
     /// from tendermint
