@@ -216,7 +216,7 @@ pub struct Slash {
     pub epoch: Epoch,
     /// Block height at which the slashable event occurred.
     pub block_height: u64,
-    /// A type of slashsable event.
+    /// A type of slashable event.
     pub r#type: SlashType,
     /// A rate is the portion of staked tokens that are slashed.
     pub rate: Decimal,
@@ -226,7 +226,7 @@ pub struct Slash {
 /// their staked tokens at and before the epoch of the slash.
 pub type Slashes = Vec<Slash>;
 
-/// A type of slashsable event.
+/// A type of slashable event.
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub enum SlashType {
     /// Duplicate block vote.

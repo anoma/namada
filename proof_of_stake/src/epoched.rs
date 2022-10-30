@@ -197,7 +197,7 @@ where
         self.get_at_index(index)
     }
 
-    /// Find the delta value at or before the given index.
+    /// Find the value at or before the given index.
     fn get_at_index(&self, offset: usize) -> Option<&Data> {
         let mut index = cmp::min(offset, self.data.len());
         loop {

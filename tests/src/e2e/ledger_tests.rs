@@ -1810,7 +1810,7 @@ fn pos_bonds() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    // 2. Submit a self-bond for the gepnesis validator
+    // 2. Submit a self-bond for the genesis validator
     let tx_args = vec![
         "bond",
         "--validator",
@@ -1956,7 +1956,6 @@ fn pos_bonds() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
-
     Ok(())
 }
 

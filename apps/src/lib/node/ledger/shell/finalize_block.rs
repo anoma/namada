@@ -52,11 +52,12 @@ where
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
-        // reset gas meter before we start
+        // Reset the gas meter before we start
         self.gas_meter.reset();
 
         let mut response = shim::response::FinalizeBlock::default();
-        // begin the next block and check if a new epoch began
+
+        // Begin the next block and check if a new epoch began
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
         let (current_epoch, _gas) = self.storage.get_current_epoch();
@@ -487,27 +488,27 @@ where
         //
         // MASP is included below just for some completeness.
 
-        // read from Parameters storage
-        let epochs_per_year: u64 = self
-            .read_storage_key(&params_storage::get_epochs_per_year_key())
-            .unwrap();
+        // Read from Parameters storage
+        let epochs_per_year: u64 =
+            self.read_storage_key(&params_storage::get_epochs_per_year_key());
         let pos_locked_ratio_last: Decimal = self
-            .read_storage_key(&params_storage::get_staked_ratio_key())
-            .unwrap();
-        let pos_last_reward_rate = self
-            .read_storage_key(&params_storage::get_pos_reward_rate_key())
-            .unwrap();
+            .expect("Epochs per year should exist in storage")
+            .read_storage_key(&params_storage::get_staked_ratio_key());
+        let pos_last_inflation_rate = self
+            .expect("PoS staked ratio should exist in storage")
+            .read_storage_key(&params_storage::get_pos_inflation_rate_key())
+            .expect("PoS inflation rate should exist in storage");
         let pos_p_gain: Decimal = self
             .read_storage_key(&params_storage::get_pos_gain_p_key())
-            .unwrap();
+            .expect("PoS P-gain factor should exist in storage");
         let pos_d_gain: Decimal = self
             .read_storage_key(&params_storage::get_pos_gain_d_key())
-            .unwrap();
+            .expect("PoS D-gain factor should exist in storage");
 
-        // read from PoS storage
+        // Read from PoS storage
         let total_tokens = self
             .read_storage_key(&total_supply_key(&staking_token_address()))
-            .unwrap();
+            .expect("Total NAM balance should exist in storage");
         let total_deltas = self.storage.read_total_deltas();
         let pos_locked_supply = total_deltas
             .get(last_epoch)
@@ -613,7 +614,7 @@ where
                  from tendermint raw hash",
             );
 
-        // Calculate the fraction block rewards and update the accumulator
+        // Calculate the fractional block rewards and update the accumulator
         // amounts for each of the consensus validators
         self.storage
             .log_block_rewards(*current_epoch, &native_proposer_address, votes)
@@ -624,6 +625,8 @@ where
         //
         // TODO: update implementation using lazy DS and be more
         // memory-efficient
+
+        // Get the number of blocks in this past epoch
         let first_block_of_this_epoch: u64 = self
             .storage
             .block
