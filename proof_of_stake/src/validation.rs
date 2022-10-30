@@ -412,7 +412,7 @@ where
             total_stake_by_epoch,
             validator_set_pre,
             validator_set_post,
-            total_deltas_by_epoch,
+            total_deltas_by_epoch: _,
             bonded_stake_by_epoch,
             new_validators,
         } = Validate::<Address, TokenAmount, TokenChange, PublicKey>::accumulate_changes(
@@ -960,7 +960,7 @@ where
 {
     fn accumulate_changes(
         changes: Vec<DataUpdate<Address, TokenAmount, TokenChange, PublicKey>>,
-        params: &PosParams,
+        _params: &PosParams,
         constants: &Constants,
         errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
     ) -> Accumulator<Address, TokenAmount, TokenChange, PublicKey> {
@@ -975,7 +975,7 @@ where
             total_deltas,
             total_stake_by_epoch,
             total_deltas_by_epoch,
-            bonded_stake_by_epoch,
+            bonded_stake_by_epoch: _,
             validator_set_pre,
             validator_set_post,
             new_validators,
