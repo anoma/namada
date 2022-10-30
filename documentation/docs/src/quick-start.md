@@ -55,7 +55,7 @@ Accounts on Namada are divided into two subcategories:
 * Implicit accounts (no attached Validity Predicate)
 * Established accounts (attached Validity Predicate)
 
-In order to make transactions on Namada, an implicit account is required.
+In order to make transactions on Namada, an account is required, and an implicit account can be created easily.
 
 An implicit account can be generated from the commands described below
 
