@@ -378,24 +378,24 @@ where
         // Read from Parameters storage
         let epochs_per_year: u64 = self
             .read_storage_key(&params_storage::get_epochs_per_year_key())
-            .unwrap();
         let pos_locked_ratio_last: Decimal = self
+            .expect("Epochs per year should exist in storage");
             .read_storage_key(&params_storage::get_staked_ratio_key())
-            .unwrap();
-        let pos_last_reward_rate = self
-            .read_storage_key(&params_storage::get_pos_reward_rate_key())
-            .unwrap();
+        let pos_last_inflation_rate = self
+            .expect("PoS staked ratio should exist in storage");
+            .read_storage_key(&params_storage::get_pos_inflation_rate_key())
+            .expect("PoS inflation rate should exist in storage");
         let pos_p_gain: Decimal = self
             .read_storage_key(&params_storage::get_pos_gain_p_key())
-            .unwrap();
+            .expect("PoS P-gain factor should exist in storage");
         let pos_d_gain: Decimal = self
             .read_storage_key(&params_storage::get_pos_gain_d_key())
-            .unwrap();
+            .expect("PoS D-gain factor should exist in storage");
 
         // Read from PoS storage
         let total_tokens = self
             .read_storage_key(&total_supply_key(&staking_token_address()))
-            .unwrap();
+            .expect("Total NAM balance should exist in storage");
         let total_deltas = self.storage.read_total_deltas();
         let pos_locked_supply = total_deltas
             .get(last_epoch)

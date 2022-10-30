@@ -22,7 +22,7 @@ pub mod validation;
 use core::fmt::Debug;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
-use std::fmt::{Display, Error};
+use std::fmt::Display;
 use std::hash::Hash;
 use std::num::TryFromIntError;
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
@@ -995,7 +995,7 @@ pub trait PosBase {
         current_epoch: impl Into<Epoch>,
         proposer_address: &Self::Address,
         votes: &Vec<VoteInfo>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), InflationError> {
         let current_epoch: Epoch = current_epoch.into();
         let validator_set = self.read_validator_set();
         let validators = validator_set.get(current_epoch).unwrap();
@@ -1038,7 +1038,10 @@ pub trait PosBase {
             total_active_stake,
         );
 
-        rewards_calculator.set_reward_coeffs().unwrap();
+        let coeffs = match rewards_calculator.get_reward_coeffs() {
+            Ok(coeffs) => coeffs,
+            Err(_) => return Err(InflationError::Error),
+        };
 
         // Iterate over validators, calculating their fraction of the block rewards accounting for
         // possible block proposal and signing (voting)
@@ -1142,6 +1145,13 @@ pub trait PosBase {
 pub enum GenesisError {
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum InflationError {
+    #[error("Error")]
+    Error,
 }
 
 #[allow(missing_docs)]
