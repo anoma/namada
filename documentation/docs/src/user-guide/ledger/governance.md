@@ -45,7 +45,7 @@ You should change the value of:
 - `Author` field with the address of `my-new-acc`.
 - `voting_start_epoch` with a future epoch (must be a multiple of 3) for which you want the voting to begin
 - `voting_end_epoch` with an epoch greater than `voting_start_epoch`, a multiple of 3, and by which no further votes will be accepted
-- `grace_epoch` with an epoch greater of `voting_end_epoch` + 6, in which the proposal, if passed, will come into effect
+- `grace_epoch` with an epoch greater than `voting_end_epoch` + 6, in which the proposal, if passed, will come into effect
 - `proposal_code_path` with the absolute path of the wasm file to execute (or remove the field completely)
 
 As soon as your `proposal.json` file is ready, you can submit the proposal with (making sure to be in the same directory as the `proposal.json` file):
