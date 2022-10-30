@@ -69,7 +69,7 @@ Successfully added a key and an address with alias: "example-implicit"
 ```
 An implicit account with alias "example-implicit" has now been successfully generated and stored locally in the wallet.
 
-It is possible to "upgrade" this implicit account to become an Established Account through submitting a transaction to do so. Note that this transaction, as with any transaction on Namada, will consume "gas", and will require a positive balance of NAM tokens.
+It is possible to derive an Established Account through submitting a transaction, signing it with the key for the implicit account. Note that this transaction, as with any transaction on Namada, will consume "gas", and will require a positive balance of NAM tokens.
 
 To initialize an account operator on-chain under the alias "example-established":
 
