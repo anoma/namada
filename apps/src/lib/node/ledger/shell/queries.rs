@@ -93,6 +93,8 @@ where
             .expect("Serializing public key should not fail");
         // get the current epoch
         let (current_epoch, _) = self.storage.get_current_epoch();
+        // get the PoS params
+        let pos_params = self.storage.read_pos_params();
         // get the active validator set
         self.storage
             .read_validator_set()
@@ -124,7 +126,10 @@ where
                         "DKG public key in storage should be deserializable",
                     );
                 TendermintValidator {
-                    power: validator.bonded_stake,
+                    power: into_tm_voting_power(
+                        pos_params.tm_votes_per_token,
+                        validator.bonded_stake,
+                    ) as u64,
                     address: validator.address.to_string(),
                     public_key: dkg_publickey.into(),
                 }
