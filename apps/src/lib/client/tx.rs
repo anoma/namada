@@ -314,6 +314,8 @@ pub async fn submit_init_validator(
     }
     let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
 
+    let eth_hot_key_public =
+        key::secp256k1::PublicKey::try_from_pk(&eth_hot_key.ref_to()).unwrap();
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
@@ -321,10 +323,7 @@ pub async fn submit_init_validator(
             &eth_cold_key.ref_to(),
         )
         .unwrap(),
-        eth_hot_key: key::secp256k1::PublicKey::try_from_pk(
-            &eth_hot_key.ref_to(),
-        )
-        .unwrap(),
+        eth_hot_key: eth_hot_key_public.clone(),
         rewards_account_key,
         protocol_key,
         dkg_key,
@@ -332,6 +331,11 @@ pub async fn submit_init_validator(
         rewards_vp_code,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    eprintln!("ETH HOT KEY: {:#?}", eth_hot_key_public);
+    eprintln!(
+        "ETH HOT KEY BORSH: {:#?}",
+        eth_hot_key_public.try_to_vec().unwrap()
+    );
     let tx = Tx::new(tx_code, Some(data));
     let (mut ctx, initialized_accounts) =
         process_tx(ctx, &tx_args, tx, Some(&source)).await;

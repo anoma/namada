@@ -11,6 +11,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let data = signed.data.ok_or_err_msg("Missing data")?;
     let init_validator = InitValidator::try_from_slice(&data[..])
         .wrap_err("failed to decode InitValidator")?;
+    log_string(&format!("InitValidator: {:#?}", init_validator));
     debug_log!("apply_tx called to init a new validator account");
 
     // Register the validator in PoS
