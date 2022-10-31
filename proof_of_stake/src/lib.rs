@@ -212,6 +212,18 @@ pub trait PosActions: PosReadOnly {
         key: &Self::Address,
         value: ValidatorConsensusKeys<Self::PublicKey>,
     ) -> Result<(), Self::Error>;
+    /// Write PoS validator's Eth bridge governance key
+    fn write_validator_eth_cold_key(
+        &mut self,
+        address: &Self::Address,
+        value: ValidatorEthKey<Self::PublicKey>,
+    ) -> Result<(), Self::Error>;
+    /// Write PoS validator's Eth validator set update signing key
+    fn write_validator_eth_hot_key(
+        &mut self,
+        address: &Self::Address,
+        value: ValidatorEthKey<Self::PublicKey>,
+    ) -> Result<(), Self::Error>;
     /// Write PoS validator's state.
     fn write_validator_state(
         &mut self,
@@ -254,19 +266,6 @@ pub trait PosActions: PosReadOnly {
         &mut self,
         value: TotalVotingPowers,
     ) -> Result<(), Self::Error>;
-    /// Write PoS validator's Eth bridge governance key
-    fn write_validator_eth_cold_key(
-        &mut self,
-        address: &Self::Address,
-        value: ValidatorEthKey<Self::PublicKey>,
-    );
-
-    /// Write PoS validator's Eth validator set update signing key
-    fn write_validator_eth_hot_key(
-        &mut self,
-        address: &Self::Address,
-        value: ValidatorEthKey<Self::PublicKey>,
-    );
 
     /// Delete an emptied PoS bond (validator self-bond or a delegation).
     fn delete_bond(
@@ -337,8 +336,8 @@ pub trait PosActions: PosReadOnly {
             staking_reward_address.clone(),
         )?;
         self.write_validator_consensus_key(address, consensus_key)?;
-        self.write_validator_eth_cold_key(address, eth_cold_key);
-        self.write_validator_eth_hot_key(address, eth_hot_key);
+        self.write_validator_eth_cold_key(address, eth_cold_key)?;
+        self.write_validator_eth_hot_key(address, eth_hot_key)?;
         self.write_validator_state(address, state)?;
         self.write_validator_set(validator_set)?;
         self.write_validator_address_raw_hash(address, &consensus_key_clone)?;

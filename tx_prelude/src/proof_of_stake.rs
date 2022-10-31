@@ -163,6 +163,22 @@ impl namada_proof_of_stake::PosActions for Ctx {
         self.write(&validator_consensus_key_key(key), &value)
     }
 
+    fn write_validator_eth_cold_key(
+        &mut self,
+        address: &Self::Address,
+        value: types::ValidatorEthKey<Self::PublicKey>,
+    ) -> Result<(), Self::Error> {
+        self.write(&validator_eth_cold_key_key(address), encode(&value))
+    }
+
+    fn write_validator_eth_hot_key(
+        &mut self,
+        address: &Self::Address,
+        value: types::ValidatorEthKey<Self::PublicKey>,
+    ) -> Result<(), Self::Error> {
+        self.write(&validator_eth_hot_key_key(address), encode(&value))
+    }
+
     fn write_validator_state(
         &mut self,
         key: &Self::Address,
@@ -215,24 +231,6 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: TotalVotingPowers,
     ) -> Result<(), Self::Error> {
         self.write(&total_voting_power_key(), &value)
-    }
-
-    fn write_validator_eth_cold_key(
-        &mut self,
-        address: &Self::Address,
-        value: types::ValidatorEthKey<Self::PublicKey>,
-    ) {
-        self.write(&validator_eth_cold_key_key(address), encode(&value))
-            .unwrap();
-    }
-
-    fn write_validator_eth_hot_key(
-        &mut self,
-        address: &Self::Address,
-        value: types::ValidatorEthKey<Self::PublicKey>,
-    ) {
-        self.write(&validator_eth_hot_key_key(address), encode(&value))
-            .unwrap();
     }
 
     fn delete_bond(&mut self, key: &BondId) -> Result<(), Self::Error> {
