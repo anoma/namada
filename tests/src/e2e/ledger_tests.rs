@@ -9,6 +9,7 @@
 //! To keep the temporary files created by a test, use env var
 //! `ANOMA_E2E_KEEP_TEMP=true`.
 
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -16,6 +17,7 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
+use namada::types::address::Address;
 use namada::types::token;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
@@ -1105,36 +1107,8 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // 2. Submit valid proposal
-    let proposal_code = wasm_abs_path(TX_PROPOSAL_CODE);
-
     let albert = find_address(&test, ALBERT)?;
-    let valid_proposal_json = json!(
-        {
-            "content": {
-                "title": "TheTitle",
-                "authors": "test@test.com",
-                "discussions-to": "www.github.com/anoma/aip/1",
-                "created": "2022-03-10T08:54:37Z",
-                "license": "MIT",
-                "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
-                "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
-                "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
-                "requires": "2"
-            },
-            "author": albert,
-            "voting_start_epoch": 12_u64,
-            "voting_end_epoch": 24_u64,
-            "grace_epoch": 30_u64,
-            "proposal_code_path": proposal_code.to_str().unwrap()
-        }
-    );
-    let valid_proposal_json_path =
-        test.test_dir.path().join("valid_proposal.json");
-    generate_proposal_json_file(
-        valid_proposal_json_path.as_path(),
-        &valid_proposal_json,
-    );
-
+    let valid_proposal_json_path = prepare_proposal_data(&test, albert);
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let submit_proposal_args = vec![
@@ -2046,4 +2020,163 @@ fn double_signing_gets_slashed() -> Result<()> {
     validator_1.exp_string("Slashing")?;
 
     Ok(())
+}
+
+/// In this test we:
+/// 1. Run the ledger node
+/// 2. For some transactions that need signature authorization:
+///    2a. Generate a new key for an implicit account.
+///    2b. Send some funds to the implicit account.
+///    2c. Submit the tx with the implicit account as the source, that
+///        requires that the account has revealed its PK. This should be done
+///        by the client automatically.
+///    2d. Submit same tx again, this time the client shouldn't reveal again.
+#[test]
+fn implicit_account_reveal_pk() -> Result<()> {
+    let test = setup::network(|genesis| genesis, None)?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+
+    ledger.exp_string("Anoma ledger node started")?;
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // 2. Some transactions that need signature authorization:
+    let txs_args: Vec<Box<dyn Fn(&str) -> Vec<String>>> = vec![
+        // A token transfer tx
+        Box::new(|source| {
+            [
+                "transfer",
+                "--source",
+                source,
+                "--target",
+                ALBERT,
+                "--token",
+                XAN,
+                "--amount",
+                "10.1",
+                "--ledger-address",
+                &validator_one_rpc,
+            ]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect()
+        }),
+        // A bond
+        Box::new(|source| {
+            vec![
+                "bond",
+                "--validator",
+                "validator-0",
+                "--source",
+                source,
+                "--amount",
+                "10.1",
+                "--ledger-address",
+                &validator_one_rpc,
+            ]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect()
+        }),
+        // Submit proposal
+        Box::new(|source| {
+            // Gen data for proposal tx
+            let source = find_address(&test, source).unwrap();
+            let valid_proposal_json_path = prepare_proposal_data(&test, source);
+            vec![
+                "init-proposal",
+                "--data-path",
+                valid_proposal_json_path.to_str().unwrap(),
+                "--ledger-address",
+                &validator_one_rpc,
+            ]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect()
+        }),
+    ];
+
+    for (ix, tx_args) in txs_args.into_iter().enumerate() {
+        let key_alias = format!("key-{ix}");
+
+        // 2a. Generate a new key for an implicit account.
+        let mut cmd = run!(
+            test,
+            Bin::Wallet,
+            &["key", "gen", "--alias", &key_alias, "--unsafe-dont-encrypt"],
+            Some(20),
+        )?;
+        cmd.assert_success();
+
+        // Apply the key_alias once the key is generated to obtain tx args
+        let tx_args = tx_args(&key_alias);
+
+        // 2b. Send some funds to the implicit account.
+        let credit_args = [
+            "transfer",
+            "--source",
+            BERTHA,
+            "--target",
+            &key_alias,
+            "--token",
+            XAN,
+            "--amount",
+            "1000",
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let mut client = run!(test, Bin::Client, credit_args, Some(40))?;
+        client.assert_success();
+
+        // 2c. Submit the tx with the implicit account as the source.
+        let expected_reveal = "Submitting a tx to reveal the public key";
+        let mut client = run!(test, Bin::Client, &tx_args, Some(40))?;
+        client.exp_string(expected_reveal)?;
+        client.assert_success();
+
+        // 2d. Submit same tx again, this time the client shouldn't reveal
+        // again.
+        let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+        let unread = client.exp_eof()?;
+        assert!(!unread.contains(expected_reveal))
+    }
+
+    Ok(())
+}
+
+/// Prepare proposal data in the test's temp dir from the given source address.
+/// This can be submitted with "init-proposal" command.
+fn prepare_proposal_data(test: &setup::Test, source: Address) -> PathBuf {
+    let proposal_code = wasm_abs_path(TX_PROPOSAL_CODE);
+    let valid_proposal_json = json!(
+        {
+            "content": {
+                "title": "TheTitle",
+                "authors": "test@test.com",
+                "discussions-to": "www.github.com/anoma/aip/1",
+                "created": "2022-03-10T08:54:37Z",
+                "license": "MIT",
+                "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
+                "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
+                "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+                "requires": "2"
+            },
+            "author": source,
+            "voting_start_epoch": 12_u64,
+            "voting_end_epoch": 24_u64,
+            "grace_epoch": 30_u64,
+            "proposal_code_path": proposal_code.to_str().unwrap()
+        }
+    );
+    let valid_proposal_json_path =
+        test.test_dir.path().join("valid_proposal.json");
+    generate_proposal_json_file(
+        valid_proposal_json_path.as_path(),
+        &valid_proposal_json,
+    );
+    valid_proposal_json_path
 }
