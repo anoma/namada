@@ -1,4 +1,5 @@
 #!/bin/sh
+# depends on cargo-release 0.21.4, git 2.24.0 or later, unclog 0.5.0
 set -e
 
 if [ -z "$1" ]; then
