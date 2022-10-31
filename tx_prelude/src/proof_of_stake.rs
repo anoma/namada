@@ -168,7 +168,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         address: &Self::Address,
         value: types::ValidatorEthKey<Self::PublicKey>,
     ) -> Result<(), Self::Error> {
-        self.write(&validator_eth_cold_key_key(address), encode(&value))
+        self.write(&validator_eth_cold_key_key(address), &value)
     }
 
     fn write_validator_eth_hot_key(
@@ -176,7 +176,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         address: &Self::Address,
         value: types::ValidatorEthKey<Self::PublicKey>,
     ) -> Result<(), Self::Error> {
-        self.write(&validator_eth_hot_key_key(address), encode(&value))
+        self.write(&validator_eth_hot_key_key(address), &value)
     }
 
     fn write_validator_state(
