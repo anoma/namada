@@ -27,6 +27,8 @@ pub struct TransferToEthereum {
     pub asset: EthAddress,
     /// The recipient address
     pub recipient: EthAddress,
+    /// The sender of the transfer
+    pub sender: Address,
     /// The amount to be transferred
     pub amount: Amount,
     /// a nonce for replay protection
