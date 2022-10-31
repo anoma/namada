@@ -174,7 +174,6 @@ fn validate_tx(
 
 #[cfg(test)]
 mod tests {
-    use address::testing::arb_non_internal_address;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
     use namada_tests::tx::{self, tx_host_env, TestTxEnv};
@@ -212,7 +211,9 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
-        let vp_owner = address::testing::established_address_1();
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
         let source = address::testing::established_address_2();
         let token = address::xan();
         let amount = token::Amount::from(10_098_123);
@@ -256,7 +257,9 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
-        let vp_owner = address::testing::established_address_1();
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
         let target = address::testing::established_address_2();
         let token = address::xan();
         let amount = token::Amount::from(10_098_123);
@@ -300,9 +303,9 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
-        let vp_owner = address::testing::established_address_1();
-        let keypair = key::testing::keypair_1();
-        let public_key = keypair.ref_to();
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
         let target = address::testing::established_address_2();
         let token = address::xan();
         let amount = token::Amount::from(10_098_123);
@@ -332,7 +335,7 @@ mod tests {
 
         let mut vp_env = vp_host_env::take();
         let tx = vp_env.tx.clone();
-        let signed_tx = tx.sign(&keypair);
+        let signed_tx = tx.sign(&secret_key);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;
         let keys_changed: BTreeSet<storage::Key> =
@@ -351,7 +354,9 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
-        let vp_owner = address::testing::established_address_1();
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
         let source = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::xan();
@@ -391,20 +396,20 @@ mod tests {
         );
     }
 
-    prop_compose! {
-        /// Generates an account address and a storage key inside its storage.
-        fn arb_account_storage_subspace_key()
-            // Generate an address
-            (address in arb_non_internal_address())
+    /// Generates a keypair, derive an implicit address from it and generate
+    /// a storage key inside its storage.
+    fn arb_account_storage_subspace_key()
+    -> impl Strategy<Value = (key::common::SecretKey, Address, Key)> {
+        // Generate a keypair
+        key::testing::arb_common_keypair().prop_flat_map(|sk| {
+            let pk = sk.ref_to();
+            let addr: Address = (&pk).into();
             // Generate a storage key other than its VP key (VP cannot be
             // modified directly via `write`, it has to be modified via
             // `tx::update_validity_predicate`.
-            (storage_key in arb_account_storage_key_no_vp(address.clone()),
-            // Use the generated address too
-            address in Just(address))
-        -> (Address, Key) {
-            (address, storage_key)
-        }
+            let storage_key = arb_account_storage_key_no_vp(addr.clone());
+            (Just(sk), Just(addr), storage_key)
+        })
     }
 
     proptest! {
@@ -412,7 +417,7 @@ mod tests {
         /// deletes to  the account is rejected.
         #[test]
         fn test_unsigned_arb_storage_write_rejected(
-            (vp_owner, storage_key) in arb_account_storage_subspace_key(),
+            (_sk, vp_owner, storage_key) in arb_account_storage_subspace_key(),
             // Generate bytes to write. If `None`, delete from the key instead
             storage_value in any::<Option<Vec<u8>>>(),
         ) {
@@ -449,21 +454,19 @@ mod tests {
         /// deletes to the account is accepted.
         #[test]
         fn test_signed_arb_storage_write(
-            (vp_owner, storage_key) in arb_account_storage_subspace_key(),
+            (secret_key, vp_owner, storage_key) in arb_account_storage_subspace_key(),
             // Generate bytes to write. If `None`, delete from the key instead
             storage_value in any::<Option<Vec<u8>>>(),
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
 
-            let keypair = key::testing::keypair_1();
-            let public_key = keypair.ref_to();
-
             // Spawn all the accounts in the storage key to be able to modify
             // their storage
             let storage_key_addresses = storage_key.find_addresses();
             tx_env.spawn_accounts(storage_key_addresses);
 
+            let public_key = secret_key.ref_to();
             tx_env.write_public_key(&vp_owner, &public_key);
 
             // Initialize VP environment from a transaction
@@ -478,7 +481,7 @@ mod tests {
 
             let mut vp_env = vp_host_env::take();
             let tx = vp_env.tx.clone();
-            let signed_tx = tx.sign(&keypair);
+            let signed_tx = tx.sign(&secret_key);
             let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
             vp_env.tx = signed_tx;
             let keys_changed: BTreeSet<storage::Key> =
@@ -496,7 +499,9 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
-        let vp_owner = address::testing::established_address_1();
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
@@ -529,9 +534,9 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
-        let vp_owner = address::testing::established_address_1();
-        let keypair = key::testing::keypair_1();
-        let public_key = keypair.ref_to();
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
@@ -557,7 +562,7 @@ mod tests {
 
         let mut vp_env = vp_host_env::take();
         let tx = vp_env.tx.clone();
-        let signed_tx = tx.sign(&keypair);
+        let signed_tx = tx.sign(&secret_key);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;
         let keys_changed: BTreeSet<storage::Key> =
@@ -575,9 +580,9 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
-        let vp_owner = address::testing::established_address_1();
-        let keypair = key::testing::keypair_1();
-        let public_key = keypair.ref_to();
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
@@ -599,7 +604,7 @@ mod tests {
 
         let mut vp_env = vp_host_env::take();
         let tx = vp_env.tx.clone();
-        let signed_tx = tx.sign(&keypair);
+        let signed_tx = tx.sign(&secret_key);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;
         let keys_changed: BTreeSet<storage::Key> =
