@@ -991,7 +991,11 @@ impl ShieldedContext {
         // The amount required of current asset to qualify for conversion
         let threshold = -conv[&asset_type];
         if threshold == 0 {
-            eprintln!("Asset threshold of selected conversion for asset type {} is 0, this is a bug, please report it.", asset_type);
+            eprintln!(
+                "Asset threshold of selected conversion for asset type {} is \
+                 0, this is a bug, please report it.",
+                asset_type
+            );
         }
         // We should use an amount of the AllowedConversion that almost
         // cancels the original amount
@@ -1038,7 +1042,9 @@ impl ShieldedContext {
                 .await,
                 at_target_asset_type,
             ) {
-                println!("converting current asset type to latest asset type...");
+                println!(
+                    "converting current asset type to latest asset type..."
+                );
                 // Not at the target asset type, not at the latest asset type.
                 // Apply conversion to get from current asset type to the latest
                 // asset type.
@@ -1059,7 +1065,9 @@ impl ShieldedContext {
                 .await,
                 at_target_asset_type,
             ) {
-                println!("converting latest asset type to target asset type...");
+                println!(
+                    "converting latest asset type to target asset type..."
+                );
                 // Not at the target asset type, yes at the latest asset type.
                 // Apply inverse conversion to get from latest asset type to
                 // the target asset type.
@@ -1549,7 +1557,10 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let (sub_prefix, balance_key) = match args.sub_prefix {
         Some(sub_prefix) => {
             let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
-            let prefix = token::multitoken_balance_prefix(&parsed_args.token, &sub_prefix);
+            let prefix = token::multitoken_balance_prefix(
+                &parsed_args.token,
+                &sub_prefix,
+            );
             (
                 Some(sub_prefix),
                 token::multitoken_balance_key(&prefix, &source),

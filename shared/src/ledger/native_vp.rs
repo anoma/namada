@@ -529,7 +529,10 @@ where
         self.pre().has_key(key).map_err(Into::into)
     }
 
-    fn has_key_post(&'view self, key: &Key) -> Result<bool, storage_api::Error> {
+    fn has_key_post(
+        &'view self,
+        key: &Key,
+    ) -> Result<bool, storage_api::Error> {
         self.post().has_key(key).map_err(Into::into)
     }
 

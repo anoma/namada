@@ -101,9 +101,7 @@ fn validate_tx(
                         ctx.read_post(key)?.unwrap_or_default();
                     let change = post.change() - pre.change();
                     // debit has to signed, credit doesn't
-                    let valid = change >= 0
-                        || addr == masp()
-                        || *valid_sig;
+                    let valid = change >= 0 || addr == masp() || *valid_sig;
                     debug_log!(
                         "token key: {}, change: {}, valid_sig: {}, valid \
                          modification: {}",

@@ -19,8 +19,8 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::primitives::ViewingKey;
 use masp_primitives::sapling::Node;
-use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_primitives::transaction::components::Amount;
+use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::Votes;
@@ -41,7 +41,7 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{
-    BlockHeight, Epoch, PrefixValue, TxIndex, KeySeg, Key,
+    BlockHeight, Epoch, Key, KeySeg, PrefixValue, TxIndex,
 };
 use namada::types::token::{balance_key, Transfer};
 use namada::types::transaction::{
@@ -187,7 +187,10 @@ pub async fn query_transparent_balance(
                     let sub_prefix = Key::parse(sub_prefix).unwrap();
                     let prefix =
                         token::multitoken_balance_prefix(&token, &sub_prefix);
-                    token::multitoken_balance_key(&prefix, &owner.address().unwrap())
+                    token::multitoken_balance_key(
+                        &prefix,
+                        &owner.address().unwrap(),
+                    )
                 }
                 None => token::balance_key(&token, &owner.address().unwrap()),
             };
@@ -220,7 +223,12 @@ pub async fn query_transparent_balance(
                 )
                 .await;
                 if let Some(balances) = balances {
-                    print_balances(&ctx, balances, &token, owner.address().as_ref());
+                    print_balances(
+                        &ctx,
+                        balances,
+                        &token,
+                        owner.address().as_ref(),
+                    );
                 }
             }
         }
@@ -615,7 +623,11 @@ pub async fn query_shielded_balance(
             } else {
                 balance = ctx
                     .shielded
-                    .compute_exchanged_balance(client.clone(), &viewing_key, epoch)
+                    .compute_exchanged_balance(
+                        client.clone(),
+                        &viewing_key,
+                        epoch,
+                    )
                     .await
                     .expect("context should contain viewing key");
             }
@@ -654,9 +666,7 @@ pub async fn query_shielded_balance(
                 if no_conversions {
                     balance = ctx
                         .shielded
-                        .compute_shielded_balance(
-                            &viewing_key,
-                            )
+                        .compute_shielded_balance(&viewing_key)
                         .expect("context should contain viewing key");
                 } else {
                     balance = ctx
@@ -751,9 +761,7 @@ pub async fn query_shielded_balance(
                 if no_conversions {
                     balance = ctx
                         .shielded
-                        .compute_shielded_balance(
-                            &viewing_key,
-                            )
+                        .compute_shielded_balance(&viewing_key)
                         .expect("context should contain viewing key");
                 } else {
                     balance = ctx
@@ -789,9 +797,7 @@ pub async fn query_shielded_balance(
             if no_conversions {
                 balance = ctx
                     .shielded
-                    .compute_shielded_balance(
-                        &viewing_key,
-                    )
+                    .compute_shielded_balance(&viewing_key)
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
                 let decoded_balance = ctx
@@ -802,7 +808,11 @@ pub async fn query_shielded_balance(
             } else {
                 balance = ctx
                     .shielded
-                    .compute_exchanged_balance(client.clone(), &viewing_key, epoch)
+                    .compute_exchanged_balance(
+                        client.clone(),
+                        &viewing_key,
+                        epoch,
+                    )
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
@@ -834,7 +844,9 @@ pub fn print_decoded_balance(decoded_balance: Amount<Address>) {
     }
 }
 
-pub fn print_decoded_balance_with_epoch(decoded_balance: Amount<(Address, Epoch)>) {
+pub fn print_decoded_balance_with_epoch(
+    decoded_balance: Amount<(Address, Epoch)>,
+) {
     let tokens = address::tokens();
     let mut found_any = false;
     for ((addr, epoch), value) in decoded_balance.components() {
@@ -1810,10 +1822,7 @@ fn process_unbonds_query(
 /// Query for all conversions.
 pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
     // The chosen token type of the conversions
-    let target_token = args
-        .token
-        .as_ref()
-        .map(|x| ctx.get(x));
+    let target_token = args.token.as_ref().map(|x| ctx.get(x));
     // To facilitate human readable token addresses
     let tokens = address::tokens();
     let client = HttpClient::new(args.query.ledger_address).unwrap();
@@ -1822,26 +1831,33 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
     let state_key = key_prefix
         .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
         .unwrap();
-    let conv_state = query_storage_value::<ConversionState>(&client, &state_key)
-        .await.expect("Conversions should be defined");
+    let conv_state =
+        query_storage_value::<ConversionState>(&client, &state_key)
+            .await
+            .expect("Conversions should be defined");
     // Track whether any non-sentinel conversions are found
     let mut conversions_found = false;
     for (addr, epoch, conv, _) in conv_state.assets.values() {
-        let amt: masp_primitives::transaction::components::Amount = conv.clone().into();
+        let amt: masp_primitives::transaction::components::Amount =
+            conv.clone().into();
         // If the user has specified any targets, then meet them
-        if matches!(&target_token, Some(target) if target != addr) { continue }
-        else if matches!(&args.epoch, Some(target) if target != epoch) { continue }
+        if matches!(&target_token, Some(target) if target != addr) {
+            continue;
+        } else if matches!(&args.epoch, Some(target) if target != epoch) {
+            continue;
+        }
         // If we have a sentinel conversion, then skip printing
-        else if amt == masp_primitives::transaction::components::Amount::zero() { continue }
+        else if amt
+            == masp_primitives::transaction::components::Amount::zero()
+        {
+            continue;
+        }
         conversions_found = true;
         // Print the asset to which the conversion applies
         let addr_enc = addr.encode();
         print!(
             "{}[{}]: ",
-            tokens
-                .get(&addr)
-                .cloned()
-                .unwrap_or(addr_enc.as_str()),
+            tokens.get(&addr).cloned().unwrap_or(addr_enc.as_str()),
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -1856,10 +1872,7 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
                 "{}{} {}[{}]",
                 prefix,
                 val,
-                tokens
-                    .get(&addr)
-                    .cloned()
-                    .unwrap_or(addr_enc.as_str()),
+                tokens.get(&addr).cloned().unwrap_or(addr_enc.as_str()),
                 epoch
             );
             // Future iterations need to be prefixed with +

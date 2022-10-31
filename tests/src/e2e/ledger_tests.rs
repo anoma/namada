@@ -17,8 +17,8 @@ use std::time::{Duration, Instant};
 
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
-use namada::types::address::{btc, eth, masp_rewards};
 use data_encoding::HEXLOWER;
+use namada::types::address::{btc, eth, masp_rewards};
 use namada::types::token;
 use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{

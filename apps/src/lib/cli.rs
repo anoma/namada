@@ -199,7 +199,8 @@ pub mod cmds {
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
-            let query_conversions = Self::parse_with_ctx(matches, QueryConversions);
+            let query_conversions =
+                Self::parse_with_ctx(matches, QueryConversions);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_voting_power =
@@ -2298,9 +2299,9 @@ pub mod args {
                         .about("The epoch for which to query conversions."),
                 )
                 .arg(
-                    TOKEN_OPT
-                        .def()
-                        .about("The token address for which to query conversions."),
+                    TOKEN_OPT.def().about(
+                        "The token address for which to query conversions.",
+                    ),
                 )
         }
     }
@@ -2349,9 +2350,9 @@ pub mod args {
                         .about("The token's address whose balance to query."),
                 )
                 .arg(
-                    NO_CONVERSIONS
-                        .def()
-                        .about("Whether not to automatically perform conversions."),
+                    NO_CONVERSIONS.def().about(
+                        "Whether not to automatically perform conversions.",
+                    ),
                 )
         }
     }

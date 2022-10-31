@@ -9,9 +9,9 @@ use arse_merkle_tree::InternalKey;
 use bit_vec::BitVec;
 use borsh::maybestd::io::Write;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use data_encoding::BASE32HEX_NOPAD;
 use ics23::CommitmentProof;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
 #[cfg(feature = "ferveo-tpke")]

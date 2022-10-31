@@ -9,7 +9,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::consensus::BranchId::Sapling;
 use masp_primitives::redjubjub::PublicKey;
 use masp_primitives::transaction::components::{
-    OutputDescription, SpendDescription, ConvertDescription,
+    ConvertDescription, OutputDescription, SpendDescription,
 };
 use masp_primitives::transaction::{
     signature_hash_data, Transaction, SIGHASH_ALL,
@@ -123,12 +123,7 @@ pub fn check_convert(
 ) -> bool {
     let zkproof =
         bellman::groth16::Proof::read(convert.zkproof.as_slice()).unwrap();
-    ctx.check_convert(
-        convert.cv,
-        convert.anchor,
-        zkproof,
-        parameters,
-    )
+    ctx.check_convert(convert.cv, convert.anchor, zkproof, parameters)
 }
 
 /// Verify a shielded transaction.

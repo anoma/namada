@@ -38,15 +38,16 @@ pub use crate::ledger::storage::merkle_tree::{
 };
 pub use crate::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::address::{masp, masp_rewards, xan};
-use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
-use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
-use crate::types::storage::{
-    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    MembershipProof, MerkleValue, BLOCK_HASH_LENGTH, TxIndex
+use crate::types::address::{
+    masp, masp_rewards, xan, Address, EstablishedAddressGen, InternalAddress,
 };
+use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::storage::TxQueue;
+use crate::types::storage::{
+    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
+    MembershipProof, MerkleValue, TxIndex, BLOCK_HASH_LENGTH,
+};
 use crate::types::time::DateTimeUtc;
 use crate::types::token;
 
