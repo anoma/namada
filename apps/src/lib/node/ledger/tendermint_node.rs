@@ -336,6 +336,12 @@ async fn update_tendermint_config(
     config.instrumentation.namespace =
         tendermint_config.instrumentation_namespace;
 
+    #[cfg(feature = "abciplus")]
+    {
+        config.consensus.timeout_commit =
+            tendermint_config.consensus_timeout_commit;
+    }
+
     let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
