@@ -90,33 +90,47 @@ where
         expected_debit: Amount,
         expected_credit: Amount,
     ) -> bool {
-        // check that the correct amount was deducted from the fee payer
-        if let Some(SignedAmount::Negative(amount)) =
-            self.account_balance_delta(payer_account)
-        {
-            if amount != expected_debit {
-                return false;
-            }
-        } else {
-            tracing::debug!("The account {} was not debited.", payer_account);
+        let debited = self.account_balance_delta(payer_account);
+        let credited = self.account_balance_delta(escrow_account);
+        if debited.is_none() && credited.is_none() {
             return false;
         }
-        // check that the correct amount was credited to escrow
-        if let Some(SignedAmount::Positive(amount)) =
-            self.account_balance_delta(escrow_account)
-        {
-            if amount != expected_credit {
-                return false;
+
+        match (debited, credited) {
+            (
+                Some(SignedAmount::Negative(debit)),
+                Some(SignedAmount::Positive(credit)),
+            ) => debit == expected_debit && credit == expected_credit,
+            (Some(SignedAmount::Positive(_)), _) => {
+                tracing::debug!(
+                    "The account {} was not debited.",
+                    payer_account
+                );
+                false
             }
-        } else {
-            tracing::debug!(
-                "The Ethereum bridge pool's escrow was not credited from \
-                 account {}.",
-                payer_account
-            );
-            return false;
+            (_, Some(SignedAmount::Negative(_))) => {
+                tracing::debug!(
+                    "The Ethereum bridge pool's escrow was not credited from \
+                     account {}.",
+                    payer_account
+                );
+                false
+            }
+            (None, _) => {
+                tracing::debug!(
+                    "Could not calculate the balance delta for {}",
+                    payer_account
+                );
+                false
+            }
+            (_, None) => {
+                tracing::debug!(
+                    "Could not calculate the balance delta for the Ethereum \
+                     bridge pool"
+                );
+                false
+            }
         }
-        true
     }
 }
 
@@ -213,15 +227,36 @@ where
         // TODO: We should look this address up from storage
         if transfer.transfer.asset == wnam() {
             // check that correct amount of Nam was put into escrow.
-            return if !self.check_nam_escrowed(
+            return if transfer.gas_fee.payer == transfer.transfer.sender {
+                if !self.check_nam_escrowed(
+                    &transfer.gas_fee.payer,
+                    &BRIDGE_POOL_ADDRESS,
+                    transfer.gas_fee.amount + transfer.transfer.amount,
+                    transfer.gas_fee.amount,
+                ) || !self.check_nam_escrowed(
+                    &transfer.transfer.sender,
+                    &Address::Internal(InternalAddress::EthBridge),
+                    transfer.gas_fee.amount + transfer.transfer.amount,
+                    transfer.transfer.amount,
+                ) {
+                    Ok(false)
+                } else {
+                    tracing::info!(
+                        "The Ethereum bridge pool VP accepted the transfer \
+                         {:?}.",
+                        transfer
+                    );
+                    Ok(true)
+                }
+            } else if !self.check_nam_escrowed(
                 &transfer.gas_fee.payer,
                 &BRIDGE_POOL_ADDRESS,
-                transfer.gas_fee.amount + transfer.transfer.amount,
+                transfer.gas_fee.amount,
                 transfer.gas_fee.amount,
             ) || !self.check_nam_escrowed(
                 &transfer.transfer.sender,
                 &Address::Internal(InternalAddress::EthBridge),
-                transfer.gas_fee.amount + transfer.transfer.amount,
+                transfer.transfer.amount,
                 transfer.transfer.amount,
             ) {
                 Ok(false)
@@ -233,7 +268,7 @@ where
                 Ok(true)
             };
         } else {
-            // check that the correct amounnt of gas fees were escrowed
+            // check that the correct amount of gas fees were escrowed
             if !self.check_nam_escrowed(
                 &transfer.gas_fee.payer,
                 &BRIDGE_POOL_ADDRESS,
@@ -333,6 +368,12 @@ mod test_bridge_pool_vp {
     /// An established user address for testing & development
     fn bertha_address() -> Address {
         Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
+            .expect("The token address decoding shouldn't fail")
+    }
+
+    /// A sampled established address for tests
+    pub fn established_address_1() -> Address {
+        Address::decode("atest1v4ehgw36g56ngwpk8ppnzsf4xqeyvsf3xq6nxde5gseyys3nxgenvvfex5cnyd2rx9zrzwfctgx7sp")
             .expect("The token address decoding shouldn't fail")
     }
 
@@ -1151,6 +1192,119 @@ mod test_bridge_pool_vp {
         }
         .try_to_vec()
         .expect("Test failed");
+
+        let res = vp
+            .validate_tx(&signed, &keys_changed, &verifiers)
+            .expect("Test failed");
+        assert!(!res);
+    }
+
+    /// Test that we check escrowing Nam correctly when minting wNam
+    /// and the gas payer account is different from the transferring
+    /// account.
+    #[test]
+    fn test_mint_wnam_separate_gas_payer() {
+        // setup
+        let mut write_log = new_writelog();
+        // initialize the eth bridge balance to 0
+        let eb_account_key =
+            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
+        write_log
+            .write(
+                &eb_account_key,
+                Amount::default().try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        // initialize the gas payers account
+        let gas_payer_balance_key = balance_key(&xan(), &established_address_1());
+        write_log
+            .write(
+                &gas_payer_balance_key,
+                Amount::from(BERTHA_WEALTH).try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        write_log.commit_tx();
+        let storage = Storage::<MockDB, Sha256Hasher>::open(
+            std::path::Path::new(""),
+            ChainId::default(),
+            None,
+        );
+        let tx = Tx::new(vec![], None);
+
+        // the transfer to be added to the pool
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: wnam(),
+                sender: bertha_address(),
+                recipient: EthAddress([1; 20]),
+                amount: 100.into(),
+                nonce: 1u64.into(),
+            },
+            gas_fee: GasFee {
+                amount: 100.into(),
+                payer: established_address_1(),
+            },
+        };
+
+        // add transfer to pool
+        let keys_changed = {
+            write_log
+                .write(
+                    &get_pending_key(&transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+            BTreeSet::from([get_pending_key(&transfer)])
+        };
+        // We escrow 100 Nam into the bridge pool VP
+        // and 100 Nam in the Eth bridge VP
+        let account_key = balance_key(&xan(), &bertha_address());
+        write_log
+            .write(
+                &account_key,
+                Amount::from(BERTHA_WEALTH - 100)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        write_log
+            .write(
+                &gas_payer_balance_key,
+                Amount::from(BERTHA_WEALTH - 100)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        let bp_account_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        write_log
+            .write(
+                &bp_account_key,
+                Amount::from(ESCROWED_AMOUNT + 100)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        write_log
+            .write(
+                &eb_account_key,
+                Amount::from(10).try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // create the data to be given to the vp
+        let vp = BridgePoolVp {
+            ctx: setup_ctx(&tx, &storage, &write_log),
+        };
+        let verifiers = BTreeSet::default();
+
+        let to_sign = transfer.try_to_vec().expect("Test failed");
+        let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
+        let signed = SignedTxData {
+            data: Some(to_sign),
+            sig,
+        }
+            .try_to_vec()
+            .expect("Test failed");
 
         let res = vp
             .validate_tx(&signed, &keys_changed, &verifiers)
