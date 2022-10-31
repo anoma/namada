@@ -1057,15 +1057,8 @@ mod test_bridge_pool_vp {
     fn test_mint_wnam() {
         // setup
         let mut write_log = new_writelog();
-        // initialize the eth bridge balance to 0
         let eb_account_key =
             balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
-        write_log
-            .write(
-                &eb_account_key,
-                Amount::default().try_to_vec().expect("Test failed"),
-            )
-            .expect("Test failed");
         write_log.commit_tx();
         let storage = setup_storage();
         let tx = Tx::new(vec![], None);
@@ -1143,25 +1136,18 @@ mod test_bridge_pool_vp {
         assert!(res);
     }
 
-    /// Test that we can rejecte a transfer that
+    /// Test that we can reject a transfer that
     /// mints wNam if we don't escrow the correct
     /// amount of Nam.
     #[test]
     fn test_reject_mint_wnam() {
         // setup
         let mut write_log = new_writelog();
-        // initialize the eth bridge balance to 0
-        let eb_account_key =
-            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
-        write_log
-            .write(
-                &eb_account_key,
-                Amount::default().try_to_vec().expect("Test failed"),
-            )
-            .expect("Test failed");
         write_log.commit_tx();
         let storage = setup_storage();
         let tx = Tx::new(vec![], None);
+        let eb_account_key =
+            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {

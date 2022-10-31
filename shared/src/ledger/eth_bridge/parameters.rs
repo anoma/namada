@@ -3,8 +3,8 @@ use std::num::NonZeroU64;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use crate::ledger::eth_bridge;
 
+use crate::ledger::eth_bridge;
 use crate::ledger::eth_bridge::{bridge_pool_vp, storage as bridge_storage};
 use crate::ledger::storage::types::encode;
 use crate::ledger::storage::{self, Storage};
