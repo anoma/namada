@@ -106,9 +106,7 @@ impl Ctx {
         self.write(&pk_key, &rewards_account_key)?;
 
         let eth_cold_key = key::common::PublicKey::Secp256k1(eth_cold_key);
-        log_string(&format!("Eth cold key: {:#?}", eth_cold_key));
         let eth_hot_key = key::common::PublicKey::Secp256k1(eth_hot_key);
-        log_string(&format!("Eth hot key: {:#?}", eth_hot_key));
         self.become_validator(
             &validator_address,
             &rewards_address,
@@ -175,7 +173,9 @@ impl namada_proof_of_stake::PosActions for Ctx {
             address, value
         );
         log_string(f);
-        self.write(&validator_eth_cold_key_key(address), encode(&value))
+        let encoded = encode(&value);
+        log_string(&format!("encoded cold key: {:#?}", encoded));
+        self.write(&validator_eth_cold_key_key(address), encoded)
     }
 
     fn write_validator_eth_hot_key(
@@ -188,7 +188,9 @@ impl namada_proof_of_stake::PosActions for Ctx {
             address, value
         );
         log_string(f);
-        self.write(&validator_eth_hot_key_key(address), encode(&value))
+        let encoded = encode(&value);
+        log_string(&format!("encoded hot key: {:#?}", encoded));
+        self.write(&validator_eth_hot_key_key(address), encoded)
     }
 
     fn write_validator_state(
