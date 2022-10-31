@@ -46,6 +46,9 @@ pub async fn main() -> Result<()> {
                 Sub::QueryEpoch(QueryEpoch(args)) => {
                     rpc::query_epoch(args).await;
                 }
+                Sub::QueryBlock(QueryBlock(args)) => {
+                    rpc::query_block(args).await;
+                }
                 Sub::QueryBalance(QueryBalance(args)) => {
                     rpc::query_balance(ctx, args).await;
                 }

@@ -72,6 +72,21 @@ pub async fn query_epoch(args: args::Query) -> Epoch {
     cli::safe_exit(1)
 }
 
+/// Query the last committed block
+pub async fn query_block(
+    args: args::Query,
+) -> tendermint_rpc::endpoint::block::Response {
+    let client = HttpClient::new(args.ledger_address).unwrap();
+    let response = client.latest_block().await.unwrap();
+    println!(
+        "Last committed block ID: {}, height: {}, time: {}",
+        response.block_id,
+        response.block.header.height,
+        response.block.header.time
+    );
+    response
+}
+
 /// Query the raw bytes of given storage key
 pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
