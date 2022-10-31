@@ -34,7 +34,7 @@ color-eyre = "0.5.11"
 data-encoding = "2.3.2"
 # NOTE: enable "print" feature to see output from builds ran by e2e tests
 escargot = {version = "0.5.7"} # , features = ["print"]}
-expectrl = {version = "=0.5.2"}
+expectrl = "0.6.0"
 eyre = "0.6.5"
 file-serve = "0.2.0"
 fs_extra = "1.2.0"
