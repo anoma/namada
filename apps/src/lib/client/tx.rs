@@ -840,7 +840,7 @@ async fn is_safe_voting_window(
 
     match proposal_end_epoch {
         Some(proposal_end_epoch) => {
-            !namada::ledger::governance::vp::is_valid_validator_voting_period(
+            !namada::ledger::governance::utils::is_valid_validator_voting_period(
                 current_epoch,
                 proposal_start_epoch,
                 proposal_end_epoch,

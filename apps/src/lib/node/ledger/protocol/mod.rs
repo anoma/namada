@@ -48,7 +48,7 @@ pub enum Error {
     #[error("IBC Token native VP: {0}")]
     IbcTokenNativeVpError(namada::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(namada::ledger::governance::vp::Error),
+    GovernanceNativeVpError(namada::ledger::governance::Error),
     #[error("SlashFund native VP error: {0}")]
     SlashFundNativeVpError(namada::ledger::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]

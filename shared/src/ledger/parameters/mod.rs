@@ -7,11 +7,12 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use thiserror::Error;
 
 use self::storage as parameter_storage;
-use super::governance::vp::is_proposal_accepted;
+use super::governance::storage as gov_storage;
 use super::storage::types::{decode, encode};
 use super::storage::{types, Storage};
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::vp_env::VpEnv;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::time::DurationSecs;
@@ -62,7 +63,13 @@ where
                 KeyType::PARAMETER => {
                     let proposal_id = u64::try_from_slice(tx_data).ok();
                     match proposal_id {
-                        Some(id) => is_proposal_accepted(&self.ctx, id),
+                        Some(id) => {
+                            let proposal_execution_key =
+                                gov_storage::get_proposal_execution_key(id);
+                            self.ctx
+                                .has_key_pre(&proposal_execution_key)
+                                .unwrap_or(false)
+                        }
                         _ => false,
                     }
                 }

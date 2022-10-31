@@ -1,7 +1,7 @@
 //! Governance
 
 use namada::ledger::governance::storage;
-use namada::ledger::governance::vp::ADDRESS as governance_address;
+use namada::ledger::governance::ADDRESS as governance_address;
 use namada::types::token::Amount;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
