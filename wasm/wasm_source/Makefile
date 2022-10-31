@@ -59,8 +59,8 @@ $(wasms): %:
 
 # Build a selected wasm in debug mode
 $(patsubst %,debug_%,$(wasms)): debug_%:
-	RUSTFLAGS='-C link-arg=-s' $(cargo) build --target wasm32-unknown-unknown --features $* && \
-	cp "./target/wasm32-unknown-unknown/debug/anoma_wasm.wasm" ../$*.wasm
+	RUSTFLAGS='-C link-arg=-s' $(cargo) build --target wasm32-unknown-unknown --target-dir 'target' --features $* && \
+	cp "./target/wasm32-unknown-unknown/debug/namada_wasm.wasm" ../$*.wasm
 
 # `cargo check` one of the wasms, e.g. `make check_tx_transfer`
 $(patsubst %,check_%,$(wasms)): check_%:
