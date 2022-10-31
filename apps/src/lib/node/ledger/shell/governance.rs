@@ -3,6 +3,7 @@ use namada::ledger::governance::utils::{
     compute_tally, get_proposal_votes, ProposalEvent,
 };
 use namada::ledger::governance::vp::ADDRESS as gov_address;
+use namada::ledger::protocol;
 use namada::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};

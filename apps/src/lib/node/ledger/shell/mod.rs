@@ -18,7 +18,6 @@ use std::mem;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::ledger::gas::BlockGasMeter;
@@ -30,7 +29,7 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, DB,
 };
-use namada::ledger::{ibc, pos};
+use namada::ledger::{ibc, pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::chain::ChainId;
 use namada::types::key::*;
@@ -48,7 +47,6 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
 
-use super::rpc;
 use crate::config::{genesis, TendermintMode};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
@@ -60,7 +58,7 @@ use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
-use crate::node::ledger::{protocol, storage, tendermint_node};
+use crate::node::ledger::{storage, tendermint_node};
 #[allow(unused_imports)]
 use crate::wallet::ValidatorData;
 use crate::{config, wallet};
@@ -557,43 +555,6 @@ where
             }
         }
         response
-    }
-
-    /// Simulate validation and application of a transaction.
-    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
-        let mut response = response::Query::default();
-        let mut gas_meter = BlockGasMeter::default();
-        let mut write_log = WriteLog::default();
-        let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
-        let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
-        match Tx::try_from(tx_bytes) {
-            Ok(tx) => {
-                let tx = TxType::Decrypted(DecryptedTx::Decrypted(tx));
-                match protocol::apply_tx(
-                    tx,
-                    tx_bytes.len(),
-                    &mut gas_meter,
-                    &mut write_log,
-                    &self.storage,
-                    &mut vp_wasm_cache,
-                    &mut tx_wasm_cache,
-                )
-                .map_err(Error::TxApply)
-                {
-                    Ok(result) => response.info = result.to_string(),
-                    Err(error) => {
-                        response.code = 1;
-                        response.log = format!("{}", error);
-                    }
-                }
-                response
-            }
-            Err(err) => {
-                response.code = 1;
-                response.log = format!("{}", Error::TxDecoding(err));
-                response
-            }
-        }
     }
 
     /// Lookup a validator's keypair for their established account from their

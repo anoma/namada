@@ -1,5 +1,6 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
+use namada::ledger::protocol;
 use namada::types::storage::{BlockHash, Header};
 
 use super::governance::execute_governance_proposals;
