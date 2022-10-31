@@ -3,6 +3,9 @@
 //! This VP currently provides a signature verification against a public key for
 //! sending tokens (receiving tokens is permissive).
 //!
+//! It allows to reveal a PK, as long as its address matches with the address
+//! that can be derived from the PK.
+//!
 //! It allows to bond, unbond and withdraw tokens to and from PoS system with a
 //! valid signature.
 //!
@@ -13,6 +16,8 @@ use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
 enum KeyType<'a> {
+    /// Public key - written once revealed
+    Pk(&'a Address),
     Token(&'a Address),
     PoS,
     Nft(&'a Address),
@@ -22,7 +27,9 @@ enum KeyType<'a> {
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
-        if let Some(address) = token::is_any_token_balance_key(key) {
+        if let Some(address) = key::is_pk_key(key) {
+            Self::Pk(address)
+        } else if let Some(address) = token::is_any_token_balance_key(key) {
             Self::Token(address)
         } else if let Some((_, address)) =
             token::is_any_multitoken_balance_key(key)
@@ -86,6 +93,31 @@ fn validate_tx(
     for key in keys_changed.iter() {
         let key_type: KeyType = key.into();
         let is_valid = match key_type {
+            KeyType::Pk(owner) => {
+                if owner == &addr {
+                    if ctx.has_key_pre(key)? {
+                        // If the PK is already reveal, reject the tx
+                        return reject();
+                    }
+                    let post: Option<key::common::PublicKey> =
+                        ctx.read_post(key)?;
+                    match post {
+                        Some(pk) => {
+                            let addr_from_pk: Address = (&pk).into();
+                            // Check that address matches with the address
+                            // derived from the PK
+                            if addr_from_pk != addr {
+                                return reject();
+                            }
+                        }
+                        None => {
+                            // Revealed PK cannot be deleted
+                            return reject();
+                        }
+                    }
+                }
+                true
+            }
             KeyType::Token(owner) => {
                 if owner == &addr {
                     let pre: token::Amount =
@@ -202,6 +234,99 @@ mod tests {
 
         assert!(
             validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap()
+        );
+    }
+
+    /// Test that a PK can be revealed when it's not revealed and cannot be
+    /// revealed anymore once it's already revealed.
+    #[test]
+    fn test_can_reveal_pk() {
+        // The SK to be used for the implicit account
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let addr: Address = (&public_key).into();
+
+        // Initialize a tx environment
+        let tx_env = TestTxEnv::default();
+
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
+            // Apply reveal_pk in a transaction
+            tx_host_env::key::reveal_pk(tx::ctx(), &public_key).unwrap();
+        });
+
+        let vp_env = vp_host_env::take();
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+
+        assert!(
+            validate_tx(&CTX, tx_data, addr.clone(), keys_changed, verifiers)
+                .unwrap(),
+            "Revealing PK that's not yet revealed and is matching the address \
+             must be accepted"
+        );
+
+        // Commit the transaction and create another tx_env
+        let vp_env = vp_host_env::take();
+        tx_host_env::set_from_vp_env(vp_env);
+        tx_host_env::commit_tx_and_block();
+        let tx_env = tx_host_env::take();
+
+        // Try to reveal it again
+        vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
+            // Apply reveal_pk in a transaction
+            tx_host_env::key::reveal_pk(tx::ctx(), &public_key).unwrap();
+        });
+
+        let vp_env = vp_host_env::take();
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+
+        assert!(
+            !validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap(),
+            "Revealing PK that's already revealed should be rejected"
+        );
+    }
+
+    /// Test that a revealed PK that doesn't correspond to the account's address
+    /// is rejected.
+    #[test]
+    fn test_reveal_wrong_pk_rejected() {
+        // The SK to be used for the implicit account
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let addr: Address = (&public_key).into();
+
+        // Another SK to be revealed for the address above (not matching it)
+        let mismatched_sk = key::testing::keypair_2();
+        let mismatched_pk = mismatched_sk.ref_to();
+
+        // Initialize a tx environment
+        let tx_env = TestTxEnv::default();
+
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
+            // Do the same as reveal_pk, but with the wrong key
+            let key = namada_tx_prelude::key::pk_key(&addr);
+            tx_host_env::ctx().write(&key, &mismatched_pk).unwrap();
+        });
+
+        let vp_env = vp_host_env::take();
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+
+        assert!(
+            !validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap(),
+            "Mismatching PK must be rejected"
         );
     }
 
