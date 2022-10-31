@@ -507,17 +507,27 @@ where
         &self,
         key: &Self::Address,
     ) -> Option<types::ValidatorEthKey<Self::PublicKey>> {
+        let public_key_type = std::any::type_name::<Self::PublicKey>();
+        tracing::debug!(?public_key_type, ?key, "Reading eth cold key");
         let (value, _gas) =
             self.read(&validator_eth_cold_key_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap())
+        value.map(|value| {
+            let v = value.clone();
+            decode(value).expect(&format!("Couldn't decode {:?}", v))
+        })
     }
 
     fn read_validator_eth_hot_key(
         &self,
         key: &Self::Address,
     ) -> Option<types::ValidatorEthKey<Self::PublicKey>> {
+        let public_key_type = std::any::type_name::<Self::PublicKey>();
+        tracing::debug!(?public_key_type, ?key, "Reading eth hot key");
         let (value, _gas) = self.read(&validator_eth_hot_key_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap())
+        value.map(|value| {
+            let v = value.clone();
+            decode(value).expect(&format!("Couldn't decode {:?}", v))
+        })
     }
 
     fn write_pos_params(&mut self, params: &PosParams) {
@@ -608,6 +618,13 @@ where
         address: &Self::Address,
         value: &types::ValidatorEthKey<Self::PublicKey>,
     ) {
+        let public_key_type = std::any::type_name::<Self::PublicKey>();
+        tracing::debug!(
+            ?public_key_type,
+            ?value,
+            ?address,
+            "Writing eth cold key"
+        );
         self.write(&validator_eth_cold_key_key(address), encode(value))
             .unwrap();
     }
@@ -617,6 +634,13 @@ where
         address: &Self::Address,
         value: &types::ValidatorEthKey<Self::PublicKey>,
     ) {
+        let public_key_type = std::any::type_name::<Self::PublicKey>();
+        tracing::debug!(
+            ?public_key_type,
+            ?value,
+            ?address,
+            "Writing eth hot key"
+        );
         self.write(&validator_eth_hot_key_key(address), encode(value))
             .unwrap();
     }
