@@ -12,6 +12,8 @@ pub mod tx_init_proposal;
 pub mod tx_init_validator;
 #[cfg(feature = "tx_mint_nft")]
 pub mod tx_mint_nft;
+#[cfg(feature = "tx_reveal_pk")]
+pub mod tx_reveal_pk;
 #[cfg(feature = "tx_transfer")]
 pub mod tx_transfer;
 #[cfg(feature = "tx_unbond")]

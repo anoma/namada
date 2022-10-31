@@ -8,6 +8,7 @@
 
 pub mod governance;
 pub mod ibc;
+pub mod key;
 pub mod nft;
 pub mod proof_of_stake;
 pub mod token;
