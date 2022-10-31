@@ -221,7 +221,7 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
-        let token = address::xan();
+        let token = address::nam();
         let amount = token::Amount::from(10_098_123);
 
         // Spawn the accounts to be able to modify their storage
@@ -265,7 +265,7 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let target = address::testing::established_address_2();
-        let token = address::xan();
+        let token = address::nam();
         let amount = token::Amount::from(10_098_123);
 
         // Spawn the accounts to be able to modify their storage
@@ -311,7 +311,7 @@ mod tests {
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
         let target = address::testing::established_address_2();
-        let token = address::xan();
+        let token = address::nam();
         let amount = token::Amount::from(10_098_123);
 
         // Spawn the accounts to be able to modify their storage
@@ -361,7 +361,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
         let target = address::testing::established_address_3();
-        let token = address::xan();
+        let token = address::nam();
         let amount = token::Amount::from(10_098_123);
 
         // Spawn the accounts to be able to modify their storage

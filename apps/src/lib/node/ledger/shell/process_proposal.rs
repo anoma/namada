@@ -189,7 +189,7 @@ where
 mod test_process_proposal {
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
-    use namada::types::address::xan;
+    use namada::types::address::nam;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
@@ -217,7 +217,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -264,7 +264,7 @@ mod test_process_proposal {
         let mut wrapper = WrapperTx::new(
             Fee {
                 amount: 100.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -346,7 +346,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 1.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -399,7 +399,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: Amount::whole(1_000_100),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -447,7 +447,7 @@ mod test_process_proposal {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &keypair,
                 Epoch(0),
@@ -511,7 +511,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -570,7 +570,7 @@ mod test_process_proposal {
         let mut wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -623,7 +623,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
