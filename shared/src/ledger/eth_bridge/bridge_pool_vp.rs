@@ -1198,11 +1198,14 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         // initialize the gas payers account
-        let gas_payer_balance_key = balance_key(&xan(), &established_address_1());
+        let gas_payer_balance_key =
+            balance_key(&xan(), &established_address_1());
         write_log
             .write(
                 &gas_payer_balance_key,
-                Amount::from(BERTHA_WEALTH).try_to_vec().expect("Test failed"),
+                Amount::from(BERTHA_WEALTH)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
         write_log.commit_tx();
@@ -1285,8 +1288,8 @@ mod test_bridge_pool_vp {
             data: Some(to_sign),
             sig,
         }
-            .try_to_vec()
-            .expect("Test failed");
+        .try_to_vec()
+        .expect("Test failed");
 
         let res = vp
             .validate_tx(&signed, &keys_changed, &verifiers)
