@@ -513,7 +513,7 @@ where
             self.read(&validator_eth_cold_key_key(key)).unwrap();
         value.map(|value| {
             let v = value.clone();
-            decode(value).expect(&format!("Couldn't decode {:?}", v))
+            decode(value).unwrap_or_else(|_| panic!("Couldn't decode {:?}", v))
         })
     }
 
@@ -526,7 +526,7 @@ where
         let (value, _gas) = self.read(&validator_eth_hot_key_key(key)).unwrap();
         value.map(|value| {
             let v = value.clone();
-            decode(value).expect(&format!("Couldn't decode {:?}", v))
+            decode(value).unwrap_or_else(|_| panic!("Couldn't decode {:?}", v))
         })
     }
 
