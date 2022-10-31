@@ -51,6 +51,7 @@ pub mod cmds {
         TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
+        TxRevealPk(TxRevealPk),
     }
 
     impl Cmd for Anoma {
@@ -66,6 +67,7 @@ pub mod cmds {
                 .subcommand(TxMintNft::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
+                .subcommand(TxRevealPk::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -82,6 +84,7 @@ pub mod cmds {
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
                 SubCmd::parse(matches).map(Self::TxVoteProposal);
+            let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
             node.or(client)
                 .or(wallet)
                 .or(ledger)
@@ -92,6 +95,7 @@ pub mod cmds {
                 .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
+                .or(tx_reveal_pk)
         }
     }
 
@@ -154,7 +158,7 @@ pub mod cmds {
                 .subcommand(TxTransfer::def().display_order(1))
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
-                .subcommand(TxInitValidator::def().display_order(1))
+                .subcommand(TxRevealPk::def().display_order(1))
                 // Nft transactions
                 .subcommand(TxInitNft::def().display_order(1))
                 .subcommand(TxMintNft::def().display_order(1))
@@ -162,6 +166,7 @@ pub mod cmds {
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
                 // PoS transactions
+                .subcommand(TxInitValidator::def().display_order(2))
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
@@ -188,6 +193,7 @@ pub mod cmds {
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
+            let tx_reveal_pk = Self::parse_with_ctx(matches, TxRevealPk);
             let tx_nft_create = Self::parse_with_ctx(matches, TxInitNft);
             let tx_nft_mint = Self::parse_with_ctx(matches, TxMintNft);
             let tx_init_proposal =
@@ -215,11 +221,12 @@ pub mod cmds {
                 .or(tx_transfer)
                 .or(tx_update_vp)
                 .or(tx_init_account)
-                .or(tx_init_validator)
+                .or(tx_reveal_pk)
                 .or(tx_nft_create)
                 .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
+                .or(tx_init_validator)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -279,6 +286,7 @@ pub mod cmds {
         TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
+        TxRevealPk(TxRevealPk),
         Bond(Bond),
         Unbond(Unbond),
         Withdraw(Withdraw),
@@ -1123,6 +1131,36 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxRevealPk(pub args::RevealPk);
+
+    impl SubCmd for TxRevealPk {
+        const CMD: &'static str = "reveal-pk";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| TxRevealPk(args::RevealPk::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Submit a tx to reveal the public key an implicit \
+                     account. Typically, you don't have to do this manually \
+                     and the client will detect when a tx to reveal PK is \
+                     needed and submit it automatically. This will write the \
+                     PK into the account's storage so that it can be used for \
+                     signature verification on transactions authorized by \
+                     this account.",
+                )
+                .add_args::<args::RevealPk>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
         FetchWasms(FetchWasms),
@@ -1860,6 +1898,28 @@ pub mod args {
                         )
                         .conflicts_with(PROPOSAL_ID.name),
                 )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct RevealPk {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// A public key to be revealed on-chain
+        pub public_key: WalletPublicKey,
+    }
+
+    impl Args for RevealPk {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let public_key = PUBLIC_KEY.parse(matches);
+
+            Self { tx, public_key }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(PUBLIC_KEY.def().about("A public key to reveal."))
         }
     }
 

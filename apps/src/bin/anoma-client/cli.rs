@@ -39,6 +39,9 @@ pub async fn main() -> Result<()> {
                 Sub::TxVoteProposal(TxVoteProposal(args)) => {
                     tx::submit_vote_proposal(ctx, args).await;
                 }
+                Sub::TxRevealPk(TxRevealPk(args)) => {
+                    tx::submit_reveal_pk(ctx, args).await;
+                }
                 Sub::Bond(Bond(args)) => {
                     tx::submit_bond(ctx, args).await;
                 }

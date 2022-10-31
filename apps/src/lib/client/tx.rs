@@ -47,6 +47,7 @@ const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
+const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 const TX_INIT_NFT: &str = "tx_init_nft.wasm";
@@ -813,6 +814,114 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     safe_exit(1)
                 }
             }
+        }
+    }
+}
+
+pub async fn submit_reveal_pk(mut ctx: Context, args: args::RevealPk) {
+    let args::RevealPk {
+        tx: args,
+        public_key,
+    } = args;
+    let public_key = ctx.get_cached(&public_key);
+    if !reveal_pk_if_needed(&mut ctx, &public_key, &args).await {
+        let addr: Address = (&public_key).into();
+        println!("PK for {addr} is already revealed, nothing to do.");
+    }
+}
+
+pub async fn reveal_pk_if_needed(
+    ctx: &mut Context,
+    public_key: &common::PublicKey,
+    args: &args::Tx,
+) -> bool {
+    let addr: Address = public_key.into();
+    // Check if PK revealed
+    if args.force || !has_revealed_pk(&addr, args.ledger_address.clone()).await
+    {
+        // If not, submit it
+        submit_reveal_pk_aux(ctx, public_key, args).await;
+        true
+    } else {
+        false
+    }
+}
+
+pub async fn has_revealed_pk(
+    addr: &Address,
+    ledger_address: TendermintAddress,
+) -> bool {
+    rpc::get_public_key(addr, ledger_address).await.is_some()
+}
+
+pub async fn submit_reveal_pk_aux(
+    ctx: &mut Context,
+    public_key: &common::PublicKey,
+    args: &args::Tx,
+) {
+    let addr: Address = public_key.into();
+    println!("Submitting a tx to reveal the public key for address {addr}...");
+    let tx_data = public_key
+        .try_to_vec()
+        .expect("Encoding a public key shouldn't fail");
+    let tx_code = ctx.read_wasm(TX_REVEAL_PK);
+    let tx = Tx::new(tx_code, Some(tx_data));
+
+    // submit_tx without signing the inner tx
+    let keypair = if let Some(signing_key) = &args.signing_key {
+        ctx.get_cached(signing_key)
+    } else if let Some(signer) = args.signer.as_ref() {
+        let signer = ctx.get(signer);
+        find_keypair(&mut ctx.wallet, &signer, args.ledger_address.clone())
+            .await
+    } else {
+        find_keypair(&mut ctx.wallet, &addr, args.ledger_address.clone()).await
+    };
+    let epoch = rpc::query_epoch(args::Query {
+        ledger_address: args.ledger_address.clone(),
+    })
+    .await;
+    let to_broadcast = if args.dry_run {
+        TxBroadcastData::DryRun(tx)
+    } else {
+        super::signing::sign_wrapper(ctx, args, epoch, tx, &keypair).await
+    };
+
+    if args.dry_run {
+        if let TxBroadcastData::DryRun(tx) = to_broadcast {
+            rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
+        } else {
+            panic!(
+                "Expected a dry-run transaction, received a wrapper \
+                 transaction instead"
+            );
+        }
+    } else {
+        // Either broadcast or submit transaction and collect result into
+        // sum type
+        let result = if args.broadcast_only {
+            Left(broadcast_tx(args.ledger_address.clone(), &to_broadcast).await)
+        } else {
+            Right(submit_tx(args.ledger_address.clone(), to_broadcast).await)
+        };
+        // Return result based on executed operation, otherwise deal with
+        // the encountered errors uniformly
+        match result {
+            Right(Err(err)) => {
+                eprintln!(
+                    "Encountered error while broadcasting transaction: {}",
+                    err
+                );
+                safe_exit(1)
+            }
+            Left(Err(err)) => {
+                eprintln!(
+                    "Encountered error while broadcasting transaction: {}",
+                    err
+                );
+                safe_exit(1)
+            }
+            _ => {}
         }
     }
 }

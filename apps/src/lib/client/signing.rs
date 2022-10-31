@@ -85,12 +85,25 @@ pub async fn sign_tx(
 ) -> (Context, TxBroadcastData) {
     let (tx, keypair) = if let Some(signing_key) = &args.signing_key {
         let signing_key = ctx.get_cached(signing_key);
+
+        // Check if the signing key needs to reveal its PK first
+        let pk: common::PublicKey = signing_key.ref_to();
+        super::tx::reveal_pk_if_needed(&mut ctx, &pk, args).await;
+
         (tx.sign(&signing_key), signing_key)
     } else if let Some(signer) = args.signer.as_ref().or(default) {
         let signer = ctx.get(signer);
         let signing_key =
             find_keypair(&mut ctx.wallet, &signer, args.ledger_address.clone())
                 .await;
+
+        // Check if the signer is implicit account that needs to reveal its PK
+        // first
+        if matches!(signer, Address::Implicit(_)) {
+            let pk: common::PublicKey = signing_key.ref_to();
+            super::tx::reveal_pk_if_needed(&mut ctx, &pk, args).await;
+        }
+
         (tx.sign(&signing_key), signing_key)
     } else {
         panic!(
