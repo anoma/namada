@@ -1965,6 +1965,9 @@ fn double_signing_gets_slashed() -> Result<()> {
     let test =
         setup::network(|genesis| setup::add_validators(1, genesis), None)?;
 
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(1));
+
     // 1. Run 2 genesis validator ledger nodes
     let args = ["ledger"];
     let mut validator_0 =
