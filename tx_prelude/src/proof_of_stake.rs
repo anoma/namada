@@ -175,7 +175,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         log_string(f);
         let encoded = encode(&value);
         log_string(&format!("encoded cold key: {:#?}", encoded));
-        self.write(&validator_eth_cold_key_key(address), encoded)
+        self.write(&validator_eth_cold_key_key(address), &value)
     }
 
     fn write_validator_eth_hot_key(
@@ -190,7 +190,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         log_string(f);
         let encoded = encode(&value);
         log_string(&format!("encoded hot key: {:#?}", encoded));
-        self.write(&validator_eth_hot_key_key(address), encoded)
+        self.write(&validator_eth_hot_key_key(address), &value)
     }
 
     fn write_validator_state(
