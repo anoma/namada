@@ -3,8 +3,9 @@ use std::num::NonZeroU64;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use crate::ledger::eth_bridge;
 
-use crate::ledger::eth_bridge::storage as bridge_storage;
+use crate::ledger::eth_bridge::{bridge_pool_vp, storage as bridge_storage};
 use crate::ledger::storage::types::encode;
 use crate::ledger::storage::{self, Storage};
 use crate::types::ethereum_events::EthAddress;
@@ -119,7 +120,10 @@ pub struct EthereumBridgeConfig {
 }
 
 impl EthereumBridgeConfig {
-    /// Initialize the Ethereum bridge parameters in storage
+    /// Initialize the Ethereum bridge parameters in storage.
+    ///
+    /// If these parameters are initialized, the storage subspaces
+    /// for the Ethereum bridge VPs are also initialized.
     pub fn init_storage<DB, H>(&self, storage: &mut Storage<DB, H>)
     where
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -148,5 +152,9 @@ impl EthereumBridgeConfig {
         storage
             .write(&governance_contract_key, encode(governance))
             .unwrap();
+        // Initialize the storage for the Ethereum Bridge VP.
+        eth_bridge::vp::init_storage(storage);
+        // Initialize the storage for the Bridge Pool VP.
+        bridge_pool_vp::init_storage(storage);
     }
 }
