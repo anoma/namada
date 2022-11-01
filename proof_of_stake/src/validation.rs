@@ -453,14 +453,14 @@ where
         for epoch in Epoch::iter_range(current_epoch, unbonding_offset + 1) {
             if let Some(post) = post.get_at_epoch(epoch) {
                 // Check that active validators length is not over the limit
-                if post.active.len() > params.max_validator_slots as usize {
+                if post.consensus.len() > params.max_validator_slots as usize {
                     errors.push(Error::TooManyActiveValidators)
                 }
                 // Check that all active have voting power >= any inactive
                 if let (
                     Some(max_inactive_validator),
                     Some(min_active_validator),
-                ) = (post.inactive.last_shim(), post.active.first_shim())
+                ) = (post.inactive.last_shim(), post.consensus.first_shim())
                 {
                     if max_inactive_validator.bonded_stake
                         > min_active_validator.bonded_stake
@@ -480,7 +480,7 @@ where
                             .map(Cow::Borrowed)
                             .unwrap_or_else(|| Cow::Owned(HashMap::default()));
                         // Check active validators
-                        for validator in &post.active {
+                        for validator in &post.consensus {
                             match total_stakes.get(&validator.address) {
                                 Some((_stake_pre, stake_post)) => {
                                     // Any validator who's total deltas changed,
@@ -500,7 +500,7 @@ where
                                     // Others must be have the same voting power
                                     // as in pre (active or inactive), or be a
                                     // newly added validator
-                                    if !pre.active.contains(validator)
+                                    if !pre.consensus.contains(validator)
                                         && !pre.inactive.contains(validator)
                                         && !new_validators
                                             .contains_key(&validator.address)
@@ -569,7 +569,7 @@ where
                                     // Others must be have the same voting power
                                     // as in pre (active or inactive), or be a
                                     // newly added validator
-                                    if !pre.active.contains(validator)
+                                    if !pre.consensus.contains(validator)
                                         && !pre.inactive.contains(validator)
                                         && !new_validators
                                             .contains_key(&validator.address)

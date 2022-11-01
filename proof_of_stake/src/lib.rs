@@ -920,7 +920,7 @@ pub trait PosBase {
         // For active validators, this would only ever happen until all the
         // validator slots are filled with non-0 voting power validators, but we
         // still need to guard against it.
-        let active_validators = cur_validators.active.iter().filter_map(
+        let active_validators = cur_validators.consensus.iter().filter_map(
             |validator: &WeightedValidator<_>| {
                 // If the validators set from previous epoch contains the same
                 // validator, it means its voting power hasn't changed and hence
@@ -928,7 +928,7 @@ pub trait PosBase {
                 if let (Some(prev_epoch), Some(prev_validators)) =
                     (previous_epoch, prev_validators)
                 {
-                    if prev_validators.active.contains(validator) {
+                    if prev_validators.consensus.contains(validator) {
                         println!(
                             "skipping validator update, still the same {}",
                             validator.address
@@ -1027,7 +1027,7 @@ pub trait PosBase {
 
         // Get total stake of the consensus validator set
         // TODO: does this need to account for rewards prodcuts?
-        let total_active_stake = validators.active.iter().fold(
+        let total_active_stake = validators.consensus.iter().fold(
             0_u64,
             |sum,
              WeightedValidator {
@@ -1084,7 +1084,7 @@ pub trait PosBase {
         let mut validator_accumulators = self
             .read_consensus_validator_rewards_accumulator()
             .unwrap_or_default();
-        for validator in validators.active.iter() {
+        for validator in validators.consensus.iter() {
             let mut rewards_frac = Decimal::default();
             let stake: Decimal = validator.bonded_stake.into();
 
@@ -1461,7 +1461,7 @@ where
             None => break,
         }
     }
-    let validator_set = ValidatorSet { active, inactive };
+    let validator_set = ValidatorSet { consensus, below_capacity, below_threshold };
     let validator_set = Epoched::init_at_genesis(validator_set, current_epoch);
     let total_bonded_delta =
         EpochedDelta::init_at_genesis(total_bonded_delta, current_epoch);
@@ -1669,9 +1669,9 @@ where
                 bonded_stake: 0,
                 address: address.clone(),
             };
-            if validator_set.active.len() < params.max_validator_slots as usize
+            if validator_set.consensus.len() < params.max_validator_slots as usize
             {
-                validator_set.active.insert(validator);
+                validator_set.consensus.insert(validator);
             } else {
                 validator_set.inactive.insert(validator);
             }
