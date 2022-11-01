@@ -136,6 +136,7 @@ pretty_assertions = "0.7.2"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
+toml = "0.5.8"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 
 [build-dependencies]
