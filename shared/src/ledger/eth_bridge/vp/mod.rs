@@ -53,7 +53,7 @@ where
             return false;
         };
         let escrow_post: Amount = if let Ok(Some(bytes)) =
-            self.ctx.read_pre(&escrow_key)
+            self.ctx.read_post(&escrow_key)
         {
             BorshDeserialize::try_from_slice(bytes.as_slice())
                 .expect("Deserializing a balance from storage shouldn't fail")
