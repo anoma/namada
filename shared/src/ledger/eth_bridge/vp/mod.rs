@@ -61,42 +61,47 @@ where
     /// that the balance increased and that the bridge pool
     /// VP has been triggered. The bridge pool VP will carry
     /// out the rest of the checks.
-    fn check_escrow(&self, verifiers: &BTreeSet<Address>) -> bool {
+    fn check_escrow(
+        &self,
+        verifiers: &BTreeSet<Address>,
+    ) -> Result<bool, Error> {
         let escrow_key = balance_key(&xan(), &super::ADDRESS);
         let escrow_pre: Amount = if let Ok(Some(bytes)) =
             self.ctx.read_pre(&escrow_key)
         {
-            BorshDeserialize::try_from_slice(bytes.as_slice())
-                .expect("Deserializing a balance from storage shouldn't fail")
+            BorshDeserialize::try_from_slice(bytes.as_slice()).map_err(
+                |_| Error(eyre!("Couldn't deserialize a balance from storage")),
+            )?
         } else {
             tracing::debug!(
                 "Could not retrieve the Ethereum bridge VP's balance from \
                  storage"
             );
-            return false;
+            return Ok(false);
         };
-        let escrow_post: Amount = if let Ok(Some(bytes)) =
-            self.ctx.read_post(&escrow_key)
-        {
-            BorshDeserialize::try_from_slice(bytes.as_slice())
-                .expect("Deserializing a balance from storage shouldn't fail")
-        } else {
-            tracing::debug!(
-                "Could not retrieve the modified Ethereum bridge VP's balance \
-                 after applying tx"
-            );
-            return false;
-        };
+        let escrow_post: Amount =
+            if let Ok(Some(bytes)) = self.ctx.read_post(&escrow_key) {
+                BorshDeserialize::try_from_slice(bytes.as_slice()).expect(
+                    "Deserializing the balance of the Ethereum bridge VP from \
+                     storage shouldn't fail",
+                )
+            } else {
+                tracing::debug!(
+                    "Could not retrieve the modified Ethereum bridge VP's \
+                     balance after applying tx"
+                );
+                return Ok(false);
+            };
 
         // The amount escrowed should increase.
         if escrow_pre < escrow_post {
-            verifiers.contains(&storage::bridge_pool::BRIDGE_POOL_ADDRESS)
+            Ok(verifiers.contains(&storage::bridge_pool::BRIDGE_POOL_ADDRESS))
         } else {
             tracing::info!(
                 "A normal tx cannot decrease the amount of Nam escrowed in \
                  the Ethereum bridge"
             );
-            false
+            Ok(false)
         }
     }
 }
@@ -145,7 +150,7 @@ where
 
         // first check if Nam is being escrowed
         if keys_changed.contains(&balance_key(&xan(), &super::ADDRESS)) {
-            return Ok(self.check_escrow(verifiers));
+            return self.check_escrow(verifiers);
         }
 
         let (key_a, key_b) = match extract_valid_keys_changed(keys_changed)? {

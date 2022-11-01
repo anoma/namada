@@ -114,24 +114,21 @@ where
         escrow_account: &Address,
         expected_debit: Amount,
         expected_credit: Amount,
-    ) -> bool {
+    ) -> Result<bool, Error> {
         let debited = self.account_balance_delta(payer_account);
         let credited = self.account_balance_delta(escrow_account);
-        if debited.is_none() && credited.is_none() {
-            return false;
-        }
 
         match (debited, credited) {
             (
                 Some(SignedAmount::Negative(debit)),
                 Some(SignedAmount::Positive(credit)),
-            ) => debit == expected_debit && credit == expected_credit,
+            ) => Ok(debit == expected_debit && credit == expected_credit),
             (Some(SignedAmount::Positive(_)), _) => {
                 tracing::debug!(
                     "The account {} was not debited.",
                     payer_account
                 );
-                false
+                Ok(false)
             }
             (_, Some(SignedAmount::Negative(_))) => {
                 tracing::debug!(
@@ -139,22 +136,12 @@ where
                      account {}.",
                     payer_account
                 );
-                false
+                Ok(false)
             }
-            (None, _) => {
-                tracing::debug!(
-                    "Could not calculate the balance delta for {}",
-                    payer_account
-                );
-                false
-            }
-            (_, None) => {
-                tracing::debug!(
-                    "Could not calculate the balance delta for the Ethereum \
-                     bridge pool"
-                );
-                false
-            }
+            (None, _) | (_, None) => Err(Error(eyre!(
+                "Could not calculate the balance delta for {}",
+                payer_account
+            ))),
         }
     }
 
@@ -272,12 +259,12 @@ where
                     &BRIDGE_POOL_ADDRESS,
                     transfer.gas_fee.amount + transfer.transfer.amount,
                     transfer.gas_fee.amount,
-                ) || !self.check_nam_escrowed(
+                )? || !self.check_nam_escrowed(
                     &transfer.transfer.sender,
                     &Address::Internal(InternalAddress::EthBridge),
                     transfer.gas_fee.amount + transfer.transfer.amount,
                     transfer.transfer.amount,
-                ) {
+                )? {
                     Ok(false)
                 } else {
                     tracing::info!(
@@ -292,12 +279,12 @@ where
                 &BRIDGE_POOL_ADDRESS,
                 transfer.gas_fee.amount,
                 transfer.gas_fee.amount,
-            ) || !self.check_nam_escrowed(
+            )? || !self.check_nam_escrowed(
                 &transfer.transfer.sender,
                 &Address::Internal(InternalAddress::EthBridge),
                 transfer.transfer.amount,
                 transfer.transfer.amount,
-            ) {
+            )? {
                 Ok(false)
             } else {
                 tracing::info!(
@@ -313,7 +300,7 @@ where
                 &BRIDGE_POOL_ADDRESS,
                 transfer.gas_fee.amount,
                 transfer.gas_fee.amount,
-            ) {
+            )? {
                 return Ok(false);
             }
         }
