@@ -220,11 +220,13 @@ where
         + BorshSchema
         + BorshSerialize,
 {
-    /// Active validator set with maximum size equal to `max_validator_slots`
+    /// Validator set of those that are active in the consensus mechanism, with maximum size equal to `max_validator_slots`
     /// in [`PosParams`].
-    pub active: BTreeSet<WeightedValidator<Address>>,
-    /// All the other validators that are not active
-    pub inactive: BTreeSet<WeightedValidator<Address>>,
+    pub consensus: BTreeSet<WeightedValidator<Address>>,
+    /// Validators whose voting power is below that of the top `max_validator_slots` validators but above the `min_validator_stake` threshold in [`PosParams`]
+    pub below_capacity: BTreeSet<WeightedValidator<Address>>,
+    /// Validators whose bonded stake is below the `min_validator_stake` threshold in [`PosParams`]
+    pub below_threshold: BTreeSet<WeightedValidator<Address>>,
 }
 
 /// Validator's state.
