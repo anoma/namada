@@ -534,7 +534,6 @@ pub fn kartoffel() -> Address {
 
 /// Temporary helper for testing
 pub const fn wnam() -> EthAddress {
-    // TODO: Replace this with the real wNam ERC20 address once it exists
     // "DEADBEEF DEADBEEF DEADBEEF DEADBEEF DEADBEEF"
     EthAddress([
         222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222, 173,
