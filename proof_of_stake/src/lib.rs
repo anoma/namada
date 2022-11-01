@@ -2033,7 +2033,7 @@ where
     Ok(UnbondData { unbond })
 }
 
-/// Update validator set when a validator's receives a new bond and when its
+/// Update validator set when a validator receives a new bond and when its
 /// bond is unbonded (self-bond or delegation).
 fn update_validator_set<Address, TokenChange>(
     params: &PosParams,
@@ -2070,7 +2070,7 @@ fn update_validator_set<Address, TokenChange>(
     validator_set.update_from_offset(
         |validator_set, epoch| {
             // Find the validator's bonded stake at the epoch that's being
-            // updated from its total deltas
+            // updated from its deltas
             let tokens_pre = validator_deltas
                 .and_then(|d| d.get(epoch))
                 .unwrap_or_default();
@@ -2090,48 +2090,78 @@ fn update_validator_set<Address, TokenChange>(
                     address: validator.clone(),
                 };
 
-                if validator_set.inactive.contains(&validator_pre) {
-                    let min_active_validator =
-                        validator_set.active.first_shim();
-                    let min_bonded_stake = min_active_validator
+                // TODO: consider the ordering of the if-else flow for efficiency
+                // TODO: handle the unwrap_or_defaults below with errors?
+
+                // First consider a validator in the `below_threshold` set
+                if validator_set.below_threshold.contains(&validator_pre) {
+                    if tokens_post >= params.min_validator_stake {
+                        let min_consensus_validator = validator_set.consensus.first_shim();
+                        let min_bonded_stake = min_consensus_validator
                         .map(|v| v.bonded_stake)
                         .unwrap_or_default();
-                    if tokens_post > min_bonded_stake {
-                        let deactivate_min =
-                            validator_set.active.pop_first_shim();
-                        let popped =
-                            validator_set.inactive.remove(&validator_pre);
+                        let popped = validator_set.below_threshold.remove(&validator_pre);
                         debug_assert!(popped);
-                        validator_set.active.insert(validator_post);
-                        if let Some(deactivate_min) = deactivate_min {
-                            validator_set.inactive.insert(deactivate_min);
+                        if tokens_post > min_bonded_stake {
+                            let deactivate_min = validator_set.consensus.pop_first_shim();
+                            validator_set.consensus.insert(validator_post);
+                            if let Some(deactivate_min) = deactivate_min {
+                                validator_set.below_capacity.insert(deactivate_min);
+                            }
+                        } else {
+                            validator_set.below_capacity.insert(validator_post);
                         }
                     } else {
-                        validator_set.inactive.remove(&validator_pre);
-                        validator_set.inactive.insert(validator_post);
+                        // Do we even want to enter and update here?
+                        validator_set.below_threshold.remove(&validator_pre);
+                        validator_set.below_threshold.insert(validator_post);
+                    }
+                } else if validator_set.below_capacity.contains(&validator_pre) {
+                    // Consider a validator in the `below_capacity` set
+                    if tokens_post < params.min_validator_stake {
+                        let popped = validator_set.below_capacity.remove(&validator_pre);
+                        debug_assert!(popped);
+                        validator_set.below_threshold.insert(validator_post);
+                    } else {
+                        let min_consensus_validator = validator_set.consensus.first_shim();
+                        let min_bonded_stake = min_consensus_validator
+                        .map(|v| v.bonded_stake)
+                        .unwrap_or_default();
+                        if tokens_post > min_bonded_stake {
+                            let deactivate_min = validator_set.consensus.pop_first_shim();
+                            validator_set.consensus.insert(validator_post);
+                            if let Some(deactivate_min) = deactivate_min {
+                                validator_set.below_capacity.insert(deactivate_min);
+                            }
+                        } else {
+                            validator_set.below_capacity.remove(&validator_pre);
+                            validator_set.below_capacity.insert(validator_post);
+                        }
                     }
                 } else {
                     debug_assert!(
-                        validator_set.active.contains(&validator_pre)
+                        validator_set.consensus.contains(&validator_pre)
                     );
                     let max_inactive_validator =
-                        validator_set.inactive.last_shim();
-                    let max_bonded_stake = max_inactive_validator
+                    validator_set.below_capacity.last_shim();
+                    let max_inactive_stake = max_inactive_validator
                         .map(|v| v.bonded_stake)
                         .unwrap_or_default();
-                    if tokens_post < max_bonded_stake {
-                        let activate_max =
-                            validator_set.inactive.pop_last_shim();
-                        let popped =
-                            validator_set.active.remove(&validator_pre);
-                        debug_assert!(popped);
-                        validator_set.inactive.insert(validator_post);
-                        if let Some(activate_max) = activate_max {
-                            validator_set.active.insert(activate_max);
-                        }
+                    if tokens_post >= max_inactive_stake {
+                        validator_set.consensus.remove(&validator_pre);
+                        validator_set.consensus.insert(validator_post);
                     } else {
-                        validator_set.active.remove(&validator_pre);
-                        validator_set.active.insert(validator_post);
+                        let popped = validator_set.consensus.remove(&validator_pre);
+                        debug_assert!(popped);
+                        let promoted_max = validator_set.below_capacity.pop_last_shim();
+                        if let Some(promoted_max) = promoted_max {
+                            validator_set.consensus.insert(promoted_max);
+                        }
+                        if tokens_post < params.min_validator_stake {
+                            validator_set.below_threshold.insert(validator_post);
+                        } else {
+                            validator_set.below_capacity.insert(validator_post);
+                        }
                     }
                 }
             }
