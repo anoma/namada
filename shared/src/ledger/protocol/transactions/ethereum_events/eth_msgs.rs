@@ -1,12 +1,12 @@
 use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada::types::address::Address;
-use namada::types::ethereum_events::EthereumEvent;
-use namada::types::storage::BlockHeight;
-use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
-use crate::node::ledger::protocol::transactions::votes::Tally;
+use crate::ledger::protocol::transactions::votes::Tally;
+use crate::types::address::Address;
+use crate::types::ethereum_events::EthereumEvent;
+use crate::types::storage::BlockHeight;
+use crate::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
 /// Represents an Ethereum event being seen by some validators
 #[derive(
@@ -57,13 +57,12 @@ pub struct EthMsg {
 mod tests {
     use std::collections::BTreeSet;
 
-    use namada::types::address;
-    use namada::types::ethereum_events::testing::{
+    use super::*;
+    use crate::types::address;
+    use crate::types::ethereum_events::testing::{
         arbitrary_nonce, arbitrary_single_transfer,
     };
-    use namada::types::storage::BlockHeight;
-
-    use super::*;
+    use crate::types::storage::BlockHeight;
 
     #[test]
     /// Tests [`From<MultiSignedEthEvent>`] for [`EthMsgUpdate`]

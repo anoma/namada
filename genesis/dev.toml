@@ -26,10 +26,10 @@ net_address = "127.0.0.1:26656"
 
 # Some tokens present at genesis.
 
-[token.xan]
+[token.nam]
 address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5"
 vp = "vp_token"
-[token.xan.balances]
+[token.nam.balances]
 # In token balances, we can use:
 # 1. An address any account
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
@@ -168,7 +168,7 @@ light_client_attack_slash_rate = 500
 
 # Governance parameters.
 [gov_params]
-# minimum amount of xan token to lock
+# minimum amount of nam token to lock
 min_proposal_fund = 500
 # proposal code size in bytes
 max_proposal_code_size = 300000

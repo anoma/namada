@@ -4,36 +4,33 @@ mod transactions;
 use std::collections::BTreeSet;
 use std::panic;
 
-use namada::ledger::eth_bridge::bridge_pool_vp::BridgePoolVp;
-use namada::ledger::eth_bridge::vp::EthBridge;
-use namada::ledger::gas::{self, BlockGasMeter, VpGasMeter};
-use namada::ledger::governance::GovernanceVp;
-use namada::ledger::ibc::vp::{Ibc, IbcToken};
-use namada::ledger::native_vp::{self, NativeVp};
-use namada::ledger::parameters::{self, ParametersVp};
-use namada::ledger::pos::{self, PosVP};
-use namada::ledger::slash_fund::SlashFundVp;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::write_log::WriteLog;
-use namada::ledger::storage::{DBIter, Storage, DB};
-use namada::proto::{self, Tx};
-use namada::types::address::{Address, InternalAddress};
-use namada::types::storage;
-use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
-use namada::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
-#[cfg(not(feature = "abcipp"))]
-use namada::types::vote_extensions::ethereum_events;
-use namada::vm::wasm::{TxCache, VpCache};
-use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
-use crate::node::ledger::shell::Shell;
+use crate::ledger::eth_bridge::bridge_pool_vp::BridgePoolVp;
+use crate::ledger::eth_bridge::vp::EthBridge;
+use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use crate::ledger::governance::GovernanceVp;
+use crate::ledger::ibc::vp::{Ibc, IbcToken};
+use crate::ledger::native_vp::{self, NativeVp};
+use crate::ledger::parameters::{self, ParametersVp};
+use crate::ledger::pos::{self, PosVP};
+use crate::ledger::slash_fund::SlashFundVp;
+use crate::ledger::storage::write_log::WriteLog;
+use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use crate::proto::{self, Tx};
+use crate::types::address::{Address, InternalAddress};
+use crate::types::storage;
+use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
+use crate::vm::wasm::{TxCache, VpCache};
+use crate::vm::{self, wasm, WasmCacheAccess};
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
-    StorageError(namada::ledger::storage::Error),
+    StorageError(crate::ledger::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
@@ -49,7 +46,7 @@ pub enum Error {
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
     #[error("IBC native VP: {0}")]
-    IbcNativeVpError(namada::ledger::ibc::vp::Error),
+    IbcNativeVpError(crate::ledger::ibc::vp::Error),
     #[error("PoS native VP: {0}")]
     PosNativeVpError(pos::vp::Error),
     #[error("PoS native VP panicked")]
@@ -57,20 +54,21 @@ pub enum Error {
     #[error("Parameters native VP: {0}")]
     ParametersNativeVpError(parameters::Error),
     #[error("IBC Token native VP: {0}")]
-    IbcTokenNativeVpError(namada::ledger::ibc::vp::IbcTokenError),
+    IbcTokenNativeVpError(crate::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(namada::ledger::governance::vp::Error),
+    GovernanceNativeVpError(crate::ledger::governance::vp::Error),
     #[error("SlashFund native VP error: {0}")]
-    SlashFundNativeVpError(namada::ledger::slash_fund::Error),
+    SlashFundNativeVpError(crate::ledger::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]
-    EthBridgeNativeVpError(namada::ledger::eth_bridge::vp::Error),
+    EthBridgeNativeVpError(crate::ledger::eth_bridge::vp::Error),
     #[error("Ethereum bridge pool native VP error: {0}")]
-    BridgePoolNativeVpError(namada::ledger::eth_bridge::bridge_pool_vp::Error),
+    BridgePoolNativeVpError(crate::ledger::eth_bridge::bridge_pool_vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
 
-pub(crate) struct ShellParams<'a, D, H, CA>
+#[allow(missing_docs)]
+pub struct ShellParams<'a, D, H, CA>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -83,23 +81,7 @@ where
     pub tx_wasm_cache: &'a mut TxCache<CA>,
 }
 
-impl<'a, D, H> From<&'a mut Shell<D, H>>
-    for ShellParams<'a, D, H, namada::vm::WasmCacheRwAccess>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    fn from(shell: &'a mut Shell<D, H>) -> Self {
-        Self {
-            block_gas_meter: &mut shell.gas_meter,
-            write_log: &mut shell.write_log,
-            storage: &shell.storage,
-            vp_wasm_cache: &mut shell.vp_wasm_cache,
-            tx_wasm_cache: &mut shell.tx_wasm_cache,
-        }
-    }
-}
-
+/// Result of applying a transaction
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Dispatch a given transaction to be applied based on its type. Some storage
@@ -109,7 +91,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// If the given tx is a successfully decrypted payload apply the necessary
 /// vps. Otherwise, we include the tx on chain with the gas charge added
 /// but no further validations.
-pub(crate) fn dispatch_tx<'a, D, H, CA>(
+pub fn dispatch_tx<'a, D, H, CA>(
     tx_type: TxType,
     tx_length: usize,
     block_gas_meter: &'a mut BlockGasMeter,
@@ -217,6 +199,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    use crate::types::vote_extensions::ethereum_events;
+
     match tx {
         ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
             events,

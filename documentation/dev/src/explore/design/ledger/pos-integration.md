@@ -27,7 +27,7 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
   - `validator/{validator_address}/address_raw_hash` (required): raw hash of validator's address associated with the address is used for look-up of validator address from a raw hash
   - TBA (e.g. alias, website, description, delegation commission rate, etc.)
 
-Only XAN tokens can be staked in bonds. The tokens being staked (bonds and unbonds amounts) are kept in the PoS account under `{xan_address}/balance/{pos_address}` until they are withdrawn.
+Only NAM tokens can be staked in bonds. The tokens being staked (bonds and unbonds amounts) are kept in the PoS account under `{nam_address}/balance/{pos_address}` until they are withdrawn.
 
 ## Initialization
 
@@ -39,7 +39,7 @@ Staking rewards for validators are rewarded in Tendermint's method `BeginBlock` 
 
 To a validator who proposed a block (`block.header.proposer_address`), the system rewards tokens based on the `block_proposer_reward` PoS parameter and each validator that voted on a block (`block.last_commit_info.validator` who `signed_last_block`) receives `block_vote_reward`.
 
-All the fees that are charged in a transaction execution (DKG transaction wrapper fee and transactions applied in a block) are transferred into a fee pool, which is another special account controlled by the PoS module. Note that the fee pool account may contain tokens other than the staking token XAN.
+All the fees that are charged in a transaction execution (DKG transaction wrapper fee and transactions applied in a block) are transferred into a fee pool, which is another special account controlled by the PoS module. Note that the fee pool account may contain tokens other than the staking token NAM.
 
 - TODO describe the fee pool, related to <https://github.com/anomanetwork/anoma/issues/48>, <https://github.com/anomanetwork/anoma/issues/51> and <https://github.com/anomanetwork/anoma/issues/72>
 

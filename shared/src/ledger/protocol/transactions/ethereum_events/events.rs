@@ -3,13 +3,13 @@
 use std::collections::BTreeSet;
 
 use eyre::Result;
-use namada::ledger::eth_bridge::storage::wrapped_erc20s;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, Storage, DB};
-use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
-use namada::types::storage::Key;
 
-use crate::node::ledger::protocol::transactions::update;
+use crate::ledger::eth_bridge::storage::wrapped_erc20s;
+use crate::ledger::protocol::transactions::update;
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{DBIter, Storage, DB};
+use crate::types::ethereum_events::{EthereumEvent, TransferToNamada};
+use crate::types::storage::Key;
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
@@ -90,15 +90,15 @@ mod tests {
 
     use assert_matches::assert_matches;
     use borsh::BorshSerialize;
-    use namada::ledger::storage::testing::TestStorage;
-    use namada::types::address;
-    use namada::types::ethereum_events::testing::{
+
+    use super::*;
+    use crate::ledger::storage::testing::TestStorage;
+    use crate::types::address;
+    use crate::types::ethereum_events::testing::{
         arbitrary_eth_address, arbitrary_keccak_hash, arbitrary_nonce,
         DAI_ERC20_ETH_ADDRESS,
     };
-    use namada::types::token::Amount;
-
-    use super::*;
+    use crate::types::token::Amount;
 
     #[test]
     /// Test that we do not make any changes to storage when acting on most

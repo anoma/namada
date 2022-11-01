@@ -8,21 +8,21 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::Result;
-use namada::ledger::eth_bridge::storage::vote_tallies;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, Storage, DB};
-use namada::types::address::Address;
-use namada::types::storage::{self, BlockHeight};
-use namada::types::transaction::TxResult;
-use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
-use namada::types::voting_power::FractionalVotingPower;
 
-use crate::node::ledger::protocol::transactions::utils::{
+use crate::ledger::eth_bridge::storage::vote_tallies;
+use crate::ledger::protocol::transactions::utils::{
     self, get_active_validators,
 };
-use crate::node::ledger::protocol::transactions::votes::{
+use crate::ledger::protocol::transactions::votes::{
     calculate_new, calculate_updated, write,
 };
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{DBIter, Storage, DB};
+use crate::types::address::Address;
+use crate::types::storage::{self, BlockHeight};
+use crate::types::transaction::TxResult;
+use crate::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
+use crate::types::voting_power::FractionalVotingPower;
 
 /// The keys changed while applying a protocol transaction
 type ChangedKeys = BTreeSet<storage::Key>;
@@ -194,23 +194,23 @@ mod tests {
     use std::collections::{BTreeSet, HashMap, HashSet};
 
     use borsh::BorshDeserialize;
-    use namada::ledger::eth_bridge::storage::wrapped_erc20s;
-    use namada::ledger::pos::namada_proof_of_stake::epoched::Epoched;
-    use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::pos::types::{ValidatorSet, WeightedValidator};
-    use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::testing::TestStorage;
-    use namada::ledger::storage::traits::Sha256Hasher;
-    use namada::types::address;
-    use namada::types::ethereum_events::testing::{
-        arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
-        DAI_ERC20_ETH_ADDRESS,
-    };
-    use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
-    use namada::types::token::Amount;
     use storage::BlockHeight;
 
     use super::*;
+    use crate::ledger::eth_bridge::storage::wrapped_erc20s;
+    use crate::ledger::pos::namada_proof_of_stake::epoched::Epoched;
+    use crate::ledger::pos::namada_proof_of_stake::PosBase;
+    use crate::ledger::pos::types::{ValidatorSet, WeightedValidator};
+    use crate::ledger::storage::mockdb::MockDB;
+    use crate::ledger::storage::testing::TestStorage;
+    use crate::ledger::storage::traits::Sha256Hasher;
+    use crate::types::address;
+    use crate::types::ethereum_events::testing::{
+        arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
+        DAI_ERC20_ETH_ADDRESS,
+    };
+    use crate::types::ethereum_events::{EthereumEvent, TransferToNamada};
+    use crate::types::token::Amount;
 
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer

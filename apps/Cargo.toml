@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_apps"
 readme = "../README.md"
 resolver = "2"
-version = "0.8.1"
+version = "0.9.0"
 default-run = "namada"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -64,7 +64,7 @@ abciplus = [
 ]
 
 [dependencies]
-namada = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand", "secp256k1-sign-verify"]}
+namada = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand", "tendermint-rpc", "secp256k1-sign-verify"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
@@ -107,7 +107,7 @@ prost = "0.9.0"
 prost-types = "0.9.0"
 rand = {version = "0.8", default-features = false}
 rand_core = {version = "0.6", default-features = false}
-rayon = "=1.5.1"
+rayon = "=1.5.3"
 regex = "1.4.5"
 reqwest = "0.11.4"
 rlimit = "0.5.4"

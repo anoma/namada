@@ -21,7 +21,7 @@ use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::proto::SignedTxData;
-use crate::types::address::{xan, Address, InternalAddress};
+use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
@@ -58,7 +58,7 @@ where
     /// Get the change in the balance of an account
     /// associated with an address
     fn account_balance_delta(&self, address: &Address) -> Option<SignedAmount> {
-        let account_key = balance_key(&xan(), address);
+        let account_key = balance_key(&nam(), address);
         let before: Amount = (&self.ctx)
             .read_pre_value(&account_key)
             .unwrap_or_else(|error| {
@@ -248,14 +248,14 @@ mod test_bridge_pool_vp {
         writelog
             .write(&get_pending_key(&transfer), transfer.try_to_vec().unwrap())
             .unwrap();
-        let escrow_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        let escrow_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         let amount: Amount = ESCROWED_AMOUNT.into();
         writelog
             .write(&escrow_key, amount.try_to_vec().unwrap())
             .unwrap();
 
         // setup a user with a balance
-        let bertha_account_key = balance_key(&xan(), &bertha_address());
+        let bertha_account_key = balance_key(&nam(), &bertha_address());
         let bertha_wealth: Amount = BERTHA_WEALTH.into();
         writelog
             .write(&bertha_account_key, bertha_wealth.try_to_vec().unwrap())
@@ -323,7 +323,7 @@ mod test_bridge_pool_vp {
             },
         };
         // change the payers account
-        let bertha_account_key = balance_key(&xan(), &bertha_address());
+        let bertha_account_key = balance_key(&nam(), &bertha_address());
         let new_bertha_balance = match payer_delta {
             SignedAmount::Positive(amount) => {
                 Amount::from(BERTHA_WEALTH) + amount
@@ -338,7 +338,7 @@ mod test_bridge_pool_vp {
             .write(&bertha_account_key, new_bertha_balance)
             .expect("Test failed");
         // change the escrow account
-        let escrow = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        let escrow = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         let new_escrow_balance = match escrow_delta {
             SignedAmount::Positive(amount) => {
                 Amount::from(ESCROWED_AMOUNT) + amount

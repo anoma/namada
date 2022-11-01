@@ -8,19 +8,19 @@ use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
+use namada::ledger::queries::{RequestCtx, ResponseQuery};
+use namada::ledger::storage_api;
 use namada::types::address::Address;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::storage::{Epoch, Key, PrefixValue};
+use namada::types::storage::Epoch;
 use namada::types::token::{self, Amount};
 use namada::types::vote_extensions::validator_set_update::EthAddrBook;
 
 use super::*;
-use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tendermint_proto::types::EvidenceParams;
-use crate::node::ledger::events::log::dumb_queries;
 use crate::node::ledger::response;
 
 #[derive(Error, Debug)]
@@ -55,47 +55,39 @@ where
     /// the default if `path` is not a supported string.
     /// INVARIANT: This method must be stateless.
     pub fn query(&self, query: request::Query) -> response::Query {
-        use rpc::Path;
-        let height = match query.height {
-            0 => self.storage.get_block_height().0,
-            1.. => BlockHeight(query.height as u64),
-            _ => {
+        let ctx = RequestCtx {
+            storage: &self.storage,
+            vp_wasm_cache: self.vp_wasm_cache.read_only(),
+            tx_wasm_cache: self.tx_wasm_cache.read_only(),
+        };
+
+        // Convert request to domain-type
+        let request = match namada::ledger::queries::RequestQuery::try_from_tm(
+            &self.storage,
+            query,
+        ) {
+            Ok(request) => request,
+            Err(err) => {
                 return response::Query {
                     code: 1,
-                    info: format!(
-                        "The query height is invalid: {}",
-                        query.height
-                    ),
+                    info: format!("Unexpected query: {}", err),
                     ..Default::default()
                 };
             }
         };
-        match Path::from_str(&query.path) {
-            Ok(path) => match path {
-                Path::DryRunTx => self.dry_run_tx(&query.data),
-                Path::Epoch => {
-                    let (epoch, _gas) = self.storage.get_last_epoch();
-                    let value = namada::ledger::storage::types::encode(&epoch);
-                    response::Query {
-                        value,
-                        ..Default::default()
-                    }
-                }
-                Path::Value(storage_key) => {
-                    self.read_storage_value(&storage_key, height, query.prove)
-                }
-                Path::Prefix(storage_key) => {
-                    self.read_storage_prefix(&storage_key, height, query.prove)
-                }
-                Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
-                Path::Accepted { tx_hash } => {
-                    let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
-                    self.query_event_log(matcher)
-                }
-                Path::Applied { tx_hash } => {
-                    let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
-                    self.query_event_log(matcher)
-                }
+
+        // Invoke the root RPC handler - returns borsh-encoded data on success
+        let result = namada::ledger::queries::handle_path(ctx, &request);
+        match result {
+            Ok(ResponseQuery {
+                data,
+                info,
+                proof_ops,
+            }) => response::Query {
+                value: data,
+                info,
+                proof_ops,
+                ..Default::default()
             },
             Err(err) => response::Query {
                 code: 1,
@@ -106,237 +98,20 @@ where
     }
 
     /// Query events in the event log matching the given query.
-    fn query_event_log(
+    pub fn query_event_log(
         &self,
-        matcher: dumb_queries::QueryMatcher,
-    ) -> response::Query {
-        let value = self
-            .event_log()
-            .iter_with_matcher(matcher)
-            .cloned()
-            .collect::<Vec<_>>()
-            .try_to_vec()
-            .unwrap();
-
-        response::Query {
-            value,
-            ..Default::default()
-        }
-    }
-
-    /// Query to check if a storage key exists.
-    fn has_storage_key(&self, key: &Key) -> response::Query {
-        match self.storage.has_key(key) {
-            Ok((has_key, _gas)) => response::Query {
-                value: has_key.try_to_vec().unwrap(),
-                ..Default::default()
-            },
-            Err(err) => response::Query {
-                code: 2,
-                info: format!("Storage error: {}", err),
-                ..Default::default()
-            },
-        }
-    }
-
-    /// Query to read a range of values from storage with a matching prefix. The
-    /// value in successful response is a [`Vec<PrefixValue>`] encoded with
-    /// [`BorshSerialize`].
-    fn read_storage_prefix(
-        &self,
-        key: &Key,
-        height: BlockHeight,
-        is_proven: bool,
-    ) -> response::Query {
-        if height != self.storage.get_block_height().0 {
-            return response::Query {
-                code: 2,
-                info: format!(
-                    "Prefix read works with only the latest height: height {}",
-                    height
-                ),
-                ..Default::default()
-            };
-        }
-        let (iter, _gas) = self.storage.iter_prefix(key);
-        let mut iter = iter.peekable();
-        if iter.peek().is_none() {
-            response::Query {
-                code: 1,
-                info: format!("No value found for key: {}", key),
-                ..Default::default()
-            }
-        } else {
-            let values: std::result::Result<
-                Vec<PrefixValue>,
-                namada::types::storage::Error,
-            > = iter
-                .map(|(key, value, _gas)| {
-                    let key = Key::parse(key)?;
-                    Ok(PrefixValue { key, value })
-                })
-                .collect();
-            match values {
-                Ok(values) => {
-                    let proof_ops = if is_proven {
-                        let mut ops = vec![];
-                        for PrefixValue { key, value } in &values {
-                            match self.storage.get_existence_proof(
-                                key,
-                                value.clone().into(),
-                                height,
-                            ) {
-                                Ok(p) => {
-                                    let mut cur_ops: Vec<ProofOp> = p
-                                        .ops
-                                        .into_iter()
-                                        .map(|op| {
-                                            #[cfg(feature = "abcipp")]
-                                            {
-                                                ProofOp {
-                                                    r#type: op.field_type,
-                                                    key: op.key,
-                                                    data: op.data,
-                                                }
-                                            }
-                                            #[cfg(not(feature = "abcipp"))]
-                                            {
-                                                op.into()
-                                            }
-                                        })
-                                        .collect();
-                                    ops.append(&mut cur_ops);
-                                }
-                                Err(err) => {
-                                    return response::Query {
-                                        code: 2,
-                                        info: format!("Storage error: {}", err),
-                                        ..Default::default()
-                                    };
-                                }
-                            }
-                        }
-                        // ops is not empty in this case
-                        Some(ProofOps { ops })
-                    } else {
-                        None
-                    };
-                    let value = values.try_to_vec().unwrap();
-                    response::Query {
-                        value,
-                        proof_ops,
-                        ..Default::default()
-                    }
-                }
-                Err(err) => response::Query {
-                    code: 1,
-                    info: format!(
-                        "Error parsing a storage key {}: {}",
-                        key, err
-                    ),
-                    ..Default::default()
-                },
-            }
-        }
-    }
-
-    /// Query to read a value from storage
-    fn read_storage_value(
-        &self,
-        key: &Key,
-        height: BlockHeight,
-        is_proven: bool,
-    ) -> response::Query {
-        match self.storage.read_with_height(key, height) {
-            Ok((Some(value), _gas)) => {
-                let proof_ops = if is_proven {
-                    match self.storage.get_existence_proof(
-                        key,
-                        value.clone().into(),
-                        height,
-                    ) {
-                        Ok(proof) => Some({
-                            #[cfg(feature = "abcipp")]
-                            {
-                                let ops = proof
-                                    .ops
-                                    .into_iter()
-                                    .map(|op| ProofOp {
-                                        r#type: op.field_type,
-                                        key: op.key,
-                                        data: op.data,
-                                    })
-                                    .collect();
-                                ProofOps { ops }
-                            }
-                            #[cfg(not(feature = "abcipp"))]
-                            {
-                                proof.into()
-                            }
-                        }),
-                        Err(err) => {
-                            return response::Query {
-                                code: 2,
-                                info: format!("Storage error: {}", err),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-                response::Query {
-                    value,
-                    proof_ops,
-                    ..Default::default()
-                }
-            }
-            Ok((None, _gas)) => {
-                let proof_ops = if is_proven {
-                    match self.storage.get_non_existence_proof(key, height) {
-                        Ok(proof) => Some({
-                            #[cfg(feature = "abcipp")]
-                            {
-                                let ops = proof
-                                    .ops
-                                    .into_iter()
-                                    .map(|op| ProofOp {
-                                        r#type: op.field_type,
-                                        key: op.key,
-                                        data: op.data,
-                                    })
-                                    .collect();
-                                ProofOps { ops }
-                            }
-                            #[cfg(not(feature = "abcipp"))]
-                            {
-                                proof.into()
-                            }
-                        }),
-                        Err(err) => {
-                            return response::Query {
-                                code: 2,
-                                info: format!("Storage error: {}", err),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-                response::Query {
-                    code: 1,
-                    info: format!("No value found for key: {}", key),
-                    proof_ops,
-                    ..Default::default()
-                }
-            }
-            Err(err) => response::Query {
-                code: 2,
-                info: format!("Storage error: {}", err),
-                ..Default::default()
-            },
-        }
+        token: &Address,
+        owner: &Address,
+    ) -> token::Amount {
+        let balance = storage_api::StorageRead::read(
+            &self.storage,
+            &token::balance_key(token, owner),
+        );
+        // Storage read must not fail, but there might be no value, in which
+        // case default (0) is returned
+        balance
+            .expect("Storage read in the protocol must not fail")
+            .unwrap_or_default()
     }
 }
 

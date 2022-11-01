@@ -11,7 +11,6 @@ pub mod ibc;
 pub mod internal;
 pub mod keccak;
 pub mod key;
-pub mod nft;
 pub mod storage;
 pub mod time;
 pub mod token;

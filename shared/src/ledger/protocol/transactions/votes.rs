@@ -5,14 +5,14 @@ use std::collections::{BTreeSet, HashMap};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
-use namada::ledger::eth_bridge::storage::vote_tallies;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, Storage, DB};
-use namada::types::address::Address;
-use namada::types::storage::BlockHeight;
-use namada::types::voting_power::FractionalVotingPower;
 
-use crate::node::ledger::protocol::transactions::read;
+use crate::ledger::eth_bridge::storage::vote_tallies;
+use crate::ledger::protocol::transactions::read;
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{DBIter, Storage, DB};
+use crate::types::address::Address;
+use crate::types::storage::BlockHeight;
+use crate::types::voting_power::FractionalVotingPower;
 
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,

@@ -24,7 +24,7 @@ use crate::ledger::storage::merkle_tree::{
 pub use crate::ledger::storage::merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
-use crate::ledger::storage::traits::StorageHasher;
+pub use crate::ledger::storage::traits::StorageHasher;
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};

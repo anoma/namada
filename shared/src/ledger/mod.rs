@@ -7,6 +7,9 @@ pub mod ibc;
 pub mod native_vp;
 pub mod parameters;
 pub mod pos;
+#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+pub mod protocol;
+pub mod queries;
 pub mod slash_fund;
 pub mod storage;
 pub mod storage_api;

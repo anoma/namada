@@ -1,8 +1,7 @@
 # Namada Trusted Setup
 This spec assumes that you have some previous knowledge about Trusted Setup Ceremonies. If not, you might want to check the following two articles: [Setup Ceremonies - ZKProof](https://zkproof.org/2021/06/30/setup-ceremonies/) and [Parameter Generation - Zcash](https://z.cash/technology/paramgen/). 
 
-The Namada Trusted Setup (TS) consists of running the phase 2 of the MPC which is a circuit-specific step to construct the multi-asset shielded pool circuit. Our phase 2 takes as input the Powers of Tau (phase 1) ran by Zcash that can be found [here](https://download.z.cash/downloads/powersoftau/).
-
+The Namada Trusted Setup (TS) consists of running the phase 2 of the MPC which is a circuit-specific step to construct the multi-asset shielded pool circuit. Our phase 2 takes as input the Powers of Tau (phase 1) ran by Zcash that can be found [here](https://download.z.cash/downloads/powersoftau/). You can sign up for the Namada Trusted Setup [here](https://namada.net/trusted-setup.html).
 
 ## Contribution flow
 
