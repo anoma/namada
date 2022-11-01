@@ -44,7 +44,7 @@ where
     ) -> Result<bool, Error> {
         let escrow_key = balance_key(&xan(), &super::ADDRESS);
         let escrow_pre: Amount = if let Ok(Some(bytes)) =
-            self.ctx.read_pre(&escrow_key)
+            self.ctx.read_bytes_pre(&escrow_key)
         {
             BorshDeserialize::try_from_slice(bytes.as_slice()).map_err(
                 |_| Error(eyre!("Couldn't deserialize a balance from storage")),
@@ -57,7 +57,7 @@ where
             return Ok(false);
         };
         let escrow_post: Amount =
-            if let Ok(Some(bytes)) = self.ctx.read_post(&escrow_key) {
+            if let Ok(Some(bytes)) = self.ctx.read_bytes_post(&escrow_key) {
                 BorshDeserialize::try_from_slice(bytes.as_slice()).expect(
                     "Deserializing the balance of the Ethereum bridge VP from \
                      storage shouldn't fail",
