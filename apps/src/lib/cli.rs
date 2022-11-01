@@ -1365,17 +1365,20 @@ pub mod args {
     use libp2p::Multiaddr;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
+    use namada::types::ethereum_events::EthAddress;
     use namada::types::governance::ProposalVote;
     use namada::types::intent::{DecimalWrapper, Exchange};
     use namada::types::key::*;
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
+    use namada::types::token::Amount;
     use namada::types::transaction::GasLimit;
     use serde::Deserialize;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
     use super::ArgMatches;
+    use crate::cli::context::FromContext;
     use crate::config;
     use crate::config::TendermintMode;
     use crate::facade::tendermint::Timeout;
@@ -1410,8 +1413,11 @@ pub mod args {
     const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
+    const ERC20: Arg<EthAddress> = arg("erc20");
+    const ETH_ADDRESS: Arg<EthAddress> = arg("ethereum-address");
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
+    const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("fee-token", DefaultFn(|| "XAN".into()));
     const FORCE: ArgFlag = flag("force");
@@ -1561,6 +1567,73 @@ pub mod args {
                 TX_HASH
                     .def()
                     .about("The hash of the transaction being looked up."),
+            )
+        }
+    }
+
+    /// A transfer to be added to the Ethereum bridge pool.
+    pub struct EthereumBridgePool {
+        /// The type of token
+        pub asset: EthAddress,
+        /// The recipient address
+        pub recipient: EthAddress,
+        /// The sender of the transfer
+        pub sender: FromContext<Address>,
+        /// The amount to be transferred
+        pub amount: Amount,
+        /// The amount of fees (in NAM)
+        pub gas_amount: Amount,
+        /// The account of fee payer.
+        pub gas_payer: FromContext<Address>,
+    }
+
+    impl Args for EthereumBridgePool {
+        fn parse(matches: &ArgMatches) -> Self {
+            let asset = ERC20.parse(matches);
+            let recipient = ETH_ADDRESS.parse(matches);
+            let sender = ADDRESS.parse(matches);
+            let amount = AMOUNT.parse(matches);
+            let gas_amount = FEE_AMOUNT.parse(matches);
+            let gas_payer = FEE_PAYER.parse(matches);
+            Self {
+                asset,
+                recipient,
+                sender,
+                amount,
+                gas_amount,
+                gas_payer,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ERC20
+                    .def()
+                    .about("The Ethereum address of the ERC20 token."),
+            )
+            .arg(
+                ETH_ADDRESS
+                    .def()
+                    .about("The Ethereum address receiving the tokens."),
+            )
+            .arg(
+                ADDRESS
+                    .def()
+                    .about("The Namada address sending the tokens."),
+            )
+            .arg(
+                AMOUNT.def().about(
+                    "The amount of tokens being sent across the bridge.",
+                ),
+            )
+            .arg(FEE_AMOUNT.def().about(
+                "The amount of NAM you wish to pay to have this transfer \
+                 relayed to Ethereum.",
+            ))
+            .arg(
+                FEE_PAYER
+                    .def()
+                    .about("The Namada address of the account paying the fee."),
             )
         }
     }
