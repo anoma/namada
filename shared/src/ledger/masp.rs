@@ -163,18 +163,13 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 
     tracing::info!("passed spend/output verification");
 
-    let assets_and_values: Vec<(AssetType, i64)> = tx_data
-        .vout
-        .iter()
-        .map(|o| (o.asset_type, o.value.try_into().unwrap()))
-        .collect();
+    let assets_and_values: Vec<(AssetType, i64)> = tx_data.value_balance.clone().into_components().collect();
 
     tracing::info!("accumulated {} assets/values", assets_and_values.len());
 
-    // ctx.final_check(
-    // assets_and_values.as_slice(),
-    // &sighash,
-    // tx_data.binding_sig.unwrap(),
-    // )
-    true
+    ctx.final_check(
+        assets_and_values.as_slice(),
+        &sighash,
+        tx_data.binding_sig.unwrap(),
+    )
 }
