@@ -635,8 +635,10 @@ where
         // handle that case
         //
         // we can remove this check once that's fixed
-        if current_decision_height == BlockHeight(2) {
-            return true;
+        match current_decision_height {
+            BlockHeight(1) => return false,
+            BlockHeight(2) => return true,
+            _ => (),
         }
 
         let fst_heights_of_each_epoch =
@@ -744,7 +746,6 @@ mod test_queries {
             /// Test if [`QueriesExt::can_send_validator_set_update`] behaves as
             /// expected.
             #[test]
-            #[ignore]
             // TODO: we should fix this test to cope with epoch changes only
             // happening at the first block of a new epoch. an erroneous change
             // was introduced to the ledger, that updated the epoch correctly
@@ -760,20 +761,9 @@ mod test_queries {
 
                 let epoch_assertions = $epoch_assertions;
 
-                // TODO: switch to `Result::into_ok_or_err` when it becomes
-                // stable
-                const fn extract(
-                    can_send: ::std::result::Result<bool, bool>,
-                ) -> bool {
-                    match can_send {
-                        Ok(x) => x,
-                        Err(x) => x,
-                    }
-                }
-
                 // test `SendValsetUpd::Now`  and `SendValsetUpd::AtPrevHeight`
-                for (idx, (curr_epoch, curr_block_height, can_send)) in
-                    epoch_assertions.iter().copied().enumerate()
+                for (curr_epoch, curr_block_height, can_send) in
+                    epoch_assertions
                 {
                     shell.storage.last_height =
                         BlockHeight(curr_block_height - 1);
@@ -789,34 +779,35 @@ mod test_queries {
                         shell
                             .storage
                             .can_send_validator_set_update(SendValsetUpd::Now),
-                        extract(can_send)
+                        can_send,
                     );
-                    if let Some((epoch, height, can_send)) =
-                        epoch_assertions.get(idx.wrapping_sub(1)).copied()
-                    {
-                        assert_eq!(
-                            shell.storage.get_epoch(height.into()),
-                            Some(Epoch(epoch))
-                        );
-                        assert_eq!(
-                            shell.storage.can_send_validator_set_update(
-                                SendValsetUpd::AtPrevHeight
-                            ),
-                            extract(can_send)
-                        );
-                    }
-                    if epoch_assertions
-                        .get(idx + 1)
-                        .map(|&(_, _, change_epoch)| change_epoch.is_ok())
-                        .unwrap_or(false)
-                    {
-                        let time = namada::types::time::DateTimeUtc::now();
-                        let mut req = FinalizeBlock::default();
-                        req.header.time = time;
-                        shell.finalize_block(req).expect("Test failed");
-                        shell.commit();
-                        shell.storage.next_epoch_min_start_time = time;
-                    }
+                    // TODO(feature = "abcipp"): test
+                    // `SendValsetUpd::AtPrevHeight`; `idx` is the value
+                    // of the current index being iterated over
+                    // the array `epoch_assertions`
+                    //
+                    // ```ignore
+                    // if let Some((epoch, height, can_send)) =
+                    //     epoch_assertions.get(_idx.wrapping_sub(1)).copied()
+                    // {
+                    //     assert_eq!(
+                    //         shell.storage.get_epoch(height.into()),
+                    //         Some(Epoch(epoch))
+                    //     );
+                    //     assert_eq!(
+                    //         shell.storage.can_send_validator_set_update(
+                    //             SendValsetUpd::AtPrevHeight
+                    //         ),
+                    //         can_send,
+                    //     );
+                    // }
+                    // ```
+                    let time = namada::types::time::DateTimeUtc::now();
+                    let mut req = FinalizeBlock::default();
+                    req.header.time = time;
+                    shell.finalize_block(req).expect("Test failed");
+                    shell.commit();
+                    shell.storage.next_epoch_min_start_time = time;
                 }
             }
         };
@@ -824,75 +815,43 @@ mod test_queries {
 
     #[cfg(feature = "abcipp")]
     test_can_send_validator_set_update! {
-        epoch_assertions: [
-            // (current epoch, current block height, can send valset upd / Ok = change epoch)
-            (0, 1, Ok(true)),
-            (0, 2, Err(false)),
-            (0, 3, Err(false)),
-            (0, 4, Err(false)),
-            (0, 5, Err(false)),
-            (0, 6, Err(false)),
-            (0, 7, Err(false)),
-            (0, 8, Err(false)),
-            (0, 9, Err(false)),
-            (0, 10, Err(false)),
-            (0, 11, Err(false)),
-            // we will change epoch here
-            (1, 12, Ok(true)),
-            (1, 13, Err(false)),
-            (1, 14, Err(false)),
-            (1, 15, Err(false)),
-            (1, 16, Err(false)),
-            (1, 17, Err(false)),
-            (1, 18, Err(false)),
-            (1, 19, Err(false)),
-            (1, 20, Err(false)),
-            (1, 21, Err(false)),
-            (1, 22, Err(false)),
-            (1, 23, Err(false)),
-            (1, 24, Err(false)),
-            // we will change epoch here
-            (2, 25, Ok(true)),
-            (2, 26, Err(false)),
-            (2, 27, Err(false)),
-            (2, 28, Err(false)),
-        ],
+        epoch_assertions: []
     }
 
     #[cfg(not(feature = "abcipp"))]
     test_can_send_validator_set_update! {
         epoch_assertions: [
-            // (current epoch, current block height, can send valset upd / Ok = change epoch)
-            (0, 1, Ok(true)),
-            (0, 2, Err(true)),
-            (0, 3, Err(true)),
-            (0, 4, Err(true)),
-            (0, 5, Err(true)),
-            (0, 6, Err(true)),
-            (0, 7, Err(true)),
-            (0, 8, Err(true)),
-            (0, 9, Err(true)),
-            (0, 10, Err(true)),
-            (0, 11, Err(true)),
+            // (current epoch, current block height, can send valset upd)
+            (0, 1, false),
+            (0, 2, true),
+            (0, 3, false),
+            (0, 4, false),
+            (0, 5, false),
+            (0, 6, false),
+            (0, 7, false),
+            (0, 8, false),
+            (0, 9, false),
             // we will change epoch here
-            (1, 12, Ok(true)),
-            (1, 13, Err(true)),
-            (1, 14, Err(true)),
-            (1, 15, Err(true)),
-            (1, 16, Err(true)),
-            (1, 17, Err(true)),
-            (1, 18, Err(true)),
-            (1, 19, Err(true)),
-            (1, 20, Err(true)),
-            (1, 21, Err(true)),
-            (1, 22, Err(true)),
-            (1, 23, Err(true)),
-            (1, 24, Err(true)),
+            (0, 10, false),
+            (1, 11, true),
+            (1, 12, false),
+            (1, 13, false),
+            (1, 14, false),
+            (1, 15, false),
+            (1, 16, false),
+            (1, 17, false),
+            (1, 18, false),
+            (1, 19, false),
             // we will change epoch here
-            (2, 25, Ok(true)),
-            (2, 26, Err(true)),
-            (2, 27, Err(true)),
-            (2, 28, Err(true)),
+            (1, 20, false),
+            (2, 21, true),
+            (2, 22, false),
+            (2, 23, false),
+            (2, 24, false),
+            (2, 25, false),
+            (2, 26, false),
+            (2, 27, false),
+            (2, 28, false),
         ],
     }
 }
