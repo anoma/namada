@@ -81,6 +81,11 @@ where
     }
 }
 
+/// Check if a delta matches the delta given by a transfer
+fn check_delta(delta: (Address, Amount), transfer: &PendingTransfer) -> bool {
+    &delta.0 == transfer.transfer.sender && delta.1 == transfer.transfer.amount
+}
+
 impl<'a, D, H, CA> NativeVp for BridgePoolVp<'a, D, H, CA>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
@@ -207,12 +212,7 @@ where
                 (&escrow_key).try_into().expect("This should not fail"),
                 (&owner_key).try_into().expect("This should not fail"),
             ) {
-                Ok(Some(delta))
-                    if delta
-                        == (
-                            transfer.transfer.sender,
-                            transfer.transfer.amount,
-                        ) => {}
+                Ok(Some(delta)) if check_delta(delta, &transfer) => {}
                 other => {
                     tracing::debug!(
                         "The assets of the transfer were not properly \
