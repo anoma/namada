@@ -48,7 +48,7 @@ const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
 const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
-    "NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS";
+    "ANOMA_EVENTS_MAX_WAIT_TIME_SECONDS";
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
