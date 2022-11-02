@@ -9,11 +9,11 @@ use borsh::BorshDeserialize;
 use thiserror::Error;
 
 use self::storage as slash_fund_storage;
-use crate::ledger::vp_env::VpEnv;
 use super::governance::storage as gov_storage;
 use super::storage_api::StorageRead;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::vp_env::VpEnv;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token;
@@ -73,7 +73,9 @@ where
                         Some(id) => {
                             let proposal_execution_key =
                                 gov_storage::get_proposal_execution_key(id);
-                            self.ctx.has_key_pre(&proposal_execution_key).unwrap_or(false)
+                            self.ctx
+                                .has_key_pre(&proposal_execution_key)
+                                .unwrap_or(false)
                         }
                         None => false,
                     }

@@ -367,6 +367,8 @@ where
     VotePower::from(0_u64)
 }
 
+/// Calculate the valid voting window for validator given a proposal epoch
+/// details
 pub fn is_valid_validator_voting_period(
     current_epoch: Epoch,
     voting_start_epoch: Epoch,

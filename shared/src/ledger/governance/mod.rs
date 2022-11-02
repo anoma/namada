@@ -9,6 +9,9 @@ pub mod utils;
 
 use std::collections::BTreeSet;
 
+use borsh::BorshDeserialize;
+use thiserror::Error;
+
 use self::storage as gov_storage;
 use self::utils::is_valid_validator_voting_period;
 use super::native_vp;
@@ -21,11 +24,11 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token as token_storage;
 use crate::vm::WasmCacheAccess;
-use borsh::BorshDeserialize;
-use thiserror::Error;
 
+/// for handling Governance NativeVP errors
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// The governance internal address
 pub const ADDRESS: Address = Address::Internal(InternalAddress::Governance);
 
 #[allow(missing_docs)]
@@ -71,7 +74,7 @@ where
 
         let result = keys_changed.iter().all(|key| {
             let proposal_id = gov_storage::get_proposal_id(key);
-            let key_type = KeyType::from_key(&key, &native_token);
+            let key_type = KeyType::from_key(key, &native_token);
 
             let result = match (key_type, proposal_id) {
                 (KeyType::VOTE, Some(proposal_id)) => {
@@ -134,8 +137,8 @@ where
 
         for counter in pre_counter..post_counter {
             // Construct the set of expected keys
-            // NOTE: we don't check the existance of committing_epoch because it's
-            // going to be checked later into the VP
+            // NOTE: we don't check the existance of committing_epoch because
+            // it's going to be checked later into the VP
             let mandatory_keys = BTreeSet::from([
                 counter_key.clone(),
                 gov_storage::get_content_key(counter),
@@ -261,22 +264,20 @@ where
     }
 
     /// Validate a proposal_code key
-    /// TODO: fix with correct parameters
     pub fn is_valid_proposal_code(&self, proposal_id: u64) -> Result<bool> {
-        let content_key: Key = gov_storage::get_content_key(proposal_id);
-        let max_content_length_parameter_key =
-            gov_storage::get_max_proposal_content_key();
+        let code_key: Key = gov_storage::get_proposal_code_key(proposal_id);
+        let max_code_size_parameter_key =
+            gov_storage::get_max_proposal_code_size_key();
 
-        let has_pre_content: bool = self.ctx.has_key_pre(&content_key)?;
-        if has_pre_content {
+        let has_pre_code: bool = self.ctx.has_key_pre(&code_key)?;
+        if has_pre_code {
             return Ok(false);
         }
 
-        let max_content_length: Option<usize> =
-            self.ctx.pre().read(&max_content_length_parameter_key)?;
-        let post_content: Option<Vec<u8>> =
-            self.ctx.read_bytes_post(&content_key)?;
-        match (post_content, max_content_length) {
+        let max_proposal_length: Option<usize> =
+            self.ctx.pre().read(&max_code_size_parameter_key)?;
+        let post_code: Option<Vec<u8>> = self.ctx.read_bytes_post(&code_key)?;
+        match (post_code, max_proposal_length) {
             (Some(post_content), Some(max_content_length)) => {
                 Ok(post_content.len() < max_content_length)
             }
@@ -310,9 +311,9 @@ where
                 let hash_post_committing_epoch =
                     self.ctx.has_key_post(&committing_epoch_key)?;
 
-                return Ok(hash_post_committing_epoch
+                Ok(hash_post_committing_epoch
                     && end_epoch < grace_epoch
-                    && grace_epoch - end_epoch >= min_grace_epoch);
+                    && grace_epoch - end_epoch >= min_grace_epoch)
             }
             _ => Ok(false),
         }
@@ -350,8 +351,8 @@ where
                 if end_epoch <= start_epoch || start_epoch <= current_epoch {
                     return Ok(false);
                 }
-                return Ok((end_epoch - start_epoch) % min_period == 0
-                    && (end_epoch - start_epoch).0 >= min_period);
+                Ok((end_epoch - start_epoch) % min_period == 0
+                    && (end_epoch - start_epoch).0 >= min_period)
             }
             _ => Ok(false),
         }
@@ -400,9 +401,9 @@ where
                 if end_epoch <= start_epoch || start_epoch <= current_epoch {
                     return Ok(false);
                 }
-                return Ok((end_epoch - start_epoch) % min_period == 0
+                Ok((end_epoch - start_epoch) % min_period == 0
                     && (end_epoch - start_epoch).0 >= min_period
-                    && (end_epoch - start_epoch).0 <= max_period);
+                    && (end_epoch - start_epoch).0 <= max_period)
             }
             _ => Ok(false),
         }
@@ -417,7 +418,7 @@ where
                 .pre()
                 .get_native_token()
                 .expect("Native token must be available"),
-            &self.ctx.address,
+            self.ctx.address,
         );
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
         let min_funds_parameter: Option<token_storage::Amount> =
@@ -458,7 +459,7 @@ where
                 .pre()
                 .get_native_token()
                 .expect("Native token must be available"),
-            &self.ctx.address,
+            self.ctx.address,
         );
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
@@ -538,8 +539,8 @@ where
         match (pre_counter, post_counter) {
             (Some(pre_counter), Some(post_counter)) => {
                 // NOTE: can't do pre_counter + set_count == post_counter here
-                // because someone may update an empty proposal that just register a
-                // committing key causing a bug
+                // because someone may update an empty proposal that just
+                // register a committing key causing a bug
                 Ok(pre_counter < post_counter)
             }
             _ => Ok(false),
@@ -553,9 +554,10 @@ where
             Some(id) => {
                 let proposal_execution_key =
                     gov_storage::get_proposal_execution_key(id);
-                return Ok(self
+                Ok(self
                     .ctx
-                    .has_key_pre(&proposal_execution_key).unwrap_or(false));
+                    .has_key_pre(&proposal_execution_key)
+                    .unwrap_or(false))
             }
             _ => Ok(false),
         }
@@ -625,26 +627,40 @@ where
 
 #[allow(clippy::upper_case_acronyms)]
 enum KeyType {
+    #[allow(non_camel_case_types)]
     COUNTER,
+    #[allow(non_camel_case_types)]
     VOTE,
+    #[allow(non_camel_case_types)]
     CONTENT,
+    #[allow(non_camel_case_types)]
     PROPOSAL_CODE,
+    #[allow(non_camel_case_types)]
     PROPOSAL_COMMIT,
+    #[allow(non_camel_case_types)]
     GRACE_EPOCH,
+    #[allow(non_camel_case_types)]
     START_EPOCH,
+    #[allow(non_camel_case_types)]
     END_EPOCH,
+    #[allow(non_camel_case_types)]
     FUNDS,
+    #[allow(non_camel_case_types)]
     BALANCE,
+    #[allow(non_camel_case_types)]
     AUTHOR,
+    #[allow(non_camel_case_types)]
     PARAMETER,
+    #[allow(non_camel_case_types)]
     UNKNOWN_GOVERNANCE,
+    #[allow(non_camel_case_types)]
     UNKNOWN,
 }
 
 impl KeyType {
     fn from_key(key: &Key, native_token: &Address) -> Self {
         if gov_storage::is_vote_key(key) {
-            return Self::VOTE;
+            Self::VOTE
         } else if gov_storage::is_content_key(key) {
             KeyType::CONTENT
         } else if gov_storage::is_proposal_code_key(key) {

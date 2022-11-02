@@ -132,7 +132,10 @@ where
                     Some(id) => {
                         let proposal_execution_key =
                             gov_storage::get_proposal_execution_key(id);
-                        return Ok(self.ctx.has_key_pre(&proposal_execution_key).unwrap_or(false));
+                        return Ok(self
+                            .ctx
+                            .has_key_pre(&proposal_execution_key)
+                            .unwrap_or(false));
                     }
                     _ => return Ok(false),
                 }
