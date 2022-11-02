@@ -29,7 +29,7 @@ calculateSlashRate slashes =
 4. Update the validators' stored voting power appropriately.
 5. Delegations to the validator can now be redelegated / start unbonding / etc.
 
-Validator can later submit a transaction to unjail themselves after a configurable period. When the transaction is applied and accepted, the validator updates its state to "candidate" and is added back to the validator set starting at the epoch at pipeline offset (active or inactive, depending on its voting power).
+Validator can later submit a transaction to unjail themselves after a configurable period. When the transaction is applied and accepted, the validator updates its state to "candidate" and is added back to the validator set starting at the epoch at pipeline offset (into `consensus`, `below_capacity` or `below_threshold` set, depending on its voting power).
 
 At present, funds slashed are sent to the governance treasury. 
 
