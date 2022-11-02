@@ -72,10 +72,7 @@ impl TryFrom<Event> for TxResponse {
             .map(String::as_str)
             // TODO: fix finalize block, to return initialized accounts,
             // even when we reject a tx?
-            .or(Some("[]"))
-            // NOTE: at this point we only have `Some(vec)`, not `None`
-            .ok_or_else(|| unreachable!())
-            .and_then(|initialized_accounts| {
+            .map_or(Ok(vec![]), |initialized_accounts| {
                 serde_json::from_str(initialized_accounts)
                     .map_err(|err| format!("JSON decode error: {err}"))
             })?;
