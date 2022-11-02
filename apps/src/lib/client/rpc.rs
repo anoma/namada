@@ -13,6 +13,7 @@ use async_std::prelude::*;
 use borsh::BorshDeserialize;
 use data_encoding::HEXLOWER;
 use itertools::Itertools;
+use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::Votes;
@@ -34,17 +35,16 @@ use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
 use tendermint::abci::Code;
+use tendermint_config::net::Address as TendermintAddress;
+use tendermint_rpc::error::Error as TError;
+use tendermint_rpc::query::Query;
+use tendermint_rpc::{
+    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
+};
 use tokio::time::{Duration, Instant};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
-use crate::facade::tendermint_rpc::error::Error as TError;
-use crate::facade::tendermint_rpc::query::Query;
-use crate::facade::tendermint_rpc::{
-    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
-};
-use crate::node::ledger::events::Event;
 
 /// Query the status of a given transaction.
 ///

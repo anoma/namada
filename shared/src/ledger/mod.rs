@@ -1,6 +1,8 @@
 //! The ledger modules
 
 pub mod eth_bridge;
+#[cfg(feature = "ferveo-tpke")]
+pub mod events;
 pub mod gas;
 pub mod governance;
 pub mod ibc;

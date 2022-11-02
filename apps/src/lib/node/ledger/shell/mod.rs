@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::ledger::events::log::EventLog;
+use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
@@ -54,8 +56,6 @@ use crate::facade::tendermint_proto::abci::{
 };
 use crate::facade::tendermint_proto::crypto::public_key;
 use crate::facade::tower_abci::{request, response};
-use crate::node::ledger::events::log::EventLog;
-use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};

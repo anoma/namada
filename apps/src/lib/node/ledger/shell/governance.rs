@@ -1,3 +1,4 @@
+use namada::ledger::events::EventType;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::{
     compute_tally, get_proposal_votes, ProposalEvent,
@@ -14,7 +15,6 @@ use namada::types::storage::Epoch;
 use namada::types::token;
 
 use super::*;
-use crate::node::ledger::events::EventType;
 
 #[derive(Default)]
 pub struct ProposalsResult {
