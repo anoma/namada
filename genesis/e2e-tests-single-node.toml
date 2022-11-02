@@ -3,7 +3,7 @@
 # - User accounts same as the ones in "dev" build (Albert, Bertha, Christel)
 
 genesis_time = "2021-09-30T10:00:00Z"
-native_token = "XAN"
+native_token = "NAM"
 
 [validator.validator-0]
 # Validator's staked NAM at genesis.
