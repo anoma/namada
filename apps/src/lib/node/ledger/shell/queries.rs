@@ -728,16 +728,6 @@ mod test_queries {
             /// Test if [`QueriesExt::can_send_validator_set_update`] behaves as
             /// expected.
             #[test]
-            // TODO: we should fix this test to cope with epoch changes only
-            // happening at the first block of a new epoch. an erroneous change
-            // was introduced to the ledger, that updated the epoch correctly
-            // at the first block of the new epoch, but recorded `height + 1`
-            // instead of the actual height of the epoch change. since this
-            // test depended on that erroneous logic to pass, it's busted.
-            //
-            // linked issues:
-            // - <https://github.com/anoma/namada/issues/599>
-            // - <https://github.com/anoma/namada/issues/600>
             fn test_can_send_validator_set_update() {
                 let (mut shell, _recv, _) = test_utils::setup_at_height(0u64);
 
