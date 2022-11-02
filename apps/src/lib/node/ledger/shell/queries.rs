@@ -1,4 +1,5 @@
 //! Shell methods for querying state
+
 use std::cmp::max;
 
 use borsh::{BorshDeserialize, BorshSerialize};

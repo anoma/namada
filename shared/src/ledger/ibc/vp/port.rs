@@ -16,6 +16,7 @@ use crate::ibc::core::ics05_port::context::{CapabilityReader, PortReader};
 use crate::ibc::core::ics05_port::error::Error as Ics05Error;
 use crate::ibc::core::ics24_host::identifier::PortId;
 use crate::ibc::core::ics26_routing::context::ModuleId;
+use crate::ledger::native_vp::VpEnv;
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{self as ledger_storage};
 use crate::types::storage::Key;
@@ -127,7 +128,7 @@ where
 
     fn get_port_by_capability(&self, cap: &Capability) -> Result<PortId> {
         let key = capability_key(cap.index());
-        match self.ctx.read_post(&key) {
+        match self.ctx.read_bytes_post(&key) {
             Ok(Some(value)) => {
                 let id = std::str::from_utf8(&value).map_err(|e| {
                     Error::InvalidPort(format!(
@@ -164,7 +165,7 @@ where
         port_id: &PortId,
     ) -> Ics05Result<(ModuleId, PortCapability)> {
         let key = port_key(port_id);
-        match self.ctx.read_post(&key) {
+        match self.ctx.read_bytes_post(&key) {
             Ok(Some(value)) => {
                 let index: [u8; 8] = value
                     .try_into()

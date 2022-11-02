@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada"
 resolver = "2"
-version = "0.7.1"
+version = "0.8.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -70,7 +70,8 @@ ark-bls12-381 = {version = "0.3"}
 ark-ec = {version = "0.3", optional = true}
 ark-serialize = "0.3"
 # We switch off "blake2b" because it cannot be compiled to wasm
-arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "bat/arse-merkle-tree", default-features = false, features = ["std", "borsh"]}
+# branch = "bat/arse-merkle-tree"
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "04ad1eeb28901b57a7599bbe433b3822965dabe8", default-features = false, features = ["std", "borsh"]}
 bech32 = "0.8.0"
 borsh = "0.9.0"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
@@ -92,7 +93,7 @@ ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/i
 ibc = {version = "0.14.0", default-features = false, optional = true}
 ibc-proto = {version = "0.17.1", default-features = false, optional = true}
 ics23 = "0.7.0"
-itertools = "0.10.3"
+itertools = "0.10.0"
 loupe = {version = "0.1.3", optional = true}
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 parity-wasm = {version = "0.42.2", optional = true}

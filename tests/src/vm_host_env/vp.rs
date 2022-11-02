@@ -10,17 +10,27 @@ use namada::types::storage::{self, Key};
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
+use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
 
 use crate::tx::{tx_host_env, TestTxEnv};
+
+/// VP execution context provides access to host env functions
+pub static CTX: Ctx = unsafe { Ctx::new() };
+
+/// VP execution context provides access to host env functions
+pub fn ctx() -> &'static Ctx {
+    &CTX
+}
 
 /// This module combines the native host function implementations from
 /// `native_vp_host_env` with the functions exposed to the vp wasm
 /// that will call to the native functions, instead of interfacing via a
 /// wasm runtime. It can be used for host environment integration tests.
 pub mod vp_host_env {
-    pub use namada_vm_env::vp_prelude::*;
+    pub use namada_vp_prelude::*;
 
+    pub use super::ctx;
     pub use super::native_vp_host_env::*;
 }
 
@@ -160,7 +170,7 @@ mod native_vp_host_env {
     /// Initialize the VP host environment in [`ENV`] by running a transaction.
     /// The transaction is expected to modify the storage sub-space of the given
     /// address `addr` or to add it to the set of verifiers using
-    /// [`tx_host_env::insert_verifier`].
+    /// `ctx.insert_verifier`.
     pub fn init_from_tx(
         addr: Address,
         mut tx_env: TestTxEnv,
@@ -316,6 +326,7 @@ mod native_vp_host_env {
     native_host_fn!(vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_has_key_post(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
+    native_host_fn!(vp_rev_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
     native_host_fn!(vp_iter_pre_next(iter_id: u64) -> i64);
     native_host_fn!(vp_iter_post_next(iter_id: u64) -> i64);
     native_host_fn!(vp_get_chain_id(result_ptr: u64));

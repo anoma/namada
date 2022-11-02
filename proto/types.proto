@@ -11,24 +11,8 @@ message Tx {
   google.protobuf.Timestamp timestamp = 3;
 }
 
-message Intent {
-  bytes data = 1;
-  google.protobuf.Timestamp timestamp = 2;
-}
+message Dkg { string data = 1; }
 
-message IntentGossipMessage{
-  // TODO remove oneof because it's not used so far
-  oneof msg {
-    Intent intent = 1;
-  }
-}
-
-message Dkg {
-  string data = 1;
-}
-
-message DkgGossipMessage{
-  oneof dkg_message {
-    Dkg dkg = 1;
-  }
+message DkgGossipMessage {
+  oneof dkg_message { Dkg dkg = 1; }
 }

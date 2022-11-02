@@ -7,7 +7,7 @@ Namada introduces a governance mechanism to propose and apply protocol changes w
 ### Governance Address
 Governance adds 2 internal addresses:
 - `GovernanceAddress`
-- `TreasuryAddress`
+- `SlashFundAddress`
 
 The first internal address contains all the proposals under its address space.
 The second internal address holds the funds of rejected proposals.
@@ -16,18 +16,18 @@ The second internal address holds the funds of rejected proposals.
 Each proposal will be stored in a sub-key under the internal proposal address. The storage keys involved are:
 
 ```
-/\$GovernanceAddress/proposal/$id/content: Vec<u8>
-/\$GovernanceAddress/proposal/$id/author: Address
-/\$GovernanceAddress/proposal/$id/start_epoch: Epoch
-/\$GovernanceAddress/proposal/$id/end_epoch: Epoch
-/\$GovernanceAddress/proposal/$id/grace_epoch: Epoch
-/\$GovernanceAddress/proposal/$id/proposal_code: Option<Vec<u8>>
-/\$GovernanceAddress/proposal/$id/funds: u64
-/\$GovernanceAddress/proposal/epoch/$id: u64
+/\$GovernanceAddress/proposal/\$id/content: Vec<u8>
+/\$GovernanceAddress/proposal/\$id/author: Address
+/\$GovernanceAddress/proposal/\$id/start_epoch: Epoch
+/\$GovernanceAddress/proposal/\$id/end_epoch: Epoch
+/\$GovernanceAddress/proposal/\$id/grace_epoch: Epoch
+/\$GovernanceAddress/proposal/\$id/proposal_code: Option<Vec<u8>>
+/\$GovernanceAddress/proposal/\$id/funds: u64
+/\$GovernanceAddress/proposal/epoch/\$id: u64
 ```
 
 - `Author` address field will be used to credit the locked funds if the proposal is approved.
-- `/$GovernanceAddress/proposal/$epoch/$id` is used for easing the ledger governance execution. `$epoch` refers to the same value as the on specific in the `grace_epoch` field.
+- `/\$GovernanceAddress/proposal/\$epoch/\$id` is used for easing the ledger governance execution. `\$epoch` refers to the same value as the on specific in the `grace_epoch` field.
 - The `content` value should follow a standard format. We leverage a similar format to what is described in the [BIP2](https://github.com/bitcoin/bips/blob/master/bip-0002.mediawiki#bip-format-and-structure) document:
 
 ```json
@@ -54,16 +54,15 @@ Each proposal will be stored in a sub-key under the internal proposal address. T
 /\$GovernanceAddress/max_proposal_content_size: u64
 /\$GovernanceAddress/min_proposal_grace_epochs: u64
 /\$GovernanceAddress/pending/\$proposal_id: u64
-
 ```
 
-`counter` is used to assign a unique, incremental ID to each proposal.\
-`min_proposal_fund` represents the minimum amount of locked tokens to submit a proposal.\
-`max_proposal_code_size` is the maximum allowed size (in bytes) of the proposal wasm code.\
-`min_proposal_period` sets the minimum voting time window (in `Epoch`).\
-`max_proposal_content_size` tells the maximum number of characters allowed in the proposal content.\
-`min_proposal_grace_epochs` is the minimum required time window (in `Epoch`) between `end_epoch` and the epoch in which the proposal has to be executed.
-`/$GovernanceAddress/pending/$proposal_id` this storage key is written only before the execution of the code defined in `/$GovernanceAddress/proposal/$id/proposal_code` and deleted afterwards. Since this storage key can be written only by the protocol itself (and by no other means), VPs can check for the presence of this storage key to be sure that a proposal_code has been executed by the protocol and not by a transaction.
+- `counter` is used to assign a unique, incremental ID to each proposal.\
+- `min_proposal_fund` represents the minimum amount of locked tokens to submit a proposal.\
+- `max_proposal_code_size` is the maximum allowed size (in bytes) of the proposal wasm code.\
+- `min_proposal_period` sets the minimum voting time window (in `Epoch`).\
+- `max_proposal_content_size` tells the maximum number of characters allowed in the proposal content.\
+- `min_proposal_grace_epochs` is the minimum required time window (in `Epoch`) between `end_epoch` and the epoch in which the proposal has to be executed.
+- `/\$GovernanceAddress/pending/\$proposal_id` this storage key is written only before the execution of the code defined in `/\$GovernanceAddress/proposal/\$id/proposal_code` and deleted afterwards. Since this storage key can be written only by the protocol itself (and by no other means), VPs can check for the presence of this storage key to be sure that a proposal_code has been executed by the protocol and not by a transaction.
 
 The governance machinery also relies on a subkey stored under the `NAM` token address:
 
@@ -167,7 +166,7 @@ All the computation above must be made at the epoch specified in the `start_epoc
 It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/governance/utils.rs#L68).
 
 ### Refund and Proposal Execution mechanism
-Together with tallying, in the first block at the beginning of each epoch, in the `FinalizeBlock` event, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). For each proposal that has been rejected, instead, the locked funds will be moved to the `TreasuryAddress`. Moreover, if the proposal had a positive outcome and `proposal_code` is defined, these changes will be executed right away.
+Together with tallying, in the first block at the beginning of each epoch, in the `FinalizeBlock` event, the protocol will manage the execution of accepted proposals and refunding. For each ended proposal with a positive outcome, it will refund the locked funds from `GovernanceAddress` to the proposal author address (specified in the proposal `author` field). For each proposal that has been rejected, instead, the locked funds will be moved to the `SlashFundAddress`. Moreover, if the proposal had a positive outcome and `proposal_code` is defined, these changes will be executed right away.
 To summarize the execution of governance in the `FinalizeBlock` event:
 
 If the proposal outcome is positive and current epoch is equal to the proposal `grace_epoch`, in the `FinalizeBlock` event:
@@ -175,33 +174,28 @@ If the proposal outcome is positive and current epoch is equal to the proposal `
 - execute any changes specified by `proposal_code`
 
 In case the proposal was rejected or if any error, in the `FinalizeBlock` event:
-- transfer the locked funds to `TreasuryAddress`
+- transfer the locked funds to `SlashFundAddress`
 
 The result is then signaled by creating and inserting a [`Tendermint Event`](https://github.com/tendermint/tendermint/blob/ab0835463f1f89dcadf83f9492e98d85583b0e71/docs/spec/abci/abci.md#events.
 
 
-## TreasuryAddress
-Funds locked in `TreasuryAddress` address should be spendable only by proposals.
+## SlashFundAddress
+Funds locked in `SlashFundAddress` address should be spendable only by proposals.
 
-### TreasuryAddress storage
+### SlashFundAddress storage
 ```
-/\$TreasuryAddress/max_transferable_fund: u64
-/\$TreasuryAddress/?: Vec<u8>
+/\$SlashFundAddress/?: Vec<u8>
 ```
 
 The funds will be stored under:
 ```
-/\$NAMAddress/balance/\$TreasuryAddress: u64
+/\$NAMAddress/balance/\$SlashFundAddress: u64
 ```
 
-### TreasuryAddress VP
-The treasury validity predicate will approve a transfer only if:
-- the transfer has been made by the protocol (by checking the existence of `/$GovernanceAddress/pending/$proposal_id` storage key)
-- the transfered amount is <= `MAX_SPENDABLE_SUM`
+### SlashFundAddress VP
+The slash_fund validity predicate will approve a transfer only if the transfer has been made by the protocol (by checking the existence of `/\$GovernanceAddress/pending/\$proposal_id` storage key)
 
-`MAX_SPENDABLE_SUM` is a parameter of the treasury native vp.
-
-It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/master/shared/src/ledger/treasury/mod.rs#L55).
+It is possible to check the actual implementation [here](https://github.com/anoma/namada/blob/main/shared/src/ledger/slash_fund/mod.rs#L70).
 
 ## Off-chain protocol
 
