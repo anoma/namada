@@ -266,6 +266,10 @@ pub mod shim {
 
     /// Custom types for response payloads
     pub mod response {
+        use namada::ledger::events::Event;
+        #[cfg(feature = "abcipp")]
+        use namada::ledger::events::EventLevel;
+
         use crate::facade::tendermint_proto::abci::{
             Event as TmEvent, ResponseProcessProposal, ValidatorUpdate,
         };
@@ -276,9 +280,6 @@ pub mod shim {
             abci::{ExecTxResult, ResponseFinalizeBlock},
             types::ConsensusParams,
         };
-        use crate::node::ledger::events::Event;
-        #[cfg(feature = "abcipp")]
-        use crate::node::ledger::events::EventLevel;
 
         #[derive(Debug, Default)]
         pub struct VerifyHeader;

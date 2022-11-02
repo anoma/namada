@@ -1,10 +1,14 @@
 use borsh::BorshSerialize;
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 
+use crate::ledger::events::log::dumb_queries;
+use crate::ledger::events::Event;
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
-use crate::ledger::storage::{DBIter, StorageHasher, DB};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{DBIter, EventLogExt, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
+use crate::types::hash::Hash;
 use crate::types::storage::{self, Epoch, PrefixValue};
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 use crate::types::transaction::TxResult;
@@ -30,6 +34,12 @@ router! {SHELL,
     // Raw storage access - is given storage key present?
     ( "has_key" / [storage_key: storage::Key] )
         -> bool = storage_has_key,
+
+    // was the transaction accepted?
+    ( "accepted" / [tx_hash: Hash] ) -> Vec<Event> = accepted,
+
+    // was the transaction applied?
+    ( "applied" / [tx_hash: Hash] ) -> Vec<Event> = applied,
 }
 
 #[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
@@ -48,6 +58,12 @@ router! {SHELL,
     // Raw storage access - is given storage key present?
     ( "has_key" / [storage_key: storage::Key] )
         -> bool = storage_has_key,
+
+    // was the transaction accepted?
+    ( "accepted" / [tx_hash: Hash]) -> Vec<Event> = accepted,
+
+    // was the transaction applied?
+    ( "applied" / [tx_hash: Hash]) -> Vec<Event> = applied,
 }
 
 // Handlers:
@@ -207,6 +223,30 @@ where
 {
     let data = StorageRead::has_key(ctx.storage, &storage_key)?;
     Ok(data)
+}
+
+fn accepted<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    tx_hash: Hash,
+) -> storage_api::Result<Vec<Event>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
+    Ok(ctx.storage.query_event_log(matcher))
+}
+
+fn applied<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    tx_hash: Hash,
+) -> storage_api::Result<Vec<Event>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
+    Ok(ctx.storage.query_event_log(matcher))
 }
 
 #[cfg(test)]

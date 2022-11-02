@@ -12,7 +12,9 @@ use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::BorshDeserialize;
 use data_encoding::HEXLOWER;
+use eyre::{eyre, Context as EyreContext};
 use itertools::Itertools;
+use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::Votes;
@@ -29,6 +31,7 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
     VotePower,
 };
+use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
@@ -43,8 +46,6 @@ use crate::facade::tendermint_rpc::query::Query;
 use crate::facade::tendermint_rpc::{
     Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
 };
-use crate::node::ledger::events::Event;
-use crate::node::ledger::rpc::Path;
 
 /// Query the status of a given transaction.
 ///
@@ -74,35 +75,13 @@ pub async fn query_tx_status(
         let mut backoff = ONE_SECOND;
 
         loop {
-            let data = vec![];
             tracing::debug!(query = ?status, "Querying tx status");
-            let response = match client
-                .abci_query(Some(status.into()), data, None, false)
-                .await
-            {
+            let mut events = match query_tx_events(&client, status).await {
                 Ok(response) => response,
                 Err(err) => {
                     tracing::debug!(%err, "ABCI query failed");
                     sleep_update(status, &mut backoff).await;
                     continue;
-                }
-            };
-            let mut events = match response.code {
-                Code::Ok => {
-                    match Vec::<Event>::try_from_slice(&response.value[..]) {
-                        Ok(events) => events,
-                        Err(err) => {
-                            eprintln!("Error decoding the event value: {err}");
-                            break Err(());
-                        }
-                    }
-                }
-                Code::Err(err) => {
-                    eprintln!(
-                        "Error in the query {} (error code {})",
-                        response.info, err
-                    );
-                    break Err(());
                 }
             };
             if let Some(e) = events.pop() {
@@ -1440,14 +1419,6 @@ impl<'a> TxEventQuery<'a> {
     }
 }
 
-impl<'a> From<TxEventQuery<'a>> for crate::facade::tendermint::abci::Path {
-    fn from(tx_query: TxEventQuery<'a>) -> Self {
-        format!("{}/{}", tx_query.event_type(), tx_query.tx_hash())
-            .parse()
-            .expect("This operation is infallible")
-    }
-}
-
 /// Transaction event queries are semantically a subset of general queries
 impl<'a> From<TxEventQuery<'a>> for Query {
     fn from(tx_query: TxEventQuery<'a>) -> Self {
@@ -1459,6 +1430,29 @@ impl<'a> From<TxEventQuery<'a>> for Query {
                 Query::default().and_eq("applied.hash", tx_hash)
             }
         }
+    }
+}
+
+pub async fn query_tx_events(
+    client: &HttpClient,
+    tx_event_query: TxEventQuery<'_>,
+) -> eyre::Result<Vec<Event>> {
+    let tx_hash: Hash = tx_event_query.tx_hash().try_into()?;
+    match tx_event_query {
+        TxEventQuery::Accepted(_) => RPC
+            .shell()
+            .accepted(client, &tx_hash)
+            .await
+            .wrap_err_with(|| {
+                eyre!("Failed querying whether a transaction was accepted")
+            }),
+        TxEventQuery::Applied(_) => RPC
+            .shell()
+            .applied(client, &tx_hash)
+            .await
+            .wrap_err_with(|| {
+                eyre!("Error querying whether a transaction was applied")
+            }),
     }
 }
 
@@ -1601,7 +1595,7 @@ pub async fn get_proposal_votes(
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
             let voter_address = gov_storage::get_voter_address(&key)
-                .expect("Vote key should contains the voting address.")
+                .expect("Vote key should contain the voting address.")
                 .clone();
             if vote.is_yay() && validators.contains(&voter_address) {
                 let amount =
@@ -1611,7 +1605,7 @@ pub async fn get_proposal_votes(
                 let validator_address =
                     gov_storage::get_vote_delegation_address(&key)
                         .expect(
-                            "Vote key should contains the delegation address.",
+                            "Vote key should contain the delegation address.",
                         )
                         .clone();
                 let delegator_token_amount = get_bond_amount_at(

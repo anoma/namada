@@ -2,6 +2,7 @@
 
 use std::fmt::{self, Display};
 use std::ops::Deref;
+use std::str::FromStr;
 
 use arse_merkle_tree::traits::Value;
 use arse_merkle_tree::Hash as TreeHash;
@@ -111,6 +112,14 @@ impl TryFrom<&str> for Hash {
 impl From<Hash> for transaction::Hash {
     fn from(hash: Hash) -> Self {
         Self::new(hash.0)
+    }
+}
+
+impl FromStr for Hash {
+    type Err = self::Error;
+
+    fn from_str(str: &str) -> Result<Self, Self::Err> {
+        Self::try_from(str)
     }
 }
 
