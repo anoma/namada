@@ -1,10 +1,11 @@
 use borsh::BorshSerialize;
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 
+use crate::ledger::events::log::dumb_queries;
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, DB};
+use crate::ledger::storage::{DBIter, EventLogExt, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::types::hash::Hash;
 use crate::types::storage::{self, Epoch, PrefixValue};
@@ -223,25 +224,27 @@ where
 }
 
 fn accepted<D, H>(
-    _ctx: RequestCtx<'_, D, H>,
-    _tx_hash: Hash,
-) -> storage_api::Result<bool>
+    ctx: RequestCtx<'_, D, H>,
+    tx_hash: Hash,
+) -> storage_api::Result<Vec<u8>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    todo!("pending reimplementation with new query router")
+    let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
+    Ok(ctx.storage.query_event_log(matcher))
 }
 
 fn applied<D, H>(
-    _ctx: RequestCtx<'_, D, H>,
-    _hash: Hash,
-) -> storage_api::Result<bool>
+    ctx: RequestCtx<'_, D, H>,
+    tx_hash: Hash,
+) -> storage_api::Result<Vec<u8>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    todo!("pending reimplementation with new query router")
+    let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
+    Ok(ctx.storage.query_event_log(matcher))
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
 use namada::ledger::protocol;
+use namada::ledger::storage::EventLogExt;
 use namada::types::storage::{BlockHash, Header};
 use namada::types::transaction::protocol::ProtocolTxType;
 
@@ -255,7 +256,9 @@ where
             .finalize_transaction()
             .map_err(|_| Error::GasOverflow)?;
 
-        self.event_log_mut().log_events(response.events.clone());
+        self.storage
+            .event_log_mut()
+            .log_events(response.events.clone());
 
         Ok(response)
     }
