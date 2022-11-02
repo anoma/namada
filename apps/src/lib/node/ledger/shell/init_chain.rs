@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use namada::ledger::pos::PosParams;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::{ibc, pos};
@@ -88,7 +89,7 @@ where
         self.initialize_established_accounts(
             genesis.established_accounts,
             &mut vp_code_cache,
-        );
+        )?;
 
         // Initialize genesis implicit
         self.initialize_implicit_accounts(genesis.implicit_accounts);
@@ -102,11 +103,12 @@ where
         // Initialize genesis validator accounts
         self.initialize_validators(&genesis.validators, &mut vp_code_cache);
         // set the initial validators set
-        Ok(self.set_initial_validators(
-            genesis.validators,
-            &genesis.parameters,
-            &genesis.pos_params,
-        ))
+        Ok(
+            self.set_initial_validators(
+                genesis.validators,
+                &genesis.pos_params,
+            ),
+        )
     }
 
     /// Initialize genesis established accounts
@@ -114,7 +116,7 @@ where
         &mut self,
         accounts: Vec<genesis::EstablishedAccount>,
         vp_code_cache: &mut HashMap<String, Vec<u8>>,
-    ) {
+    ) -> Result<()> {
         for genesis::EstablishedAccount {
             address,
             vp_code_path,
@@ -165,6 +167,7 @@ where
                 self.storage.write(&key, value).unwrap();
             }
         }
+        Ok(())
     }
 
     /// Initialize genesis implicit accounts

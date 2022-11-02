@@ -4,7 +4,8 @@ use std::num::NonZeroU64;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
-use crate::ledger::eth_bridge::storage as bridge_storage;
+use crate::ledger::eth_bridge;
+use crate::ledger::eth_bridge::{bridge_pool_vp, storage as bridge_storage};
 use crate::ledger::storage::types::encode;
 use crate::ledger::storage::{self, Storage};
 use crate::types::ethereum_events::EthAddress;
@@ -119,7 +120,10 @@ pub struct EthereumBridgeConfig {
 }
 
 impl EthereumBridgeConfig {
-    /// Initialize the Ethereum bridge parameters in storage
+    /// Initialize the Ethereum bridge parameters in storage.
+    ///
+    /// If these parameters are initialized, the storage subspaces
+    /// for the Ethereum bridge VPs are also initialized.
     pub fn init_storage<DB, H>(&self, storage: &mut Storage<DB, H>)
     where
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -148,5 +152,46 @@ impl EthereumBridgeConfig {
         storage
             .write(&governance_contract_key, encode(governance))
             .unwrap();
+        // Initialize the storage for the Ethereum Bridge VP.
+        eth_bridge::vp::init_storage(storage);
+        // Initialize the storage for the Bridge Pool VP.
+        bridge_pool_vp::init_storage(storage);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use eyre::Result;
+
+    use crate::ledger::eth_bridge::parameters::{
+        ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
+        UpgradeableContract,
+    };
+    use crate::types::ethereum_events::EthAddress;
+
+    /// Ensure we can serialize and deserialize a [`Config`] struct to and from
+    /// TOML. This can fail if complex fields are ordered before simple fields
+    /// in any of the config structs.
+    #[test]
+    fn test_round_trip_toml_serde() -> Result<()> {
+        let config = EthereumBridgeConfig {
+            min_confirmations: MinimumConfirmations::default(),
+            contracts: Contracts {
+                native_erc20: EthAddress([42; 20]),
+                bridge: UpgradeableContract {
+                    address: EthAddress([23; 20]),
+                    version: ContractVersion::default(),
+                },
+                governance: UpgradeableContract {
+                    address: EthAddress([18; 20]),
+                    version: ContractVersion::default(),
+                },
+            },
+        };
+        let serialized = toml::to_string(&config)?;
+        let deserialized: EthereumBridgeConfig = toml::from_str(&serialized)?;
+
+        assert_eq!(config, deserialized);
+        Ok(())
     }
 }

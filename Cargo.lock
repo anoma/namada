@@ -3364,6 +3364,7 @@ dependencies = [
  "test-log",
  "thiserror",
  "tiny-keccak",
+ "toml",
  "tonic-build",
  "tracing 0.1.37",
  "tracing-subscriber 0.3.16",
