@@ -595,29 +595,11 @@ where
             })
     }
 
-    // TODO: fix this method; should only be able to send a validator
-    // set update at the second block of an epoch
     #[cfg(feature = "abcipp")]
-    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
-        let height = match can_send {
-            SendValsetUpd::Now => self.get_current_decision_height(),
-            SendValsetUpd::AtPrevHeight => self.last_height,
-        };
-
-        // handle genesis block corner case
-        if height == BlockHeight(1) {
-            return true;
-        }
-
-        let fst_heights_of_each_epoch =
-            self.block.pred_epochs.first_block_heights();
-
-        // check if the last stored height
-        // is the one we are looking for
-        fst_heights_of_each_epoch
-            .last()
-            .map(|&h| h == height)
-            .unwrap_or(false)
+    fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
+        // TODO: implement this method for ABCI++; should only be able to send
+        // a validator set update at the second block of an epoch
+        true
     }
 
     #[cfg(not(feature = "abcipp"))]
