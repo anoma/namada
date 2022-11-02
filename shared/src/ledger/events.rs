@@ -12,6 +12,7 @@ use thiserror::Error;
 
 use crate::ledger::governance::utils::ProposalEvent;
 use crate::types::ibc::IbcEvent;
+#[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::{hash_tx, TxType};
 
 /// Indicates if an event is emitted do to
@@ -65,6 +66,7 @@ impl Display for EventType {
 impl Event {
     /// Creates a new event with the hash and height of the transaction
     /// already filled in
+    #[cfg(feature = "ferveo-tpke")]
     pub fn new_tx_event(tx: &TxType, height: u64) -> Self {
         let mut event = match tx {
             TxType::Wrapper(wrapper) => {
