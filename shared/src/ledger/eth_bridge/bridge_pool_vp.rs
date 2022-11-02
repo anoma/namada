@@ -977,7 +977,13 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
@@ -1073,7 +1079,13 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
@@ -1168,7 +1180,13 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
@@ -1280,12 +1298,17 @@ mod test_bridge_pool_vp {
                 Amount::from(10).try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
-
+        let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
-        let verifiers = BTreeSet::default();
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
