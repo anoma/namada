@@ -82,8 +82,8 @@ where
 }
 
 /// Check if a delta matches the delta given by a transfer
-fn check_delta(delta: (Address, Amount), transfer: &PendingTransfer) -> bool {
-    &delta.0 == transfer.transfer.sender && delta.1 == transfer.transfer.amount
+fn check_delta(delta: &(Address, Amount), transfer: &PendingTransfer) -> bool {
+    delta.0 == transfer.transfer.sender && delta.1 == transfer.transfer.amount
 }
 
 impl<'a, D, H, CA> NativeVp for BridgePoolVp<'a, D, H, CA>
@@ -124,7 +124,7 @@ where
 
         let pending_key = get_pending_key(&transfer);
         // check that transfer is not already in the pool
-        match (&self.ctx).read_pre_value(&pending_key) {
+        match (&self.ctx).read_pre_value::<PendingTransfer>(&pending_key) {
             Ok(Some(_)) => {
                 tracing::debug!(
                     "Rejecting transaction as the transfer is already in the \
@@ -212,7 +212,7 @@ where
                 (&escrow_key).try_into().expect("This should not fail"),
                 (&owner_key).try_into().expect("This should not fail"),
             ) {
-                Ok(Some(delta)) if check_delta(delta, &transfer) => {}
+                Ok(Some(delta)) if check_delta(&delta, &transfer) => {}
                 other => {
                     tracing::debug!(
                         "The assets of the transfer were not properly \
@@ -831,7 +831,13 @@ mod test_bridge_pool_vp {
 
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
