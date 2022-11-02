@@ -815,6 +815,7 @@ mod test_queries {
 
     #[cfg(feature = "abcipp")]
     test_can_send_validator_set_update! {
+        // TODO(feature = "abcipp"): add some epoch assertions
         epoch_assertions: []
     }
 
