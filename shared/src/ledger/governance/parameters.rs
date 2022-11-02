@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::storage as gov_storage;
@@ -24,10 +26,29 @@ pub struct GovParams {
     pub max_proposal_code_size: u64,
     /// Minimum proposal voting period in epochs
     pub min_proposal_period: u64,
-    /// Maximimum number of characters for proposal content
+    /// Maximum proposal voting period in epochs
+    pub max_proposal_period: u64,
+    /// Maximum number of characters for proposal content
     pub max_proposal_content_size: u64,
     /// Minimum epochs between end and grace epochs
     pub min_proposal_grace_epochs: u64,
+}
+
+impl Display for GovParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Min. proposal fund: {}\nMax. proposal code size: {}\nMin. \
+             proposal period: {}\nMax. proposal period: {}\nMax. proposal \
+             content size: {}\nMin. proposal grace epochs: {}",
+            self.min_proposal_fund,
+            self.max_proposal_code_size,
+            self.min_proposal_period,
+            self.max_proposal_period,
+            self.max_proposal_content_size,
+            self.min_proposal_grace_epochs
+        )
+    }
 }
 
 impl Default for GovParams {
@@ -36,6 +57,7 @@ impl Default for GovParams {
             min_proposal_fund: 500,
             max_proposal_code_size: 300_000,
             min_proposal_period: 3,
+            max_proposal_period: 27,
             max_proposal_content_size: 10_000,
             min_proposal_grace_epochs: 6,
         }
@@ -53,6 +75,7 @@ impl GovParams {
             min_proposal_fund,
             max_proposal_code_size,
             min_proposal_period,
+            max_proposal_period,
             max_proposal_content_size,
             min_proposal_grace_epochs,
         } = self;
@@ -73,6 +96,12 @@ impl GovParams {
             gov_storage::get_min_proposal_period_key();
         storage
             .write(&min_proposal_period_key, encode(min_proposal_period))
+            .unwrap();
+
+        let max_proposal_period_key =
+            gov_storage::get_max_proposal_period_key();
+        storage
+            .write(&max_proposal_period_key, encode(max_proposal_period))
             .unwrap();
 
         let max_proposal_content_size_key =

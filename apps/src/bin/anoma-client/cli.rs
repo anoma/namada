@@ -3,10 +3,10 @@
 use color_eyre::eyre::Result;
 use namada_apps::cli;
 use namada_apps::cli::cmds::*;
-use namada_apps::client::{gossip, rpc, tx, utils};
+use namada_apps::client::{rpc, tx, utils};
 
 pub async fn main() -> Result<()> {
-    match cli::anoma_client_cli() {
+    match cli::anoma_client_cli()? {
         cli::AnomaClient::WithContext(cmd_box) => {
             let (cmd, ctx) = *cmd_box;
             use AnomaClientWithContext as Sub;
@@ -80,19 +80,15 @@ pub async fn main() -> Result<()> {
                 Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
                     rpc::query_protocol_parameters(ctx, args).await;
                 }
-                // Gossip cmds
-                Sub::Intent(Intent(args)) => {
-                    gossip::gossip_intent(ctx, args).await;
-                }
-                Sub::SubscribeTopic(SubscribeTopic(args)) => {
-                    gossip::subscribe_topic(ctx, args).await;
-                }
             }
         }
         cli::AnomaClient::WithoutContext(cmd, global_args) => match cmd {
             // Utils cmds
             Utils::JoinNetwork(JoinNetwork(args)) => {
                 utils::join_network(global_args, args).await
+            }
+            Utils::FetchWasms(FetchWasms(args)) => {
+                utils::fetch_wasms(global_args, args).await
             }
             Utils::InitNetwork(InitNetwork(args)) => {
                 utils::init_network(global_args, args)

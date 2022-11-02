@@ -6,7 +6,8 @@ license = "GPL-3.0"
 name = "namada_apps"
 readme = "../README.md"
 resolver = "2"
-version = "0.7.1"
+version = "0.8.1"
+default-run = "namada"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -70,9 +71,10 @@ abciplus = [
 
 [dependencies]
 namada = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand", "secp256k1-sign-verify"]}
-arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", branch = "bat/arse-merkle-tree", features = ["std", "borsh"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
+# branch = "bat/arse-merkle-tree"
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "04ad1eeb28901b57a7599bbe433b3822965dabe8", features = ["std", "borsh"]}
 async-std = {version = "=1.11.0", features = ["unstable"]}
 async-trait = "0.1.51"
 base64 = "0.13.0"
@@ -87,8 +89,8 @@ clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default
 clarity = "0.5.1"
 color-eyre = "0.5.10"
 config = "0.11.0"
+data-encoding = "2.3.2"
 derivative = "2.2.0"
-directories = "4.0.1"
 ed25519-consensus = "1.2.0"
 ethabi = "17.0.0"
 ferveo = {git = "https://github.com/anoma/ferveo"}
@@ -97,11 +99,9 @@ eyre = "0.6.5"
 flate2 = "1.0.22"
 file-lock = "2.0.2"
 futures = "0.3"
-hex = "0.4.3"
 itertools = "0.10.1"
 libc = "0.2.97"
 libloading = "0.7.2"
-libp2p = "0.38.0"
 message-io = {version = "0.14.3", default-features = false, features = ["websocket"]}
 num256 = "0.3.5"
 num-derive = "0.3.3"
@@ -109,7 +109,6 @@ num-traits = "0.2.14"
 num_cpus = "1.13.0"
 once_cell = "1.8.0"
 orion = "0.16.0"
-pathdiff = "0.2.1"
 prost = "0.9.0"
 prost-types = "0.9.0"
 rand = {version = "0.8", default-features = false}
@@ -118,7 +117,7 @@ rayon = "=1.5.1"
 regex = "1.4.5"
 reqwest = "0.11.4"
 rlimit = "0.5.4"
-rocksdb = {version = "0.18.0", features = ['zstd'], default-features = false}
+rocksdb = {version = "0.19.0", features = ['zstd', 'jemalloc'], default-features = false}
 rpassword = "5.0.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
@@ -154,6 +153,7 @@ tracing-subscriber = {version = "0.3.7", features = ["env-filter"]}
 web30 = "0.19.1"
 websocket = "0.26.2"
 winapi = "0.3.9"
+bimap = {version = "0.6.2", features = ["serde"]}
 
 warp = "0.3.2"
 bytes = "1.1.0"
@@ -161,7 +161,6 @@ bytes = "1.1.0"
 [dev-dependencies]
 assert_matches = "1.5.0"
 namada = {path = "../shared", features = ["testing", "wasm-runtime"]}
-cargo-watch = "7.5.0"
 bit-set = "0.5.2"
 # A fork with state machime testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
@@ -171,4 +170,3 @@ tokio-test = "0.4.2"
 
 [build-dependencies]
 git2 = "0.13.25"
-tonic-build = "0.6.0"

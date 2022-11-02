@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "tx_template"
 resolver = "2"
-version = "0.7.1"
+version = "0.8.1"
 
 [lib]
 crate-type = ["cdylib"]
@@ -17,28 +17,3 @@ getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
 namada_tests = {path = "../../tests"}
-
-[patch.crates-io]
-# TODO temp patch for <https://github.com/near/borsh-rs/issues/82>, <https://github.com/near/borsh-rs/issues/84> and more tba.
-borsh = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
-borsh-derive = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
-borsh-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
-borsh-schema-derive-internal = {git = "https://github.com/heliaxdev/borsh-rs.git", rev = "cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"}
-
-# patched to a commit on the `eth-bridge-integration` branch of our fork
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "87be41b8c9cc2850830f4d8028c1fe1bd9f96284"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "87be41b8c9cc2850830f4d8028c1fe1bd9f96284"}
-tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "87be41b8c9cc2850830f4d8028c1fe1bd9f96284"}
-tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "87be41b8c9cc2850830f4d8028c1fe1bd9f96284"}
-
-# patched to a commit on the `eth-bridge-integration` branch of our fork
-ibc = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"}
-
-[profile.release]
-# smaller and faster wasm (https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto)
-lto = true
-# simply terminate on panics, no unwinding
-panic = "abort"
-# tell llvm to optimize for size (https://rustwasm.github.io/book/reference/code-size.html#tell-llvm-to-optimize-for-size-instead-of-speed)
-opt-level = 'z'

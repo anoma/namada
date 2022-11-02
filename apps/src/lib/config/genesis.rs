@@ -10,7 +10,6 @@ use namada::ledger::eth_bridge::parameters::EthereumBridgeConfig;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::{GenesisValidator, PosParams};
-use namada::ledger::treasury::parameters::TreasuryParams;
 use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
@@ -27,12 +26,12 @@ pub mod genesis_config {
     use std::path::Path;
     use std::str::FromStr;
 
-    use hex;
+    use data_encoding::HEXLOWER;
+    use eyre::Context;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::pos::types::BasisPoints;
     use namada::ledger::pos::{GenesisValidator, PosParams};
-    use namada::ledger::treasury::parameters::TreasuryParams;
     use namada::types::address::Address;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
@@ -52,12 +51,12 @@ pub mod genesis_config {
 
     impl HexString {
         pub fn to_bytes(&self) -> Result<Vec<u8>, HexKeyError> {
-            let bytes = hex::decode(&self.0)?;
+            let bytes = HEXLOWER.decode(self.0.as_ref())?;
             Ok(bytes)
         }
 
         pub fn to_sha256_bytes(&self) -> Result<[u8; 32], HexKeyError> {
-            let bytes = hex::decode(&self.0)?;
+            let bytes = HEXLOWER.decode(self.0.as_ref())?;
             let slice = bytes.as_slice();
             let array: [u8; 32] = slice.try_into()?;
             Ok(array)
@@ -78,15 +77,15 @@ pub mod genesis_config {
     #[derive(Error, Debug)]
     pub enum HexKeyError {
         #[error("Invalid hex string: {0:?}")]
-        InvalidHexString(hex::FromHexError),
+        InvalidHexString(data_encoding::DecodeError),
         #[error("Invalid sha256 checksum: {0}")]
         InvalidSha256(TryFromSliceError),
         #[error("Invalid public key: {0}")]
         InvalidPublicKey(ParsePublicKeyError),
     }
 
-    impl From<hex::FromHexError> for HexKeyError {
-        fn from(err: hex::FromHexError) -> Self {
+    impl From<data_encoding::DecodeError> for HexKeyError {
+        fn from(err: data_encoding::DecodeError) -> Self {
             Self::InvalidHexString(err)
         }
     }
@@ -121,8 +120,6 @@ pub mod genesis_config {
         pub pos_params: PosParamsConfig,
         // Governance parameters
         pub gov_params: GovernanceParamsConfig,
-        // Treasury parameters
-        pub treasury_params: TreasuryParamasConfig,
         // Ethereum bridge config
         pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
         // Wasm definitions
@@ -137,22 +134,18 @@ pub mod genesis_config {
         // Maximum size of proposal in kibibytes (KiB)
         // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_code_size: u64,
-        // Proposal period length in epoch
+        // Minimum proposal period length in epochs
         // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_period: u64,
+        // Maximum proposal period length in epochs
+        // XXX: u64 doesn't work with toml-rs!
+        pub max_proposal_period: u64,
         // Maximum number of characters in the proposal content
         // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_content_size: u64,
         // Minimum number of epoch between end and grace epoch
         // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_grace_epochs: u64,
-    }
-
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct TreasuryParamasConfig {
-        // Maximum funds that can be moved from treasury in a single transfer
-        // XXX: u64 doesn't work with toml-rs!
-        pub max_proposal_fund_transfer: u64,
     }
 
     /// Validator pre-genesis configuration can be created with client utils
@@ -197,16 +190,6 @@ pub mod genesis_config {
         pub staking_reward_vp: Option<String>,
         // IP:port of the validator. (used in generation only)
         pub net_address: Option<String>,
-        /// Matchmaker account's alias, if any
-        pub matchmaker_account: Option<String>,
-        /// Path to a matchmaker WASM program, if any
-        pub matchmaker_code: Option<String>,
-        /// Path to a transaction WASM code used by the matchmaker, if any
-        pub matchmaker_tx: Option<String>,
-        /// Is this validator running a seed intent gossip node? A seed node is
-        /// not part of the gossipsub where intents are being propagated and
-        /// hence cannot run matchmakers
-        pub intent_gossip_seed: Option<bool>,
         /// Tendermint node key is used to derive Tendermint node ID for node
         /// authentication
         pub tendermint_node_key: Option<HexString>,
@@ -570,16 +553,13 @@ pub mod genesis_config {
             min_proposal_fund: config.gov_params.min_proposal_fund,
             max_proposal_code_size: config.gov_params.max_proposal_code_size,
             min_proposal_period: config.gov_params.min_proposal_period,
+            max_proposal_period: config.gov_params.max_proposal_period,
             max_proposal_content_size: config
                 .gov_params
                 .max_proposal_content_size,
             min_proposal_grace_epochs: config
                 .gov_params
                 .min_proposal_grace_epochs,
-        };
-
-        let treasury_params = TreasuryParams {
-            max_proposal_fund_transfer: 10_000,
         };
 
         let pos_params = PosParams {
@@ -608,16 +588,28 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
-            treasury_params,
             ethereum_bridge_params: config.ethereum_bridge_params,
         };
         genesis.init();
         genesis
     }
 
-    pub fn open_genesis_config(path: impl AsRef<Path>) -> GenesisConfig {
-        let config_file = std::fs::read_to_string(path).unwrap();
-        toml::from_str(&config_file).unwrap()
+    pub fn open_genesis_config(
+        path: impl AsRef<Path>,
+    ) -> color_eyre::eyre::Result<GenesisConfig> {
+        let config_file =
+            std::fs::read_to_string(&path).wrap_err_with(|| {
+                format!(
+                    "couldn't read genesis config file from {}",
+                    path.as_ref().to_string_lossy()
+                )
+            })?;
+        toml::from_str(&config_file).wrap_err_with(|| {
+            format!(
+                "couldn't parse TOML from {}",
+                path.as_ref().to_string_lossy()
+            )
+        })
     }
 
     pub fn write_genesis_config(
@@ -629,7 +621,7 @@ pub mod genesis_config {
     }
 
     pub fn read_genesis_config(path: impl AsRef<Path>) -> Genesis {
-        load_genesis_config(open_genesis_config(path))
+        load_genesis_config(open_genesis_config(path).unwrap())
     }
 }
 
@@ -644,7 +636,6 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
-    pub treasury_params: TreasuryParams,
     // Ethereum bridge config
     pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
 }
@@ -838,13 +829,6 @@ pub fn genesis() -> Genesis {
         public_key: Some(wallet::defaults::christel_keypair().ref_to()),
         storage: HashMap::default(),
     };
-    let matchmaker = EstablishedAccount {
-        address: wallet::defaults::matchmaker_address(),
-        vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::matchmaker_keypair().ref_to()),
-        storage: HashMap::default(),
-    };
     let implicit_accounts = vec![ImplicitAccount {
         public_key: wallet::defaults::daewon_keypair().ref_to(),
     }];
@@ -871,10 +855,6 @@ pub fn genesis() -> Genesis {
             default_key_tokens,
         ),
         ((&validator.account_key).into(), default_key_tokens),
-        (
-            matchmaker.public_key.as_ref().unwrap().into(),
-            default_key_tokens,
-        ),
     ]);
     let token_accounts = address::tokens()
         .into_iter()
@@ -888,13 +868,12 @@ pub fn genesis() -> Genesis {
     Genesis {
         genesis_time: DateTimeUtc::now(),
         validators: vec![validator],
-        established_accounts: vec![albert, bertha, christel, matchmaker],
+        established_accounts: vec![albert, bertha, christel],
         implicit_accounts,
         token_accounts,
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
-        treasury_params: TreasuryParams::default(),
         ethereum_bridge_params: None,
     }
 }

@@ -9,7 +9,7 @@ use eyre::{eyre, Result};
 use itertools::Itertools;
 
 use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
-use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
+use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::traits::StorageHasher;
 use crate::types::address::{xan, Address, InternalAddress};
@@ -67,7 +67,7 @@ where
     ) -> Result<bool, Error> {
         let escrow_key = balance_key(&xan(), &super::ADDRESS);
         let escrow_pre: Amount = if let Ok(Some(bytes)) =
-            self.ctx.read_pre(&escrow_key)
+            self.ctx.read_bytes_pre(&escrow_key)
         {
             BorshDeserialize::try_from_slice(bytes.as_slice()).map_err(
                 |_| Error(eyre!("Couldn't deserialize a balance from storage")),
@@ -80,7 +80,7 @@ where
             return Ok(false);
         };
         let escrow_post: Amount =
-            if let Ok(Some(bytes)) = self.ctx.read_post(&escrow_key) {
+            if let Ok(Some(bytes)) = self.ctx.read_bytes_post(&escrow_key) {
                 BorshDeserialize::try_from_slice(bytes.as_slice()).expect(
                     "Deserializing the balance of the Ethereum bridge VP from \
                      storage shouldn't fail",
@@ -240,7 +240,8 @@ fn extract_valid_keys_changed(
 /// amount, and that the changes balance each other out. If the balance changes
 /// are invalid, the reason is logged and a `None` is returned. Otherwise,
 /// return the `Address` of the owner of the balance which is decreasing,
-/// as by how much it decreased, which should be authorizing the balance change.
+/// and by how much it decreased, which should be authorizing the balance
+/// change.
 pub(super) fn check_balance_changes(
     reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,
@@ -473,12 +474,17 @@ mod tests {
         tx: &'a Tx,
         storage: &'a Storage<MockDB, Sha256Hasher>,
         write_log: &'a WriteLog,
+        keys_changed: &'a BTreeSet<Key>,
+        verifiers: &'a BTreeSet<Address>,
     ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
         Ctx::new(
+            &super::super::ADDRESS,
             storage,
             write_log,
             tx,
             VpGasMeter::new(0u64),
+            keys_changed,
+            verifiers,
             VpCache::new(temp_dir(), 100usize),
         )
     }
@@ -627,14 +633,15 @@ mod tests {
             )
             .expect("Test failed");
 
+        let keys_changed = BTreeSet::from([account_key, escrow_key]);
+        let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
+
         // set up the VP
         let tx = Tx::new(vec![], None);
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &storage, &writelog),
+            ctx: setup_ctx(&tx, &storage, &writelog, &keys_changed, &verifiers),
         };
 
-        let keys_changed = BTreeSet::from([account_key, escrow_key]);
-        let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
         let res = vp.validate_tx(
             &tx.try_to_vec().expect("Test failed"),
             &keys_changed,
@@ -669,14 +676,15 @@ mod tests {
             )
             .expect("Test failed");
 
+        let keys_changed = BTreeSet::from([account_key, escrow_key]);
+        let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
+
         // set up the VP
         let tx = Tx::new(vec![], None);
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &storage, &writelog),
+            ctx: setup_ctx(&tx, &storage, &writelog, &keys_changed, &verifiers),
         };
 
-        let keys_changed = BTreeSet::from([account_key, escrow_key]);
-        let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
         let res = vp.validate_tx(
             &tx.try_to_vec().expect("Test failed"),
             &keys_changed,
@@ -712,14 +720,15 @@ mod tests {
             )
             .expect("Test failed");
 
+        let keys_changed = BTreeSet::from([account_key, escrow_key]);
+        let verifiers = BTreeSet::from([]);
+
         // set up the VP
         let tx = Tx::new(vec![], None);
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &storage, &writelog),
+            ctx: setup_ctx(&tx, &storage, &writelog, &keys_changed, &verifiers),
         };
 
-        let keys_changed = BTreeSet::from([account_key, escrow_key]);
-        let verifiers = BTreeSet::from([]);
         let res = vp.validate_tx(
             &tx.try_to_vec().expect("Test failed"),
             &keys_changed,

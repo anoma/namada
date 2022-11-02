@@ -4,11 +4,15 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_vp_prelude"
 resolver = "2"
-version = "0.7.1"
+version = "0.8.1"
 
 [features]
 default = []
 
 [dependencies]
+namada = {path = "../shared"}
 namada_vm_env = {path = "../vm_env"}
+namada_macros = {path = "../macros"}
+borsh = "0.9.0"
 sha2 = "0.10.1"
+thiserror = "1.0.30"

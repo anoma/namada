@@ -1,0 +1,1 @@
+- Refactored PoS VP logic ([#318](https://github.com/anoma/namada/pull/318))

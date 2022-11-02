@@ -6,7 +6,7 @@ use namada_apps::cli::cmds;
 use namada_apps::client::eth_bridge_pool;
 
 pub async fn main() -> Result<()> {
-    let (cmd, ctx) = cli::anoma_relayer_cli();
+    let (cmd, ctx) = cli::anoma_relayer_cli()?;
     use cmds::EthBridgePool as Sub;
     match cmd {
         // Ledger cmds
