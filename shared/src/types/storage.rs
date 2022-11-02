@@ -291,36 +291,6 @@ impl MerkleValue {
     }
 }
 
-impl MerkleValue {
-    /// Get the natural byte repesentation of the value
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Bytes(bytes) => bytes,
-            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
-        }
-    }
-}
-
-impl MerkleValue {
-    /// Get the natural byte repesentation of the value
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Bytes(bytes) => bytes,
-            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
-        }
-    }
-}
-
-impl MerkleValue {
-    /// Get the natural byte repesentation of the value
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Bytes(bytes) => bytes,
-            Self::Transfer(transfer) => transfer.try_to_vec().unwrap(),
-        }
-    }
-}
-
 /// Storage keys that are utf8 encoded strings
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub struct StringKey {
@@ -763,6 +733,59 @@ impl KeySeg for KeccakHash {
     fn raw(&self) -> String {
         self.to_string()
     }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
+/// Implement [`KeySeg`] for a type via base32hex of its BE bytes (using
+/// `to_le_bytes()` and `from_le_bytes` methods) that maintains sort order of
+/// the original data.
+// TODO this could be a bit more efficient without the string conversion (atm
+// with base32hex), if we can use bytes for storage key directly (which we can
+// with rockDB, but atm, we're calling `to_string()` using the custom `Display`
+// impl from here)
+macro_rules! impl_int_key_seg {
+    ($unsigned:ty, $signed:ty, $len:literal) => {
+        impl KeySeg for $unsigned {
+            fn parse(string: String) -> Result<Self> {
+                let bytes =
+                    BASE32HEX_NOPAD.decode(string.as_ref()).map_err(|err| {
+                        Error::ParseKeySeg(format!(
+                            "Failed parsing {} with {}",
+                            string, err
+                        ))
+                    })?;
+                let mut fixed_bytes = [0; $len];
+                fixed_bytes.copy_from_slice(&bytes);
+                Ok(<$unsigned>::from_be_bytes(fixed_bytes))
+            }
+
+            fn raw(&self) -> String {
+                BASE32HEX_NOPAD.encode(&self.to_be_bytes())
+            }
+
+            fn to_db_key(&self) -> DbKeySeg {
+                DbKeySeg::StringSeg(self.raw())
+            }
+        }
+
+        impl KeySeg for $signed {
+            fn parse(string: String) -> Result<Self> {
+                // get signed int from a unsigned int complemented with a min
+                // value
+                let complemented = <$unsigned>::parse(string)?;
+                let signed = (complemented as $signed) ^ <$signed>::MIN;
+                Ok(signed)
+            }
+
+            fn raw(&self) -> String {
+                // signed int is converted to unsigned int that preserves the
+                // order by complementing it with a min value
+                let complemented = (*self ^ <$signed>::MIN) as $unsigned;
+                complemented.raw()
+            }
 
             fn to_db_key(&self) -> DbKeySeg {
                 DbKeySeg::StringSeg(self.raw())
