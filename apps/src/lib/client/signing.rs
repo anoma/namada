@@ -9,12 +9,12 @@ use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
-use tendermint_config::net::Address as TendermintAddress;
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxBroadcastData;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::wallet::Wallet;
 
 /// Find the public key for the given address and try to load the keypair

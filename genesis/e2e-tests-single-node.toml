@@ -1,12 +1,11 @@
 # Genesis configuration source for E2E tests with:
-# - 1 genesis validator and intent # gossip nodes
-# - a matchmaker configured on the first validator node
+# - 1 genesis validator
 # - User accounts same as the ones in "dev" build (Albert, Bertha, Christel)
 
 genesis_time = "2021-09-30T10:00:00Z"
 
 [validator.validator-0]
-# Validator's staked XAN at genesis.
+# Validator's staked NAM at genesis.
 tokens = 200000
 # Amount of the validator's genesis token balance which is not staked.
 non_staked_balance = 1000000000000
@@ -18,20 +17,13 @@ staking_reward_vp = "vp_user"
 # We set the port to be the default+1000, so that if a local node was running at 
 # the same time as the E2E tests, it wouldn't affect them.
 net_address = "127.0.0.1:27656"
-# This has to be an alias of one of the established accounts
-matchmaker_account = "matchmaker"
-# A matchmaker dylib program's name (the platform specific extension 
-# `(dll|dylib|so)` is added by Anoma)
-matchmaker_code = "libmm_token_exch"
-# A transaction WASM code used by the matchmaker
-matchmaker_tx = "wasm/tx_from_intent.wasm"
 
 # Some tokens present at genesis.
 
-[token.XAN]
+[token.NAM]
 address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5"
 vp = "vp_token"
-[token.XAN.balances]
+[token.NAM.balances]
 Albert = 1000000
 "Albert.public_key" = 100
 Bertha = 1000000
@@ -41,8 +33,6 @@ Christel = 1000000
 Daewon = 1000000
 faucet = 9223372036854
 "faucet.public_key" = 100
-matchmaker = 1000000
-"matchmaker.public_key" = 1000
 "validator-0.public_key" = 100
 
 [token.BTC]
@@ -109,9 +99,6 @@ faucet = 9223372036854
 # Some established accounts present at genesis.
 [established.faucet]
 vp = "vp_testnet_faucet"
-
-[established.matchmaker]
-vp = "vp_user"
 
 [established.Albert]
 vp = "vp_user"
@@ -181,16 +168,15 @@ light_client_attack_slash_rate = 500
 
 # Governance parameters.
 [gov_params]
-# minimum amount of xan token to lock
+# minimum amount of nam token to lock
 min_proposal_fund = 500
 # proposal code size in bytes
 max_proposal_code_size = 300000
-# proposal period length in epoch
+# min proposal period length in epochs
 min_proposal_period = 3
+# max proposal period length in epochs
+max_proposal_period = 27
 # maximum number of characters in the proposal content
 max_proposal_content_size = 10000
 # minimum epochs between end and grace epoch
 min_proposal_grace_epochs = 6
-
-[treasury_params]
-max_proposal_fund_transfer = 10000

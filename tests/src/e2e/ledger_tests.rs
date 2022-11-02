@@ -9,14 +9,13 @@
 //! To keep the temporary files created by a test, use env var
 //! `ANOMA_E2E_KEEP_TEMP=true`.
 
-use std::fs::{self, OpenOptions};
-use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
+use data_encoding::HEXLOWER;
 use namada::types::token;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
@@ -24,7 +23,8 @@ use namada_apps::config::genesis::genesis_config::{
 use serde_json::json;
 use setup::constants::*;
 
-use super::setup::working_dir;
+use super::helpers::{get_height, wait_for_block_height};
+use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     find_address, find_voting_power, get_actor_rpc, get_epoch,
 };
@@ -52,7 +52,7 @@ fn run_ledger() -> Result<()> {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
         ledger.exp_string("Anoma ledger node started")?;
-        ledger.exp_string("This node is a fullnode")?;
+        ledger.exp_string("This node is not a validator")?;
     }
 
     Ok(())
@@ -81,11 +81,11 @@ fn test_node_connectivity() -> Result<()> {
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
-    non_validator.exp_string("This node is a fullnode")?;
+    non_validator.exp_string("This node is not a validator")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
-    let bg_non_validator = non_validator.background();
+    let _bg_non_validator = non_validator.background();
 
     // 2. Submit a valid token transfer tx
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -96,7 +96,7 @@ fn test_node_connectivity() -> Result<()> {
         "--target",
         ALBERT,
         "--token",
-        XAN,
+        NAM,
         "--amount",
         "10.1",
         "--fee-amount",
@@ -104,7 +104,7 @@ fn test_node_connectivity() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -112,15 +112,45 @@ fn test_node_connectivity() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 3. Check that all the nodes processed the tx with the same result
+    // 3. Check that all the nodes processed the tx and report the same balance
+
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
-    let mut non_validator = bg_non_validator.foreground();
-
     let expected_result = "all VPs accepted transaction";
+    // We cannot check this on non-validator node as it might sync without
+    // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;
     validator_1.exp_string(expected_result)?;
-    non_validator.exp_string(expected_result)?;
+    let _bg_validator_0 = validator_0.background();
+    let _bg_validator_1 = validator_1.background();
+
+    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
+    let non_validator_rpc = get_actor_rpc(&test, &Who::NonValidator);
+
+    // Find the block height on the validator
+    let after_tx_height = get_height(&test, &validator_0_rpc)?;
+
+    // Wait for the non-validator to be synced to at least the same height
+    wait_for_block_height(&test, &non_validator_rpc, after_tx_height, 10)?;
+
+    let query_balance_args = |ledger_rpc| {
+        vec![
+            "balance",
+            "--owner",
+            ALBERT,
+            "--token",
+            NAM,
+            "--ledger-address",
+            ledger_rpc,
+        ]
+    };
+    for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
+        let mut client =
+            run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
+        client.exp_string("NAM: 1000010.1")?;
+        client.assert_success();
+    }
 
     Ok(())
 }
@@ -260,7 +290,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--target",
             ALBERT,
             "--token",
-            XAN,
+            NAM,
             "--amount",
             "10.1",
             "--fee-amount",
@@ -268,7 +298,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--gas-limit",
             "0",
             "--fee-token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc,
         ],
@@ -285,7 +315,7 @@ fn ledger_txs_and_queries() -> Result<()> {
              "--gas-limit",
              "0",
              "--fee-token",
-             XAN,
+             NAM,
             "--ledger-address",
             &validator_one_rpc,
         ],
@@ -303,7 +333,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--gas-limit",
             "0",
             "--fee-token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
@@ -324,7 +354,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--gas-limit",
             "0",
             "--fee-token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc,
         ],
@@ -356,12 +386,12 @@ fn ledger_txs_and_queries() -> Result<()> {
                 "--owner",
                 BERTHA,
                 "--token",
-                XAN,
+                NAM,
                 "--ledger-address",
                 &validator_one_rpc,
             ],
             // expect a decimal
-            r"XAN: \d+(\.\d+)?",
+            r"NAM: \d+(\.\d+)?",
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {
@@ -373,8 +403,8 @@ fn ledger_txs_and_queries() -> Result<()> {
     let christel = find_address(&test, CHRISTEL)?;
     // as setup in `genesis/e2e-tests-single-node.toml`
     let christel_balance = token::Amount::whole(1000000);
-    let xan = find_address(&test, XAN)?;
-    let storage_key = token::balance_key(&xan, &christel).to_string();
+    let nam = find_address(&test, NAM)?;
+    let storage_key = token::balance_key(&nam, &christel).to_string();
     let query_args_and_expected_response = vec![
         // 7. Query storage key and get hex-encoded raw bytes
         (
@@ -386,7 +416,7 @@ fn ledger_txs_and_queries() -> Result<()> {
                 &validator_one_rpc,
             ],
             // expect hex encoded of borsh encoded bytes
-            hex::encode(christel_balance.try_to_vec().unwrap()),
+            HEXLOWER.encode(&christel_balance.try_to_vec().unwrap()),
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {
@@ -424,7 +454,8 @@ fn invalid_transactions() -> Result<()> {
     let transfer = token::Transfer {
         source: find_address(&test, DAEWON)?,
         target: find_address(&test, ALBERT)?,
-        token: find_address(&test, XAN)?,
+        token: find_address(&test, NAM)?,
+        sub_prefix: None,
         amount: token::Amount::whole(1),
     };
     let data = transfer
@@ -450,7 +481,7 @@ fn invalid_transactions() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -504,7 +535,7 @@ fn invalid_transactions() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         // Force to ignore client check that fails on the balance check of the
         // source address
         "--force",
@@ -580,7 +611,7 @@ fn pos_bonds() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -603,7 +634,7 @@ fn pos_bonds() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -623,7 +654,7 @@ fn pos_bonds() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -646,7 +677,7 @@ fn pos_bonds() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -686,7 +717,7 @@ fn pos_bonds() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -707,7 +738,7 @@ fn pos_bonds() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -723,7 +754,7 @@ fn pos_bonds() -> Result<()> {
 /// 1. Run the ledger node with shorter epochs for faster progression
 /// 2. Initialize a new validator account
 /// 3. Submit a delegation to the new validator
-/// 4. Transfer some XAN to the new validator
+/// 4. Transfer some NAM to the new validator
 /// 5. Submit a self-bond for the new validator
 /// 6. Wait for the pipeline epoch
 /// 7. Check the new validator's voting power
@@ -776,7 +807,7 @@ fn pos_init_validator() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -793,7 +824,7 @@ fn pos_init_validator() -> Result<()> {
         "--target",
         &new_validator_key,
         "--token",
-        XAN,
+        NAM,
         "--amount",
         "0.5",
         "--fee-amount",
@@ -801,7 +832,7 @@ fn pos_init_validator() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -822,7 +853,7 @@ fn pos_init_validator() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -830,7 +861,7 @@ fn pos_init_validator() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 4. Transfer some XAN to the new validator
+    // 4. Transfer some NAM to the new validator
     let tx_args = vec![
         "transfer",
         "--source",
@@ -838,7 +869,7 @@ fn pos_init_validator() -> Result<()> {
         "--target",
         new_validator,
         "--token",
-        XAN,
+        NAM,
         "--amount",
         "10999.5",
         "--fee-amount",
@@ -846,7 +877,7 @@ fn pos_init_validator() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -866,7 +897,7 @@ fn pos_init_validator() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -934,7 +965,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         "--target",
         ALBERT,
         "--token",
-        XAN,
+        NAM,
         "--amount",
         "10.1",
         "--fee-amount",
@@ -942,7 +973,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
     ]);
 
@@ -994,7 +1025,33 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 /// 13. Check governance address funds are 0
 #[test]
 fn proposal_submission() -> Result<()> {
-    let test = setup::network(|genesis| genesis, None)?;
+    let working_dir = setup::working_dir();
+
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                min_num_of_blocks: 1,
+                min_duration: 1,
+                max_expected_time_per_block: 1,
+                vp_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("vp_"),
+                )),
+                // Enable tx whitelist to test the execution of a
+                // non-whitelisted tx by governance
+                tx_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("tx_"),
+                )),
+            };
+
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
 
     let anomac_help = vec!["--help"];
 
@@ -1025,7 +1082,7 @@ fn proposal_submission() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -1034,8 +1091,6 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // 2. Submit valid proposal
-    let valid_proposal_json_path =
-        test.test_dir.path().join("valid_proposal.json");
     let proposal_code = wasm_abs_path(TX_PROPOSAL_CODE);
 
     let albert = find_address(&test, ALBERT)?;
@@ -1053,16 +1108,17 @@ fn proposal_submission() -> Result<()> {
                 "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 6,
-            "voting_end_epoch": 18,
-            "grace_epoch": 24,
+            "voting_start_epoch": 12_u64,
+            "voting_end_epoch": 24_u64,
+            "grace_epoch": 30_u64,
             "proposal_code_path": proposal_code.to_str().unwrap()
         }
     );
-
-    generate_proposal_json(
-        valid_proposal_json_path.clone(),
-        valid_proposal_json,
+    let valid_proposal_json_path =
+        test.test_dir.path().join("valid_proposal.json");
+    generate_proposal_json_file(
+        valid_proposal_json_path.as_path(),
+        &valid_proposal_json,
     );
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1079,7 +1135,6 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // 3. Query the proposal
-
     let proposal_query_args = vec![
         "query-proposal",
         "--proposal-id",
@@ -1098,13 +1153,13 @@ fn proposal_submission() -> Result<()> {
         "--owner",
         ALBERT,
         "--token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("XAN: 999500")?;
+    client.exp_string("NAM: 999500")?;
     client.assert_success();
 
     // 5. Query token balance governance
@@ -1113,19 +1168,17 @@ fn proposal_submission() -> Result<()> {
         "--owner",
         GOVERNANCE_ADDRESS,
         "--token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("XAN: 500")?;
+    client.exp_string("NAM: 500")?;
     client.assert_success();
 
     // 6. Submit an invalid proposal
     // proposal is invalid due to voting_end_epoch - voting_start_epoch < 3
-    let invalid_proposal_json_path =
-        test.test_dir.path().join("invalid_proposal.json");
     let albert = find_address(&test, ALBERT)?;
     let invalid_proposal_json = json!(
         {
@@ -1156,14 +1209,16 @@ fn proposal_submission() -> Result<()> {
     eros.",             "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 9999,
-            "voting_end_epoch": 10000,
-            "grace_epoch": 10009,
+            "voting_start_epoch": 9999_u64,
+            "voting_end_epoch": 10000_u64,
+            "grace_epoch": 10009_u64,
         }
     );
-    generate_proposal_json(
-        invalid_proposal_json_path.clone(),
-        invalid_proposal_json,
+    let invalid_proposal_json_path =
+        test.test_dir.path().join("invalid_proposal.json");
+    generate_proposal_json_file(
+        invalid_proposal_json_path.as_path(),
+        &invalid_proposal_json,
     );
 
     let submit_proposal_args = vec![
@@ -1174,8 +1229,12 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
-    client.exp_string("Transaction is invalid.")?;
-    client.assert_success();
+    client.exp_string(
+        "Invalid proposal end epoch: difference between proposal start and \
+         end epoch must be at least 3 and at max 27 and end epoch must be a \
+         multiple of 3",
+    )?;
+    client.assert_failure();
 
     // 7. Check invalid proposal was not accepted
     let proposal_query_args = vec![
@@ -1196,18 +1255,18 @@ fn proposal_submission() -> Result<()> {
         "--owner",
         ALBERT,
         "--token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("XAN: 999500")?;
+    client.exp_string("NAM: 999500")?;
     client.assert_success();
 
     // 9. Send a yay vote from a validator
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 <= 7 {
+    while epoch.0 <= 13 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
@@ -1272,7 +1331,7 @@ fn proposal_submission() -> Result<()> {
 
     // 11. Query the proposal and check the result
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 <= 19 {
+    while epoch.0 <= 25 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
@@ -1291,7 +1350,7 @@ fn proposal_submission() -> Result<()> {
 
     // 12. Wait proposal grace and check proposal author funds
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 < 26 {
+    while epoch.0 < 31 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
@@ -1301,13 +1360,13 @@ fn proposal_submission() -> Result<()> {
         "--owner",
         ALBERT,
         "--token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("XAN: 1000000")?;
+    client.exp_string("NAM: 1000000")?;
     client.assert_success();
 
     // 13. Check if governance funds are 0
@@ -1316,13 +1375,13 @@ fn proposal_submission() -> Result<()> {
         "--owner",
         GOVERNANCE_ADDRESS,
         "--token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("XAN: 0")?;
+    client.exp_string("NAM: 0")?;
     client.assert_success();
 
     // // 14. Query parameters
@@ -1334,7 +1393,7 @@ fn proposal_submission() -> Result<()> {
 
     let mut client =
         run!(test, Bin::Client, query_protocol_parameters, Some(30))?;
-    client.exp_regex(".*Min. proposal grace epoch: 9.*")?;
+    client.exp_regex(".*Min. proposal grace epochs: 9.*")?;
     client.assert_success();
 
     Ok(())
@@ -1372,7 +1431,7 @@ fn proposal_offline() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -1380,9 +1439,7 @@ fn proposal_offline() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 2. Create an offline proposal
-    let valid_proposal_json_path =
-        test.test_dir.path().join("valid_proposal.json");
+    // 2. Create an offline
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json = json!(
         {
@@ -1398,14 +1455,16 @@ fn proposal_offline() -> Result<()> {
                 "requires": "2"
             },
             "author": albert,
-            "voting_start_epoch": 3,
-            "voting_end_epoch": 6,
-            "grace_epoch": 6
+            "voting_start_epoch": 3_u64,
+            "voting_end_epoch": 9_u64,
+            "grace_epoch": 18_u64
         }
     );
-    generate_proposal_json(
-        valid_proposal_json_path.clone(),
-        valid_proposal_json,
+    let valid_proposal_json_path =
+        test.test_dir.path().join("valid_proposal.json");
+    generate_proposal_json_file(
+        valid_proposal_json_path.as_path(),
+        &valid_proposal_json,
     );
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1425,17 +1484,17 @@ fn proposal_offline() -> Result<()> {
 
     // 3. Generate an offline yay vote
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 <= 5 {
+    while epoch.0 <= 2 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    let proposal_path = working_dir().join("proposal");
-    let proposal_ref = proposal_path.to_string_lossy();
+    let proposal_path = test.test_dir.path().join("proposal");
+
     let submit_proposal_vote = vec![
         "vote-proposal",
         "--data-path",
-        &proposal_ref,
+        proposal_path.to_str().unwrap(),
         "--vote",
         "yay",
         "--signer",
@@ -1450,31 +1509,14 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     let expected_file_name = format!("proposal-vote-{}", albert);
-    let expected_path_vote = working_dir().join(&expected_file_name);
+    let expected_path_vote = test.test_dir.path().join(&expected_file_name);
     assert!(expected_path_vote.exists());
 
-    let expected_path_proposal = working_dir().join("proposal");
-    assert!(expected_path_proposal.exists());
-
     // 4. Compute offline tally
-    let proposal_data_folder = working_dir().join("proposal-test-data");
-    fs::create_dir_all(&proposal_data_folder)
-        .expect("Should create a new folder.");
-    fs::copy(
-        expected_path_proposal,
-        &proposal_data_folder.join("proposal"),
-    )
-    .expect("Should copy proposal file.");
-    fs::copy(
-        expected_path_vote,
-        &proposal_data_folder.join(&expected_file_name),
-    )
-    .expect("Should copy proposal vote file.");
-
     let tally_offline = vec![
         "query-proposal-result",
         "--data-path",
-        proposal_data_folder.to_str().unwrap(),
+        test.test_dir.path().to_str().unwrap(),
         "--offline",
         "--ledger-address",
         &validator_one_rpc,
@@ -1487,17 +1529,18 @@ fn proposal_offline() -> Result<()> {
     Ok(())
 }
 
-fn generate_proposal_json(
-    proposal_path: PathBuf,
-    proposal_content: serde_json::Value,
+fn generate_proposal_json_file(
+    proposal_path: &std::path::Path,
+    proposal_content: &serde_json::Value,
 ) {
-    let intent_writer = OpenOptions::new()
+    let intent_writer = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
         .open(proposal_path)
         .unwrap();
-    serde_json::to_writer(intent_writer, &proposal_content).unwrap();
+
+    serde_json::to_writer(intent_writer, proposal_content).unwrap();
 }
 
 /// In this test we:
@@ -1540,7 +1583,8 @@ fn test_genesis_validators() -> Result<()> {
     // the given index
     let get_first_port = |ix: u8| net_address_port_0 + 6 * (ix as u16 + 1);
 
-    // 1. Setup 2 genesis validators
+    // 1. Setup 2 genesis validators, one with ed25519 keys (0) and one with
+    // secp256k1 keys (1)
     let validator_0_alias = "validator-0";
     let validator_1_alias = "validator-1";
 
@@ -1552,6 +1596,8 @@ fn test_genesis_validators() -> Result<()> {
             "--unsafe-dont-encrypt",
             "--alias",
             validator_0_alias,
+            "--scheme",
+            "ed25519",
             "--net-address",
             &format!("127.0.0.1:{}", get_first_port(0)),
         ],
@@ -1588,6 +1634,8 @@ fn test_genesis_validators() -> Result<()> {
             "--unsafe-dont-encrypt",
             "--alias",
             validator_1_alias,
+            "--scheme",
+            "secp256k1",
             "--net-address",
             &format!("127.0.0.1:{}", get_first_port(1)),
         ],
@@ -1619,7 +1667,7 @@ fn test_genesis_validators() -> Result<()> {
     // 2. Initialize a new network with the 2 validators
     let mut genesis = genesis_config::open_genesis_config(
         working_dir.join(setup::SINGLE_NODE_NET_GENESIS),
-    );
+    )?;
     let update_validator_config =
         |ix: u8, mut config: genesis_config::ValidatorConfig| {
             // Setup tokens balances and validity predicates
@@ -1726,6 +1774,7 @@ fn test_genesis_validators() -> Result<()> {
             chain_id.as_str(),
             "--pre-genesis-path",
             pre_genesis_path.as_ref(),
+            "--dont-prefetch-wasm",
         ],
         Some(5)
     )?;
@@ -1743,6 +1792,7 @@ fn test_genesis_validators() -> Result<()> {
             chain_id.as_str(),
             "--pre-genesis-path",
             pre_genesis_path.as_ref(),
+            "--dont-prefetch-wasm",
         ],
         Some(5)
     )?;
@@ -1801,11 +1851,11 @@ fn test_genesis_validators() -> Result<()> {
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
     non_validator.exp_string("Anoma ledger node started")?;
-    non_validator.exp_string("This node is a fullnode")?;
+    non_validator.exp_string("This node is not a validator")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
-    let bg_non_validator = non_validator.background();
+    let _bg_non_validator = non_validator.background();
 
     // 4. Submit a valid token transfer tx
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1816,7 +1866,7 @@ fn test_genesis_validators() -> Result<()> {
         "--target",
         validator_1_alias,
         "--token",
-        XAN,
+        NAM,
         "--amount",
         "10.1",
         "--fee-amount",
@@ -1824,7 +1874,7 @@ fn test_genesis_validators() -> Result<()> {
         "--gas-limit",
         "0",
         "--fee-token",
-        XAN,
+        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -1836,12 +1886,180 @@ fn test_genesis_validators() -> Result<()> {
     // 3. Check that all the nodes processed the tx with the same result
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
-    let mut non_validator = bg_non_validator.foreground();
 
     let expected_result = "all VPs accepted transaction";
+    // We cannot check this on non-validator node as it might sync without
+    // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;
     validator_1.exp_string(expected_result)?;
-    non_validator.exp_string(expected_result)?;
+    let _bg_validator_0 = validator_0.background();
+    let _bg_validator_1 = validator_1.background();
+
+    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
+    let non_validator_rpc = get_actor_rpc(&test, &Who::NonValidator);
+
+    // Find the block height on the validator
+    let after_tx_height = get_height(&test, &validator_0_rpc)?;
+
+    // Wait for the non-validator to be synced to at least the same height
+    wait_for_block_height(&test, &non_validator_rpc, after_tx_height, 10)?;
+
+    let query_balance_args = |ledger_rpc| {
+        vec![
+            "balance",
+            "--owner",
+            validator_1_alias,
+            "--token",
+            NAM,
+            "--ledger-address",
+            ledger_rpc,
+        ]
+    };
+    for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
+        let mut client =
+            run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
+        client.exp_string("NAM: 1000000000010.1")?;
+        client.assert_success();
+    }
+
+    Ok(())
+}
+
+/// In this test we intentionally make a validator node double sign blocks
+/// to test that slashing evidence is received and processed by the ledger
+/// correctly:
+/// 1. Run 2 genesis validator ledger nodes
+/// 2. Copy the first genesis validator base-dir
+/// 3. Increment its ports and generate new node ID to avoid conflict
+/// 4. Run it to get it to double vote and sign blocks
+/// 5. Submit a valid token transfer tx to validator 0
+/// 6. Wait for double signing evidence
+#[test]
+fn double_signing_gets_slashed() -> Result<()> {
+    use std::net::SocketAddr;
+    use std::str::FromStr;
+
+    use namada::types::key::{self, ed25519, SigScheme};
+    use namada_apps::client;
+    use namada_apps::config::Config;
+
+    // Setup 2 genesis validator nodes
+    let test =
+        setup::network(|genesis| setup::add_validators(1, genesis), None)?;
+
+    // 1. Run 2 genesis validator ledger nodes
+    let args = ["ledger"];
+    let mut validator_0 =
+        run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
+    validator_0.exp_string("Anoma ledger node started")?;
+    validator_0.exp_string("This node is a validator")?;
+    let _bg_validator_0 = validator_0.background();
+    let mut validator_1 =
+        run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
+    validator_1.exp_string("Anoma ledger node started")?;
+    validator_1.exp_string("This node is a validator")?;
+    let bg_validator_1 = validator_1.background();
+
+    // 2. Copy the first genesis validator base-dir
+    let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
+    let validator_0_base_dir_copy =
+        test.test_dir.path().join("validator-0-copy");
+    fs_extra::dir::copy(
+        &validator_0_base_dir,
+        &validator_0_base_dir_copy,
+        &fs_extra::dir::CopyOptions {
+            copy_inside: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // 3. Increment its ports and generate new node ID to avoid conflict
+
+    // Same as in `genesis/e2e-tests-single-node.toml` for `validator-0`
+    let net_address_0 = SocketAddr::from_str("127.0.0.1:27656").unwrap();
+    let net_address_port_0 = net_address_0.port();
+
+    let update_config = |ix: u8, mut config: Config| {
+        let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
+        config.ledger.tendermint.p2p_address.set_port(first_port);
+        config
+            .ledger
+            .tendermint
+            .rpc_address
+            .set_port(first_port + 1);
+        config.ledger.shell.ledger_address.set_port(first_port + 2);
+        config
+    };
+
+    let validator_0_copy_config = update_config(
+        2,
+        Config::load(&validator_0_base_dir_copy, &test.net.chain_id, None),
+    );
+    validator_0_copy_config
+        .write(&validator_0_base_dir_copy, &test.net.chain_id, true)
+        .unwrap();
+
+    // Generate a new node key
+    use rand::prelude::ThreadRng;
+    use rand::thread_rng;
+
+    let mut rng: ThreadRng = thread_rng();
+    let node_sk = ed25519::SigScheme::generate(&mut rng);
+    let node_sk = key::common::SecretKey::Ed25519(node_sk);
+    let tm_home_dir = validator_0_base_dir_copy
+        .join(test.net.chain_id.as_str())
+        .join("tendermint");
+    let _node_pk =
+        client::utils::write_tendermint_node_key(&tm_home_dir, node_sk);
+
+    // 4. Run it to get it to double vote and sign block
+    let loc = format!("{}:{}", std::file!(), std::line!());
+    // This node will only connect to `validator_1`, so that nodes
+    // `validator_0` and `validator_0_copy` should start double signing
+    let mut validator_0_copy = setup::run_cmd(
+        Bin::Node,
+        args,
+        Some(40),
+        &test.working_dir,
+        validator_0_base_dir_copy,
+        "validator",
+        loc,
+    )?;
+    validator_0_copy.exp_string("Anoma ledger node started")?;
+    validator_0_copy.exp_string("This node is a validator")?;
+    let _bg_validator_0_copy = validator_0_copy.background();
+
+    // 5. Submit a valid token transfer tx to validator 0
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let tx_args = [
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "10.1",
+        "--fee-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--fee-token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 6. Wait for double signing evidence
+    let mut validator_1 = bg_validator_1.foreground();
+    validator_1.exp_string("Processing evidence")?;
+    validator_1.exp_string("Slashing")?;
 
     Ok(())
 }

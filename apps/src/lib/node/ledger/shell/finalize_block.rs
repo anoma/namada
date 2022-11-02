@@ -1,20 +1,12 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::governance::utils::{
-    compute_tally, get_proposal_votes, ProposalEvent,
-};
-use namada::ledger::governance::vp::ADDRESS as gov_address;
-use namada::ledger::storage::types::encode;
-use namada::ledger::treasury::ADDRESS as treasury_address;
-use namada::types::address::{xan as m1t, Address};
-use namada::types::governance::TallyResult;
-use namada::types::storage::{BlockHash, Epoch, Header};
-use tendermint_proto::abci::Misbehavior as Evidence;
-use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+use namada::ledger::protocol;
+use namada::types::storage::{BlockHash, Header};
 
+use super::governance::execute_governance_proposals;
 use super::*;
-use crate::node::ledger::events::EventType;
+use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
+use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 
 impl<D, H> Shell<D, H>
 where
@@ -54,173 +46,8 @@ where
             self.update_state(req.header, req.hash, req.byzantine_validators);
 
         if new_epoch {
-            for id in std::mem::take(&mut self.proposal_data) {
-                let proposal_funds_key = gov_storage::get_funds_key(id);
-                let proposal_start_epoch_key =
-                    gov_storage::get_voting_start_epoch_key(id);
-
-                let funds = self
-                    .read_storage_key::<token::Amount>(&proposal_funds_key)
-                    .ok_or_else(|| {
-                        Error::BadProposal(
-                            id,
-                            "Invalid proposal funds.".to_string(),
-                        )
-                    })?;
-                let proposal_start_epoch = self
-                    .read_storage_key::<Epoch>(&proposal_start_epoch_key)
-                    .ok_or_else(|| {
-                        Error::BadProposal(
-                            id,
-                            "Invalid proposal start_epoch.".to_string(),
-                        )
-                    })?;
-
-                let votes =
-                    get_proposal_votes(&self.storage, proposal_start_epoch, id);
-                let tally_result =
-                    compute_tally(&self.storage, proposal_start_epoch, votes);
-
-                let transfer_address = match tally_result {
-                    TallyResult::Passed => {
-                        let proposal_author_key =
-                            gov_storage::get_author_key(id);
-                        let proposal_author = self
-                            .read_storage_key::<Address>(&proposal_author_key)
-                            .ok_or_else(|| {
-                                Error::BadProposal(
-                                    id,
-                                    "Invalid proposal author.".to_string(),
-                                )
-                            })?;
-
-                        let proposal_code_key =
-                            gov_storage::get_proposal_code_key(id);
-                        let proposal_code =
-                            self.read_storage_key_bytes(&proposal_code_key);
-                        match proposal_code {
-                            Some(proposal_code) => {
-                                let tx =
-                                    Tx::new(proposal_code, Some(encode(&id)));
-                                let tx_type = TxType::Decrypted(
-                                    DecryptedTx::Decrypted(tx),
-                                );
-                                let pending_execution_key =
-                                    gov_storage::get_proposal_execution_key(id);
-                                self.storage
-                                    .write(&pending_execution_key, "")
-                                    .expect(
-                                        "Should be able to write to storage.",
-                                    );
-                                let tx_result = protocol::apply_tx(
-                                    tx_type,
-                                    0, /*  this is used to compute the fee
-                                        * based on the code size. We dont
-                                        * need it here. */
-                                    &mut BlockGasMeter::default(),
-                                    &mut self.write_log,
-                                    &self.storage,
-                                    &mut self.vp_wasm_cache,
-                                    &mut self.tx_wasm_cache,
-                                );
-                                self.storage
-                                    .delete(&pending_execution_key)
-                                    .expect(
-                                        "Should be able to delete the storage.",
-                                    );
-                                match tx_result {
-                                    Ok(tx_result) => {
-                                        if tx_result.is_accepted() {
-                                            self.write_log.commit_tx();
-                                            let proposal_event: Event =
-                                                ProposalEvent::new(
-                                                    EventType::Proposal
-                                                        .to_string(),
-                                                    TallyResult::Passed,
-                                                    id,
-                                                    true,
-                                                    true,
-                                                )
-                                                .into();
-                                            response
-                                                .events
-                                                .push(proposal_event);
-
-                                            proposal_author
-                                        } else {
-                                            self.write_log.drop_tx();
-                                            let proposal_event: Event =
-                                                ProposalEvent::new(
-                                                    EventType::Proposal
-                                                        .to_string(),
-                                                    TallyResult::Passed,
-                                                    id,
-                                                    true,
-                                                    false,
-                                                )
-                                                .into();
-                                            response
-                                                .events
-                                                .push(proposal_event);
-
-                                            treasury_address
-                                        }
-                                    }
-                                    Err(_e) => {
-                                        self.write_log.drop_tx();
-                                        let proposal_event: Event =
-                                            ProposalEvent::new(
-                                                EventType::Proposal.to_string(),
-                                                TallyResult::Passed,
-                                                id,
-                                                true,
-                                                false,
-                                            )
-                                            .into();
-                                        response.events.push(proposal_event);
-
-                                        treasury_address
-                                    }
-                                }
-                            }
-                            None => {
-                                let proposal_event: Event = ProposalEvent::new(
-                                    EventType::Proposal.to_string(),
-                                    TallyResult::Passed,
-                                    id,
-                                    false,
-                                    false,
-                                )
-                                .into();
-                                response.events.push(proposal_event);
-
-                                proposal_author
-                            }
-                        }
-                    }
-                    TallyResult::Rejected | TallyResult::Unknown => {
-                        let proposal_event: Event = ProposalEvent::new(
-                            EventType::Proposal.to_string(),
-                            TallyResult::Rejected,
-                            id,
-                            false,
-                            false,
-                        )
-                        .into();
-                        response.events.push(proposal_event);
-
-                        treasury_address
-                    }
-                };
-
-                // transfer proposal locked funds
-                self.storage.transfer(
-                    &m1t(),
-                    funds,
-                    &gov_address,
-                    &transfer_address,
-                );
-            }
+            let _proposals_result =
+                execute_governance_proposals(self, &mut response)?;
         }
 
         for processed_tx in &req.txs {
@@ -488,18 +315,6 @@ where
             let update = ValidatorUpdate { pub_key, power };
             response.validator_updates.push(update);
         });
-
-        // Update evidence parameters
-        let (epoch_duration, _gas) =
-            parameters::read_epoch_parameter(&self.storage)
-                .expect("Couldn't read epoch duration parameters");
-        let pos_params = self.storage.read_pos_params();
-        let evidence_params =
-            self.get_evidence_params(&epoch_duration, &pos_params);
-        response.consensus_param_updates = Some(ConsensusParams {
-            evidence: Some(evidence_params),
-            ..response.consensus_param_updates.take().unwrap_or_default()
-        });
     }
 }
 
@@ -507,7 +322,7 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use namada::types::address::xan;
+    use namada::types::address::nam;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};
 
@@ -535,7 +350,7 @@ mod test_finalize_block {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &keypair,
                 Epoch(0),
@@ -606,7 +421,7 @@ mod test_finalize_block {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -658,7 +473,7 @@ mod test_finalize_block {
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
@@ -724,7 +539,7 @@ mod test_finalize_block {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &keypair,
                 Epoch(0),
@@ -755,7 +570,7 @@ mod test_finalize_block {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &keypair,
                 Epoch(0),

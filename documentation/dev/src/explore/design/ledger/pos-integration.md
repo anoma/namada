@@ -34,11 +34,22 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
   - `total_deltas (required)`
   - (TODO) other standard validator metadata TBA (e.g. alias, website, description, etc.)
 
-Only NAM tokens can be staked in bonds. The tokens being staked (amounts in the bonds and unbonds) are kept in the PoS account under `{nam_address}/balance/{pos_address}` until they are withdrawn.
+Only NAM tokens can be staked in bonds. The tokens being staked (bonds and unbonds amounts) are kept in the PoS account under `{nam_address}/balance/{pos_address}` until they are withdrawn.
 
 ## Initialization
 
 The PoS system is initialized via the shell on chain initialization. The genesis validator set is given in the genesis configuration. On genesis initialization, all the epoched data is set to be immediately active for the current (the very first) epoch.
+
+## Staking rewards and transaction fees
+
+Staking rewards for validators are rewarded in Tendermint's method `BeginBlock` in the base ledger. A validator must specify a `validator/{validator_address}/staking_reward_address` for its rewards to be credited to this address.
+
+To a validator who proposed a block (`block.header.proposer_address`), the system rewards tokens based on the `block_proposer_reward` PoS parameter and each validator that voted on a block (`block.last_commit_info.validator` who `signed_last_block`) receives `block_vote_reward`.
+
+All the fees that are charged in a transaction execution (DKG transaction wrapper fee and transactions applied in a block) are transferred into a fee pool, which is another special account controlled by the PoS module. Note that the fee pool account may contain tokens other than the staking token NAM.
+
+- TODO describe the fee pool, related to <https://github.com/anomanetwork/anoma/issues/48>, <https://github.com/anomanetwork/anoma/issues/51> and <https://github.com/anomanetwork/anoma/issues/72>
+
 
 ## Transactions
 

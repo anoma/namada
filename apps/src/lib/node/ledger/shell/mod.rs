@@ -1,11 +1,12 @@
 //! The ledger shell connects the ABCI++ interface with the Anoma ledger app.
 //!
 //! Any changes applied before [`Shell::finalize_block`] might have to be
-//! reverted, so any changes applied in the methods `Shell::prepare_proposal`
-//! (ABCI++), [`Shell::process_and_decode_proposal`] must be also reverted
+//! reverted, so any changes applied in the methods [`Shell::prepare_proposal`]
+//! and [`Shell::process_proposal`] must be also reverted
 //! (unless we can simply overwrite them in the next block).
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod finalize_block;
+mod governance;
 mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
@@ -17,7 +18,6 @@ use std::mem;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::ledger::gas::BlockGasMeter;
@@ -29,7 +29,7 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, DB,
 };
-use namada::ledger::{ibc, parameters, pos};
+use namada::ledger::{ibc, pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::chain::ChainId;
 use namada::types::key::*;
@@ -44,32 +44,36 @@ use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-use tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
-use tendermint_proto::abci::{
-    Misbehavior as Evidence, MisbehaviorType as EvidenceType,
-    RequestPrepareProposal, ValidatorUpdate,
-};
-use tendermint_proto::crypto::public_key;
-use tendermint_proto::types::ConsensusParams;
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
-use tower_abci::{request, response};
 
-use super::rpc;
 use crate::config::{genesis, TendermintMode};
+#[cfg(feature = "abcipp")]
+use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
+use crate::facade::tendermint_proto::abci::{
+    Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
+};
+use crate::facade::tendermint_proto::crypto::public_key;
+use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
-use crate::node::ledger::{protocol, storage, tendermint_node};
+use crate::node::ledger::{storage, tendermint_node};
 #[allow(unused_imports)]
 use crate::wallet::ValidatorData;
 use crate::{config, wallet};
 
-fn key_to_tendermint<PK: PublicKey>(
-    pk: &PK,
+fn key_to_tendermint(
+    pk: &common::PublicKey,
 ) -> std::result::Result<public_key::Sum, ParsePublicKeyError> {
-    ed25519::PublicKey::try_from_pk(pk)
-        .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap()))
+    match pk {
+        common::PublicKey::Ed25519(_) => ed25519::PublicKey::try_from_pk(pk)
+            .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap())),
+        common::PublicKey::Secp256k1(_) => {
+            secp256k1::PublicKey::try_from_pk(pk)
+                .map(|pk| public_key::Sum::Secp256k1(pk.try_to_vec().unwrap()))
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -92,6 +96,8 @@ pub enum Error {
     Broadcaster(tokio::sync::mpsc::error::TryRecvError),
     #[error("Error executing proposal {0}: {1}")]
     BadProposal(u64, String),
+    #[error("Error reading wasm: {0}")]
+    ReadingWasm(#[from] eyre::Error),
 }
 
 impl From<Error> for TxResult {
@@ -259,11 +265,10 @@ where
                     );
                     let wallet = wallet::Wallet::load_or_new_from_genesis(
                         wallet_path,
-                        move || {
-                            genesis::genesis_config::open_genesis_config(
-                                genesis_path,
-                            )
-                        },
+                        genesis::genesis_config::open_genesis_config(
+                            genesis_path,
+                        )
+                        .unwrap(),
                     );
                     wallet
                         .take_validator_data()
@@ -386,6 +391,7 @@ where
             let pos_params = self.storage.read_pos_params();
             let current_epoch = self.storage.block.epoch;
             for evidence in byzantine_validators {
+                tracing::info!("Processing evidence {evidence:?}.");
                 let evidence_height = match u64::try_from(evidence.height) {
                     Ok(height) => height,
                     Err(err) => {
@@ -411,6 +417,13 @@ where
                         continue;
                     }
                 };
+                if evidence_epoch + pos_params.unbonding_len <= current_epoch {
+                    tracing::info!(
+                        "Skipping outdated evidence from epoch \
+                         {evidence_epoch}"
+                    );
+                    continue;
+                }
                 let slash_type = match EvidenceType::from_i32(evidence.r#type) {
                     Some(r#type) => match r#type {
                         EvidenceType::DuplicateVote => {
@@ -436,19 +449,7 @@ where
                     }
                 };
                 let validator_raw_hash = match evidence.validator {
-                    Some(validator) => {
-                        match String::from_utf8(validator.address) {
-                            Ok(raw_hash) => raw_hash,
-                            Err(err) => {
-                                tracing::error!(
-                                    "Evidence failed to decode validator \
-                                     address from utf-8 with {}",
-                                    err
-                                );
-                                continue;
-                            }
-                        }
-                    }
+                    Some(validator) => tm_raw_hash_to_string(validator.address),
                     None => {
                         tracing::error!(
                             "Evidence without a validator {:#?}",
@@ -472,9 +473,9 @@ where
                 };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {}",
-                    evidence_epoch,
-                    slash_type,
                     validator,
+                    slash_type,
+                    evidence_epoch,
                     evidence_height
                 );
                 if let Err(err) = self.storage.slash(
@@ -492,6 +493,7 @@ where
     }
 
     /// INVARIANT: This method must be stateless.
+    #[cfg(feature = "abcipp")]
     pub fn extend_vote(
         &self,
         _req: request::ExtendVote,
@@ -500,6 +502,7 @@ where
     }
 
     /// INVARIANT: This method must be stateless.
+    #[cfg(feature = "abcipp")]
     pub fn verify_vote_extension(
         &self,
         _req: request::VerifyVoteExtension,
@@ -554,43 +557,6 @@ where
         response
     }
 
-    /// Simulate validation and application of a transaction.
-    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
-        let mut response = response::Query::default();
-        let mut gas_meter = BlockGasMeter::default();
-        let mut write_log = WriteLog::default();
-        let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
-        let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
-        match Tx::try_from(tx_bytes) {
-            Ok(tx) => {
-                let tx = TxType::Decrypted(DecryptedTx::Decrypted(tx));
-                match protocol::apply_tx(
-                    tx,
-                    tx_bytes.len(),
-                    &mut gas_meter,
-                    &mut write_log,
-                    &self.storage,
-                    &mut vp_wasm_cache,
-                    &mut tx_wasm_cache,
-                )
-                .map_err(Error::TxApply)
-                {
-                    Ok(result) => response.info = result.to_string(),
-                    Err(error) => {
-                        response.code = 1;
-                        response.log = format!("{}", error);
-                    }
-                }
-                response
-            }
-            Err(err) => {
-                response.code = 1;
-                response.log = format!("{}", Error::TxDecoding(err));
-                response
-            }
-        }
-    }
-
     /// Lookup a validator's keypair for their established account from their
     /// wallet. If the node is not validator, this function returns None
     #[allow(dead_code)]
@@ -599,10 +565,10 @@ where
         let genesis_path = &self
             .base_dir
             .join(format!("{}.toml", self.chain_id.as_str()));
-        let mut wallet =
-            wallet::Wallet::load_or_new_from_genesis(wallet_path, move || {
-                genesis::genesis_config::open_genesis_config(genesis_path)
-            });
+        let mut wallet = wallet::Wallet::load_or_new_from_genesis(
+            wallet_path,
+            genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
+        );
         self.mode.get_validator_address().map(|addr| {
             let pk_bytes = self
                 .storage
@@ -636,18 +602,20 @@ mod test_utils {
 
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
-    use namada::types::address::{xan, EstablishedAddressGen};
+    use namada::types::address::{nam, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, Epoch, Header};
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
-    use tendermint_proto::abci::{RequestInitChain, RequestProcessProposal};
-    use tendermint_proto::google::protobuf::Timestamp;
     use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::{
+        RequestInitChain, RequestProcessProposal,
+    };
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
@@ -757,10 +725,10 @@ mod test_utils {
             });
             let results = resp
                 .tx_results
-                .iter()
+                .into_iter()
                 .zip(req.txs.into_iter())
                 .map(|(res, tx_bytes)| ProcessedTx {
-                    result: res.into(),
+                    result: res,
                     tx: tx_bytes,
                 })
                 .collect();
@@ -854,7 +822,7 @@ mod test_utils {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),

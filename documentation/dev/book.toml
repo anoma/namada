@@ -8,12 +8,12 @@ src = "src"
 title = "Anoma - DOCS"
 
 [output.html]
-edit-url-template = "https://github.com/anoma/namada/edit/master/documentation/dev/{path}"
+edit-url-template = "https://github.com/anoma/namada/edit/main/documentation/dev/{path}"
 git-repository-url = "https://github.com/anoma/namada"
 additional-css = ["assets/custom.css", "assets/mdbook-admonish.css"]
 additional-js = ["assets/mermaid.min.js", "assets/mermaid-init.js"]
 mathjax-support = true
-git-branch = "master"
+git-branch = "main"
 
 [output.html.search]
 expand = true

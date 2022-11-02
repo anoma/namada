@@ -16,14 +16,14 @@ You can install Namada by following the instructions from the [Install User Guid
 
 ## Setting up Namada
 
-At this point, depending on your installation choice, we will assume that the `anoma` binaries are available on path and built from the latest testnet branch.
+At this point, depending on your installation choice, we will assume that the `namada` binaries are available on path and built from the latest testnet branch.
 
 ### Join a network
 
 To join the current testnet, you need to download the configuration files. This can be done easily with:
 
 ```shell
-anomac utils join-network --chain-id $NAMADA_TESTNET_CHAIN_ID
+namadac utils join-network --chain-id $NAMADA_TESTNET_CHAIN_ID
 ```
 
 It should output something like this where the chain id might differ:
@@ -67,7 +67,7 @@ tar -xvf masp-params.tar.gz ~/Library/Application\ Support/MASPParams/
 At this point, you are ready to start your Namada node with:
 
 ```shell
-anoma ledger
+namada ledger
 ```
 
 To keep your node running after closing your terminal, you can optionally use a terminal multiplexer like `tmux`.
@@ -84,9 +84,9 @@ To try out shielded transfers, you will first need an ordinary
 transparent account with some token balance. Example commands for that:
 
 ```
-anomaw address gen --alias my-implicit
-anomac init-account --source my-implicit --public-key my-implicit --alias my-established
-anomac transfer --token btc --amount 1000 --source faucet --target my-established --signer my-established
+namadaw address gen --alias my-implicit
+namadac init-account --source my-implicit --public-key my-implicit --alias my-established
+namadac transfer --token btc --amount 1000 --source faucet --target my-established --signer my-established
 ```
 
 The testnet tokens which the faucet can provide you are named `NAM`,
@@ -102,7 +102,7 @@ you could randomly generate one with e.g. `openssl rand -hex 32`. The
 wallet does not yet support spending keys, so make a note of yours
 somewhere.
 
-Shielded transfers work with the `anomac transfer` command, but either
+Shielded transfers work with the `namadac transfer` command, but either
 `--source`, `--target`, or both are replaced. `--source` may be replaced
 with `--spending-key` to spend a shielded balance, but if you are
 following along, you don't have a shielded balance to spend yet.
@@ -112,7 +112,7 @@ balance.
 To create a payment address from your spending key, use:
 
 ```shell
-anomaw masp gen-payment-addr --spending-key [your spending key]
+namadaw masp gen-payment-addr --spending-key [your spending key]
 ```
 
 This will generate a different payment address each time you run it.
@@ -123,14 +123,14 @@ Once you have a payment address, transfer a balance from your
 transparent account to your shielded spending key with something like:
 
 ```shell
-anomac transfer --source my-established --payment-address [your payment address] --token btc --amount 100
+namadac transfer --source my-established --payment-address [your payment address] --token btc --amount 100
 ```
 
 Once this transfer goes through, you can view your spending key's
 balance:
 
 ```shell
-anomac balance --spending-key [your spending key]
+namadac balance --spending-key [your spending key]
 ```
 
 However, your spending key is the secret key to all your shielded
@@ -138,24 +138,24 @@ balances, and you may not want to use it just to view balances. For this
 purpose, you can derive the viewing key:
 
 ```shell
-anomaw masp derive-view-key --spending-key [your spending key]
-anomac balance --viewing-key [your viewing key]
+namadaw masp derive-view-key --spending-key [your spending key]
+namadac balance --viewing-key [your viewing key]
 ```
 
 The viewing key can also be used to generate payment addresses, with
-e.g. `anomaw masp gen-payment-addr --viewing-key [your viewing key]`.
+e.g. `namadaw masp gen-payment-addr --viewing-key [your viewing key]`.
 
 Now that you have a shielded balance, it can either be transferred to a
 different shielded payment address (shielded to shielded):
 
 ```shell
-anomac transfer --spending-key [your spending key] --payment-address [someone's payment address] --token btc --amount 50 --signer my-established
+namadac transfer --spending-key [your spending key] --payment-address [someone's payment address] --token btc --amount 50 --signer my-established
 ```
 
 or to a transparent account (shielded to transparent):
 
 ```shell
-anomac transfer --spending-key [your spending key] --target [some transparent account] --token btc --amount 50 --signer my-established
+namadac transfer --spending-key [your spending key] --target [some transparent account] --token btc --amount 50 --signer my-established
 ```
 
 Note that for both of these types of transfer, `--signer` must be
@@ -165,7 +165,7 @@ specified. However, any transparent account can sign these transactions.
 
 ### Build from Source
 
-Build the provided validity predicate, transaction and matchmaker wasm modules
+Build the provided validity predicate and transaction wasm modules
 
 ```shell
 make build-wasm-scripts-docker
@@ -178,21 +178,21 @@ make build-wasm-scripts-docker
 If you get the following log, it means that Tendermint is not installed properly on your machine or not available on path. To solve this issue, install Tendermint by following the [Install User Guide](../user-guide/install.md).
 
 ```shell
-2022-03-30T07:21:09.212187Z  INFO anoma_apps::cli::context: Chain ID: anoma-masp-0.3.51d2f83a8412b95
-2022-03-30T07:21:09.213968Z  INFO anoma_apps::node::ledger: Available logical cores: 8
-2022-03-30T07:21:09.213989Z  INFO anoma_apps::node::ledger: Using 4 threads for Rayon.
-2022-03-30T07:21:09.213994Z  INFO anoma_apps::node::ledger: Using 4 threads for Tokio.
-2022-03-30T07:21:09.217867Z  INFO anoma_apps::node::ledger: VP WASM compilation cache size not configured, using 1/6 of available memory.
-2022-03-30T07:21:09.218908Z  INFO anoma_apps::node::ledger: Available memory: 15.18 GiB
-2022-03-30T07:21:09.218934Z  INFO anoma_apps::node::ledger: VP WASM compilation cache size: 2.53 GiB
-2022-03-30T07:21:09.218943Z  INFO anoma_apps::node::ledger: Tx WASM compilation cache size not configured, using 1/6 of available memory.
-2022-03-30T07:21:09.218947Z  INFO anoma_apps::node::ledger: Tx WASM compilation cache size: 2.53 GiB
-2022-03-30T07:21:09.218954Z  INFO anoma_apps::node::ledger: Block cache size not configured, using 1/3 of available memory.
-2022-03-30T07:21:09.218959Z  INFO anoma_apps::node::ledger: RocksDB block cache size: 5.06 GiB
-2022-03-30T07:21:09.218996Z  INFO anoma_apps::node::ledger::storage::rocksdb: Using 2 compactions threads for RocksDB.
-2022-03-30T07:21:09.219196Z  INFO anoma_apps::node::ledger: Tendermint node is no longer running.
-2022-03-30T07:21:09.232544Z  INFO anoma::ledger::storage: No state could be found
-2022-03-30T07:21:09.232709Z  INFO anoma_apps::node::ledger: Tendermint has exited, shutting down...
-2022-03-30T07:21:09.232794Z  INFO anoma_apps::node::ledger: Anoma ledger node started.
-2022-03-30T07:21:09.232849Z  INFO anoma_apps::node::ledger: Anoma ledger node has shut down.
+2022-03-30T07:21:09.212187Z  INFO namada_apps::cli::context: Chain ID: anoma-masp-0.3.51d2f83a8412b95
+2022-03-30T07:21:09.213968Z  INFO namada_apps::node::ledger: Available logical cores: 8
+2022-03-30T07:21:09.213989Z  INFO namada_apps::node::ledger: Using 4 threads for Rayon.
+2022-03-30T07:21:09.213994Z  INFO namada_apps::node::ledger: Using 4 threads for Tokio.
+2022-03-30T07:21:09.217867Z  INFO namada_apps::node::ledger: VP WASM compilation cache size not configured, using 1/6 of available memory.
+2022-03-30T07:21:09.218908Z  INFO namada_apps::node::ledger: Available memory: 15.18 GiB
+2022-03-30T07:21:09.218934Z  INFO namada_apps::node::ledger: VP WASM compilation cache size: 2.53 GiB
+2022-03-30T07:21:09.218943Z  INFO namada_apps::node::ledger: Tx WASM compilation cache size not configured, using 1/6 of available memory.
+2022-03-30T07:21:09.218947Z  INFO namada_apps::node::ledger: Tx WASM compilation cache size: 2.53 GiB
+2022-03-30T07:21:09.218954Z  INFO namada_apps::node::ledger: Block cache size not configured, using 1/3 of available memory.
+2022-03-30T07:21:09.218959Z  INFO namada_apps::node::ledger: RocksDB block cache size: 5.06 GiB
+2022-03-30T07:21:09.218996Z  INFO namada_apps::node::ledger::storage::rocksdb: Using 2 compactions threads for RocksDB.
+2022-03-30T07:21:09.219196Z  INFO namada_apps::node::ledger: Tendermint node is no longer running.
+2022-03-30T07:21:09.232544Z  INFO namada::ledger::storage: No state could be found
+2022-03-30T07:21:09.232709Z  INFO namada_apps::node::ledger: Tendermint has exited, shutting down...
+2022-03-30T07:21:09.232794Z  INFO namada_apps::node::ledger: Anoma ledger node started.
+2022-03-30T07:21:09.232849Z  INFO namada_apps::node::ledger: Anoma ledger node has shut down.
 ```

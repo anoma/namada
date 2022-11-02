@@ -105,11 +105,8 @@ impl DB for MockDB {
                                     types::decode(bytes)
                                         .map_err(Error::CodingError)?,
                                 ),
-                                Some(&"store") => merkle_tree_stores.set_store(
-                                    &st,
-                                    types::decode(bytes)
-                                        .map_err(Error::CodingError)?,
-                                ),
+                                Some(&"store") => merkle_tree_stores
+                                    .set_store(st.decode_store(bytes)?),
                                 _ => unknown_key_error(path)?,
                             }
                         }
@@ -218,7 +215,7 @@ impl DB for MockDB {
                     .map_err(Error::KeyError)?;
                 self.0.borrow_mut().insert(
                     store_key.to_string(),
-                    types::encode(merkle_tree_stores.store(st)),
+                    merkle_tree_stores.store(st).encode(),
                 );
             }
         }
@@ -322,8 +319,7 @@ impl DB for MockDB {
             let bytes = self.0.borrow().get(&store_key.to_string()).cloned();
             match bytes {
                 Some(b) => {
-                    let store = types::decode(b).map_err(Error::CodingError)?;
-                    merkle_tree_stores.set_store(st, store);
+                    merkle_tree_stores.set_store(st.decode_store(b)?);
                 }
                 None => return Ok(None),
             }
@@ -431,7 +427,28 @@ impl<'iter> DBIter<'iter> for MockDB {
         let db_prefix = "subspace/".to_owned();
         let prefix = format!("{}{}", db_prefix, prefix);
         let iter = self.0.borrow().clone().into_iter();
-        MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
+        MockPrefixIterator::new(
+            MockIterator {
+                prefix,
+                iter,
+                reverse_order: false,
+            },
+            db_prefix,
+        )
+    }
+
+    fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter {
+        let db_prefix = "subspace/".to_owned();
+        let prefix = format!("{}{}", db_prefix, prefix);
+        let iter = self.0.borrow().clone().into_iter();
+        MockPrefixIterator::new(
+            MockIterator {
+                prefix,
+                iter,
+                reverse_order: true,
+            },
+            db_prefix,
+        )
     }
 }
 
@@ -441,21 +458,34 @@ pub struct MockIterator {
     prefix: String,
     /// The concrete iterator
     pub iter: btree_map::IntoIter<String, Vec<u8>>,
+    /// Is the iterator in reverse order?
+    reverse_order: bool,
 }
 
 /// A prefix iterator for the [`MockDB`].
 pub type MockPrefixIterator = PrefixIterator<MockIterator>;
 
 impl Iterator for MockIterator {
-    type Item = KVBytes;
+    type Item = Result<KVBytes>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        for (key, val) in &mut self.iter {
-            if key.starts_with(&self.prefix) {
-                return Some((
-                    Box::from(key.as_bytes()),
-                    Box::from(val.as_slice()),
-                ));
+        if self.reverse_order {
+            for (key, val) in (&mut self.iter).rev() {
+                if key.starts_with(&self.prefix) {
+                    return Some(Ok((
+                        Box::from(key.as_bytes()),
+                        Box::from(val.as_slice()),
+                    )));
+                }
+            }
+        } else {
+            for (key, val) in &mut self.iter {
+                if key.starts_with(&self.prefix) {
+                    return Some(Ok((
+                        Box::from(key.as_bytes()),
+                        Box::from(val.as_slice()),
+                    )));
+                }
             }
         }
         None
@@ -468,7 +498,9 @@ impl Iterator for PrefixIterator<MockIterator> {
     /// Returns the next pair and the gas cost
     fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
         match self.iter.next() {
-            Some((key, val)) => {
+            Some(result) => {
+                let (key, val) =
+                    result.expect("Prefix iterator shouldn't fail");
                 let key = String::from_utf8(key.to_vec())
                     .expect("Cannot convert from bytes to key string");
                 match key.strip_prefix(&self.db_prefix) {

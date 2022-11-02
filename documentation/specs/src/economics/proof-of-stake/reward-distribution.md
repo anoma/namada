@@ -204,15 +204,3 @@ In order to maintain a record of the block rewards over the course of an epoch, 
 TODO describe / figure out:
 
 - how leftover reward tokens from round-off / truncation are handled
-
-## Slashes
-
-Slashes should lead to punishment for delegators who were contributing voting power to the validator at the height of the infraction, _as if_ the delegations were iterated over and slashed individually.
-
-This can be implemented as a negative inflation rate for a particular block.
-
-Instant redelegation is not supported. Redelegations must wait the unbonding period.
-
-<!--## State management
-
-Each $entry_{v,i}$ can be reference-counted by the number of delegations created during that epoch which might need to reference it. As soon as the number of delegations drops to zero, the entry can be deleted.-->

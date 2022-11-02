@@ -11,7 +11,9 @@ use async_std::fs::{self};
 use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::BorshDeserialize;
+use data_encoding::HEXLOWER;
 use itertools::Itertools;
+use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::Votes;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
@@ -21,75 +23,61 @@ use namada::ledger::pos::types::{
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
-use namada::ledger::treasury::storage as treasury_storage;
+use namada::ledger::queries::{self, RPC};
 use namada::types::address::Address;
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalVote, TallyResult,
+    OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
+    VotePower,
 };
 use namada::types::key::*;
-use namada::types::storage::{Epoch, PrefixValue};
+use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
-use tendermint::abci::Code;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::error::Error as TError;
-use tendermint_rpc::query::Query;
-use tendermint_rpc::{
-    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
-};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
-use crate::node::ledger::rpc::Path;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_rpc::error::Error as TError;
+use crate::facade::tendermint_rpc::query::Query;
+use crate::facade::tendermint_rpc::{
+    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
+};
 
 /// Query the epoch of the last committed block
 pub async fn query_epoch(args: args::Query) -> Epoch {
     let client = HttpClient::new(args.ledger_address).unwrap();
-    let path = Path::Epoch;
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => match Epoch::try_from_slice(&response.value[..]) {
-            Ok(epoch) => {
-                println!("Last committed epoch: {}", epoch);
-                return epoch;
-            }
+    let epoch = unwrap_client_response(RPC.shell().epoch(&client).await);
+    println!("Last committed epoch: {}", epoch);
+    epoch
+}
 
-            Err(err) => {
-                eprintln!("Error decoding the epoch value: {}", err)
-            }
-        },
-        Code::Err(err) => eprintln!(
-            "Error in the query {} (error code {})",
-            response.info, err
-        ),
-    }
-    cli::safe_exit(1)
+/// Query the last committed block
+pub async fn query_block(
+    args: args::Query,
+) -> tendermint_rpc::endpoint::block::Response {
+    let client = HttpClient::new(args.ledger_address).unwrap();
+    let response = client.latest_block().await.unwrap();
+    println!(
+        "Last committed block ID: {}, height: {}, time: {}",
+        response.block_id,
+        response.block.header.height,
+        response.block.header.time
+    );
+    response
 }
 
 /// Query the raw bytes of given storage key
 pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let path = Path::Value(args.storage_key);
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => {
-            println!("{}", hex::encode(&response.value));
-        }
-        Code::Err(err) => {
-            eprintln!(
-                "Error in the query {}  (error code {})",
-                response.info, err
-            );
-            cli::safe_exit(1)
-        }
+    let response = unwrap_client_response(
+        RPC.shell()
+            .storage_value(&client, None, None, false, &args.storage_key)
+            .await,
+    );
+    if !response.data.is_empty() {
+        println!("Found data: 0x{}", HEXLOWER.encode(&response.data));
+    } else {
+        println!("No data found for key {}", args.storage_key);
     }
 }
 
@@ -101,15 +89,29 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
         (Some(token), Some(owner)) => {
             let token = ctx.get(&token);
             let owner = ctx.get(&owner);
-            let key = token::balance_key(&token, &owner);
+            let key = match &args.sub_prefix {
+                Some(sub_prefix) => {
+                    let sub_prefix = Key::parse(sub_prefix).unwrap();
+                    let prefix =
+                        token::multitoken_balance_prefix(&token, &sub_prefix);
+                    token::multitoken_balance_key(&prefix, &owner)
+                }
+                None => token::balance_key(&token, &owner),
+            };
             let currency_code = tokens
                 .get(&token)
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
             match query_storage_value::<token::Amount>(&client, &key).await {
-                Some(balance) => {
-                    println!("{}: {}", currency_code, balance);
-                }
+                Some(balance) => match &args.sub_prefix {
+                    Some(sub_prefix) => {
+                        println!(
+                            "{} with {}: {}",
+                            currency_code, sub_prefix, balance
+                        );
+                    }
+                    None => println!("{}: {}", currency_code, balance),
+                },
                 None => {
                     println!("No {} balance found for {}", currency_code, owner)
                 }
@@ -117,68 +119,97 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
         }
         (None, Some(owner)) => {
             let owner = ctx.get(&owner);
-            let mut found_any = false;
-            for (token, currency_code) in tokens {
-                let key = token::balance_key(&token, &owner);
-                if let Some(balance) =
-                    query_storage_value::<token::Amount>(&client, &key).await
-                {
-                    println!("{}: {}", currency_code, balance);
-                    found_any = true;
+            for (token, _) in tokens {
+                let prefix = token.to_db_key().into();
+                let balances =
+                    query_storage_prefix::<token::Amount>(&client, &prefix)
+                        .await;
+                if let Some(balances) = balances {
+                    print_balances(&ctx, balances, &token, Some(&owner));
                 }
-            }
-            if !found_any {
-                println!("No balance found for {}", owner);
             }
         }
         (Some(token), None) => {
             let token = ctx.get(&token);
-            let key = token::balance_prefix(&token);
+            let prefix = token.to_db_key().into();
             let balances =
-                query_storage_prefix::<token::Amount>(client, key).await;
-            match balances {
-                Some(balances) => {
-                    let currency_code = tokens
-                        .get(&token)
-                        .map(|c| Cow::Borrowed(*c))
-                        .unwrap_or_else(|| Cow::Owned(token.to_string()));
-                    let stdout = io::stdout();
-                    let mut w = stdout.lock();
-                    writeln!(w, "Token {}:", currency_code).unwrap();
-                    for (key, balance) in balances {
-                        let owner =
-                            token::is_any_token_balance_key(&key).unwrap();
-                        writeln!(w, "  {}, owned by {}", balance, owner)
-                            .unwrap();
-                    }
-                }
-                None => {
-                    println!("No balances for token {}", token.encode())
-                }
+                query_storage_prefix::<token::Amount>(&client, &prefix).await;
+            if let Some(balances) = balances {
+                print_balances(&ctx, balances, &token, None);
             }
         }
         (None, None) => {
-            let stdout = io::stdout();
-            let mut w = stdout.lock();
-            for (token, currency_code) in tokens {
+            for (token, _) in tokens {
                 let key = token::balance_prefix(&token);
                 let balances =
-                    query_storage_prefix::<token::Amount>(client.clone(), key)
-                        .await;
-                match balances {
-                    Some(balances) => {
-                        writeln!(w, "Token {}:", currency_code).unwrap();
-                        for (key, balance) in balances {
-                            let owner =
-                                token::is_any_token_balance_key(&key).unwrap();
-                            writeln!(w, "  {}, owned by {}", balance, owner)
-                                .unwrap();
-                        }
-                    }
-                    None => {
-                        println!("No balances for token {}", token.encode())
-                    }
+                    query_storage_prefix::<token::Amount>(&client, &key).await;
+                if let Some(balances) = balances {
+                    print_balances(&ctx, balances, &token, None);
                 }
+            }
+        }
+    }
+}
+
+fn print_balances(
+    ctx: &Context,
+    balances: impl Iterator<Item = (storage::Key, token::Amount)>,
+    token: &Address,
+    target: Option<&Address>,
+) {
+    let stdout = io::stdout();
+    let mut w = stdout.lock();
+
+    // Token
+    let tokens = address::tokens();
+    let currency_code = tokens
+        .get(token)
+        .map(|c| Cow::Borrowed(*c))
+        .unwrap_or_else(|| Cow::Owned(token.to_string()));
+    writeln!(w, "Token {}", currency_code).unwrap();
+
+    let print_num = balances
+        .filter_map(
+            |(key, balance)| match token::is_any_multitoken_balance_key(&key) {
+                Some((sub_prefix, owner)) => Some((
+                    owner.clone(),
+                    format!(
+                        "with {}: {}, owned by {}",
+                        sub_prefix,
+                        balance,
+                        lookup_alias(ctx, owner)
+                    ),
+                )),
+                None => token::is_any_token_balance_key(&key).map(|owner| {
+                    (
+                        owner.clone(),
+                        format!(
+                            ": {}, owned by {}",
+                            balance,
+                            lookup_alias(ctx, owner)
+                        ),
+                    )
+                }),
+            },
+        )
+        .filter_map(|(o, s)| match target {
+            Some(t) if o == *t => Some(s),
+            Some(_) => None,
+            None => Some(s),
+        })
+        .map(|s| {
+            writeln!(w, "{}", s).unwrap();
+        })
+        .count();
+
+    if print_num == 0 {
+        match target {
+            Some(t) => {
+                writeln!(w, "No balances owned by {}", lookup_alias(ctx, t))
+                    .unwrap()
+            }
+            None => {
+                writeln!(w, "No balances for token {}", currency_code).unwrap()
             }
         }
     }
@@ -302,20 +333,17 @@ pub async fn query_proposal_result(
 
     match args.proposal_id {
         Some(id) => {
-            let start_epoch_key = gov_storage::get_voting_start_epoch_key(id);
             let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
-            let start_epoch =
-                query_storage_value::<Epoch>(&client, &start_epoch_key).await;
             let end_epoch =
                 query_storage_value::<Epoch>(&client, &end_epoch_key).await;
 
-            match (start_epoch, end_epoch) {
-                (Some(start_epoch), Some(end_epoch)) => {
+            match end_epoch {
+                Some(end_epoch) => {
                     if current_epoch > end_epoch {
                         let votes =
-                            get_proposal_votes(&client, start_epoch, id).await;
+                            get_proposal_votes(&client, end_epoch, id).await;
                         let proposal_result =
-                            compute_tally(&client, start_epoch, votes).await;
+                            compute_tally(&client, end_epoch, votes).await;
                         println!("Proposal: {}", id);
                         println!("{:4}Result: {}", "", proposal_result);
                     } else {
@@ -323,7 +351,7 @@ pub async fn query_proposal_result(
                         cli::safe_exit(1)
                     }
                 }
-                _ => {
+                None => {
                     eprintln!("Error while retriving proposal.");
                     cli::safe_exit(1)
                 }
@@ -347,7 +375,14 @@ pub async fn query_proposal_result(
                                             if entry.file_name().eq(&"proposal")
                                             {
                                                 is_proposal_present = true
-                                            } else {
+                                            } else if entry
+                                                .file_name()
+                                                .to_string_lossy()
+                                                .starts_with("proposal-vote-")
+                                            {
+                                                // Folder may contain other
+                                                // files than just the proposal
+                                                // and the votes
                                                 files.insert(entry.path());
                                             }
                                         }
@@ -369,8 +404,8 @@ pub async fn query_proposal_result(
 
                         if !is_proposal_present {
                             eprintln!(
-                                "The folder must contain a the offline \
-                                 proposal in a file named proposal"
+                                "The folder must contain the offline proposal \
+                                 in a file named \"proposal\""
                             );
                             cli::safe_exit(1)
                         }
@@ -414,7 +449,10 @@ pub async fn query_proposal_result(
                     }
                 };
             } else {
-                eprintln!("Either id or offline should be used as arguments.");
+                eprintln!(
+                    "Either --proposal-id or --data-path should be provided \
+                     as arguments."
+                );
                 cli::safe_exit(1)
             }
         }
@@ -427,45 +465,8 @@ pub async fn query_protocol_parameters(
 ) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
 
-    println!("Goveranance parameters");
-    let key = gov_storage::get_max_proposal_code_size_key();
-    let max_proposal_code_size = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Max. proposal code size: {}",
-        "", max_proposal_code_size
-    );
-
-    let key = gov_storage::get_max_proposal_content_key();
-    let max_proposal_content = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Max. proposal content size: {}",
-        "", max_proposal_content
-    );
-
-    let key = gov_storage::get_min_proposal_fund_key();
-    let min_proposal_fund = query_storage_value::<Amount>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!("{:4}Min. proposal funds: {}", "", min_proposal_fund);
-
-    let key = gov_storage::get_min_proposal_grace_epoch_key();
-    let min_proposal_grace_epoch = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Min. proposal grace epoch: {}",
-        "", min_proposal_grace_epoch
-    );
-
-    let key = gov_storage::get_min_proposal_period_key();
-    let min_proposal_period = query_storage_value::<u64>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!("{:4}Min. proposal period: {}", "", min_proposal_period);
+    let gov_parameters = get_governance_parameters(&client).await;
+    println!("Governance Parameters\n {:4}", gov_parameters);
 
     println!("Protocol parameters");
     let key = param_storage::get_epoch_storage_key();
@@ -498,16 +499,6 @@ pub async fn query_protocol_parameters(
         .await
         .expect("Parameter should be definied.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
-
-    println!("Treasury parameters");
-    let key = treasury_storage::get_max_transferable_fund_key();
-    let max_transferable_amount = query_storage_value::<Amount>(&client, &key)
-        .await
-        .expect("Parameter should be definied.");
-    println!(
-        "{:4}Max. transferable amount: {}",
-        "", max_transferable_amount
-    );
 
     println!("PoS parameters");
     let key = pos::params_key();
@@ -652,18 +643,14 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             let owner = ctx.get(&owner);
             // Find owner's bonds to any validator
             let bonds_prefix = pos::bonds_for_source_prefix(&owner);
-            let bonds = query_storage_prefix::<pos::Bonds>(
-                client.clone(),
-                bonds_prefix,
-            )
-            .await;
+            let bonds =
+                query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix)
+                    .await;
             // Find owner's unbonds to any validator
             let unbonds_prefix = pos::unbonds_for_source_prefix(&owner);
-            let unbonds = query_storage_prefix::<pos::Unbonds>(
-                client.clone(),
-                unbonds_prefix,
-            )
-            .await;
+            let unbonds =
+                query_storage_prefix::<pos::Unbonds>(&client, &unbonds_prefix)
+                    .await;
 
             let mut total: token::Amount = 0.into();
             let mut total_active: token::Amount = 0.into();
@@ -772,18 +759,14 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
         (None, None) => {
             // Find all the bonds
             let bonds_prefix = pos::bonds_prefix();
-            let bonds = query_storage_prefix::<pos::Bonds>(
-                client.clone(),
-                bonds_prefix,
-            )
-            .await;
+            let bonds =
+                query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix)
+                    .await;
             // Find all the unbonds
             let unbonds_prefix = pos::unbonds_prefix();
-            let unbonds = query_storage_prefix::<pos::Unbonds>(
-                client.clone(),
-                unbonds_prefix,
-            )
-            .await;
+            let unbonds =
+                query_storage_prefix::<pos::Unbonds>(&client, &unbonds_prefix)
+                    .await;
 
             let mut total: token::Amount = 0.into();
             let mut total_active: token::Amount = 0.into();
@@ -1024,11 +1007,9 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
         None => {
             // Iterate slashes for all validators
             let slashes_prefix = pos::slashes_prefix();
-            let slashes = query_storage_prefix::<pos::Slashes>(
-                client.clone(),
-                slashes_prefix,
-            )
-            .await;
+            let slashes =
+                query_storage_prefix::<pos::Slashes>(&client, &slashes_prefix)
+                    .await;
 
             match slashes {
                 Some(slashes) => {
@@ -1067,12 +1048,12 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
 /// Dry run a transaction
 pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
     let client = HttpClient::new(ledger_address.clone()).unwrap();
-    let path = Path::DryRunTx;
-    let response = client
-        .abci_query(Some(path.into()), tx_bytes, None, false)
-        .await
-        .unwrap();
-    println!("{:#?}", response);
+    let (data, height, prove) = (Some(tx_bytes), None, false);
+    let result = unwrap_client_response(
+        RPC.shell().dry_run_tx(&client, data, height, prove).await,
+    )
+    .data;
+    println!("Dry-run result: {}", result);
 }
 
 /// Get account's public key stored in its storage sub-space
@@ -1105,7 +1086,7 @@ pub async fn is_delegator(
     let client = HttpClient::new(ledger_address).unwrap();
     let bonds_prefix = pos::bonds_for_source_prefix(address);
     let bonds =
-        query_storage_prefix::<pos::Bonds>(client.clone(), bonds_prefix).await;
+        query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix).await;
     bonds.is_some() && bonds.unwrap().count() > 0
 }
 
@@ -1115,8 +1096,7 @@ pub async fn is_delegator_at(
     epoch: Epoch,
 ) -> bool {
     let key = pos::bonds_for_source_prefix(address);
-    let bonds_iter =
-        query_storage_prefix::<pos::Bonds>(client.clone(), key).await;
+    let bonds_iter = query_storage_prefix::<pos::Bonds>(client, &key).await;
     if let Some(mut bonds) = bonds_iter {
         bonds.any(|(_, bond)| bond.get(epoch).is_some())
     } else {
@@ -1136,7 +1116,7 @@ pub async fn known_address(
         Address::Established(_) => {
             // Established account exists if it has a VP
             let key = storage::Key::validity_predicate(address);
-            query_has_storage_key(client, key).await
+            query_has_storage_key(&client, &key).await
         }
         Address::Implicit(_) | Address::Internal(_) => true,
     }
@@ -1194,7 +1174,7 @@ fn process_bonds_query(
     let mut total_active = total_active.unwrap_or_else(|| 0.into());
     let mut current_total: token::Amount = 0.into();
     for bond in bonds.iter() {
-        for (epoch_start, &(mut delta)) in bond.deltas.iter().sorted() {
+        for (epoch_start, &(mut delta)) in bond.pos_deltas.iter().sorted() {
             writeln!(w, "  Active from epoch {}: Δ {}", epoch_start, delta)
                 .unwrap();
             delta = apply_slashes(slashes, delta, *epoch_start, None, Some(w));
@@ -1285,107 +1265,77 @@ pub async fn query_storage_value<T>(
 where
     T: BorshDeserialize,
 {
-    let path = Path::Value(key.to_owned());
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => match T::try_from_slice(&response.value[..]) {
-            Ok(value) => return Some(value),
-            Err(err) => eprintln!("Error decoding the value: {}", err),
-        },
-        Code::Err(err) => {
-            if err == 1 {
-                return None;
-            } else {
-                eprintln!(
-                    "Error in the query {} (error code {})",
-                    response.info, err
-                )
-            }
-        }
+    // In case `T` is a unit (only thing that encodes to 0 bytes), we have to
+    // use `storage_has_key` instead of `storage_value`, because `storage_value`
+    // returns 0 bytes when the key is not found.
+    let maybe_unit = T::try_from_slice(&[]);
+    if let Ok(unit) = maybe_unit {
+        return if unwrap_client_response(
+            RPC.shell().storage_has_key(client, key).await,
+        ) {
+            Some(unit)
+        } else {
+            None
+        };
     }
-    cli::safe_exit(1)
+
+    let response = unwrap_client_response(
+        RPC.shell()
+            .storage_value(client, None, None, false, key)
+            .await,
+    );
+    if response.data.is_empty() {
+        return None;
+    }
+    T::try_from_slice(&response.data[..])
+        .map(Some)
+        .unwrap_or_else(|err| {
+            eprintln!("Error decoding the value: {}", err);
+            cli::safe_exit(1)
+        })
 }
 
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
 pub async fn query_storage_prefix<T>(
-    client: HttpClient,
-    key: storage::Key,
+    client: &HttpClient,
+    key: &storage::Key,
 ) -> Option<impl Iterator<Item = (storage::Key, T)>>
 where
     T: BorshDeserialize,
 {
-    let path = Path::Prefix(key);
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => {
-            match Vec::<PrefixValue>::try_from_slice(&response.value[..]) {
-                Ok(values) => {
-                    let decode = |PrefixValue { key, value }: PrefixValue| {
-                        match T::try_from_slice(&value[..]) {
-                            Err(err) => {
-                                eprintln!(
-                                    "Skipping a value for key {}. Error in \
-                                     decoding: {}",
-                                    key, err
-                                );
-                                None
-                            }
-                            Ok(value) => Some((key, value)),
-                        }
-                    };
-                    return Some(values.into_iter().filter_map(decode));
-                }
-                Err(err) => eprintln!("Error decoding the values: {}", err),
-            }
-        }
-        Code::Err(err) => {
-            if err == 1 {
-                return None;
-            } else {
+    let values = unwrap_client_response(
+        RPC.shell()
+            .storage_prefix(client, None, None, false, key)
+            .await,
+    );
+    let decode =
+        |PrefixValue { key, value }: PrefixValue| match T::try_from_slice(
+            &value[..],
+        ) {
+            Err(err) => {
                 eprintln!(
-                    "Error in the query {} (error code {})",
-                    response.info, err
-                )
+                    "Skipping a value for key {}. Error in decoding: {}",
+                    key, err
+                );
+                None
             }
-        }
+            Ok(value) => Some((key, value)),
+        };
+    if values.data.is_empty() {
+        None
+    } else {
+        Some(values.data.into_iter().filter_map(decode))
     }
-    cli::safe_exit(1)
 }
 
 /// Query to check if the given storage key exists.
 pub async fn query_has_storage_key(
-    client: HttpClient,
-    key: storage::Key,
+    client: &HttpClient,
+    key: &storage::Key,
 ) -> bool {
-    let path = Path::HasKey(key);
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => match bool::try_from_slice(&response.value[..]) {
-            Ok(value) => return value,
-            Err(err) => eprintln!("Error decoding the value: {}", err),
-        },
-        Code::Err(err) => {
-            eprintln!(
-                "Error in the query {} (error code {})",
-                response.info, err
-            )
-        }
-    }
-    cli::safe_exit(1)
+    unwrap_client_response(RPC.shell().storage_has_key(client, key).await)
 }
 
 /// Represents a query for an event pertaining to the specified transaction
@@ -1555,12 +1505,13 @@ pub async fn get_proposal_votes(
     let vote_prefix_key =
         gov_storage::get_proposal_vote_prefix_key(proposal_id);
     let vote_iter =
-        query_storage_prefix::<ProposalVote>(client.clone(), vote_prefix_key)
-            .await;
+        query_storage_prefix::<ProposalVote>(client, &vote_prefix_key).await;
 
-    let mut yay_validators: HashMap<Address, Amount> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, Amount> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, Amount> = HashMap::new();
+    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
+    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
 
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
@@ -1587,9 +1538,15 @@ pub async fn get_proposal_votes(
                 .await;
                 if let Some(amount) = delegator_token_amount {
                     if vote.is_yay() {
-                        yay_delegators.insert(voter_address, amount);
+                        let entry =
+                            yay_delegators.entry(voter_address).or_default();
+                        entry
+                            .insert(validator_address, VotePower::from(amount));
                     } else {
-                        nay_delegators.insert(voter_address, amount);
+                        let entry =
+                            nay_delegators.entry(voter_address).or_default();
+                        entry
+                            .insert(validator_address, VotePower::from(amount));
                     }
                 }
             }
@@ -1612,9 +1569,11 @@ pub async fn get_proposal_offline_votes(
 
     let proposal_hash = proposal.compute_hash();
 
-    let mut yay_validators: HashMap<Address, Amount> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, Amount> = HashMap::new();
-    let mut nay_delegators: HashMap<Address, Amount> = HashMap::new();
+    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
+    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
+    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+        HashMap::new();
 
     for path in files {
         let file = File::open(&path).expect("Proposal file must exist.");
@@ -1651,27 +1610,74 @@ pub async fn get_proposal_offline_votes(
         {
             let key = pos::bonds_for_source_prefix(&proposal_vote.address);
             let bonds_iter =
-                query_storage_prefix::<pos::Bonds>(client.clone(), key).await;
+                query_storage_prefix::<pos::Bonds>(client, &key).await;
             if let Some(bonds) = bonds_iter {
-                for (key, epoched_amount) in bonds {
-                    let bond = epoched_amount
-                        .get(proposal.tally_epoch)
-                        .expect("Delegation bond should be definied.");
+                for (key, epoched_bonds) in bonds {
+                    // Look-up slashes for the validator in this key and
+                    // apply them if any
+                    let validator = pos::get_validator_address_from_bond(&key)
+                        .expect(
+                            "Delegation key should contain validator address.",
+                        );
+                    let slashes_key = pos::validator_slashes_key(&validator);
+                    let slashes = query_storage_value::<pos::Slashes>(
+                        client,
+                        &slashes_key,
+                    )
+                    .await
+                    .unwrap_or_default();
+                    let mut delegated_amount: token::Amount = 0.into();
                     let epoch = namada::ledger::pos::types::Epoch::from(
                         proposal.tally_epoch.0,
                     );
-                    let amount = *bond
-                        .deltas
-                        .get(&epoch)
-                        .expect("Delegation amount should be definied.");
+                    let bond = epoched_bonds
+                        .get(epoch)
+                        .expect("Delegation bond should be defined.");
+                    let mut to_deduct = bond.neg_deltas;
+                    for (start_epoch, &(mut delta)) in
+                        bond.pos_deltas.iter().sorted()
+                    {
+                        // deduct bond's neg_deltas
+                        if to_deduct > delta {
+                            to_deduct -= delta;
+                            // If the whole bond was deducted, continue to
+                            // the next one
+                            continue;
+                        } else {
+                            delta -= to_deduct;
+                            to_deduct = token::Amount::default();
+                        }
+
+                        delta = apply_slashes(
+                            &slashes,
+                            delta,
+                            *start_epoch,
+                            None,
+                            None,
+                        );
+                        delegated_amount += delta;
+                    }
+
                     let validator_address =
                         pos::get_validator_address_from_bond(&key).expect(
                             "Delegation key should contain validator address.",
                         );
                     if proposal_vote.vote.is_yay() {
-                        yay_delegators.insert(validator_address, amount);
+                        let entry = yay_delegators
+                            .entry(proposal_vote.address.clone())
+                            .or_default();
+                        entry.insert(
+                            validator_address,
+                            VotePower::from(delegated_amount),
+                        );
                     } else {
-                        nay_delegators.insert(validator_address, amount);
+                        let entry = nay_delegators
+                            .entry(proposal_vote.address.clone())
+                            .or_default();
+                        entry.insert(
+                            validator_address,
+                            VotePower::from(delegated_amount),
+                        );
                     }
                 }
             }
@@ -1690,7 +1696,7 @@ pub async fn compute_tally(
     client: &HttpClient,
     epoch: Epoch,
     votes: Votes,
-) -> TallyResult {
+) -> ProposalResult {
     let validators = get_all_validators(client, epoch).await;
     let total_stacked_tokens =
         get_total_staked_tokes(client, epoch, &validators).await;
@@ -1701,29 +1707,43 @@ pub async fn compute_tally(
         nay_delegators,
     } = votes;
 
-    let mut total_yay_stacked_tokens = Amount::from(0);
+    let mut total_yay_stacked_tokens = VotePower::from(0_u64);
     for (_, amount) in yay_validators.clone().into_iter() {
         total_yay_stacked_tokens += amount;
     }
 
     // YAY: Add delegator amount whose validator didn't vote / voted nay
-    for (validator_address, amount) in yay_delegators.into_iter() {
-        if !yay_validators.contains_key(&validator_address) {
-            total_yay_stacked_tokens += amount;
+    for (_, vote_map) in yay_delegators.iter() {
+        for (validator_address, vote_power) in vote_map.iter() {
+            if !yay_validators.contains_key(validator_address) {
+                total_yay_stacked_tokens += vote_power;
+            }
         }
     }
 
     // NAY: Remove delegator amount whose validator validator vote yay
-    for (validator_address, amount) in nay_delegators.into_iter() {
-        if yay_validators.contains_key(&validator_address) {
-            total_yay_stacked_tokens -= amount;
+    for (_, vote_map) in nay_delegators.iter() {
+        for (validator_address, vote_power) in vote_map.iter() {
+            if yay_validators.contains_key(validator_address) {
+                total_yay_stacked_tokens -= vote_power;
+            }
         }
     }
 
-    if 3 * total_yay_stacked_tokens >= 2 * total_stacked_tokens {
-        TallyResult::Passed
+    if total_yay_stacked_tokens >= (total_stacked_tokens / 3) * 2 {
+        ProposalResult {
+            result: TallyResult::Passed,
+            total_voting_power: total_stacked_tokens,
+            total_yay_power: total_yay_stacked_tokens,
+            total_nay_power: 0,
+        }
     } else {
-        TallyResult::Rejected
+        ProposalResult {
+            result: TallyResult::Rejected,
+            total_voting_power: total_stacked_tokens,
+            total_yay_power: total_yay_stacked_tokens,
+            total_nay_power: 0,
+        }
     }
 }
 
@@ -1746,7 +1766,21 @@ pub async fn get_bond_amount_at(
         Some(epoched_bonds) => {
             let mut delegated_amount: token::Amount = 0.into();
             for bond in epoched_bonds.iter() {
-                for (epoch_start, &(mut delta)) in bond.deltas.iter().sorted() {
+                let mut to_deduct = bond.neg_deltas;
+                for (epoch_start, &(mut delta)) in
+                    bond.pos_deltas.iter().sorted()
+                {
+                    // deduct bond's neg_deltas
+                    if to_deduct > delta {
+                        to_deduct -= delta;
+                        // If the whole bond was deducted, continue to
+                        // the next one
+                        continue;
+                    } else {
+                        delta -= to_deduct;
+                        to_deduct = token::Amount::default();
+                    }
+
                     delta = apply_slashes(
                         &slashes,
                         delta,
@@ -1788,8 +1822,8 @@ pub async fn get_total_staked_tokes(
     client: &HttpClient,
     epoch: Epoch,
     validators: &[Address],
-) -> token::Amount {
-    let mut total = Amount::from(0);
+) -> VotePower {
+    let mut total = VotePower::from(0_u64);
 
     for validator in validators {
         total += get_validator_stake(client, epoch, validator).await;
@@ -1801,7 +1835,7 @@ async fn get_validator_stake(
     client: &HttpClient,
     epoch: Epoch,
     validator: &Address,
-) -> token::Amount {
+) -> VotePower {
     let total_voting_power_key = pos::validator_total_deltas_key(validator);
     let total_voting_power = query_storage_value::<pos::ValidatorTotalDeltas>(
         client,
@@ -1810,11 +1844,9 @@ async fn get_validator_stake(
     .await
     .expect("Total deltas should be defined");
     let epoched_total_voting_power = total_voting_power.get(epoch);
-    if let Some(epoched_total_voting_power) = epoched_total_voting_power {
-        token::Amount::from_change(epoched_total_voting_power)
-    } else {
-        token::Amount::from(0)
-    }
+
+    VotePower::try_from(epoched_total_voting_power.unwrap_or_default())
+        .unwrap_or_default()
 }
 
 pub async fn get_delegators_delegation(
@@ -1823,8 +1855,7 @@ pub async fn get_delegators_delegation(
     _epoch: Epoch,
 ) -> Vec<Address> {
     let key = pos::bonds_for_source_prefix(address);
-    let bonds_iter =
-        query_storage_prefix::<pos::Bonds>(client.clone(), key).await;
+    let bonds_iter = query_storage_prefix::<pos::Bonds>(client, &key).await;
 
     let mut delegation_addresses: Vec<Address> = Vec::new();
     if let Some(bonds) = bonds_iter {
@@ -1835,4 +1866,62 @@ pub async fn get_delegators_delegation(
         }
     }
     delegation_addresses
+}
+
+pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
+    let key = gov_storage::get_max_proposal_code_size_key();
+    let max_proposal_code_size = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_max_proposal_content_key();
+    let max_proposal_content_size = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_min_proposal_fund_key();
+    let min_proposal_fund = query_storage_value::<Amount>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_min_proposal_grace_epoch_key();
+    let min_proposal_grace_epochs = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_min_proposal_period_key();
+    let min_proposal_period = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    let key = gov_storage::get_max_proposal_period_key();
+    let max_proposal_period = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    GovParams {
+        min_proposal_fund: u64::from(min_proposal_fund),
+        max_proposal_code_size,
+        min_proposal_period,
+        max_proposal_period,
+        max_proposal_content_size,
+        min_proposal_grace_epochs,
+    }
+}
+
+/// Try to find an alias for a given address from the wallet. If not found,
+/// formats the address into a string.
+fn lookup_alias(ctx: &Context, addr: &Address) -> String {
+    match ctx.wallet.find_alias(addr) {
+        Some(alias) => format!("{}", alias),
+        None => format!("{}", addr),
+    }
+}
+
+/// A helper to unwrap client's response. Will shut down process on error.
+fn unwrap_client_response<T>(response: Result<T, queries::tm::Error>) -> T {
+    response.unwrap_or_else(|err| {
+        eprintln!("Error in the query {}", err);
+        cli::safe_exit(1)
+    })
 }

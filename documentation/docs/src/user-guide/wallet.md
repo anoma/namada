@@ -3,6 +3,7 @@
 This document describes the different wallet concepts and options that are available to users of Namada who want to be able to [send, receive and interact](#send-and-receive-nam-tokens) with NAM tokens on the Namada blockchain.
 
 Check out the different options to generate a wallet:
+
 - File System Wallet
 - Web Wallet
 - Paper Wallet
@@ -15,7 +16,7 @@ Namada uses ed25519 keypairs for signing cryptographic operations on the blockch
 To manage your keys, various sub-commands are available under:
 
 ```shell
-anoma wallet key
+namada wallet key
 ```
 
 ### Generate a keypair
@@ -23,17 +24,17 @@ anoma wallet key
 Generate a keypair with a given alias and derive the implicit address from its public key:
 
 ```shell
-anoma wallet key gen --alias my-key
+namada wallet key gen --alias my-key
 ```
 
 ```admonish note
-The derived implicit address shares the same `my-key` alias. The previous command has the same effect as `anoma wallet address gen --alias my-key`.
+The derived implicit address shares the same `my-key` alias. The previous command has the same effect as `namada wallet address gen --alias my-key`.
 ```
 
 ### List all known keys
 
 ```shell
-anoma wallet key list
+namada wallet key list
 ```
 
 ## Manage addresses
@@ -49,31 +50,31 @@ There are currently 3 types of account addresses:
 To manage addresses, similar to keys, various sub-commands are available:
 
 ```shell
-anoma wallet address
+namada wallet address
 ```
 
 ### Generate an implicit address
 
 ```shell
-anoma wallet address gen --alias my-account
+namada wallet address gen --alias my-account
 ```
 
 ```admonish note
 
-Note that this will also generate and save a key from which the address was derived and save it under the same `my-account` alias. Thus, this command has the same effect as `anoma wallet key gen --alias my-account`.
+Note that this will also generate and save a key from which the address was derived and save it under the same `my-account` alias. Thus, this command has the same effect as `namada wallet key gen --alias my-account`.
 ```
 
 ### List all known addresses
 
 ```shell
-anoma wallet address list
+namada wallet address list
 ```
 
 ## File System Wallet
 
-By default, the Namada Wallet is stored under `.anoma/{chain_id}/wallet.toml` where keys are stored encrypted. You can change the default base directory path with `--base-dir` and you can allow the storage of unencrypted keypairs with the flag `--unsafe-dont-encrypt`. 
+By default, the Namada Wallet is stored under `.anoma/{chain_id}/wallet.toml` where keys are stored encrypted. You can change the default base directory path with `--base-dir` and you can allow the storage of unencrypted keypairs with the flag `--unsafe-dont-encrypt`.
 
-If the wallet doesn't already exist, it will be created for you as soon as you run a command that tries to access the wallet. A newly created wallet will be pre-loaded with some internal addresses like `pos`, `pos_slash_pool`, `masp` and more. 
+If the wallet doesn't already exist, it will be created for you as soon as you run a command that tries to access the wallet. A newly created wallet will be pre-loaded with some internal addresses like `pos`, `pos_slash_pool`, `masp` and more.
 
 Currently, the Namada client can load the password via:
 
@@ -83,7 +84,7 @@ Currently, the Namada client can load the password via:
 
 ## Web Wallet
 
-The Web Wallet for Namada is currently in closed beta. 
+The Web Wallet for Namada is currently in closed beta.
 
 ## Paper Wallet
 
@@ -104,7 +105,7 @@ If you already have a key in your wallet, you can skip this step. Otherwise, [ge
 Then, send a transaction to initialize your new established account and save its address with the alias `my-new-acc`. The `my-key` public key will be written into the account's storage for authorizing future transactions. We also sign this transaction with `my-key`.
 
 ```shell
-anoma client init-account \
+namada client init-account \
   --alias my-new-acc \
   --public-key my-key \
   --source my-key
@@ -116,11 +117,10 @@ This command uses the prebuilt [User Validity Predicate](https://github.com/anom
 
 ### Send a Payment
 
-
 To submit a regular token transfer from your account to the `validator-1` address:
 
 ```shell
-anoma client transfer \
+namada client transfer \
   --source my-new-acc \
   --target validator-1 \
   --token NAM \
@@ -134,7 +134,7 @@ This command will attempt to find and use the key of the source address to sign 
 To query token balances for a specific token and/or owner:
 
 ```shell
-anoma client balance --token NAM --owner my-new-acc
+namada client balance --token NAM --owner my-new-acc
 ```
 
 ```admonish note
@@ -143,9 +143,9 @@ For any client command that submits a transaction (`init-account`, `transfer`, `
 ```
 
 ### See every known addresses' balance
+
 You can see the token's addresses known by the client when you query all tokens balances:
 
 ```shell
-anoma client balance
+namada client balance
 ```
-

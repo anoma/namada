@@ -1,11 +1,10 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
-use tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use tendermint_proto::abci::{
-    ExecTxResult, RequestProcessProposal, ResponseProcessProposal,
-};
 
 use super::*;
+use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
+use crate::facade::tendermint_proto::abci::RequestProcessProposal;
+use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 
 impl<D, H> Shell<D, H>
 where
@@ -27,28 +26,25 @@ where
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,
-    ) -> ResponseProcessProposal {
+    ) -> ProcessProposal {
         let tx_results = self.process_txs(&req.txs);
 
-        ResponseProcessProposal {
+        ProcessProposal {
             status: if tx_results.iter().any(|res| res.code > 3) {
                 ProposalStatus::Reject as i32
             } else {
                 ProposalStatus::Accept as i32
             },
             tx_results,
-            ..Default::default()
         }
     }
 
     /// Check all the given txs.
-    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<ExecTxResult> {
+    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<TxResult> {
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         txs.iter()
             .map(|tx_bytes| {
-                ExecTxResult::from(
-                    self.process_single_tx(tx_bytes, &mut tx_queue_iter),
-                )
+                self.process_single_tx(tx_bytes, &mut tx_queue_iter)
             })
             .collect()
     }
@@ -154,9 +150,8 @@ where
                         }
                     } else {
                         // check that the fee payer has sufficient balance
-                        let balance = self
-                            .get_balance(&tx.fee.token, &tx.fee_payer())
-                            .unwrap_or_default();
+                        let balance =
+                            self.get_balance(&tx.fee.token, &tx.fee_payer());
 
                         if tx.fee.amount <= balance {
                             TxResult {
@@ -193,17 +188,17 @@ where
 mod test_process_proposal {
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
-    use namada::types::address::xan;
+    use namada::types::address::nam;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
-    use tendermint_proto::abci::RequestInitChain;
-    use tendermint_proto::google::protobuf::Timestamp;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::RequestInitChain;
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shell::test_utils::{
         gen_keypair, ProcessProposal, TestError, TestShell,
     };
@@ -221,7 +216,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -268,7 +263,7 @@ mod test_process_proposal {
         let mut wrapper = WrapperTx::new(
             Fee {
                 amount: 100.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -350,7 +345,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 1.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -403,7 +398,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: Amount::whole(1_000_100),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -451,7 +446,7 @@ mod test_process_proposal {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &keypair,
                 Epoch(0),
@@ -515,7 +510,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -574,7 +569,7 @@ mod test_process_proposal {
         let mut wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
@@ -627,7 +622,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),

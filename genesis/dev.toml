@@ -26,10 +26,10 @@ net_address = "127.0.0.1:26656"
 
 # Some tokens present at genesis.
 
-[token.xan]
+[token.nam]
 address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5"
 vp = "vp_token"
-[token.xan.balances]
+[token.nam.balances]
 # In token balances, we can use:
 # 1. An address any account
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
@@ -114,11 +114,6 @@ address = "atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwf
 public_key = "d06f8d4f897f329a50fd23ba5d2503bbe22fab2f14d5f625e07a65f617eb2778"
 vp = "vp_user"
 
-[established.matchmaker]
-address = "atest1v4ehgw36x5mnswphx565gv2yxdprzvf5gdp523jpxy6rvv6zxaznzsejxeznzseh8pp5ywz93xwala"
-public_key = "f4fe03b0d3130f077e4d51cc7748baac998750476bef994a0a73ac4e7d183168"
-vp = "vp_user"
-
 # An implicit account present at genesis.
 
 # Daewon (a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz)
@@ -173,16 +168,15 @@ light_client_attack_slash_rate = 500
 
 # Governance parameters.
 [gov_params]
-# minimum amount of xan token to lock
+# minimum amount of nam token to lock
 min_proposal_fund = 500
 # proposal code size in bytes
 max_proposal_code_size = 300000
-# proposal period length in epoch
+# min proposal period length in epochs
 min_proposal_period = 3
+# max proposal period length in epochs
+max_proposal_period = 27
 # maximum number of characters in the proposal content
 max_proposal_content_size = 5000
 # minimum epochs between end and grace epoch
 min_proposal_grace_epochs = 6
-
-[treasury_params]
-max_proposal_fund_transfer = 10000

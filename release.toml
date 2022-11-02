@@ -1,10 +1,7 @@
-allow-branch               = ["master", "maint-*"]
+allow-branch               = ["main", "maint-*"]
 consolidate-commits        = true
-disable-push               = true
-disable-publish            = true
-disable-tag                = true
-no-dev-version             = true
-pre-release-commit-message = "Anoma {{version}}"
+pre-release-commit-message = "Namada {{version}}"
+publish                    = false
+push                       = false
 shared-version             = true
-sign-tag                   = true
-tag-message                = "Anoma {{version}}"
+tag                        = false

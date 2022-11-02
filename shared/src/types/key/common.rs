@@ -4,13 +4,16 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::HEXLOWER;
+use namada_proof_of_stake::types::PublicKeyTmRawHash;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ed25519, ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError,
-    RefTo, SchemeType, SigScheme as SigSchemeTrait, VerifySigError,
+    ed25519, secp256k1, tm_consensus_key_raw_hash, ParsePublicKeyError,
+    ParseSecretKeyError, ParseSignatureError, RefTo, SchemeType,
+    SigScheme as SigSchemeTrait, VerifySigError,
 };
 
 /// Public key
@@ -31,6 +34,8 @@ use super::{
 pub enum PublicKey {
     /// Encapsulate Ed25519 public keys
     Ed25519(ed25519::PublicKey),
+    /// Encapsulate Secp256k1 public keys
+    Secp256k1(secp256k1::PublicKey),
 }
 
 impl super::PublicKey for PublicKey {
@@ -49,6 +54,13 @@ impl super::PublicKey for PublicKey {
                 )
                 .map_err(ParsePublicKeyError::InvalidEncoding)?,
             ))
+        } else if PK::TYPE == secp256k1::PublicKey::TYPE {
+            Ok(Self::Secp256k1(
+                secp256k1::PublicKey::try_from_slice(
+                    pk.try_to_vec().unwrap().as_slice(),
+                )
+                .map_err(ParsePublicKeyError::InvalidEncoding)?,
+            ))
         } else {
             Err(ParsePublicKeyError::MismatchedScheme)
         }
@@ -57,7 +69,7 @@ impl super::PublicKey for PublicKey {
 
 impl Display for PublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.try_to_vec().unwrap()))
+        write!(f, "{}", HEXLOWER.encode(&self.try_to_vec().unwrap()))
     }
 }
 
@@ -65,7 +77,9 @@ impl FromStr for PublicKey {
     type Err = ParsePublicKeyError;
 
     fn from_str(str: &str) -> Result<Self, Self::Err> {
-        let vec = hex::decode(str).map_err(ParsePublicKeyError::InvalidHex)?;
+        let vec = HEXLOWER
+            .decode(str.as_ref())
+            .map_err(ParsePublicKeyError::InvalidHex)?;
         Self::try_from_slice(vec.as_slice())
             .map_err(ParsePublicKeyError::InvalidEncoding)
     }
@@ -77,6 +91,8 @@ impl FromStr for PublicKey {
 pub enum SecretKey {
     /// Encapsulate Ed25519 secret keys
     Ed25519(ed25519::SecretKey),
+    /// Encapsulate Secp256k1 secret keys
+    Secp256k1(secp256k1::SecretKey),
 }
 
 impl Serialize for SecretKey {
@@ -88,13 +104,12 @@ impl Serialize for SecretKey {
         S: serde::Serializer,
     {
         // String encoded, because toml doesn't support enums
-        match self {
-            ed25519_sk @ SecretKey::Ed25519(_) => {
-                let keypair_string =
-                    format!("{}{}", "ED25519_SK_PREFIX", ed25519_sk);
-                Serialize::serialize(&keypair_string, serializer)
-            }
-        }
+        let prefix = match self {
+            SecretKey::Ed25519(_) => "ED25519_SK_PREFIX",
+            SecretKey::Secp256k1(_) => "SECP256K1_SK_PREFIX",
+        };
+        let keypair_string = format!("{}{}", prefix, self);
+        Serialize::serialize(&keypair_string, serializer)
     }
 }
 
@@ -110,6 +125,10 @@ impl<'de> Deserialize<'de> for SecretKey {
                 .map_err(D::Error::custom)?;
         if let Some(raw) = keypair_string.strip_prefix("ED25519_SK_PREFIX") {
             SecretKey::from_str(raw).map_err(D::Error::custom)
+        } else if let Some(raw) =
+            keypair_string.strip_prefix("SECP256K1_SK_PREFIX")
+        {
+            SecretKey::from_str(raw).map_err(D::Error::custom)
         } else {
             Err(D::Error::custom(
                 "Could not deserialize SecretKey do to invalid prefix",
@@ -123,16 +142,23 @@ impl super::SecretKey for SecretKey {
 
     const TYPE: SchemeType = SigScheme::TYPE;
 
-    fn try_from_sk<PK: super::SecretKey>(
-        pk: &PK,
+    fn try_from_sk<SK: super::SecretKey>(
+        sk: &SK,
     ) -> Result<Self, ParseSecretKeyError> {
-        if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_ref())
+        if SK::TYPE == Self::TYPE {
+            Self::try_from_slice(sk.try_to_vec().unwrap().as_ref())
                 .map_err(ParseSecretKeyError::InvalidEncoding)
-        } else if PK::TYPE == ed25519::SecretKey::TYPE {
+        } else if SK::TYPE == ed25519::SecretKey::TYPE {
             Ok(Self::Ed25519(
                 ed25519::SecretKey::try_from_slice(
-                    pk.try_to_vec().unwrap().as_ref(),
+                    sk.try_to_vec().unwrap().as_ref(),
+                )
+                .map_err(ParseSecretKeyError::InvalidEncoding)?,
+            ))
+        } else if SK::TYPE == secp256k1::SecretKey::TYPE {
+            Ok(Self::Secp256k1(
+                secp256k1::SecretKey::try_from_slice(
+                    sk.try_to_vec().unwrap().as_ref(),
                 )
                 .map_err(ParseSecretKeyError::InvalidEncoding)?,
             ))
@@ -146,13 +172,14 @@ impl RefTo<PublicKey> for SecretKey {
     fn ref_to(&self) -> PublicKey {
         match self {
             SecretKey::Ed25519(sk) => PublicKey::Ed25519(sk.ref_to()),
+            SecretKey::Secp256k1(sk) => PublicKey::Secp256k1(sk.ref_to()),
         }
     }
 }
 
 impl Display for SecretKey {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.try_to_vec().unwrap()))
+        write!(f, "{}", HEXLOWER.encode(&self.try_to_vec().unwrap()))
     }
 }
 
@@ -160,7 +187,9 @@ impl FromStr for SecretKey {
     type Err = ParseSecretKeyError;
 
     fn from_str(str: &str) -> Result<Self, Self::Err> {
-        let vec = hex::decode(str).map_err(ParseSecretKeyError::InvalidHex)?;
+        let vec = HEXLOWER
+            .decode(str.as_ref())
+            .map_err(ParseSecretKeyError::InvalidHex)?;
         Self::try_from_slice(vec.as_slice())
             .map_err(ParseSecretKeyError::InvalidEncoding)
     }
@@ -183,21 +212,30 @@ impl FromStr for SecretKey {
 pub enum Signature {
     /// Encapsulate Ed25519 signatures
     Ed25519(ed25519::Signature),
+    /// Encapsulate Secp256k1 signatures
+    Secp256k1(secp256k1::Signature),
 }
 
 impl super::Signature for Signature {
     const TYPE: SchemeType = SigScheme::TYPE;
 
-    fn try_from_sig<PK: super::Signature>(
-        pk: &PK,
+    fn try_from_sig<SIG: super::Signature>(
+        sig: &SIG,
     ) -> Result<Self, ParseSignatureError> {
-        if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
+        if SIG::TYPE == Self::TYPE {
+            Self::try_from_slice(sig.try_to_vec().unwrap().as_slice())
                 .map_err(ParseSignatureError::InvalidEncoding)
-        } else if PK::TYPE == ed25519::Signature::TYPE {
+        } else if SIG::TYPE == ed25519::Signature::TYPE {
             Ok(Self::Ed25519(
                 ed25519::Signature::try_from_slice(
-                    pk.try_to_vec().unwrap().as_slice(),
+                    sig.try_to_vec().unwrap().as_slice(),
+                )
+                .map_err(ParseSignatureError::InvalidEncoding)?,
+            ))
+        } else if SIG::TYPE == secp256k1::Signature::TYPE {
+            Ok(Self::Secp256k1(
+                secp256k1::Signature::try_from_slice(
+                    sig.try_to_vec().unwrap().as_slice(),
                 )
                 .map_err(ParseSignatureError::InvalidEncoding)?,
             ))
@@ -248,6 +286,9 @@ impl super::SigScheme for SigScheme {
             SecretKey::Ed25519(kp) => {
                 Signature::Ed25519(ed25519::SigScheme::sign(kp, data))
             }
+            SecretKey::Secp256k1(kp) => {
+                Signature::Secp256k1(secp256k1::SigScheme::sign(kp, data))
+            }
         }
     }
 
@@ -259,7 +300,11 @@ impl super::SigScheme for SigScheme {
         match (pk, sig) {
             (PublicKey::Ed25519(pk), Signature::Ed25519(sig)) => {
                 ed25519::SigScheme::verify_signature(pk, data, sig)
-            } // _ => Err(VerifySigError::MismatchedScheme),
+            }
+            (PublicKey::Secp256k1(pk), Signature::Secp256k1(sig)) => {
+                secp256k1::SigScheme::verify_signature(pk, data, sig)
+            }
+            _ => Err(VerifySigError::MismatchedScheme),
         }
     }
 
@@ -271,7 +316,17 @@ impl super::SigScheme for SigScheme {
         match (pk, sig) {
             (PublicKey::Ed25519(pk), Signature::Ed25519(sig)) => {
                 ed25519::SigScheme::verify_signature_raw(pk, data, sig)
-            } // _ => Err(VerifySigError::MismatchedScheme),
+            }
+            (PublicKey::Secp256k1(pk), Signature::Secp256k1(sig)) => {
+                secp256k1::SigScheme::verify_signature_raw(pk, data, sig)
+            }
+            _ => Err(VerifySigError::MismatchedScheme),
         }
+    }
+}
+
+impl PublicKeyTmRawHash for PublicKey {
+    fn tm_raw_hash(&self) -> String {
+        tm_consensus_key_raw_hash(self)
     }
 }

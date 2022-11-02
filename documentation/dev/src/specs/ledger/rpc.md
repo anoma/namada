@@ -4,6 +4,10 @@ The ledger provides an RPC interface for submitting transactions to the mempool,
 
 The RPC interface is provided as [specified](https://github.com/tendermint/spec/tree/4566f1e3028278c5b3eca27b53254a48771b152b/spec/rpc) from Tendermint and most of the requests are routed to the Namada ledger via ABCI.
 
+## OpenAPI spec
+
+The [OpenAPI specification](./openapi.yml) is provided.
+
 ## Transactions
 
 A [transaction](../ledger.md#transactions) can be submitted to the [mempool](../ledger.md#mempool) via Tendermint's [`BroadCastTxSync`](https://github.com/tendermint/spec/tree/4566f1e3028278c5b3eca27b53254a48771b152b/spec/rpc#broadcasttxsync) or [`BroadCastTxAsync`](https://github.com/tendermint/spec/tree/4566f1e3028278c5b3eca27b53254a48771b152b/spec/rpc#broadcasttxasync). The `CheckTx` result of these requests is success only if the transaction passes [mempool validation rules](../ledger.md#mempool). In case of `BroadCastTxAsync`, the `DeliverTx` is not indicative of the transaction's result, it's merely a result of the transaction being added to the [transaction queue](../ledger.md#outer-transaction-processing). The actual result of the outer transaction and the inner transaction can be found from via the [ABCI events](https://github.com/tendermint/spec/blob/4566f1e3028278c5b3eca27b53254a48771b152b/spec/abci/abci.md#events).

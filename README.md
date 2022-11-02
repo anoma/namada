@@ -4,10 +4,9 @@
 
 ## Overview
 
-[Namada](http://namada.net) is a sovereign proof-of-stake blockchain, using Tendermint BFT
-consensus, that enables multi-asset private transfers for any native
-or non-native asset using a multi-asset shielded pool derived from
-the Sapling circuit. Namada features full IBC protocol support,
+[Namada](http://namada.net) is a Proof-of-Stake L1 for interchain asset-agnostic privacy. Namada uses Tendermint BFT
+consensus and enables multi-asset shielded transfers for any native
+or non-native asset. Namada features full IBC protocol support,
 a natively integrated Ethereum bridge, a modern proof-of-stake
 system with automatic reward compounding and cubic slashing, and a
 stake-weighted governance signalling mechanism. Users of shielded
@@ -20,9 +19,9 @@ interaction with the protocol.
 
 ## 📓 Docs
 
-- user docs: built from [docs mdBook](./documentation/docs/)
-- dev docs: built from [dev mdBook](./documentation/dev/)
-- specifications: built from [specs mdBook](./documentation/specs/)
+* user docs: built from [docs mdBook](./documentation/docs/)
+* dev docs: built from [dev mdBook](./documentation/dev/)
+* specifications: built from [specs mdBook](./documentation/specs/)
 
 ## Warning
 
@@ -38,16 +37,16 @@ make install
 
 After installation, the main `anoma` executable will be available on path.
 
-To find how to use it, check out the [User Guide section of the docs](https://docs.anoma.net/user-guide/).
+To find how to use it, check out the [User Guide section of the docs](https://docs.namada.net/user-guide/index.html).
 
 For more detailed instructions and more install options, see the [Install
-section](https://docs.anoma.net/user-guide/install.html) of the User
+section](https://docs.namada.net/user-guide/install.html) of the User
 Guide.
 
 ## ⚙️ Development
 
 ```shell
-# Build the provided validity predicate, transaction and matchmaker wasm modules
+# Build the provided validity predicate and transaction wasm modules
 make build-wasm-scripts-docker
 
 # Development (debug) build Anoma, which includes a validator and some default 
@@ -69,11 +68,11 @@ make clippy
 
 To change the log level, set `ANOMA_LOG` environment variable to one of:
 
-- `error`
-- `warn`
-- `info`
-- `debug`
-- `trace`
+* `error`
+* `warn`
+* `info`
+* `debug`
+* `trace`
 
 The default is set to `info` for all the modules, expect for Tendermint ABCI, which has a lot of `debug` logging.
 

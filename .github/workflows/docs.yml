@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - main
-  pull_request:
+  # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
+  pull_request_target:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 concurrency:
@@ -39,12 +41,21 @@ jobs:
             command: cd documentation/specs && mdbook build
             cache_subkey: specs
             cache_version: v1
+            distribution_id: E2Y9R2H4P5LYED
           - name: Build docs
             folder: documentation/docs
             bucket: namada-docs-static-website
             command: cd documentation/docs && mdbook build
             cache_subkey: docs
             cache_version: v1
+            distribution_id: E2T9UML53913RV
+          - name: Build development docs
+            folder: documentation/dev
+            bucket: namada-dev-static-website
+            command: cargo run --bin namada_encoding_spec && cd documentation/dev && mdbook build
+            cache_subkey: dev
+            cache_version: v1
+            distribution_id: E6XPP5KFWXJFQ
 
     env:
       CARGO_INCREMENTAL: 0
@@ -55,6 +66,13 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -102,9 +120,87 @@ jobs:
             cd ${{ matrix.make.folder }} && mdbook-admonish install
       - name: ${{ matrix.make.name }}
         run: ${{ matrix.make.command }}
+      - name: Zip doc folder
+        run: tar -cvf ${{ matrix.make.bucket }}.tar ${{ matrix.make.folder }}/book
+      - name: Upload rendered docs
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.make.bucket }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ matrix.make.bucket }}.tar
       - name: Publish docs
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: aws s3 sync ${{ matrix.make.folder }}/book/html/ s3://${{ matrix.make.bucket }} --region eu-west-1 --delete
+      - name: Invalidate distribution cache
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: aws cloudfront create-invalidation --distribution-id ${{ matrix.make.distribution_id }} --paths "/*"
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true
+
+  rust-docs:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+
+    env:
+      CARGO_INCREMENTAL: 0
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: 100G
+      SCCACHE_BUCKET: namada-sccache-master
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          aws-region: eu-west-1
+      - name: Install sccache (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          LINK: https://github.com/mozilla/sccache/releases/download
+          SCCACHE_VERSION: v0.3.0
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install sccache (macos-latest)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install sccache
+      - name: Setup rust toolchain
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          profile: default
+          override: true
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: default
+      - name: Show rust toolchain info
+        run: rustup show
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Build rust-docs
+        run: make build-doc
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats

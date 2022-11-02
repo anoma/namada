@@ -4,41 +4,39 @@ use std::env;
 use std::fs::File;
 use std::time::Duration;
 
-use async_std::io::{self, WriteExt};
+use async_std::io::prelude::WriteExt;
+use async_std::io::{self};
 use borsh::BorshSerialize;
 use itertools::Either::*;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
 use namada::proto::Tx;
-use namada::types::address::{xan as m1t, Address};
+use namada::types::address::{nam, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
 use namada::types::key::*;
-use namada::types::nft::{self, Nft, NftToken};
 use namada::types::storage::Epoch;
-use namada::types::token::Amount;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
-use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use namada::types::{address, token};
+use namada::types::{address, storage, token};
 use namada::{ledger, vm};
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
-use tendermint_rpc::query::{EventType, Query};
-use tendermint_rpc::{Client, HttpClient};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::signing::{find_keypair, sign_tx};
-use crate::client::tendermint_rpc_types::{Error, TxBroadcastData, TxResponse};
+use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::client::tendermint_websocket_client::{
     Error as WsError, TendermintWebsocketClient, WebSocketAddress,
 };
-use crate::client::tm_jsonrpc_client::{fetch_event, JsonRpcAddress};
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+use crate::facade::tendermint_rpc::query::{EventType, Query};
+use crate::facade::tendermint_rpc::{Client, HttpClient};
+use crate::node::ledger::events::EventType as NamadaEventType;
 use crate::node::ledger::tendermint_node;
 
 const ACCEPTED_QUERY_KEY: &str = "accepted.hash";
@@ -49,13 +47,10 @@ const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-const TX_INIT_NFT: &str = "tx_init_nft.wasm";
-const TX_MINT_NFT: &str = "tx_mint_nft.wasm";
 const VP_USER_WASM: &str = "vp_user.wasm";
 const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
-const VP_NFT: &str = "vp_nft.wasm";
 
 const ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: &str =
     "ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT";
@@ -156,6 +151,7 @@ pub async fn submit_init_validator(
     args::TxInitValidator {
         tx: tx_args,
         source,
+        scheme,
         account_key,
         consensus_key,
         rewards_account_key,
@@ -177,16 +173,33 @@ pub async fn submit_init_validator(
     let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
         println!("Generating validator account key...");
         ctx.wallet
-            .gen_key(Some(validator_key_alias.clone()), unsafe_dont_encrypt)
+            .gen_key(
+                scheme,
+                Some(validator_key_alias.clone()),
+                unsafe_dont_encrypt,
+            )
             .1
             .ref_to()
     });
 
-    let consensus_key =
-        ctx.get_opt_cached(&consensus_key).unwrap_or_else(|| {
+    let consensus_key = ctx
+        .get_opt_cached(&consensus_key)
+        .map(|key| match *key {
+            common::SecretKey::Ed25519(_) => key,
+            common::SecretKey::Secp256k1(_) => {
+                eprintln!("Consensus key can only be ed25519");
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
             println!("Generating consensus key...");
             ctx.wallet
-                .gen_key(Some(consensus_key_alias.clone()), unsafe_dont_encrypt)
+                .gen_key(
+                    // Note that TM only allows ed25519 for consensus key
+                    SchemeType::Ed25519,
+                    Some(consensus_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
                 .1
         });
 
@@ -194,7 +207,11 @@ pub async fn submit_init_validator(
         ctx.get_opt_cached(&rewards_account_key).unwrap_or_else(|| {
             println!("Generating staking reward account key...");
             ctx.wallet
-                .gen_key(Some(rewards_key_alias.clone()), unsafe_dont_encrypt)
+                .gen_key(
+                    scheme,
+                    Some(rewards_key_alias.clone()),
+                    unsafe_dont_encrypt,
+                )
                 .1
                 .ref_to()
         });
@@ -204,7 +221,8 @@ pub async fn submit_init_validator(
         println!("Generating protocol signing key...");
     }
     // Generate the validator keys
-    let validator_keys = ctx.wallet.gen_validator_keys(protocol_key).unwrap();
+    let validator_keys =
+        ctx.wallet.gen_validator_keys(protocol_key, scheme).unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair
@@ -331,15 +349,11 @@ pub async fn submit_init_validator(
             };
         // add validator address and keys to the wallet
         ctx.wallet
-            .add_validator_data(validator_address.clone(), validator_keys);
+            .add_validator_data(validator_address, validator_keys);
         ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 
         let tendermint_home = ctx.config.ledger.tendermint_dir();
-        tendermint_node::write_validator_key(
-            &tendermint_home,
-            &validator_address,
-            &consensus_key,
-        );
+        tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
         tendermint_node::write_validator_state(tendermint_home);
 
         println!();
@@ -392,7 +406,17 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         }
     }
     // Check source balance
-    let balance_key = token::balance_key(&token, &source);
+    let (sub_prefix, balance_key) = match args.sub_prefix {
+        Some(sub_prefix) => {
+            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
+            (
+                Some(sub_prefix),
+                token::multitoken_balance_key(&prefix, &source),
+            )
+        }
+        None => (None, token::balance_key(&token, &source)),
+    };
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
@@ -424,6 +448,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
         source,
         target,
         token,
+        sub_prefix,
         amount: args.amount,
     };
     tracing::debug!("Transfer data {:?}", transfer);
@@ -435,81 +460,73 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     process_tx(ctx, &args.tx, tx, Some(&args.source)).await;
 }
 
-pub async fn submit_init_nft(ctx: Context, args: args::NftCreate) {
-    let file = File::open(&args.nft_data).expect("File must exist.");
-    let nft: Nft = serde_json::from_reader(file)
-        .expect("Couldn't deserialize nft data file");
-
-    let vp_code = match &nft.vp_path {
-        Some(path) => {
-            std::fs::read(path).expect("Expected a file at given code path")
-        }
-        None => ctx.read_wasm(VP_NFT),
-    };
-
-    let signer = Some(WalletAddress::new(nft.creator.clone().to_string()));
-
-    let data = CreateNft {
-        tag: nft.tag.to_string(),
-        creator: nft.creator,
-        vp_code,
-        keys: nft.keys,
-        opt_keys: nft.opt_keys,
-        tokens: nft.tokens,
-    };
-
-    let data = data.try_to_vec().expect(
-        "Encoding transfer data to initialize a new account shouldn't fail",
-    );
-
-    let tx_code = ctx.read_wasm(TX_INIT_NFT);
-
-    let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, signer.as_ref()).await;
-}
-
-pub async fn submit_mint_nft(ctx: Context, args: args::NftMint) {
-    let file = File::open(&args.nft_data).expect("File must exist.");
-    let nft_tokens: Vec<NftToken> =
-        serde_json::from_reader(file).expect("JSON was not well-formatted");
-
-    let nft_creator_key = nft::get_creator_key(&args.nft_address);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    let nft_creator_address =
-        match rpc::query_storage_value::<Address>(&client, &nft_creator_key)
-            .await
-        {
-            Some(addr) => addr,
-            None => {
-                eprintln!("No creator key found for {}", &args.nft_address);
-                safe_exit(1);
-            }
-        };
-
-    let signer = Some(WalletAddress::new(nft_creator_address.to_string()));
-
-    let data = MintNft {
-        address: args.nft_address,
-        creator: nft_creator_address,
-        tokens: nft_tokens,
-    };
-
-    let data = data.try_to_vec().expect(
-        "Encoding transfer data to initialize a new account shouldn't fail",
-    );
-
-    let tx_code = ctx.read_wasm(TX_MINT_NFT);
-
-    let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, signer.as_ref()).await;
-}
-
 pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     let file = File::open(&args.proposal_data).expect("File must exist.");
     let proposal: Proposal =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
 
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+
     let signer = WalletAddress::new(proposal.clone().author.to_string());
+    let governance_parameters = rpc::get_governance_parameters(&client).await;
+    let current_epoch = rpc::query_epoch(args::Query {
+        ledger_address: args.tx.ledger_address.clone(),
+    })
+    .await;
+
+    if proposal.voting_start_epoch <= current_epoch
+        || proposal.voting_start_epoch.0
+            % governance_parameters.min_proposal_period
+            != 0
+    {
+        println!("{}", proposal.voting_start_epoch <= current_epoch);
+        println!(
+            "{}",
+            proposal.voting_start_epoch.0
+                % governance_parameters.min_proposal_period
+                == 0
+        );
+        eprintln!(
+            "Invalid proposal start epoch: {} must be greater than current \
+             epoch {} and a multiple of {}",
+            proposal.voting_start_epoch,
+            current_epoch,
+            governance_parameters.min_proposal_period
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
+        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
+            < governance_parameters.min_proposal_period
+        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
+            > governance_parameters.max_proposal_period
+        || proposal.voting_end_epoch.0 % 3 != 0
+    {
+        eprintln!(
+            "Invalid proposal end epoch: difference between proposal start \
+             and end epoch must be at least {} and at max {} and end epoch \
+             must be a multiple of {}",
+            governance_parameters.min_proposal_period,
+            governance_parameters.max_proposal_period,
+            governance_parameters.min_proposal_period
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    } else if proposal.grace_epoch <= proposal.voting_end_epoch
+        || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
+            < governance_parameters.min_proposal_grace_epochs
+    {
+        eprintln!(
+            "Invalid proposal grace epoch: difference between proposal grace \
+             and end epoch must be at least {}",
+            governance_parameters.min_proposal_grace_epochs
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
 
     if args.offline {
         let signer = ctx.get(&signer);
@@ -521,11 +538,18 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         .await;
         let offline_proposal =
             OfflineProposal::new(proposal, signer, &signing_key);
-        let proposal_filename = "proposal".to_string();
+        let proposal_filename = args
+            .proposal_data
+            .parent()
+            .expect("No parent found")
+            .join("proposal");
         let out = File::create(&proposal_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_proposal) {
             Ok(_) => {
-                println!("Proposal created: {}.", proposal_filename);
+                println!(
+                    "Proposal created: {}.",
+                    proposal_filename.to_string_lossy()
+                );
             }
             Err(e) => {
                 eprintln!("Error while creating proposal file: {}.", e);
@@ -533,8 +557,6 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             }
         }
     } else {
-        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-
         let tx_data: Result<InitProposalData, _> = proposal.clone().try_into();
         let init_proposal_data = if let Ok(data) = tx_data {
             data
@@ -543,35 +565,23 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1)
         };
 
-        let min_proposal_funds_key = gov_storage::get_min_proposal_fund_key();
-        let min_proposal_funds: Amount =
-            rpc::query_storage_value(&client, &min_proposal_funds_key)
-                .await
-                .unwrap();
-        let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
+        let balance = rpc::get_token_balance(&client, &nam(), &proposal.author)
             .await
             .unwrap_or_default();
-        if balance < min_proposal_funds {
+        if balance
+            < token::Amount::from(governance_parameters.min_proposal_fund)
+        {
             eprintln!(
                 "Address {} doesn't have enough funds.",
                 &proposal.author
             );
             safe_exit(1);
         }
-        let min_proposal_funds_key = gov_storage::get_min_proposal_fund_key();
-        let min_proposal_funds: Amount =
-            rpc::query_storage_value(&client, &min_proposal_funds_key)
-                .await
-                .unwrap();
 
-        let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
-            .await
-            .unwrap_or_default();
-        if balance < min_proposal_funds {
-            eprintln!(
-                "Address {} doesn't have enough funds.",
-                &proposal.author
-            );
+        if init_proposal_data.content.len()
+            > governance_parameters.max_proposal_content_size as usize
+        {
+            eprintln!("Proposal content size too big.",);
             safe_exit(1);
         }
 
@@ -625,12 +635,17 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             &signing_key,
         );
 
-        let proposal_vote_filename =
-            format!("proposal-vote-{}", &signer.to_string());
+        let proposal_vote_filename = proposal_file_path
+            .parent()
+            .expect("No parent found")
+            .join(format!("proposal-vote-{}", &signer.to_string()));
         let out = File::create(&proposal_vote_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_vote) {
             Ok(_) => {
-                println!("Proposal vote created: {}.", proposal_vote_filename);
+                println!(
+                    "Proposal vote created: {}.",
+                    proposal_vote_filename.to_string_lossy()
+                );
             }
             Err(e) => {
                 eprintln!("Error while creating proposal vote file: {}.", e);
@@ -639,6 +654,10 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         }
     } else {
         let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+        let current_epoch = rpc::query_epoch(args::Query {
+            ledger_address: args.tx.ledger_address.clone(),
+        })
+        .await;
 
         let voter_address = ctx.get(signer);
         let proposal_id = args.proposal_id.unwrap();
@@ -652,6 +671,17 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
 
         match proposal_start_epoch {
             Some(epoch) => {
+                if current_epoch < epoch {
+                    eprintln!(
+                        "Current epoch {} is not greater than proposal start \
+                         epoch {}",
+                        current_epoch, epoch
+                    );
+
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
                 let mut delegation_addresses = rpc::get_delegators_delegation(
                     &client,
                     &voter_address,
@@ -683,6 +713,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     .await;
                 }
 
+                println!("{:?}", delegation_addresses);
+
                 let tx_data = VoteProposalData {
                     id: proposal_id,
                     vote: args.vote,
@@ -699,7 +731,13 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 process_tx(ctx, &args.tx, tx, Some(signer)).await;
             }
             None => {
-                eprintln!("Proposal start epoch is not in the storage.")
+                eprintln!(
+                    "Proposal start epoch for proposal id {} is not definied.",
+                    proposal_id
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
             }
         }
     }
@@ -799,7 +837,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
-    let balance_key = token::balance_key(&address::xan(), bond_source);
+    let balance_key = token::balance_key(&address::nam(), bond_source);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
@@ -867,7 +905,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         Some(bonds) => {
             let mut bond_amount: token::Amount = 0.into();
             for bond in bonds.iter() {
-                for delta in bond.deltas.values() {
+                for delta in bond.pos_deltas.values() {
                     bond_amount += *delta;
                 }
             }
@@ -1097,7 +1135,7 @@ pub async fn broadcast_tx(
     address: TendermintAddress,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response, WsError> {
-    let (tx, wrapper_tx_hash, _decrypted_tx_hash) = match to_broadcast {
+    let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
             wrapper_hash,
@@ -1135,7 +1173,7 @@ pub async fn broadcast_tx(
         // acceptance/application results later
         {
             println!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
-            println!("Inner transaction hash: {:?}", _decrypted_tx_hash);
+            println!("Inner transaction hash: {:?}", decrypted_tx_hash);
         }
         Ok(response)
     } else {
@@ -1154,56 +1192,88 @@ pub async fn broadcast_tx(
 pub async fn submit_tx(
     address: TendermintAddress,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, Error> {
-    // the data for finding the relevant events
+) -> Result<TxResponse, WsError> {
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
             wrapper_hash,
             decrypted_hash,
         } => (tx, wrapper_hash, decrypted_hash),
-        TxBroadcastData::DryRun(_) => {
-            panic!("Cannot broadcast a dry-run transaction")
+        _ => panic!("Cannot broadcast a dry-run transaction"),
+    };
+
+    let websocket_timeout =
+        if let Ok(val) = env::var(ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT) {
+            if let Ok(timeout) = val.parse::<u64>() {
+                Duration::new(timeout, 0)
+            } else {
+                Duration::new(300, 0)
+            }
+        } else {
+            Duration::new(300, 0)
+        };
+    tracing::debug!("Tenderming address: {:?}", address);
+    let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
+        WebSocketAddress::try_from(address.clone())?,
+        Some(websocket_timeout),
+    )?;
+
+    // It is better to subscribe to the transaction before it is broadcast
+    //
+    // Note that the `APPLIED_QUERY_KEY` key comes from a custom event
+    // created by the shell
+    let query = Query::from(EventType::NewBlock)
+        .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
+    wrapper_tx_subscription.subscribe(query)?;
+
+    // We also subscribe to the event emitted when the encrypted
+    // payload makes its way onto the blockchain
+    let mut decrypted_tx_subscription = {
+        let mut decrypted_tx_subscription = TendermintWebsocketClient::open(
+            WebSocketAddress::try_from(address.clone())?,
+            Some(websocket_timeout),
+        )?;
+        let query = Query::from(EventType::NewBlock)
+            .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
+        decrypted_tx_subscription.subscribe(query)?;
+        decrypted_tx_subscription
+    };
+
+    // Broadcast the supplied transaction
+    broadcast_tx(address, &to_broadcast).await?;
+
+    let parsed = {
+        let parsed = TxResponse::parse(
+            wrapper_tx_subscription.receive_response()?,
+            NamadaEventType::Accepted,
+            wrapper_hash,
+        );
+
+        println!(
+            "Transaction accepted with result: {}",
+            serde_json::to_string_pretty(&parsed).unwrap()
+        );
+        // The transaction is now on chain. We wait for it to be decrypted
+        // and applied
+        if parsed.code == 0.to_string() {
+            let parsed = TxResponse::parse(
+                decrypted_tx_subscription.receive_response()?,
+                NamadaEventType::Applied,
+                decrypted_hash.as_str(),
+            );
+            println!(
+                "Transaction applied with result: {}",
+                serde_json::to_string_pretty(&parsed).unwrap()
+            );
+            Ok(parsed)
+        } else {
+            Ok(parsed)
         }
     };
-    let url = JsonRpcAddress::try_from(&address)?.to_string();
 
-    // the filters for finding the relevant events
-    let wrapper_query = Query::from(EventType::NewBlockHeader)
-        .and_eq(ACCEPTED_QUERY_KEY, wrapper_hash.as_str());
-    let tx_query = Query::from(EventType::NewBlockHeader)
-        .and_eq(APPLIED_QUERY_KEY, decrypted_hash.as_str());
-
-    // broadcast the tx
-    if let Err(err) = broadcast_tx(address, &to_broadcast).await {
-        eprintln!("Encountered error while broadcasting transaction: {}", err);
-        safe_exit(1)
-    }
-
-    // get the event for the wrapper tx
-    let response =
-        fetch_event(&url, wrapper_query, wrapper_hash.as_str()).await?;
-    println!(
-        "Transaction accepted with result: {}",
-        serde_json::to_string_pretty(&response).unwrap()
-    );
-
-    // The transaction is now on chain. We wait for it to be decrypted
-    // and applied
-    if response.code == 0.to_string() {
-        // get the event for the inner tx
-        let response =
-            fetch_event(&url, tx_query, decrypted_hash.as_str()).await?;
-        println!(
-            "Transaction applied with result: {}",
-            serde_json::to_string_pretty(&response).unwrap()
-        );
-        Ok(response)
-    } else {
-        tracing::warn!(
-            "Received an error from the associated wrapper tx: {}",
-            response.code
-        );
-        Ok(response)
-    }
+    wrapper_tx_subscription.unsubscribe()?;
+    wrapper_tx_subscription.close();
+    decrypted_tx_subscription.unsubscribe()?;
+    decrypted_tx_subscription.close();
+    parsed
 }

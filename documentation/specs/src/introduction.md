@@ -2,31 +2,28 @@
 
 Welcome to the Namada specifications!
 
+## What is Namada? 
+
 Namada is a sovereign proof-of-stake blockchain, using Tendermint BFT consensus,
 that enables multi-asset private transfers for any native or non-native asset
-using a multi-asset shielded pool derived from the Sapling circuit. Namada features
-full IBC protocol support, a natively integrated Ethereum bridge, a modern proof-of-stake
-system with automatic reward compounding and cubic slashing, a stake-weighted governance
-signalling mechanism, and a proactive/retroactive public goods funding system.
-Users of shielded transfers are rewarded for their contributions
-to the privacy set in the form of native protocol tokens. A multi-asset shielded transfer wallet
-is provided in order to facilitate safe and private user interaction with the protocol.
+using a [multi-asset shielded pool](https://research.metastate.dev/multi-asset_shielded_pool/) derived from the [Sapling circuit](https://z.cash/upgrade/sapling/). Namada features full IBC protocol support, a natively integrated Ethereum bridge, a modern proof-of-stakesystem with automatic reward compounding and cubic slashing, a stake-weighted governance signalling mechanism, and a proactive/retroactive public goods funding system. Users of shielded transfers are rewarded for their contributions to the privacy set in the form of native protocol tokens. A multi-asset shielded transfer wallet is provided in order to facilitate safe and private user interaction with the protocol.
 
-### How does Namada relate to Anoma?
+You can learn more about Namada [here](https://medium.com/anomanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c).
+### What is Anoma?
 
-Namada is the first fractal instance launched as part of the Anoma ecosystem.
+The Anoma protocol is designed to facilitate the operation of networked fractal instances, which intercommunicate but can utilise varied state machines and security models. 
+A fractal instance is an instance of the Anoma consensus and execution protocols operated by a set of networked validators. Anoma’s fractal instance architecture is an attempt to build a platform which is architecturally homogeneous and with a heterogeneous security model. Thus, different fractal instances may specialise in different tasks and serve different communities. Privacy should be default and inherent in the systems we use for transacting.
 
-The Anoma protocol is designed to facilitate the operation of networked fractal instances,
-which intercommunicate but can utilise varied state machines and security models. Different
-fractal instances may specialise in different tasks and serve different communities. The Namada
-instance will be the first such fractal instance, and it will be focused exclusively on the use-case of private asset transfers.
+### How does Namada relate to Anoma? 
+
+The Namada instance will be the first such fractal instance, and it will be focused exclusively on the use-case of private asset transfers. Namada is a helpful stepping stone to finalise, test, and launch a protocol version that is simpler than the full
+Anoma protocol but still encapsulates a unified and useful set of features. 
 
 ### Raison d'être
 
-Safe and user-friendly multi-asset privacy doesn't yet exist in the blockchain ecosystem.
-Up until now users have had the choice of either a sovereign chain that reissues assets (e.g. Zcash)
-or a privacy preserving solution built on an existing smart contract chain (e.g. Tornado Cash on
-Ethereum). Both have large trade-offs: in the former case, users don't have
+Privacy should be default and inherent in the systems we use for transacting. Yet safe and user-friendly multi-asset privacy doesn't yet exist in the blockchain ecosystem.
+Up until now users have had the choice of either a sovereign chain that reissues assets (e.g. [Zcash](https://z.cash/))
+or a privacy preserving solution built on an existing smart contract chain. Both have large trade-offs: in the former case, users don't have
 assets that they actually want to transact with, and in the latter case, the restrictions
 of existing platforms mean that users leak a ton of metadata
 and the protocols are expensive and clunky to use.
@@ -36,15 +33,7 @@ and fungible or non-fungible assets (such as ERC20 tokens) sent over a custom Et
 reduces transfer costs and streamlines UX as much as possible. Once assets are on Namada,
 shielded transfers are cheap and all assets contribute to the same anonymity set.
 
-Namada is also a helpful stepping stone to finalise, test,
-and launch a protocol version that is simpler than the full
-Anoma protocol but still encapsulates a unified and useful
-set of features. There are reasons to expect that it may
-make sense for a fractal instance focused exclusively on
-shielded transfers to exist in the long-term, as it can
-provide throughput and user-friendliness guarantees which
-are more difficult to provide with a more general platform.
-Namada is designed to be such an instance.
+Users on Namada can earn rewards, retain privacy of assets, and contribute to the overall privacy set. 
 
 ### Layout of this specification
 

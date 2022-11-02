@@ -323,10 +323,14 @@ impl DB for RocksDB {
         let mut epoch = None;
         let mut pred_epochs = None;
         let mut address_gen = None;
-        for (key, bytes) in self.0.iterator_opt(
+        for value in self.0.iterator_opt(
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             read_opts,
         ) {
+            let (key, bytes) = match value {
+                Ok(data) => data,
+                Err(e) => return Err(Error::DBError(e.into_string())),
+            };
             let path = &String::from_utf8((*key).to_vec()).map_err(|e| {
                 Error::Temporary {
                     error: format!(
@@ -348,11 +352,8 @@ impl DB for RocksDB {
                                     types::decode(bytes)
                                         .map_err(Error::CodingError)?,
                                 ),
-                                Some(&"store") => merkle_tree_stores.set_store(
-                                    &st,
-                                    types::decode(bytes)
-                                        .map_err(Error::CodingError)?,
-                                ),
+                                Some(&"store") => merkle_tree_stores
+                                    .set_store(st.decode_store(bytes)?),
                                 _ => unknown_key_error(path)?,
                             }
                         }
@@ -484,7 +485,7 @@ impl DB for RocksDB {
                     .map_err(Error::KeyError)?;
                 batch.put(
                     store_key.to_string(),
-                    types::encode(merkle_tree_stores.store(st)),
+                    merkle_tree_stores.store(st).encode(),
                 );
             }
         }
@@ -593,8 +594,7 @@ impl DB for RocksDB {
                 .map_err(|e| Error::DBError(e.into_string()))?;
             match bytes {
                 Some(b) => {
-                    let store = types::decode(b).map_err(Error::CodingError)?;
-                    merkle_tree_stores.set_store(st, store);
+                    merkle_tree_stores.set_store(st.decode_store(b)?);
                 }
                 None => return Ok(None),
             }
@@ -806,24 +806,36 @@ impl<'iter> DBIter<'iter> for RocksDB {
         &'iter self,
         prefix: &Key,
     ) -> PersistentPrefixIterator<'iter> {
-        let db_prefix = "subspace/".to_owned();
-        let prefix = format!("{}{}", db_prefix, prefix);
-
-        let mut read_opts = ReadOptions::default();
-        // don't use the prefix bloom filter
-        read_opts.set_total_order_seek(true);
-        let mut upper_prefix = prefix.clone().into_bytes();
-        if let Some(last) = upper_prefix.pop() {
-            upper_prefix.push(last + 1);
-        }
-        read_opts.set_iterate_upper_bound(upper_prefix);
-
-        let iter = self.0.iterator_opt(
-            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
-            read_opts,
-        );
-        PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
+        iter_prefix(self, prefix, Direction::Forward)
     }
+
+    fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter {
+        iter_prefix(self, prefix, Direction::Reverse)
+    }
+}
+
+fn iter_prefix<'iter>(
+    db: &'iter RocksDB,
+    prefix: &Key,
+    direction: Direction,
+) -> PersistentPrefixIterator<'iter> {
+    let db_prefix = "subspace/".to_owned();
+    let prefix = format!("{}{}", db_prefix, prefix);
+
+    let mut read_opts = ReadOptions::default();
+    // don't use the prefix bloom filter
+    read_opts.set_total_order_seek(true);
+    let mut upper_prefix = prefix.clone().into_bytes();
+    if let Some(last) = upper_prefix.pop() {
+        upper_prefix.push(last + 1);
+    }
+    read_opts.set_iterate_upper_bound(upper_prefix);
+
+    let iter = db.0.iterator_opt(
+        IteratorMode::From(prefix.as_bytes(), direction),
+        read_opts,
+    );
+    PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
 }
 
 #[derive(Debug)]
@@ -837,7 +849,9 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
     /// Returns the next pair and the gas cost
     fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
         match self.0.iter.next() {
-            Some((key, val)) => {
+            Some(result) => {
+                let (key, val) =
+                    result.expect("Prefix iterator shouldn't fail");
                 let key = String::from_utf8(key.to_vec())
                     .expect("Cannot convert from bytes to key string");
                 match key.strip_prefix(&self.0.db_prefix) {

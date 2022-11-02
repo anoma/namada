@@ -3,10 +3,10 @@
 use color_eyre::eyre::Result;
 use namada_apps::cli;
 use namada_apps::cli::cmds::*;
-use namada_apps::client::{gossip, rpc, tx, utils};
+use namada_apps::client::{rpc, tx, utils};
 
 pub async fn main() -> Result<()> {
-    match cli::anoma_client_cli() {
+    match cli::anoma_client_cli()? {
         cli::AnomaClient::WithContext(cmd_box) => {
             let (cmd, ctx) = *cmd_box;
             use AnomaClientWithContext as Sub;
@@ -27,12 +27,6 @@ pub async fn main() -> Result<()> {
                 Sub::TxInitValidator(TxInitValidator(args)) => {
                     tx::submit_init_validator(ctx, args).await;
                 }
-                Sub::TxInitNft(TxInitNft(args)) => {
-                    tx::submit_init_nft(ctx, args).await;
-                }
-                Sub::TxMintNft(TxMintNft(args)) => {
-                    tx::submit_mint_nft(ctx, args).await;
-                }
                 Sub::TxInitProposal(TxInitProposal(args)) => {
                     tx::submit_init_proposal(ctx, args).await;
                 }
@@ -51,6 +45,9 @@ pub async fn main() -> Result<()> {
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
                     rpc::query_epoch(args).await;
+                }
+                Sub::QueryBlock(QueryBlock(args)) => {
+                    rpc::query_block(args).await;
                 }
                 Sub::QueryBalance(QueryBalance(args)) => {
                     rpc::query_balance(ctx, args).await;
@@ -80,19 +77,15 @@ pub async fn main() -> Result<()> {
                 Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
                     rpc::query_protocol_parameters(ctx, args).await;
                 }
-                // Gossip cmds
-                Sub::Intent(Intent(args)) => {
-                    gossip::gossip_intent(ctx, args).await;
-                }
-                Sub::SubscribeTopic(SubscribeTopic(args)) => {
-                    gossip::subscribe_topic(ctx, args).await;
-                }
             }
         }
         cli::AnomaClient::WithoutContext(cmd, global_args) => match cmd {
             // Utils cmds
             Utils::JoinNetwork(JoinNetwork(args)) => {
                 utils::join_network(global_args, args).await
+            }
+            Utils::FetchWasms(FetchWasms(args)) => {
+                utils::fetch_wasms(global_args, args).await
             }
             Utils::InitNetwork(InitNetwork(args)) => {
                 utils::init_network(global_args, args)

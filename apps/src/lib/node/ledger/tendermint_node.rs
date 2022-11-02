@@ -4,20 +4,21 @@ use std::process::Stdio;
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
-use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
-use tendermint::Genesis;
-use tendermint_config::net::Address as TendermintAddress;
-use tendermint_config::{Error as TendermintError, TendermintConfig};
 use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 use crate::config;
+use crate::facade::tendermint::Genesis;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_config::{
+    Error as TendermintError, TendermintConfig,
+};
 
 /// Env. var to output Tendermint log to stdout
 pub const ENV_VAR_TM_STDOUT: &str = "ANOMA_TM_STDOUT";
@@ -95,35 +96,23 @@ pub async fn run(
 
     #[cfg(feature = "dev")]
     {
-        let genesis = &crate::config::genesis::genesis();
         let consensus_key = crate::wallet::defaults::validator_keypair();
         // write the validator key file if it didn't already exist
         if !has_validator_key {
-            write_validator_key_async(
-                &home_dir,
-                &genesis
-                    .validators
-                    .first()
-                    .expect(
-                        "There should be one genesis validator in \"dev\" mode",
-                    )
-                    .pos_data
-                    .address,
-                &consensus_key,
-            )
-            .await;
+            write_validator_key_async(&home_dir, &consensus_key).await;
         }
     }
+    #[cfg(feature = "abcipp")]
     write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
+    #[cfg(not(feature = "abcipp"))]
+    write_tm_genesis(&home_dir, chain_id, genesis_time).await;
 
     update_tendermint_config(&home_dir, config).await?;
 
     let mut tendermint_node = Command::new(&tendermint_path);
     tendermint_node.args(&[
         "start",
-        "--mode",
-        &mode,
-        "--proxy-app",
+        "--proxy_app",
         &ledger_address,
         "--home",
         &home_dir_string,
@@ -182,7 +171,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     // reset all the Tendermint state, if any
     std::process::Command::new(tendermint_path)
         .args(&[
-            "reset",
+            "reset-state",
             "unsafe-all",
             // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
             // "--log-level=\"*debug\"",
@@ -198,33 +187,46 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
 
 /// Convert a common signing scheme validator key into JSON for
 /// Tendermint
-fn validator_key_to_json<SK: SecretKey>(
-    address: &Address,
-    sk: &SK,
+fn validator_key_to_json(
+    sk: &common::SecretKey,
 ) -> std::result::Result<serde_json::Value, ParseSecretKeyError> {
-    let address = address.raw_hash().unwrap();
-    ed25519::SecretKey::try_from_sk(sk).map(|sk| {
-        let pk: ed25519::PublicKey = sk.ref_to();
-        let ck_arr =
-            [sk.try_to_vec().unwrap(), pk.try_to_vec().unwrap()].concat();
-        json!({
-            "address": address,
-            "pub_key": {
-                "type": "tendermint/PubKeyEd25519",
-                "value": base64::encode(pk.try_to_vec().unwrap()),
-            },
-            "priv_key": {
-                "type": "tendermint/PrivKeyEd25519",
-                "value": base64::encode(ck_arr),
-            }
-        })
-    })
+    let raw_hash = tm_consensus_key_raw_hash(&sk.ref_to());
+    let (id_str, pk_arr, kp_arr) = match sk {
+        common::SecretKey::Ed25519(_) => {
+            let sk_ed: ed25519::SecretKey = sk.try_to_sk().unwrap();
+            let keypair = [
+                sk_ed.try_to_vec().unwrap(),
+                sk_ed.ref_to().try_to_vec().unwrap(),
+            ]
+            .concat();
+            ("Ed25519", sk_ed.ref_to().try_to_vec().unwrap(), keypair)
+        }
+        common::SecretKey::Secp256k1(_) => {
+            let sk_sec: secp256k1::SecretKey = sk.try_to_sk().unwrap();
+            (
+                "Secp256k1",
+                sk_sec.ref_to().try_to_vec().unwrap(),
+                sk_sec.try_to_vec().unwrap(),
+            )
+        }
+    };
+
+    Ok(json!({
+        "address": raw_hash,
+        "pub_key": {
+            "type": format!("tendermint/PubKey{}",id_str),
+            "value": base64::encode(pk_arr),
+        },
+        "priv_key": {
+            "type": format!("tendermint/PrivKey{}",id_str),
+            "value": base64::encode(kp_arr),
+        }
+    }))
 }
 
 /// Initialize validator private key for Tendermint
 pub async fn write_validator_key_async(
     home_dir: impl AsRef<Path>,
-    address: &Address,
     consensus_key: &common::SecretKey,
 ) {
     let home_dir = home_dir.as_ref();
@@ -241,7 +243,7 @@ pub async fn write_validator_key_async(
         .open(&path)
         .await
         .expect("Couldn't create private validator key file");
-    let key = validator_key_to_json(address, consensus_key).unwrap();
+    let key = validator_key_to_json(consensus_key).unwrap();
     let data = serde_json::to_vec_pretty(&key)
         .expect("Couldn't encode private validator key file");
     file.write_all(&data[..])
@@ -252,7 +254,6 @@ pub async fn write_validator_key_async(
 /// Initialize validator private key for Tendermint
 pub fn write_validator_key(
     home_dir: impl AsRef<Path>,
-    address: &Address,
     consensus_key: &common::SecretKey,
 ) {
     let home_dir = home_dir.as_ref();
@@ -267,7 +268,7 @@ pub fn write_validator_key(
         .truncate(true)
         .open(&path)
         .expect("Couldn't create private validator key file");
-    let key = validator_key_to_json(address, consensus_key).unwrap();
+    let key = validator_key_to_json(consensus_key).unwrap();
     serde_json::to_writer_pretty(file, &key)
         .expect("Couldn't write private validator key file");
 }
@@ -335,13 +336,10 @@ async fn update_tendermint_config(
     config.instrumentation.namespace =
         tendermint_config.instrumentation_namespace;
 
-    // setup the events log
+    #[cfg(feature = "abciplus")]
     {
-        // keep events for one minute
-        config.rpc.event_log_window_size =
-            std::time::Duration::from_secs(59).into();
-        // we do not limit the size of the events log
-        config.rpc.event_log_max_items = 0;
+        config.consensus.timeout_commit =
+            tendermint_config.consensus_timeout_commit;
     }
 
     let mut file = OpenOptions::new()
@@ -361,7 +359,7 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    config: &config::Tendermint,
+    #[cfg(feature = "abcipp")] config: &config::Tendermint,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
@@ -382,8 +380,11 @@ async fn write_tm_genesis(
     genesis.genesis_time = genesis_time
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
-    genesis.consensus_params.timeout.commit =
-        config.consensus_timeout_commit.into();
+    #[cfg(feature = "abcipp")]
+    {
+        genesis.consensus_params.timeout.commit =
+            config.consensus_timeout_commit.into();
+    }
 
     let mut file = OpenOptions::new()
         .write(true)

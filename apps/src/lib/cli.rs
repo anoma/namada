@@ -9,7 +9,8 @@
 pub mod context;
 mod utils;
 
-use clap::{crate_authors, AppSettings, ArgMatches};
+use clap::{AppSettings, ArgGroup, ArgMatches};
+use color_eyre::eyre::Result;
 pub use utils::safe_exit;
 use utils::*;
 
@@ -17,7 +18,7 @@ pub use self::context::Context;
 
 include!("../../version.rs");
 
-const APP_NAME: &str = "Anoma";
+const APP_NAME: &str = "Namada";
 
 // Main Anoma sub-commands
 const NODE_CMD: &str = "node";
@@ -41,18 +42,13 @@ pub mod cmds {
 
         // Inlined commands from the node.
         Ledger(Ledger),
-        Gossip(Gossip),
-        Matchmaker(Matchmaker),
 
         // Inlined commands from the client.
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxUpdateVp(TxUpdateVp),
-        TxInitNft(TxInitNft),
-        TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
-        Intent(Intent),
     }
 
     impl Cmd for Anoma {
@@ -61,16 +57,11 @@ pub mod cmds {
                 .subcommand(AnomaClient::def())
                 .subcommand(AnomaWallet::def())
                 .subcommand(Ledger::def())
-                .subcommand(Gossip::def())
-                .subcommand(Matchmaker::def())
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxUpdateVp::def())
-                .subcommand(TxInitNft::def())
-                .subcommand(TxMintNft::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
-                .subcommand(Intent::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -78,31 +69,21 @@ pub mod cmds {
             let client = SubCmd::parse(matches).map(Self::Client);
             let wallet = SubCmd::parse(matches).map(Self::Wallet);
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
-            let gossip = SubCmd::parse(matches).map(Self::Gossip);
-            let matchmaker = SubCmd::parse(matches).map(Self::Matchmaker);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
             let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
-            let tx_nft_create = SubCmd::parse(matches).map(Self::TxInitNft);
-            let tx_nft_mint = SubCmd::parse(matches).map(Self::TxMintNft);
             let tx_init_proposal =
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
                 SubCmd::parse(matches).map(Self::TxVoteProposal);
-            let intent = SubCmd::parse(matches).map(Self::Intent);
             node.or(client)
                 .or(wallet)
                 .or(ledger)
-                .or(gossip)
-                .or(matchmaker)
                 .or(tx_custom)
                 .or(tx_transfer)
                 .or(tx_update_vp)
-                .or(tx_nft_create)
-                .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
-                .or(intent)
         }
     }
 
@@ -112,25 +93,18 @@ pub mod cmds {
     #[allow(clippy::large_enum_variant)]
     pub enum AnomaNode {
         Ledger(Ledger),
-        Gossip(Gossip),
-        Matchmaker(Matchmaker),
         Config(Config),
     }
 
     impl Cmd for AnomaNode {
         fn add_sub(app: App) -> App {
-            app.subcommand(Ledger::def())
-                .subcommand(Gossip::def())
-                .subcommand(Matchmaker::def())
-                .subcommand(Config::def())
+            app.subcommand(Ledger::def()).subcommand(Config::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
-            let gossip = SubCmd::parse(matches).map(Self::Gossip);
-            let matchmaker = SubCmd::parse(matches).map(Self::Matchmaker);
             let config = SubCmd::parse(matches).map(Self::Config);
-            ledger.or(gossip).or(matchmaker).or(config)
+            ledger.or(config)
         }
     }
     impl SubCmd for AnomaNode {
@@ -173,9 +147,6 @@ pub mod cmds {
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxInitValidator::def().display_order(1))
-                // Nft transactions
-                .subcommand(TxInitNft::def().display_order(1))
-                .subcommand(TxMintNft::def().display_order(1))
                 // Proposal transactions
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
@@ -185,6 +156,7 @@ pub mod cmds {
                 .subcommand(Withdraw::def().display_order(2))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(3))
+                .subcommand(QueryBlock::def().display_order(3))
                 .subcommand(QueryBalance::def().display_order(3))
                 .subcommand(QueryBonds::def().display_order(3))
                 .subcommand(QueryVotingPower::def().display_order(3))
@@ -194,9 +166,6 @@ pub mod cmds {
                 .subcommand(QueryProposal::def().display_order(3))
                 .subcommand(QueryProposalResult::def().display_order(3))
                 .subcommand(QueryProtocolParameters::def().display_order(3))
-                // Intents
-                .subcommand(Intent::def().display_order(4))
-                .subcommand(SubscribeTopic::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -209,8 +178,6 @@ pub mod cmds {
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
-            let tx_nft_create = Self::parse_with_ctx(matches, TxInitNft);
-            let tx_nft_mint = Self::parse_with_ctx(matches, TxMintNft);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
@@ -219,6 +186,7 @@ pub mod cmds {
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
+            let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_voting_power =
@@ -231,22 +199,19 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
-            let intent = Self::parse_with_ctx(matches, Intent);
-            let subscribe_topic = Self::parse_with_ctx(matches, SubscribeTopic);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
                 .or(tx_update_vp)
                 .or(tx_init_account)
                 .or(tx_init_validator)
-                .or(tx_nft_create)
-                .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
                 .or(query_epoch)
+                .or(query_block)
                 .or(query_balance)
                 .or(query_bonds)
                 .or(query_voting_power)
@@ -256,8 +221,6 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
-                .or(intent)
-                .or(subscribe_topic)
                 .or(utils)
         }
     }
@@ -300,14 +263,13 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
-        TxInitNft(TxInitNft),
-        TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         Bond(Bond),
         Unbond(Unbond),
         Withdraw(Withdraw),
         QueryEpoch(QueryEpoch),
+        QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
         QueryVotingPower(QueryVotingPower),
@@ -316,9 +278,6 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
-        // Gossip cmds
-        Intent(Intent),
-        SubscribeTopic(SubscribeTopic),
     }
 
     #[derive(Clone, Debug)]
@@ -480,7 +439,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
         Gen(AddressGen),
-        Find(AddressFind),
+        Find(AddressOrAliasFind),
         List(AddressList),
         Add(AddressAdd),
     }
@@ -506,7 +465,7 @@ pub mod cmds {
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(AddressGen::def())
-                .subcommand(AddressFind::def())
+                .subcommand(AddressOrAliasFind::def())
                 .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
         }
@@ -538,21 +497,23 @@ pub mod cmds {
 
     /// Find an address by its alias
     #[derive(Clone, Debug)]
-    pub struct AddressFind(pub args::AddressFind);
+    pub struct AddressOrAliasFind(pub args::AddressOrAliasFind);
 
-    impl SubCmd for AddressFind {
+    impl SubCmd for AddressOrAliasFind {
         const CMD: &'static str = "find";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| AddressFind(args::AddressFind::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                AddressOrAliasFind(args::AddressOrAliasFind::parse(matches))
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Find an address by its alias.")
-                .add_args::<args::AddressFind>()
+                .about(
+                    "Find an address by its alias or an alias by its address.",
+                )
+                .add_args::<args::AddressOrAliasFind>()
         }
     }
 
@@ -654,76 +615,6 @@ pub mod cmds {
                 "Delete Anoma ledger node's and Tendermint node's storage \
                  data.",
             )
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub enum Gossip {
-        Run(GossipRun),
-    }
-
-    impl SubCmd for Gossip {
-        const CMD: &'static str = "gossip";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let run = SubCmd::parse(matches).map(Gossip::Run);
-                run
-                    // The `run` command is the default if no sub-command given
-                    .or_else(|| {
-                        Some(Gossip::Run(GossipRun(args::GossipRun::parse(
-                            matches,
-                        ))))
-                    })
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Gossip node sub-commands. If no sub-command specified, \
-                     defaults to run the node.",
-                )
-                .subcommand(GossipRun::def())
-                .add_args::<args::GossipRun>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct Matchmaker(pub args::Matchmaker);
-
-    impl SubCmd for Matchmaker {
-        const CMD: &'static str = "matchmaker";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Matchmaker(args::Matchmaker::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Run a matchmaker.")
-                .add_args::<args::Matchmaker>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct GossipRun(pub args::GossipRun);
-
-    impl SubCmd for GossipRun {
-        const CMD: &'static str = "run";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| GossipRun(args::GossipRun::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Run a gossip node.")
-                .add_args::<args::GossipRun>()
         }
     }
 
@@ -1033,6 +924,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryBlock(pub args::Query);
+
+    impl SubCmd for QueryBlock {
+        const CMD: &'static str = "block";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryBlock(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the last committed block.")
+                .add_args::<args::Query>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryBalance(pub args::QueryBalance);
 
     impl SubCmd for QueryBalance {
@@ -1131,50 +1041,6 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxInitNft(pub args::NftCreate);
-
-    impl SubCmd for TxInitNft {
-        const CMD: &'static str = "init-nft";
-
-        fn parse(matches: &ArgMatches) -> Option<Self>
-        where
-            Self: Sized,
-        {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxInitNft(args::NftCreate::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Create a new NFT.")
-                .add_args::<args::NftCreate>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct TxMintNft(pub args::NftMint);
-
-    impl SubCmd for TxMintNft {
-        const CMD: &'static str = "mint-nft";
-
-        fn parse(matches: &ArgMatches) -> Option<Self>
-        where
-            Self: Sized,
-        {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxMintNft(args::NftMint::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Mint new NFT tokens.")
-                .add_args::<args::NftMint>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
     pub struct TxInitProposal(pub args::InitProposal);
 
     impl SubCmd for TxInitProposal {
@@ -1219,49 +1085,9 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct Intent(pub args::Intent);
-
-    impl SubCmd for Intent {
-        const CMD: &'static str = "intent";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Intent(args::Intent::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Send an intent.")
-                .add_args::<args::Intent>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct SubscribeTopic(pub args::SubscribeTopic);
-
-    impl SubCmd for SubscribeTopic {
-        const CMD: &'static str = "subscribe-topic";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                SubscribeTopic(args::SubscribeTopic::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Subscribe intent gossip node with a matchmaker to a \
-                     topic.",
-                )
-                .add_args::<args::SubscribeTopic>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
+        FetchWasms(FetchWasms),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
     }
@@ -1273,11 +1099,15 @@ pub mod cmds {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let join_network =
                     SubCmd::parse(matches).map(Self::JoinNetwork);
+                let fetch_wasms = SubCmd::parse(matches).map(Self::FetchWasms);
                 let init_network =
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
-                join_network.or(init_network).or(init_genesis)
+                join_network
+                    .or(fetch_wasms)
+                    .or(init_network)
+                    .or(init_genesis)
             })
         }
 
@@ -1285,6 +1115,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Utilities.")
                 .subcommand(JoinNetwork::def())
+                .subcommand(FetchWasms::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -1307,6 +1138,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Configure Anoma to join an existing network.")
                 .add_args::<args::JoinNetwork>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FetchWasms(pub args::FetchWasms);
+
+    impl SubCmd for FetchWasms {
+        const CMD: &'static str = "fetch-wasms";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::FetchWasms::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Ensure pre-built wasms are present")
+                .add_args::<args::FetchWasms>()
         }
     }
 
@@ -1355,31 +1205,26 @@ pub mod cmds {
 
 pub mod args {
 
-    use std::convert::TryFrom;
     use std::env;
-    use std::fs::File;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use libp2p::Multiaddr;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::governance::ProposalVote;
-    use namada::types::intent::{DecimalWrapper, Exchange};
     use namada::types::key::*;
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
     use namada::types::transaction::GasLimit;
-    use serde::Deserialize;
-    use tendermint::Timeout;
-    use tendermint_config::net::Address as TendermintAddress;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
-    use super::ArgMatches;
+    use super::{ArgGroup, ArgMatches};
     use crate::config;
     use crate::config::TendermintMode;
+    use crate::facade::tendermint::Timeout;
+    use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
     const ADDRESS: Arg<WalletAddress> = arg("address");
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
@@ -1413,19 +1258,13 @@ pub mod args {
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("fee-token", DefaultFn(|| "XAN".into()));
+        arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".into()));
     const FORCE: ArgFlag = flag("force");
+    const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_LIMIT: ArgDefault<token::Amount> =
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
-    const INTENT_GOSSIPER_ADDR: ArgDefault<SocketAddr> = arg_default(
-        "intent-gossiper",
-        DefaultFn(|| {
-            let raw = "127.0.0.1:26661";
-            SocketAddr::from_str(raw).unwrap()
-        }),
-    );
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -1437,13 +1276,8 @@ pub mod args {
 
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
-    const MATCHMAKER_PATH: ArgOpt<PathBuf> = arg_opt("matchmaker-path");
     const MODE: ArgOpt<String> = arg_opt("mode");
-    const MULTIADDR_OPT: ArgOpt<Multiaddr> = arg_opt("address");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
-    const NODE_OPT: ArgOpt<String> = arg_opt("node");
-    const NODE: Arg<String> = arg("node");
-    const NFT_ADDRESS: Arg<Address> = arg("nft-address");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
     const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
@@ -1453,23 +1287,22 @@ pub mod args {
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
+    const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
     const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
-    const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
+    const SCHEME: ArgDefault<SchemeType> =
+        arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
     const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
     const SOURCE: Arg<WalletAddress> = arg("source");
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
+    const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     const TARGET: Arg<WalletAddress> = arg("target");
-    const TO_STDOUT: ArgFlag = flag("stdout");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     const TOKEN: Arg<WalletAddress> = arg("token");
-    const TOPIC_OPT: ArgOpt<String> = arg_opt("topic");
-    const TOPIC: Arg<String> = arg("topic");
-    const TX_CODE_PATH: ArgOpt<PathBuf> = arg_opt("tx-code-path");
     const TX_HASH: Arg<String> = arg("tx-hash");
     const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
@@ -1521,9 +1354,7 @@ pub mod args {
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
-                     transactions and matchmaker files. This must not be an \
-                     absolute path as the directory is nested inside the \
-                     chain directory. This value can also be set via \
+                     transactions. This value can also be set via \
                      `ANOMA_WASM_DIR` environment variable, but the argument \
                      takes precedence, if specified.",
                 ))
@@ -1608,6 +1439,8 @@ pub mod args {
         pub target: WalletAddress,
         /// Transferred token address
         pub token: WalletAddress,
+        /// Transferred token address
+        pub sub_prefix: Option<String>,
         /// Transferred token amount
         pub amount: token::Amount,
     }
@@ -1618,12 +1451,14 @@ pub mod args {
             let source = SOURCE.parse(matches);
             let target = TARGET.parse(matches);
             let token = TOKEN.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
             Self {
                 tx,
                 source,
                 target,
                 token,
+                sub_prefix,
                 amount,
             }
         }
@@ -1636,6 +1471,7 @@ pub mod args {
                 ))
                 .arg(TARGET.def().about("The target account address."))
                 .arg(TOKEN.def().about("The transfer token."))
+                .arg(SUB_PREFIX.def().about("The token's sub prefix."))
                 .arg(AMOUNT.def().about("The amount to transfer in decimal."))
         }
     }
@@ -1689,6 +1525,7 @@ pub mod args {
     pub struct TxInitValidator {
         pub tx: Tx,
         pub source: WalletAddress,
+        pub scheme: SchemeType,
         pub account_key: Option<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
         pub rewards_account_key: Option<WalletPublicKey>,
@@ -1702,6 +1539,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
+            let scheme = SCHEME.parse(matches);
             let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let rewards_account_key = REWARDS_KEY.parse(matches);
@@ -1712,6 +1550,7 @@ pub mod args {
             Self {
                 tx,
                 source,
+                scheme,
                 account_key,
                 consensus_key,
                 rewards_account_key,
@@ -1726,6 +1565,10 @@ pub mod args {
             app.add_args::<Tx>()
                 .arg(SOURCE.def().about(
                     "The source account's address that signs the transaction.",
+                ))
+                .arg(SCHEME.def().about(
+                    "The key scheme/type used for the validator keys. \
+                     Currently supports ed25519 and secp256k1.",
                 ))
                 .arg(VALIDATOR_ACCOUNT_KEY.def().about(
                     "A public key for the validator account. A new one will \
@@ -2107,66 +1950,6 @@ pub mod args {
         }
     }
 
-    // Transaction to create a new nft
-    #[derive(Clone, Debug)]
-    pub struct NftCreate {
-        /// Common tx argumentsips
-        pub tx: Tx,
-        /// Path to the nft file description
-        pub nft_data: PathBuf,
-    }
-
-    impl Args for NftCreate {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let data_path = DATA_PATH.parse(matches);
-
-            Self {
-                tx,
-                nft_data: data_path,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Tx>()
-                .arg(DATA_PATH.def().about("The path nft description file."))
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct NftMint {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// The nft address
-        pub nft_address: Address,
-        /// The nft token description
-        pub nft_data: PathBuf,
-    }
-
-    impl Args for NftMint {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let nft_address = NFT_ADDRESS.parse(matches);
-            let data_path = DATA_PATH.parse(matches);
-
-            Self {
-                tx,
-                nft_address,
-                nft_data: data_path,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Tx>()
-                .arg(NFT_ADDRESS.def().about("The nft address."))
-                .arg(
-                    DATA_PATH.def().about(
-                        "The data path file that describes the nft tokens.",
-                    ),
-                )
-        }
-    }
-
     /// Query token balance(s)
     #[derive(Clone, Debug)]
     pub struct QueryBalance {
@@ -2176,6 +1959,8 @@ pub mod args {
         pub owner: Option<WalletAddress>,
         /// Address of a token
         pub token: Option<WalletAddress>,
+        /// Sub prefix of an account
+        pub sub_prefix: Option<String>,
     }
 
     impl Args for QueryBalance {
@@ -2183,10 +1968,12 @@ pub mod args {
             let query = Query::parse(matches);
             let owner = OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
             Self {
                 query,
                 owner,
                 token,
+                sub_prefix,
             }
         }
 
@@ -2202,67 +1989,11 @@ pub mod args {
                         .def()
                         .about("The token's address whose balance to query."),
                 )
-        }
-    }
-
-    /// Helper struct for generating intents
-    #[derive(Debug, Clone, Deserialize)]
-    pub struct ExchangeDefinition {
-        /// The source address
-        pub addr: String,
-        /// The token to be sold
-        pub token_sell: String,
-        /// The minimum rate
-        pub rate_min: String,
-        /// The maximum amount of token to be sold
-        pub max_sell: String,
-        /// The token to be bought
-        pub token_buy: String,
-        /// The amount of token to be bought
-        pub min_buy: String,
-        /// The path to the wasm vp code
-        pub vp_path: Option<String>,
-    }
-
-    impl TryFrom<ExchangeDefinition> for Exchange {
-        type Error = &'static str;
-
-        fn try_from(
-            value: ExchangeDefinition,
-        ) -> Result<Exchange, Self::Error> {
-            let vp = if let Some(path) = value.vp_path {
-                if let Ok(wasm) = std::fs::read(path.clone()) {
-                    Some(wasm)
-                } else {
-                    eprintln!("File {} was not found.", path);
-                    None
-                }
-            } else {
-                None
-            };
-
-            let addr = Address::decode(value.addr)
-                .expect("Addr should be a valid address");
-            let token_buy = Address::decode(value.token_buy)
-                .expect("Token_buy should be a valid address");
-            let token_sell = Address::decode(value.token_sell)
-                .expect("Token_sell should be a valid address");
-            let min_buy = token::Amount::from_str(&value.min_buy)
-                .expect("Min_buy must be convertible to number");
-            let max_sell = token::Amount::from_str(&value.max_sell)
-                .expect("Max_sell must be convertible to number");
-            let rate_min = DecimalWrapper::from_str(&value.rate_min)
-                .expect("Max_sell must be convertible to decimal.");
-
-            Ok(Exchange {
-                addr,
-                token_sell,
-                rate_min,
-                max_sell,
-                token_buy,
-                min_buy,
-                vp,
-            })
+                .arg(
+                    SUB_PREFIX.def().about(
+                        "The token's sub prefix whose balance to query.",
+                    ),
+                )
         }
     }
 
@@ -2384,218 +2115,6 @@ pub mod args {
                 .arg(STORAGE_KEY.def().about("Storage key"))
         }
     }
-    /// Intent arguments
-    #[derive(Clone, Debug)]
-    pub struct Intent {
-        /// Gossip node address
-        pub node_addr: Option<String>,
-        /// Intent topic
-        pub topic: Option<String>,
-        /// Source address
-        pub source: Option<WalletAddress>,
-        /// Signing key
-        pub signing_key: Option<WalletKeypair>,
-        /// Exchanges description
-        pub exchanges: Vec<Exchange>,
-        /// The address of the ledger node as host:port
-        pub ledger_address: TendermintAddress,
-        /// Print output to stdout
-        pub to_stdout: bool,
-    }
-
-    impl Args for Intent {
-        fn parse(matches: &ArgMatches) -> Self {
-            let node_addr = NODE_OPT.parse(matches);
-            let data_path = DATA_PATH.parse(matches);
-            let source = SOURCE_OPT.parse(matches);
-            let signing_key = SIGNING_KEY_OPT.parse(matches);
-            let to_stdout = TO_STDOUT.parse(matches);
-            let topic = TOPIC_OPT.parse(matches);
-
-            let file = File::open(&data_path).expect("File must exist.");
-            let exchange_definitions: Vec<ExchangeDefinition> =
-                serde_json::from_reader(file)
-                    .expect("JSON was not well-formatted");
-
-            let exchanges: Vec<Exchange> = exchange_definitions
-                .iter()
-                .map(|item| {
-                    Exchange::try_from(item.clone()).expect(
-                        "Conversion from ExchangeDefinition to Exchange \
-                         should not fail.",
-                    )
-                })
-                .collect();
-            let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
-
-            Self {
-                node_addr,
-                topic,
-                source,
-                signing_key,
-                exchanges,
-                ledger_address,
-                to_stdout,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                NODE_OPT
-                    .def()
-                    .about("The gossip node address.")
-                    .conflicts_with(TO_STDOUT.name),
-            )
-            .arg(DATA_PATH.def().about(
-                "The data of the intent, that contains all value necessary \
-                 for the matchmaker.",
-            ))
-            .arg(
-                SOURCE_OPT
-                    .def()
-                    .about(
-                        "Sign the intent with the key of a given address or \
-                         address alias from your wallet.",
-                    )
-                    .conflicts_with(SIGNING_KEY_OPT.name),
-            )
-            .arg(
-                SIGNING_KEY_OPT
-                    .def()
-                    .about(
-                        "Sign the intent with the key for the given public \
-                         key, public key hash or alias from your wallet.",
-                    )
-                    .conflicts_with(SOURCE_OPT.name),
-            )
-            .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
-            .arg(
-                TOPIC_OPT
-                    .def()
-                    .about("The subnetwork where the intent should be sent to.")
-                    .conflicts_with(TO_STDOUT.name),
-            )
-            .arg(
-                TO_STDOUT
-                    .def()
-                    .about(
-                        "Echo the serialized intent to stdout. Note that with \
-                         this option, the intent won't be submitted to the \
-                         intent gossiper RPC.",
-                    )
-                    .conflicts_with_all(&[NODE_OPT.name, TOPIC.name]),
-            )
-        }
-    }
-
-    /// Subscribe intent topic arguments
-    #[derive(Clone, Debug)]
-    pub struct SubscribeTopic {
-        /// Gossip node address
-        pub node_addr: String,
-        /// Intent topic
-        pub topic: String,
-    }
-
-    impl Args for SubscribeTopic {
-        fn parse(matches: &ArgMatches) -> Self {
-            let node_addr = NODE.parse(matches);
-            let topic = TOPIC.parse(matches);
-            Self { node_addr, topic }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(NODE.def().about("The gossip node address.")).arg(
-                TOPIC
-                    .def()
-                    .about("The new topic of interest for that node."),
-            )
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct GossipRun {
-        pub addr: Option<Multiaddr>,
-        pub rpc: Option<SocketAddr>,
-    }
-
-    impl Args for GossipRun {
-        fn parse(matches: &ArgMatches) -> Self {
-            let addr = MULTIADDR_OPT.parse(matches);
-            let rpc = RPC_SOCKET_ADDR.parse(matches);
-            Self { addr, rpc }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                MULTIADDR_OPT
-                    .def()
-                    .about("Gossip service address as host:port."),
-            )
-            .arg(RPC_SOCKET_ADDR.def().about("Enable RPC service."))
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct Matchmaker {
-        pub matchmaker_path: Option<PathBuf>,
-        pub tx_code_path: Option<PathBuf>,
-        pub intent_gossiper_addr: SocketAddr,
-        pub ledger_addr: TendermintAddress,
-        pub tx_signing_key: WalletKeypair,
-        pub tx_source_address: WalletAddress,
-    }
-
-    impl Args for Matchmaker {
-        fn parse(matches: &ArgMatches) -> Self {
-            let intent_gossiper_addr = INTENT_GOSSIPER_ADDR.parse(matches);
-            let matchmaker_path = MATCHMAKER_PATH.parse(matches);
-            let tx_code_path = TX_CODE_PATH.parse(matches);
-            let ledger_addr = LEDGER_ADDRESS_DEFAULT.parse(matches);
-            let tx_signing_key = SIGNING_KEY.parse(matches);
-            let tx_source_address = SOURCE.parse(matches);
-            Self {
-                intent_gossiper_addr,
-                matchmaker_path,
-                tx_code_path,
-                ledger_addr,
-                tx_signing_key,
-                tx_source_address,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(INTENT_GOSSIPER_ADDR.def().about(
-                "Intent Gossiper endpoint for matchmaker connections as \
-                 \"{host}:{port}\".",
-            ))
-            .arg(MATCHMAKER_PATH.def().about(
-                "The file name of the matchmaker compiled to a dynamic \
-                 library (the filename extension is optional).",
-            ))
-            .arg(
-                TX_CODE_PATH
-                    .def()
-                    .about("The transaction code to use with the matchmaker."),
-            )
-            .arg(LEDGER_ADDRESS_DEFAULT.def().about(
-                "The address of the ledger as \"{scheme}://{host}:{port}\" \
-                 that the matchmaker must send transactions to. If the scheme \
-                 is not supplied, it is assumed to be TCP.",
-            ))
-            .arg(SIGNING_KEY.def().about(
-                "Sign the transactions created by the matchmaker with the key \
-                 for the given public key, public key hash or alias from your \
-                 wallet.",
-            ))
-            .arg(SOURCE.def().about(
-                "Source address or alias of an address of the transactions \
-                 created by the matchmaker. This must be matching the signing \
-                 key.",
-            ))
-        }
-    }
-
     /// Common transaction arguments
     #[derive(Clone, Debug)]
     pub struct Tx {
@@ -2721,6 +2240,8 @@ pub mod args {
     /// Wallet generate key and implicit address arguments
     #[derive(Clone, Debug)]
     pub struct KeyAndAddressGen {
+        /// Scheme type
+        pub scheme: SchemeType,
         /// Key alias
         pub alias: Option<String>,
         /// Don't encrypt the keypair
@@ -2729,16 +2250,23 @@ pub mod args {
 
     impl Args for KeyAndAddressGen {
         fn parse(matches: &ArgMatches) -> Self {
+            let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
+                scheme,
                 alias,
                 unsafe_dont_encrypt,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS_OPT.def().about(
+            app.arg(SCHEME.def().about(
+                "The type of key that should be generated. Argument must be \
+                 either ed25519 or secp256k1. If none provided, the default \
+                 key scheme is ed25519.",
+            ))
+            .arg(ALIAS_OPT.def().about(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
             ))
@@ -2850,14 +2378,16 @@ pub mod args {
 
     /// Wallet address lookup arguments
     #[derive(Clone, Debug)]
-    pub struct AddressFind {
-        pub alias: String,
+    pub struct AddressOrAliasFind {
+        pub alias: Option<String>,
+        pub address: Option<Address>,
     }
 
-    impl Args for AddressFind {
+    impl Args for AddressOrAliasFind {
         fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
-            Self { alias }
+            let alias = ALIAS_OPT.parse(matches);
+            let address = RAW_ADDRESS_OPT.parse(matches);
+            Self { alias, address }
         }
 
         fn def(app: App) -> App {
@@ -2865,6 +2395,16 @@ pub mod args {
                 ALIAS_OPT
                     .def()
                     .about("An alias associated with the address."),
+            )
+            .arg(
+                RAW_ADDRESS_OPT
+                    .def()
+                    .about("The bech32m encoded address string."),
+            )
+            .group(
+                ArgGroup::new("find_flags")
+                    .args(&[ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
+                    .required(true),
             )
         }
     }
@@ -2902,6 +2442,7 @@ pub mod args {
         pub chain_id: ChainId,
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
+        pub dont_prefetch_wasm: bool,
     }
 
     impl Args for JoinNetwork {
@@ -2909,10 +2450,12 @@ pub mod args {
             let chain_id = CHAIN_ID.parse(matches);
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
+            let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
+                dont_prefetch_wasm,
             }
         }
 
@@ -2920,6 +2463,25 @@ pub mod args {
             app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
                 .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
+            .arg(DONT_PREFETCH_WASM.def().about(
+                "Do not pre-fetch WASM.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FetchWasms {
+        pub chain_id: ChainId,
+    }
+
+    impl Args for FetchWasms {
+        fn parse(matches: &ArgMatches) -> Self {
+            let chain_id = CHAIN_ID.parse(matches);
+            Self { chain_id }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository, in which case it should have pre-built wasms available for download."))
         }
     }
 
@@ -2986,7 +2548,7 @@ pub mod args {
             ))
             .arg(LOCALHOST.def().about(
                 "Use localhost address for P2P and RPC connections for the \
-                 validators ledger and intent gossip nodes",
+                 validators ledger",
             ))
             .arg(ALLOW_DUPLICATE_IP.def().about(
                 "Toggle to disable guard against peers connecting from the \
@@ -3009,6 +2571,7 @@ pub mod args {
         pub alias: String,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
+        pub key_scheme: SchemeType,
     }
 
     impl Args for InitGenesisValidator {
@@ -3016,10 +2579,12 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let key_scheme = SCHEME.parse(matches);
             Self {
                 alias,
                 net_address,
                 unsafe_dont_encrypt,
+                key_scheme,
             }
         }
 
@@ -3033,6 +2598,10 @@ pub mod args {
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
+                ))
+                .arg(SCHEME.def().about(
+                    "The key scheme/type used for the validator keys. \
+                     Currently supports ed25519 and secp256k1.",
                 ))
         }
     }
@@ -3053,7 +2622,7 @@ pub fn anoma_cli() -> (cmds::Anoma, String) {
     safe_exit(2);
 }
 
-pub fn anoma_node_cli() -> (cmds::AnomaNode, Context) {
+pub fn anoma_node_cli() -> Result<(cmds::AnomaNode, Context)> {
     let app = anoma_node_app();
     cmds::AnomaNode::parse_or_print_help(app)
 }
@@ -3063,7 +2632,7 @@ pub enum AnomaClient {
     WithContext(Box<(cmds::AnomaClientWithContext, Context)>),
 }
 
-pub fn anoma_client_cli() -> AnomaClient {
+pub fn anoma_client_cli() -> Result<AnomaClient> {
     let app = anoma_client_app();
     let mut app = cmds::AnomaClient::add_sub(app);
     let matches = app.clone().get_matches();
@@ -3072,11 +2641,11 @@ pub fn anoma_client_cli() -> AnomaClient {
             let global_args = args::Global::parse(&matches);
             match cmd {
                 cmds::AnomaClient::WithContext(sub_cmd) => {
-                    let context = Context::new(global_args);
-                    AnomaClient::WithContext(Box::new((sub_cmd, context)))
+                    let context = Context::new(global_args)?;
+                    Ok(AnomaClient::WithContext(Box::new((sub_cmd, context))))
                 }
                 cmds::AnomaClient::WithoutContext(sub_cmd) => {
-                    AnomaClient::WithoutContext(sub_cmd, global_args)
+                    Ok(AnomaClient::WithoutContext(sub_cmd, global_args))
                 }
             }
         }
@@ -3087,7 +2656,7 @@ pub fn anoma_client_cli() -> AnomaClient {
     }
 }
 
-pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, Context) {
+pub fn anoma_wallet_cli() -> Result<(cmds::AnomaWallet, Context)> {
     let app = anoma_wallet_app();
     cmds::AnomaWallet::parse_or_print_help(app)
 }
@@ -3095,7 +2664,6 @@ pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, Context) {
 fn anoma_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .author(crate_authors!("\n"))
         .about("Anoma command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::Anoma::add_sub(args::Global::def(app))
@@ -3104,7 +2672,6 @@ fn anoma_app() -> App {
 fn anoma_node_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .author(crate_authors!("\n"))
         .about("Anoma node command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaNode::add_sub(args::Global::def(app))
@@ -3113,7 +2680,6 @@ fn anoma_node_app() -> App {
 fn anoma_client_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .author(crate_authors!("\n"))
         .about("Anoma client command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaClient::add_sub(args::Global::def(app))
@@ -3122,7 +2688,6 @@ fn anoma_client_app() -> App {
 fn anoma_wallet_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
-        .author(crate_authors!("\n"))
         .about("Anoma wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaWallet::add_sub(args::Global::def(app))

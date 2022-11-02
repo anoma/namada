@@ -17,7 +17,7 @@ pub use token::{Error as IbcTokenError, IbcToken};
 use super::storage::{client_id, ibc_prefix, is_client_counter_key, IbcPrefix};
 use crate::ibc::core::ics02_client::context::ClientReader;
 use crate::ibc::events::IbcEvent;
-use crate::ledger::native_vp::{self, Ctx, NativeVp};
+use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::proto::SignedTxData;
 use crate::types::address::{Address, InternalAddress};
@@ -184,7 +184,7 @@ where
     }
 
     fn read_counter_pre(&self, key: &Key) -> Result<u64> {
-        match self.ctx.read_pre(key) {
+        match self.ctx.read_bytes_pre(key) {
             Ok(Some(value)) => {
                 // As ibc-go, u64 like a counter is encoded with big-endian
                 let counter: [u8; 8] = value.try_into().map_err(|_| {
@@ -205,7 +205,7 @@ where
     }
 
     fn read_counter(&self, key: &Key) -> Result<u64> {
-        match self.ctx.read_post(key) {
+        match self.ctx.read_bytes_post(key) {
             Ok(Some(value)) => {
                 // As ibc-go, u64 like a counter is encoded with big-endian
                 let counter: [u8; 8] = value.try_into().map_err(|_| {
@@ -344,13 +344,12 @@ mod tests {
     use crate::ibc::Height;
     use crate::ibc_proto::cosmos::base::v1beta1::Coin;
     use prost::Message;
-    use sha2::Digest;
-    use crate::tendermint_proto::Protobuf;
     use crate::tendermint::time::Time as TmTime;
+    use crate::tendermint_proto::Protobuf;
 
     use super::get_dummy_header;
     use super::super::handler::{
-        commitment_prefix, init_connection, make_create_client_event,
+        self, commitment_prefix, init_connection, make_create_client_event,
         make_open_ack_channel_event, make_open_ack_connection_event,
         make_open_confirm_channel_event, make_open_confirm_connection_event,
         make_open_init_channel_event, make_open_init_connection_event,
@@ -374,6 +373,8 @@ mod tests {
     use crate::types::ibc::data::{PacketAck, PacketReceipt};
     use crate::vm::wasm;
     use crate::types::storage::{BlockHash, BlockHeight};
+
+    const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 
     fn get_client_id() -> ClientId {
         ClientId::from_str("test_client").expect("Creating a client ID failed")
@@ -454,7 +455,7 @@ mod tests {
     }
 
     fn get_channel_id() -> ChannelId {
-        ChannelId::from_str("test_channel").unwrap()
+        ChannelId::from_str("channel-42").unwrap()
     }
 
     fn get_connection(conn_state: ConnState) -> ConnectionEnd {
@@ -494,9 +495,8 @@ mod tests {
     fn get_channel_counterparty() -> ChanCounterparty {
         let counterpart_port_id = PortId::from_str("counterpart_test_port")
             .expect("Creating a port ID failed");
-        let counterpart_channel_id =
-            ChannelId::from_str("counterpart_test_channel")
-                .expect("Creating a channel ID failed");
+        let counterpart_channel_id = ChannelId::from_str("channel-0")
+            .expect("Creating a channel ID failed");
         ChanCounterparty::new(counterpart_port_id, Some(counterpart_channel_id))
     }
 
@@ -533,15 +533,6 @@ mod tests {
             .expect("write failed");
     }
 
-    fn hash(packet: &Packet) -> String {
-        let input = format!(
-            "{:?},{:?},{:?}",
-            packet.timeout_timestamp, packet.timeout_height, packet.data,
-        );
-        let r = sha2::Sha256::digest(input.as_bytes());
-        format!("{:x}", r)
-    }
-
     #[test]
     fn test_create_client() {
         let (storage, mut write_log) = insert_init_states();
@@ -568,13 +559,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
-
         let mut keys_changed = BTreeSet::new();
         let client_state_key = client_state_key(&get_client_id());
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
@@ -598,13 +597,22 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         let client_state_key = client_state_key(&get_client_id());
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
 
         let ibc = Ibc { ctx };
         // this should fail because no state is stored
@@ -668,13 +676,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
         assert!(
@@ -696,7 +712,7 @@ mod tests {
         let msg = MsgConnectionOpenInit {
             client_id: get_client_id(),
             counterparty: get_conn_counterparty(),
-            version: ConnVersion::default(),
+            version: None,
             delay_period: Duration::new(100, 0),
             signer: Signer::new("account0"),
         };
@@ -717,13 +733,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
         assert!(
@@ -745,7 +769,7 @@ mod tests {
         let msg = MsgConnectionOpenInit {
             client_id: get_client_id(),
             counterparty: get_conn_counterparty(),
-            version: ConnVersion::default(),
+            version: None,
             delay_period: Duration::new(100, 0),
             signer: Signer::new("account0"),
         };
@@ -763,13 +787,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         // this should fail because no client exists
         let result = ibc
@@ -835,13 +867,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
         assert!(
@@ -913,13 +953,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -978,13 +1026,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -1029,13 +1085,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -1099,13 +1163,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -1154,10 +1226,9 @@ mod tests {
         let msg = MsgChannelOpenAck {
             port_id: get_port_id(),
             channel_id: get_channel_id(),
-            counterparty_channel_id: get_channel_counterparty()
+            counterparty_channel_id: *get_channel_counterparty()
                 .channel_id()
-                .unwrap()
-                .clone(),
+                .unwrap(),
             counterparty_version: ChanVersion::ics20(),
             proofs,
             signer: Signer::new("account0"),
@@ -1167,7 +1238,8 @@ mod tests {
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.encode_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        let event = make_open_ack_channel_event(&msg);
+        let event =
+            make_open_ack_channel_event(&msg, &channel).expect("no connection");
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
@@ -1177,13 +1249,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -1240,7 +1320,9 @@ mod tests {
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.encode_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
-        let event = make_open_confirm_channel_event(&msg);
+
+        let event = make_open_confirm_channel_event(&msg, &channel)
+            .expect("no connection");
         write_log.set_ibc_event(event.try_into().unwrap());
 
         let tx_code = vec![];
@@ -1250,13 +1332,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -1281,13 +1371,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(port_key(&get_port_id()));
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -1313,13 +1411,22 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         let cap_key = capability_key(index);
         keys_changed.insert(cap_key);
 
         let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1356,7 +1463,7 @@ mod tests {
             source_port: get_port_id(),
             source_channel: get_channel_id(),
             token: Some(Coin {
-                denom: "XAN".to_string(),
+                denom: "NAM".to_string(),
                 amount: 100u64.to_string(),
             }),
             sender: Signer::new("sender"),
@@ -1373,14 +1480,10 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
-        let commitment = hash(&packet);
-        let mut commitment_bytes = vec![];
-        commitment
-            .encode(&mut commitment_bytes)
-            .expect("encoding shouldn't fail");
+        let commitment = handler::commitment(&packet);
         let key = commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
-            .write(&key, commitment_bytes)
+            .write(&key, commitment.into_vec())
             .expect("write failed");
 
         let tx_code = vec![];
@@ -1390,13 +1493,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -1436,7 +1547,7 @@ mod tests {
         let packet = Packet {
             sequence,
             source_port: counterparty.port_id().clone(),
-            source_channel: counterparty.channel_id().unwrap().clone(),
+            source_channel: *counterparty.channel_id().unwrap(),
             destination_port: get_port_id(),
             destination_channel: get_channel_id(),
             data: vec![0],
@@ -1469,13 +1580,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -1502,7 +1621,7 @@ mod tests {
             source_port: get_port_id(),
             source_channel: get_channel_id(),
             destination_port: counterparty.port_id().clone(),
-            destination_channel: counterparty.channel_id().unwrap().clone(),
+            destination_channel: *counterparty.channel_id().unwrap(),
             data: vec![0],
             timeout_height: Height::new(0, 100),
             timeout_timestamp,
@@ -1519,11 +1638,11 @@ mod tests {
         let bytes = channel.encode_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
         // insert a commitment
-        let commitment = hash(&packet);
+        let commitment = handler::commitment(&packet);
         let commitment_key =
             commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
-            .write(&commitment_key, commitment.as_bytes().to_vec())
+            .write(&commitment_key, commitment.into_vec())
             .expect("write failed");
         write_log.commit_tx();
         write_log.commit_block(&mut storage).expect("commit failed");
@@ -1536,7 +1655,7 @@ mod tests {
                 .unwrap();
         let msg = MsgAcknowledgement {
             packet,
-            acknowledgement: ack,
+            acknowledgement: ack.into(),
             proofs,
             signer: Signer::new("account0"),
         };
@@ -1553,13 +1672,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -1595,7 +1722,7 @@ mod tests {
             source_port: get_port_id(),
             source_channel: get_channel_id(),
             token: Some(Coin {
-                denom: "XAN".to_string(),
+                denom: "NAM".to_string(),
                 amount: 100u64.to_string(),
             }),
             sender: Signer::new("sender"),
@@ -1610,18 +1737,14 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
-        let commitment = hash(&packet);
+        let commitment = handler::commitment(&packet);
         let commitment_key = commitment_key(
             &packet.source_port,
             &packet.source_channel,
             sequence,
         );
-        let mut commitment_bytes = vec![];
-        commitment
-            .encode(&mut commitment_bytes)
-            .expect("encoding shouldn't fail");
         write_log
-            .write(&commitment_key, commitment_bytes)
+            .write(&commitment_key, commitment.into_vec())
             .expect("write failed");
         let event = make_send_packet_event(packet);
         write_log.set_ibc_event(event.try_into().unwrap());
@@ -1633,13 +1756,21 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(commitment_key);
 
         let verifiers = BTreeSet::new();
-
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
@@ -1675,7 +1806,7 @@ mod tests {
         let packet = Packet {
             sequence: Sequence::from(1),
             source_port: counterparty.port_id().clone(),
-            source_channel: counterparty.channel_id().unwrap().clone(),
+            source_channel: *counterparty.channel_id().unwrap(),
             destination_port: get_port_id(),
             destination_channel: get_channel_id(),
             data: vec![0],
@@ -1717,12 +1848,20 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
-
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(receipt_key);
 
         let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
 
         let ibc = Ibc { ctx };
         assert!(
@@ -1757,12 +1896,20 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
-
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(ack_key);
 
         let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
 
         let ibc = Ibc { ctx };
         assert!(
