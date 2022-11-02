@@ -1418,14 +1418,6 @@ impl<'a> TxEventQuery<'a> {
     }
 }
 
-impl<'a> From<TxEventQuery<'a>> for crate::facade::tendermint::abci::Path {
-    fn from(tx_query: TxEventQuery<'a>) -> Self {
-        format!("{}/{}", tx_query.event_type(), tx_query.tx_hash())
-            .parse()
-            .expect("This operation is infallible")
-    }
-}
-
 /// Transaction event queries are semantically a subset of general queries
 impl<'a> From<TxEventQuery<'a>> for Query {
     fn from(tx_query: TxEventQuery<'a>) -> Self {
