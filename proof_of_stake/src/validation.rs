@@ -50,13 +50,6 @@ where
     MissingNewValidatorConsensusKey(u64),
     #[error("Invalid validator consensus key update in epoch {0}")]
     InvalidValidatorConsensusKeyUpdate(u64),
-    #[error("Validator staking reward address is required for validator {0}")]
-    StakingRewardAddressIsRequired(Address),
-    #[error(
-        "Staking reward address must be different from the validator's \
-         address {0}"
-    )]
-    StakingRewardAddressEqValidator(Address),
     #[error("Unexpectedly missing total deltas value for validator {0}")]
     MissingValidatorTotalDeltas(Address),
     #[error("The sum of total deltas for validator {0} are negative")]
@@ -245,7 +238,7 @@ where
         /// Validator's address
         address: Address,
         /// Validator's data update
-        update: ValidatorUpdate<Address, TokenChange, PublicKey>,
+        update: ValidatorUpdate<TokenChange, PublicKey>,
     },
     /// Validator set update
     ValidatorSet(Data<ValidatorSets<Address>>),
@@ -262,9 +255,8 @@ where
 
 /// An update of a validator's data.
 #[derive(Clone, Debug)]
-pub enum ValidatorUpdate<Address, TokenChange, PublicKey>
+pub enum ValidatorUpdate<TokenChange, PublicKey>
 where
-    Address: Clone + Debug,
     TokenChange: Display
         + Debug
         + Default
@@ -283,8 +275,6 @@ where
     State(Data<ValidatorStates>),
     /// Consensus key update
     ConsensusKey(Data<ValidatorConsensusKeys<PublicKey>>),
-    /// Staking reward address update
-    StakingRewardAddress(Data<Address>),
     /// Total deltas update
     TotalDeltas(Data<ValidatorTotalDeltas<TokenChange>>),
     /// Voting power update
@@ -313,7 +303,6 @@ pub struct NewValidator<PublicKey> {
     has_consensus_key: Option<PublicKey>,
     has_total_deltas: bool,
     has_voting_power: bool,
-    has_staking_reward_address: bool,
     has_address_raw_hash: Option<String>,
     voting_power: VotingPower,
 }
@@ -806,16 +795,11 @@ where
                         has_consensus_key,
                         has_total_deltas,
                         has_voting_power,
-                        has_staking_reward_address,
                         has_address_raw_hash,
                         voting_power,
                     } = &new_validator;
                     // The new validator must have set all the required fields
-                    if !(*has_state
-                        && *has_total_deltas
-                        && *has_voting_power
-                        && *has_staking_reward_address)
-                    {
+                    if !(*has_state && *has_total_deltas && *has_voting_power) {
                         errors.push(Error::InvalidNewValidator(
                             address.clone(),
                             new_validator.clone(),
@@ -1129,15 +1113,6 @@ where
                         address,
                         data,
                     ),
-                    StakingRewardAddress(data) => {
-                        Self::validator_staking_reward_address(
-                            errors,
-                            new_validators,
-                            address,
-                            data,
-                        )
-                    }
-
                     TotalDeltas(data) => Self::validator_total_deltas(
                         constants,
                         errors,
@@ -1324,32 +1299,6 @@ where
                 errors.push(Error::ValidatorStateIsRequired(address))
             }
             (None, None) => {}
-        }
-    }
-
-    fn validator_staking_reward_address(
-        errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
-        new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
-        address: Address,
-        data: Data<Address>,
-    ) {
-        match (data.pre, data.post) {
-            (Some(_), Some(post)) => {
-                if post == address {
-                    errors
-                        .push(Error::StakingRewardAddressEqValidator(address));
-                }
-            }
-            (None, Some(post)) => {
-                if post == address {
-                    errors.push(Error::StakingRewardAddressEqValidator(
-                        address.clone(),
-                    ));
-                }
-                let validator = new_validators.entry(address).or_default();
-                validator.has_staking_reward_address = true;
-            }
-            _ => errors.push(Error::StakingRewardAddressIsRequired(address)),
         }
     }
 

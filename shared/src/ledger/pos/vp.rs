@@ -17,12 +17,10 @@ use thiserror::Error;
 
 use super::{
     bond_key, is_bond_key, is_params_key, is_total_voting_power_key,
-    is_unbond_key, is_validator_set_key,
-    is_validator_staking_reward_address_key, is_validator_total_deltas_key,
+    is_unbond_key, is_validator_set_key, is_validator_total_deltas_key,
     is_validator_voting_power_key, params_key, staking_token_address,
     total_voting_power_key, unbond_key, validator_consensus_key_key,
-    validator_set_key, validator_slashes_key,
-    validator_staking_reward_address_key, validator_state_key,
+    validator_set_key, validator_slashes_key, validator_state_key,
     validator_total_deltas_key, validator_voting_power_key, BondId, Bonds,
     Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
 };
@@ -148,21 +146,6 @@ where
                 changes.push(Validator {
                     address: validator.clone(),
                     update: State(Data { pre, post }),
-                });
-            } else if let Some(validator) =
-                is_validator_staking_reward_address_key(key)
-            {
-                let pre =
-                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
-                        Address::try_from_slice(&bytes[..]).ok()
-                    });
-                let post =
-                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
-                        Address::try_from_slice(&bytes[..]).ok()
-                    });
-                changes.push(Validator {
-                    address: validator.clone(),
-                    update: StakingRewardAddress(Data { pre, post }),
                 });
             } else if let Some(validator) = is_validator_consensus_key_key(key)
             {

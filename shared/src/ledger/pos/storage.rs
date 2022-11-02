@@ -19,8 +19,6 @@ use crate::types::{key, token};
 const PARAMS_STORAGE_KEY: &str = "params";
 const VALIDATOR_STORAGE_PREFIX: &str = "validator";
 const VALIDATOR_ADDRESS_RAW_HASH: &str = "address_raw_hash";
-const VALIDATOR_STAKING_REWARD_ADDRESS_STORAGE_KEY: &str =
-    "staking_reward_address";
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
 const VALIDATOR_TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
@@ -87,31 +85,6 @@ pub fn is_validator_address_raw_hash_key(key: &Key) -> Option<&str> {
             DbKeySeg::StringSeg(raw_hash),
         ] if addr == &ADDRESS && prefix == VALIDATOR_ADDRESS_RAW_HASH => {
             Some(raw_hash)
-        }
-        _ => None,
-    }
-}
-
-/// Storage key for validator's staking reward address.
-pub fn validator_staking_reward_address_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_STAKING_REWARD_ADDRESS_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for validator's staking reward address?
-pub fn is_validator_staking_reward_address_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(validator),
-            DbKeySeg::StringSeg(key),
-        ] if addr == &ADDRESS
-            && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_STAKING_REWARD_ADDRESS_STORAGE_KEY =>
-        {
-            Some(validator)
         }
         _ => None,
     }
@@ -464,15 +437,6 @@ where
             .unwrap();
     }
 
-    fn write_validator_staking_reward_address(
-        &mut self,
-        key: &Self::Address,
-        value: &Self::Address,
-    ) {
-        self.write(&validator_staking_reward_address_key(key), encode(value))
-            .unwrap();
-    }
-
     fn write_validator_consensus_key(
         &mut self,
         key: &Self::Address,
@@ -531,22 +495,6 @@ where
     fn write_total_voting_power(&mut self, value: &TotalVotingPowers) {
         self.write(&total_voting_power_key(), encode(value))
             .unwrap();
-    }
-
-    fn init_staking_reward_account(
-        &mut self,
-        address: &Self::Address,
-        pk: &Self::PublicKey,
-    ) {
-        // let user_vp =
-        //     std::fs::read("wasm/vp_user.wasm").expect("cannot load user VP");
-        // // The staking reward accounts are setup with a user VP
-        // self.write(&Key::validity_predicate(address), user_vp.to_vec())
-        //     .unwrap();
-
-        // Write the public key
-        let pk_key = key::pk_key(address);
-        self.write(&pk_key, encode(pk)).unwrap();
     }
 
     fn credit_tokens(
