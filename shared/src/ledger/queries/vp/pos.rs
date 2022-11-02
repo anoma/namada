@@ -5,9 +5,9 @@ use namada_proof_of_stake::PosReadOnly;
 use crate::ledger::pos::{self, BondId};
 use crate::ledger::queries::types::RequestCtx;
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
-use crate::ledger::storage_api::{self, ResultExt};
+use crate::ledger::storage_api;
 use crate::types::address::Address;
-use crate::types::storage::{self, Epoch};
+use crate::types::storage::Epoch;
 use crate::types::token;
 
 // PoS validity predicate queries
@@ -122,15 +122,12 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let bonds_prefix = pos::bonds_for_source_prefix(&owner);
-    // TODO replace with the nicer `iter_prefix_bytes` from #335
-    let mut bonds_iter =
-        storage_api::StorageRead::iter_prefix(ctx.storage, &bonds_prefix)?;
 
     let mut delegations: HashSet<Address> = HashSet::new();
-    while let Some((key, _bonds_bytes)) =
-        storage_api::StorageRead::iter_next(ctx.storage, &mut bonds_iter)?
+    for iter_result in
+        storage_api::iter_prefix_bytes(ctx.storage, &bonds_prefix)?
     {
-        let key = storage::Key::parse(&key).into_storage_result()?;
+        let (key, _bonds_bytes) = iter_result?;
         let validator_address = pos::get_validator_address_from_bond(&key)
             .ok_or_else(|| {
                 storage_api::Error::new_const(

@@ -158,10 +158,10 @@ where
 {
     require_latest_height(&ctx, request)?;
 
-    let (iter, _gas) = ctx.storage.iter_prefix(&storage_key);
+    let iter = storage_api::iter_prefix_bytes(ctx.storage, &storage_key)?;
     let data: storage_api::Result<Vec<PrefixValue>> = iter
-        .map(|(key, value, _gas)| {
-            let key = storage::Key::parse(key).into_storage_result()?;
+        .map(|iter_result| {
+            let (key, value) = iter_result?;
             Ok(PrefixValue { key, value })
         })
         .collect();
