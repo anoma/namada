@@ -96,7 +96,7 @@ where
                     self.is_valid_end_epoch(proposal_id)
                 }
                 (KeyType::FUNDS, Some(proposal_id)) => {
-                    self.is_valid_funds(proposal_id)
+                    self.is_valid_funds(proposal_id, &native_token)
                 }
                 (KeyType::AUTHOR, Some(proposal_id)) => {
                     self.is_valid_author(proposal_id, verifiers)
@@ -106,7 +106,7 @@ where
                     self.is_valid_proposal_commit()
                 }
                 (KeyType::PARAMETER, _) => self.is_valid_parameter(tx_data),
-                (KeyType::BALANCE, _) => self.is_valid_balance(),
+                (KeyType::BALANCE, _) => self.is_valid_balance(&native_token),
                 (KeyType::UNKNOWN_GOVERNANCE, _) => Ok(false),
                 (KeyType::UNKNOWN, _) => Ok(true),
                 _ => Ok(false),
@@ -171,6 +171,7 @@ where
             gov_storage::get_voting_end_epoch_key(proposal_id);
 
         let current_epoch = self.ctx.get_block_epoch().ok();
+
         let pre_counter: Option<u64> =
             self.ctx.pre().read(&counter_key)?.unwrap_or_default();
         let pre_voting_start_epoch: Option<Epoch> = self
@@ -255,6 +256,7 @@ where
             self.ctx.pre().read(&max_content_length_parameter_key)?;
         let post_content: Option<Vec<u8>> =
             self.ctx.read_bytes_post(&content_key)?;
+
         match (post_content, max_content_length) {
             (Some(post_content), Some(max_content_length)) => {
                 Ok(post_content.len() < max_content_length)
@@ -277,6 +279,7 @@ where
         let max_proposal_length: Option<usize> =
             self.ctx.pre().read(&max_code_size_parameter_key)?;
         let post_code: Option<Vec<u8>> = self.ctx.read_bytes_post(&code_key)?;
+
         match (post_code, max_proposal_length) {
             (Some(post_code), Some(max_content_length)) => {
                 Ok(post_code.len() < max_content_length)
@@ -298,7 +301,8 @@ where
         }
 
         let end_epoch: Option<u64> = self.ctx.post().read(&end_epoch_key)?;
-        let grace_epoch: Option<u64> = self.ctx.post().read(&grace_epoch_key)?;
+        let grace_epoch: Option<u64> =
+            self.ctx.post().read(&grace_epoch_key)?;
         let min_grace_epoch: Option<u64> =
             self.ctx.pre().read(&min_grace_epoch_key)?;
         match (min_grace_epoch, grace_epoch, end_epoch) {
@@ -308,10 +312,10 @@ where
                         proposal_id,
                         grace_epoch,
                     );
-                let hash_post_committing_epoch =
+                let has_post_committing_epoch =
                     self.ctx.has_key_post(&committing_epoch_key)?;
 
-                Ok(hash_post_committing_epoch
+                Ok(has_post_committing_epoch
                     && end_epoch < grace_epoch
                     && grace_epoch - end_epoch >= min_grace_epoch)
             }
@@ -341,6 +345,7 @@ where
         let end_epoch: Option<Epoch> = self.ctx.post().read(&end_epoch_key)?;
         let min_period: Option<u64> =
             self.ctx.pre().read(&min_period_parameter_key)?;
+
         match (min_period, start_epoch, end_epoch, current_epoch) {
             (
                 Some(min_period),
@@ -378,10 +383,10 @@ where
         }
 
         let start_epoch: Option<Epoch> =
-            self.ctx.pre().read(&start_epoch_key)?;
+            self.ctx.post().read(&start_epoch_key)?;
         let end_epoch: Option<Epoch> = self.ctx.post().read(&end_epoch_key)?;
         let min_period: Option<u64> =
-            self.ctx.post().read(&min_period_parameter_key)?;
+            self.ctx.pre().read(&min_period_parameter_key)?;
         let max_period: Option<u64> =
             self.ctx.pre().read(&max_period_parameter_key)?;
         match (
@@ -410,17 +415,16 @@ where
     }
 
     /// Validate a funds key
-    pub fn is_valid_funds(&self, proposal_id: u64) -> Result<bool> {
+    pub fn is_valid_funds(
+        &self,
+        proposal_id: u64,
+        native_token_address: &Address,
+    ) -> Result<bool> {
         let funds_key = gov_storage::get_funds_key(proposal_id);
-        let balance_key = token_storage::balance_key(
-            &self
-                .ctx
-                .pre()
-                .get_native_token()
-                .expect("Native token must be available"),
-            self.ctx.address,
-        );
+        let balance_key =
+            token_storage::balance_key(native_token_address, self.ctx.address);
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
+
         let min_funds_parameter: Option<token_storage::Amount> =
             self.ctx.pre().read(&min_funds_parameter_key)?;
         let pre_balance: Option<token_storage::Amount> =
@@ -452,15 +456,9 @@ where
     }
 
     /// Validate a balance key
-    fn is_valid_balance(&self) -> Result<bool> {
-        let balance_key = token_storage::balance_key(
-            &self
-                .ctx
-                .pre()
-                .get_native_token()
-                .expect("Native token must be available"),
-            self.ctx.address,
-        );
+    fn is_valid_balance(&self, native_token_address: &Address) -> Result<bool> {
+        let balance_key =
+            token_storage::balance_key(native_token_address, self.ctx.address);
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
         let min_funds_parameter: Option<token_storage::Amount> =
