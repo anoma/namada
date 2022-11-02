@@ -3,7 +3,7 @@
 This guide assumes that the Namada binaries are [installed](./install.md) and available on path. These are:
 
 - `namada`: The main binary that can be used to interact with all the components of Namada
-- `namadan`: The ledger and intent gossiper node
+- `namadan`: The ledger node
 - `namadac`: The client
 - `namadaw`: The wallet
 

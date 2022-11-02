@@ -139,6 +139,12 @@ impl From<Amount> for u64 {
     }
 }
 
+impl From<Amount> for u128 {
+    fn from(amount: Amount) -> Self {
+        u128::from(amount.micro)
+    }
+}
+
 impl Add for Amount {
     type Output = Amount;
 
@@ -456,5 +462,23 @@ mod tests {
 
         let zero = Amount::from(0);
         assert_eq!("0", zero.to_string());
+    }
+}
+
+/// Helpers for testing with addresses.
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    /// Generate an arbitrary token amount
+    pub fn arb_amount() -> impl Strategy<Value = Amount> {
+        any::<u64>().prop_map(Amount::from)
+    }
+
+    /// Generate an arbitrary token amount up to and including given `max` value
+    pub fn arb_amount_ceiled(max: u64) -> impl Strategy<Value = Amount> {
+        (0..=max).prop_map(Amount::from)
     }
 }

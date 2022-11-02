@@ -6,6 +6,7 @@
 //! (unless we can simply overwrite them in the next block).
 //! More info in <https://github.com/anoma/anoma/issues/362>.
 mod finalize_block;
+mod governance;
 mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
@@ -22,6 +23,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::ledger::gas::BlockGasMeter;
+use namada::ledger::pos;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
@@ -29,18 +31,16 @@ use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, DB};
-use namada::ledger::{ibc, parameters, pos};
 use namada::proto::{self, Tx};
+use namada::types::address;
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key};
-use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
-use namada::types::{address, token};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -55,10 +55,6 @@ use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
 use crate::facade::tendermint_proto::crypto::public_key;
-#[cfg(not(feature = "abcipp"))]
-use crate::facade::tendermint_proto::types::ConsensusParams;
-#[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::types::ConsensusParams;
 use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::events::log::EventLog;
 use crate::node::ledger::events::Event;
@@ -104,6 +100,8 @@ pub enum Error {
     Broadcaster(tokio::sync::mpsc::error::TryRecvError),
     #[error("Error executing proposal {0}: {1}")]
     BadProposal(u64, String),
+    #[error("Error reading wasm: {0}")]
+    ReadingWasm(#[from] eyre::Error),
 }
 
 impl From<Error> for TxResult {
@@ -393,11 +391,10 @@ where
                     );
                     let wallet = wallet::Wallet::load_or_new_from_genesis(
                         wallet_path,
-                        move || {
-                            genesis::genesis_config::open_genesis_config(
-                                genesis_path,
-                            )
-                        },
+                        genesis::genesis_config::open_genesis_config(
+                            genesis_path,
+                        )
+                        .unwrap(),
                     );
                     wallet
                         .take_validator_data()
@@ -542,6 +539,7 @@ where
             let pos_params = self.storage.read_pos_params();
             let current_epoch = self.storage.block.epoch;
             for evidence in byzantine_validators {
+                tracing::info!("Processing evidence {evidence:?}.");
                 let evidence_height = match u64::try_from(evidence.height) {
                     Ok(height) => height,
                     Err(err) => {
@@ -567,6 +565,13 @@ where
                         continue;
                     }
                 };
+                if evidence_epoch + pos_params.unbonding_len <= current_epoch {
+                    tracing::info!(
+                        "Skipping outdated evidence from epoch \
+                         {evidence_epoch}"
+                    );
+                    continue;
+                }
                 let slash_type = match EvidenceType::from_i32(evidence.r#type) {
                     Some(r#type) => match r#type {
                         EvidenceType::DuplicateVote => {
@@ -592,19 +597,7 @@ where
                     }
                 };
                 let validator_raw_hash = match evidence.validator {
-                    Some(validator) => {
-                        match String::from_utf8(validator.address) {
-                            Ok(raw_hash) => raw_hash,
-                            Err(err) => {
-                                tracing::error!(
-                                    "Evidence failed to decode validator \
-                                     address from utf-8 with {}",
-                                    err
-                                );
-                                continue;
-                            }
-                        }
-                    }
+                    Some(validator) => tm_raw_hash_to_string(validator.address),
                     None => {
                         tracing::error!(
                             "Evidence without a validator {:#?}",
@@ -628,9 +621,9 @@ where
                 };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {}",
-                    evidence_epoch,
-                    slash_type,
                     validator,
+                    slash_type,
+                    evidence_epoch,
                     evidence_height
                 );
                 if let Err(err) = self.storage.slash(
@@ -758,10 +751,10 @@ where
         let genesis_path = &self
             .base_dir
             .join(format!("{}.toml", self.chain_id.as_str()));
-        let mut wallet =
-            wallet::Wallet::load_or_new_from_genesis(wallet_path, move || {
-                genesis::genesis_config::open_genesis_config(genesis_path)
-            });
+        let mut wallet = wallet::Wallet::load_or_new_from_genesis(
+            wallet_path,
+            genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
+        );
         self.mode.get_validator_address().map(|addr| {
             let pk_bytes = self
                 .storage
@@ -803,11 +796,13 @@ mod test_utils {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, Epoch, Header};
+    use namada::types::time::DateTimeUtc;
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
+    #[cfg(feature = "abciplus")]
     use crate::facade::tendermint_proto::abci::{
         RequestInitChain, RequestProcessProposal,
     };

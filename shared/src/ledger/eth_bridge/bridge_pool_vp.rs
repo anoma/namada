@@ -91,24 +91,21 @@ where
         escrow_account: &Address,
         expected_debit: Amount,
         expected_credit: Amount,
-    ) -> bool {
+    ) -> Result<bool, Error> {
         let debited = self.account_balance_delta(payer_account);
         let credited = self.account_balance_delta(escrow_account);
-        if debited.is_none() && credited.is_none() {
-            return false;
-        }
 
         match (debited, credited) {
             (
                 Some(SignedAmount::Negative(debit)),
                 Some(SignedAmount::Positive(credit)),
-            ) => debit == expected_debit && credit == expected_credit,
+            ) => Ok(debit == expected_debit && credit == expected_credit),
             (Some(SignedAmount::Positive(_)), _) => {
                 tracing::debug!(
                     "The account {} was not debited.",
                     payer_account
                 );
-                false
+                Ok(false)
             }
             (_, Some(SignedAmount::Negative(_))) => {
                 tracing::debug!(
@@ -116,22 +113,12 @@ where
                      account {}.",
                     payer_account
                 );
-                false
+                Ok(false)
             }
-            (None, _) => {
-                tracing::debug!(
-                    "Could not calculate the balance delta for {}",
-                    payer_account
-                );
-                false
-            }
-            (_, None) => {
-                tracing::debug!(
-                    "Could not calculate the balance delta for the Ethereum \
-                     bridge pool"
-                );
-                false
-            }
+            (None, _) | (_, None) => Err(Error(eyre!(
+                "Could not calculate the balance delta for {}",
+                payer_account
+            ))),
         }
     }
 
@@ -154,6 +141,11 @@ where
             ))),
         }
     }
+}
+
+/// Check if a delta matches the delta given by a transfer
+fn check_delta(delta: &(Address, Amount), transfer: &PendingTransfer) -> bool {
+    delta.0 == transfer.transfer.sender && delta.1 == transfer.transfer.amount
 }
 
 impl<'a, D, H, CA> NativeVp for BridgePoolVp<'a, D, H, CA>
@@ -194,7 +186,7 @@ where
 
         let pending_key = get_pending_key(&transfer);
         // check that transfer is not already in the pool
-        match (&self.ctx).read_pre(&pending_key) {
+        match (&self.ctx).read_pre_value::<PendingTransfer>(&pending_key) {
             Ok(Some(_)) => {
                 tracing::debug!(
                     "Rejecting transaction as the transfer is already in the \
@@ -202,10 +194,11 @@ where
                 );
                 return Ok(false);
             }
-            Err(_) => {
+            Err(e) => {
                 return Err(eyre!(
                     "Could not read the storage key associated with the \
-                     transfer."
+                     transfer: {:?}",
+                    e
                 )
                 .into());
             }
@@ -249,12 +242,12 @@ where
                     &BRIDGE_POOL_ADDRESS,
                     transfer.gas_fee.amount + transfer.transfer.amount,
                     transfer.gas_fee.amount,
-                ) || !self.check_nam_escrowed(
+                )? || !self.check_nam_escrowed(
                     &transfer.transfer.sender,
                     &Address::Internal(InternalAddress::EthBridge),
                     transfer.gas_fee.amount + transfer.transfer.amount,
                     transfer.transfer.amount,
-                ) {
+                )? {
                     Ok(false)
                 } else {
                     tracing::info!(
@@ -269,12 +262,12 @@ where
                 &BRIDGE_POOL_ADDRESS,
                 transfer.gas_fee.amount,
                 transfer.gas_fee.amount,
-            ) || !self.check_nam_escrowed(
+            )? || !self.check_nam_escrowed(
                 &transfer.transfer.sender,
                 &Address::Internal(InternalAddress::EthBridge),
                 transfer.transfer.amount,
                 transfer.transfer.amount,
-            ) {
+            )? {
                 Ok(false)
             } else {
                 tracing::info!(
@@ -290,7 +283,7 @@ where
                 &BRIDGE_POOL_ADDRESS,
                 transfer.gas_fee.amount,
                 transfer.gas_fee.amount,
-            ) {
+            )? {
                 return Ok(false);
             }
         }
@@ -307,13 +300,12 @@ where
                 (&escrow_key).try_into().expect("This should not fail"),
                 (&owner_key).try_into().expect("This should not fail"),
             ) {
-                Ok(Some((addr, amt)))
-                    if addr == transfer.transfer.sender
-                        && amt == transfer.transfer.amount => {}
-                _ => {
+                Ok(Some(delta)) if check_delta(&delta, &transfer) => {}
+                other => {
                     tracing::debug!(
                         "The assets of the transfer were not properly \
-                         escrowed into the Ethereum bridge pool."
+                         escrowed into the Ethereum bridge pool: {:?}",
+                        other
                     );
                     return Ok(false);
                 }
@@ -529,12 +521,17 @@ mod test_bridge_pool_vp {
         tx: &'a Tx,
         storage: &'a Storage<MockDB, Sha256Hasher>,
         write_log: &'a WriteLog,
+        keys_changed: &'a BTreeSet<Key>,
+        verifiers: &'a BTreeSet<Address>,
     ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
         Ctx::new(
+            &BRIDGE_POOL_ADDRESS,
             storage,
             write_log,
             tx,
             VpGasMeter::new(0u64),
+            keys_changed,
+            verifiers,
             VpCache::new(temp_dir(), 100usize),
         )
     }
@@ -605,10 +602,16 @@ mod test_bridge_pool_vp {
             escrow_delta,
         );
         keys_changed.append(&mut new_keys_changed);
-
+        let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
@@ -620,7 +623,6 @@ mod test_bridge_pool_vp {
         .try_to_vec()
         .expect("Test failed");
 
-        let verifiers = BTreeSet::default();
         let res = vp.validate_tx(&signed, &keys_changed, &verifiers);
         match expect {
             Expect::True => assert!(res.expect("Test failed")),
@@ -945,10 +947,17 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(TOKENS.into()),
         );
         keys_changed.append(&mut new_keys_changed);
+        let verifiers = BTreeSet::default();
 
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
@@ -960,7 +969,6 @@ mod test_bridge_pool_vp {
         .try_to_vec()
         .expect("Test failed");
 
-        let verifiers = BTreeSet::default();
         let res = vp.validate_tx(&signed, &keys_changed, &verifiers);
         assert!(!res.expect("Test failed"));
     }
@@ -1006,12 +1014,17 @@ mod test_bridge_pool_vp {
         keys_changed.insert(
             wrapped_erc20s::Keys::from(&ASSET).balance(&BRIDGE_POOL_ADDRESS),
         );
-
+        let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
-        let verifiers = BTreeSet::default();
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
@@ -1099,12 +1112,17 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
 
+        let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
-        let verifiers = BTreeSet::default();
-
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
         let signed = SignedTxData {
@@ -1191,12 +1209,17 @@ mod test_bridge_pool_vp {
                 Amount::from(10).try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
-
+        let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
-        let verifiers = BTreeSet::default();
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
@@ -1303,12 +1326,17 @@ mod test_bridge_pool_vp {
                 Amount::from(10).try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
-
+        let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let vp = BridgePoolVp {
-            ctx: setup_ctx(&tx, &storage, &write_log),
+            ctx: setup_ctx(
+                &tx,
+                &storage,
+                &write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
-        let verifiers = BTreeSet::default();
 
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);

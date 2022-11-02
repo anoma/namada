@@ -1,6 +1,7 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
+use data_encoding::HEXUPPER;
 use namada::ledger::pos::types::VotingPower;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
@@ -44,9 +45,9 @@ where
         req: RequestProcessProposal,
     ) -> ProcessProposal {
         tracing::info!(
-            proposer = ?hex::encode(&req.proposer_address),
+            proposer = ?HEXUPPER.encode(&req.proposer_address),
             height = req.height,
-            hash = ?hex::encode(&req.hash),
+            hash = ?HEXUPPER.encode(&req.hash),
             n_txs = req.txs.len(),
             "Received block proposal",
         );
@@ -58,9 +59,9 @@ where
             !self.has_proper_eth_events_num(&counters);
         if invalid_num_of_eth_ev_digests {
             tracing::warn!(
-                proposer = ?hex::encode(&req.proposer_address),
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
                 height = req.height,
-                hash = ?hex::encode(&req.hash),
+                hash = ?HEXUPPER.encode(&req.hash),
                 eth_ev_digest_num = counters.eth_ev_digest_num,
                 "Found invalid number of Ethereum events vote extension digests, proposed block \
                  will be rejected"
@@ -71,9 +72,9 @@ where
             !self.has_proper_valset_upd_num(&counters);
         if invalid_num_of_valset_upd_digests {
             tracing::warn!(
-                proposer = ?hex::encode(&req.proposer_address),
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
                 height = req.height,
-                hash = ?hex::encode(&req.hash),
+                hash = ?HEXUPPER.encode(&req.hash),
                 valset_upd_digest_num = counters.valset_upd_digest_num,
                 "Found invalid number of validator set update vote extension digests, proposed block \
                  will be rejected"
@@ -92,9 +93,9 @@ where
         });
         if invalid_txs {
             tracing::warn!(
-                proposer = ?hex::encode(&req.proposer_address),
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
                 height = req.height,
-                hash = ?hex::encode(&req.hash),
+                hash = ?HEXUPPER.encode(&req.hash),
                 "Found invalid transactions, proposed block will be rejected"
             );
         }

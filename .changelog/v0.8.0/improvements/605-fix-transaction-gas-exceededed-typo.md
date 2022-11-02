@@ -1,0 +1,1 @@
+- Fix a typo in an error ([#605](https://github.com/anoma/namada/issues/605))

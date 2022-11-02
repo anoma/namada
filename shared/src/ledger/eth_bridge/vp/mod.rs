@@ -4,16 +4,17 @@ mod authorize;
 
 use std::collections::{BTreeSet, HashSet};
 
+use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
 use itertools::Itertools;
 
 use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
-use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
+use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::traits::StorageHasher;
-use crate::types::address::{Address, InternalAddress};
+use crate::types::address::{xan, Address, InternalAddress};
 use crate::types::storage::Key;
-use crate::types::token::Amount;
+use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
 
 /// Validity predicate for the Ethereum bridge
@@ -25,6 +26,61 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, DB, H, CA>,
+}
+
+impl<'ctx, DB, H, CA> EthBridge<'ctx, DB, H, CA>
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    /// If the bridge's escrow key was changed, we check
+    /// that the balance increased and that the bridge pool
+    /// VP has been triggered. The bridge pool VP will carry
+    /// out the rest of the checks.
+    fn check_escrow(
+        &self,
+        verifiers: &BTreeSet<Address>,
+    ) -> Result<bool, Error> {
+        let escrow_key = balance_key(&xan(), &super::ADDRESS);
+        let escrow_pre: Amount = if let Ok(Some(bytes)) =
+            self.ctx.read_bytes_pre(&escrow_key)
+        {
+            BorshDeserialize::try_from_slice(bytes.as_slice()).map_err(
+                |_| Error(eyre!("Couldn't deserialize a balance from storage")),
+            )?
+        } else {
+            tracing::debug!(
+                "Could not retrieve the Ethereum bridge VP's balance from \
+                 storage"
+            );
+            return Ok(false);
+        };
+        let escrow_post: Amount =
+            if let Ok(Some(bytes)) = self.ctx.read_bytes_post(&escrow_key) {
+                BorshDeserialize::try_from_slice(bytes.as_slice()).expect(
+                    "Deserializing the balance of the Ethereum bridge VP from \
+                     storage shouldn't fail",
+                )
+            } else {
+                tracing::debug!(
+                    "Could not retrieve the modified Ethereum bridge VP's \
+                     balance after applying tx"
+                );
+                return Ok(false);
+            };
+
+        // The amount escrowed should increase.
+        if escrow_pre < escrow_post {
+            Ok(verifiers.contains(&storage::bridge_pool::BRIDGE_POOL_ADDRESS))
+        } else {
+            tracing::info!(
+                "A normal tx cannot decrease the amount of Nam escrowed in \
+                 the Ethereum bridge"
+            );
+            Ok(false)
+        }
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -50,6 +106,7 @@ where
     ///   decreased by the same amount
     /// - a wrapped ERC20's balance key to decrease iff another one of its
     ///   balance keys increased by the same amount
+    /// - Escrowing Nam in order to mint wrapped Nam on Ethereum
     ///
     /// Some other changes to the storage subspace of this account are expected
     /// to happen natively i.e. bypassing this validity predicate. For example,
@@ -67,6 +124,12 @@ where
             verifiers_len = verifiers.len(),
             "Ethereum Bridge VP triggered",
         );
+
+        // first check if Nam is being escrowed
+        if keys_changed.contains(&balance_key(&xan(), &super::ADDRESS)) {
+            return self.check_escrow(verifiers);
+        }
+
         let (key_a, key_b) = match extract_valid_keys_changed(keys_changed)? {
             Some((key_a, key_b)) => (key_a, key_b),
             None => return Ok(false),
@@ -154,7 +217,8 @@ fn extract_valid_keys_changed(
 /// amount, and that the changes balance each other out. If the balance changes
 /// are invalid, the reason is logged and a `None` is returned. Otherwise,
 /// return the `Address` of the owner of the balance which is decreasing,
-/// as by how much it decreased, which should be authorizing the balance change.
+/// and by how much it decreased, which should be authorizing the balance
+/// change.
 pub(super) fn check_balance_changes(
     reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,

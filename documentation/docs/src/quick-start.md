@@ -1,17 +1,20 @@
-# Quick Start - How to run a validator node
+# Quickstart - How to run a validator on Namada?
 
 ## About this guide
 
-This guide is aimed at people interested in running a validator node and assumes basic knowledge of the terminal and how commands are used.
+This guide is for the ones interested in operating a Namada validator node and assumes basic knowledge of the terminal and how commands are used.
 
-* Comments start with `#`:  
-  `# this is a comment make sure you read them!`
-* Sample outputs start with an arrow:  
-  `➜ this is an example command line output useful for comparing`
+* Comments start with `#`:
 
-## Install Namada
+```# this is a comment make sure you read them!```
 
-See [the install guide](user-guide/install.md) for details on installing the Namada binaries. Commands in this guide will assume you have the Namada binaries (`namada`, `namadan`, `namadaw`, `namadac`) on your path.
+* Sample outputs start with an arrow:
+  
+```➜ this is an example command line output useful for comparing```
+
+## Installing Namada
+
+See [the installation guide](user-guide/install.md) for details on installing the Namada binaries. Commands in this guide will assume you have the Namada binaries (`namada`, `namadan`, `namadaw`, `namadac`) on your path.
 
 ## Joining a network
 
