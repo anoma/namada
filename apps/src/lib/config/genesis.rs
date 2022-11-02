@@ -588,7 +588,6 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
-            treasury_params,
             ethereum_bridge_params: config.ethereum_bridge_params,
         };
         genesis.init();
@@ -637,7 +636,6 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
-    pub treasury_params: TreasuryParams,
     // Ethereum bridge config
     pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
 }
@@ -876,7 +874,6 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
-        treasury_params: TreasuryParams::default(),
         ethereum_bridge_params: None,
     }
 }
