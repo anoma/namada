@@ -33,10 +33,10 @@ router! {SHELL,
         -> bool = storage_has_key,
 
     // was the transaction accepted?
-    ( "accepted" / [tx_hash: Hash] ) -> bool = accepted,
+    ( "accepted" / [tx_hash: Hash] ) -> Vec<u8> = accepted,
 
     // was the transaction applied?
-    ( "applied" / [tx_hash: Hash] ) -> bool = applied,
+    ( "applied" / [tx_hash: Hash] ) -> Vec<u8> = applied,
 }
 
 #[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
@@ -57,10 +57,10 @@ router! {SHELL,
         -> bool = storage_has_key,
 
     // was the transaction accepted?
-    ( "accepted" / [tx_hash: Hash]) -> bool = accepted,
+    ( "accepted" / [tx_hash: Hash]) -> Vec<u8> = accepted,
 
     // was the transaction applied?
-    ( "applied" / [tx_hash: Hash]) -> bool = applied,
+    ( "applied" / [tx_hash: Hash]) -> Vec<u8> = applied,
 }
 
 // Handlers:

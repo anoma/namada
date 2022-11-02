@@ -30,11 +30,11 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
     VotePower,
 };
+use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
-use tendermint::abci::Code;
 use tendermint_config::net::Address as TendermintAddress;
 use tendermint_rpc::error::Error as TError;
 use tendermint_rpc::query::Query;
@@ -74,11 +74,8 @@ pub async fn query_tx_status(
         let mut backoff = ONE_SECOND;
 
         loop {
-            let data = vec![];
             tracing::debug!(query = ?status, "Querying tx status");
-            let response = match client
-                .abci_query(Some(status.into()), data, None, false)
-                .await
+            let raw_response = match send_tx_event_query(&client, status).await
             {
                 Ok(response) => response,
                 Err(err) => {
@@ -87,22 +84,11 @@ pub async fn query_tx_status(
                     continue;
                 }
             };
-            let mut events = match response.code {
-                Code::Ok => {
-                    match Vec::<Event>::try_from_slice(&response.value[..]) {
-                        Ok(events) => events,
-                        Err(err) => {
-                            eprintln!("Error decoding the event value: {err}");
-                            break Err(());
-                        }
-                    }
-                }
-                Code::Err(err) => {
-                    eprintln!(
-                        "Error in the query {} (error code {})",
-                        response.info, err
-                    );
-                    break Err(());
+            let mut events = match Vec::<Event>::try_from_slice(&raw_response) {
+                Ok(events) => events,
+                Err(err) => {
+                    eprintln!("Error decoding the event value: {err}");
+                    cli::safe_exit(1);
                 }
             };
             if let Some(e) = events.pop() {
@@ -1459,6 +1445,19 @@ impl<'a> From<TxEventQuery<'a>> for Query {
                 Query::default().and_eq("applied.hash", tx_hash)
             }
         }
+    }
+}
+
+pub async fn send_tx_event_query(
+    client: &HttpClient,
+    tx_query: TxEventQuery<'_>,
+) -> Result<Vec<u8>, queries::tm::Error> {
+    let tx_hash: Hash = tx_query.tx_hash().try_into().unwrap();
+    match tx_query {
+        TxEventQuery::Accepted(_) => {
+            RPC.shell().accepted(client, &tx_hash).await
+        }
+        TxEventQuery::Applied(_) => RPC.shell().applied(client, &tx_hash).await,
     }
 }
 
