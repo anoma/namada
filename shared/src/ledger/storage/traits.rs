@@ -206,7 +206,7 @@ impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
     fn subtree_delete(&mut self, key: &Key) -> Result<Hash, Error> {
         self.delete_key(key)
             .map_err(|err| Error::MerkleTree(err.to_string()))?;
-        Ok(self.root())
+        Ok(self.root().into())
     }
 }
 
