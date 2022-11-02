@@ -1665,7 +1665,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, Some(&args.source)).await;
+    process_tx(ctx, &args.tx, tx, default_signer).await;
 }
 
 pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
