@@ -4,32 +4,31 @@
 
 The overall aim of this integration is to have the ability to provide a
 multi-asset shielded pool following the MASP spec as an account on the
-current Anoma blockchain implementation.
+current Namada blockchain implementation.
 
-## Shielded pool VP
+## Shielded pool validity predicate (VP) 
 
-The shielded value pool can be an Anoma "established account" with a
+The shielded value pool can be an Namada established account with a
 validity predicate which handles the verification of shielded
 transactions. Similarly to zcash, the asset balance of the shielded pool
 itself is transparent - that is, from the transparent perspective, the
 MASP is just an account holding assets. The shielded pool VP has the
 following functions:
 
-- Accept only valid transactions involving assets moving in or out of
+- Accepts only valid transactions involving assets moving in or out of
   the pool.
-- Accept valid shielded-to-shielded transactions, which don't move
-  assets from the perspective of transparent Anoma.
-- Publish the note commitment and nullifier reveal Merkle trees.
+- Accepts valid shielded-to-shielded transactions, which don't move
+  assets from the perspective of transparent Namada.
+- Publishes the note commitment and nullifier reveal Merkle trees.
 
 To make this possible, the host environment needs to provide
 verification primitives to VPs. One possibility is to provide a single
-high-level "verify transaction output descriptions and proofs"
-operation, but another is to provide cryptographic functions in the host
+high-level operation to verify transaction output descriptions and proofs, but another is to provide cryptographic functions in the host
 environment and implement the verifier as part of the VP.
 
-The shielded pool needs the ability to update the commitment and
-nullifier Merkle trees as it receives transactions. This may possibly be
-achievable via the temporary storage mechanism added for IBC, with the
+In future, the shielded pool will be able to update the commitment and
+nullifier Merkle trees as it receives transactions. This could likely be
+achieved via the temporary storage mechanism added for IBC, with the
 trees finalized with each block.
 
 The input to the VP is the following set of state changes:
@@ -37,7 +36,7 @@ The input to the VP is the following set of state changes:
 - updates to the shielded pool's asset balances
 - new encrypted notes
 - updated note and nullifier tree states (partial, because we only have
-  the last block's anchor?)
+  the last block's anchor)
 
 and the following data which is ancillary from the ledger's perspective:
 
@@ -71,7 +70,7 @@ struct OutputDescription {
   c_enc: [u8; ENC_CIPHERTEXT_SIZE],
   // Encrypted note key recovery ciphertext
   c_out: [u8; OUT_CIPHERTEXT_SIZE],
-  // Zero-knowledge proof of the new encrypted note's location (?)
+  // Zero-knowledge proof of the new encrypted note's location
   zkproof: Proof<Bls12>,
 }
 ```
@@ -79,7 +78,7 @@ struct OutputDescription {
 Given these inputs:
 
 The VP must verify the proofs for all spend and output descriptions
-(`bellman::groth16`), as well as the signature for spend notes.
+([`bellman::groth16`](https://docs.rs/bellman/latest/bellman/groth16/index.html)), as well as the signature for spend notes.
 
 Encrypted notes from output descriptions must be published in the
 storage so that holders of the viewing key can view them; however, the
@@ -89,15 +88,14 @@ Nullifiers and commitments must be appended to their respective Merkle
 trees in the VP's storage as well, which is a transaction-level rather
 than a block-level state update.
 
-Additionally to the individual spend and output description
+In addition to the individual spend and output description
 verifications, the final transparent asset value change described in the
-transaction must equal the pool asset value change, and as an additional
-sanity check, the pool's balance of any asset may not end up negative
-(this may already be impossible?). (needs more input)
+transaction must equal the pool asset value change. As an additional
+sanity check, the pool's balance of any asset may not end up negative. 
 
 NB: Shielded-to-shielded transactions in an asset do not, from the
 ledger's perspective, transact in that asset; therefore, the asset's own
-VP is not run as described above, and cannot be because the shielded
+VP cannot run as described above because the shielded
 pool is asset-hiding.
 
 ## Client capabilities
@@ -116,7 +114,7 @@ if any, and proof data computed offline by the client.
 
 The client and wallet must be extended to support the shielded pool and
 the cryptographic operations needed to interact with it. From the
-perspective of the transparent Anoma protocol, a shielded transaction is
+perspective of the transparent Namada protocol, a shielded transaction is
 just a data write to the MASP storage, unless it moves value in or out
 of the pool. The client needs the capability to create notes,
 transactions, and proofs of transactions, but it has the advantage of
@@ -148,7 +146,7 @@ For cryptographic details and further information, see
 Note that this structure is required only by the client; the VP only
 handles commitments to this data.
 
-Diversifiers are selected (randomly?) by the client and used to
+Diversifiers are selected by the client and used to
 diversify addresses and their associated keys. `v` and `t` identify the
 asset type and value. Asset identifiers are derived from asset names,
 which are arbitrary strings (in this case, token/other asset VP
@@ -217,7 +215,7 @@ struct TxOut {
 ```
 Note that in contrast to Sapling's UTXO based approach, our
 transparent inputs/outputs are based on the account model used
-in the rest of Anoma.
+in the rest of Namada.
 
 # Shielded Transfer Specification
 ## Transfer Format
@@ -242,17 +240,17 @@ pub struct Transfer {
 ```
 ## Conditions
 Below, the conditions necessary for a valid shielded or unshielded transfer are outlined:
-* A shielded component equal to `None` indicates a transparent Anoma transaction
-* Otherwise the shielded component must have the form `Some(x)` where `x` has the transaction encoding specified in the [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/anoma/masp/main/docs/multi-asset-shielded-pool.pdf)
+* A shielded component equal to `None` indicates a transparent Namada transaction
+* Otherwise the shielded component must have the form `Some(x)` where `x` has the transaction encoding specified in the [Multi-Asset Shielded Pool Specs]()
 * Hence for a shielded transaction to be valid:
-  * the `Transfer` must satisfy the usual conditions for Anoma ledger transfers (i.e. sufficient funds, ...) as enforced by token and account validity predicates
-  * the `Transaction` must satisfy the conditions specified in the [Multi-Asset Shielded Pool Specication](https://raw.githubusercontent.com/anoma/masp/main/docs/multi-asset-shielded-pool.pdf)
-  * the `Transaction` and `Transfer` together must additionaly satisfy the below boundary conditions intended to ensure consistency between the MASP validity predicate ledger and Anoma ledger
+  * the `Transfer` must satisfy the usual conditions for Namada ledger transfers (i.e. sufficient funds, ...) as enforced by token and account validity predicates
+  * the `Transaction` must satisfy the conditions specified in the [Multi-Asset Shielded Pool Specification](https://github.com/anoma/masp/blob/main/docs/multi-asset-shielded-pool.pdf)
+  * the `Transaction` and `Transfer` together must additionally satisfy the below boundary conditions intended to ensure consistency between the MASP validity predicate ledger and Namada ledger
 * A key equal to `None` indicates an unpinned shielded transaction; one that can only be found by scanning and trial-decrypting the entire shielded pool
 * Otherwise the key must have the form `Some(x)` where `x` is a `String` such that there exists no prior accepted transaction with the same key
 
 ### Boundary Conditions
-Below, the conditions necessary to maintain consistency between the MASP validity predicate ledger and Anoma ledger are outlined:
+Below, the conditions necessary to maintain consistency between the MASP validity predicate ledger and Namada ledger are outlined:
 * If the target address is the MASP validity predicate, then no transparent outputs are permitted in the shielded transaction
 * If the target address is not the MASP validity predicate, then:
   * there must be exactly one transparent output in the shielded transaction and:
@@ -287,7 +285,7 @@ Below are miscellaneous remarks on the capabilities and limitations of the curre
   * This key must not be reused, this is in order to avoid revealing that multiple transactions are going to the same entity
 
 ## Multi-Asset Shielded Pool Specification Differences from Zcash Protocol Specification
-The [Multi-Asset Shielded Pool Specication](https://media.githubusercontent.com/media/anoma/masp/main/docs/multi-asset-shielded-pool.pdf) referenced above is in turn an extension to the [Zcash Protocol Specification](https://zips.z.cash/protocol/protocol.pdf). Below, the changes from the Zcash Protocol Specification assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
+The [Multi-Asset Shielded Pool Specification](https://github.com/anoma/masp/blob/main/docs/multi-asset-shielded-pool.pdf) referenced above is in turn an extension to the [Zcash Protocol Specification](https://zips.z.cash/protocol/protocol.pdf). Below, the changes from the Zcash Protocol Specification assumed to have been integrated into the Multi-Asset Shielded Pool Specification are listed:
 * [3.2 Notes](https://zips.z.cash/protocol/protocol.pdf#notes)
   * Sapling note tuple must include asset type
   * Note commitment must be parameterized by asset type
@@ -391,7 +389,7 @@ Below, the changes from [ZIP 32: Shielded Hierarchical Deterministic Wallets](ht
   * For extended full viewing keys on the Testnet, the Human-Readable Part is "xfvktest"
 
 # Storage Interface Specification
-Anoma nodes provide interfaces that allow Anoma clients to query for specific pinned transactions, transactions accepted into the shielded pool, and allowed conversions between various asset types. Below we describe the ABCI paths and the encodings of the responses to each type of query.
+Namada nodes provide interfaces that allow Namada clients to query for specific pinned transactions, transactions accepted into the shielded pool, and allowed conversions between various asset types. Below we describe the ABCI paths and the encodings of the responses to each type of query.
 
 ## Shielded Transfer Query
 In order to determine shielded balances belonging to particular keys or spend one's balance, it is necessary to download the transactions that transferred the assets to you. To this end, the nth transaction in the shielded pool can be obtained by getting the value at the storage path `<MASP-address>/tx-<n>`. Note that indexing is 0-based. This will return a quadruple of the type below:
@@ -414,7 +412,7 @@ When scanning the shielded pool, it is sometimes useful know when to stop scanni
 ## Pinned Transfer Query
 A transaction pinned to the key `x` in the shielded pool can be obtained indirectly by getting the value at the storage path `<MASP address>/pin-<x>`. This will return the index of the desired transaction within the shielded pool encoded as a `u64`. At this point, the above shielded transaction query can then be used to obtain the actual transaction bytes.
 ## Conversion Query
-In order for MASP clients to convert older asset types to their latest variants, they need to query nodes for currently valid conversions. This can be done by querying the ABCI path `conv/<asset-type>` where `asset-type` is a hexadecimal encoding of the asset identifier as defined in [Multi-Asset Shielded Pool Specication](https://media.githubusercontent.com/media/anoma/masp/main/docs/multi-asset-shielded-pool.pdf).  This will return a quadruple of the type below:
+In order for MASP clients to convert older asset types to their latest variants, they need to query nodes for currently valid conversions. This can be done by querying the ABCI path `conv/<asset-type>` where `asset-type` is a hexadecimal encoding of the asset identifier as defined in [Multi-Asset Shielded Pool Specification](https://github.com/anoma/masp/blob/main/docs/multi-asset-shielded-pool.pdf).  This will return a quadruple of the type below:
 ```
 (
     /// the token address of this asset type
@@ -427,4 +425,4 @@ In order for MASP clients to convert older asset types to their latest variants,
     MerklePath<Node>
 )
 ```
-If no conversions are available the amount will be exactly zero, otherwise the amount must contain negative units of the queried asset type.
+If no conversions are available, the amount will be exactly zero, otherwise the amount must contain negative units of the queried asset type.

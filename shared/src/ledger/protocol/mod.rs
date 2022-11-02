@@ -2,30 +2,32 @@
 use std::collections::BTreeSet;
 use std::panic;
 
-use namada::ledger::eth_bridge::vp::EthBridge;
-use namada::ledger::gas::{self, BlockGasMeter, VpGasMeter};
-use namada::ledger::governance::GovernanceVp;
-use namada::ledger::ibc::vp::{Ibc, IbcToken};
-use namada::ledger::native_vp::{self, NativeVp};
-use namada::ledger::parameters::{self, ParametersVp};
-use namada::ledger::pos::{self, PosVP};
-use namada::ledger::slash_fund::SlashFundVp;
-use namada::ledger::storage::write_log::WriteLog;
-use namada::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use namada::proto::{self, Tx};
-use namada::types::address::{Address, InternalAddress};
-use namada::types::storage;
-use namada::types::storage::TxIndex;
-use namada::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
-use namada::vm::wasm::{TxCache, VpCache};
-use namada::vm::{self, wasm, WasmCacheAccess};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
+use crate::ledger::eth_bridge::vp::EthBridge;
+use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use crate::ledger::governance::GovernanceVp;
+use crate::ledger::ibc::vp::{Ibc, IbcToken};
+use crate::ledger::native_vp::{self, NativeVp};
+use crate::ledger::parameters::{self, ParametersVp};
+use crate::ledger::pos::{self, PosVP};
+use crate::ledger::slash_fund::SlashFundVp;
+use crate::ledger::storage::write_log::WriteLog;
+use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use crate::types::storage::{TxIndex};
+use crate::proto::{self, Tx};
+use crate::types::address::{Address, InternalAddress};
+use crate::types::storage;
+use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
+use crate::vm::wasm::{TxCache, VpCache};
+use crate::vm::{self, wasm, WasmCacheAccess};
+
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
-    StorageError(namada::ledger::storage::Error),
+    StorageError(crate::ledger::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
@@ -39,7 +41,7 @@ pub enum Error {
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
     #[error("IBC native VP: {0}")]
-    IbcNativeVpError(namada::ledger::ibc::vp::Error),
+    IbcNativeVpError(crate::ledger::ibc::vp::Error),
     #[error("PoS native VP: {0}")]
     PosNativeVpError(pos::vp::Error),
     #[error("PoS native VP panicked")]
@@ -47,17 +49,18 @@ pub enum Error {
     #[error("Parameters native VP: {0}")]
     ParametersNativeVpError(parameters::Error),
     #[error("IBC Token native VP: {0}")]
-    IbcTokenNativeVpError(namada::ledger::ibc::vp::IbcTokenError),
+    IbcTokenNativeVpError(crate::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(namada::ledger::governance::vp::Error),
+    GovernanceNativeVpError(crate::ledger::governance::vp::Error),
     #[error("SlashFund native VP error: {0}")]
-    SlashFundNativeVpError(namada::ledger::slash_fund::Error),
+    SlashFundNativeVpError(crate::ledger::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]
-    EthBridgeNativeVpError(namada::ledger::eth_bridge::vp::Error),
+    EthBridgeNativeVpError(crate::ledger::eth_bridge::vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
 
+/// Result of applying a transaction
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Apply a given transaction

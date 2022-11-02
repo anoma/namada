@@ -1,9 +1,9 @@
 # Web explorer interface
 
 * Block explorer
-  * Display PoS state
-  * Display governance state
-  * Display transparent transfers
-  * Display transfers in and out of the MASP
-  * Display total values for the MASP
+  * Displays PoS state
+  * Displays governance state
+  * Displays transparent transfers
+  * Displays transfers in and out of the MASP
+  * Displays total values for the MASP
   * Allows tx hashes of shielded transfers to be looked up for confirmation

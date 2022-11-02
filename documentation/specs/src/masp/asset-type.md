@@ -2,22 +2,22 @@
 
 MASP notes carry balances that are some positive integer amount of an
 asset type. Per both the MASP specification and the implementation, the
-asset *identifier* is an 32-byte Blake2s hash of an arbitrary asset
+asset *identifier* is an 32-byte [Blake2s hash](https://www.blake2.net/) of an arbitrary asset
 *name* string, although the full 32-byte space is not used because the
 identifier must itself hash to an elliptic curve point (currently
 guaranteed by incrementing a nonce until the hash is a curve point). The
 final curve point is the asset *type* proper, used in computations.
 
 The following is a schema for the arbitrary asset name string intended
-to support various uses; at least fungible tokens and NFTs, but possibly
-others.
+to support various uses - currently fungible tokens and NFTs, but possibly
+others in future.
 
 The asset name string is built up from a number of segments, joined by a
 separator. We use `/` as the separator.
 
 Segments may be one of the following:
 
-- **Controlling address** segment: an Anoma address which controls the
+- **Controlling address** segment: a Namada address which controls the
   asset. For example, this is the fungible token address for a fungible
   token. This segment must be present, and must be first; it should in
   theory be an error to transparently transact in assets of this type

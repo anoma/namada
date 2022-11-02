@@ -483,7 +483,7 @@ impl Display for InternalAddress {
 }
 
 /// Temporary helper for testing
-pub fn xan() -> Address {
+pub fn nam() -> Address {
     Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").expect("The token address decoding shouldn't fail")
 }
 
@@ -537,7 +537,7 @@ pub fn masp_tx_key() -> crate::types::key::common::SecretKey {
 /// informal currency codes.
 pub fn tokens() -> HashMap<Address, &'static str> {
     vec![
-        (xan(), "XAN"),
+        (nam(), "NAM"),
         (btc(), "BTC"),
         (eth(), "ETH"),
         (dot(), "DOT"),
@@ -554,7 +554,7 @@ pub fn tokens() -> HashMap<Address, &'static str> {
 /// are dispensed for every b possessed tokens.
 pub fn masp_rewards() -> HashMap<Address, (u64, u64)> {
     vec![
-        (xan(), (0, 100)),
+        (nam(), (0, 100)),
         (btc(), (1, 100)),
         (eth(), (2, 100)),
         (dot(), (3, 100)),

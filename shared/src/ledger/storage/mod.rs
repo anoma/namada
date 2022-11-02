@@ -39,7 +39,7 @@ pub use crate::ledger::storage::merkle_tree::{
 pub use crate::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{
-    masp, masp_rewards, xan, Address, EstablishedAddressGen, InternalAddress,
+    masp, masp_rewards, nam, Address, EstablishedAddressGen, InternalAddress,
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 #[cfg(feature = "ferveo-tpke")]
@@ -745,7 +745,7 @@ where
         // with the zeroth epoch to minimize the number of convert notes clients
         // have to use. This trick works under the assumption that reward tokens
         // from different epochs are exactly equivalent.
-        let reward_asset_bytes = (xan(), 0u64)
+        let reward_asset_bytes = (nam(), 0u64)
             .try_to_vec()
             .expect("unable to serialize address and epoch");
         let reward_asset = AssetType::new(reward_asset_bytes.as_ref())
@@ -818,7 +818,7 @@ where
 
         // Update the MASP's transparent reward token balance to ensure that it
         // is sufficiently backed to redeem rewards
-        let reward_key = token::balance_key(&xan(), &masp_addr);
+        let reward_key = token::balance_key(&nam(), &masp_addr);
         if let Ok((Some(addr_bal), _)) = self.read(&reward_key) {
             // If there is already a balance, then add to it
             let addr_bal: token::Amount =

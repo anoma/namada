@@ -3300,12 +3300,13 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
  "ark-serialize",
  "assert_matches",
+ "async-trait",
  "bech32",
  "bellman",
  "bit-vec",
@@ -3332,6 +3333,7 @@ dependencies = [
  "masp_proofs",
  "namada_proof_of_stake",
  "parity-wasm",
+ "paste",
  "pretty_assertions",
  "proptest",
  "prost",
@@ -3350,8 +3352,11 @@ dependencies = [
  "tendermint 0.23.6",
  "tendermint-proto 0.23.5",
  "tendermint-proto 0.23.6",
+ "tendermint-rpc 0.23.5",
+ "tendermint-rpc 0.23.6",
  "test-log",
  "thiserror",
+ "tokio",
  "tonic-build",
  "tracing 0.1.37",
  "tracing-subscriber 0.3.16",
@@ -3367,7 +3372,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -3452,7 +3457,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "itertools",
@@ -3463,7 +3468,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "quote",
  "syn",
@@ -3471,7 +3476,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "derivative",
@@ -3481,7 +3486,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "assert_cmd",
  "borsh",
@@ -3515,7 +3520,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -3528,7 +3533,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "hex",
@@ -3539,7 +3544,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "namada",
@@ -4579,9 +4584,9 @@ dependencies = [
 
 [[package]]
 name = "rayon"
-version = "1.5.1"
+version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c06aca804d41dbc8ba42dfd964f0d01334eceb64314b9ecf7c5fad5188a06d90"
+checksum = "bd99e5772ead8baa5215278c9b15bf92087709e9c1b2d1f97cdb5a183c933a7d"
 dependencies = [
  "autocfg 1.1.0",
  "crossbeam-deque",
@@ -5557,7 +5562,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "async-trait",
  "bytes 1.2.1",
@@ -5598,7 +5603,7 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "flex-error",
  "serde 1.0.147",
@@ -5624,7 +5629,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -5653,7 +5658,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "bytes 1.2.1",
  "flex-error",
@@ -5703,7 +5708,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -5751,7 +5756,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",

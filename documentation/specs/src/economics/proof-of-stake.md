@@ -4,7 +4,7 @@ This section of the specification describes the proof-of-stake mechanism of Nama
 
 This section is split into three subcomponents: the [bonding mechanism](./proof-of-stake/bonding-mechanism.md), [reward distribution](./proof-of-stake/reward-distribution.md), and [cubic slashing](./proof-of-stake/cubic-slashing.md).
 
-## Introduction
+## Context
 
 Blockchain systems rely on economic security (directly or indirectly) to 
 prevent 
@@ -13,7 +13,7 @@ for actors
 to behave according to protocol. The aim is that economic incentives promote 
 correct long-term operation of the system and economic punishments 
 discourage diverging from correct protocol execution either by mistake or 
-with the intent of carrying out attacks. Many PoS blockcains rely on the 1/3 Byzantine rule, where they make the assumption the adversary cannot control more 2/3 of the total stake or 2/3 of the actors. 
+with the intent of carrying out attacks. Many PoS blockchains rely on the 1/3 Byzantine rule, where they make the assumption the adversary cannot control more 2/3 of the total stake or 2/3 of the actors. 
 
 ## Goals of Rewards and Slashing: Liveness and Security
 

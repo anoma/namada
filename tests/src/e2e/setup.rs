@@ -787,7 +787,7 @@ pub mod constants {
     pub const GOVERNANCE_ADDRESS: &str = "governance";
 
     // Fungible token addresses
-    pub const XAN: &str = "XAN";
+    pub const NAM: &str = "NAM";
     pub const BTC: &str = "BTC";
     pub const ETH: &str = "ETH";
     pub const DOT: &str = "DOT";

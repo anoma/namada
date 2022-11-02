@@ -35,13 +35,12 @@ use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
 use namada::proto::Tx;
-use namada::types::address::{btc, masp, masp_tx_key, xan as m1t, Address};
+use namada::types::address::{nam, btc, masp, masp_tx_key, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
-use namada::types::nft::{self, Nft, NftToken};
 use namada::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
@@ -49,7 +48,6 @@ use namada::types::token::{
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
-use namada::types::transaction::nft::{CreateNft, MintNft};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, storage, token};
 use namada::{ledger, vm};
@@ -82,13 +80,10 @@ const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-const TX_INIT_NFT: &str = "tx_init_nft.wasm";
-const TX_MINT_NFT: &str = "tx_mint_nft.wasm";
 const VP_USER_WASM: &str = "vp_user.wasm";
 const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
-const VP_NFT: &str = "vp_nft.wasm";
 
 const ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: &str =
     "ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT";
@@ -1670,80 +1665,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, default_signer).await;
-}
-
-pub async fn submit_init_nft(ctx: Context, args: args::NftCreate) {
-    let file = File::open(&args.nft_data).expect("File must exist.");
-    let nft: Nft = serde_json::from_reader(file)
-        .expect("Couldn't deserialize nft data file");
-
-    let vp_code = match &nft.vp_path {
-        Some(path) => {
-            std::fs::read(path).expect("Expected a file at given code path")
-        }
-        None => ctx.read_wasm(VP_NFT),
-    };
-
-    let signer = TxSigningKey::WalletAddress(WalletAddress::new(
-        nft.creator.clone().to_string(),
-    ));
-
-    let data = CreateNft {
-        tag: nft.tag.to_string(),
-        creator: nft.creator,
-        vp_code,
-        keys: nft.keys,
-        opt_keys: nft.opt_keys,
-        tokens: nft.tokens,
-    };
-
-    let data = data.try_to_vec().expect(
-        "Encoding transfer data to initialize a new account shouldn't fail",
-    );
-
-    let tx_code = ctx.read_wasm(TX_INIT_NFT);
-
-    let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, signer).await;
-}
-
-pub async fn submit_mint_nft(ctx: Context, args: args::NftMint) {
-    let file = File::open(&args.nft_data).expect("File must exist.");
-    let nft_tokens: Vec<NftToken> =
-        serde_json::from_reader(file).expect("JSON was not well-formatted");
-
-    let nft_creator_key = nft::get_creator_key(&args.nft_address);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    let nft_creator_address =
-        match rpc::query_storage_value::<Address>(&client, &nft_creator_key)
-            .await
-        {
-            Some(addr) => addr,
-            None => {
-                eprintln!("No creator key found for {}", &args.nft_address);
-                safe_exit(1);
-            }
-        };
-
-    let signer = TxSigningKey::WalletAddress(WalletAddress::new(
-        nft_creator_address.to_string(),
-    ));
-
-    let data = MintNft {
-        address: args.nft_address,
-        creator: nft_creator_address,
-        tokens: nft_tokens,
-    };
-
-    let data = data.try_to_vec().expect(
-        "Encoding transfer data to initialize a new account shouldn't fail",
-    );
-
-    let tx_code = ctx.read_wasm(TX_MINT_NFT);
-
-    let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, signer).await;
+    process_tx(ctx, &args.tx, tx, Some(&args.source)).await;
 }
 
 pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
@@ -1851,7 +1773,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1)
         };
 
-        let balance = rpc::get_token_balance(&client, &m1t(), &proposal.author)
+        let balance = rpc::get_token_balance(&client, &nam(), &proposal.author)
             .await
             .unwrap_or_default();
         if balance
@@ -2130,7 +2052,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
-    let balance_key = token::balance_key(&address::xan(), bond_source);
+    let balance_key = token::balance_key(&address::nam(), bond_source);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {

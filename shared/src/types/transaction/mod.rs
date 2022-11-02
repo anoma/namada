@@ -7,8 +7,6 @@ pub mod decrypted;
 pub mod encrypted;
 /// txs to manage governance
 pub mod governance;
-/// txs to manage nfts
-pub mod nft;
 pub mod pos;
 /// transaction protocols made by validators
 pub mod protocol;
@@ -343,7 +341,7 @@ pub mod tx_types {
     #[cfg(test)]
     mod test_process_tx {
         use super::*;
-        use crate::types::address::xan;
+        use crate::types::address::nam;
         use crate::types::storage::Epoch;
 
         fn gen_keypair() -> common::SecretKey {
@@ -427,7 +425,7 @@ pub mod tx_types {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: 10.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &keypair,
                 Epoch(0),
@@ -462,7 +460,7 @@ pub mod tx_types {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: 10.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &keypair,
                 Epoch(0),

@@ -47,8 +47,6 @@ pub mod cmds {
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxUpdateVp(TxUpdateVp),
-        TxInitNft(TxInitNft),
-        TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
     }
@@ -62,8 +60,6 @@ pub mod cmds {
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxUpdateVp::def())
-                .subcommand(TxInitNft::def())
-                .subcommand(TxMintNft::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
         }
@@ -76,8 +72,6 @@ pub mod cmds {
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
             let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
-            let tx_nft_create = SubCmd::parse(matches).map(Self::TxInitNft);
-            let tx_nft_mint = SubCmd::parse(matches).map(Self::TxMintNft);
             let tx_init_proposal =
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
@@ -88,8 +82,6 @@ pub mod cmds {
                 .or(tx_custom)
                 .or(tx_transfer)
                 .or(tx_update_vp)
-                .or(tx_nft_create)
-                .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
         }
@@ -155,9 +147,6 @@ pub mod cmds {
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxInitValidator::def().display_order(1))
-                // Nft transactions
-                .subcommand(TxInitNft::def().display_order(1))
-                .subcommand(TxMintNft::def().display_order(1))
                 // Proposal transactions
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
@@ -168,6 +157,7 @@ pub mod cmds {
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(3))
                 .subcommand(QueryConversions::def().display_order(3))
+                .subcommand(QueryBlock::def().display_order(3))
                 .subcommand(QueryBalance::def().display_order(3))
                 .subcommand(QueryBonds::def().display_order(3))
                 .subcommand(QueryVotingPower::def().display_order(3))
@@ -189,8 +179,6 @@ pub mod cmds {
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
-            let tx_nft_create = Self::parse_with_ctx(matches, TxInitNft);
-            let tx_nft_mint = Self::parse_with_ctx(matches, TxMintNft);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
@@ -201,6 +189,7 @@ pub mod cmds {
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
             let query_conversions =
                 Self::parse_with_ctx(matches, QueryConversions);
+            let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_voting_power =
@@ -219,8 +208,6 @@ pub mod cmds {
                 .or(tx_update_vp)
                 .or(tx_init_account)
                 .or(tx_init_validator)
-                .or(tx_nft_create)
-                .or(tx_nft_mint)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(bond)
@@ -228,6 +215,7 @@ pub mod cmds {
                 .or(withdraw)
                 .or(query_epoch)
                 .or(query_conversions)
+                .or(query_block)
                 .or(query_balance)
                 .or(query_bonds)
                 .or(query_voting_power)
@@ -279,8 +267,6 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
-        TxInitNft(TxInitNft),
-        TxMintNft(TxMintNft),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         Bond(Bond),
@@ -288,6 +274,7 @@ pub mod cmds {
         Withdraw(Withdraw),
         QueryEpoch(QueryEpoch),
         QueryConversions(QueryConversions),
+        QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
         QueryVotingPower(QueryVotingPower),
@@ -1122,10 +1109,30 @@ pub mod cmds {
             })
         }
 
+
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query currently applicable conversions.")
                 .add_args::<args::QueryConversions>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryBlock(pub args::Query);
+
+    impl SubCmd for QueryBlock {
+        const CMD: &'static str = "block";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryBlock(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the last committed block.")
+                .add_args::<args::Query>()
         }
     }
 
@@ -1224,50 +1231,6 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query the raw bytes of a given storage key")
                 .add_args::<args::QueryRawBytes>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct TxInitNft(pub args::NftCreate);
-
-    impl SubCmd for TxInitNft {
-        const CMD: &'static str = "init-nft";
-
-        fn parse(matches: &ArgMatches) -> Option<Self>
-        where
-            Self: Sized,
-        {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxInitNft(args::NftCreate::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Create a new NFT.")
-                .add_args::<args::NftCreate>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct TxMintNft(pub args::NftMint);
-
-    impl SubCmd for TxMintNft {
-        const CMD: &'static str = "mint-nft";
-
-        fn parse(matches: &ArgMatches) -> Option<Self>
-        where
-            Self: Sized,
-        {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxMintNft(args::NftMint::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Mint new NFT tokens.")
-                .add_args::<args::NftMint>()
         }
     }
 
@@ -1492,7 +1455,7 @@ pub mod args {
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("fee-token", DefaultFn(|| "XAN".into()));
+        arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".into()));
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_LIMIT: ArgDefault<token::Amount> =
@@ -1514,7 +1477,6 @@ pub mod args {
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
-    const NFT_ADDRESS: Arg<Address> = arg("nft-address");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
     const PIN: ArgFlag = flag("pin");
     const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
@@ -2205,66 +2167,6 @@ pub mod args {
                      withdrawing from self-bonds, the validator is also the \
                      source.",
                 ))
-        }
-    }
-
-    // Transaction to create a new nft
-    #[derive(Clone, Debug)]
-    pub struct NftCreate {
-        /// Common tx argumentsips
-        pub tx: Tx,
-        /// Path to the nft file description
-        pub nft_data: PathBuf,
-    }
-
-    impl Args for NftCreate {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let data_path = DATA_PATH.parse(matches);
-
-            Self {
-                tx,
-                nft_data: data_path,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Tx>()
-                .arg(DATA_PATH.def().about("The path nft description file."))
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct NftMint {
-        /// Common tx arguments
-        pub tx: Tx,
-        /// The nft address
-        pub nft_address: Address,
-        /// The nft token description
-        pub nft_data: PathBuf,
-    }
-
-    impl Args for NftMint {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let nft_address = NFT_ADDRESS.parse(matches);
-            let data_path = DATA_PATH.parse(matches);
-
-            Self {
-                tx,
-                nft_address,
-                nft_data: data_path,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Tx>()
-                .arg(NFT_ADDRESS.def().about("The nft address."))
-                .arg(
-                    DATA_PATH.def().about(
-                        "The data path file that describes the nft tokens.",
-                    ),
-                )
         }
     }
 

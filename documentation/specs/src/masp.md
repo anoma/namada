@@ -8,3 +8,4 @@ See the following documents:
 - [Asset type schema](./masp/asset-type.md)
 - [Burn and mint](./masp/burn-and-mint.md)
 - [Convert circuit](./masp/convert-circuit.md)
+- [Shielded pool incentives](./economics/shielded-pool-incentives.md)
