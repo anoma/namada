@@ -12,6 +12,7 @@ use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::BorshDeserialize;
 use data_encoding::HEXLOWER;
+use eyre::{eyre, Context as EyreContext};
 use itertools::Itertools;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
@@ -1435,13 +1436,23 @@ impl<'a> From<TxEventQuery<'a>> for Query {
 pub async fn query_tx_events(
     client: &HttpClient,
     tx_event_query: TxEventQuery<'_>,
-) -> Result<Vec<Event>, queries::tm::Error> {
-    let tx_hash: Hash = tx_event_query.tx_hash().try_into().unwrap();
+) -> eyre::Result<Vec<Event>> {
+    let tx_hash: Hash = tx_event_query.tx_hash().try_into()?;
     match tx_event_query {
-        TxEventQuery::Accepted(_) => {
-            RPC.shell().accepted(client, &tx_hash).await
-        }
-        TxEventQuery::Applied(_) => RPC.shell().applied(client, &tx_hash).await,
+        TxEventQuery::Accepted(_) => RPC
+            .shell()
+            .accepted(client, &tx_hash)
+            .await
+            .wrap_err_with(|| {
+                eyre!("Failed querying whether a transaction was accepted")
+            }),
+        TxEventQuery::Applied(_) => RPC
+            .shell()
+            .applied(client, &tx_hash)
+            .await
+            .wrap_err_with(|| {
+                eyre!("Error querying whether a transaction was applied")
+            }),
     }
 }
 
