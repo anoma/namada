@@ -172,18 +172,11 @@ where
 
         let current_epoch = self.ctx.get_block_epoch().ok();
 
-        let pre_counter: Option<u64> =
-            self.ctx.pre().read(&counter_key)?.unwrap_or_default();
-        let pre_voting_start_epoch: Option<Epoch> = self
-            .ctx
-            .pre()
-            .read(&voting_start_epoch_key)?
-            .unwrap_or_default();
-        let pre_voting_end_epoch: Option<Epoch> = self
-            .ctx
-            .pre()
-            .read(&voting_end_epoch_key)?
-            .unwrap_or_default();
+        let pre_counter: Option<u64> = self.ctx.pre().read(&counter_key)?;
+        let pre_voting_start_epoch: Option<Epoch> =
+            self.ctx.pre().read(&voting_start_epoch_key)?;
+        let pre_voting_end_epoch: Option<Epoch> =
+            self.ctx.pre().read(&voting_end_epoch_key)?;
 
         let voter = gov_storage::get_voter_address(key);
         let delegation_address = gov_storage::get_vote_delegation_address(key);
