@@ -278,8 +278,8 @@ where
             self.ctx.pre().read(&max_code_size_parameter_key)?;
         let post_code: Option<Vec<u8>> = self.ctx.read_bytes_post(&code_key)?;
         match (post_code, max_proposal_length) {
-            (Some(post_content), Some(max_content_length)) => {
-                Ok(post_content.len() < max_content_length)
+            (Some(post_code), Some(max_content_length)) => {
+                Ok(post_code.len() < max_content_length)
             }
             _ => Ok(false),
         }
@@ -297,8 +297,8 @@ where
             return Ok(false);
         }
 
-        let end_epoch: Option<u64> = self.ctx.pre().read(&end_epoch_key)?;
-        let grace_epoch: Option<u64> = self.ctx.pre().read(&grace_epoch_key)?;
+        let end_epoch: Option<u64> = self.ctx.post().read(&end_epoch_key)?;
+        let grace_epoch: Option<u64> = self.ctx.post().read(&grace_epoch_key)?;
         let min_grace_epoch: Option<u64> =
             self.ctx.pre().read(&min_grace_epoch_key)?;
         match (min_grace_epoch, grace_epoch, end_epoch) {
@@ -337,8 +337,8 @@ where
         }
 
         let start_epoch: Option<Epoch> =
-            self.ctx.pre().read(&start_epoch_key)?;
-        let end_epoch: Option<Epoch> = self.ctx.pre().read(&end_epoch_key)?;
+            self.ctx.post().read(&start_epoch_key)?;
+        let end_epoch: Option<Epoch> = self.ctx.post().read(&end_epoch_key)?;
         let min_period: Option<u64> =
             self.ctx.pre().read(&min_period_parameter_key)?;
         match (min_period, start_epoch, end_epoch, current_epoch) {
@@ -379,9 +379,9 @@ where
 
         let start_epoch: Option<Epoch> =
             self.ctx.pre().read(&start_epoch_key)?;
-        let end_epoch: Option<Epoch> = self.ctx.pre().read(&end_epoch_key)?;
+        let end_epoch: Option<Epoch> = self.ctx.post().read(&end_epoch_key)?;
         let min_period: Option<u64> =
-            self.ctx.pre().read(&min_period_parameter_key)?;
+            self.ctx.post().read(&min_period_parameter_key)?;
         let max_period: Option<u64> =
             self.ctx.pre().read(&max_period_parameter_key)?;
         match (
@@ -468,7 +468,7 @@ where
         let pre_balance: Option<token_storage::Amount> =
             self.ctx.pre().read(&balance_key)?;
         let post_balance: Option<token_storage::Amount> =
-            self.ctx.pre().read(&balance_key)?;
+            self.ctx.post().read(&balance_key)?;
 
         match (min_funds_parameter, pre_balance, post_balance) {
             (
@@ -498,7 +498,7 @@ where
             return Ok(false);
         }
 
-        let author = self.ctx.pre().read(&author_key)?;
+        let author = self.ctx.post().read(&author_key)?;
 
         match author {
             Some(author) => match author {
