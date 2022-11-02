@@ -11,10 +11,10 @@ pub mod write_log;
 use core::fmt::Debug;
 use std::array;
 
-use borsh::BorshSerialize;
 use thiserror::Error;
 
 use super::events::log::{dumb_queries, EventLog};
+use super::events::Event;
 use super::parameters::Parameters;
 use super::storage_api::{ResultExt, StorageRead, StorageWrite};
 use super::{parameters, storage_api};
@@ -277,7 +277,10 @@ pub trait DBWriteBatch {
 /// Methods for querying and mutating an event log.
 pub trait EventLogExt {
     /// Query events in the event log matching the given query.
-    fn query_event_log(&self, matcher: dumb_queries::QueryMatcher) -> Vec<u8>;
+    fn query_event_log(
+        &self,
+        matcher: dumb_queries::QueryMatcher,
+    ) -> Vec<Event>;
     /// Return a reference to the [`EventLog`].
     fn event_log(&self) -> &EventLog;
     /// Return a mutable reference to the [`EventLog`].
@@ -290,13 +293,14 @@ where
     H: StorageHasher,
 {
     /// Query events in the event log matching the given query.
-    fn query_event_log(&self, matcher: dumb_queries::QueryMatcher) -> Vec<u8> {
+    fn query_event_log(
+        &self,
+        matcher: dumb_queries::QueryMatcher,
+    ) -> Vec<Event> {
         self.event_log()
             .iter_with_matcher(matcher)
             .cloned()
             .collect::<Vec<_>>()
-            .try_to_vec()
-            .unwrap()
     }
 
     /// Return a reference to the [`EventLog`].

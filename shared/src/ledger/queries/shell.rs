@@ -2,6 +2,7 @@ use borsh::BorshSerialize;
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 
 use crate::ledger::events::log::dumb_queries;
+use crate::ledger::events::Event;
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
@@ -33,10 +34,10 @@ router! {SHELL,
         -> bool = storage_has_key,
 
     // was the transaction accepted?
-    ( "accepted" / [tx_hash: Hash] ) -> Vec<u8> = accepted,
+    ( "accepted" / [tx_hash: Hash] ) -> Vec<Event> = accepted,
 
     // was the transaction applied?
-    ( "applied" / [tx_hash: Hash] ) -> Vec<u8> = applied,
+    ( "applied" / [tx_hash: Hash] ) -> Vec<Event> = applied,
 }
 
 #[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
@@ -57,10 +58,10 @@ router! {SHELL,
         -> bool = storage_has_key,
 
     // was the transaction accepted?
-    ( "accepted" / [tx_hash: Hash]) -> Vec<u8> = accepted,
+    ( "accepted" / [tx_hash: Hash]) -> Vec<Event> = accepted,
 
     // was the transaction applied?
-    ( "applied" / [tx_hash: Hash]) -> Vec<u8> = applied,
+    ( "applied" / [tx_hash: Hash]) -> Vec<Event> = applied,
 }
 
 // Handlers:
@@ -226,7 +227,7 @@ where
 fn accepted<D, H>(
     ctx: RequestCtx<'_, D, H>,
     tx_hash: Hash,
-) -> storage_api::Result<Vec<u8>>
+) -> storage_api::Result<Vec<Event>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -238,7 +239,7 @@ where
 fn applied<D, H>(
     ctx: RequestCtx<'_, D, H>,
     tx_hash: Hash,
-) -> storage_api::Result<Vec<u8>>
+) -> storage_api::Result<Vec<Event>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,

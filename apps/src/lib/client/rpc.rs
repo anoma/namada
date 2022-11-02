@@ -75,20 +75,12 @@ pub async fn query_tx_status(
 
         loop {
             tracing::debug!(query = ?status, "Querying tx status");
-            let raw_response = match send_tx_event_query(&client, status).await
-            {
+            let mut events = match query_tx_events(&client, status).await {
                 Ok(response) => response,
                 Err(err) => {
                     tracing::debug!(%err, "ABCI query failed");
                     sleep_update(status, &mut backoff).await;
                     continue;
-                }
-            };
-            let mut events = match Vec::<Event>::try_from_slice(&raw_response) {
-                Ok(events) => events,
-                Err(err) => {
-                    eprintln!("Error decoding the event value: {err}");
-                    cli::safe_exit(1);
                 }
             };
             if let Some(e) = events.pop() {
@@ -1448,12 +1440,12 @@ impl<'a> From<TxEventQuery<'a>> for Query {
     }
 }
 
-pub async fn send_tx_event_query(
+pub async fn query_tx_events(
     client: &HttpClient,
-    tx_query: TxEventQuery<'_>,
-) -> Result<Vec<u8>, queries::tm::Error> {
-    let tx_hash: Hash = tx_query.tx_hash().try_into().unwrap();
-    match tx_query {
+    tx_event_query: TxEventQuery<'_>,
+) -> Result<Vec<Event>, queries::tm::Error> {
+    let tx_hash: Hash = tx_event_query.tx_hash().try_into().unwrap();
+    match tx_event_query {
         TxEventQuery::Accepted(_) => {
             RPC.shell().accepted(client, &tx_hash).await
         }
