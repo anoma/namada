@@ -5,7 +5,7 @@ use std::default::Default;
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
 use namada::ledger::eth_bridge::storage::bridge_pool::{
-    get_key_from_hash, get_pending_key, get_signed_root_key,
+    get_key_from_hash, get_signed_root_key,
 };
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
@@ -18,6 +18,7 @@ use namada::types::eth_bridge_pool::{
 };
 use namada::types::ethereum_events::EthAddress;
 use namada::types::keccak::encode::Encode;
+use namada::types::keccak::KeccakHash;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::MembershipProof::BridgePool;
@@ -399,8 +400,8 @@ where
         &self,
         request_bytes: Vec<u8>,
     ) -> response::Query {
-        if let Ok(transfers) =
-            <Vec<PendingTransfer>>::try_from_slice(request_bytes.as_slice())
+        if let Ok(transfer_hashes) =
+            <Vec<KeccakHash>>::try_from_slice(request_bytes.as_slice())
         {
             // get the latest signed merkle root of the Ethereum bridge pool
             let signed_root: MultiSignedMerkleRoot = match self
@@ -436,12 +437,34 @@ where
                          block height",
                     ),
             );
-
+            // from the hashes of the transfers, get the actual values.
+            let keys: Vec<_> =
+                transfer_hashes.iter().map(get_key_from_hash).collect();
+            let values: Vec<PendingTransfer> = keys
+                .iter()
+                .filter_map(|key| match self.storage.read(key) {
+                    Ok((Some(bytes), _)) => {
+                        BorshDeserialize::try_from_slice(&bytes[..]).ok()
+                    }
+                    _ => None,
+                })
+                .collect();
+            if values.len() != keys.len() {
+                return response::Query {
+                    code: 1,
+                    log: "One or more of the provided hashes had no \
+                          corresponding transfer in storage."
+                        .into(),
+                    info: "One or more of the provided hashes had no \
+                           corresponding transfer in storage."
+                        .into(),
+                    ..Default::default()
+                };
+            }
             // get the membership proof
-            let keys: Vec<_> = transfers.iter().map(get_pending_key).collect();
             match tree.get_sub_tree_existence_proof(
                 &keys,
-                transfers.into_iter().map(MerkleValue::from).collect(),
+                values.into_iter().map(MerkleValue::from).collect(),
             ) {
                 Ok(BridgePool(proof)) => response::Query {
                     code: 0,
@@ -864,7 +887,9 @@ pub enum SendValsetUpd {
 
 #[cfg(test)]
 mod test_queries {
-    use namada::ledger::eth_bridge::storage::bridge_pool::BridgePoolTree;
+    use namada::ledger::eth_bridge::storage::bridge_pool::{
+        get_pending_key, BridgePoolTree,
+    };
     use namada::types::eth_bridge_pool::{GasFee, TransferToEthereum};
     use namada::types::ethereum_events::EthAddress;
 
@@ -1061,6 +1086,7 @@ mod test_queries {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
                 amount: 0.into(),
                 nonce: 0.into(),
             },
@@ -1098,6 +1124,7 @@ mod test_queries {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
                 amount: 0.into(),
                 nonce: 0.into(),
             },
@@ -1151,6 +1178,7 @@ mod test_queries {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
                 amount: 0.into(),
                 nonce: 0.into(),
             },
@@ -1196,7 +1224,9 @@ mod test_queries {
         shell.storage.block.height = shell.storage.block.height + 1;
 
         let resp = shell.generate_bridge_pool_proof(
-            vec![transfer.clone()].try_to_vec().expect("Test failed"),
+            vec![transfer.keccak256()]
+                .try_to_vec()
+                .expect("Test failed"),
         );
         assert_eq!(resp.code, 0);
 
@@ -1229,6 +1259,7 @@ mod test_queries {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
                 amount: 0.into(),
                 nonce: 0.into(),
             },
@@ -1275,7 +1306,9 @@ mod test_queries {
 
         // this is in the pool, but its merkle root has not been signed yet
         let resp = shell.generate_bridge_pool_proof(
-            vec![transfer2].try_to_vec().expect("Test failed"),
+            vec![transfer2.keccak256()]
+                .try_to_vec()
+                .expect("Test failed"),
         );
         // thus proof generation should fail
         assert_eq!(resp.code, 1);

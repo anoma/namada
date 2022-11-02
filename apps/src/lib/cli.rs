@@ -23,12 +23,14 @@ const APP_NAME: &str = "Anoma";
 const NODE_CMD: &str = "node";
 const CLIENT_CMD: &str = "client";
 const WALLET_CMD: &str = "wallet";
+const BRIDGE_POOL_CMD: &str = "ethereum-bridge-pool";
 
 pub mod cmds {
     use clap::AppSettings;
 
     use super::utils::*;
     use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
+    use crate::cli::BRIDGE_POOL_CMD;
 
     /// Commands for `anoma` binary.
     #[allow(clippy::large_enum_variant)]
@@ -40,6 +42,7 @@ pub mod cmds {
         Wallet(AnomaWallet),
 
         // Inlined commands from the node.
+        EthBridgePool(EthBridgePool),
         Ledger(Ledger),
         Gossip(Gossip),
         Matchmaker(Matchmaker),
@@ -60,6 +63,7 @@ pub mod cmds {
             app.subcommand(AnomaNode::def())
                 .subcommand(AnomaClient::def())
                 .subcommand(AnomaWallet::def())
+                .subcommand(EthBridgePool::def())
                 .subcommand(Ledger::def())
                 .subcommand(Gossip::def())
                 .subcommand(Matchmaker::def())
@@ -1351,6 +1355,118 @@ pub mod cmds {
                 .add_args::<args::InitGenesisValidator>()
         }
     }
+
+    /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
+    #[derive(Clone, Debug)]
+    #[allow(clippy::large_enum_variant)]
+    pub enum EthBridgePool {
+        /// Add a transfer to the pool.
+        AddTransfer(args::EthereumBridgePool),
+        /// Construct a proof that a set of transfers is in the pool.
+        /// This can be used to relay transfers across the
+        /// bridge to Ethereum.
+        ConstructProof(args::BridgePoolProof),
+        /// Query the contents of the pool.
+        QueryPool(args::Query),
+    }
+
+    impl Cmd for EthBridgePool {
+        fn add_sub(app: App) -> App {
+            app.subcommand(AddToEthBridgePool::def().display_order(1))
+                .subcommand(ConstructProof::def().display_order(1))
+                .subcommand(QueryEthBridgePool::def().display_order(1))
+        }
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            let add_to_pool = AddToEthBridgePool::parse(matches)
+                .map(|add| Self::AddTransfer(add.0));
+            let construct_proof = ConstructProof::parse(matches)
+                .map(|proof| Self::ConstructProof(proof.0));
+            let query_pool = QueryEthBridgePool::parse(matches)
+                .map(|q| Self::QueryPool(q.0));
+            add_to_pool.or(construct_proof).or(query_pool)
+        }
+    }
+
+    impl SubCmd for EthBridgePool {
+        const CMD: &'static str = BRIDGE_POOL_CMD;
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            Cmd::parse(matches)
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Functionality for interacting with the Ethereum bridge \
+                     pool. This pool holds transfers waiting to be relayed to \
+                     Ethereum.",
+                )
+                .subcommand(AddToEthBridgePool::def().display_order(1))
+                .subcommand(ConstructProof::def().display_order(1))
+                .subcommand(QueryEthBridgePool::def().display_order(1))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct AddToEthBridgePool(pub args::EthereumBridgePool);
+
+    impl SubCmd for AddToEthBridgePool {
+        const CMD: &'static str = "add-transfer";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::EthereumBridgePool::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Add a new transfer to the Ethereum bridge pool.")
+                .add_args::<args::EthereumBridgePool>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ConstructProof(pub args::BridgePoolProof);
+
+    impl SubCmd for ConstructProof {
+        const CMD: &'static str = "construct-proof";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::BridgePoolProof::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Construct a merkle proof that the given transfer is in \
+                     the pool.",
+                )
+                .add_args::<args::EthereumBridgePool>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryEthBridgePool(args::Query);
+
+    impl SubCmd for QueryEthBridgePool {
+        const CMD: &'static str = "query";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Get the contents of the Ethereum bridge pool.")
+                .add_args::<args::Query>()
+        }
+    }
 }
 
 pub mod args {
@@ -1368,6 +1484,7 @@ pub mod args {
     use namada::types::ethereum_events::EthAddress;
     use namada::types::governance::ProposalVote;
     use namada::types::intent::{DecimalWrapper, Exchange};
+    use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
@@ -1418,13 +1535,16 @@ pub mod args {
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
-    const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("fee-token", DefaultFn(|| "XAN".into()));
     const FORCE: ArgFlag = flag("force");
+    const GAS_AMOUNT: ArgDefault<token::Amount> =
+        arg_default("gas-amount", DefaultFn(|| token::Amount::from(0)));
     const GAS_LIMIT: ArgDefault<token::Amount> =
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
+    const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+        arg_default_from_ctx("gas-token", DefaultFn(|| "XAN".into()));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
+    const HASH_LIST: Arg<String> = arg("hash-list");
     const INTENT_GOSSIPER_ADDR: ArgDefault<SocketAddr> = arg_default(
         "intent-gossiper",
         DefaultFn(|| {
@@ -1572,7 +1692,10 @@ pub mod args {
     }
 
     /// A transfer to be added to the Ethereum bridge pool.
+    #[derive(Clone, Debug)]
     pub struct EthereumBridgePool {
+        /// The args for building a tx to the bridge pool
+        pub tx: Tx,
         /// The type of token
         pub asset: EthAddress,
         /// The recipient address
@@ -1589,6 +1712,7 @@ pub mod args {
 
     impl Args for EthereumBridgePool {
         fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
             let asset = ERC20.parse(matches);
             let recipient = ETH_ADDRESS.parse(matches);
             let sender = ADDRESS.parse(matches);
@@ -1596,6 +1720,7 @@ pub mod args {
             let gas_amount = FEE_AMOUNT.parse(matches);
             let gas_payer = FEE_PAYER.parse(matches);
             Self {
+                tx,
                 asset,
                 recipient,
                 sender,
@@ -1606,35 +1731,69 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(
-                ERC20
-                    .def()
-                    .about("The Ethereum address of the ERC20 token."),
-            )
-            .arg(
-                ETH_ADDRESS
-                    .def()
-                    .about("The Ethereum address receiving the tokens."),
-            )
-            .arg(
-                ADDRESS
-                    .def()
-                    .about("The Namada address sending the tokens."),
-            )
-            .arg(
-                AMOUNT.def().about(
+            app.add_args::<Tx>()
+                .arg(
+                    ERC20
+                        .def()
+                        .about("The Ethereum address of the ERC20 token."),
+                )
+                .arg(
+                    ETH_ADDRESS
+                        .def()
+                        .about("The Ethereum address receiving the tokens."),
+                )
+                .arg(
+                    ADDRESS
+                        .def()
+                        .about("The Namada address sending the tokens."),
+                )
+                .arg(AMOUNT.def().about(
                     "The amount of tokens being sent across the bridge.",
-                ),
-            )
-            .arg(FEE_AMOUNT.def().about(
-                "The amount of NAM you wish to pay to have this transfer \
-                 relayed to Ethereum.",
+                ))
+                .arg(FEE_AMOUNT.def().about(
+                    "The amount of NAM you wish to pay to have this transfer \
+                     relayed to Ethereum.",
+                ))
+                .arg(
+                    FEE_PAYER.def().about(
+                        "The Namada address of the account paying the fee.",
+                    ),
+                )
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct BridgePoolProof {
+        /// The query parameters.
+        pub query: Query,
+        pub transfers: Vec<KeccakHash>,
+    }
+
+    impl Args for BridgePoolProof {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let hashes = HASH_LIST.parse(matches);
+            Self {
+                query,
+                transfers: hashes
+                    .split(' ')
+                    .map(|hash| {
+                        KeccakHash::try_from(hash).unwrap_or_else(|_| {
+                            tracing::info!(
+                                "Could not parse '{}' as a Keccak hash.",
+                                hash
+                            );
+                            safe_exit(1)
+                        })
+                    })
+                    .collect(),
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>().arg(HASH_LIST.def().about(
+                "List of Keccak hashes of transfers in the bridge pool.",
             ))
-            .arg(
-                FEE_PAYER
-                    .def()
-                    .about("The Namada address of the account paying the fee."),
-            )
         }
     }
 
@@ -2728,7 +2887,7 @@ pub mod args {
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
         /// The amount being payed to include the transaction
-        pub fee_amount: token::Amount,
+        pub fee_amount: Amount,
         /// The token in which the fee is being paid
         pub fee_token: WalletAddress,
         /// The max amount of gas used to process tx
@@ -2760,10 +2919,10 @@ pub mod args {
                  initialized, the alias will be the prefix of each new \
                  address joined with a number.",
             ))
-            .arg(FEE_AMOUNT.def().about(
+            .arg(GAS_AMOUNT.def().about(
                 "The amount being paid for the inclusion of this transaction",
             ))
-            .arg(FEE_TOKEN.def().about("The token for paying the fee"))
+            .arg(GAS_TOKEN.def().about("The token for paying the fee"))
             .arg(
                 GAS_LIMIT.def().about(
                     "The maximum amount of gas needed to run transaction",
@@ -2796,8 +2955,8 @@ pub mod args {
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
-            let fee_amount = FEE_AMOUNT.parse(matches);
-            let fee_token = FEE_TOKEN.parse(matches);
+            let fee_amount = GAS_AMOUNT.parse(matches);
+            let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
 
             let signing_key = SIGNING_KEY_OPT.parse(matches);
@@ -3225,6 +3384,11 @@ pub fn anoma_wallet_cli() -> (cmds::AnomaWallet, Context) {
     cmds::AnomaWallet::parse_or_print_help(app)
 }
 
+pub fn anoma_relayer_cli() -> (cmds::EthBridgePool, Context) {
+    let app = anoma_relayer_app();
+    cmds::EthBridgePool::parse_or_print_help(app)
+}
+
 fn anoma_app() -> App {
     let app = App::new(APP_NAME)
         .version(anoma_version())
@@ -3257,6 +3421,15 @@ fn anoma_wallet_app() -> App {
         .version(anoma_version())
         .author(crate_authors!("\n"))
         .about("Anoma wallet command line interface.")
+        .setting(AppSettings::SubcommandRequiredElseHelp);
+    cmds::AnomaWallet::add_sub(args::Global::def(app))
+}
+
+fn anoma_relayer_app() -> App {
+    let app = App::new(APP_NAME)
+        .version(anoma_version())
+        .author(crate_authors!("\n"))
+        .about("Anoma Ethereum bridge pool command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::AnomaWallet::add_sub(args::Global::def(app))
 }

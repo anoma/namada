@@ -1,3 +1,4 @@
+pub mod eth_bridge_pool;
 pub mod gossip;
 pub mod rpc;
 pub mod signing;

@@ -23,6 +23,8 @@ use crate::types::token::Amount;
     Eq,
     PartialOrd,
     Ord,
+    Serialize,
+    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
