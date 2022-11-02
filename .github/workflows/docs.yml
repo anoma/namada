@@ -125,7 +125,7 @@ jobs:
       - name: Upload rendered docs
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.make.bucket }}-${{ github.event.pull_request.number || github.sha }}
+          name: ${{ matrix.make.bucket }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ matrix.make.bucket }}.tar
       - name: Publish docs
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
