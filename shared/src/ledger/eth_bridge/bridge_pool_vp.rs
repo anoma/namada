@@ -15,6 +15,7 @@ use std::collections::BTreeSet;
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::eyre;
 
+use crate::ledger::eth_bridge::storage;
 use crate::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
@@ -24,8 +25,9 @@ use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::proto::SignedTxData;
-use crate::types::address::{wnam, xan, Address, InternalAddress};
+use crate::types::address::{xan, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
+use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
@@ -142,6 +144,26 @@ where
             ))),
         }
     }
+
+    /// Get the Ethereum address for wNam from storage, if possible
+    fn native_erc20_address(&self) -> Result<EthAddress, Error> {
+        match self.ctx.storage.read(&storage::native_erc20_key()) {
+            Ok((Some(bytes), _)) => {
+                Ok(EthAddress::try_from_slice(bytes.as_slice()).expect(
+                    "Deserializing the Native ERC20 address from storage \
+                     shouldn't fail.",
+                ))
+            }
+            Ok(_) => Err(Error(eyre!(
+                "The Ethereum bridge storage is not initialized"
+            ))),
+            Err(e) => Err(Error(eyre!(
+                "Failed to read storage when fetching the native ERC20 \
+                 address with: {}",
+                e.to_string()
+            ))),
+        }
+    }
 }
 
 /// Check if a delta matches the delta given by a transfer
@@ -234,8 +256,8 @@ where
 
         // if we are going to mint wNam on Ethereum, the appropriate
         // amount of Nam must be escrowed in the Ethereum bridge VP's storage.
-        // TODO: We should look this address up from storage
-        if transfer.transfer.asset == wnam() {
+        let wnam_address = self.native_erc20_address()?;
+        if transfer.transfer.asset == wnam_address {
             // check that correct amount of Nam was put into escrow.
             return if transfer.gas_fee.payer == transfer.transfer.sender {
                 if !self.check_nam_escrowed(
@@ -334,6 +356,9 @@ mod test_bridge_pool_vp {
     use borsh::{BorshDeserialize, BorshSerialize};
 
     use super::*;
+    use crate::ledger::eth_bridge::parameters::{
+        Contracts, EthereumBridgeConfig, UpgradeableContract,
+    };
     use crate::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::storage::mockdb::MockDB;
@@ -341,6 +366,7 @@ mod test_bridge_pool_vp {
     use crate::ledger::storage::write_log::WriteLog;
     use crate::ledger::storage::Storage;
     use crate::proto::Tx;
+    use crate::types::address::wnam;
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::types::ethereum_events::EthAddress;
@@ -487,6 +513,32 @@ mod test_bridge_pool_vp {
         [account_key, token_key].into()
     }
 
+    /// Initialize some dummy storage for testing
+    fn setup_storage() -> Storage<MockDB, Sha256Hasher> {
+        let mut storage = Storage::<MockDB, Sha256Hasher>::open(
+            std::path::Path::new(""),
+            ChainId::default(),
+            None,
+        );
+        // a dummy config for testing
+        let config = EthereumBridgeConfig {
+            min_confirmations: Default::default(),
+            contracts: Contracts {
+                native_erc20: wnam(),
+                bridge: UpgradeableContract {
+                    address: EthAddress([42; 20]),
+                    version: Default::default(),
+                },
+                governance: UpgradeableContract {
+                    address: EthAddress([18; 20]),
+                    version: Default::default(),
+                },
+            },
+        };
+        config.init_storage(&mut storage);
+        storage
+    }
+
     /// Setup a ctx for running native vps
     fn setup_ctx<'a>(
         tx: &'a Tx,
@@ -527,11 +579,7 @@ mod test_bridge_pool_vp {
     {
         // setup
         let mut write_log = new_writelog();
-        let storage = Storage::<MockDB, Sha256Hasher>::open(
-            std::path::Path::new(""),
-            ChainId::default(),
-            None,
-        );
+        let storage = setup_storage();
         let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
@@ -880,11 +928,7 @@ mod test_bridge_pool_vp {
     fn test_adding_transfer_twice_fails() {
         // setup
         let mut write_log = new_writelog();
-        let storage = Storage::<MockDB, Sha256Hasher>::open(
-            std::path::Path::new(""),
-            ChainId::default(),
-            None,
-        );
+        let storage = setup_storage();
         let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
@@ -958,11 +1002,7 @@ mod test_bridge_pool_vp {
     fn test_zero_gas_fees_rejected() {
         // setup
         let mut write_log = new_writelog();
-        let storage = Storage::<MockDB, Sha256Hasher>::open(
-            std::path::Path::new(""),
-            ChainId::default(),
-            None,
-        );
+        let storage = setup_storage();
         let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
@@ -1030,21 +1070,10 @@ mod test_bridge_pool_vp {
     fn test_mint_wnam() {
         // setup
         let mut write_log = new_writelog();
-        // initialize the eth bridge balance to 0
         let eb_account_key =
             balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
-        write_log
-            .write(
-                &eb_account_key,
-                Amount::default().try_to_vec().expect("Test failed"),
-            )
-            .expect("Test failed");
         write_log.commit_tx();
-        let storage = Storage::<MockDB, Sha256Hasher>::open(
-            std::path::Path::new(""),
-            ChainId::default(),
-            None,
-        );
+        let storage = setup_storage();
         let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
@@ -1125,29 +1154,18 @@ mod test_bridge_pool_vp {
         assert!(res);
     }
 
-    /// Test that we can rejecte a transfer that
+    /// Test that we can reject a transfer that
     /// mints wNam if we don't escrow the correct
     /// amount of Nam.
     #[test]
     fn test_reject_mint_wnam() {
         // setup
         let mut write_log = new_writelog();
-        // initialize the eth bridge balance to 0
+        write_log.commit_tx();
+        let storage = setup_storage();
+        let tx = Tx::new(vec![], None);
         let eb_account_key =
             balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
-        write_log
-            .write(
-                &eb_account_key,
-                Amount::default().try_to_vec().expect("Test failed"),
-            )
-            .expect("Test failed");
-        write_log.commit_tx();
-        let storage = Storage::<MockDB, Sha256Hasher>::open(
-            std::path::Path::new(""),
-            ChainId::default(),
-            None,
-        );
-        let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1255,11 +1273,7 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         write_log.commit_tx();
-        let storage = Storage::<MockDB, Sha256Hasher>::open(
-            std::path::Path::new(""),
-            ChainId::default(),
-            None,
-        );
+        let storage = setup_storage();
         let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
