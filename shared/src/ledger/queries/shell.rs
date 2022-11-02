@@ -6,12 +6,11 @@ use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::types::storage::{self, Epoch, PrefixValue};
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+#[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 use crate::types::transaction::{DecryptedTx, TxType};
 
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 router! {SHELL,
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
@@ -22,24 +21,6 @@ router! {SHELL,
 
     // Dry run a transaction
     ( "dry_run_tx" ) -> TxResult = (with_options dry_run_tx),
-
-    // Raw storage access - prefix iterator
-    ( "prefix" / [storage_key: storage::Key] )
-        -> Vec<PrefixValue> = (with_options storage_prefix),
-
-    // Raw storage access - is given storage key present?
-    ( "has_key" / [storage_key: storage::Key] )
-        -> bool = storage_has_key,
-}
-
-#[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
-router! {SHELL,
-    // Epoch of the last committed block
-    ( "epoch" ) -> Epoch = epoch,
-
-    // Raw storage access - read value
-    ( "value" / [storage_key: storage::Key] )
-        -> Vec<u8> = (with_options storage_value),
 
     // Raw storage access - prefix iterator
     ( "prefix" / [storage_key: storage::Key] )
@@ -86,6 +67,18 @@ where
         proof_ops: None,
         info: Default::default(),
     })
+}
+
+#[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
+fn dry_run_tx<D, H>(
+    _ctx: RequestCtx<'_, D, H>,
+    _request: &RequestQuery,
+) -> storage_api::Result<EncodedResponseQuery>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    unimplemented!("Dry running tx requires \"wasm-runtime\" feature.")
 }
 
 fn epoch<D, H>(ctx: RequestCtx<'_, D, H>) -> storage_api::Result<Epoch>

@@ -19,7 +19,7 @@ pub mod types;
 pub mod validation;
 
 use core::fmt::Debug;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -156,6 +156,99 @@ pub trait PosReadOnly {
     /// Read PoS total voting power of all validators (active and inactive).
     fn read_total_voting_power(&self)
     -> Result<TotalVotingPowers, Self::Error>;
+
+    /// Check if the given address is a validator by checking that it has some
+    /// state.
+    fn is_validator(
+        &self,
+        address: &Self::Address,
+    ) -> Result<bool, Self::Error> {
+        let state = self.read_validator_state(address)?;
+        Ok(state.is_some())
+    }
+
+    /// Get the total bond amount for the given bond ID at the given epoch.
+    fn bond_amount(
+        &self,
+        bond_id: &BondId<Self::Address>,
+        epoch: impl Into<Epoch>,
+    ) -> Result<Self::TokenAmount, Self::Error> {
+        // TODO new slash logic
+        let slashes = self.read_validator_slashes(&bond_id.validator)?;
+        // TODO apply rewards, if any
+        let bonds = self.read_bond(bond_id)?;
+        Ok(bonds
+            .and_then(|bonds| {
+                bonds.get(epoch).map(|bond| {
+                    let mut total: u64 = 0;
+                    // Find the sum of the bonds
+                    for (start_epoch, delta) in bond.pos_deltas.into_iter() {
+                        let delta: u64 = delta.into();
+                        total += delta;
+                        // Apply slashes if any
+                        for slash in slashes.iter() {
+                            if slash.epoch <= start_epoch {
+                                let current_slashed = slash.rate * delta;
+                                total -= current_slashed;
+                            }
+                        }
+                    }
+                    let neg_deltas: u64 = bond.neg_deltas.into();
+                    Self::TokenAmount::from(total - neg_deltas)
+                })
+            })
+            .unwrap_or_default())
+    }
+
+    /// Get all the validator known addresses. These validators may be in any
+    /// state, e.g. active, inactive or jailed.
+    fn validator_addresses(
+        &self,
+        epoch: impl Into<Epoch>,
+    ) -> Result<HashSet<Self::Address>, Self::Error> {
+        let validator_sets = self.read_validator_set()?;
+        let validator_set = validator_sets.get(epoch).unwrap();
+
+        Ok(validator_set
+            .active
+            .union(&validator_set.inactive)
+            .map(|validator| validator.address.clone())
+            .collect())
+    }
+
+    /// Get the total stake of a validator at the given epoch or current when
+    /// `None`. The total stake is a sum of validator's self-bonds and
+    /// delegations to their address.
+    fn validator_stake(
+        &self,
+        validator: &Self::Address,
+        epoch: impl Into<Epoch>,
+    ) -> Result<Self::TokenAmount, Self::Error> {
+        let total_deltas = self.read_validator_total_deltas(validator)?;
+        let total_stake = total_deltas
+            .and_then(|total_deltas| total_deltas.get(epoch))
+            .and_then(|total_stake| {
+                let sum: i128 = total_stake.into();
+                let sum: u64 = sum.try_into().ok()?;
+                Some(sum.into())
+            });
+        Ok(total_stake.unwrap_or_default())
+    }
+
+    /// Get the total stake in PoS system at the given epoch or current when
+    /// `None`.
+    fn total_stake(
+        &self,
+        epoch: impl Into<Epoch>,
+    ) -> Result<Self::TokenAmount, Self::Error> {
+        let epoch = epoch.into();
+        // TODO read total stake from storage once added
+        self.validator_addresses(epoch)?
+            .into_iter()
+            .try_fold(Self::TokenAmount::default(), |acc, validator| {
+                Ok(acc + self.validator_stake(&validator, epoch)?)
+            })
+    }
 }
 
 /// PoS system trait to be implemented in integration that can read and write
@@ -308,16 +401,6 @@ pub trait PosActions: PosReadOnly {
         self.write_validator_total_deltas(address, total_deltas)?;
         self.write_validator_voting_power(address, voting_power)?;
         Ok(())
-    }
-
-    /// Check if the given address is a validator by checking that it has some
-    /// state.
-    fn is_validator(
-        &self,
-        address: &Self::Address,
-    ) -> Result<bool, Self::Error> {
-        let state = self.read_validator_state(address)?;
-        Ok(state.is_some())
     }
 
     /// Self-bond tokens to a validator when `source` is `None` or equal to
