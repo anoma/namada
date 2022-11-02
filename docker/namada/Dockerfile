@@ -25,7 +25,7 @@ RUN make build-release
 FROM golang:1.18.0 as tendermint-builder
 WORKDIR /app
 
-RUN git clone -b v0.1.1-abcipp --single-branch https://github.com/heliaxdev/tendermint.git && cd tendermint && make build
+RUN git clone -b v0.1.3-abciplus --single-branch https://github.com/heliaxdev/tendermint.git && cd tendermint && make build
 
 FROM debian:bullseye-slim AS runtime
 ENV ANOMA_BASE_DIR=/.anoma 
