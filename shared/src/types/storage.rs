@@ -800,22 +800,6 @@ impl_int_key_seg!(u32, i32, 4);
 impl_int_key_seg!(u64, i64, 8);
 impl_int_key_seg!(u128, i128, 16);
 
-impl KeySeg for KeccakHash {
-    fn parse(seg: String) -> Result<Self> {
-        seg.clone()
-            .try_into()
-            .map_err(|_| Error::ParseError(seg, "Hash".into()))
-    }
-
-    fn raw(&self) -> String {
-        self.to_string()
-    }
-
-    fn to_db_key(&self) -> DbKeySeg {
-        DbKeySeg::StringSeg(self.raw())
-    }
-}
-
 /// Epoch identifier. Epochs are identified by consecutive numbers.
 #[derive(
     Clone,

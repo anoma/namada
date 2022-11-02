@@ -125,9 +125,9 @@ impl BridgePoolTree {
         }
     }
 
-    /// Return the root as a [struct@`Hash`] type.
-    pub fn root(&self) -> Hash {
-        self.root.clone().into()
+    /// Return the root as a [`struct@Hash`] type.
+    pub fn root(&self) -> KeccakHash {
+        self.root.clone()
     }
 
     /// Get a reference to the backing store
@@ -149,7 +149,8 @@ impl BridgePoolTree {
         if !leaves.is_subset(&self.leaves) {
             return Err(eyre!(
                 "Cannot generate proof for values that aren't in the tree"
-            ).into());
+            )
+            .into());
         }
         let mut proof_hashes = vec![];
         let mut flags = vec![];

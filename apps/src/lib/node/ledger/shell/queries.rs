@@ -1072,6 +1072,7 @@ mod test_queries {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
                 amount: 0.into(),
                 nonce: 0.into(),
             },
@@ -1109,6 +1110,7 @@ mod test_queries {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
                 amount: 0.into(),
                 nonce: 0.into(),
             },
@@ -1162,6 +1164,7 @@ mod test_queries {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
                 amount: 0.into(),
                 nonce: 0.into(),
             },
@@ -1216,10 +1219,7 @@ mod test_queries {
             BTreeSet::from([transfer.keccak256()]),
         );
         let proof = tree
-            .get_membership_proof(
-                std::array::from_ref(&Key::from(&transfer)),
-                vec![transfer],
-            )
+            .get_membership_proof(vec![transfer])
             .expect("Test failed");
 
         let proof = RelayProof {
@@ -1243,6 +1243,7 @@ mod test_queries {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
                 amount: 0.into(),
                 nonce: 0.into(),
             },
