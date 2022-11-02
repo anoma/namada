@@ -34,7 +34,7 @@ All [the data relevant to the PoS system](https://specs.namada.net/economics/pro
   - `total_deltas (required)`
   - (TODO) other standard validator metadata TBA (e.g. alias, website, description, etc.)
 
-Only NAM tokens can be staked in bonds. The tokens being staked (bonds and unbonds amounts) are kept in the PoS account under `{nam_address}/balance/{pos_address}` until they are withdrawn.
+Only NAM tokens can be staked in bonds. The tokens being staked (bonds and unbonds amounts) together with accumulated rewards (as they are auto-bonded) are kept in the PoS account under `{nam_address}/balance/{pos_address}` until they are withdrawn.
 
 ## Initialization
 
@@ -59,7 +59,7 @@ For slashing tokens, we implement a [PoS slash pool account](vp.md#pos-slash-poo
 
 ### Validator transactions
 
-The validator transactions are assumed to be applied with an account address `validator_address` and the the current epoch `n`.
+The validator transactions are assumed to be applied with an account address `validator_address` and the current epoch `n` (a transaction can use host environment function to find the current epoch).
 
 - `become_validator(consensus_key, commission_rate, max_commission_rate_change)`:
   - creates a record in `validator/{validator_address}/consensus_key` in epoch `n + pipeline_length`
