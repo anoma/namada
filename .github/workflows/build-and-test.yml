@@ -63,7 +63,7 @@ jobs:
       - name: Upload wasm artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: wasm-${{ github.sha }}
+          name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             wasm/tx_*.wasm
             wasm/vp_*.wasm
@@ -95,7 +95,7 @@ jobs:
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
-          name: wasm-${{ github.sha }}
+          name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
           path: ./wasm
       - name: Update WASM
         run: aws s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
@@ -195,7 +195,7 @@ jobs:
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
-          name: wasm-${{ github.sha }}
+          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
           path: ./wasm
       - name: Run unit test
         run: make test-unit${{ matrix.make.suffix }}
@@ -220,7 +220,7 @@ jobs:
       - name: Download anoma binaries
         uses: actions/download-artifact@v3
         with:
-          name: binaries${{ matrix.make.suffix }}-${{ github.sha }}
+          name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: ./target/release/
       - name: Change permissions
         run: |
@@ -250,7 +250,7 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@v3
         with:
-          name: logs-e2e${{ matrix.make.suffix }}-${{ github.sha }}
+          name: logs-e2e${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             /tmp/.*/logs/
             /tmp/.*/e2e-test.*/setup/validator-*/.anoma/logs/*.log
@@ -342,7 +342,7 @@ jobs:
       - name: Upload target binaries
         uses: actions/upload-artifact@v3
         with:
-          name: binaries${{ matrix.make.suffix }}-${{ github.sha }}
+          name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             target/release/namada
             target/release/namadac
