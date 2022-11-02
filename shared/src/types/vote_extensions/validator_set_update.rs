@@ -9,7 +9,7 @@ use num_rational::Ratio;
 use crate::ledger::pos::types::VotingPower;
 use crate::proto::Signed;
 use crate::types::address::Address;
-use crate::types::ethereum_events::EthAddress;
+use crate::types::ethereum_events::{EthAddress, Uint};
 use crate::types::keccak::encode::{AbiEncode, Encode, Token};
 use crate::types::keccak::KeccakHash;
 use crate::types::key::common::{self, Signature};
@@ -21,15 +21,35 @@ use crate::types::storage::Epoch;
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
 const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
 
-/// Type alias for a [`ValidatorSetUpdateVextDigest`].
-pub type VextDigest = ValidatorSetUpdateVextDigest;
+/// Voting power that has been normalized. Needed
+/// for interacting with smart contracts.
+///
+/// https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
+#[derive(Debug, Clone, Default)]
+pub struct NormalizedVotingPower(ethereum::U256);
+
+impl NormalizedVotingPower {
+    fn new(voting_power: VotingPower, total_voting_power: VotingPower) -> Self {
+        let voting_power: u64 = voting_power.into();
+        const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
+
+        let voting_power = Ratio::new(voting_power, total_voting_power.into())
+            * NORMALIZED_VOTING_POWER;
+        let voting_power = voting_power.round().to_integer();
+        Self(voting_power.into())
+    }
+}
+
+impl Encode<1> for NormalizedVotingPower {
+    fn tokenize(&self) -> [Token; 1] {
+        [Token::Uint(self.0)]
+    }
+}
 
 /// Contains the digest of all signatures from a quorum of
 /// validators for a [`Vext`].
-#[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
-pub struct ValidatorSetUpdateVextDigest {
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct VextDigest {
     #[cfg(feature = "abcipp")]
     /// A mapping from a validator address to a [`Signature`].
     pub signatures: HashMap<Address, Signature>,
@@ -42,6 +62,27 @@ pub struct ValidatorSetUpdateVextDigest {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     pub voting_powers: VotingPowersMap,
+}
+
+impl BorshSchema for VextDigest {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                HashMap::<Address, Signature>::declaration(),
+                VotingPowersMap::declaration()
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "validator_set_update::VextDigest".into()
+    }
 }
 
 impl VextDigest {
@@ -85,14 +126,9 @@ impl VextDigest {
 /// an Ethereum key.
 pub type SignedVext = Signed<Vext, SerializeWithAbiEncode>;
 
-/// Type alias for a [`ValidatorSetUpdateVext`].
-pub type Vext = ValidatorSetUpdateVext;
-
 /// Represents a validator set update, for some new [`Epoch`].
-#[derive(
-    Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
-pub struct ValidatorSetUpdateVext {
+#[derive(Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct Vext {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     ///
@@ -128,6 +164,28 @@ impl Vext {
     #[inline]
     pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
         SignedVext::new(sk, self.clone())
+    }
+}
+
+impl BorshSchema for Vext {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields =
+            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
+                VotingPowersMap::declaration(),
+                Address::declaration(),
+                BlockHeight::declaration(),
+            ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "validator_set_update::Vext".into()
     }
 }
 
@@ -203,25 +261,21 @@ impl VotingPowersMapExt for VotingPowersMap {
         });
 
         let sorted = unsorted;
-        let total_voting_power: u64 = sorted
+        let total_voting_power: VotingPower = sorted
             .iter()
             .map(|&(_, &voting_power)| u64::from(voting_power))
-            .sum();
+            .sum::<u64>()
+            .into();
 
         // split the vec into three portions
         sorted.into_iter().fold(
             Default::default(),
             |accum, (addr_book, &voting_power)| {
-                let voting_power: u64 = voting_power.into();
-
-                // normalize the voting power
-                // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
-                const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
-
-                let voting_power = Ratio::new(voting_power, total_voting_power)
-                    * NORMALIZED_VOTING_POWER;
-                let voting_power = voting_power.round().to_integer();
-                let voting_power: ethereum::U256 = voting_power.into();
+                let voting_power = NormalizedVotingPower::new(
+                    voting_power,
+                    total_voting_power,
+                );
+                let [voting_power] = voting_power.tokenize();
 
                 let (mut hot_key_addrs, mut cold_key_addrs, mut voting_powers) =
                     accum;
@@ -234,7 +288,7 @@ impl VotingPowersMapExt for VotingPowersMap {
                     .push(Token::Address(ethereum::H160(hot_key_addr)));
                 cold_key_addrs
                     .push(Token::Address(ethereum::H160(cold_key_addr)));
-                voting_powers.push(Token::Uint(voting_power));
+                voting_powers.push(voting_power);
 
                 (hot_key_addrs, cold_key_addrs, voting_powers)
             },
@@ -266,6 +320,41 @@ fn compute_hash(
         Token::Array(voting_powers),
         bheight_to_token(block_height),
     ])
+}
+
+/// Struct for serializing validator set
+/// arguments with ABI for Ethereum smart
+/// contracts.
+#[derive(Debug, Clone, Default)]
+pub struct ValidatorSetArgs {
+    /// Ethereum address of validators
+    pub validators: Vec<EthAddress>,
+    /// Voting powers of validators
+    pub powers: Vec<NormalizedVotingPower>,
+    /// A nonce
+    pub nonce: Uint,
+}
+
+impl Encode<1> for ValidatorSetArgs {
+    fn tokenize(&self) -> [Token; 1] {
+        let addrs = Token::Array(
+            self.validators
+                .iter()
+                .map(|addr| Token::Address(addr.0.into()))
+                .collect(),
+        );
+        let powers = Token::Array(
+            self.powers
+                .iter()
+                .map(|power| {
+                    let [power] = power.tokenize();
+                    power
+                })
+                .collect(),
+        );
+        let nonce = Token::Uint(self.nonce.clone().into());
+        [Token::Tuple(vec![addrs, powers, nonce])]
+    }
 }
 
 // this is only here so we don't pollute the
