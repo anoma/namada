@@ -95,7 +95,8 @@ where
             Some((key_a, key_b)) => (key_a, key_b),
             None => return Ok(false),
         };
-        let sender = match check_balance_changes(&self.ctx, key_a, key_b)? {
+        let (sender, _) = match check_balance_changes(&self.ctx, key_a, key_b)?
+        {
             Some(sender) => sender,
             None => return Ok(false),
         };
@@ -176,13 +177,14 @@ fn extract_valid_keys_changed(
 /// Checks that the balances at both `key_a` and `key_b` have changed by some
 /// amount, and that the changes balance each other out. If the balance changes
 /// are invalid, the reason is logged and a `None` is returned. Otherwise,
-/// return the `Address` of the owner of the balance which is decreasing, which
-/// should be authorizing the balance change.
-fn check_balance_changes(
+/// return the `Address` of the owner of the balance which is decreasing,
+/// and by how much it decreased, which should be authorizing the balance
+/// change.
+pub(super) fn check_balance_changes(
     reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,
     key_b: wrapped_erc20s::Key,
-) -> Result<Option<Address>> {
+) -> Result<Option<(Address, Amount)>> {
     let (balance_a, balance_b) =
         match (key_a.suffix.clone(), key_b.suffix.clone()) {
             (
@@ -288,14 +290,26 @@ fn check_balance_changes(
 
     if balance_a_delta < 0 {
         if let wrapped_erc20s::KeyType::Balance { owner } = key_a.suffix {
-            Ok(Some(owner))
+            Ok(Some((
+                owner,
+                Amount::from(
+                    u64::try_from(balance_b_delta)
+                        .expect("This should not fail"),
+                ),
+            )))
         } else {
             unreachable!()
         }
     } else {
         assert!(balance_b_delta < 0);
         if let wrapped_erc20s::KeyType::Balance { owner } = key_b.suffix {
-            Ok(Some(owner))
+            Ok(Some((
+                owner,
+                Amount::from(
+                    u64::try_from(balance_a_delta)
+                        .expect("This should not fail"),
+                ),
+            )))
         } else {
             unreachable!()
         }
