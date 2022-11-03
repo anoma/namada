@@ -18,6 +18,8 @@ pub mod tx_update_vp;
 pub mod tx_vote_proposal;
 #[cfg(feature = "tx_withdraw")]
 pub mod tx_withdraw;
+#[cfg(feature = "vp_masp")]
+pub mod vp_masp;
 #[cfg(feature = "vp_testnet_faucet")]
 pub mod vp_testnet_faucet;
 #[cfg(feature = "vp_token")]
