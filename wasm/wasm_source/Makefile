@@ -15,6 +15,7 @@ wasms += tx_transfer
 wasms += tx_unbond
 wasms += tx_update_vp
 wasms += tx_withdraw
+wasms += vp_masp
 wasms += vp_testnet_faucet
 wasms += vp_token
 wasms += vp_user

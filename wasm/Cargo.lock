@@ -1895,6 +1895,8 @@ version = "0.9.0"
 dependencies = [
  "borsh",
  "getrandom",
+ "masp_primitives",
+ "masp_proofs",
  "namada",
  "namada_tests",
  "namada_tx_prelude",
