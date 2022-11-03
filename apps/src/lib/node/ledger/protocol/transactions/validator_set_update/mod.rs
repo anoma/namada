@@ -94,7 +94,7 @@ where
         }
     }
 
-    let (tally, changed) = if !exists_in_storage {
+    let (tally, changed, confirmed) = if !exists_in_storage {
         tracing::debug!(
             %valset_upd_keys.prefix,
             ?ext.voting_powers,
@@ -102,7 +102,8 @@ where
         );
         let tally = votes::calculate_new(seen_by, &voting_powers)?;
         let changed = valset_upd_keys.into_iter().collect();
-        (tally, changed)
+        let confirmed = tally.seen;
+        (tally, changed, confirmed)
     } else {
         tracing::debug!(
             %valset_upd_keys.prefix,
@@ -124,7 +125,10 @@ where
                 )
             }
         });
-        votes::calculate_updated(storage, &valset_upd_keys, &votes)?
+        let (tally, changed) =
+            votes::calculate_updated(storage, &valset_upd_keys, &votes)?;
+        let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
+        (tally, changed, confirmed)
     };
 
     tracing::debug!(
@@ -133,6 +137,13 @@ where
         "Applying validator set update state changes"
     );
     votes::write(storage, &valset_upd_keys, &ext.voting_powers, &tally)?;
+
+    if confirmed {
+        tracing::debug!(
+            %valset_upd_keys.prefix,
+            "Acquired complete proof on validator set update"
+        );
+    }
 
     Ok(changed)
 }
