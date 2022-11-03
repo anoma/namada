@@ -235,8 +235,11 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     // Start oracle if necessary
     let (eth_receiver, oracle) =
         match maybe_start_ethereum_oracle(&config, abort_sender).await {
-            EthereumOracleTask::NotEnabled { handle } => (None, handle),
-            EthereumOracleTask::Oracle {
+            EthereumOracleTask::NotEnabled {
+                handle,
+                eth_receiver,
+            }
+            | EthereumOracleTask::Oracle {
                 handle,
                 eth_receiver,
                 ..
@@ -621,7 +624,13 @@ fn start_tendermint(
 /// Represents an Ethereum oracle task and associated channels.
 enum EthereumOracleTask {
     NotEnabled {
+        // TODO(namada#459): we have to return a dummy handle for the moment,
+        // until `run_aux` is refactored
         handle: task::JoinHandle<()>,
+        // TODO(namada#521): we have to pass back a dummy channel here
+        // unfortunately, as validator shells still expect one even in the case
+        // where Ethereum bridge componentry is not enabled
+        eth_receiver: mpsc::Receiver<EthereumEvent>,
     },
     Oracle {
         handle: task::JoinHandle<()>,
@@ -640,12 +649,6 @@ async fn maybe_start_ethereum_oracle(
     config: &config::Ledger,
     abort_sender: oneshot::Sender<()>,
 ) -> EthereumOracleTask {
-    if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
-        return EthereumOracleTask::NotEnabled {
-            handle: spawn_dummy_task(()),
-        };
-    }
-
     let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
 
     // Start the oracle for listening to Ethereum events
@@ -689,6 +692,7 @@ async fn maybe_start_ethereum_oracle(
         }
         ethereum_bridge::ledger::Mode::Off => EthereumOracleTask::NotEnabled {
             handle: spawn_dummy_task(()),
+            eth_receiver,
         },
     }
 }
