@@ -1,5 +1,6 @@
 //! secp256k1 keys and related functionality
 
+use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
@@ -8,6 +9,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXLOWER;
+use ethabi::Token;
 use libsecp256k1::RecoveryId;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
@@ -20,6 +22,7 @@ use super::{
     SchemeType, SigScheme as SigSchemeTrait, VerifySigError,
 };
 use crate::types::ethereum_events::EthAddress;
+use crate::types::keccak::encode::Encode;
 
 /// The provided constant is for a traditional
 /// signature on this curve. For Ethereum, an extra byte is included
@@ -422,6 +425,16 @@ impl BorshSchema for Signature {
     }
 }
 
+impl Encode<1> for Signature {
+    fn tokenize(&self) -> [Token; 1] {
+        let sig_serialized = libsecp256k1::Signature::serialize(&self.0);
+        let r = Token::FixedBytes(sig_serialized[..32].to_vec());
+        let s = Token::FixedBytes(sig_serialized[32..].to_vec());
+        let v = Token::FixedBytes(vec![self.1.serialize()]);
+        [Token::Tuple(vec![r, s, v])]
+    }
+}
+
 #[allow(clippy::derive_hash_xor_eq)]
 impl Hash for Signature {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -431,7 +444,18 @@ impl Hash for Signature {
 
 impl PartialOrd for Signature {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.serialize().partial_cmp(&other.0.serialize())
+        match self.0.serialize().partial_cmp(&other.0.serialize()) {
+            Some(Ordering::Equal) => {
+                self.1.serialize().partial_cmp(&other.1.serialize())
+            }
+            res => res,
+        }
+    }
+}
+
+impl Ord for Signature {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
     }
 }
 
