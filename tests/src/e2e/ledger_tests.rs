@@ -843,7 +843,7 @@ fn masp_pinned_txs() -> Result<()> {
     client.exp_string("Received 20 BTC")?;
     client.assert_success();
 
-    // Assert PPA(C) has no XAN pinned to it
+    // Assert PPA(C) has no NAM pinned to it
     let mut client = run!(
         test,
         Bin::Client,
@@ -852,20 +852,20 @@ fn masp_pinned_txs() -> Result<()> {
             "--owner",
             AC_PAYMENT_ADDRESS,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.send_line(AC_VIEWING_KEY)?;
-    client.exp_string("Received no shielded XAN")?;
+    client.exp_string("Received no shielded NAM")?;
     client.assert_success();
 
     // Wait till epoch boundary
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Assert PPA(C) does not XAN pinned to it on epoch boundary
+    // Assert PPA(C) does not NAM pinned to it on epoch boundary
     let mut client = run!(
         test,
         Bin::Client,
@@ -874,14 +874,14 @@ fn masp_pinned_txs() -> Result<()> {
             "--owner",
             AC_PAYMENT_ADDRESS,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.send_line(AC_VIEWING_KEY)?;
-    client.exp_string("Received no shielded XAN")?;
+    client.exp_string("Received no shielded NAM")?;
     client.assert_success();
 
     Ok(())
@@ -969,7 +969,7 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("BTC: 20")?;
     client.assert_success();
 
-    // Assert XAN balance at VK(A) is 0
+    // Assert NAM balance at VK(A) is 0
     let mut client = run!(
         test,
         Bin::Client,
@@ -978,13 +978,13 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AA_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
-    client.exp_string("No shielded XAN balance found")?;
+    client.exp_string("No shielded NAM balance found")?;
     client.assert_success();
 
     let masp_rewards = masp_rewards();
@@ -1013,7 +1013,7 @@ fn masp_incentives() -> Result<()> {
     let amt20 = token::Amount::from_str("20").unwrap();
     let amt30 = token::Amount::from_str("30").unwrap();
 
-    // Assert XAN balance at VK(A) is 20*BTC_reward*(epoch_1-epoch_0)
+    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_1-epoch_0)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1022,19 +1022,19 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AA_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
     ))?;
     client.assert_success();
 
-    // Assert XAN balance at MASP pool is 20*BTC_reward*(epoch_1-epoch_0)
+    // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_1-epoch_0)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1043,14 +1043,14 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             MASP,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
     ))?;
     client.assert_success();
@@ -1076,7 +1076,7 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("BTC: 20")?;
     client.assert_success();
 
-    // Assert XAN balance at VK(A) is 20*BTC_reward*(epoch_2-epoch_0)
+    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_2-epoch_0)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1085,19 +1085,19 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AA_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
     ))?;
     client.assert_success();
 
-    // Assert XAN balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
+    // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1106,14 +1106,14 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             MASP,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
     ))?;
     client.assert_success();
@@ -1161,7 +1161,7 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("ETH: 30")?;
     client.assert_success();
 
-    // Assert XAN balance at VK(B) is 0
+    // Assert NAM balance at VK(B) is 0
     let mut client = run!(
         test,
         Bin::Client,
@@ -1170,13 +1170,13 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AB_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
-    client.exp_string("No shielded XAN balance found")?;
+    client.exp_string("No shielded NAM balance found")?;
     client.assert_success();
 
     // Wait till epoch boundary
@@ -1200,7 +1200,7 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("ETH: 30")?;
     client.assert_success();
 
-    // Assert XAN balance at VK(B) is 30*ETH_reward*(epoch_4-epoch_3)
+    // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_4-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1209,19 +1209,19 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AB_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         (amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0)
     ))?;
     client.assert_success();
 
-    // Assert XAN balance at MASP pool is
+    // Assert NAM balance at MASP pool is
     // 20*BTC_reward*(epoch_4-epoch_0)+30*ETH_reward*(epoch_4-epoch_3)
     let mut client = run!(
         test,
@@ -1231,14 +1231,14 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             MASP,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         ((amt20 * masp_rewards[&btc()]).0 * (ep4.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0))
     ))?;
@@ -1289,7 +1289,7 @@ fn masp_incentives() -> Result<()> {
 
     let mut ep = get_epoch(&test, &validator_one_rpc)?;
 
-    // Assert XAN balance at VK(B) is 30*ETH_reward*(ep-epoch_3)
+    // Assert NAM balance at VK(B) is 30*ETH_reward*(ep-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1298,20 +1298,20 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AB_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         (amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0)
     ))?;
     client.assert_success();
 
     ep = get_epoch(&test, &validator_one_rpc)?;
-    // Assert XAN balance at MASP pool is
+    // Assert NAM balance at MASP pool is
     // 20*BTC_reward*(epoch_5-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
         test,
@@ -1321,14 +1321,14 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             MASP,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         ((amt20 * masp_rewards[&btc()]).0 * (ep.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0))
     ))?;
@@ -1377,7 +1377,7 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("No shielded BTC balance found")?;
     client.assert_success();
 
-    // Assert XAN balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
+    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1386,19 +1386,19 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AA_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
     ))?;
     client.assert_success();
 
-    // Assert XAN balance at MASP pool is
+    // Assert NAM balance at MASP pool is
     // 20*BTC_reward*(epoch_6-epoch_0)+20*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
         test,
@@ -1408,14 +1408,14 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             MASP,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
     ))?;
@@ -1424,7 +1424,7 @@ fn masp_incentives() -> Result<()> {
     // Wait till epoch boundary
     let _ep7 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Assert XAN balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
+    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1433,19 +1433,19 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AA_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
     ))?;
     client.assert_success();
 
-    // Assert XAN balance at VK(B) is 30*ETH_reward*(epoch_5-epoch_3)
+    // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1454,19 +1454,19 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AB_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         (amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)
     ))?;
     client.assert_success();
 
-    // Assert XAN balance at MASP pool is
+    // Assert NAM balance at MASP pool is
     // 20*BTC_reward*(epoch_6-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
         test,
@@ -1476,14 +1476,14 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             MASP,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
     client.exp_string(&format!(
-        "XAN: {}",
+        "NAM: {}",
         ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
     ))?;
@@ -1493,7 +1493,7 @@ fn masp_incentives() -> Result<()> {
     // construction
     let _ep8 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 30*ETH_reward*(epoch_5-epoch_3) XAN from SK(B) to Christel
+    // Send 30*ETH_reward*(epoch_5-epoch_3) NAM from SK(B) to Christel
     let mut client = run!(
         test,
         Bin::Client,
@@ -1504,7 +1504,7 @@ fn masp_incentives() -> Result<()> {
             "--target",
             CHRISTEL,
             "--token",
-            XAN,
+            NAM,
             "--amount",
             &((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)).to_string(),
             "--ledger-address",
@@ -1518,7 +1518,7 @@ fn masp_incentives() -> Result<()> {
     // Wait till epoch boundary
     let _ep9 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 20*BTC_reward*(epoch_6-epoch_0) XAN from SK(A) to Bertha
+    // Send 20*BTC_reward*(epoch_6-epoch_0) NAM from SK(A) to Bertha
     let mut client = run!(
         test,
         Bin::Client,
@@ -1529,7 +1529,7 @@ fn masp_incentives() -> Result<()> {
             "--target",
             BERTHA,
             "--token",
-            XAN,
+            NAM,
             "--amount",
             &((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)).to_string(),
             "--ledger-address",
@@ -1540,7 +1540,7 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
-    // Assert XAN balance at VK(A) is 0
+    // Assert NAM balance at VK(A) is 0
     let mut client = run!(
         test,
         Bin::Client,
@@ -1549,16 +1549,16 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AA_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
-    client.exp_string("No shielded XAN balance found")?;
+    client.exp_string("No shielded NAM balance found")?;
     client.assert_success();
 
-    // Assert XAN balance at VK(B) is 0
+    // Assert NAM balance at VK(B) is 0
     let mut client = run!(
         test,
         Bin::Client,
@@ -1567,16 +1567,16 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             AB_VIEWING_KEY,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
-    client.exp_string("No shielded XAN balance found")?;
+    client.exp_string("No shielded NAM balance found")?;
     client.assert_success();
 
-    // Assert XAN balance at MASP pool is 0
+    // Assert NAM balance at MASP pool is 0
     let mut client = run!(
         test,
         Bin::Client,
@@ -1585,13 +1585,13 @@ fn masp_incentives() -> Result<()> {
             "--owner",
             MASP,
             "--token",
-            XAN,
+            NAM,
             "--ledger-address",
             &validator_one_rpc
         ],
         Some(300)
     )?;
-    client.exp_string("XAN: 0")?;
+    client.exp_string("NAM: 0")?;
     client.assert_success();
 
     Ok(())
