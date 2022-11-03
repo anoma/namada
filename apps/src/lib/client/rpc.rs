@@ -1458,6 +1458,7 @@ pub async fn query_tx_events(
 }
 
 /// Lookup the full response accompanying the specified transaction event
+// TODO: maybe remove this in favor of `query_tx_status`
 pub async fn query_tx_response(
     ledger_address: &TendermintAddress,
     tx_query: TxEventQuery<'_>,
