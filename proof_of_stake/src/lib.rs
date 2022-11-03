@@ -14,6 +14,7 @@
 
 pub mod btree_set;
 pub mod epoched;
+pub mod epoched_new;
 pub mod parameters;
 pub mod storage;
 pub mod types;
@@ -27,19 +28,18 @@ use std::num::TryFromIntError;
 use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
-use namada_core::ledger::storage_api;
+use namada_core::ledger::storage_api::{self, StorageRead, StorageWrite};
 use namada_core::types::address::{self, Address, InternalAddress};
-use namada_core::types::key::common;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
-pub use parameters::PosParams;
+use namada_core::types::{key::common, token, storage::Epoch};
+use parameters::PosParams;
 use rust_decimal::Decimal;
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, CommissionRates, GenesisValidator, Slash,
-    SlashType, Slashes, TotalDeltas, Unbond, Unbonds, ValidatorConsensusKeys,
-    ValidatorDeltas, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
-    ValidatorState, ValidatorStates,
+    ActiveValidator, Bonds, CommissionRate, Epoch, GenesisValidator, GenesisValidator_NEW,
+    Slash, SlashType, Slashes, TotalDeltas, Unbond, Unbonds,
+    ValidatorConsensusKeys, ValidatorConsensusKeys_NEW, ValidatorSet,
+    ValidatorSetUpdate, ValidatorSets, ValidatorState, ValidatorStates,
+    ValidatorDeltas
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -1658,4 +1658,68 @@ impl From<CommissionRateChangeError> for storage_api::Error {
     fn from(err: CommissionRateChangeError) -> Self {
         Self::new(err)
     }
+}
+
+/// Get the storage handle to a PoS validator's consensus key (used for
+/// signing block votes).
+pub fn validator_consensus_key_handle(
+    validator: &Address,
+) -> ValidatorConsensusKeys_NEW {
+    let key = storage::validator_consensus_key_key(&validator);
+    crate::epoched_new::Epoched::open(key)
+}
+
+pub fn init_genesis_NEW<S>(
+    storage: &mut S,
+    params: &PosParams,
+    validators: impl Iterator<Item = GenesisValidator_NEW> + Clone,
+    current_epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
+{
+    for GenesisValidator {
+        address,
+        tokens,
+        consensus_key,
+    } in validators
+    {
+        validator_consensus_key_handle(&address).init_at_genesis(
+            storage,
+            consensus_key,
+            current_epoch,
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Read PoS validator's consensus key (used for signing block votes).
+pub fn read_validator_consensus_key<S>(
+    storage: &S,
+    params: &PosParams,
+    validator: &Address,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<Option<key::common::PublicKey>>
+where
+    S: for<'iter> StorageRead<'iter>,
+{
+    let handle = validator_consensus_key_handle(&validator);
+    handle.get(storage, epoch, params)
+}
+
+/// Write PoS validator's consensus key (used for signing block votes).
+pub fn write_validator_consensus_key<S>(
+    storage: &mut S,
+    params: &PosParams,
+    validator: &Address,
+    consensus_key: key::common::PublicKey,
+    current_epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
+{
+    let handle = validator_consensus_key_handle(&validator);
+    let offset = OffsetPipelineLen::value(params);
+    handle.set(storage, consensus_key, current_epoch, offset)
 }

@@ -43,5 +43,24 @@ pub fn init_genesis_storage<'a, DB, H>(
 {
     storage
         .init_genesis(params, validators, current_epoch)
-        .expect("Initialize PoS genesis storage")
+        .expect("Initialize PoS genesis storage");
+}
+
+/// Initialize storage in the genesis block.
+pub fn init_genesis_storage_NEW<DB, H>(
+    storage: &mut Storage<DB, H>,
+    params: &PosParams,
+    validators: impl Iterator<Item = GenesisValidator> + Clone,
+    current_epoch: Epoch,
+) where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    namada_proof_of_stake::init_genesis_NEW(
+        storage,
+        params,
+        validators,
+        current_epoch,
+    )
+    .expect("Initialize PoS genesis storage");
 }

@@ -20,6 +20,12 @@ use crate::epoched::{
 use crate::parameters::PosParams;
 
 /// Epoched validator's consensus key.
+pub type ValidatorConsensusKeys_NEW = crate::epoched_new::Epoched<
+    common::PublicKey,
+    crate::epoched_new::OffsetPipelineLen,
+    0,
+>;
+/// Epoched validator's consensus key.
 pub type ValidatorConsensusKeys = Epoched<common::PublicKey, OffsetPipelineLen>;
 /// Epoched validator's state.
 pub type ValidatorStates = Epoched<ValidatorState, OffsetPipelineLen>;
@@ -61,6 +67,8 @@ pub struct GenesisValidator {
     /// Maximum change in commission rate permitted per epoch
     pub max_commission_rate_change: Decimal,
 }
+pub type GenesisValidator_NEW =
+    GenesisValidator<Address, token::Amount, key::common::PublicKey>;
 
 /// An update of the active and inactive validator set.
 #[derive(Debug, Clone)]
@@ -94,6 +102,26 @@ pub struct ActiveValidator {
     BorshSchema,
 )]
 pub struct BondId {
+    /// (Un)bond's source address is the owner of the bonded tokens.
+    pub source: Address,
+    /// (Un)bond's validator address.
+    pub validator: Address,
+}
+
+/// ID of a bond and/or an unbond.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+)]
+pub struct BondId_NEW {
     /// (Un)bond's source address is the owner of the bonded tokens.
     pub source: Address,
     /// (Un)bond's validator address.
