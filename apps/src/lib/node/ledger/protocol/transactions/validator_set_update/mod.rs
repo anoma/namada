@@ -1,6 +1,4 @@
-//! Code for handling
-//! [`namada::types::transaction::protocol::ProtocolTxType::ValidatorSetUpdate`]
-//! transactions.
+//! Code for handling [`ProtocolTxType::ValidatorSetUpdate`] protocol txs.
 
 use std::collections::{HashMap, HashSet};
 
@@ -10,6 +8,8 @@ use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
 use namada::types::storage::BlockHeight;
+#[allow(unused_imports)]
+use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::validator_set_update;
 use namada::types::voting_power::FractionalVotingPower;
@@ -110,9 +110,8 @@ where
         );
         let mut votes = HashMap::default();
         seen_by.into_iter().for_each(|(address, block_height)| {
-            let fract_voting_power = voting_powers
-                .get(&(address.clone(), block_height))
-                .unwrap();
+            let fract_voting_power =
+                voting_powers.get(&(address.clone(), block_height)).unwrap();
             if let Some(already_present_fract_voting_power) =
                 votes.insert(address.clone(), fract_voting_power.to_owned())
             {
@@ -120,7 +119,8 @@ where
                     ?address,
                     ?already_present_fract_voting_power,
                     new_fract_voting_power = ?fract_voting_power,
-                    "Validator voted more than once, arbitrarily using later value",
+                    "Validator voted more than once on validator set update, \
+                     arbitrarily using later value"
                 )
             }
         });
