@@ -13,8 +13,6 @@ use std::array;
 
 use thiserror::Error;
 
-use super::events::log::{dumb_queries, EventLog};
-use super::events::Event;
 use super::parameters::Parameters;
 use super::storage_api::{ResultExt, StorageRead, StorageWrite};
 use super::{parameters, storage_api};
@@ -71,8 +69,6 @@ where
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
-    /// Log of events emitted by `FinalizeBlock`.
-    event_log: EventLog,
 }
 
 /// The block storage data
@@ -274,48 +270,6 @@ pub trait DBWriteBatch {
     fn delete<K: AsRef<[u8]>>(&mut self, key: K);
 }
 
-/// Methods for querying and mutating an event log.
-pub trait EventLogExt {
-    /// Query events in the event log matching the given query.
-    fn query_event_log(
-        &self,
-        matcher: dumb_queries::QueryMatcher,
-    ) -> Vec<Event>;
-    /// Return a reference to the [`EventLog`].
-    fn event_log(&self) -> &EventLog;
-    /// Return a mutable reference to the [`EventLog`].
-    fn event_log_mut(&mut self) -> &mut EventLog;
-}
-
-impl<D, H> EventLogExt for Storage<D, H>
-where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-{
-    /// Query events in the event log matching the given query.
-    fn query_event_log(
-        &self,
-        matcher: dumb_queries::QueryMatcher,
-    ) -> Vec<Event> {
-        self.event_log()
-            .iter_with_matcher(matcher)
-            .cloned()
-            .collect::<Vec<_>>()
-    }
-
-    /// Return a reference to the [`EventLog`].
-    #[inline]
-    fn event_log(&self) -> &EventLog {
-        &self.event_log
-    }
-
-    /// Return a mutable reference to the [`EventLog`].
-    #[inline]
-    fn event_log_mut(&mut self) -> &mut EventLog {
-        &mut self.event_log
-    }
-}
-
 impl<D, H> Storage<D, H>
 where
     D: DB + for<'iter> DBIter<'iter>,
@@ -348,7 +302,6 @@ where
             ),
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
-            event_log: EventLog::default(),
         }
     }
 
@@ -954,7 +907,6 @@ pub mod testing {
                 ),
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
-                event_log: EventLog::default(),
             }
         }
     }

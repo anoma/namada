@@ -1008,6 +1008,7 @@ mod test {
             ..RequestQuery::default()
         };
         let ctx = RequestCtx {
+            event_log: &client.event_log,
             storage: &client.storage,
             vp_wasm_cache: client.vp_wasm_cache.clone(),
             tx_wasm_cache: client.tx_wasm_cache.clone(),

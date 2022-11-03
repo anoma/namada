@@ -147,6 +147,7 @@ mod testing {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::ledger::events::log::EventLog;
     use crate::ledger::storage::testing::TestStorage;
     use crate::types::storage::BlockHeight;
     use crate::vm::wasm::{self, TxCache, VpCache};
@@ -161,6 +162,8 @@ mod testing {
         pub rpc: RPC,
         /// storage
         pub storage: TestStorage,
+        /// event log
+        pub event_log: EventLog,
         /// VP wasm compilation cache
         pub vp_wasm_cache: VpCache<WasmCacheRoAccess>,
         /// tx wasm compilation cache
@@ -180,6 +183,7 @@ mod testing {
         pub fn new(rpc: RPC) -> Self {
             // Initialize the `TestClient`
             let storage = TestStorage::default();
+            let event_log = EventLog::default();
             let (vp_wasm_cache, vp_cache_dir) =
                 wasm::compilation_cache::common::testing::cache();
             let (tx_wasm_cache, tx_cache_dir) =
@@ -187,6 +191,7 @@ mod testing {
             Self {
                 rpc,
                 storage,
+                event_log,
                 vp_wasm_cache: vp_wasm_cache.read_only(),
                 tx_wasm_cache: tx_wasm_cache.read_only(),
                 vp_cache_dir,
@@ -221,6 +226,7 @@ mod testing {
             };
             let ctx = RequestCtx {
                 storage: &self.storage,
+                event_log: &self.event_log,
                 vp_wasm_cache: self.vp_wasm_cache.clone(),
                 tx_wasm_cache: self.tx_wasm_cache.clone(),
             };
