@@ -1012,6 +1012,7 @@ mod test {
             storage: &client.storage,
             vp_wasm_cache: client.vp_wasm_cache.clone(),
             tx_wasm_cache: client.tx_wasm_cache.clone(),
+            storage_read_past_height_limit: None,
         };
         let result = TEST_RPC.handle(ctx, &request);
         assert!(result.is_err());

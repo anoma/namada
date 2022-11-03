@@ -230,6 +230,7 @@ mod testing {
                 event_log: &self.event_log,
                 vp_wasm_cache: self.vp_wasm_cache.clone(),
                 tx_wasm_cache: self.tx_wasm_cache.clone(),
+                storage_read_past_height_limit: None,
             };
             let response = self.rpc.handle(ctx, &request).unwrap();
             Ok(response)
