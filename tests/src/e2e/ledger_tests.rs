@@ -490,11 +490,6 @@ fn masp_txs_and_queries() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
 
     let _bg_ledger = ledger.background();
 
@@ -706,9 +701,7 @@ fn masp_txs_and_queries() -> Result<()> {
             let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
 
             if *tx_result == "Transaction is valid" && !dry_run {
-                if !cfg!(feature = "ABCI") {
-                    client.exp_string("Transaction accepted")?;
-                }
+                client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
             }
             client.exp_string(tx_result)?;
@@ -751,11 +744,6 @@ fn masp_pinned_txs() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
 
     let _bg_ledger = ledger.background();
 
@@ -916,11 +904,6 @@ fn masp_incentives() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
-    if !cfg!(feature = "ABCI") {
-        ledger.exp_string("started node")?;
-    } else {
-        ledger.exp_string("Started node")?;
-    }
 
     let _bg_ledger = ledger.background();
 
