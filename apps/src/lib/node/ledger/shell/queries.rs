@@ -57,6 +57,7 @@ where
     pub fn query(&self, query: request::Query) -> response::Query {
         let ctx = RequestCtx {
             storage: &self.storage,
+            event_log: self.event_log(),
             vp_wasm_cache: self.vp_wasm_cache.read_only(),
             tx_wasm_cache: self.tx_wasm_cache.read_only(),
         };

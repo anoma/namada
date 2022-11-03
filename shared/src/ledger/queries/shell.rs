@@ -6,7 +6,7 @@ use crate::ledger::events::Event;
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, EventLogExt, DB};
+use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::types::hash::Hash;
 use crate::types::storage::{self, Epoch, PrefixValue};
@@ -34,10 +34,10 @@ router! {SHELL,
         -> bool = storage_has_key,
 
     // was the transaction accepted?
-    ( "accepted" / [tx_hash: Hash] ) -> Vec<Event> = accepted,
+    ( "accepted" / [tx_hash: Hash] ) -> Option<Event> = accepted,
 
     // was the transaction applied?
-    ( "applied" / [tx_hash: Hash] ) -> Vec<Event> = applied,
+    ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
 }
 
 #[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
@@ -227,25 +227,35 @@ where
 fn accepted<D, H>(
     ctx: RequestCtx<'_, D, H>,
     tx_hash: Hash,
-) -> storage_api::Result<Vec<Event>>
+) -> storage_api::Result<Option<Event>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
-    Ok(ctx.storage.query_event_log(matcher))
+    Ok(ctx
+        .event_log
+        .iter_with_matcher(matcher)
+        .by_ref()
+        .next()
+        .cloned())
 }
 
 fn applied<D, H>(
     ctx: RequestCtx<'_, D, H>,
     tx_hash: Hash,
-) -> storage_api::Result<Vec<Event>>
+) -> storage_api::Result<Option<Event>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
-    Ok(ctx.storage.query_event_log(matcher))
+    Ok(ctx
+        .event_log
+        .iter_with_matcher(matcher)
+        .by_ref()
+        .next()
+        .cloned())
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 use tendermint_proto::crypto::ProofOps;
 
+use crate::ledger::events::log::EventLog;
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::ledger::storage_api;
@@ -12,17 +13,19 @@ use crate::vm::WasmCacheRoAccess;
 /// A request context provides read-only access to storage and WASM compilation
 /// caches to request handlers.
 #[derive(Debug, Clone)]
-pub struct RequestCtx<'a, D, H>
+pub struct RequestCtx<'shell, D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    /// Storage access
-    pub storage: &'a Storage<D, H>,
-    /// VP WASM compilation cache
+    /// Reference to the ledger's [`Storage`].
+    pub storage: &'shell Storage<D, H>,
+    /// Log of events emitted by `FinalizeBlock` ABCI calls.
+    pub event_log: &'shell EventLog,
+    /// Cache of VP wasm compiled artifacts.
     #[cfg(feature = "wasm-runtime")]
     pub vp_wasm_cache: VpCache<WasmCacheRoAccess>,
-    /// tx WASM compilation cache
+    /// Cache of transaction wasm compiled artifacts.
     #[cfg(feature = "wasm-runtime")]
     pub tx_wasm_cache: TxCache<WasmCacheRoAccess>,
 }

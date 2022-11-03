@@ -76,7 +76,7 @@ pub async fn query_tx_status(
 
         loop {
             tracing::debug!(query = ?status, "Querying tx status");
-            let mut events = match query_tx_events(&client, status).await {
+            let maybe_event = match query_tx_events(&client, status).await {
                 Ok(response) => response,
                 Err(err) => {
                     tracing::debug!(%err, "ABCI query failed");
@@ -84,8 +84,7 @@ pub async fn query_tx_status(
                     continue;
                 }
             };
-            if let Some(e) = events.pop() {
-                // we should only have one event matching the query
+            if let Some(e) = maybe_event {
                 break Ok(e);
             }
             sleep_update(status, &mut backoff).await;
@@ -1433,10 +1432,12 @@ impl<'a> From<TxEventQuery<'a>> for Query {
     }
 }
 
+/// Call the corresponding `tx_event_query` RPC method, to fetch
+/// the current status of a transation.
 pub async fn query_tx_events(
     client: &HttpClient,
     tx_event_query: TxEventQuery<'_>,
-) -> eyre::Result<Vec<Event>> {
+) -> eyre::Result<Option<Event>> {
     let tx_hash: Hash = tx_event_query.tx_hash().try_into()?;
     match tx_event_query {
         TxEventQuery::Accepted(_) => RPC
