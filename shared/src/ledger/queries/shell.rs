@@ -58,10 +58,10 @@ router! {SHELL,
         -> bool = storage_has_key,
 
     // was the transaction accepted?
-    ( "accepted" / [tx_hash: Hash]) -> Vec<Event> = accepted,
+    ( "accepted" / [tx_hash: Hash]) -> Option<Event> = accepted,
 
     // was the transaction applied?
-    ( "applied" / [tx_hash: Hash]) -> Vec<Event> = applied,
+    ( "applied" / [tx_hash: Hash]) -> Option<Event> = applied,
 }
 
 // Handlers:
