@@ -19,9 +19,11 @@ use masp_primitives::ff::PrimeField;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
+#[cfg(feature = "wasm-runtime")]
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
 };
+#[cfg(feature = "wasm-runtime")]
 use rayon::prelude::ParallelSlice;
 use thiserror::Error;
 
@@ -684,6 +686,7 @@ where
 
     /// Initialize a new epoch when the current epoch is finished. Returns
     /// `true` on a new epoch.
+    #[cfg(feature = "wasm-runtime")]
     pub fn update_epoch(
         &mut self,
         height: BlockHeight,
@@ -731,6 +734,7 @@ where
             .expect("unable to derive asset identifier")
     }
 
+    #[cfg(feature = "wasm-runtime")]
     /// Update the MASP's allowed conversions
     fn update_allowed_conversions(&mut self) -> Result<()> {
         // The derived conversions will be placed in MASP address space
