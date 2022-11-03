@@ -23,6 +23,7 @@ tx_unbond = ["namada_tx_prelude"]
 tx_update_vp = ["namada_tx_prelude"]
 tx_vote_proposal = ["namada_tx_prelude"]
 tx_withdraw = ["namada_tx_prelude"]
+vp_masp = ["namada_vp_prelude", "masp_proofs", "masp_primitives"]
 vp_testnet_faucet = ["namada_vp_prelude", "once_cell"]
 vp_token = ["namada_vp_prelude"]
 vp_user = ["namada_vp_prelude", "once_cell", "rust_decimal"]
@@ -35,6 +36,8 @@ once_cell = {version = "1.8.0", optional = true}
 rust_decimal = {version = "1.14.3", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", optional = true }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", optional = true }
 
 [dev-dependencies]
 namada = {path = "../../shared"}
