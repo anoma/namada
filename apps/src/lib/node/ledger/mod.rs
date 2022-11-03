@@ -234,7 +234,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
 
     // Start oracle if necessary
     let (eth_receiver, oracle) =
-        match maybe_start_ethereum_oracle(&config, abort_sender) {
+        match maybe_start_ethereum_oracle(&config, abort_sender).await {
             EthereumOracleTask::NotEnabled { handle } => (None, handle),
             EthereumOracleTask::Oracle {
                 handle,
@@ -636,7 +636,7 @@ enum EthereumOracleTask {
 }
 
 /// Potentially starts an Ethereum event oracle.
-fn maybe_start_ethereum_oracle(
+async fn maybe_start_ethereum_oracle(
     config: &config::Ledger,
     abort_sender: oneshot::Sender<()>,
 ) -> EthereumOracleTask {
@@ -666,9 +666,10 @@ fn maybe_start_ethereum_oracle(
             // initialization from storage, rather than using a
             // hardcoded config
             control_sender
-                .blocking_send(oracle::control::Command::SendConfig {
+                .send(oracle::control::Command::SendConfig {
                     config: oracle::config::Config::default(),
                 })
+                .await
                 .expect("Could not send initial configuration to the oracle!");
             EthereumOracleTask::Oracle {
                 handle,
