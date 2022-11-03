@@ -104,7 +104,27 @@ where
         let changed = valset_upd_keys.into_iter().collect();
         (tally, changed)
     } else {
-        todo!()
+        tracing::debug!(
+            %valset_upd_keys.prefix,
+            "Validator set update votes already in storage",
+        );
+        let mut votes = HashMap::default();
+        seen_by.into_iter().for_each(|(address, block_height)| {
+            let fract_voting_power = voting_powers
+                .get(&(address.clone(), block_height))
+                .unwrap();
+            if let Some(already_present_fract_voting_power) =
+                votes.insert(address.clone(), fract_voting_power.to_owned())
+            {
+                tracing::warn!(
+                    ?address,
+                    ?already_present_fract_voting_power,
+                    new_fract_voting_power = ?fract_voting_power,
+                    "Validator voted more than once, arbitrarily using later value",
+                )
+            }
+        });
+        votes::calculate_updated(storage, &valset_upd_keys, &votes)?
     };
 
     tracing::debug!(
