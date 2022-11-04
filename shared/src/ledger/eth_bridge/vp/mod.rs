@@ -4,7 +4,7 @@ mod authorize;
 
 use std::collections::{BTreeSet, HashSet};
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, Result};
 use itertools::Itertools;
 
@@ -16,6 +16,29 @@ use crate::types::address::{xan, Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
+
+/// Initialize the storage owned by the Ethereum Bridge VP.
+///
+/// This means that the amount of escrowed Nam is
+/// initialized to 0.
+pub fn init_storage<D, H>(storage: &mut ledger_storage::Storage<D, H>)
+where
+    D: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    let escrow_key = balance_key(&xan(), &super::ADDRESS);
+    storage
+        .write(
+            &escrow_key,
+            Amount::default()
+                .try_to_vec()
+                .expect("Serializing an amount shouldn't fail."),
+        )
+        .expect(
+            "Initializing the escrow balance of the Ethereum Bridge VP \
+             shouldn't fail.",
+        );
+}
 
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, DB, H, CA>
