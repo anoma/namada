@@ -1,5 +1,10 @@
 //! Cryptographic keys
 
+pub mod common;
+pub mod dkg_session_keys;
+pub mod ed25519;
+pub mod secp256k1;
+
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::str::FromStr;
@@ -15,10 +20,6 @@ use thiserror::Error;
 use super::address::Address;
 use super::storage::{self, DbKeySeg, Key, KeySeg};
 use crate::types::address;
-
-pub mod common;
-pub mod ed25519;
-pub mod secp256k1;
 
 const PK_STORAGE_KEY: &str = "public_key";
 const PROTOCOL_PK_STORAGE_KEY: &str = "protocol_public_key";
@@ -347,6 +348,18 @@ impl<PK: PublicKey> From<&PK> for PublicKeyHash {
             hasher.finalize(),
             width = PKH_HASH_LEN
         ))
+    }
+}
+
+/// Derive Tendermint raw hash from the public key
+pub trait PublicKeyTmRawHash {
+    /// Derive Tendermint raw hash from the public key
+    fn tm_raw_hash(&self) -> String;
+}
+
+impl PublicKeyTmRawHash for common::PublicKey {
+    fn tm_raw_hash(&self) -> String {
+        tm_consensus_key_raw_hash(self)
     }
 }
 

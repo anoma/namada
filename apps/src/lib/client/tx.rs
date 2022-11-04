@@ -2179,7 +2179,7 @@ async fn is_safe_voting_window(
 
     match proposal_end_epoch {
         Some(proposal_end_epoch) => {
-            !namada::ledger::governance::utils::is_valid_validator_voting_period(
+            !namada::ledger::native_vp::governance::utils::is_valid_validator_voting_period(
                 current_epoch,
                 proposal_start_epoch,
                 proposal_end_epoch,
@@ -2486,7 +2486,7 @@ pub async fn submit_validator_commission_change(
         match (commission_rates, max_change) {
             (Some(rates), Some(max_change)) => {
                 // Assuming that pipeline length = 2
-                let rate_next_epoch = rates.get(epoch + 1).unwrap();
+                let rate_next_epoch = rates.get(epoch.next()).unwrap();
                 if (args.rate - rate_next_epoch).abs() > max_change {
                     eprintln!(
                         "New rate is too large of a change with respect to \

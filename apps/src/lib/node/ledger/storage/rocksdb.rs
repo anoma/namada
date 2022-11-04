@@ -37,9 +37,9 @@ use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
     MerkleTreeStoresRead, Result, StoreType, DB,
 };
+use namada::types::internal::TxQueue;
 use namada::types::storage::{
-    BlockHeight, BlockResults, Header, Key, KeySeg, TxQueue,
-    KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
 use rocksdb::{

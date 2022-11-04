@@ -4,25 +4,11 @@ use std::hash::{Hash, Hasher};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use prost::Message;
 use serde::{Deserialize, Serialize};
-#[cfg(not(feature = "ABCI"))]
-#[cfg(feature = "ferveo-tpke")]
-use tendermint_proto::abci::Event;
-#[cfg(not(feature = "ABCI"))]
-#[cfg(feature = "ferveo-tpke")]
-use tendermint_proto::abci::EventAttribute;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::abci::ResponseDeliverTx;
-#[cfg(feature = "ABCI")]
-#[cfg(feature = "ferveo-tpke")]
-use tendermint_proto_abci::abci::Event;
-#[cfg(feature = "ABCI")]
-#[cfg(feature = "ferveo-tpke")]
-use tendermint_proto_abci::abci::EventAttribute;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::ResponseDeliverTx;
 use thiserror::Error;
 
 use super::generated::types;
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
+use crate::tendermint_proto::abci::ResponseDeliverTx;
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
@@ -175,6 +161,7 @@ impl From<Tx> for types::Tx {
     }
 }
 
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl From<Tx> for ResponseDeliverTx {
     #[cfg(not(feature = "ferveo-tpke"))]
     fn from(_tx: Tx) -> ResponseDeliverTx {
@@ -184,6 +171,8 @@ impl From<Tx> for ResponseDeliverTx {
     /// Annotate the Tx with meta-data based on its contents
     #[cfg(feature = "ferveo-tpke")]
     fn from(tx: Tx) -> ResponseDeliverTx {
+        use crate::tendermint_proto::abci::{Event, EventAttribute};
+
         #[cfg(feature = "ABCI")]
         fn encode_str(x: &str) -> Vec<u8> {
             x.as_bytes().to_vec()

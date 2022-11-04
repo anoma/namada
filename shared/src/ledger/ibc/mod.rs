@@ -1,6 +1,6 @@
 //! IBC integration
 
-pub use namada_core::ledger::ibc::storage;
+pub use namada_core::ledger::ibc::{actions as handler, storage};
 pub mod vp;
 
 use namada_core::ledger::ibc::storage::{

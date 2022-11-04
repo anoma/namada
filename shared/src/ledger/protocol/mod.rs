@@ -7,8 +7,8 @@ use thiserror::Error;
 
 use crate::ledger::eth_bridge::vp::EthBridge;
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
-use crate::ledger::governance::GovernanceVp;
 use crate::ledger::ibc::vp::{Ibc, IbcToken};
+use crate::ledger::native_vp::governance::GovernanceVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pos::{self, PosVP};
@@ -51,7 +51,7 @@ pub enum Error {
     #[error("IBC Token native VP: {0}")]
     IbcTokenNativeVpError(crate::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(crate::ledger::governance::Error),
+    GovernanceNativeVpError(crate::ledger::native_vp::governance::Error),
     #[error("SlashFund native VP error: {0}")]
     SlashFundNativeVpError(crate::ledger::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]

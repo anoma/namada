@@ -8,8 +8,9 @@ use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
 use thiserror::Error;
 
-use crate::ledger::governance::vp::is_proposal_accepted;
+use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
+use crate::ledger::vp_env::VpEnv;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -55,7 +56,13 @@ where
                 KeyType::PARAMETER => {
                     let proposal_id = u64::try_from_slice(tx_data).ok();
                     match proposal_id {
-                        Some(id) => is_proposal_accepted(&self.ctx, id),
+                        Some(id) => {
+                            let proposal_execution_key =
+                                gov_storage::get_proposal_execution_key(id);
+                            self.ctx
+                                .has_key_pre(&proposal_execution_key)
+                                .unwrap_or(false)
+                        }
                         _ => false,
                     }
                 }

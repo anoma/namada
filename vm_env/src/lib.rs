@@ -8,8 +8,7 @@
 use std::mem::ManuallyDrop;
 
 use borsh::BorshDeserialize;
-use namada::types::internal::HostEnvResult;
-use namada::vm::types::KeyVal;
+use namada_core::types::internal::{HostEnvResult, KeyVal};
 
 /// Transaction environment imports
 pub mod tx {

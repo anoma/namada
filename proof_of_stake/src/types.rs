@@ -8,6 +8,7 @@ use std::hash::Hash;
 use std::ops::{Add, AddAssign, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+pub use namada_core::types::storage::Epoch;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 
 use crate::epoched::{
@@ -38,27 +39,6 @@ pub type TotalDeltas<TokenChange> =
     EpochedDelta<TokenChange, OffsetUnbondingLen>;
 /// Epoched validator commission rate
 pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
-
-/// Epoch identifier. Epochs are identified by consecutive natural numbers.
-///
-/// In the API functions, this type is wrapped in [`Into`]. When using this
-/// library, to replace [`Epoch`] with a custom type, simply implement [`From`]
-/// to and from the types here.
-#[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    BorshDeserialize,
-    BorshSerialize,
-    BorshSchema,
-)]
-pub struct Epoch(u64);
 
 /// A genesis validator definition.
 #[derive(
@@ -304,98 +284,6 @@ pub enum SlashType {
     DuplicateVote,
     /// Light client attack.
     LightClientAttack,
-}
-
-/// Derive Tendermint raw hash from the public key
-pub trait PublicKeyTmRawHash {
-    /// Derive Tendermint raw hash from the public key
-    fn tm_raw_hash(&self) -> String;
-}
-
-impl Epoch {
-    /// Iterate a range of consecutive epochs starting from `self` of a given
-    /// length. Work-around for `Step` implementation pending on stabilization of <https://github.com/rust-lang/rust/issues/42168>.
-    pub fn iter_range(self, len: u64) -> impl Iterator<Item = Epoch> + Clone {
-        let start_ix: u64 = self.into();
-        let end_ix: u64 = start_ix + len;
-        (start_ix..end_ix).map(Epoch::from)
-    }
-
-    /// Checked epoch subtraction. Computes self - rhs, returning None if
-    /// overflow occurred.
-    #[must_use = "this returns the result of the operation, without modifying \
-                  the original"]
-    pub fn checked_sub(self, rhs: Epoch) -> Option<Self> {
-        if rhs.0 > self.0 {
-            None
-        } else {
-            Some(Self(self.0 - rhs.0))
-        }
-    }
-
-    /// Checked epoch subtraction. Computes self - rhs, returning default
-    /// `Epoch(0)` if overflow occurred.
-    #[must_use = "this returns the result of the operation, without modifying \
-                  the original"]
-    pub fn sub_or_default(self, rhs: Epoch) -> Self {
-        self.checked_sub(rhs).unwrap_or_default()
-    }
-}
-
-impl From<u64> for Epoch {
-    fn from(epoch: u64) -> Self {
-        Epoch(epoch)
-    }
-}
-
-impl From<Epoch> for u64 {
-    fn from(epoch: Epoch) -> Self {
-        epoch.0
-    }
-}
-
-impl From<Epoch> for usize {
-    fn from(epoch: Epoch) -> Self {
-        epoch.0 as usize
-    }
-}
-
-impl Add<u64> for Epoch {
-    type Output = Self;
-
-    fn add(self, rhs: u64) -> Self::Output {
-        Epoch(self.0 + rhs)
-    }
-}
-
-impl Add<usize> for Epoch {
-    type Output = Self;
-
-    fn add(self, rhs: usize) -> Self::Output {
-        Epoch(self.0 + rhs as u64)
-    }
-}
-
-impl Sub<u64> for Epoch {
-    type Output = Epoch;
-
-    fn sub(self, rhs: u64) -> Self::Output {
-        Epoch(self.0 - rhs)
-    }
-}
-
-impl Sub<Epoch> for Epoch {
-    type Output = Self;
-
-    fn sub(self, rhs: Epoch) -> Self::Output {
-        Epoch(self.0 - rhs.0)
-    }
-}
-
-impl Display for Epoch {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
 }
 
 impl<Address> Display for BondId<Address>

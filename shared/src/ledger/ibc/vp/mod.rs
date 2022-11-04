@@ -12,8 +12,6 @@ mod token;
 use std::collections::{BTreeSet, HashSet};
 
 use borsh::BorshDeserialize;
-use ibc::core::ics02_client::context::ClientReader;
-use ibc::events::IbcEvent;
 use namada_core::ledger::ibc::storage::{
     client_id, ibc_prefix, is_client_counter_key, IbcPrefix,
 };
@@ -25,6 +23,8 @@ use namada_core::types::storage::Key;
 use thiserror::Error;
 pub use token::{Error as IbcTokenError, IbcToken};
 
+use crate::ibc::core::ics02_client::context::ClientReader;
+use crate::ibc::events::IbcEvent;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::vm::WasmCacheAccess;
 
@@ -1521,7 +1521,7 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
-        let commitment = handler::commitment(&packet);
+        let commitment = actions::commitment(&packet);
         let key = commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
             .write(&key, commitment.into_vec())
@@ -1683,7 +1683,7 @@ mod tests {
         let bytes = channel.encode_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
         // insert a commitment
-        let commitment = handler::commitment(&packet);
+        let commitment = actions::commitment(&packet);
         let commitment_key =
             commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
@@ -1784,7 +1784,7 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
-        let commitment = handler::commitment(&packet);
+        let commitment = actions::commitment(&packet);
         let commitment_key = commitment_key(
             &packet.source_port,
             &packet.source_channel,
