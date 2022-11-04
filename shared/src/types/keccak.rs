@@ -117,13 +117,13 @@ pub mod encode {
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     #[repr(transparent)]
     pub struct EncodeCell<T> {
-        /// ABI-encoded values of type `T`.
+        /// ABI-encoded value of type `T`.
         encoded_data: Vec<u8>,
         /// Indicate we do not own values of type `T`.
         ///
         /// Passing `PhantomData<T>` here would trigger the drop checker,
-        /// which is not the desired behavior, since we own encoded values
-        /// of `T`, not values of `T` themselves.
+        /// which is not the desired behavior, since we own an encoded value
+        /// of `T`, not a value of `T` itself.
         _marker: PhantomData<*const T>,
     }
 
