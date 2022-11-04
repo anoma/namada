@@ -15,7 +15,7 @@ use std::collections::BTreeSet;
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::eyre;
 
-use super::storage;
+use crate::ledger::eth_bridge::storage;
 use crate::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
@@ -108,13 +108,13 @@ where
 
     /// Check that the correct amount of Nam was sent
     /// from the correct account into escrow
-    fn check_nam_escrowed(
-        &self,
-        payer_account: &Address,
-        escrow_account: &Address,
-        expected_debit: Amount,
-        expected_credit: Amount,
-    ) -> Result<bool, Error> {
+    fn check_nam_escrowed(&self, delta: EscrowDelta) -> Result<bool, Error> {
+        let EscrowDelta {
+            payer_account,
+            escrow_account,
+            expected_debit,
+            expected_credit,
+        } = delta;
         let debited = self.account_balance_delta(payer_account);
         let credited = self.account_balance_delta(escrow_account);
 
@@ -164,11 +164,86 @@ where
             ))),
         }
     }
+
+    /// Deteremine the debit and credit amounts that should be checked.
+    fn escrow_check<'trans>(
+        &self,
+        transfer: &'trans PendingTransfer,
+    ) -> Result<EscrowCheck<'trans>, Error> {
+        // there is a corner case where the gas fees and escrowed Nam
+        // are debited from the same address when mint wNam.
+        Ok(
+            if transfer.gas_fee.payer == transfer.transfer.sender
+                && transfer.transfer.asset == self.native_erc20_address()?
+            {
+                let debit = transfer
+                    .gas_fee
+                    .amount
+                    .checked_add(&transfer.transfer.amount)
+                    .ok_or_else(|| {
+                        Error(eyre!(
+                            "Addition oveflowed adding gas fee + transfer \
+                             amount."
+                        ))
+                    })?;
+                EscrowCheck {
+                    gas_check: EscrowDelta {
+                        payer_account: &transfer.gas_fee.payer,
+                        escrow_account: &BRIDGE_POOL_ADDRESS,
+                        expected_debit: debit,
+                        expected_credit: transfer.gas_fee.amount,
+                    },
+                    token_check: EscrowDelta {
+                        payer_account: &transfer.transfer.sender,
+                        escrow_account: &Address::Internal(
+                            InternalAddress::EthBridge,
+                        ),
+                        expected_debit: debit,
+                        expected_credit: transfer.transfer.amount,
+                    },
+                }
+            } else {
+                EscrowCheck {
+                    gas_check: EscrowDelta {
+                        payer_account: &transfer.gas_fee.payer,
+                        escrow_account: &BRIDGE_POOL_ADDRESS,
+                        expected_debit: transfer.gas_fee.amount,
+                        expected_credit: transfer.gas_fee.amount,
+                    },
+                    token_check: EscrowDelta {
+                        payer_account: &transfer.transfer.sender,
+                        escrow_account: &Address::Internal(
+                            InternalAddress::EthBridge,
+                        ),
+                        expected_debit: transfer.transfer.amount,
+                        expected_credit: transfer.transfer.amount,
+                    },
+                }
+            },
+        )
+    }
 }
 
 /// Check if a delta matches the delta given by a transfer
 fn check_delta(delta: &(Address, Amount), transfer: &PendingTransfer) -> bool {
     delta.0 == transfer.transfer.sender && delta.1 == transfer.transfer.amount
+}
+
+/// Helper struct for handling the different escrow
+/// checking scenarios.
+struct EscrowDelta<'a> {
+    payer_account: &'a Address,
+    escrow_account: &'a Address,
+    expected_debit: Amount,
+    expected_credit: Amount,
+}
+
+/// There are two checks we must do when minting wNam.
+/// 1. Check that gas fees were escrowed.
+/// 2. Check that the Nam to back wNam was escrowed.
+struct EscrowCheck<'a> {
+    gas_check: EscrowDelta<'a>,
+    token_check: EscrowDelta<'a>,
 }
 
 impl<'a, D, H, CA> NativeVp for BridgePoolVp<'a, D, H, CA>
@@ -253,62 +328,26 @@ where
             );
             return Ok(false);
         }
-
+        // The deltas in the escrowed amounts we must check.
+        let escrow_checks = self.escrow_check(&transfer)?;
+        // check that gas we correctly escrowed.
+        if !self.check_nam_escrowed(escrow_checks.gas_check)? {
+            return Ok(false);
+        }
         // if we are going to mint wNam on Ethereum, the appropriate
         // amount of Nam must be escrowed in the Ethereum bridge VP's storage.
         let wnam_address = self.native_erc20_address()?;
         if transfer.transfer.asset == wnam_address {
             // check that correct amount of Nam was put into escrow.
-            return if transfer.gas_fee.payer == transfer.transfer.sender {
-                if !self.check_nam_escrowed(
-                    &transfer.gas_fee.payer,
-                    &BRIDGE_POOL_ADDRESS,
-                    transfer.gas_fee.amount + transfer.transfer.amount,
-                    transfer.gas_fee.amount,
-                )? || !self.check_nam_escrowed(
-                    &transfer.transfer.sender,
-                    &Address::Internal(InternalAddress::EthBridge),
-                    transfer.gas_fee.amount + transfer.transfer.amount,
-                    transfer.transfer.amount,
-                )? {
-                    Ok(false)
-                } else {
-                    tracing::info!(
-                        "The Ethereum bridge pool VP accepted the transfer \
-                         {:?}.",
-                        transfer
-                    );
-                    Ok(true)
-                }
-            } else if !self.check_nam_escrowed(
-                &transfer.gas_fee.payer,
-                &BRIDGE_POOL_ADDRESS,
-                transfer.gas_fee.amount,
-                transfer.gas_fee.amount,
-            )? || !self.check_nam_escrowed(
-                &transfer.transfer.sender,
-                &Address::Internal(InternalAddress::EthBridge),
-                transfer.transfer.amount,
-                transfer.transfer.amount,
-            )? {
-                Ok(false)
-            } else {
+            return if self.check_nam_escrowed(escrow_checks.token_check)? {
                 tracing::info!(
                     "The Ethereum bridge pool VP accepted the transfer {:?}.",
                     transfer
                 );
                 Ok(true)
+            } else {
+                Ok(false)
             };
-        } else {
-            // check that the correct amount of gas fees were escrowed
-            if !self.check_nam_escrowed(
-                &transfer.gas_fee.payer,
-                &BRIDGE_POOL_ADDRESS,
-                transfer.gas_fee.amount,
-                transfer.gas_fee.amount,
-            )? {
-                return Ok(false);
-            }
         }
 
         // check that the assets to be transferred were escrowed
@@ -1128,8 +1167,8 @@ mod test_bridge_pool_vp {
                 Amount::from(100).try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
-        let verifiers = BTreeSet::default();
 
+        let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let vp = BridgePoolVp {
             ctx: setup_ctx(
@@ -1140,7 +1179,6 @@ mod test_bridge_pool_vp {
                 &verifiers,
             ),
         };
-
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
         let signed = SignedTxData {
@@ -1221,7 +1259,6 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         let verifiers = BTreeSet::default();
-
         // create the data to be given to the vp
         let vp = BridgePoolVp {
             ctx: setup_ctx(
