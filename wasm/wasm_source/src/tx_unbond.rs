@@ -99,6 +99,7 @@ mod tests {
                 tx_env.credit_tokens(
                     source,
                     &staking_token_address(),
+                    None,
                     initial_stake,
                 );
             }

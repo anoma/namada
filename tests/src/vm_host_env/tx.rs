@@ -13,6 +13,7 @@ use namada::types::storage::Key;
 use namada::types::time::DurationSecs;
 use namada::types::{key, token};
 use namada::vm::prefix_iter::PrefixIterators;
+use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
 use namada_tx_prelude::{BorshSerialize, Ctx};
@@ -111,14 +112,23 @@ impl TestTxEnv {
         );
     }
 
-    /// Fake accounts existence by initializating their VP storage.
+    /// Fake accounts' existence by initializing their VP storage.
     /// This is needed for accounts that are being modified by a tx test to
-    /// pass account existence check in `tx_write` function.
+    /// pass account existence check in `tx_write` function. Only established
+    /// addresses ([`Address::Established`]) have their VP storage initialized,
+    /// as other types of accounts should not have wasm VPs in storage in any
+    /// case.
     pub fn spawn_accounts(
         &mut self,
         addresses: impl IntoIterator<Item = impl Borrow<Address>>,
     ) {
         for address in addresses {
+            if matches!(
+                address.borrow(),
+                Address::Internal(_) | Address::Implicit(_)
+            ) {
+                continue;
+            }
             let key = Key::validity_predicate(address.borrow());
             let vp_code = vec![];
             self.storage
@@ -143,9 +153,17 @@ impl TestTxEnv {
         &mut self,
         target: &Address,
         token: &Address,
+        sub_prefix: Option<Key>,
         amount: token::Amount,
     ) {
-        let storage_key = token::balance_key(token, target);
+        let storage_key = match &sub_prefix {
+            Some(sub_prefix) => {
+                let prefix =
+                    token::multitoken_balance_prefix(token, sub_prefix);
+                token::multitoken_balance_key(&prefix, target)
+            }
+            None => token::balance_key(token, target),
+        };
         self.storage
             .write(&storage_key, amount.try_to_vec().unwrap())
             .unwrap();
@@ -161,6 +179,22 @@ impl TestTxEnv {
         self.storage
             .write(&storage_key, public_key.try_to_vec().unwrap())
             .unwrap();
+    }
+
+    /// Apply the tx changes to the write log and return
+    /// the set of verifiers.
+    pub fn execute_tx(&mut self) -> Result<(), Error> {
+        let empty_data = vec![];
+        wasm::run::tx(
+            &self.storage,
+            &mut self.write_log,
+            &mut self.gas_meter,
+            &self.tx.code,
+            self.tx.data.as_ref().unwrap_or(&empty_data),
+            &mut self.vp_wasm_cache,
+            &mut self.tx_wasm_cache,
+        )
+        .and(Ok(()))
     }
 }
 
