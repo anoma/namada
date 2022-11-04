@@ -6,6 +6,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::Uint as ethUint;
 use eyre::{eyre, Context};
+use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
 use crate::types::hash::Hash;
@@ -56,10 +57,14 @@ impl From<u64> for Uint {
     PartialOrd,
     Ord,
     Hash,
+    Serialize,
+    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
 )]
+#[serde(try_from = "String")]
+#[serde(into = "String")]
 pub struct EthAddress(pub [u8; 20]);
 
 impl EthAddress {
@@ -86,6 +91,20 @@ impl FromStr for EthAddress {
         let h160 = ethabi::ethereum_types::Address::from_str(s)
             .wrap_err_with(|| eyre!("couldn't parse Ethereum address {}", s))?;
         Ok(Self(h160.into()))
+    }
+}
+
+impl TryFrom<String> for EthAddress {
+    type Error = eyre::Error;
+
+    fn try_from(string: String) -> Result<Self, eyre::Error> {
+        Self::from_str(string.as_ref())
+    }
+}
+
+impl From<EthAddress> for String {
+    fn from(addr: EthAddress) -> Self {
+        addr.to_string()
     }
 }
 
@@ -275,6 +294,26 @@ pub mod tests {
         );
 
         assert!(result.is_err());
+    }
+
+    /// Test that serde correct serializes EthAddress types to/from lowercase
+    /// hex encodings
+    #[test]
+    fn test_eth_address_serde_roundtrip() {
+        let addr =
+            EthAddress::from_str(testing::DAI_ERC20_ETH_ADDRESS_CHECKSUMMED)
+                .unwrap();
+        let serialized = serde_json::to_string(&addr).expect("Test failed");
+        assert_eq!(
+            serialized,
+            format!(
+                r#""{}""#,
+                testing::DAI_ERC20_ETH_ADDRESS_CHECKSUMMED.to_lowercase()
+            )
+        );
+        let deserialized: EthAddress =
+            serde_json::from_str(&serialized).expect("Test failed");
+        assert_eq!(addr, deserialized);
     }
 }
 
