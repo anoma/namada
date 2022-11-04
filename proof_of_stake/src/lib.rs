@@ -423,7 +423,7 @@ pub trait PosActions: PosReadOnly {
         };
         let mut bond = match self.read_bond(&bond_id)? {
             Some(val) => val,
-            None => Err(UnbondError::NoBondFound)?,
+            None => return Err(UnbondError::NoBondFound.into()),
         };
         let unbond = self.read_unbond(&bond_id)?;
         let mut validator_total_deltas = self
