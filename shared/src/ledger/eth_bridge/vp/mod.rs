@@ -8,7 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, Result};
 use itertools::Itertools;
 
-use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
+use crate::ledger::eth_bridge::storage::{self, escrow_key, wrapped_erc20s};
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::traits::StorageHasher;
@@ -81,10 +81,14 @@ where
         };
         let escrow_post: Amount =
             if let Ok(Some(bytes)) = self.ctx.read_bytes_post(&escrow_key) {
-                BorshDeserialize::try_from_slice(bytes.as_slice()).expect(
-                    "Deserializing the balance of the Ethereum bridge VP from \
-                     storage shouldn't fail",
-                )
+                BorshDeserialize::try_from_slice(bytes.as_slice()).map_err(
+                    |_| {
+                        Error(eyre!(
+                            "Couldn't deserialize the balance of the Ethereum \
+                             bridge VP from storage."
+                        ))
+                    },
+                )?
             } else {
                 tracing::debug!(
                     "Could not retrieve the modified Ethereum bridge VP's \
@@ -104,6 +108,14 @@ where
             Ok(false)
         }
     }
+}
+
+/// One of the the two types of checks
+/// this VP must perform.
+#[derive(Debug)]
+enum CheckType {
+    Escrow,
+    Erc20Transfer(wrapped_erc20s::Key, wrapped_erc20s::Key),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -148,13 +160,9 @@ where
             "Ethereum Bridge VP triggered",
         );
 
-        // first check if Nam is being escrowed
-        if keys_changed.contains(&balance_key(&xan(), &super::ADDRESS)) {
-            return self.check_escrow(verifiers);
-        }
-
-        let (key_a, key_b) = match extract_valid_keys_changed(keys_changed)? {
-            Some((key_a, key_b)) => (key_a, key_b),
+        let (key_a, key_b) = match determine_check_type(keys_changed)? {
+            Some(CheckType::Erc20Transfer(key_a, key_b)) => (key_a, key_b),
+            Some(CheckType::Escrow) => return self.check_escrow(verifiers),
             None => return Ok(false),
         };
         let (sender, _) = match check_balance_changes(&self.ctx, key_a, key_b)?
@@ -169,9 +177,9 @@ where
 
 /// If `keys_changed` represents a valid set of changed keys, return them,
 /// otherwise return `None`.
-fn extract_valid_keys_changed(
+fn determine_check_type(
     keys_changed: &BTreeSet<Key>,
-) -> Result<Option<(wrapped_erc20s::Key, wrapped_erc20s::Key)>, Error> {
+) -> Result<Option<CheckType>, Error> {
     // we aren't concerned with keys that changed outside of our account
     let keys_changed: HashSet<_> = keys_changed
         .iter()
@@ -187,8 +195,9 @@ fn extract_valid_keys_changed(
         relevant_keys.len = keys_changed.len(),
         "Found keys changed under our account"
     );
-
-    if keys_changed.len() != 2 {
+    if keys_changed.len() == 1 && keys_changed.contains(&escrow_key()) {
+        return Ok(Some(CheckType::Escrow));
+    } else if keys_changed.len() != 2 {
         tracing::debug!(
             relevant_keys.len = keys_changed.len(),
             "Rejecting transaction as only two keys should have changed"
@@ -233,7 +242,7 @@ fn extract_valid_keys_changed(
         );
         return Ok(None);
     }
-    Ok(Some((key_a, key_b)))
+    Ok(Some(CheckType::Erc20Transfer(key_a, key_b)))
 }
 
 /// Checks that the balances at both `key_a` and `key_b` have changed by some
@@ -415,7 +424,7 @@ mod tests {
     fn test_error_if_triggered_without_keys_changed() {
         let keys_changed = BTreeSet::new();
 
-        let result = extract_valid_keys_changed(&keys_changed);
+        let result = determine_check_type(&keys_changed);
 
         assert!(result.is_err());
     }
@@ -423,20 +432,20 @@ mod tests {
     #[test]
     fn test_rejects_if_not_two_keys_changed() {
         {
-            let keys_changed = BTreeSet::from_iter(vec![arbitrary_key()]);
+            let keys_changed = BTreeSet::from_iter(vec![arbitrary_key(); 3]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
         {
             let keys_changed = BTreeSet::from_iter(vec![
-                arbitrary_key(),
+                escrow_key(),
                 arbitrary_key(),
                 arbitrary_key(),
             ]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -448,7 +457,7 @@ mod tests {
             let keys_changed =
                 BTreeSet::from_iter(vec![arbitrary_key(), arbitrary_key()]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -462,7 +471,7 @@ mod tests {
                 .supply(),
             ]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -479,7 +488,7 @@ mod tests {
                 ),
             ]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -505,7 +514,7 @@ mod tests {
                 ),
             ]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -523,7 +532,7 @@ mod tests {
                 ),
             ]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
