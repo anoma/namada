@@ -12,20 +12,18 @@ use namada::ledger::eth_bridge::storage::vote_tallies;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::types::address::Address;
-use namada::types::storage::{self, BlockHeight};
+use namada::types::storage::BlockHeight;
 use namada::types::transaction::TxResult;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada::types::voting_power::FractionalVotingPower;
 
+use super::ChangedKeys;
 use crate::node::ledger::protocol::transactions::utils::{
     self, get_active_validators,
 };
 use crate::node::ledger::protocol::transactions::votes::{
-    calculate_new, calculate_updated, write,
+    calculate_new, calculate_updated, write, Votes,
 };
-
-/// The keys changed while applying a protocol transaction
-type ChangedKeys = BTreeSet<storage::Key>;
 
 /// Applies derived state changes to storage, based on Ethereum `events` which
 /// were newly seen by some active validator(s) in the last epoch. For `events`
@@ -157,9 +155,17 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
+    let mut seen_by = Votes::default();
+    for (address, block_height) in update.seen_by.into_iter() {
+        // TODO: more deterministic deduplication
+        if let Some(present) = seen_by.insert(address, block_height) {
+            tracing::warn!(?present, "Duplicate vote in digest");
+        }
+    }
+
     let (vote_tracking, changed, confirmed) = if !exists_in_storage {
         tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-        let vote_tracking = calculate_new(&update.seen_by, voting_powers)?;
+        let vote_tracking = calculate_new(seen_by, voting_powers)?;
         let changed = eth_msg_keys.into_iter().collect();
         let confirmed = vote_tracking.seen;
         (vote_tracking, changed, confirmed)
@@ -168,9 +174,24 @@ where
             %eth_msg_keys.prefix,
             "Ethereum event already exists in storage",
         );
-        let vote_tracking =
-            calculate_updated(storage, &eth_msg_keys, voting_powers)?;
-        let changed = BTreeSet::default(); // TODO(namada#515): calculate changed keys
+        let mut votes = HashMap::default();
+        seen_by.iter().for_each(|(address, block_height)| {
+            let voting_power = voting_powers
+                .get(&(address.to_owned(), block_height.to_owned()))
+                .unwrap();
+            if let Some(already_present_voting_power) =
+                votes.insert(address.to_owned(), voting_power.to_owned())
+            {
+                tracing::warn!(
+                    ?address,
+                    ?already_present_voting_power,
+                    new_voting_power = ?voting_power,
+                    "Validator voted more than once, arbitrarily using later value",
+                )
+            }
+        });
+        let (vote_tracking, changed) =
+            calculate_updated(storage, &eth_msg_keys, &votes)?;
         let confirmed =
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
         (vote_tracking, changed, confirmed)
@@ -208,7 +229,6 @@ mod tests {
     };
     use namada::types::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada::types::token::Amount;
-    use storage::BlockHeight;
 
     use super::*;
 
@@ -230,10 +250,7 @@ mod tests {
         };
         let update = EthMsgUpdate {
             body: body.clone(),
-            seen_by: BTreeSet::from_iter(vec![(
-                sole_validator.clone(),
-                BlockHeight(100),
-            )]),
+            seen_by: Votes::from([(sole_validator.clone(), BlockHeight(100))]),
         };
         let updates = HashSet::from_iter(vec![update]);
         let voting_powers = HashMap::from_iter(vec![(
@@ -269,8 +286,8 @@ mod tests {
         let (seen_by_bytes, _) = storage.read(&eth_msg_keys.seen_by())?;
         let seen_by_bytes = seen_by_bytes.unwrap();
         assert_eq!(
-            Vec::<Address>::try_from_slice(&seen_by_bytes)?,
-            vec![sole_validator]
+            Votes::try_from_slice(&seen_by_bytes)?,
+            Votes::from([(sole_validator, BlockHeight(100))])
         );
 
         let (voting_power_bytes, _) =
