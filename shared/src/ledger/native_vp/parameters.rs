@@ -2,13 +2,12 @@
 
 use std::collections::BTreeSet;
 
-use borsh::BorshDeserialize;
 use namada_core::ledger::storage;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
 use thiserror::Error;
 
-use crate::ledger::governance::vp::is_proposal_accepted;
+use super::governance;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::vm::WasmCacheAccess;
 
@@ -52,13 +51,11 @@ where
         let result = keys_changed.iter().all(|key| {
             let key_type: KeyType = key.into();
             match key_type {
-                KeyType::PARAMETER => {
-                    let proposal_id = u64::try_from_slice(tx_data).ok();
-                    match proposal_id {
-                        Some(id) => is_proposal_accepted(&self.ctx, id),
-                        _ => false,
-                    }
-                }
+                KeyType::PARAMETER => governance::utils::is_proposal_accepted(
+                    self.ctx.storage,
+                    tx_data,
+                )
+                .unwrap_or(false),
                 KeyType::UNKNOWN_PARAMETER => false,
                 KeyType::UNKNOWN => true,
             }

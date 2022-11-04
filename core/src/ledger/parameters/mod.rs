@@ -1,103 +1,18 @@
 //! Protocol parameters
 pub mod storage;
 
-use std::collections::BTreeSet;
-
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use rust_decimal::Decimal;
 use thiserror::Error;
 
-use self::storage as parameter_storage;
-use super::governance::{self};
 use super::storage::types::{decode, encode};
 use super::storage::{types, Storage};
-use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::time::DurationSecs;
-use crate::vm::WasmCacheAccess;
 
 const ADDRESS: Address = Address::Internal(InternalAddress::Parameters);
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Native VP error: {0}")]
-    NativeVpError(native_vp::Error),
-}
-
-/// Parameters functions result
-pub type Result<T> = std::result::Result<T, Error>;
-
-/// Parameters VP
-pub struct ParametersVp<'a, DB, H, CA>
-where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, DB, H, CA>,
-}
-
-impl<'a, DB, H, CA> NativeVp for ParametersVp<'a, DB, H, CA>
-where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: 'static + WasmCacheAccess,
-{
-    type Error = Error;
-
-    const ADDR: InternalAddress = InternalAddress::Parameters;
-
-    fn validate_tx(
-        &self,
-        tx_data: &[u8],
-        keys_changed: &BTreeSet<Key>,
-        _verifiers: &BTreeSet<Address>,
-    ) -> Result<bool> {
-        let result = keys_changed.iter().all(|key| {
-            let key_type: KeyType = key.into();
-            match key_type {
-                KeyType::PARAMETER => governance::utils::is_proposal_accepted(
-                    self.ctx.storage,
-                    tx_data,
-                )
-                .unwrap_or(false),
-                KeyType::UNKNOWN_PARAMETER => false,
-                KeyType::UNKNOWN => true,
-            }
-        });
-        Ok(result)
-    }
-}
-
-impl From<native_vp::Error> for Error {
-    fn from(err: native_vp::Error) -> Self {
-        Self::NativeVpError(err)
-    }
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum ReadError {
-    #[error("Storage error: {0}")]
-    StorageError(ledger_storage::Error),
-    #[error("Storage type error: {0}")]
-    StorageTypeError(types::Error),
-    #[error("Protocol parameters are missing, they must be always set")]
-    ParametersMissing,
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum WriteError {
-    #[error("Storage error: {0}")]
-    StorageError(ledger_storage::Error),
-    #[error("Serialize error: {0}")]
-    SerializeError(String),
-}
 
 /// Protocol parameters
 #[derive(
@@ -154,6 +69,26 @@ pub struct EpochDuration {
     pub min_num_of_blocks: u64,
     /// Minimum duration of an epoch
     pub min_duration: DurationSecs,
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ReadError {
+    #[error("Storage error: {0}")]
+    StorageError(ledger_storage::Error),
+    #[error("Storage type error: {0}")]
+    StorageTypeError(types::Error),
+    #[error("Protocol parameters are missing, they must be always set")]
+    ParametersMissing,
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum WriteError {
+    #[error("Storage error: {0}")]
+    StorageError(ledger_storage::Error),
+    #[error("Serialize error: {0}")]
+    SerializeError(String),
 }
 
 impl Parameters {
@@ -254,7 +189,6 @@ impl Parameters {
         );
     }
 }
-
 /// Update the max_expected_time_per_block parameter in storage. Returns the
 /// parameters and gas cost.
 pub fn update_max_expected_time_per_block_parameter<DB, H>(
@@ -554,27 +488,4 @@ where
             + gas_staked
             + gas_reward,
     ))
-}
-
-#[allow(clippy::upper_case_acronyms)]
-enum KeyType {
-    #[allow(clippy::upper_case_acronyms)]
-    PARAMETER,
-    #[allow(clippy::upper_case_acronyms)]
-    #[allow(non_camel_case_types)]
-    UNKNOWN_PARAMETER,
-    #[allow(clippy::upper_case_acronyms)]
-    UNKNOWN,
-}
-
-impl From<&Key> for KeyType {
-    fn from(value: &Key) -> Self {
-        if parameter_storage::is_protocol_parameter_key(value) {
-            KeyType::PARAMETER
-        } else if parameter_storage::is_parameter_key(value) {
-            KeyType::UNKNOWN_PARAMETER
-        } else {
-            KeyType::UNKNOWN
-        }
-    }
 }

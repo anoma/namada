@@ -64,7 +64,7 @@ use ibc_relayer::config::{AddressType, ChainConfig, GasPrice, PacketFilter};
 use ibc_relayer::keyring::Store;
 use ibc_relayer::light_client::tendermint::LightClient as TmLightClient;
 use ibc_relayer::light_client::{LightClient, Verified};
-use namada::ledger::ibc::handler::{commitment_prefix, port_channel_id};
+use namada::core::ledger::ibc::actions::{commitment_prefix, port_channel_id};
 use namada::ledger::ibc::storage::*;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::Sha256Hasher;

@@ -1,10 +1,10 @@
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
-use namada_core::ledger::storage::merkle_tree;
-use prost::Message;
-use tendermint_proto::crypto::{ProofOp, ProofOps};
+use namada_core::types::address::Address;
+use namada_core::types::hash::Hash;
+use namada_core::types::storage::BlockResults;
 
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -13,9 +13,8 @@ use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
-use crate::types::address::Address;
-use crate::types::hash::Hash;
-use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
+use crate::tendermint::merkle::proof::Proof;
+use crate::types::storage::{self, Epoch, PrefixValue};
 #[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 
@@ -264,7 +263,7 @@ where
     let proof = if request.prove {
         let mut ops = vec![];
         for PrefixValue { key, value } in &data {
-            let mut proof = ctx
+            let mut proof: crate::tendermint::merkle::proof::Proof = ctx
                 .storage
                 .get_existence_proof(key, value.clone().into(), request.height)
                 .into_storage_result()?;
@@ -446,40 +445,5 @@ mod test {
         assert!(has_balance_key);
 
         Ok(())
-    }
-}
-
-/// Convert merkle tree proof to tendermint proof
-fn proof_to_tm_proof(
-    merkle_tree::Proof {
-        key,
-        sub_proof,
-        base_proof,
-    }: merkle_tree::Proof,
-) -> tendermint::merkle::proof::Proof {
-    use crate::tendermint::merkle::proof::{Proof, ProofOp};
-    let mut data = vec![];
-    sub_proof
-        .encode(&mut data)
-        .expect("Encoding proof shouldn't fail");
-    let sub_proof_op = ProofOp {
-        field_type: "ics23_CommitmentProof".to_string(),
-        key: key.to_string().as_bytes().to_vec(),
-        data,
-    };
-
-    let mut data = vec![];
-    base_proof
-        .encode(&mut data)
-        .expect("Encoding proof shouldn't fail");
-    let base_proof_op = ProofOp {
-        field_type: "ics23_CommitmentProof".to_string(),
-        key: key.to_string().as_bytes().to_vec(),
-        data,
-    };
-
-    // Set ProofOps from leaf to root
-    Proof {
-        ops: vec![sub_proof_op, base_proof_op],
     }
 }

@@ -1,8 +1,8 @@
 use masp_primitives::transaction::Transaction;
-use namada::types::address::{masp, Address, InternalAddress};
-use namada::types::storage::{Key, KeySeg};
-use namada::types::token;
-pub use namada::types::token::*;
+use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::storage::KeySeg;
+use namada_core::types::token;
+pub use namada_core::types::token::*;
 
 use super::*;
 
@@ -87,14 +87,14 @@ pub fn transfer(
     // If this transaction has a shielded component, then handle it
     // separately
     if let Some(shielded) = shielded {
-        let masp_addr = masp();
+        let masp_addr = address::masp();
         ctx.insert_verifier(&masp_addr)?;
-        let head_tx_key = Key::from(masp_addr.to_db_key())
+        let head_tx_key = storage::Key::from(masp_addr.to_db_key())
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");
         let current_tx_idx: u64 =
             ctx.read(&head_tx_key).unwrap_or(None).unwrap_or(0);
-        let current_tx_key = Key::from(masp_addr.to_db_key())
+        let current_tx_key = storage::Key::from(masp_addr.to_db_key())
             .push(&(TX_KEY_PREFIX.to_owned() + &current_tx_idx.to_string()))
             .expect("Cannot obtain a storage key");
         // Save the Transfer object and its location within the blockchain
@@ -122,7 +122,7 @@ pub fn transfer(
         ctx.write(&head_tx_key, current_tx_idx + 1)?;
         // If storage key has been supplied, then pin this transaction to it
         if let Some(key) = key {
-            let pin_key = Key::from(masp_addr.to_db_key())
+            let pin_key = storage::Key::from(masp_addr.to_db_key())
                 .push(&(PIN_KEY_PREFIX.to_owned() + key))
                 .expect("Cannot obtain a storage key");
             ctx.write(&pin_key, current_tx_idx)?;

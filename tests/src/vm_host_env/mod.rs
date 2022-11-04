@@ -21,8 +21,8 @@ mod tests {
     use std::panic;
 
     use itertools::Itertools;
+    use namada::core::ledger::ibc::actions::IbcActions;
     use namada::ibc::tx_msg::Msg;
-    use namada::ledger::ibc::handler::IbcActions;
     use namada::ledger::ibc::storage as ibc_storage;
     use namada::ledger::ibc::vp::{
         get_dummy_header as tm_dummy_header, Error as IbcError,

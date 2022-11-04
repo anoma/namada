@@ -10,19 +10,17 @@ use arse_merkle_tree::{
 use borsh::{BorshDeserialize, BorshSerialize};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
-use namada_core::types::storage::{TreeKeyError, IBC_KEY_LIMIT};
-use prost::Message;
 use thiserror::Error;
 
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
 use crate::bytes::ByteBuf;
 use crate::ledger::storage::ics23_specs::{self, ibc_leaf_spec};
 use crate::ledger::storage::types;
-use crate::tendermint::merkle::proof::{Proof, ProofOp};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::storage::{
-    DbKeySeg, Error as StorageError, Key, MerkleValue, StringKey, TreeBytes,
+    self, DbKeySeg, Error as StorageError, Key, MerkleValue, StringKey,
+    TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
 };
 
 #[allow(missing_docs)]
@@ -53,10 +51,14 @@ pub enum Error {
 /// Result for functions that may fail
 type Result<T> = std::result::Result<T, Error>;
 
-/// Type aliases for the different merkle trees and backing stores
+// Type aliases for the different merkle trees and backing stores
+/// Sparse-merkle-tree store
 pub type SmtStore = DefaultStore<SmtHash, Hash, 32>;
+/// Arse-merkle-tree store
 pub type AmtStore = DefaultStore<StringKey, TreeBytes, IBC_KEY_LIMIT>;
+/// Sparse-merkle-tree
 pub type Smt<H> = ArseMerkleTree<H, SmtHash, Hash, SmtStore, 32>;
+/// Arse-merkle-tree
 pub type Amt<H> =
     ArseMerkleTree<H, StringKey, TreeBytes, AmtStore, IBC_KEY_LIMIT>;
 
@@ -96,6 +98,7 @@ pub enum Store {
 }
 
 impl Store {
+    /// Convert to a `StoreRef` with borrowed store
     pub fn as_ref(&self) -> StoreRef {
         match self {
             Self::Base(store) => StoreRef::Base(store),
@@ -119,6 +122,7 @@ pub enum StoreRef<'a> {
 }
 
 impl<'a> StoreRef<'a> {
+    /// Convert to an owned `Store`.
     pub fn to_owned(&self) -> Store {
         match *self {
             Self::Base(store) => Store::Base(store.to_owned()),
@@ -128,6 +132,7 @@ impl<'a> StoreRef<'a> {
         }
     }
 
+    /// Encode a `StoreRef`.
     pub fn encode(&self) -> Vec<u8> {
         match self {
             Self::Base(store) => store.try_to_vec(),
@@ -392,25 +397,15 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         }
 
         // Get a proof of the sub tree
-        self.get_tendermint_proof(key, nep)
+        self.get_sub_tree_proof(key, nep)
     }
 
     /// Get the Tendermint proof with the base proof
-    pub fn get_tendermint_proof(
+    pub fn get_sub_tree_proof(
         &self,
         key: &Key,
         sub_proof: CommitmentProof,
     ) -> Result<Proof> {
-        let mut data = vec![];
-        sub_proof
-            .encode(&mut data)
-            .expect("Encoding proof shouldn't fail");
-        let sub_proof_op = ProofOp {
-            field_type: "ics23_CommitmentProof".to_string(),
-            key: key.to_string().as_bytes().to_vec(),
-            data,
-        };
-
         // Get a membership proof of the base tree because the sub root should
         // exist
         let (store_type, _) = StoreType::sub_key(key)?;
@@ -429,19 +424,10 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             _ => unreachable!(),
         };
 
-        let mut data = vec![];
-        base_proof
-            .encode(&mut data)
-            .expect("Encoding proof shouldn't fail");
-        let base_proof_op = ProofOp {
-            field_type: "ics23_CommitmentProof".to_string(),
-            key: key.to_string().as_bytes().to_vec(),
-            data,
-        };
-
-        // Set ProofOps from leaf to root
         Ok(Proof {
-            ops: vec![sub_proof_op, base_proof_op],
+            key: key.clone(),
+            sub_proof,
+            base_proof,
         })
     }
 }
@@ -541,6 +527,69 @@ impl From<MtError> for Error {
     }
 }
 
+/// Type of membership proof from a merkle tree
+pub enum MembershipProof {
+    /// ICS23 compliant membership proof
+    ICS23(CommitmentProof),
+}
+
+impl From<CommitmentProof> for MembershipProof {
+    fn from(proof: CommitmentProof) -> Self {
+        Self::ICS23(proof)
+    }
+}
+
+/// A storage key existence or non-existence proof
+#[derive(Debug)]
+pub struct Proof {
+    /// Storage key
+    pub key: storage::Key,
+    /// Sub proof
+    pub sub_proof: CommitmentProof,
+    /// Base proof
+    pub base_proof: CommitmentProof,
+}
+
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
+impl From<Proof> for crate::tendermint::merkle::proof::Proof {
+    fn from(
+        Proof {
+            key,
+            sub_proof,
+            base_proof,
+        }: Proof,
+    ) -> Self {
+        use prost::Message;
+
+        use crate::tendermint::merkle::proof::{Proof, ProofOp};
+
+        let mut data = vec![];
+        sub_proof
+            .encode(&mut data)
+            .expect("Encoding proof shouldn't fail");
+        let sub_proof_op = ProofOp {
+            field_type: "ics23_CommitmentProof".to_string(),
+            key: key.to_string().as_bytes().to_vec(),
+            data,
+        };
+
+        let mut data = vec![];
+        base_proof
+            .encode(&mut data)
+            .expect("Encoding proof shouldn't fail");
+        let base_proof_op = ProofOp {
+            field_type: "ics23_CommitmentProof".to_string(),
+            key: key.to_string().as_bytes().to_vec(),
+            data,
+        };
+
+        // Set ProofOps from leaf to root
+        Proof {
+            ops: vec![sub_proof_op, base_proof_op],
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -585,9 +634,7 @@ mod test {
         let nep = tree
             .get_non_existence_proof(&ibc_non_key)
             .expect("Test failed");
-        let subtree_nep = nep.ops.get(0).expect("Test failed");
-        let nep_commitment_proof =
-            CommitmentProof::decode(&*subtree_nep.data).expect("Test failed");
+        let nep_commitment_proof = nep.sub_proof;
         let non_existence_proof =
             match nep_commitment_proof.clone().proof.expect("Test failed") {
                 Ics23Proof::Nonexist(nep) => nep,
@@ -611,9 +658,7 @@ mod test {
             sub_key.to_string().as_bytes(),
         );
         assert!(nep_verification_res);
-        let basetree_ep = nep.ops.get(1).unwrap();
-        let basetree_ep_commitment_proof =
-            CommitmentProof::decode(&*basetree_ep.data).unwrap();
+        let basetree_ep_commitment_proof = nep.base_proof;
         let basetree_ics23_ep =
             match basetree_ep_commitment_proof.clone().proof.unwrap() {
                 Ics23Proof::Exist(ep) => ep,
@@ -679,17 +724,19 @@ mod test {
                 vec![ibc_val.clone().into()],
             )
             .unwrap();
-        let proof = tree.get_tendermint_proof(&ibc_key, proof).unwrap();
+        let proof = tree.get_sub_tree_proof(&ibc_key, proof).unwrap();
         let (store_type, sub_key) = StoreType::sub_key(&ibc_key).unwrap();
         let paths = vec![sub_key.to_string(), store_type.to_string()];
         let mut sub_root = ibc_val.clone();
         let mut value = ibc_val;
         // First, the sub proof is verified. Next the base proof is verified
         // with the sub root
-        for ((p, spec), key) in
-            proof.ops.iter().zip(specs.iter()).zip(paths.iter())
+        for ((commitment_proof, spec), key) in
+            [proof.sub_proof, proof.base_proof]
+                .into_iter()
+                .zip(specs.iter())
+                .zip(paths.iter())
         {
-            let commitment_proof = CommitmentProof::decode(&*p.data).unwrap();
             let existence_proof = match commitment_proof.clone().proof.unwrap()
             {
                 Ics23Proof::Exist(ep) => ep,
@@ -734,17 +781,19 @@ mod test {
                 vec![pos_val.clone().into()],
             )
             .unwrap();
-        let proof = tree.get_tendermint_proof(&pos_key, proof).unwrap();
+        let proof = tree.get_sub_tree_proof(&pos_key, proof).unwrap();
         let (store_type, sub_key) = StoreType::sub_key(&pos_key).unwrap();
         let paths = vec![sub_key.to_string(), store_type.to_string()];
         let mut sub_root = pos_val.clone();
         let mut value = pos_val;
         // First, the sub proof is verified. Next the base proof is verified
         // with the sub root
-        for ((p, spec), key) in
-            proof.ops.iter().zip(specs.iter()).zip(paths.iter())
+        for ((commitment_proof, spec), key) in
+            [proof.sub_proof, proof.base_proof]
+                .into_iter()
+                .zip(specs.iter())
+                .zip(paths.iter())
         {
-            let commitment_proof = CommitmentProof::decode(&*p.data).unwrap();
             let existence_proof = match commitment_proof.clone().proof.unwrap()
             {
                 Ics23Proof::Exist(ep) => ep,
@@ -784,9 +833,7 @@ mod test {
         let nep = tree
             .get_non_existence_proof(&ibc_non_key)
             .expect("Test failed");
-        let subtree_nep = nep.ops.get(0).expect("Test failed");
-        let nep_commitment_proof =
-            CommitmentProof::decode(&*subtree_nep.data).expect("Test failed");
+        let nep_commitment_proof = nep.sub_proof;
         let non_existence_proof =
             match nep_commitment_proof.clone().proof.expect("Test failed") {
                 Ics23Proof::Nonexist(nep) => nep,
@@ -810,9 +857,7 @@ mod test {
             sub_key.to_string().as_bytes(),
         );
         assert!(nep_verification_res);
-        let basetree_ep = nep.ops.get(1).unwrap();
-        let basetree_ep_commitment_proof =
-            CommitmentProof::decode(&*basetree_ep.data).unwrap();
+        let basetree_ep_commitment_proof = nep.base_proof;
         let basetree_ics23_ep =
             match basetree_ep_commitment_proof.clone().proof.unwrap() {
                 Ics23Proof::Exist(ep) => ep,
@@ -828,17 +873,5 @@ mod test {
             &subtree_root,
         );
         assert!(basetree_verification_res);
-    }
-}
-
-/// Type of membership proof from a merkle tree
-pub enum MembershipProof {
-    /// ICS23 compliant membership proof
-    ICS23(CommitmentProof),
-}
-
-impl From<CommitmentProof> for MembershipProof {
-    fn from(proof: CommitmentProof) -> Self {
-        Self::ICS23(proof)
     }
 }

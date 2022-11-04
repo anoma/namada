@@ -10,6 +10,7 @@ use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use derivative::Derivative;
+use namada_core::types::key::PublicKeyTmRawHash;
 use rust_decimal::Decimal;
 use thiserror::Error;
 
@@ -18,9 +19,9 @@ use crate::epoched::DynEpochOffset;
 use crate::parameters::PosParams;
 use crate::types::{
     decimal_mult_i128, decimal_mult_u64, BondId, Bonds, CommissionRates, Epoch,
-    PublicKeyTmRawHash, Slash, Slashes, TotalDeltas, Unbonds,
-    ValidatorConsensusKeys, ValidatorDeltas, ValidatorSets, ValidatorState,
-    ValidatorStates, WeightedValidator,
+    Slash, Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys,
+    ValidatorDeltas, ValidatorSets, ValidatorState, ValidatorStates,
+    WeightedValidator,
 };
 
 #[allow(missing_docs)]

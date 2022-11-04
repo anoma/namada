@@ -15,6 +15,7 @@
 pub mod btree_set;
 pub mod epoched;
 pub mod parameters;
+pub mod storage;
 pub mod types;
 pub mod validation;
 
@@ -30,7 +31,9 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
-use parameters::PosParams;
+use namada_core::ledger::storage_api;
+use namada_core::types::address::{self, Address, InternalAddress};
+pub use parameters::PosParams;
 use rust_decimal::Decimal;
 use thiserror::Error;
 use types::{
@@ -44,6 +47,18 @@ use crate::btree_set::BTreeSetShims;
 use crate::types::{
     decimal_mult_i128, decimal_mult_u64, Bond, BondId, WeightedValidator,
 };
+
+/// Address of the PoS account implemented as a native VP
+pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
+
+/// Address of the PoS slash pool account
+pub const SLASH_POOL_ADDRESS: Address =
+    Address::Internal(InternalAddress::PosSlashPool);
+
+/// Address of the staking token (NAM)
+pub fn staking_token_address() -> Address {
+    address::nam()
+}
 
 /// Read-only part of the PoS system
 pub trait PosReadOnly {
@@ -2131,4 +2146,58 @@ where
         withdrawn: withdrawn_amount,
         slashed,
     })
+}
+
+impl From<BecomeValidatorError<namada_core::types::address::Address>>
+    for storage_api::Error
+{
+    fn from(
+        err: BecomeValidatorError<namada_core::types::address::Address>,
+    ) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<BondError<namada_core::types::address::Address>>
+    for storage_api::Error
+{
+    fn from(err: BondError<namada_core::types::address::Address>) -> Self {
+        Self::new(err)
+    }
+}
+
+impl
+    From<
+        UnbondError<
+            namada_core::types::address::Address,
+            namada_core::types::token::Amount,
+        >,
+    > for storage_api::Error
+{
+    fn from(
+        err: UnbondError<
+            namada_core::types::address::Address,
+            namada_core::types::token::Amount,
+        >,
+    ) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<WithdrawError<namada_core::types::address::Address>>
+    for storage_api::Error
+{
+    fn from(err: WithdrawError<namada_core::types::address::Address>) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<CommissionRateChangeError<namada_core::types::address::Address>>
+    for storage_api::Error
+{
+    fn from(
+        err: CommissionRateChangeError<namada_core::types::address::Address>,
+    ) -> Self {
+        Self::new(err)
+    }
 }

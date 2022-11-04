@@ -1,31 +1,26 @@
 //! Governance VP
 
-/// utility functions
 pub mod utils;
 
 use std::collections::BTreeSet;
 
-use namada_core::ledger::native_vp;
+use namada_core::ledger::governance::storage as gov_storage;
+use namada_core::ledger::storage;
 use namada_core::ledger::vp_env::VpEnv;
-pub use namada_core::ledger::{parameters, storage};
 use thiserror::Error;
 use utils::is_valid_validator_voting_period;
 
-use self::storage as gov_storage;
-use super::storage_api::StorageRead;
+use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::ledger::pos::{self as pos_storage, BondId, Bonds};
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::pos::{self, BondId, Bonds};
+use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
-use crate::types::token as token_storage;
+use crate::types::token;
 use crate::vm::WasmCacheAccess;
 
 /// for handling Governance NativeVP errors
 pub type Result<T> = std::result::Result<T, Error>;
-
-/// The governance internal address
-pub const ADDRESS: Address = Address::Internal(InternalAddress::Governance);
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -37,8 +32,8 @@ pub enum Error {
 /// Governance VP
 pub struct GovernanceVp<'a, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: storage::StorageHasher,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
@@ -47,8 +42,8 @@ where
 
 impl<'a, DB, H, CA> NativeVp for GovernanceVp<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -116,8 +111,8 @@ where
 
 impl<'a, DB, H, CA> GovernanceVp<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     fn is_valid_key_set(&self, keys: &BTreeSet<Key>) -> Result<(bool, u64)> {
@@ -411,16 +406,16 @@ where
     ) -> Result<bool> {
         let funds_key = gov_storage::get_funds_key(proposal_id);
         let balance_key =
-            token_storage::balance_key(native_token_address, self.ctx.address);
+            token::balance_key(native_token_address, self.ctx.address);
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
-        let min_funds_parameter: Option<token_storage::Amount> =
+        let min_funds_parameter: Option<token::Amount> =
             self.ctx.pre().read(&min_funds_parameter_key)?;
-        let pre_balance: Option<token_storage::Amount> =
+        let pre_balance: Option<token::Amount> =
             self.ctx.pre().read(&balance_key)?;
-        let post_balance: Option<token_storage::Amount> =
+        let post_balance: Option<token::Amount> =
             self.ctx.post().read(&balance_key)?;
-        let post_funds: Option<token_storage::Amount> =
+        let post_funds: Option<token::Amount> =
             self.ctx.post().read(&funds_key)?;
 
         match (min_funds_parameter, pre_balance, post_balance, post_funds) {
@@ -447,14 +442,14 @@ where
     /// Validate a balance key
     fn is_valid_balance(&self, native_token_address: &Address) -> Result<bool> {
         let balance_key =
-            token_storage::balance_key(native_token_address, self.ctx.address);
+            token::balance_key(native_token_address, self.ctx.address);
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
-        let min_funds_parameter: Option<token_storage::Amount> =
+        let min_funds_parameter: Option<token::Amount> =
             self.ctx.pre().read(&min_funds_parameter_key)?;
-        let pre_balance: Option<token_storage::Amount> =
+        let pre_balance: Option<token::Amount> =
             self.ctx.pre().read(&balance_key)?;
-        let post_balance: Option<token_storage::Amount> =
+        let post_balance: Option<token::Amount> =
             self.ctx.post().read(&balance_key)?;
 
         match (min_funds_parameter, pre_balance, post_balance) {
@@ -549,14 +544,12 @@ where
         delegation_address: &Address,
     ) -> Result<bool>
     where
-        DB: 'static
-            + ledger_storage::DB
-            + for<'iter> ledger_storage::DBIter<'iter>,
-        H: 'static + StorageHasher,
+        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        H: 'static + storage::StorageHasher,
         CA: 'static + WasmCacheAccess,
     {
-        let validator_set_key = pos_storage::validator_set_key();
-        let pre_validator_set: pos_storage::ValidatorSets =
+        let validator_set_key = pos::validator_set_key();
+        let pre_validator_set: pos::ValidatorSets =
             self.ctx.pre().read(&validator_set_key)?.unwrap();
 
         let validator_set = pre_validator_set.get(epoch);
@@ -588,7 +581,7 @@ where
         address: &Address,
         delegation_address: &Address,
     ) -> Result<bool> {
-        let bond_key = pos_storage::bond_key(&BondId {
+        let bond_key = pos::bond_key(&BondId {
             source: address.clone(),
             validator: delegation_address.clone(),
         });
@@ -658,7 +651,7 @@ impl KeyType {
             KeyType::COUNTER
         } else if gov_storage::is_parameter_key(key) {
             KeyType::PARAMETER
-        } else if token_storage::is_balance_key(native_token, key).is_some() {
+        } else if token::is_balance_key(native_token, key).is_some() {
             KeyType::BALANCE
         } else if gov_storage::is_governance_key(key) {
             KeyType::UNKNOWN_GOVERNANCE

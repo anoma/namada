@@ -1,4 +1,5 @@
 pub use ark_bls12_381::Bls12_381 as EllipticCurve;
+
 /// Integration of Ferveo cryptographic primitives
 /// to enable decrypting txs.
 /// *Not wasm compatible*

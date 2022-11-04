@@ -2,23 +2,18 @@
 
 use std::collections::BTreeSet;
 
+use namada_core::ledger::slash_fund;
 /// SlashFund storage
-pub mod storage;
-
+pub use namada_core::ledger::slash_fund::storage;
 use thiserror::Error;
 
-use self::storage as slash_fund_storage;
-use super::governance::{self};
-use super::storage_api::StorageRead;
-use crate::ledger::native_vp::{self, Ctx, NativeVp};
+use crate::ledger::native_vp::{self, governance, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
-
-/// Internal SlashFund address
-pub const ADDRESS: Address = Address::Internal(InternalAddress::SlashFund);
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -62,7 +57,7 @@ where
             let key_type: KeyType = get_key_type(key, &native_token);
             match key_type {
                 KeyType::BALANCE(addr) => {
-                    if addr.ne(&ADDRESS) {
+                    if addr.ne(&slash_fund::ADDRESS) {
                         return true;
                     }
                     governance::utils::is_proposal_accepted(
@@ -91,7 +86,7 @@ enum KeyType {
 }
 
 fn get_key_type(value: &Key, native_token: &Address) -> KeyType {
-    if slash_fund_storage::is_slash_fund_key(value) {
+    if storage::is_slash_fund_key(value) {
         KeyType::UNKNOWN_SLASH_FUND
     } else if token::is_any_token_balance_key(value).is_some() {
         match token::is_balance_key(native_token, value) {

@@ -1,6 +1,5 @@
 //! A basic fungible token
 
-use std::convert::TryFrom;
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
@@ -12,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::types::address::{masp, Address, DecodeError as AddressError};
-use crate::types::ibc::data::FungibleTokenPacketData;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 /// Amount in micro units. For different granularity another representation
@@ -429,10 +427,13 @@ pub enum TransferError {
     NoToken,
 }
 
-impl TryFrom<FungibleTokenPacketData> for Transfer {
+#[cfg(any(feature = "abciplus", feature = "abcipp"))]
+impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
     type Error = TransferError;
 
-    fn try_from(data: FungibleTokenPacketData) -> Result<Self, Self::Error> {
+    fn try_from(
+        data: crate::ledger::ibc::data::FungibleTokenPacketData,
+    ) -> Result<Self, Self::Error> {
         let source =
             Address::decode(&data.sender).map_err(TransferError::Address)?;
         let target =

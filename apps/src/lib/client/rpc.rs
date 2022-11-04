@@ -25,7 +25,7 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::governance::utils::Votes;
+use namada::ledger::native_vp::governance::utils::Votes;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{
     decimal_mult_u64, Epoch as PosEpoch, WeightedValidator,
@@ -131,7 +131,7 @@ pub async fn query_epoch(args: args::Query) -> Epoch {
 /// Query the last committed block
 pub async fn query_block(
     args: args::Query,
-) -> tendermint_rpc::endpoint::block::Response {
+) -> crate::facade::tendermint_rpc::endpoint::block::Response {
     let client = HttpClient::new(args.ledger_address).unwrap();
     let response = client.latest_block().await.unwrap();
     println!(
@@ -2065,8 +2065,7 @@ fn process_bonds_query(
                 .unwrap();
             delta = apply_slashes(slashes, delta, *epoch_start, None, Some(w));
             current_total += delta;
-            let epoch_start: Epoch = (*epoch_start).into();
-            if epoch >= &epoch_start {
+            if epoch >= epoch_start {
                 total_active += delta;
             }
         }
@@ -2121,8 +2120,7 @@ fn process_unbonds_query(
                 Some(w),
             );
             current_total += delta;
-            let epoch_end: Epoch = (*epoch_end).into();
-            if epoch > &epoch_end {
+            if epoch > epoch_end {
                 withdrawable += delta;
             }
         }
@@ -2800,8 +2798,7 @@ pub async fn get_bond_amount_at(
                         None,
                         None,
                     );
-                    let epoch_start: Epoch = (*epoch_start).into();
-                    if epoch >= epoch_start {
+                    if epoch >= *epoch_start {
                         delegated_amount += delta;
                     }
                 }
