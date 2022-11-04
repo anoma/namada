@@ -25,9 +25,7 @@ mod tests {
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
     use namada_tests::tx::*;
-    use namada_tx_prelude::address::testing::{
-        arb_established_address,
-    };
+    use namada_tx_prelude::address::testing::arb_established_address;
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
@@ -36,6 +34,7 @@ mod tests {
         CommissionRates, GenesisValidator, PosVP,
     };
     use proptest::prelude::*;
+    use rust_decimal::prelude::ToPrimitive;
     use rust_decimal::Decimal;
 
     use super::*;
@@ -50,13 +49,11 @@ mod tests {
         /// that this transaction is accepted by the PoS validity predicate.
         #[test]
         fn test_tx_change_validator_commissions(
-            initial_rate in arb_rate(),
-            max_change in arb_rate(),
-            commission_change in arb_commission_change(),
+            commission_state_change in arb_commission_info(),
             // A key to sign the transaction
             key in arb_common_keypair(),
             pos_params in arb_pos_params()) {
-            test_tx_change_validator_commission_aux(commission_change, initial_rate, max_change, key, pos_params).unwrap()
+            test_tx_change_validator_commission_aux(commission_state_change.2, commission_state_change.0, commission_state_change.1, key, pos_params).unwrap()
         }
     }
 
@@ -75,8 +72,6 @@ mod tests {
             commission_rate: initial_rate,
             max_commission_rate_change: max_change,
         }];
-
-        println!("\nInitial rate = {}\nMax change = {}\nNew rate = {}",initial_rate,max_change,commission_change.new_rate.clone());
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
@@ -108,7 +103,8 @@ mod tests {
         println!("dbg2.1");
 
         let commission_rates_post: CommissionRates = ctx()
-            .read_validator_commission_rate(&commission_change.validator)?.unwrap();
+            .read_validator_commission_rate(&commission_change.validator)?
+            .unwrap();
 
         dbg!(&commission_rates_pre);
         dbg!(&commission_rates_post);
@@ -118,14 +114,14 @@ mod tests {
             assert_eq!(
                 commission_rates_pre.get(epoch),
                 commission_rates_post.get(epoch),
-                "The commission rates before the pipeline offset must not change \
-                 - checking in epoch: {epoch}"
+                "The commission rates before the pipeline offset must not \
+                 change - checking in epoch: {epoch}"
             );
             assert_eq!(
                 Some(&initial_rate),
                 commission_rates_post.get(epoch),
-                "The commission rates before the pipeline offset must not change \
-                 - checking in epoch: {epoch}"
+                "The commission rates before the pipeline offset must not \
+                 change - checking in epoch: {epoch}"
             );
         }
         println!("\ndbg3\n");
@@ -135,14 +131,14 @@ mod tests {
             assert_ne!(
                 commission_rates_pre.get(epoch),
                 commission_rates_post.get(epoch),
-                "The commission rate after the pipeline offset must have changed \
-                 - checking in epoch: {epoch}"
+                "The commission rate after the pipeline offset must have \
+                 changed - checking in epoch: {epoch}"
             );
             assert_eq!(
                 Some(&commission_change.new_rate),
                 commission_rates_post.get(epoch),
-                "The commission rate after the pipeline offset must be the new_rate \
-                 - checking in epoch: {epoch}"
+                "The commission rate after the pipeline offset must be the \
+                 new_rate - checking in epoch: {epoch}"
             );
         }
 
@@ -163,18 +159,41 @@ mod tests {
         Ok(())
     }
 
-    fn arb_rate() -> impl Strategy<Value = Decimal> {
-        (0..=100_000u64).prop_map(|num| {
-            Decimal::from(num) / Decimal::new(100_000, 0)
-        })
+    fn arb_rate(min: Decimal, max: Decimal) -> impl Strategy<Value = Decimal> {
+        let int_min: u64 = (min * Decimal::from(100_000_u64))
+            .to_u64()
+            .unwrap_or_default();
+        let int_max: u64 = (max * Decimal::from(100_000_u64)).to_u64().unwrap();
+        (int_min..int_max)
+            .prop_map(|num| Decimal::from(num) / Decimal::from(100_000_u64))
     }
 
-    fn arb_commission_change()
-    -> impl Strategy<Value = transaction::pos::CommissionChange> {
-        (arb_established_address(), arb_rate()).prop_map(
+    fn arb_commission_change(
+        rate_pre: Decimal,
+        max_change: Decimal,
+    ) -> impl Strategy<Value = transaction::pos::CommissionChange> {
+        let min = rate_pre - max_change;
+        let max = rate_pre + max_change;
+        (arb_established_address(), arb_rate(min, max)).prop_map(
             |(validator, new_rate)| transaction::pos::CommissionChange {
                 validator: Address::Established(validator),
                 new_rate,
+            },
+        )
+    }
+
+    fn arb_commission_info()
+    -> impl Strategy<Value = (Decimal, Decimal, transaction::pos::CommissionChange)>
+    {
+        let min = Decimal::ZERO;
+        let max = Decimal::ONE;
+        (arb_rate(min, max), arb_rate(min, max)).prop_flat_map(
+            |(rate, change)| {
+                (
+                    Just(rate),
+                    Just(change),
+                    arb_commission_change(rate, change),
+                )
             },
         )
     }

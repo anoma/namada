@@ -33,8 +33,8 @@ use crate::ledger::native_vp::{
     self, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
 };
 use crate::ledger::pos::{
-    is_validator_address_raw_hash_key, is_validator_consensus_key_key,
-    is_validator_state_key,
+    is_validator_address_raw_hash_key, is_validator_commission_rate_key,
+    is_validator_consensus_key_key, is_validator_state_key,
 };
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::{self, StorageRead};
@@ -262,6 +262,18 @@ where
                     TotalVotingPowers::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(TotalVotingPower(Data { pre, post }));
+            } else if let Some(address) = is_validator_commission_rate_key(key)
+            {
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                    CommissionRates::try_from_slice(&bytes[..]).ok()
+                });
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                    CommissionRates::try_from_slice(&bytes[..]).ok()
+                });
+                changes.push(Validator {
+                    address: address.clone(),
+                    update: CommissionRateUpdate(Data { pre, post }),
+                });
             } else if key.segments.get(0) == Some(&addr.to_db_key()) {
                 // Unknown changes to this address space are disallowed
                 tracing::info!("PoS unrecognized key change {} rejected", key);

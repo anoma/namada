@@ -16,7 +16,7 @@ use crate::btree_set::BTreeSetShims;
 use crate::epoched::DynEpochOffset;
 use crate::parameters::PosParams;
 use crate::types::{
-    BondId, Bonds, Epoch, PublicKeyTmRawHash, Slash, Slashes,
+    BondId, Bonds, CommissionRates, Epoch, PublicKeyTmRawHash, Slash, Slashes,
     TotalVotingPowers, Unbonds, ValidatorConsensusKeys, ValidatorSets,
     ValidatorState, ValidatorStates, ValidatorTotalDeltas,
     ValidatorVotingPowers, VotingPower, VotingPowerDelta, WeightedValidator,
@@ -50,6 +50,12 @@ where
     MissingNewValidatorConsensusKey(u64),
     #[error("Invalid validator consensus key update in epoch {0}")]
     InvalidValidatorConsensusKeyUpdate(u64),
+    #[error("Unexpectedly missing commission rate value for validator {0}")]
+    ValidatorCommissionRateIsRequired(Address),
+    #[error("Missing new validator commission rate in epoch {0}")]
+    MissingNewValidatorCommissionRate(u64),
+    #[error("Invalid validator commission rate update in epoch {0}")]
+    InvalidValidatorCommissionRateUpdate(u64),
     #[error("Unexpectedly missing total deltas value for validator {0}")]
     MissingValidatorTotalDeltas(Address),
     #[error("The sum of total deltas for validator {0} are negative")]
@@ -279,6 +285,8 @@ where
     TotalDeltas(Data<ValidatorTotalDeltas<TokenChange>>),
     /// Voting power update
     VotingPowerUpdate(Data<ValidatorVotingPowers>),
+    /// Commission rate update
+    CommissionRateUpdate(Data<CommissionRates>),
 }
 
 /// Data update with prior and posterior state.
@@ -305,6 +313,7 @@ pub struct NewValidator<PublicKey> {
     has_voting_power: bool,
     has_address_raw_hash: Option<String>,
     voting_power: VotingPower,
+    has_commission_rate: bool,
 }
 
 /// Validation constants
@@ -797,9 +806,14 @@ where
                         has_voting_power,
                         has_address_raw_hash,
                         voting_power,
+                        has_commission_rate,
                     } = &new_validator;
                     // The new validator must have set all the required fields
-                    if !(*has_state && *has_total_deltas && *has_voting_power) {
+                    if !(*has_state
+                        && *has_total_deltas
+                        && *has_voting_power
+                        && *has_commission_rate)
+                    {
                         errors.push(Error::InvalidNewValidator(
                             address.clone(),
                             new_validator.clone(),
@@ -1132,6 +1146,15 @@ where
                         address,
                         data,
                     ),
+                    CommissionRateUpdate(data) => {
+                        Self::validator_commission_rate(
+                            constants,
+                            errors,
+                            new_validators,
+                            address,
+                            data,
+                        )
+                    }
                 },
                 Balance(data) => Self::balance(errors, balance_delta, data),
                 Bond { id, data, slashes } => {
@@ -1464,6 +1487,62 @@ where
             }
             (Some(_), None) => {
                 errors.push(Error::MissingValidatorTotalDeltas(address))
+            }
+            (None, None) => {}
+        }
+    }
+
+    fn validator_commission_rate(
+        constants: &Constants,
+        errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
+        new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
+        address: Address,
+        data: Data<CommissionRates>,
+    ) {
+        match (data.pre, data.post) {
+            // Should this case ever happen since commission rate should be init
+            // at genesis? (same w consensus key tho)
+            (None, Some(post)) => {
+                if post.last_update() != constants.current_epoch {
+                    errors.push(Error::InvalidLastUpdate)
+                }
+                // The value must be known at pipeline epoch
+                match post.get(constants.pipeline_epoch) {
+                    Some(_) => {
+                        let validator =
+                            new_validators.entry(address).or_default();
+                        validator.has_commission_rate = true;
+                    }
+                    _ => errors.push(Error::MissingNewValidatorCommissionRate(
+                        constants.pipeline_epoch.into(),
+                    )),
+                }
+            }
+            (Some(pre), Some(post)) => {
+                if post.last_update() != constants.current_epoch {
+                    errors.push(Error::InvalidLastUpdate)
+                }
+                // Before pipeline epoch, the commission rate must not change
+                for epoch in Epoch::iter_range(
+                    constants.current_epoch,
+                    constants.pipeline_offset,
+                ) {
+                    match (pre.get(epoch), post.get(epoch)) {
+                        (Some(rate_pre), Some(rate_post))
+                            if rate_pre == rate_post =>
+                        {
+                            continue;
+                        }
+                        _ => errors.push(
+                            Error::InvalidValidatorCommissionRateUpdate(
+                                epoch.into(),
+                            ),
+                        ),
+                    }
+                }
+            }
+            (Some(_), None) => {
+                errors.push(Error::ValidatorCommissionRateIsRequired(address))
             }
             (None, None) => {}
         }
