@@ -2,12 +2,12 @@
 use std::convert::TryInto;
 use std::str::FromStr;
 
-use thiserror::Error;
-
-use super::super::handler::{
+use namada_core::ledger::ibc::actions::{
     make_create_client_event, make_update_client_event,
     make_upgrade_client_event,
 };
+use thiserror::Error;
+
 use super::super::storage::{
     client_counter_key, client_state_key, client_type_key,
     client_update_height_key, client_update_timestamp_key, consensus_height,

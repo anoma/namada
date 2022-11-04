@@ -1,21 +1,18 @@
 //! Governance VP
 
-/// governance parameters
-pub mod parameters;
-/// governance storage
-pub mod storage;
-/// utility function
+/// utility functions
 pub mod utils;
 
 use std::collections::BTreeSet;
 
+use namada_core::ledger::native_vp;
+use namada_core::ledger::vp_env::VpEnv;
+pub use namada_core::ledger::{parameters, storage};
 use thiserror::Error;
+use utils::is_valid_validator_voting_period;
 
 use self::storage as gov_storage;
-use self::utils::is_valid_validator_voting_period;
-use super::native_vp;
 use super::storage_api::StorageRead;
-use super::vp_env::VpEnv;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::pos::{self as pos_storage, BondId, Bonds};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};

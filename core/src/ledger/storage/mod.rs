@@ -4,9 +4,7 @@ pub mod ics23_specs;
 mod merkle_tree;
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
-pub mod traits;
 pub mod types;
-pub mod write_log;
 
 use core::fmt::Debug;
 use std::array;
@@ -336,7 +334,6 @@ where
     pub fn open(
         db_path: impl AsRef<std::path::Path>,
         chain_id: ChainId,
-        native_token: Address,
         cache: Option<&D::Cache>,
     ) -> Self {
         let block = BlockStorage {
@@ -363,7 +360,6 @@ where
             conversion_state: ConversionState::default(),
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
-            native_token,
         }
     }
 
@@ -1158,7 +1154,6 @@ pub mod testing {
     use super::mockdb::MockDB;
     use super::*;
     use crate::ledger::storage::traits::Sha256Hasher;
-    use crate::types::address;
     /// Storage with a mock DB for testing
     pub type TestStorage = Storage<MockDB, Sha256Hasher>;
 
@@ -1190,7 +1185,6 @@ pub mod testing {
                 conversion_state: ConversionState::default(),
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
-                native_token: address::nam(),
             }
         }
     }

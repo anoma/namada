@@ -1,0 +1,62 @@
+[package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+edition = "2021"
+license = "GPL-3.0"
+name = "namada_core"
+resolver = "2"
+version = "0.9.0"
+
+[features]
+default = []
+ferveo-tpke = [
+  "ferveo",
+  "tpke",
+  "ark-ec",
+  "rand_core",
+  "rand",
+]
+# for integration tests and test utilies
+testing = [
+  "rand",
+  "rand_core",
+]
+
+[dependencies]
+ark-ec = {version = "0.3", optional = true}
+# We switch off "blake2b" because it cannot be compiled to wasm
+# branch = "bat/arse-merkle-tree"
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "04ad1eeb28901b57a7599bbe433b3822965dabe8", default-features = false, features = ["std", "borsh"]}
+bech32 = "0.8.0"
+borsh = "0.9.0"
+chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
+data-encoding = "2.3.2"
+derivative = "2.2.0"
+ed25519-consensus = "1.2.0"
+ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
+tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
+ics23 = "0.7.0"
+itertools = "0.10.0"
+libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
+rand = {version = "0.8", optional = true}
+rand_core = {version = "0.6", optional = true}
+rust_decimal = "1.26.1"
+serde = {version = "1.0.125", features = ["derive"]}
+serde_json = "1.0.62"
+sha2 = "0.9.3"
+thiserror = "1.0.30"
+tracing = "0.1.30"
+zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
+
+[dev-dependencies]
+assert_matches = "1.5.0"
+libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
+pretty_assertions = "0.7.2"
+# A fork with state machine testing
+proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
+rand = {version = "0.8"}
+rand_core = {version = "0.6"}
+test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
+tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
+
+[build-dependencies]
+tonic-build = "0.6.0"

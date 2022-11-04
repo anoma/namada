@@ -9,7 +9,7 @@ pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::types::{self, Slash, Slashes, ValidatorStates};
 use namada_proof_of_stake::validation::validate;
-use namada_proof_of_stake::{validation, PosReadOnly};
+use namada_proof_of_stake::{impl_pos_read_only, validation, PosReadOnly};
 use rust_decimal::Decimal;
 use thiserror::Error;
 

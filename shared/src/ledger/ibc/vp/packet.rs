@@ -1,14 +1,18 @@
 //! IBC validity predicate for packets
 
-use thiserror::Error;
-
-use super::super::handler::{
+use namada_core::ledger::ibc::actions::{
     self, make_send_packet_event, make_timeout_event, packet_from_message,
 };
-use super::super::storage::{
+use namada_core::ledger::ibc::data::{Error as IbcDataError, IbcMessage};
+use namada_core::ledger::ibc::storage::{
     ibc_denom_key, port_channel_sequence_id, token_hash_from_denom,
     Error as IbcStorageError,
 };
+use namada_core::types::ibc::data::{
+    Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
+};
+use thiserror::Error;
+
 use super::{Ibc, StateChange};
 use crate::ibc::core::ics02_client::height::Height;
 use crate::ibc::core::ics04_channel::channel::{
@@ -35,9 +39,6 @@ use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ibc::proofs::Proofs;
 use crate::ledger::native_vp::VpEnv;
 use crate::ledger::storage::{self, StorageHasher};
-use crate::types::ibc::data::{
-    Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
-};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 
@@ -446,7 +447,7 @@ where
         packet: &Packet,
         commitment: PacketCommitment,
     ) -> Result<()> {
-        if commitment == handler::commitment(packet) {
+        if commitment == namada_core::ledger::ibc::actions::commitment(packet) {
             Ok(())
         } else {
             Err(Error::InvalidPacket(
