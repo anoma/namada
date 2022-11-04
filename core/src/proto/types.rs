@@ -7,10 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::generated::types;
-#[cfg(feature = "ferveo-tpke")]
-use crate::tendermint_proto::abci::Event;
-#[cfg(feature = "ferveo-tpke")]
-use crate::tendermint_proto::abci::EventAttribute;
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
@@ -164,6 +161,7 @@ impl From<Tx> for types::Tx {
     }
 }
 
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl From<Tx> for ResponseDeliverTx {
     #[cfg(not(feature = "ferveo-tpke"))]
     fn from(_tx: Tx) -> ResponseDeliverTx {
@@ -173,6 +171,8 @@ impl From<Tx> for ResponseDeliverTx {
     /// Annotate the Tx with meta-data based on its contents
     #[cfg(feature = "ferveo-tpke")]
     fn from(tx: Tx) -> ResponseDeliverTx {
+        use crate::tendermint_proto::abci::{Event, EventAttribute};
+
         #[cfg(feature = "ABCI")]
         fn encode_str(x: &str) -> Vec<u8> {
             x.as_bytes().to_vec()

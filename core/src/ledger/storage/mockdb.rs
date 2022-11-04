@@ -14,7 +14,7 @@ use super::{
 };
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 #[cfg(feature = "ferveo-tpke")]
-use crate::types::storage::TxQueue;
+use crate::types::internal::TxQueue;
 use crate::types::storage::{
     BlockHeight, BlockResults, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
 };

@@ -9,8 +9,9 @@ pub mod pos;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 pub mod protocol;
 pub mod queries;
-pub mod slash_fund;
+pub mod storage;
+pub mod vp_host_fns;
 
 pub use namada_core::ledger::{
-    gas, governance, parameters, storage, storage_api, tx_env, vp_env,
+    gas, governance, parameters, storage_api, tx_env, vp_env,
 };

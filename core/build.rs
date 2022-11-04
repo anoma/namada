@@ -25,12 +25,7 @@ fn main() {
     if let Ok(rustfmt_toolchain) = read_to_string(RUSTFMT_TOOLCHAIN_SRC) {
         // Try to find the path to rustfmt.
         if let Ok(output) = Command::new("rustup")
-            .args(&[
-                "which",
-                "rustfmt",
-                "--toolchain",
-                rustfmt_toolchain.trim(),
-            ])
+            .args(["which", "rustfmt", "--toolchain", rustfmt_toolchain.trim()])
             .output()
         {
             if let Ok(rustfmt) = str::from_utf8(&output.stdout) {

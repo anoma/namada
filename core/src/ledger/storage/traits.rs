@@ -7,7 +7,6 @@ use arse_merkle_tree::traits::{Hasher, Value};
 use arse_merkle_tree::{Key as TreeKey, H256};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof};
-use namada_core::types::storage::IBC_KEY_LIMIT;
 use sha2::{Digest, Sha256};
 
 use super::ics23_specs;

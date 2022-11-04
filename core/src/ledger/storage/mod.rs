@@ -1,13 +1,13 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
 pub mod ics23_specs;
-mod merkle_tree;
+pub mod merkle_tree;
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
+pub mod traits;
 pub mod types;
 
 use core::fmt::Debug;
-use std::array;
 use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -15,6 +15,10 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
 use masp_primitives::sapling::Node;
+pub use merkle_tree::{
+    MembershipProof, MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite,
+    StoreType,
+};
 #[cfg(feature = "wasm-runtime")]
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
@@ -22,29 +26,27 @@ use rayon::iter::{
 #[cfg(feature = "wasm-runtime")]
 use rayon::prelude::ParallelSlice;
 use thiserror::Error;
+pub use traits::{Sha256Hasher, StorageHasher};
 
-use super::parameters::{self, Parameters};
-use super::storage_api;
-use super::storage_api::{ResultExt, StorageRead, StorageWrite};
 use crate::ledger::gas::MIN_STORAGE_GAS;
-use crate::ledger::parameters::EpochDuration;
+use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
-pub use crate::ledger::storage::merkle_tree::{
-    MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
-};
-pub use crate::ledger::storage::traits::{Sha256Hasher, StorageHasher};
+use crate::ledger::storage_api;
+use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{
     masp, Address, EstablishedAddressGen, InternalAddress,
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
+// TODO
 #[cfg(feature = "ferveo-tpke")]
-use crate::types::storage::TxQueue;
+use crate::types::internal::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    MembershipProof, MerkleValue, TxIndex, BLOCK_HASH_LENGTH,
+    TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 use crate::types::token;
@@ -61,8 +63,6 @@ pub struct ConversionState {
     /// Map assets to their latest conversion and position in Merkle tree
     pub assets: BTreeMap<AssetType, (Address, Epoch, AllowedConversion, usize)>,
 }
-/// The maximum size of an IBC key (in bytes) allowed in merkle-ized storage
-pub const IBC_KEY_LIMIT: usize = 120;
 
 /// The storage data
 #[derive(Debug)]
@@ -334,6 +334,7 @@ where
     pub fn open(
         db_path: impl AsRef<std::path::Path>,
         chain_id: ChainId,
+        native_token: Address,
         cache: Option<&D::Cache>,
     ) -> Self {
         let block = BlockStorage {
@@ -360,6 +361,7 @@ where
             conversion_state: ConversionState::default(),
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
+            native_token,
         }
     }
 
@@ -618,12 +620,15 @@ where
     }
 
     /// Get the existence proof
+    #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: MerkleValue,
+        value: crate::types::storage::MerkleValue,
         height: BlockHeight,
     ) -> Result<Proof> {
+        use std::array;
+
         if height >= self.get_block_height().0 {
             let MembershipProof::ICS23(proof) = self
                 .block
@@ -632,7 +637,8 @@ where
                 .map_err(Error::MerkleTreeError)?;
             self.block
                 .tree
-                .get_tendermint_proof(key, proof)
+                .get_sub_tree_proof(key, proof)
+                .map(Into::into)
                 .map_err(Error::MerkleTreeError)
         } else {
             match self.db.read_merkle_tree_stores(height)? {
@@ -644,7 +650,8 @@ where
                             vec![value],
                         )
                         .map_err(Error::MerkleTreeError)?;
-                    tree.get_tendermint_proof(key, proof)
+                    tree.get_sub_tree_proof(key, proof)
+                        .map(Into::into)
                         .map_err(Error::MerkleTreeError)
                 }
                 None => Err(Error::NoMerkleTree { height }),
@@ -653,17 +660,24 @@ where
     }
 
     /// Get the non-existence proof
+    #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
     pub fn get_non_existence_proof(
         &self,
         key: &Key,
         height: BlockHeight,
     ) -> Result<Proof> {
         if height >= self.last_height {
-            Ok(self.block.tree.get_non_existence_proof(key)?)
+            self.block
+                .tree
+                .get_non_existence_proof(key)
+                .map(Into::into)
+                .map_err(Error::MerkleTreeError)
         } else {
             match self.db.read_merkle_tree_stores(height)? {
-                Some(stores) => Ok(MerkleTree::<H>::new(stores)
-                    .get_non_existence_proof(key)?),
+                Some(stores) => MerkleTree::<H>::new(stores)
+                    .get_non_existence_proof(key)
+                    .map(Into::into)
+                    .map_err(Error::MerkleTreeError),
                 None => Err(Error::NoMerkleTree { height }),
             }
         }
@@ -952,19 +966,19 @@ where
     }
 
     /// Start write batch.
-    fn batch() -> D::WriteBatch {
+    pub fn batch() -> D::WriteBatch {
         D::batch()
     }
 
     /// Execute write batch.
-    fn exec_batch(&mut self, batch: D::WriteBatch) -> Result<()> {
+    pub fn exec_batch(&mut self, batch: D::WriteBatch) -> Result<()> {
         self.db.exec_batch(batch)
     }
 
     /// Batch write the value with the given height and account subspace key to
     /// the DB. Returns the size difference from previous value, if any, or
     /// the size of the value otherwise.
-    fn batch_write_subspace_val(
+    pub fn batch_write_subspace_val(
         &mut self,
         batch: &mut D::WriteBatch,
         key: &Key,
@@ -979,7 +993,7 @@ where
     /// Batch delete the value with the given height and account subspace key
     /// from the DB. Returns the size of the removed value, if any, 0 if no
     /// previous value was found.
-    fn batch_delete_subspace_val(
+    pub fn batch_delete_subspace_val(
         &mut self,
         batch: &mut D::WriteBatch,
         key: &Key,
@@ -1154,6 +1168,7 @@ pub mod testing {
     use super::mockdb::MockDB;
     use super::*;
     use crate::ledger::storage::traits::Sha256Hasher;
+    use crate::types::address;
     /// Storage with a mock DB for testing
     pub type TestStorage = Storage<MockDB, Sha256Hasher>;
 
@@ -1185,6 +1200,7 @@ pub mod testing {
                 conversion_state: ConversionState::default(),
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
+                native_token: address::nam(),
             }
         }
     }

@@ -1,3 +1,5 @@
+//! Governance utility functions
+
 use std::collections::HashMap;
 use std::str::FromStr;
 

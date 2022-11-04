@@ -2,35 +2,6 @@
 
 use core::time::Duration;
 
-use ibc::core::ics02_client::client_consensus::AnyConsensusState;
-use ibc::core::ics02_client::client_state::AnyClientState;
-use ibc::core::ics02_client::context::ClientReader;
-use ibc::core::ics02_client::height::Height;
-use ibc::core::ics03_connection::connection::ConnectionEnd;
-use ibc::core::ics03_connection::context::ConnectionReader;
-use ibc::core::ics03_connection::error::Error as Ics03Error;
-use ibc::core::ics04_channel::channel::{ChannelEnd, Counterparty, State};
-use ibc::core::ics04_channel::commitment::{
-    AcknowledgementCommitment, PacketCommitment,
-};
-use ibc::core::ics04_channel::context::ChannelReader;
-use ibc::core::ics04_channel::error::Error as Ics04Error;
-use ibc::core::ics04_channel::handler::verify::verify_channel_proofs;
-use ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
-use ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
-use ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
-use ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-use ibc::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
-use ibc::core::ics04_channel::packet::{Receipt, Sequence};
-use ibc::core::ics05_port::capabilities::{Capability, ChannelCapability};
-use ibc::core::ics05_port::context::PortReader;
-use ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
-};
-use ibc::core::ics26_routing::context::ModuleId;
-use ibc::core::ics26_routing::msgs::Ics26Envelope;
-use ibc::proofs::Proofs;
-use ibc::timestamp::Timestamp;
 use namada_core::ledger::ibc::actions::{
     make_close_confirm_channel_event, make_close_init_channel_event,
     make_open_ack_channel_event, make_open_confirm_channel_event,
@@ -50,12 +21,45 @@ use namada_core::ledger::parameters;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::types::storage::Key;
 use sha2::Digest;
-use tendermint::Time;
-use tendermint_proto::Protobuf;
 use thiserror::Error;
 
 use super::{Ibc, StateChange};
+use crate::ibc::core::ics02_client::client_consensus::AnyConsensusState;
+use crate::ibc::core::ics02_client::client_state::AnyClientState;
+use crate::ibc::core::ics02_client::context::ClientReader;
+use crate::ibc::core::ics02_client::height::Height;
+use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
+use crate::ibc::core::ics03_connection::context::ConnectionReader;
+use crate::ibc::core::ics03_connection::error::Error as Ics03Error;
+use crate::ibc::core::ics04_channel::channel::{
+    ChannelEnd, Counterparty, State,
+};
+use crate::ibc::core::ics04_channel::commitment::{
+    AcknowledgementCommitment, PacketCommitment,
+};
+use crate::ibc::core::ics04_channel::context::ChannelReader;
+use crate::ibc::core::ics04_channel::error::Error as Ics04Error;
+use crate::ibc::core::ics04_channel::handler::verify::verify_channel_proofs;
+use crate::ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
+use crate::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
+use crate::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
+use crate::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
+use crate::ibc::core::ics04_channel::msgs::{ChannelMsg, PacketMsg};
+use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
+use crate::ibc::core::ics05_port::capabilities::{
+    Capability, ChannelCapability,
+};
+use crate::ibc::core::ics05_port::context::PortReader;
+use crate::ibc::core::ics24_host::identifier::{
+    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+};
+use crate::ibc::core::ics26_routing::context::ModuleId;
+use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
+use crate::ibc::proofs::Proofs;
+use crate::ibc::timestamp::Timestamp;
 use crate::ledger::native_vp::{Error as NativeVpError, VpEnv};
+use crate::tendermint::Time;
+use crate::tendermint_proto::Protobuf;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]

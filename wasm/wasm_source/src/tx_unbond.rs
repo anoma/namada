@@ -18,7 +18,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 mod tests {
     use std::collections::HashMap;
 
-    use namada::ledger::pos::PosParams;
+    use namada::ledger::pos::{BondId, GenesisValidator, PosParams, PosVP};
+    use namada::proof_of_stake::types::{Bond, Unbond};
     use namada::proto::Tx;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
@@ -30,8 +31,6 @@ mod tests {
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::token;
-    use namada_vp_prelude::proof_of_stake::types::{Bond, Unbond};
-    use namada_vp_prelude::proof_of_stake::{BondId, GenesisValidator, PosVP};
     use proptest::prelude::*;
 
     use super::*;

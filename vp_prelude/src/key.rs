@@ -1,7 +1,7 @@
 //! Cryptographic signature keys
 
-use namada::types::address::Address;
-pub use namada::types::key::*;
+use namada_core::types::address::Address;
+pub use namada_core::types::key::*;
 
 use super::*;
 

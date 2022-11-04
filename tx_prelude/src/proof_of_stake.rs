@@ -1,16 +1,17 @@
 //! Proof of Stake system integration with functions for transactions
 
-pub use namada::ledger::pos::*;
-use namada::ledger::pos::{
-    bond_key, namada_proof_of_stake, params_key, unbond_key,
+use namada_core::types::transaction::InitValidator;
+use namada_core::types::{key, token};
+pub use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::storage::{
+    bond_key, params_key, total_deltas_key, unbond_key,
     validator_address_raw_hash_key, validator_commission_rate_key,
     validator_consensus_key_key, validator_deltas_key,
     validator_max_commission_rate_change_key, validator_set_key,
-    validator_slashes_key, validator_state_key,
+    validator_slashes_key, validator_state_key, BondId, Bonds, TotalDeltas,
+    Unbonds, ValidatorConsensusKeys, ValidatorDeltas, ValidatorSets,
 };
-use namada::types::address::Address;
-use namada::types::transaction::InitValidator;
-use namada::types::{key, token};
+use namada_proof_of_stake::types::{CommissionRates, ValidatorStates};
 pub use namada_proof_of_stake::{
     epoched, parameters, types, PosActions as PosWrite, PosReadOnly as PosRead,
 };
@@ -125,7 +126,7 @@ impl Ctx {
     }
 }
 
-namada::impl_pos_read_only! {
+namada_proof_of_stake::impl_pos_read_only! {
     type Error = crate::Error;
     impl namada_proof_of_stake::PosReadOnly for Ctx
 }

@@ -1,26 +1,26 @@
 //! Storage types
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
+use std::io::Write;
 use std::num::ParseIntError;
 use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
 
-use arse_merkle_tree::InternalKey;
+use arse_merkle_tree::traits::Value;
+use arse_merkle_tree::{InternalKey, Key as TreeKey};
 use bit_vec::BitVec;
-use borsh::maybestd::io::Write;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
-use ics23::CommitmentProof;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
-#[cfg(feature = "ferveo-tpke")]
-use super::transaction::WrapperTx;
 use crate::bytes::ByteBuf;
-use crate::ledger::storage::IBC_KEY_LIMIT;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::time::DateTimeUtc;
+
+/// The maximum size of an IBC key (in bytes) allowed in merkle-ized storage
+pub const IBC_KEY_LIMIT: usize = 120;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -389,6 +389,42 @@ pub struct StringKey {
     pub length: usize,
 }
 
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum TreeKeyError {
+    #[error("Invalid key for merkle tree: {0}")]
+    InvalidMerkleKey(String),
+}
+
+impl TreeKey<IBC_KEY_LIMIT> for StringKey {
+    type Error = TreeKeyError;
+
+    fn as_slice(&self) -> &[u8] {
+        &self.original.as_slice()[..self.length]
+    }
+
+    fn try_from_bytes(bytes: &[u8]) -> std::result::Result<Self, Self::Error> {
+        let mut tree_key = [0u8; IBC_KEY_LIMIT];
+        let mut original = [0u8; IBC_KEY_LIMIT];
+        let mut length = 0;
+        for (i, byte) in bytes.iter().enumerate() {
+            if i >= IBC_KEY_LIMIT {
+                return Err(TreeKeyError::InvalidMerkleKey(
+                    "Input IBC key is too large".into(),
+                ));
+            }
+            original[i] = *byte;
+            tree_key[i] = byte.wrapping_add(1);
+            length += 1;
+        }
+        Ok(Self {
+            original,
+            tree_key: tree_key.into(),
+            length,
+        })
+    }
+}
+
 impl Deref for StringKey {
     type Target = InternalKey<IBC_KEY_LIMIT>;
 
@@ -456,18 +492,15 @@ impl From<TreeBytes> for Vec<u8> {
     }
 }
 
-// TODO not sure
-// /// Type of membership proof from a merkle tree
-// pub enum MembershipProof {
-//     /// ICS23 compliant membership proof
-//     ICS23(CommitmentProof),
-// }
+impl Value for TreeBytes {
+    fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
 
-// impl From<CommitmentProof> for MembershipProof {
-//     fn from(proof: CommitmentProof) -> Self {
-//         Self::ICS23(proof)
-//     }
-// }
+    fn zero() -> Self {
+        TreeBytes::zero()
+    }
+}
 
 impl Key {
     /// Parses string and returns a key
@@ -893,6 +926,53 @@ impl Epoch {
     pub fn prev(&self) -> Self {
         Self(self.0 - 1)
     }
+
+    /// Iterate a range of consecutive epochs starting from `self` of a given
+    /// length. Work-around for `Step` implementation pending on stabilization of <https://github.com/rust-lang/rust/issues/42168>.
+    pub fn iter_range(self, len: u64) -> impl Iterator<Item = Epoch> + Clone {
+        let start_ix: u64 = self.into();
+        let end_ix: u64 = start_ix + len;
+        (start_ix..end_ix).map(Epoch::from)
+    }
+
+    /// Checked epoch subtraction. Computes self - rhs, returning None if
+    /// overflow occurred.
+    #[must_use = "this returns the result of the operation, without modifying \
+                  the original"]
+    pub fn checked_sub(self, rhs: Epoch) -> Option<Self> {
+        if rhs.0 > self.0 {
+            None
+        } else {
+            Some(Self(self.0 - rhs.0))
+        }
+    }
+
+    /// Checked epoch subtraction. Computes self - rhs, returning default
+    /// `Epoch(0)` if overflow occurred.
+    #[must_use = "this returns the result of the operation, without modifying \
+                  the original"]
+    pub fn sub_or_default(self, rhs: Epoch) -> Self {
+        self.checked_sub(rhs).unwrap_or_default()
+    }
+}
+
+impl From<u64> for Epoch {
+    fn from(epoch: u64) -> Self {
+        Epoch(epoch)
+    }
+}
+
+impl From<Epoch> for u64 {
+    fn from(epoch: Epoch) -> Self {
+        epoch.0
+    }
+}
+
+// TODO remove this once it's not being used
+impl From<Epoch> for usize {
+    fn from(epoch: Epoch) -> Self {
+        epoch.0 as usize
+    }
 }
 
 impl Add<u64> for Epoch {
@@ -903,11 +983,28 @@ impl Add<u64> for Epoch {
     }
 }
 
+// TODO remove this once it's not being used
+impl Add<usize> for Epoch {
+    type Output = Self;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        Epoch(self.0 + rhs as u64)
+    }
+}
+
 impl Sub<u64> for Epoch {
     type Output = Epoch;
 
     fn sub(self, rhs: u64) -> Self::Output {
         Self(self.0 - rhs)
+    }
+}
+
+impl Sub<Epoch> for Epoch {
+    type Output = Self;
+
+    fn sub(self, rhs: Epoch) -> Self::Output {
+        Epoch(self.0 - rhs.0)
     }
 }
 
@@ -935,14 +1032,6 @@ impl Rem<u64> for Epoch {
     }
 }
 
-impl Sub for Epoch {
-    type Output = Epoch;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0 - rhs.0)
-    }
-}
-
 impl Add for Epoch {
     type Output = Epoch;
 
@@ -956,18 +1045,6 @@ impl Mul for Epoch {
 
     fn mul(self, rhs: Self) -> Self::Output {
         Self(self.0 * rhs.0)
-    }
-}
-
-impl From<Epoch> for u64 {
-    fn from(epoch: Epoch) -> Self {
-        epoch.0
-    }
-}
-
-impl From<u64> for Epoch {
-    fn from(value: u64) -> Self {
-        Self(value)
     }
 }
 
@@ -1048,35 +1125,6 @@ impl Epochs {
             return Some(epoch);
         }
         None
-    }
-}
-
-#[cfg(feature = "ferveo-tpke")]
-#[derive(Default, Debug, Clone, BorshDeserialize, BorshSerialize)]
-/// Wrapper txs to be decrypted in the next block proposal
-pub struct TxQueue(std::collections::VecDeque<WrapperTx>);
-
-#[cfg(feature = "ferveo-tpke")]
-impl TxQueue {
-    /// Add a new wrapper at the back of the queue
-    pub fn push(&mut self, wrapper: WrapperTx) {
-        self.0.push_back(wrapper);
-    }
-
-    /// Remove the wrapper at the head of the queue
-    pub fn pop(&mut self) -> Option<WrapperTx> {
-        self.0.pop_front()
-    }
-
-    /// Get an iterator over the queue
-    pub fn iter(&self) -> impl std::iter::Iterator<Item = &WrapperTx> {
-        self.0.iter()
-    }
-
-    /// Check if there are any txs in the queue
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
     }
 }
 

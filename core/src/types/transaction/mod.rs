@@ -26,12 +26,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
-use super::ibc::IbcEvent;
-use super::storage;
 use crate::ledger::gas::VpsGas;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
+use crate::types::ibc::IbcEvent;
 use crate::types::key::*;
+use crate::types::storage;
 
 /// Get the hash of a transaction
 pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
@@ -188,7 +188,7 @@ pub struct InitValidator {
     /// Public key used to sign protocol transactions
     pub protocol_key: common::PublicKey,
     /// Serialization of the public session key used in the DKG
-    pub dkg_key: DkgPublicKey,
+    pub dkg_key: crate::types::key::dkg_session_keys::DkgPublicKey,
     /// The initial commission rate charged for delegation rewards
     pub commission_rate: Decimal,
     /// The maximum change allowed per epoch to the commission rate. This is
@@ -532,5 +532,3 @@ pub mod tx_types {
 
 #[cfg(feature = "ferveo-tpke")]
 pub use tx_types::*;
-
-use crate::types::key::dkg_session_keys::DkgPublicKey;
