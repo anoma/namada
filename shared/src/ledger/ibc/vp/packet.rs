@@ -3,13 +3,12 @@
 use namada_core::ledger::ibc::actions::{
     self, make_send_packet_event, make_timeout_event, packet_from_message,
 };
-use namada_core::ledger::ibc::data::{Error as IbcDataError, IbcMessage};
+use namada_core::ledger::ibc::data::{
+    Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
+};
 use namada_core::ledger::ibc::storage::{
     ibc_denom_key, port_channel_sequence_id, token_hash_from_denom,
     Error as IbcStorageError,
-};
-use namada_core::types::ibc::data::{
-    Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
 };
 use thiserror::Error;
 
@@ -447,7 +446,7 @@ where
         packet: &Packet,
         commitment: PacketCommitment,
     ) -> Result<()> {
-        if commitment == namada_core::ledger::ibc::actions::commitment(packet) {
+        if commitment == actions::commitment(packet) {
             Ok(())
         } else {
             Err(Error::InvalidPacket(

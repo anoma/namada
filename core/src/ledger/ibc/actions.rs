@@ -68,15 +68,15 @@ use crate::ibc::events::IbcEvent;
 #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
 use crate::ibc::mock::client_state::{MockClientState, MockConsensusState};
 use crate::ibc::timestamp::Timestamp;
+use crate::ledger::ibc::data::{
+    Error as IbcDataError, FungibleTokenPacketData, IbcMessage, PacketAck,
+    PacketReceipt,
+};
 use crate::ledger::ibc::storage;
 use crate::ledger::storage_api;
 use crate::tendermint::Time;
 use crate::tendermint_proto::{Error as ProtoError, Protobuf};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::data::{
-    Error as IbcDataError, FungibleTokenPacketData, IbcMessage, PacketAck,
-    PacketReceipt,
-};
 use crate::types::ibc::IbcEvent as AnomaIbcEvent;
 use crate::types::storage::{BlockHeight, Key};
 use crate::types::time::Rfc3339String;

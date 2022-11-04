@@ -10,9 +10,10 @@ version = "0.10.1"
 default = []
 
 [dependencies]
-namada = {path = "../shared"}
-namada_vm_env = {path = "../vm_env"}
+namada_core = {path = "../core"}
 namada_macros = {path = "../macros"}
+namada_proof_of_stake = {path = "../proof_of_stake"}
+namada_vm_env = {path = "../vm_env"}
 borsh = "0.9.0"
 sha2 = "0.10.1"
 thiserror = "1.0.30"

@@ -1,18 +1,49 @@
 //! Proof-of-Stake storage keys and storage integration via [`PosBase`] trait.
 
-use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::types::ValidatorStates;
-use namada_proof_of_stake::{types, PosBase};
+use namada_core::ledger::storage::types::{decode, encode};
+use namada_core::ledger::storage::{self, Storage, StorageHasher};
+use namada_core::ledger::storage_api;
+use namada_core::types::address::Address;
+use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
+use namada_core::types::{key, token};
+use rust_decimal::Decimal;
 
-use super::{
-    BondId, Bonds, CommissionRates, TotalDeltas, ValidatorConsensusKeys,
-    ValidatorDeltas, ValidatorSets, ADDRESS,
-};
-use crate::ledger::storage::types::{decode, encode};
-use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::types::address::Address;
-use crate::types::storage::{DbKeySeg, Key, KeySeg};
-use crate::types::{key, token};
+use super::ADDRESS;
+use crate::parameters::PosParams;
+pub use crate::types::{CommissionRates, ValidatorStates};
+use crate::{types, PosBase, PosReadOnly};
+
+// TODO: these are not needed anymore, remove together with all the generics in
+// this crate
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type ValidatorConsensusKeys =
+    crate::types::ValidatorConsensusKeys<key::common::PublicKey>;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type ValidatorDeltas = crate::types::ValidatorDeltas<token::Change>;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type Bonds = crate::types::Bonds<token::Amount>;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type Unbonds = crate::types::Unbonds<token::Amount>;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type ValidatorSets = crate::types::ValidatorSets<Address>;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type BondId = crate::types::BondId<Address>;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type GenesisValidator = crate::types::GenesisValidator<
+    Address,
+    token::Amount,
+    key::common::PublicKey,
+>;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type TotalDeltas = crate::types::TotalDeltas<token::Change>;
 
 const PARAMS_STORAGE_KEY: &str = "params";
 const VALIDATOR_STORAGE_PREFIX: &str = "validator";
@@ -423,7 +454,7 @@ where
     fn read_validator_max_commission_rate_change(
         &self,
         key: &Self::Address,
-    ) -> rust_decimal::Decimal {
+    ) -> Decimal {
         let (value, _gas) = self
             .read(&validator_max_commission_rate_change_key(key))
             .unwrap();
@@ -507,7 +538,7 @@ where
         validator: &Self::Address,
         value: types::Slash,
     ) {
-        let mut slashes = self.read_validator_slashes(validator);
+        let mut slashes = PosBase::read_validator_slashes(self, validator);
         slashes.push(value);
         self.write(&validator_slashes_key(validator), encode(&slashes))
             .unwrap();
@@ -587,4 +618,143 @@ where
             );
         }
     }
+}
+
+/// Implement `PosReadOnly` for a type that implements
+/// [`trait@namada_core::ledger::storage_api::StorageRead`].
+///
+/// Excuse the horrible syntax - we haven't found a better way to use this
+/// for native_vp `CtxPreStorageRead`/`CtxPostStorageRead`, which have
+/// generics and explicit lifetimes.
+///
+/// # Examples
+///
+/// ```ignore
+/// impl_pos_read_only! { impl PosReadOnly for X }
+/// ```
+#[macro_export]
+macro_rules! impl_pos_read_only {
+    (
+        // Type error type has to be declared before the impl.
+        // This error type must `impl From<storage_api::Error> for $error`.
+        type $error:tt = $err_ty:ty ;
+        // Matches anything, so that we can use lifetimes and generic types.
+        // This expects `impl(<.*>)? PoSReadOnly for $ty(<.*>)?`.
+        $( $any:tt )* )
+    => {
+        $( $any )*
+        {
+            type Address = namada_core::types::address::Address;
+            type $error = $err_ty;
+            type PublicKey = namada_core::types::key::common::PublicKey;
+            type TokenAmount = namada_core::types::token::Amount;
+            type TokenChange = namada_core::types::token::Change;
+
+            const POS_ADDRESS: Self::Address = $crate::ADDRESS;
+
+            fn staking_token_address(&self) -> Self::Address {
+                namada_core::ledger::storage_api::StorageRead::get_native_token(self)
+                    .expect("Native token must be available")
+            }
+
+            fn read_pos_params(&self) -> std::result::Result<PosParams, Self::Error> {
+                let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &params_key())?.unwrap();
+                Ok(namada_core::ledger::storage::types::decode(value).unwrap())
+            }
+
+            fn read_validator_consensus_key(
+                &self,
+                key: &Self::Address,
+            ) -> std::result::Result<Option<ValidatorConsensusKeys>, Self::Error> {
+                let value =
+                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_consensus_key_key(key))?;
+                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
+            }
+
+            fn read_validator_commission_rate(
+                &self,
+                key: &Self::Address,
+            ) -> std::result::Result<Option<CommissionRates>, Self::Error> {
+                let value =
+                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_commission_rate_key(key))?;
+                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
+            }
+
+            fn read_validator_max_commission_rate_change(
+                &self,
+                key: &Self::Address,
+            ) -> std::result::Result<Option<Decimal>, Self::Error> {
+                let value =
+                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_max_commission_rate_change_key(key))?;
+                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
+            }
+
+            fn read_validator_state(
+                &self,
+                key: &Self::Address,
+            ) -> std::result::Result<Option<ValidatorStates>, Self::Error> {
+                let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_state_key(key))?;
+                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
+            }
+
+            fn read_validator_deltas(
+                &self,
+                key: &Self::Address,
+            ) -> std::result::Result<Option<ValidatorDeltas>, Self::Error> {
+                let value =
+                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_deltas_key(key))?;
+                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
+            }
+
+            fn read_validator_slashes(
+                &self,
+                key: &Self::Address,
+            ) -> std::result::Result<Vec<types::Slash>, Self::Error> {
+                let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_slashes_key(key))?;
+                Ok(value
+                    .map(|value| namada_core::ledger::storage::types::decode(value).unwrap())
+                    .unwrap_or_default())
+            }
+
+            fn read_bond(
+                &self,
+                key: &BondId,
+            ) -> std::result::Result<Option<Bonds>, Self::Error> {
+                let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &bond_key(key))?;
+                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
+            }
+
+            fn read_unbond(
+                &self,
+                key: &BondId,
+            ) -> std::result::Result<Option<Unbonds>, Self::Error> {
+                let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &unbond_key(key))?;
+                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
+            }
+
+            fn read_validator_set(
+                &self,
+            ) -> std::result::Result<ValidatorSets, Self::Error> {
+                let value =
+                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_set_key())?.unwrap();
+                Ok(namada_core::ledger::storage::types::decode(value).unwrap())
+            }
+
+            fn read_total_deltas(
+                &self,
+            ) -> std::result::Result<TotalDeltas, Self::Error> {
+                let value =
+                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &total_deltas_key())?.unwrap();
+                Ok(namada_core::ledger::storage::types::decode(value).unwrap())
+            }
+        }
+    }
+}
+
+impl_pos_read_only! {
+    type Error = storage_api::Error;
+    impl<DB, H> PosReadOnly for Storage<DB, H>
+        where
+            DB: storage::DB + for<'iter> storage::DBIter<'iter> +'static,
+            H: StorageHasher +'static,
 }

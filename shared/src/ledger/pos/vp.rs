@@ -20,12 +20,11 @@ use super::{
     validator_consensus_key_key, validator_deltas_key,
     validator_max_commission_rate_change_key, validator_set_key,
     validator_slashes_key, validator_state_key, BondId, Bonds, CommissionRates,
-    Unbonds, ValidatorConsensusKeys, ValidatorDeltas, ValidatorSets,
+    TotalDeltas, Unbonds, ValidatorConsensusKeys, ValidatorDeltas,
+    ValidatorSets,
 };
-use crate::impl_pos_read_only;
-use crate::ledger::governance;
 use crate::ledger::native_vp::{
-    self, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
+    self, governance, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
 };
 use crate::ledger::pos::{
     is_validator_address_raw_hash_key, is_validator_commission_rate_key,

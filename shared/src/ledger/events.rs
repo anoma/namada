@@ -7,10 +7,10 @@ use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use tendermint_proto::abci::EventAttribute;
 use thiserror::Error;
 
-use crate::ledger::governance::utils::ProposalEvent;
+use crate::ledger::native_vp::governance::utils::ProposalEvent;
+use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::{hash_tx, TxType};
@@ -162,7 +162,7 @@ impl From<ProposalEvent> for Event {
 }
 
 /// Convert our custom event into the necessary tendermint proto type
-impl From<Event> for tendermint_proto::abci::Event {
+impl From<Event> for crate::tendermint_proto::abci::Event {
     fn from(event: Event) -> Self {
         Self {
             r#type: event.event_type.to_string(),

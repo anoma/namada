@@ -1748,6 +1748,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hmac-drbg"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17ea0a1394df5b6574da6e0c1ade9e78868c9fb0a4e5ef4428e32da4676b85b1"
+dependencies = [
+ "digest 0.9.0",
+ "generic-array",
+ "hmac 0.8.1",
+]
+
+[[package]]
 name = "http"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2164,12 +2175,14 @@ dependencies = [
  "arrayref",
  "base64",
  "digest 0.9.0",
+ "hmac-drbg",
  "libsecp256k1-core",
  "libsecp256k1-gen-ecmult",
  "libsecp256k1-gen-genmult",
  "rand 0.8.5",
  "serde",
  "sha2 0.9.9",
+ "typenum",
 ]
 
 [[package]]
@@ -2436,37 +2449,70 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 name = "namada"
 version = "0.10.1"
 dependencies = [
- "ark-bls12-381",
- "ark-serialize",
  "async-trait",
- "bech32",
  "bellman",
- "bit-vec",
  "bls12_381",
  "borsh",
- "chrono",
  "circular-queue",
  "clru",
  "data-encoding",
  "derivative",
- "ed25519-consensus",
- "ferveo-common",
- "hex",
  "ibc",
  "ibc-proto",
- "ics23",
  "itertools",
- "libsecp256k1",
  "loupe",
  "masp_primitives",
  "masp_proofs",
+ "namada_core",
  "namada_proof_of_stake",
  "parity-wasm",
  "paste",
  "proptest",
  "prost",
- "prost-types",
  "pwasm-utils",
+ "rayon",
+ "rust_decimal",
+ "serde_json",
+ "sha2 0.9.9",
+ "tempfile",
+ "tendermint",
+ "tendermint-proto",
+ "thiserror",
+ "tracing",
+ "wasmer",
+ "wasmer-cache",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-dylib",
+ "wasmer-engine-universal",
+ "wasmer-vm",
+ "wasmparser 0.83.0",
+ "zeroize",
+]
+
+[[package]]
+name = "namada_core"
+version = "0.9.0"
+dependencies = [
+ "ark-bls12-381",
+ "ark-serialize",
+ "bech32",
+ "bellman",
+ "bit-vec",
+ "borsh",
+ "chrono",
+ "data-encoding",
+ "derivative",
+ "ed25519-consensus",
+ "ferveo-common",
+ "ibc",
+ "ibc-proto",
+ "ics23",
+ "itertools",
+ "libsecp256k1",
+ "masp_primitives",
+ "proptest",
+ "prost",
+ "prost-types",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
@@ -2476,19 +2522,11 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "sparse-merkle-tree",
- "tempfile",
  "tendermint",
  "tendermint-proto",
  "thiserror",
  "tonic-build",
  "tracing",
- "wasmer",
- "wasmer-cache",
- "wasmer-compiler-singlepass",
- "wasmer-engine-dylib",
- "wasmer-engine-universal",
- "wasmer-vm",
- "wasmparser 0.83.0",
  "zeroize",
 ]
 
@@ -2506,10 +2544,12 @@ version = "0.10.1"
 dependencies = [
  "borsh",
  "derivative",
+ "namada_core",
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -2547,8 +2587,9 @@ version = "0.10.1"
 dependencies = [
  "borsh",
  "masp_primitives",
- "namada",
+ "namada_core",
  "namada_macros",
+ "namada_proof_of_stake",
  "namada_vm_env",
  "rust_decimal",
  "sha2 0.10.6",
@@ -2563,7 +2604,7 @@ dependencies = [
  "hex",
  "masp_primitives",
  "masp_proofs",
- "namada",
+ "namada_core",
 ]
 
 [[package]]
@@ -2571,8 +2612,9 @@ name = "namada_vp_prelude"
 version = "0.10.1"
 dependencies = [
  "borsh",
- "namada",
+ "namada_core",
  "namada_macros",
+ "namada_proof_of_stake",
  "namada_vm_env",
  "sha2 0.10.6",
  "thiserror",

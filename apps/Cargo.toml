@@ -47,25 +47,27 @@ std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
 testing = ["dev"]
 
 abcipp = [
+    "namada/abcipp",
+    "namada/tendermint-rpc-abcipp",
     "tendermint-abcipp",
     "tendermint-config-abcipp",
     "tendermint-proto-abcipp",
     "tendermint-rpc-abcipp",
     "tower-abci-abcipp",
-    "namada/abcipp"
 ]
 
 abciplus = [
+    "namada/abciplus",
+    "namada/tendermint-rpc",
     "tendermint",
     "tendermint-config",
     "tendermint-rpc",
     "tendermint-proto",
     "tower-abci",
-    "namada/abciplus"
 ]
 
 [dependencies]
-namada = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand", "tendermint-rpc", "secp256k1-sign-verify"]}
+namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
@@ -148,7 +150,7 @@ rust_decimal = "1.26.1"
 rust_decimal_macros = "1.26.1"
 
 [dev-dependencies]
-namada = {path = "../shared", features = ["testing", "wasm-runtime"]}
+namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 bit-set = "0.5.2"
 # A fork with state machime testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}

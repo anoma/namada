@@ -2,6 +2,7 @@ use core::time::Duration;
 use std::collections::HashMap;
 use std::str::FromStr;
 
+pub use namada::core::ledger::ibc::actions::*;
 use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use namada::ibc::core::ics02_client::client_consensus::ConsensusState;
 use namada::ibc::core::ics02_client::client_state::{
@@ -45,7 +46,6 @@ use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use namada::ibc_proto::ics23::CommitmentProof;
 use namada::ledger::gas::VpGasMeter;
-pub use namada::ledger::ibc::handler::*;
 use namada::ledger::ibc::init_genesis_storage;
 pub use namada::ledger::ibc::storage::{
     ack_key, capability_index_key, capability_key, channel_counter_key,

@@ -1,9 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::governance::{Proposal, ProposalError};
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
-use crate::types::governance::ProposalVote;
+use crate::types::governance::{Proposal, ProposalError, ProposalVote};
 use crate::types::storage::Epoch;
 
 /// A tx data type to hold proposal data

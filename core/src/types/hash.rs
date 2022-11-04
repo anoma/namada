@@ -4,18 +4,15 @@ use std::fmt::{self, Display};
 use std::ops::Deref;
 use std::str::FromStr;
 
-// use arse_merkle_tree::traits::Value;
-// use arse_merkle_tree::Hash as TreeHash;
+use arse_merkle_tree::traits::Value;
+use arse_merkle_tree::{Hash as TreeHash, H256};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use hex::FromHex;
+use data_encoding::HEXUPPER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-// use crate::tendermint::abci::transaction;
-// use crate::tendermint::Hash as TmHash;
-
-/// The length of the raw transaction hash.
+/// The length of the transaction hash string
 pub const HASH_LENGTH: usize = 32;
 
 #[allow(missing_docs)]
@@ -26,7 +23,7 @@ pub enum Error {
     #[error("Failed trying to convert slice to a hash: {0}")]
     ConversionFailed(std::array::TryFromSliceError),
     #[error("Failed to convert string into a hash: {0}")]
-    FromStringError(hex::FromHexError),
+    FromStringError(data_encoding::DecodeError),
 }
 
 /// Result for functions that may fail
@@ -46,14 +43,11 @@ pub type HashResult<T> = std::result::Result<T, Error>;
     Deserialize,
 )]
 /// A hash, typically a sha-2 hash of a tx
-pub struct Hash(pub [u8; 32]);
+pub struct Hash(pub [u8; HASH_LENGTH]);
 
 impl Display for Hash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in &self.0 {
-            write!(f, "{:02X}", byte)?;
-        }
-        Ok(())
+        write!(f, "{}", HEXUPPER.encode(&self.0))
     }
 }
 
@@ -64,7 +58,7 @@ impl AsRef<[u8]> for Hash {
 }
 
 impl Deref for Hash {
-    type Target = [u8; 32];
+    type Target = [u8; HASH_LENGTH];
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -84,7 +78,7 @@ impl TryFrom<&[u8]> for Hash {
                 ),
             });
         }
-        let hash: [u8; 32] =
+        let hash: [u8; HASH_LENGTH] =
             TryFrom::try_from(value).map_err(Error::ConversionFailed)?;
         Ok(Hash(hash))
     }
@@ -102,16 +96,10 @@ impl TryFrom<&str> for Hash {
     type Error = self::Error;
 
     fn try_from(string: &str) -> HashResult<Self> {
-        Ok(Self(
-            <[u8; HASH_LENGTH]>::from_hex(string)
-                .map_err(Error::FromStringError)?,
-        ))
-    }
-}
-
-impl From<Hash> for transaction::Hash {
-    fn from(hash: Hash) -> Self {
-        Self::new(hash.0)
+        let vec = HEXUPPER
+            .decode(string.as_ref())
+            .map_err(Error::FromStringError)?;
+        Self::try_from(&vec[..])
     }
 }
 
@@ -131,7 +119,7 @@ impl Hash {
     }
 
     fn zero() -> Self {
-        Self([0u8; 32])
+        Self([0u8; HASH_LENGTH])
     }
 
     /// Check if the hash is all zeros
@@ -140,11 +128,19 @@ impl Hash {
     }
 }
 
-// impl From<Hash> for TmHash {
-//     fn from(hash: Hash) -> Self {
-//         TmHash::Sha256(hash.0)
-//     }
-// }
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
+impl From<Hash> for crate::tendermint::abci::transaction::Hash {
+    fn from(hash: Hash) -> Self {
+        Self::new(hash.0)
+    }
+}
+
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
+impl From<Hash> for crate::tendermint::Hash {
+    fn from(hash: Hash) -> Self {
+        Self::Sha256(hash.0)
+    }
+}
 
 impl From<Hash> for TreeHash {
     fn from(hash: Hash) -> Self {
@@ -152,22 +148,31 @@ impl From<Hash> for TreeHash {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use proptest::prelude::*;
-    use proptest::string::{string_regex, RegexGeneratorStrategy};
-
-    use super::*;
-
-    /// Returns a proptest strategy that yields hex encoded hashes.
-    fn hex_encoded_hash_strat() -> RegexGeneratorStrategy<String> {
-        string_regex(r"[a-fA-F0-9]{64}").unwrap()
+impl Value for Hash {
+    fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
     }
 
-    proptest! {
-        #[test]
-        fn test_hash_string(hex_hash in hex_encoded_hash_strat()) {
-            let _: Hash = hex_hash.try_into().unwrap();
-        }
+    fn zero() -> Self {
+        Hash([0u8; HASH_LENGTH])
+    }
+}
+
+impl From<Hash> for H256 {
+    fn from(hash: Hash) -> Self {
+        hash.0.into()
+    }
+}
+
+impl From<H256> for Hash {
+    fn from(hash: H256) -> Self {
+        Self(hash.into())
+    }
+}
+
+impl From<&H256> for Hash {
+    fn from(hash: &H256) -> Self {
+        let hash = hash.to_owned();
+        Self(hash.into())
     }
 }
