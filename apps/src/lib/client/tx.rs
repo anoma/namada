@@ -33,9 +33,10 @@ use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::masp;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
 use namada::proto::Tx;
-use namada::types::address::{nam, btc, masp, masp_tx_key, Address};
+use namada::types::address::{btc, masp, masp_tx_key, nam, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
@@ -87,16 +88,6 @@ const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 
 const ENV_VAR_ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: &str =
     "ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT";
-
-/// Env var to point to a dir with MASP parameters. When not specified,
-/// the default OS specific path is used.
-const ENV_VAR_MASP_PARAMS_DIR: &str = "ANOMA_MASP_PARAMS_DIR";
-
-// Circuit names
-// TODO these could be exported from masp_proof crate
-const MASP_SPEND_NAME: &str = "masp-spend.params";
-const MASP_OUTPUT_NAME: &str = "masp-output.params";
-const MASP_CONVERT_NAME: &str = "masp-convert.params";
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_code = ctx.read_wasm(args.code_path);
@@ -684,16 +675,10 @@ impl ShieldedContext {
     pub fn new(context_dir: PathBuf) -> ShieldedContext {
         // Make sure that MASP parameters are downloaded to enable MASP
         // transaction building and verification later on
-        let params_dir =
-            if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
-                println!("Using {} as masp parameter folder.", params_dir);
-                PathBuf::from(params_dir)
-            } else {
-                masp_proofs::default_params_folder().unwrap()
-            };
-        let spend_path = params_dir.join(MASP_SPEND_NAME);
-        let convert_path = params_dir.join(MASP_CONVERT_NAME);
-        let output_path = params_dir.join(MASP_OUTPUT_NAME);
+        let params_dir = masp::get_params_dir();
+        let spend_path = params_dir.join(masp::SPEND_NAME);
+        let convert_path = params_dir.join(masp::CONVERT_NAME);
+        let output_path = params_dir.join(masp::OUTPUT_NAME);
         if !(spend_path.exists()
             && convert_path.exists()
             && output_path.exists())
@@ -1446,11 +1431,12 @@ where
             amt,
         )?;
     }
-    let prover = if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
+    let prover = if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
+    {
         let params_dir = PathBuf::from(params_dir);
-        let spend_path = params_dir.join(MASP_SPEND_NAME);
-        let convert_path = params_dir.join(MASP_CONVERT_NAME);
-        let output_path = params_dir.join(MASP_OUTPUT_NAME);
+        let spend_path = params_dir.join(masp::SPEND_NAME);
+        let convert_path = params_dir.join(masp::CONVERT_NAME);
+        let output_path = params_dir.join(masp::OUTPUT_NAME);
         LocalTxProver::new(&spend_path, &output_path, &convert_path)
     } else {
         LocalTxProver::with_default_location()
