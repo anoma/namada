@@ -15,7 +15,7 @@ use crate::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
 };
 use crate::types::hash::Hash;
-use crate::types::keccak::encode::Encode;
+use crate::types::keccak::encode::EncodeCell;
 use crate::types::storage::MembershipProof::BridgePool;
 use crate::types::storage::{self, Epoch, MerkleValue, PrefixValue};
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
@@ -48,10 +48,12 @@ router! {SHELL,
     ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
 
     // Get the current contents of the Ethereum bridge pool
-    ( "eth_bridge_pool" / "contents" ) -> Vec<PendingTransfer> = read_ethereum_bridge_pool,
+    ( "eth_bridge_pool" / "contents" )
+        -> Vec<PendingTransfer> = read_ethereum_bridge_pool,
 
     // Generate a merkle proof for the inclusion of requested transfers in the Ethereum bridge pool
-    ( "eth_bridge_pool" / "proof" ) -> Vec<u8> = (with_options generate_bridge_pool_proof),
+    ( "eth_bridge_pool" / "proof" )
+        -> EncodeCell<RelayProof> = (with_options generate_bridge_pool_proof),
 }
 
 #[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
@@ -78,10 +80,13 @@ router! {SHELL,
     ( "applied" / [tx_hash: Hash]) -> Option<Event> = applied,
 
     // Get the current contents of the Ethereum bridge pool
-    ( "eth_bridge_pool" / "contents" ) -> Vec<PendingTransfer> = read_ethereum_bridge_pool,
+    ( "eth_bridge_pool" / "contents" )
+        -> Vec<PendingTransfer> = read_ethereum_bridge_pool,
 
-    // Generate a merkle proof for the inclusion of requested transfers in the Ethereum bridge pool
-    ( "eth_bridge_pool" / "proof" ) -> Vec<u8> = (with_options generate_bridge_pool_proof),
+    // Generate a merkle proof for the inclusion of requested
+    // transfers in the Ethereum bridge pool
+    ( "eth_bridge_pool" / "proof" )
+        -> EncodeCell<RelayProof> = (with_options generate_bridge_pool_proof),
 }
 
 // Handlers:
@@ -376,21 +381,22 @@ where
             &keys,
             transfers.into_iter().map(MerkleValue::from).collect(),
         ) {
-            Ok(BridgePool(proof)) => Ok(EncodedResponseQuery {
-                // TODO: we are returning ABI encoded data here, but Borsh
-                // serialized is expected!
-                data: RelayProof {
+            Ok(BridgePool(proof)) => {
+                let data = EncodeCell::new(&RelayProof {
                     // TODO: use actual validators
                     validator_args: Default::default(),
                     root: signed_root,
                     proof,
                     // TODO: Use real nonce
                     nonce: 0.into(),
-                }
-                .encode(),
-                proof_ops: None,
-                info: Default::default(),
-            }),
+                })
+                .try_to_vec()
+                .into_storage_result()?;
+                Ok(EncodedResponseQuery {
+                    data,
+                    ..Default::default()
+                })
+            }
             Err(e) => Err(storage_api::Error::new(e)),
             _ => unreachable!(),
         }
@@ -710,7 +716,7 @@ mod test {
             nonce: 0.into(),
         }
         .encode();
-        assert_eq!(proof, resp.data);
+        assert_eq!(proof, resp.data.into_inner());
     }
 
     /// Test if the no merkle tree including a transfer
