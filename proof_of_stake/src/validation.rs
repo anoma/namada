@@ -46,6 +46,8 @@ where
     InvalidNewValidatorState(u64),
     #[error("Invalid validator state update in epoch {0}")]
     InvalidValidatorStateUpdate(u64),
+    #[error("Unexpectedly missing consensus key value for validator {0}")]
+    ValidatorConsensusKeyIsRequired(Address),
     #[error("Missing new validator consensus key in epoch {0}")]
     MissingNewValidatorConsensusKey(u64),
     #[error("Invalid validator consensus key update in epoch {0}")]
@@ -1319,7 +1321,7 @@ where
                 }
             }
             (Some(_), None) => {
-                errors.push(Error::ValidatorStateIsRequired(address))
+                errors.push(Error::ValidatorConsensusKeyIsRequired(address))
             }
             (None, None) => {}
         }
