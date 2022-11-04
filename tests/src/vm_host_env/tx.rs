@@ -13,6 +13,7 @@ use namada::types::storage::Key;
 use namada::types::time::DurationSecs;
 use namada::types::{key, token};
 use namada::vm::prefix_iter::PrefixIterators;
+use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
 use namada_tx_prelude::{BorshSerialize, Ctx};
@@ -152,9 +153,17 @@ impl TestTxEnv {
         &mut self,
         target: &Address,
         token: &Address,
+        sub_prefix: Option<Key>,
         amount: token::Amount,
     ) {
-        let storage_key = token::balance_key(token, target);
+        let storage_key = match &sub_prefix {
+            Some(sub_prefix) => {
+                let prefix =
+                    token::multitoken_balance_prefix(token, sub_prefix);
+                token::multitoken_balance_key(&prefix, target)
+            }
+            None => token::balance_key(token, target),
+        };
         self.storage
             .write(&storage_key, amount.try_to_vec().unwrap())
             .unwrap();
@@ -170,6 +179,22 @@ impl TestTxEnv {
         self.storage
             .write(&storage_key, public_key.try_to_vec().unwrap())
             .unwrap();
+    }
+
+    /// Apply the tx changes to the write log and return
+    /// the set of verifiers.
+    pub fn execute_tx(&mut self) -> Result<(), Error> {
+        let empty_data = vec![];
+        wasm::run::tx(
+            &self.storage,
+            &mut self.write_log,
+            &mut self.gas_meter,
+            &self.tx.code,
+            self.tx.data.as_ref().unwrap_or(&empty_data),
+            &mut self.vp_wasm_cache,
+            &mut self.tx_wasm_cache,
+        )
+        .and(Ok(()))
     }
 }
 

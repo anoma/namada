@@ -1,3 +1,4 @@
+pub mod eth_bridge_pool;
 pub mod pos;
 
 use std::collections::BTreeSet;
