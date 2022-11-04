@@ -11,6 +11,7 @@ pub use types::{
 use super::storage::traits::StorageHasher;
 use super::storage::{DBIter, DB};
 use super::storage_api;
+use crate::types::storage::BlockHeight;
 
 #[macro_use]
 mod router;
@@ -48,7 +49,9 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    if request.height != ctx.storage.last_height {
+    if request.height != BlockHeight(0)
+        && request.height != ctx.storage.last_height
+    {
         return Err(storage_api::Error::new_const(
             "This query doesn't support arbitrary block heights, only the \
              latest committed block height ('0' can be used as a special \

@@ -2,28 +2,19 @@
 use std::cmp::max;
 use std::default::Default;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use ferveo_common::TendermintValidator;
-use namada::ledger::eth_bridge::storage::bridge_pool::{
-    get_key_from_hash, get_pending_key, get_signed_root_key,
-};
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
-use namada::ledger::storage::{MerkleTree, StoreRef, StoreType};
 use namada::ledger::storage_api;
 use namada::types::address::Address;
-use namada::types::eth_bridge_pool::{
-    MultiSignedMerkleRoot, PendingTransfer, RelayProof,
-};
 use namada::types::ethereum_events::EthAddress;
-use namada::types::keccak::encode::Encode;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::storage::MembershipProof::BridgePool;
-use namada::types::storage::{Epoch, MerkleValue};
+use namada::types::storage::Epoch;
 use namada::types::token::{self, Amount};
 use namada::types::vote_extensions::validator_set_update::EthAddrBook;
 
@@ -123,123 +114,6 @@ where
         balance
             .expect("Storage read in the protocol must not fail")
             .unwrap_or_default()
-    }
-
-    /// Read the current contents of the Ethereum bridge
-    /// pool.
-    fn read_ethereum_bridge_pool(&self) -> response::Query {
-        let stores = self
-            .storage
-            .db
-            .read_merkle_tree_stores(self.storage.last_height)
-            .expect("We should always be able to read the database")
-            .expect(
-                "Every signed root should correspond to an existing block \
-                 height",
-            );
-        let store = match stores.get_store(StoreType::BridgePool) {
-            StoreRef::BridgePool(store) => store,
-            _ => unreachable!(),
-        };
-
-        let transfers: Vec<PendingTransfer> = store
-            .iter()
-            .map(|hash| {
-                let res = self
-                    .storage
-                    .read(&get_key_from_hash(hash))
-                    .unwrap()
-                    .0
-                    .unwrap();
-                BorshDeserialize::try_from_slice(res.as_slice()).unwrap()
-            })
-            .collect();
-        response::Query {
-            code: 0,
-            value: transfers.try_to_vec().unwrap(),
-            ..Default::default()
-        }
-    }
-
-    /// Generate a merkle proof for the inclusion of the
-    /// requested transfers in the Ethereum bridge pool.
-    fn generate_bridge_pool_proof(
-        &self,
-        request_bytes: Vec<u8>,
-    ) -> response::Query {
-        if let Ok(transfers) =
-            <Vec<PendingTransfer>>::try_from_slice(request_bytes.as_slice())
-        {
-            // get the latest signed merkle root of the Ethereum bridge pool
-            let signed_root: MultiSignedMerkleRoot = match self
-                .storage
-                .read(&get_signed_root_key())
-                .expect("Reading the database should not faile")
-            {
-                (Some(bytes), _) => {
-                    BorshDeserialize::try_from_slice(bytes.as_slice()).unwrap()
-                }
-                _ => {
-                    return response::Query {
-                        code: 1,
-                        log: "No signed root for the Ethereum bridge pool \
-                              exists in storage."
-                            .into(),
-                        info: "No signed root for the Ethereum bridge pool \
-                               exists in storage."
-                            .into(),
-                        ..Default::default()
-                    };
-                }
-            };
-
-            // get the merkle tree corresponding to the above root.
-            let tree = MerkleTree::<H>::new(
-                self.storage
-                    .db
-                    .read_merkle_tree_stores(signed_root.height)
-                    .expect("We should always be able to read the database")
-                    .expect(
-                        "Every signed root should correspond to an existing \
-                         block height",
-                    ),
-            );
-
-            // get the membership proof
-            let keys: Vec<_> = transfers.iter().map(get_pending_key).collect();
-            match tree.get_sub_tree_existence_proof(
-                &keys,
-                transfers.into_iter().map(MerkleValue::from).collect(),
-            ) {
-                Ok(BridgePool(proof)) => response::Query {
-                    code: 0,
-                    value: RelayProof {
-                        // TODO: use actual validators
-                        validator_args: Default::default(),
-                        root: signed_root,
-                        proof,
-                        // TODO: Use real nonce
-                        nonce: 0.into(),
-                    }
-                    .encode(),
-                    ..Default::default()
-                },
-                Err(e) => response::Query {
-                    code: 1,
-                    log: e.to_string(),
-                    info: e.to_string(),
-                    ..Default::default()
-                },
-                _ => unreachable!(),
-            }
-        } else {
-            response::Query {
-                code: 1,
-                log: "Could not deserialize transfers".into(),
-                info: "Could not deserialize transfers".into(),
-                ..Default::default()
-            }
-        }
     }
 }
 
@@ -632,19 +506,9 @@ pub enum SendValsetUpd {
 
 #[cfg(test)]
 mod test_queries {
-    use namada::ledger::eth_bridge::storage::bridge_pool::BridgePoolTree;
-    use namada::types::eth_bridge_pool::{GasFee, TransferToEthereum};
-    use namada::types::ethereum_events::EthAddress;
-
     use super::*;
     use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
-
-    /// An established user address for testing & development
-    fn bertha_address() -> Address {
-        Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
-            .expect("The token address decoding shouldn't fail")
-    }
 
     macro_rules! test_can_send_validator_set_update {
         (epoch_assertions: $epoch_assertions:expr $(,)?) => {
@@ -819,237 +683,5 @@ mod test_queries {
             (2, 27, Err(true)),
             (2, 28, Err(true)),
         ],
-    }
-
-    /// Test that reading the bridge pool works
-    #[test]
-    fn test_read_bridge_pool() {
-        let (mut shell, _, _) = test_utils::setup();
-        let transfer = PendingTransfer {
-            transfer: TransferToEthereum {
-                asset: EthAddress([0; 20]),
-                recipient: EthAddress([0; 20]),
-                sender: bertha_address(),
-                amount: 0.into(),
-                nonce: 0.into(),
-            },
-            gas_fee: GasFee {
-                amount: 0.into(),
-                payer: bertha_address(),
-            },
-        };
-
-        // write a transfer into the bridge pool
-        shell
-            .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
-            .expect("Test failed");
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // check the response
-        let resp = shell.read_ethereum_bridge_pool();
-        assert_eq!(resp.code, 0);
-        let pool =
-            BTreeSet::<PendingTransfer>::try_from_slice(resp.value.as_slice())
-                .expect("Test failed");
-        assert_eq!(pool, BTreeSet::from([transfer]));
-    }
-
-    /// Test that reading the bridge pool always gets
-    /// the latest pool
-    #[test]
-    fn test_bridge_pool_updates() {
-        let (mut shell, _, _) = test_utils::setup();
-        let transfer = PendingTransfer {
-            transfer: TransferToEthereum {
-                asset: EthAddress([0; 20]),
-                recipient: EthAddress([0; 20]),
-                sender: bertha_address(),
-                amount: 0.into(),
-                nonce: 0.into(),
-            },
-            gas_fee: GasFee {
-                amount: 0.into(),
-                payer: bertha_address(),
-            },
-        };
-
-        // write a transfer into the bridge pool
-        shell
-            .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
-            .expect("Test failed");
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // update the pool
-        shell
-            .storage
-            .delete(&get_pending_key(&transfer))
-            .expect("Test failed");
-        let mut transfer2 = transfer;
-        transfer2.transfer.amount = 1.into();
-        shell
-            .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
-            .expect("Test failed");
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // check the response
-        let resp = shell.read_ethereum_bridge_pool();
-        assert_eq!(resp.code, 0);
-        let pool =
-            BTreeSet::<PendingTransfer>::try_from_slice(resp.value.as_slice())
-                .expect("Test failed");
-        assert_eq!(pool, BTreeSet::from([transfer2]));
-    }
-
-    /// Test that we can get a merkle proof even if the signed
-    /// merkle roots is lagging behind the pool
-    #[test]
-    fn test_get_merkle_proof() {
-        let (mut shell, _, _) = test_utils::setup();
-        let transfer = PendingTransfer {
-            transfer: TransferToEthereum {
-                asset: EthAddress([0; 20]),
-                recipient: EthAddress([0; 20]),
-                sender: bertha_address(),
-                amount: 0.into(),
-                nonce: 0.into(),
-            },
-            gas_fee: GasFee {
-                amount: 0.into(),
-                payer: bertha_address(),
-            },
-        };
-
-        // write a transfer into the bridge pool
-        shell
-            .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
-            .expect("Test failed");
-
-        // create a signed Merkle root for this pool
-        let signed_root = MultiSignedMerkleRoot {
-            sigs: Default::default(),
-            root: transfer.keccak256(),
-            height: Default::default(),
-        };
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // update the pool
-        let mut transfer2 = transfer.clone();
-        transfer2.transfer.amount = 1.into();
-        shell
-            .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
-            .expect("Test failed");
-
-        // add the signature for the pool at the previous block height
-        shell
-            .storage
-            .write(&get_signed_root_key(), signed_root.try_to_vec().unwrap())
-            .expect("Test failed");
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        let resp = shell.generate_bridge_pool_proof(
-            vec![transfer.clone()].try_to_vec().expect("Test failed"),
-        );
-        assert_eq!(resp.code, 0);
-
-        let tree = BridgePoolTree::new(
-            transfer.keccak256(),
-            BTreeSet::from([transfer.keccak256()]),
-        );
-        let proof = tree
-            .get_membership_proof(vec![transfer])
-            .expect("Test failed");
-
-        let proof = RelayProof {
-            validator_args: Default::default(),
-            root: signed_root,
-            proof,
-            // TODO: Use a real nonce
-            nonce: 0.into(),
-        }
-        .encode();
-        assert_eq!(proof, resp.value);
-    }
-
-    /// Test if the no merkle tree including a transfer
-    /// has had its root signed, then we cannot generate
-    /// a proof.
-    #[test]
-    fn test_cannot_get_proof() {
-        let (mut shell, _, _) = test_utils::setup();
-        let transfer = PendingTransfer {
-            transfer: TransferToEthereum {
-                asset: EthAddress([0; 20]),
-                recipient: EthAddress([0; 20]),
-                sender: bertha_address(),
-                amount: 0.into(),
-                nonce: 0.into(),
-            },
-            gas_fee: GasFee {
-                amount: 0.into(),
-                payer: bertha_address(),
-            },
-        };
-
-        // write a transfer into the bridge pool
-        shell
-            .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
-            .expect("Test failed");
-
-        // create a signed Merkle root for this pool
-        let signed_root = MultiSignedMerkleRoot {
-            sigs: Default::default(),
-            root: transfer.keccak256(),
-            height: Default::default(),
-        };
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // update the pool
-        let mut transfer2 = transfer;
-        transfer2.transfer.amount = 1.into();
-        shell
-            .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
-            .expect("Test failed");
-
-        // add the signature for the pool at the previous block height
-        shell
-            .storage
-            .write(&get_signed_root_key(), signed_root.try_to_vec().unwrap())
-            .expect("Test failed");
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // this is in the pool, but its merkle root has not been signed yet
-        let resp = shell.generate_bridge_pool_proof(
-            vec![transfer2].try_to_vec().expect("Test failed"),
-        );
-        // thus proof generation should fail
-        assert_eq!(resp.code, 1);
     }
 }
