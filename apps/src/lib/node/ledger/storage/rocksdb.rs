@@ -625,22 +625,26 @@ impl DB for RocksDB {
             .map_err(Error::KeyError)?
             .join(key)
             .to_string();
+
         // If it has a "new" val, it was written at this height
-        if let Some(new_val) = self
+        match self
             .0
             .get(new_val_key)
             .map_err(|e| Error::DBError(e.into_string()))?
         {
-            return Ok(Some(new_val));
-        } else {
-            let old_val_key = key_prefix
-                .push(&"old".to_owned())
-                .map_err(Error::KeyError)?
-                .join(key)
-                .to_string();
-            // If it has an "old" val, it was deleted at this height
-            if self.0.key_may_exist(old_val_key) {
-                return Ok(None);
+            Some(new_val) => {
+                return Ok(Some(new_val));
+            }
+            None => {
+                let old_val_key = key_prefix
+                    .push(&"old".to_owned())
+                    .map_err(Error::KeyError)?
+                    .join(key)
+                    .to_string();
+                // If it has an "old" val, it was deleted at this height
+                if self.0.key_may_exist(old_val_key) {
+                    return Ok(None);
+                }
             }
         }
 
