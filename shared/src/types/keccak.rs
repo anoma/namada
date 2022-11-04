@@ -3,6 +3,7 @@
 //! on Ethereum.
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
+use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use hex::FromHex;
@@ -103,12 +104,47 @@ pub fn keccak_hash(bytes: &[u8]) -> KeccakHash {
 
 /// This module defines encoding methods compatible with Ethereum
 /// smart contracts.
+// TODO: relocate this sub-module to a new home
 pub mod encode {
     #[doc(inline)]
     pub use ethabi::token::Token;
     use tiny_keccak::{Hasher, Keccak};
 
     use super::*;
+
+    /// A container for data types that are able to be `encode`
+    /// or `encodePacked` Ethereum ABI-encoded.
+    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+    #[repr(transparent)]
+    pub struct EncodeCell<T> {
+        /// ABI-encoded values of type `T`.
+        encoded_data: Vec<u8>,
+        /// Indicate we do not own values of type `T`.
+        ///
+        /// Passing `PhantomData<T>` here would trigger the drop checker,
+        /// which is not the desired behavior, since we own encoded values
+        /// of `T`, not values of `T` themselves.
+        _marker: PhantomData<*const T>,
+    }
+
+    impl<T> EncodeCell<T> {
+        /// Return a new ABI encoded value of type `T`.
+        pub fn new<const N: usize>(value: &T) -> Self
+        where
+            T: Encode<N>,
+        {
+            let encoded_data = value.encode();
+            Self {
+                encoded_data,
+                _marker: PhantomData,
+            }
+        }
+
+        /// Return the underlying ABI encoded value.
+        pub fn into_inner(self) -> Vec<u8> {
+            self.encoded_data
+        }
+    }
 
     /// Contains a method to encode data to a format compatible with Ethereum.
     pub trait Encode<const N: usize> {
