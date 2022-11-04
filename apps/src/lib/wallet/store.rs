@@ -339,7 +339,7 @@ impl Store {
         if alias.is_empty() {
             println!(
                 "Empty alias given, defaulting to {}.",
-                alias = Into::<Alias>::into(pkh.to_string())
+                Into::<Alias>::into(pkh.to_string())
             );
         }
         if self.keys.contains_key(&alias) {
@@ -366,10 +366,7 @@ impl Store {
         address: Address,
     ) -> Option<Alias> {
         if alias.is_empty() {
-            println!(
-                "Empty alias given, defaulting to {}.",
-                alias = address.encode()
-            );
+            println!("Empty alias given, defaulting to {}.", address.encode());
         }
         if self.addresses.contains_left(&alias) {
             match show_overwrite_confirmation(&alias, "an address") {
