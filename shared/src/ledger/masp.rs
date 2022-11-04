@@ -55,7 +55,7 @@ pub fn load_convert_params() -> (
     bellman::groth16::Parameters<Bls12>,
     bellman::groth16::PreparedVerifyingKey<Bls12>,
 ) {
-    let params_dir = masp_proofs::default_params_folder().unwrap();
+    let params_dir = get_params_dir();
     let spend_path = params_dir.join(CONVERT_NAME);
     if !spend_path.exists() {
         #[cfg(feature = "masp_proofs/download-params")]
@@ -75,7 +75,7 @@ pub fn load_output_params() -> (
     bellman::groth16::Parameters<Bls12>,
     bellman::groth16::PreparedVerifyingKey<Bls12>,
 ) {
-    let params_dir = masp_proofs::default_params_folder().unwrap();
+    let params_dir = get_params_dir();
     let output_path = params_dir.join(OUTPUT_NAME);
     if !output_path.exists() {
         #[cfg(feature = "masp_proofs/download-params")]
