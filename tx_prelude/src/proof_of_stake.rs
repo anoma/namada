@@ -74,6 +74,21 @@ impl Ctx {
         )
     }
 
+    /// Change validator commission rate.
+    pub fn change_validator_commission_rate(
+        &mut self,
+        validator: &Address,
+        rate: &Decimal,
+    ) -> TxResult {
+        let current_epoch = self.get_block_epoch()?;
+        namada_proof_of_stake::PosActions::change_validator_commission_rate(
+            self,
+            validator,
+            *rate,
+            current_epoch,
+        )
+    }
+
     /// Attempt to initialize a validator account. On success, returns the
     /// initialized validator account's address.
     pub fn init_validator(
@@ -118,6 +133,7 @@ namada::impl_pos_read_only! {
 impl namada_proof_of_stake::PosActions for Ctx {
     type BecomeValidatorError = crate::Error;
     type BondError = crate::Error;
+    type CommissionRateChangeError = crate::Error;
     type UnbondError = crate::Error;
     type WithdrawError = crate::Error;
 

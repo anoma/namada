@@ -126,6 +126,16 @@ impl From<namada_proof_of_stake::WithdrawError<Address>>
     }
 }
 
+impl From<namada_proof_of_stake::CommissionRateChangeError<Address>>
+    for storage_api::Error
+{
+    fn from(
+        err: namada_proof_of_stake::CommissionRateChangeError<Address>,
+    ) -> Self {
+        Self::new(err)
+    }
+}
+
 #[macro_use]
 mod macros {
     /// Implement `PosReadOnly` for a type that implements

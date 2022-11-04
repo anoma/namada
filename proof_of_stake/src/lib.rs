@@ -183,6 +183,10 @@ pub trait PosActions: PosReadOnly {
     /// Error in `PosActions::withdraw_tokens`
     type WithdrawError: From<Self::Error> + From<WithdrawError<Self::Address>>;
 
+    /// Error in `PosActions::change_commission_rate`
+    type CommissionRateChangeError: From<Self::Error>
+        + From<CommissionRateChangeError<Self::Address>>;
+
     /// Write PoS parameters.
     fn write_pos_params(
         &mut self,
@@ -534,48 +538,54 @@ pub trait PosActions: PosReadOnly {
     /// Change the commission rate of a validator
     fn change_validator_commission_rate(
         &mut self,
-        params: &PosParams,
         validator: &Self::Address,
         new_rate: Decimal,
         current_epoch: impl Into<Epoch>,
-    ) -> Result<(), CommissionRateChangeError<Self::Address>> {
+    ) -> Result<(), Self::CommissionRateChangeError> {
         if new_rate < Decimal::ZERO {
             return Err(CommissionRateChangeError::NegativeRate(
                 new_rate,
                 validator.clone(),
-            ));
+            )
+            .into());
         }
         let current_epoch = current_epoch.into();
         let max_change = self
             .read_validator_max_commission_rate_change(validator)
             .map_err(|_| {
-                CommissionRateChangeError::NoMaxSetInStorage(validator)
-            })
-            .unwrap()
-            .unwrap();
+                CommissionRateChangeError::NoMaxSetInStorage(validator.clone())
+            })?
+            .ok_or_else(|| {
+                CommissionRateChangeError::CannotRead(validator.clone())
+            })?;
         let mut commission_rates =
             match self.read_validator_commission_rate(validator) {
                 Ok(Some(rates)) => rates,
                 _ => {
                     return Err(CommissionRateChangeError::CannotRead(
                         validator.clone(),
-                    ));
+                    )
+                    .into());
                 }
             };
+        let params = self.read_pos_params()?;
+
         let rate_at_pipeline = *commission_rates
-            .get_at_offset(current_epoch, DynEpochOffset::PipelineLen, params)
+            .get_at_offset(current_epoch, DynEpochOffset::PipelineLen, &params)
             .expect("Could not find a rate in given epoch");
         if new_rate == rate_at_pipeline {
             return Err(CommissionRateChangeError::ChangeIsZero(
                 validator.clone(),
-            ));
+            )
+            .into());
         }
+
 
         let rate_before_pipeline = *commission_rates
             .get_at_offset(
                 current_epoch - 1,
                 DynEpochOffset::PipelineLen,
-                params,
+                &params,
             )
             .expect("Could not find a rate in given epoch");
         let change_from_prev = new_rate - rate_before_pipeline;
@@ -583,7 +593,8 @@ pub trait PosActions: PosReadOnly {
             return Err(CommissionRateChangeError::RateChangeTooLarge(
                 change_from_prev,
                 validator.clone(),
-            ));
+            )
+            .into());
         }
         commission_rates.update_from_offset(
             |val, _epoch| {
@@ -591,11 +602,12 @@ pub trait PosActions: PosReadOnly {
             },
             current_epoch,
             DynEpochOffset::PipelineLen,
-            params,
+            &params,
         );
         self.write_validator_commission_rate(validator, commission_rates)
-            .map_err(|_| CommissionRateChangeError::CannotWrite(validator))
-            .unwrap();
+            .map_err(|_| {
+                CommissionRateChangeError::CannotWrite(validator.clone())
+            })?;
 
         Ok(())
     }
@@ -1128,7 +1140,15 @@ where
 #[derive(Error, Debug)]
 pub enum CommissionRateChangeError<Address>
 where
-    Address: Display + Debug + Clone + PartialOrd + Ord + Hash,
+    Address: Display
+        + Debug
+        + Clone
+        + PartialOrd
+        + Ord
+        + Hash
+        + BorshDeserialize
+        + BorshSerialize
+        + BorshSchema,
 {
     #[error("Unexpected negative commission rate {0} for validator {1}")]
     NegativeRate(Decimal, Address),
