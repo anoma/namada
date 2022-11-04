@@ -1,13 +1,8 @@
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada::types::ethereum_events::EthereumEvent;
-use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
-use crate::ledger::protocol::transactions::votes::Tally;
-use crate::types::address::Address;
+use crate::ledger::protocol::transactions::votes::{Tally, Votes};
 use crate::types::ethereum_events::EthereumEvent;
-use crate::types::storage::BlockHeight;
 use crate::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
-use crate::node::ledger::protocol::transactions::votes::{Tally, Votes};
 
 /// Represents an Ethereum event being seen by some validators
 #[derive(

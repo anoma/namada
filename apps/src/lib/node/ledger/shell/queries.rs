@@ -12,8 +12,8 @@ use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
-use namada::ledger::storage_api;
 use namada::ledger::storage::{MerkleTree, StoreRef, StoreType};
+use namada::ledger::storage_api;
 use namada::types::address::Address;
 use namada::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
@@ -23,8 +23,7 @@ use namada::types::keccak::encode::Encode;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::storage::MembershipProof::BridgePool;
-use namada::types::storage::{Epoch, Key, MerkleValue, PrefixValue};
-use namada::types::storage::Epoch;
+use namada::types::storage::{Epoch, MerkleValue};
 use namada::types::token::{self, Amount};
 use namada::types::vote_extensions::validator_set_update::EthAddrBook;
 
@@ -32,7 +31,6 @@ use super::*;
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tendermint_proto::types::EvidenceParams;
 use crate::node::ledger::response;
-use crate::node::ledger::rpc::BridgePoolSubpath;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -170,7 +168,7 @@ where
         request_bytes: Vec<u8>,
     ) -> response::Query {
         if let Ok(transfers) =
-        <Vec<PendingTransfer>>::try_from_slice(request_bytes.as_slice())
+            <Vec<PendingTransfer>>::try_from_slice(request_bytes.as_slice())
         {
             // get the latest signed merkle root of the Ethereum bridge pool
             let signed_root: MultiSignedMerkleRoot = match self
@@ -223,7 +221,7 @@ where
                         // TODO: Use real nonce
                         nonce: 0.into(),
                     }
-                        .encode(),
+                    .encode(),
                     ..Default::default()
                 },
                 Err(e) => response::Query {

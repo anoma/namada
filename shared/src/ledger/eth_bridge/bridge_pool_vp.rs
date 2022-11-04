@@ -358,7 +358,7 @@ mod test_bridge_pool_vp {
         // get the balance keys
         let token_key =
             wrapped_erc20s::Keys::from(&ASSET).balance(&balance.owner);
-        let account_key = balance_key(&xan(), &balance.owner);
+        let account_key = balance_key(&nam(), &balance.owner);
 
         // update the balance of xan
         let new_balance = match gas_delta {

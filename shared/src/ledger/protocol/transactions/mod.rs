@@ -7,7 +7,7 @@
 
 use std::collections::BTreeSet;
 
-use namada::types::storage;
+use crate::types::storage;
 
 #[cfg(not(feature = "abcipp"))]
 pub(super) mod ethereum_events;

@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
 
+use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::read;
 use crate::ledger::storage::traits::StorageHasher;
@@ -13,8 +14,6 @@ use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::types::address::Address;
 use crate::types::storage::BlockHeight;
 use crate::types::voting_power::FractionalVotingPower;
-use super::ChangedKeys;
-use crate::node::ledger::protocol::transactions::read;
 
 /// The addresses of validators that voted for something, and the block
 /// heights at which they voted. We use a [`BTreeMap`] to enforce that a
