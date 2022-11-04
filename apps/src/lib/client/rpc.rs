@@ -33,6 +33,7 @@ use namada::types::key::*;
 use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
+use rust_decimal::Decimal;
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
@@ -991,19 +992,30 @@ pub async fn query_commission_rate(
             let validator = ctx.get(&validator);
             let validator_commission_key =
                 pos::validator_commission_rate_key(&validator);
+            let validator_max_commission_change_key =
+                pos::validator_max_commission_rate_change_key(&validator);
             let commission_rates = query_storage_value::<pos::CommissionRates>(
                 &client,
                 &validator_commission_key,
             )
             .await;
+            let max_rate_change = query_storage_value::<Decimal>(
+                &client,
+                &validator_max_commission_change_key,
+            )
+            .await;
+            let max_rate_change =
+                max_rate_change.expect("No max rate change found");
             let commission_rates =
                 commission_rates.expect("No commission rate found ");
             match commission_rates.get(epoch) {
                 Some(rate) => {
                     println!(
-                        "Validator {} commission rate: {}",
+                        "Validator {} commission rate: {}, max change per \
+                         epoch: {}",
                         validator.encode(),
-                        *rate
+                        *rate,
+                        max_rate_change,
                     )
                 }
                 None => {
