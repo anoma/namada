@@ -1,7 +1,7 @@
 //! Logic and data types relating to tallying validators' votes for pieces of
 //! data stored in the ledger, where those pieces of data should only be acted
 //! on once they have received enough votes
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
@@ -13,6 +13,16 @@ use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::types::address::Address;
 use crate::types::storage::BlockHeight;
 use crate::types::voting_power::FractionalVotingPower;
+use super::ChangedKeys;
+use crate::node::ledger::protocol::transactions::read;
+
+/// The addresses of validators that voted for something, and the block
+/// heights at which they voted. We use a [`BTreeMap`] to enforce that a
+/// validator (as uniquely identified by an [`Address`]) may vote at most once,
+/// and their vote must be associated with a specific [`BlockHeight`]. Their
+/// voting power at that block height is what is used when calculating whether
+/// something has enough voting power behind it or not.
+pub type Votes = BTreeMap<Address, BlockHeight>;
 
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
@@ -22,11 +32,11 @@ use crate::types::voting_power::FractionalVotingPower;
 pub struct Tally {
     /// The total voting power that's voted for this event across all epochs
     pub voting_power: FractionalVotingPower,
-    /// The addresses of validators that voted for this event. We use a
-    /// set type as validators should only be able to vote at most once,
-    /// and [`BTreeSet`] specifically as we want this field to be
-    /// deterministically ordered for storage.
-    pub seen_by: BTreeSet<Address>,
+    /// The votes which have been counted towards `voting_power`. Note that
+    /// validators may submit multiple votes at different block heights for
+    /// the same thing, but ultimately only one vote per validator will be
+    /// used when tallying voting power.
+    pub seen_by: Votes,
     /// Whether this event has been acted on or not - this should only ever
     /// transition from `false` to `true`, once there is enough voting power
     pub seen: bool,
@@ -35,11 +45,11 @@ pub struct Tally {
 /// Calculate a new [`Tally`] based on some validators' fractional voting powers
 /// as specific block heights
 pub fn calculate_new(
-    seen_by: &BTreeSet<(Address, BlockHeight)>,
+    seen_by: Votes,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<Tally> {
     let mut seen_by_voting_power = FractionalVotingPower::default();
-    for (validator, block_height) in seen_by {
+    for (validator, block_height) in seen_by.iter() {
         match voting_powers
             .get(&(validator.to_owned(), block_height.to_owned()))
         {
@@ -57,21 +67,18 @@ pub fn calculate_new(
         seen_by_voting_power > FractionalVotingPower::TWO_THIRDS;
     Ok(Tally {
         voting_power: seen_by_voting_power,
-        seen_by: seen_by
-            .iter()
-            .map(|(validator, _)| validator.to_owned())
-            .collect(),
+        seen_by,
         seen: newly_confirmed,
     })
 }
 
 /// Calculate an updated [`Tally`] based on one that is in storage under `keys`,
-/// and some new votes
+/// with some new `voters`.
 pub fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
-    _voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<Tally>
+    _voters: &HashMap<Address, FractionalVotingPower>,
+) -> Result<(Tally, ChangedKeys)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -80,7 +87,7 @@ where
     // TODO(namada#515): implement this
     let _body: T = read::value(store, &keys.body())?;
     let seen: bool = read::value(store, &keys.seen())?;
-    let seen_by: BTreeSet<Address> = read::value(store, &keys.seen_by())?;
+    let seen_by: Votes = read::value(store, &keys.seen_by())?;
     let voting_power: FractionalVotingPower =
         read::value(store, &keys.voting_power())?;
 
@@ -95,7 +102,7 @@ where
         "Updating events is not implemented yet, so the returned vote tally \
          will be identical to the one in storage",
     );
-    Ok(tally)
+    Ok((tally, ChangedKeys::default()))
 }
 
 pub fn write<D, H, T>(

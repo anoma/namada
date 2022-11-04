@@ -130,6 +130,7 @@ pub enum StoreRef<'a> {
 }
 
 impl<'a> StoreRef<'a> {
+    /// Get owned copies of backing stores of our Merkle tree.
     pub fn to_owned(&self) -> Store {
         match *self {
             Self::Base(store) => Store::Base(store.to_owned()),
@@ -140,6 +141,7 @@ impl<'a> StoreRef<'a> {
         }
     }
 
+    /// Borsh Seriliaze the backing stores of our Merkle tree.
     pub fn encode(&self) -> Vec<u8> {
         match self {
             Self::Base(store) => store.try_to_vec(),
@@ -363,7 +365,10 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             account: (self.account.root().into(), self.account.store()),
             ibc: (self.ibc.root().into(), self.ibc.store()),
             pos: (self.pos.root().into(), self.pos.store()),
-            bridge_pool: (self.bridge_pool.root(), self.bridge_pool.store()),
+            bridge_pool: (
+                self.bridge_pool.root().into(),
+                self.bridge_pool.store(),
+            ),
         }
     }
 
@@ -533,6 +538,17 @@ impl MerkleTreeStoresRead {
             Store::Ibc(store) => self.ibc.1 = store,
             Store::PoS(store) => self.pos.1 = store,
             Store::BridgePool(store) => self.bridge_pool.1 = store,
+        }
+    }
+
+    /// Read the backing store of the requested type
+    pub fn get_store(&self, store_type: StoreType) -> StoreRef {
+        match store_type {
+            StoreType::Base => StoreRef::Base(&self.base.1),
+            StoreType::Account => StoreRef::Account(&self.account.1),
+            StoreType::Ibc => StoreRef::Ibc(&self.ibc.1),
+            StoreType::PoS => StoreRef::PoS(&self.pos.1),
+            StoreType::BridgePool => StoreRef::BridgePool(&self.bridge_pool.1),
         }
     }
 }
