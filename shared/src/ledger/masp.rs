@@ -23,11 +23,11 @@ use masp_proofs::sapling::SaplingVerificationContext;
 pub const ENV_VAR_MASP_PARAMS_DIR: &str = "ANOMA_MASP_PARAMS_DIR";
 
 // TODO these could be exported from masp_proof crate
-// Spend circuit name
+/// Spend circuit name
 pub const SPEND_NAME: &str = "masp-spend.params";
-// Output circuit name
+/// Output circuit name
 pub const OUTPUT_NAME: &str = "masp-output.params";
-// Convert circuit name
+/// Convert circuit name
 pub const CONVERT_NAME: &str = "masp-convert.params";
 
 /// Load Sapling spend params.
@@ -182,11 +182,13 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 
     tracing::info!("accumulated {} assets/values", assets_and_values.len());
 
-    ctx.final_check(
+    let result = ctx.final_check(
         assets_and_values.as_slice(),
         &sighash,
         tx_data.binding_sig.unwrap(),
-    )
+    );
+    tracing::info!("final check result {result}");
+    result
 }
 
 /// Get the path to MASP parameters from [`ENV_VAR_MASP_PARAMS_DIR`] env var or
