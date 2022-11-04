@@ -138,7 +138,7 @@ impl Shell {
                     CheckTxType::New => MempoolTxType::NewTransaction,
                     CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
                 };
-                Ok(Response::CheckTx(self.mempool_validate(&*tx.tx, r#type)))
+                Ok(Response::CheckTx(self.mempool_validate(&tx.tx, r#type)))
             }
             Request::ListSnapshots(_) => {
                 Ok(Response::ListSnapshots(Default::default()))

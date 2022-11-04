@@ -136,7 +136,7 @@ where
 
     /// Add a gas cost incured in a validity predicate
     pub fn add_gas(&self, used_gas: u64) -> Result<(), vp_env::RuntimeError> {
-        vp_env::add_gas(&mut *self.gas_meter.borrow_mut(), used_gas)
+        vp_env::add_gas(&mut self.gas_meter.borrow_mut(), used_gas)
     }
 
     /// Read access to the prior storage (state before tx execution)
@@ -168,7 +168,7 @@ where
         key: &crate::types::storage::Key,
     ) -> Result<Option<Vec<u8>>, storage_api::Error> {
         vp_env::read_pre(
-            &mut *self.ctx.gas_meter.borrow_mut(),
+            &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.storage,
             self.ctx.write_log,
             key,
@@ -181,7 +181,7 @@ where
         key: &crate::types::storage::Key,
     ) -> Result<bool, storage_api::Error> {
         vp_env::has_key_pre(
-            &mut *self.ctx.gas_meter.borrow_mut(),
+            &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.storage,
             key,
         )
@@ -199,7 +199,7 @@ where
         &self,
         iter: &mut Self::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        vp_env::iter_pre_next::<DB>(&mut *self.ctx.gas_meter.borrow_mut(), iter)
+        vp_env::iter_pre_next::<DB>(&mut self.ctx.gas_meter.borrow_mut(), iter)
             .into_storage_result()
     }
 
@@ -244,7 +244,7 @@ where
         key: &crate::types::storage::Key,
     ) -> Result<Option<Vec<u8>>, storage_api::Error> {
         vp_env::read_post(
-            &mut *self.ctx.gas_meter.borrow_mut(),
+            &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.storage,
             self.ctx.write_log,
             key,
@@ -257,7 +257,7 @@ where
         key: &crate::types::storage::Key,
     ) -> Result<bool, storage_api::Error> {
         vp_env::has_key_post(
-            &mut *self.ctx.gas_meter.borrow_mut(),
+            &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.storage,
             self.ctx.write_log,
             key,
@@ -277,7 +277,7 @@ where
         iter: &mut Self::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
         vp_env::iter_post_next::<DB>(
-            &mut *self.ctx.gas_meter.borrow_mut(),
+            &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.write_log,
             iter,
         )
@@ -333,49 +333,38 @@ where
         &self,
         key: &Key,
     ) -> Result<Option<T>, storage_api::Error> {
-        vp_env::read_temp(
-            &mut *self.gas_meter.borrow_mut(),
-            self.write_log,
-            key,
-        )
-        .map(|data| data.and_then(|t| T::try_from_slice(&t[..]).ok()))
-        .into_storage_result()
+        vp_env::read_temp(&mut self.gas_meter.borrow_mut(), self.write_log, key)
+            .map(|data| data.and_then(|t| T::try_from_slice(&t[..]).ok()))
+            .into_storage_result()
     }
 
     fn read_bytes_temp(
         &self,
         key: &Key,
     ) -> Result<Option<Vec<u8>>, storage_api::Error> {
-        vp_env::read_temp(
-            &mut *self.gas_meter.borrow_mut(),
-            self.write_log,
-            key,
-        )
-        .into_storage_result()
+        vp_env::read_temp(&mut self.gas_meter.borrow_mut(), self.write_log, key)
+            .into_storage_result()
     }
 
     fn get_chain_id(&'view self) -> Result<String, storage_api::Error> {
-        vp_env::get_chain_id(&mut *self.gas_meter.borrow_mut(), self.storage)
+        vp_env::get_chain_id(&mut self.gas_meter.borrow_mut(), self.storage)
             .into_storage_result()
     }
 
     fn get_block_height(
         &'view self,
     ) -> Result<BlockHeight, storage_api::Error> {
-        vp_env::get_block_height(
-            &mut *self.gas_meter.borrow_mut(),
-            self.storage,
-        )
-        .into_storage_result()
+        vp_env::get_block_height(&mut self.gas_meter.borrow_mut(), self.storage)
+            .into_storage_result()
     }
 
     fn get_block_hash(&'view self) -> Result<BlockHash, storage_api::Error> {
-        vp_env::get_block_hash(&mut *self.gas_meter.borrow_mut(), self.storage)
+        vp_env::get_block_hash(&mut self.gas_meter.borrow_mut(), self.storage)
             .into_storage_result()
     }
 
     fn get_block_epoch(&'view self) -> Result<Epoch, storage_api::Error> {
-        vp_env::get_block_epoch(&mut *self.gas_meter.borrow_mut(), self.storage)
+        vp_env::get_block_epoch(&mut self.gas_meter.borrow_mut(), self.storage)
             .into_storage_result()
     }
 
@@ -384,7 +373,7 @@ where
         prefix: &Key,
     ) -> Result<Self::PrefixIter, storage_api::Error> {
         vp_env::iter_prefix(
-            &mut *self.gas_meter.borrow_mut(),
+            &mut self.gas_meter.borrow_mut(),
             self.storage,
             prefix,
         )
@@ -396,7 +385,7 @@ where
         prefix: &Key,
     ) -> Result<Self::PrefixIter, storage_api::Error> {
         vp_env::rev_iter_prefix(
-            &mut *self.gas_meter.borrow_mut(),
+            &mut self.gas_meter.borrow_mut(),
             self.storage,
             prefix,
         )
@@ -429,7 +418,7 @@ where
                 self.address,
                 self.storage,
                 self.write_log,
-                &mut *self.gas_meter.borrow_mut(),
+                &mut self.gas_meter.borrow_mut(),
                 self.tx,
                 &mut iterators,
                 self.verifiers,
@@ -470,7 +459,7 @@ where
     }
 
     fn get_tx_code_hash(&self) -> Result<Hash, storage_api::Error> {
-        vp_env::get_tx_code_hash(&mut *self.gas_meter.borrow_mut(), self.tx)
+        vp_env::get_tx_code_hash(&mut self.gas_meter.borrow_mut(), self.tx)
             .into_storage_result()
     }
 }

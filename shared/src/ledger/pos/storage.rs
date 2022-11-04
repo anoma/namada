@@ -48,14 +48,7 @@ pub fn params_key() -> Key {
 
 /// Is storage key for PoS parameters?
 pub fn is_params_key(key: &Key) -> bool {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if addr == &ADDRESS && key == PARAMS_STORAGE_KEY =>
-        {
-            true
-        }
-        _ => false,
-    }
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == PARAMS_STORAGE_KEY)
 }
 
 /// Storage key prefix for validator data.
@@ -326,14 +319,7 @@ pub fn validator_set_key() -> Key {
 
 /// Is storage key for a validator set?
 pub fn is_validator_set_key(key: &Key) -> bool {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if addr == &ADDRESS && key == VALIDATOR_SET_STORAGE_KEY =>
-        {
-            true
-        }
-        _ => false,
-    }
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == VALIDATOR_SET_STORAGE_KEY)
 }
 
 /// Storage key for total voting power.
@@ -345,14 +331,7 @@ pub fn total_voting_power_key() -> Key {
 
 /// Is storage key for total voting power?
 pub fn is_total_voting_power_key(key: &Key) -> bool {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if addr == &ADDRESS && key == TOTAL_VOTING_POWER_STORAGE_KEY =>
-        {
-            true
-        }
-        _ => false,
-    }
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == TOTAL_VOTING_POWER_STORAGE_KEY)
 }
 
 /// Get validator address from bond key

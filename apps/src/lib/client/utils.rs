@@ -279,7 +279,7 @@ pub async fn join_network(
         // Write consensus key to tendermint home
         tendermint_node::write_validator_key(
             &tm_home_dir,
-            &*pre_genesis_wallet.consensus_key,
+            &pre_genesis_wallet.consensus_key,
         );
 
         // Derive the node ID from the node key
@@ -400,8 +400,7 @@ pub fn init_network(
         archive_dir,
     }: args::InitNetwork,
 ) {
-    let mut config =
-        genesis_config::open_genesis_config(&genesis_path).unwrap();
+    let mut config = genesis_config::open_genesis_config(genesis_path).unwrap();
 
     // Update the WASM checksums
     let checksums =
@@ -679,7 +678,7 @@ pub fn init_network(
     fs::rename(&temp_dir, &chain_dir).unwrap();
 
     // Copy the WASM checksums
-    let wasm_dir_full = chain_dir.join(&config::DEFAULT_WASM_DIR);
+    let wasm_dir_full = chain_dir.join(config::DEFAULT_WASM_DIR);
     fs::create_dir_all(&wasm_dir_full).unwrap();
     fs::copy(
         &wasm_checksums_path,
@@ -696,16 +695,16 @@ pub fn init_network(
             .join(config::DEFAULT_BASE_DIR);
         let temp_validator_chain_dir =
             validator_dir.join(temp_chain_id.as_str());
-        let validator_chain_dir = validator_dir.join(&chain_id.as_str());
+        let validator_chain_dir = validator_dir.join(chain_id.as_str());
         fs::create_dir_all(&validator_chain_dir)
             .expect("Couldn't create validator directory");
         // Rename the generated directories for validators from `temp_chain_id`
         // to `chain_id`
-        std::fs::rename(&temp_validator_chain_dir, &validator_chain_dir)
+        std::fs::rename(temp_validator_chain_dir, &validator_chain_dir)
             .unwrap();
 
         // Copy the WASM checksums
-        let wasm_dir_full = validator_chain_dir.join(&config::DEFAULT_WASM_DIR);
+        let wasm_dir_full = validator_chain_dir.join(config::DEFAULT_WASM_DIR);
         fs::create_dir_all(&wasm_dir_full).unwrap();
         fs::copy(
             &wasm_checksums_path,
@@ -1052,7 +1051,7 @@ pub fn write_tendermint_node_key(
         .create(true)
         .write(true)
         .truncate(true)
-        .open(&node_key_path)
+        .open(node_key_path)
         .expect("Couldn't create validator node key file");
     serde_json::to_writer_pretty(file, &tm_node_keypair_json)
         .expect("Couldn't write validator node key file");

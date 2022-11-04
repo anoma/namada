@@ -450,7 +450,7 @@ where
         // but with gas and storage bytes len diff accounting
         tracing::debug!("storage write key {}", key,);
         let value = value.as_ref();
-        self.block.tree.update(key, &value)?;
+        self.block.tree.update(key, value)?;
 
         let len = value.len();
         let gas = key.len() + len;
@@ -805,7 +805,7 @@ where
         // gas and storage bytes len diff accounting, because it can only be
         // used by the protocol that has a direct mutable access to storage
         let val = val.as_ref();
-        self.block.tree.update(key, &val).into_storage_result()?;
+        self.block.tree.update(key, val).into_storage_result()?;
         let _ = self
             .db
             .write_subspace_val(self.block.height, key, val)
@@ -941,14 +941,14 @@ mod tests {
             max_expected_time_per_block in Just(max_expected_time_per_block),
             start_height in Just(start_height),
             start_time in Just(start_time),
-            block_height in start_height + 1..(start_height + 2 * min_num_of_blocks as u64),
+            block_height in start_height + 1..(start_height + 2 * min_num_of_blocks),
             block_time in start_time + 1..(start_time + 2 * min_duration),
             // Delta will be applied on the `min_num_of_blocks` parameter
             min_blocks_delta in -(min_num_of_blocks as i64 - 1)..5,
             // Delta will be applied on the `min_duration` parameter
-            min_duration_delta in -(min_duration as i64 - 1)..50,
+            min_duration_delta in -(min_duration - 1)..50,
             // Delta will be applied on the `max_expected_time_per_block` parameter
-            max_time_per_block_delta in -(max_expected_time_per_block as i64 - 1)..50,
+            max_time_per_block_delta in -(max_expected_time_per_block - 1)..50,
         ) -> (EpochDuration, i64, BlockHeight, DateTimeUtc, BlockHeight, DateTimeUtc,
                 i64, i64, i64) {
             let epoch_duration = EpochDuration {
@@ -998,7 +998,7 @@ mod tests {
 
             // Test for 1.
             if block_height.0 - start_height.0
-                >= epoch_duration.min_num_of_blocks as u64
+                >= epoch_duration.min_num_of_blocks
                 && time::duration_passed(
                     block_time,
                     start_time,

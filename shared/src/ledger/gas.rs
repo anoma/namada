@@ -208,7 +208,7 @@ impl VpsGas {
         let parallel_gas = self.rest.iter().sum::<u64>() / PARALLEL_GAS_DIVIDER;
         self.max
             .unwrap_or_default()
-            .checked_add(parallel_gas as u64)
+            .checked_add(parallel_gas)
             .ok_or(Error::GasOverflow)
     }
 }

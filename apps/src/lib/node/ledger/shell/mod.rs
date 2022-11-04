@@ -140,7 +140,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub fn reset(config: config::Ledger) -> Result<()> {
     // simply nuke the DB files
     let db_path = &config.db_dir();
-    match std::fs::remove_dir_all(&db_path) {
+    match std::fs::remove_dir_all(db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         res => res.map_err(Error::RemoveDB)?,
     };

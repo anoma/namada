@@ -62,13 +62,13 @@ impl Context {
 
         let chain_dir = global_args
             .base_dir
-            .join(&global_config.default_chain_id.as_str());
+            .join(global_config.default_chain_id.as_str());
         let genesis_file_path = global_args
             .base_dir
             .join(format!("{}.toml", global_config.default_chain_id.as_str()));
         let wallet = Wallet::load_or_new_from_genesis(
             &chain_dir,
-            genesis_config::open_genesis_config(&genesis_file_path)?,
+            genesis_config::open_genesis_config(genesis_file_path)?,
         );
 
         // If the WASM dir specified, put it in the config

@@ -150,7 +150,7 @@ mod native_vp_host_env {
                      `vp_host_env::init()`)",
                 )
                 .as_mut();
-            f(&mut *env)
+            f(&mut env)
         })
     }
 

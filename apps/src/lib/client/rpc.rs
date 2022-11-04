@@ -410,7 +410,7 @@ pub async fn query_proposal_result(
                             cli::safe_exit(1)
                         }
 
-                        let file = File::open(&path.join("proposal"))
+                        let file = File::open(path.join("proposal"))
                             .expect("Proposal file must exist.");
                         let proposal: OfflineProposal =
                             serde_json::from_reader(file).expect(
@@ -1410,11 +1410,11 @@ pub async fn query_tx_response(
     // applied to the blockchain
     let query_event_opt =
         response_block_results.end_block_events.and_then(|events| {
-            (&events)
+            events
                 .iter()
                 .find(|event| {
                     event.type_str == tx_query.event_type()
-                        && (&event.attributes).iter().any(|tag| {
+                        && event.attributes.iter().any(|tag| {
                             tag.key.as_ref() == "hash"
                                 && tag.value.as_ref() == tx_query.tx_hash()
                         })
@@ -1429,8 +1429,8 @@ pub async fn query_tx_response(
         )
     })?;
     // Reformat the event attributes so as to ease value extraction
-    let event_map: std::collections::HashMap<&str, &str> = (&query_event
-        .attributes)
+    let event_map: std::collections::HashMap<&str, &str> = query_event
+        .attributes
         .iter()
         .map(|tag| (tag.key.as_ref(), tag.value.as_ref()))
         .collect();

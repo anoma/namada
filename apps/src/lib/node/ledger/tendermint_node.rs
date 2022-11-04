@@ -86,7 +86,7 @@ pub async fn run(
 
     // init and run a tendermint node child process
     let output = Command::new(&tendermint_path)
-        .args(&["init", &mode, "--home", &home_dir_string])
+        .args(["init", &mode, "--home", &home_dir_string])
         .output()
         .await
         .map_err(Error::Init)?;
@@ -110,7 +110,7 @@ pub async fn run(
     update_tendermint_config(&home_dir, config).await?;
 
     let mut tendermint_node = Command::new(&tendermint_path);
-    tendermint_node.args(&[
+    tendermint_node.args([
         "start",
         "--proxy_app",
         &ledger_address,
@@ -170,7 +170,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
     // reset all the Tendermint state, if any
     std::process::Command::new(tendermint_path)
-        .args(&[
+        .args([
             "reset-state",
             "unsafe-all",
             // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels

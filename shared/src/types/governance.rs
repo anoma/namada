@@ -224,9 +224,9 @@ impl OfflineProposal {
             tally_epoch_serialized,
         ]
         .concat();
-        let proposal_data_hash = Hash::sha256(&proposal_serialized);
+        let proposal_data_hash = Hash::sha256(proposal_serialized);
         let signature =
-            common::SigScheme::sign(signing_key, &proposal_data_hash);
+            common::SigScheme::sign(signing_key, proposal_data_hash);
         Self {
             content: proposal.content,
             author: proposal.author,
@@ -261,7 +261,7 @@ impl OfflineProposal {
             tally_epoch_serialized,
         ]
         .concat();
-        Hash::sha256(&proposal_serialized)
+        Hash::sha256(proposal_serialized)
     }
 }
 
@@ -297,7 +297,7 @@ impl OfflineVote {
             .expect("Conversion to bytes shouldn't fail.");
         let vote_serialized =
             &[proposal_hash_data, proposal_vote_data].concat();
-        let signature = common::SigScheme::sign(signing_key, &vote_serialized);
+        let signature = common::SigScheme::sign(signing_key, vote_serialized);
         Self {
             proposal_hash,
             vote,

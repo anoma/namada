@@ -748,7 +748,7 @@ where
                     .map_err(|_| Ics04Error::implementation_specific())?;
                 if let Some(id) = channel.connection_hops().get(0) {
                     if id == conn_id {
-                        let key = Key::parse(&key).map_err(|_| {
+                        let key = Key::parse(key).map_err(|_| {
                             Ics04Error::implementation_specific()
                         })?;
                         let port_channel_id =

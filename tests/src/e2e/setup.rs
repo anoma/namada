@@ -373,7 +373,7 @@ impl Test {
             args,
             timeout_sec,
             &self.working_dir,
-            &base_dir,
+            base_dir,
             mode,
             loc,
         )
@@ -660,7 +660,7 @@ where
         .env("TM_LOG_LEVEL", "info")
         .env("ANOMA_LOG_COLOR", "false")
         .current_dir(working_dir)
-        .args(&[
+        .args([
             "--base-dir",
             &base_dir.as_ref().to_string_lossy(),
             "--mode",
@@ -689,7 +689,7 @@ where
         let mut rng = rand::thread_rng();
         let log_dir = base_dir.as_ref().join("logs");
         fs::create_dir_all(&log_dir)?;
-        log_dir.join(&format!(
+        log_dir.join(format!(
             "{}-{}-{}.log",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -828,8 +828,8 @@ pub fn copy_wasm_to_chain_dir<'a>(
     let target_wasm_dir = chain_dir.join(config::DEFAULT_WASM_DIR);
     for file in &wasm_files {
         std::fs::copy(
-            working_dir.join("wasm").join(&file),
-            target_wasm_dir.join(&file),
+            working_dir.join("wasm").join(file),
+            target_wasm_dir.join(file),
         )
         .unwrap();
     }
@@ -843,8 +843,8 @@ pub fn copy_wasm_to_chain_dir<'a>(
             .join(chain_id.as_str())
             .join(config::DEFAULT_WASM_DIR);
         for file in &wasm_files {
-            let src = working_dir.join("wasm").join(&file);
-            let dst = target_wasm_dir.join(&file);
+            let src = working_dir.join("wasm").join(file);
+            let dst = target_wasm_dir.join(file);
             std::fs::copy(&src, &dst)
                 .wrap_err_with(|| {
                     format!(
@@ -870,7 +870,7 @@ pub fn get_all_wasms_hashes(
     checksums
         .values()
         .filter_map(|wasm| {
-            if wasm.contains(&filter_prefix) {
+            if wasm.contains(filter_prefix) {
                 Some(
                     wasm.split('.').collect::<Vec<&str>>()[1]
                         .to_owned()

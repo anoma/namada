@@ -216,7 +216,7 @@ mod native_tx_host_env {
                      `tx_host_env::init()`)",
                 )
                 .as_mut();
-            f(&mut *env)
+            f(&mut env)
         })
     }
 
