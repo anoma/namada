@@ -7,10 +7,6 @@ use std::ops::{Add, Sub};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
 
-use crate::tendermint::time::Time;
-use crate::tendermint::Error as TendermintError;
-use crate::tendermint_proto::google::protobuf;
-
 /// Check if the given `duration` has passed since the given `start.
 pub fn duration_passed(
     current: DateTimeUtc,
@@ -179,35 +175,37 @@ impl From<DateTime<Utc>> for DateTimeUtc {
     }
 }
 
-impl TryFrom<prost_types::Timestamp> for DateTimeUtc {
-    type Error = prost_types::TimestampOutOfSystemRangeError;
+// TODO move
+// impl TryFrom<prost_types::Timestamp> for DateTimeUtc {
+//     type Error = prost_types::TimestampOutOfSystemRangeError;
 
-    fn try_from(
-        timestamp: prost_types::Timestamp,
-    ) -> Result<Self, Self::Error> {
-        let system_time: std::time::SystemTime = timestamp.try_into()?;
-        Ok(Self(system_time.into()))
-    }
-}
+//     fn try_from(
+//         timestamp: prost_types::Timestamp,
+//     ) -> Result<Self, Self::Error> {
+//         let system_time: std::time::SystemTime = timestamp.try_into()?;
+//         Ok(Self(system_time.into()))
+//     }
+// }
 
-impl From<DateTimeUtc> for prost_types::Timestamp {
-    fn from(dt: DateTimeUtc) -> Self {
-        let seconds = dt.0.timestamp();
-        let nanos = dt.0.timestamp_subsec_nanos() as i32;
-        prost_types::Timestamp { seconds, nanos }
-    }
-}
+// impl From<DateTimeUtc> for prost_types::Timestamp {
+//     fn from(dt: DateTimeUtc) -> Self {
+//         let seconds = dt.0.timestamp();
+//         let nanos = dt.0.timestamp_subsec_nanos() as i32;
+//         prost_types::Timestamp { seconds, nanos }
+//     }
+// }
 
-impl TryFrom<protobuf::Timestamp> for DateTimeUtc {
-    type Error = prost_types::TimestampOutOfSystemRangeError;
+// TODO move
+// impl TryFrom<protobuf::Timestamp> for DateTimeUtc {
+//     type Error = prost_types::TimestampOutOfSystemRangeError;
 
-    fn try_from(timestamp: protobuf::Timestamp) -> Result<Self, Self::Error> {
-        Self::try_from(prost_types::Timestamp {
-            seconds: timestamp.seconds,
-            nanos: timestamp.nanos,
-        })
-    }
-}
+//     fn try_from(timestamp: protobuf::Timestamp) -> Result<Self, Self::Error>
+// {         Self::try_from(prost_types::Timestamp {
+//             seconds: timestamp.seconds,
+//             nanos: timestamp.nanos,
+//         })
+//     }
+// }
 
 impl From<DateTimeUtc> for std::time::SystemTime {
     fn from(dt: DateTimeUtc) -> Self {
@@ -230,18 +228,19 @@ impl From<DateTimeUtc> for Rfc3339String {
     }
 }
 
-impl TryFrom<DateTimeUtc> for Time {
-    type Error = TendermintError;
+// TODO move
+// impl TryFrom<DateTimeUtc> for Time {
+//     type Error = TendermintError;
 
-    fn try_from(dt: DateTimeUtc) -> Result<Self, Self::Error> {
-        Self::parse_from_rfc3339(&DateTime::to_rfc3339(&dt.0))
-    }
-}
+//     fn try_from(dt: DateTimeUtc) -> Result<Self, Self::Error> {
+//         Self::parse_from_rfc3339(&DateTime::to_rfc3339(&dt.0))
+//     }
+// }
 
-impl TryFrom<Time> for DateTimeUtc {
-    type Error = chrono::ParseError;
+// impl TryFrom<Time> for DateTimeUtc {
+//     type Error = chrono::ParseError;
 
-    fn try_from(t: Time) -> Result<Self, Self::Error> {
-        Rfc3339String(t.to_rfc3339()).try_into()
-    }
-}
+//     fn try_from(t: Time) -> Result<Self, Self::Error> {
+//         Rfc3339String(t.to_rfc3339()).try_into()
+//     }
+// }

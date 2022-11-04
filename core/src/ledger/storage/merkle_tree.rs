@@ -10,11 +10,11 @@ use arse_merkle_tree::{
 use borsh::{BorshDeserialize, BorshSerialize};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
+use namada_core::types::storage::{TreeKeyError, IBC_KEY_LIMIT};
 use prost::Message;
 use thiserror::Error;
 
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
-use super::IBC_KEY_LIMIT;
 use crate::bytes::ByteBuf;
 use crate::ledger::storage::ics23_specs::{self, ibc_leaf_spec};
 use crate::ledger::storage::types;
@@ -22,8 +22,7 @@ use crate::tendermint::merkle::proof::{Proof, ProofOp};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::storage::{
-    DbKeySeg, Error as StorageError, Key, MembershipProof, MerkleValue,
-    StringKey, TreeBytes,
+    DbKeySeg, Error as StorageError, Key, MerkleValue, StringKey, TreeBytes,
 };
 
 #[allow(missing_docs)]
@@ -33,6 +32,8 @@ pub enum Error {
     InvalidKey(StorageError),
     #[error("Invalid key for merkle tree: {0}")]
     InvalidMerkleKey(String),
+    #[error("Storage tree key error: {0}")]
+    StorageTreeKey(#[from] TreeKeyError),
     #[error("Empty Key: {0}")]
     EmptyKey(String),
     #[error("Merkle Tree error: {0}")]
@@ -827,5 +828,17 @@ mod test {
             &subtree_root,
         );
         assert!(basetree_verification_res);
+    }
+}
+
+/// Type of membership proof from a merkle tree
+pub enum MembershipProof {
+    /// ICS23 compliant membership proof
+    ICS23(CommitmentProof),
+}
+
+impl From<CommitmentProof> for MembershipProof {
+    fn from(proof: CommitmentProof) -> Self {
+        Self::ICS23(proof)
     }
 }

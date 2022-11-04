@@ -15,9 +15,8 @@ pub use {
     tendermint_proto_abcipp as tendermint_proto,
 };
 
-pub mod bytes;
 pub mod ledger;
-pub mod proto;
+pub use namada_core::proto;
 pub mod types;
 pub mod vm;
 

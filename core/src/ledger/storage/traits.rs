@@ -7,14 +7,13 @@ use arse_merkle_tree::traits::{Hasher, Value};
 use arse_merkle_tree::{Key as TreeKey, H256};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof};
+use namada_core::types::storage::IBC_KEY_LIMIT;
 use sha2::{Digest, Sha256};
 
-use super::merkle_tree::{Amt, Error, Smt};
-use super::{ics23_specs, IBC_KEY_LIMIT};
+use super::ics23_specs;
+use super::merkle_tree::{Amt, Error, MembershipProof, Smt};
 use crate::types::hash::Hash;
-use crate::types::storage::{
-    Key, MembershipProof, MerkleValue, StringKey, TreeBytes,
-};
+use crate::types::storage::{Key, MerkleValue, StringKey, TreeBytes};
 
 /// Trait for reading from a merkle tree that is a sub-tree
 /// of the global merkle tree.
@@ -156,74 +155,6 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
         self.update(key, value)
             .map(Hash::from)
             .map_err(|err| Error::MerkleTree(format!("{:?}", err)))
-    }
-}
-
-impl TreeKey<IBC_KEY_LIMIT> for StringKey {
-    type Error = Error;
-
-    fn as_slice(&self) -> &[u8] {
-        &self.original.as_slice()[..self.length]
-    }
-
-    fn try_from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let mut tree_key = [0u8; IBC_KEY_LIMIT];
-        let mut original = [0u8; IBC_KEY_LIMIT];
-        let mut length = 0;
-        for (i, byte) in bytes.iter().enumerate() {
-            if i >= IBC_KEY_LIMIT {
-                return Err(Error::InvalidMerkleKey(
-                    "Input IBC key is too large".into(),
-                ));
-            }
-            original[i] = *byte;
-            tree_key[i] = byte.wrapping_add(1);
-            length += 1;
-        }
-        Ok(Self {
-            original,
-            tree_key: tree_key.into(),
-            length,
-        })
-    }
-}
-
-impl Value for Hash {
-    fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-
-    fn zero() -> Self {
-        Hash([0u8; 32])
-    }
-}
-
-impl From<Hash> for H256 {
-    fn from(hash: Hash) -> Self {
-        hash.0.into()
-    }
-}
-
-impl From<H256> for Hash {
-    fn from(hash: H256) -> Self {
-        Self(hash.into())
-    }
-}
-
-impl From<&H256> for Hash {
-    fn from(hash: &H256) -> Self {
-        let hash = hash.to_owned();
-        Self(hash.into())
-    }
-}
-
-impl Value for TreeBytes {
-    fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-
-    fn zero() -> Self {
-        TreeBytes::zero()
     }
 }
 

@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXLOWER;
-use namada_proof_of_stake::types::PublicKeyTmRawHash;
+// use namada_proof_of_stake::types::PublicKeyTmRawHash;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -325,8 +325,9 @@ impl super::SigScheme for SigScheme {
     }
 }
 
-impl PublicKeyTmRawHash for PublicKey {
-    fn tm_raw_hash(&self) -> String {
-        tm_consensus_key_raw_hash(self)
-    }
-}
+// TODO
+// impl PublicKeyTmRawHash for PublicKey {
+//     fn tm_raw_hash(&self) -> String {
+//         tm_consensus_key_raw_hash(self)
+//     }
+// }
