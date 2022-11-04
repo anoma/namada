@@ -456,17 +456,18 @@ impl From<TreeBytes> for Vec<u8> {
     }
 }
 
-/// Type of membership proof from a merkle tree
-pub enum MembershipProof {
-    /// ICS23 compliant membership proof
-    ICS23(CommitmentProof),
-}
+// TODO not sure
+// /// Type of membership proof from a merkle tree
+// pub enum MembershipProof {
+//     /// ICS23 compliant membership proof
+//     ICS23(CommitmentProof),
+// }
 
-impl From<CommitmentProof> for MembershipProof {
-    fn from(proof: CommitmentProof) -> Self {
-        Self::ICS23(proof)
-    }
-}
+// impl From<CommitmentProof> for MembershipProof {
+//     fn from(proof: CommitmentProof) -> Self {
+//         Self::ICS23(proof)
+//     }
+// }
 
 impl Key {
     /// Parses string and returns a key

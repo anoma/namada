@@ -3660,6 +3660,7 @@ dependencies = [
  "loupe",
  "masp_primitives",
  "masp_proofs",
+ "namada_core",
  "namada_proof_of_stake",
  "parity-wasm",
  "paste",
@@ -3784,6 +3785,40 @@ dependencies = [
  "tracing-subscriber 0.3.16",
  "websocket",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "namada_core"
+version = "0.9.0"
+dependencies = [
+ "ark-ec",
+ "assert_matches",
+ "bech32",
+ "borsh",
+ "chrono",
+ "data-encoding",
+ "derivative",
+ "ed25519-consensus",
+ "ferveo",
+ "group-threshold-cryptography",
+ "ics23",
+ "itertools",
+ "libsecp256k1",
+ "pretty_assertions",
+ "proptest",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "rust_decimal",
+ "serde 1.0.147",
+ "serde_json",
+ "sha2 0.9.9",
+ "sparse-merkle-tree",
+ "test-log",
+ "thiserror",
+ "tonic-build",
+ "tracing 0.1.37",
+ "tracing-subscriber 0.3.16",
+ "zeroize",
 ]
 
 [[package]]

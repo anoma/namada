@@ -12,18 +12,20 @@ mod token;
 use std::collections::{BTreeSet, HashSet};
 
 use borsh::BorshDeserialize;
+use ibc::core::ics02_client::context::ClientReader;
+use ibc::events::IbcEvent;
+use namada_core::ledger::ibc::storage::{
+    client_id, ibc_prefix, is_client_counter_key, IbcPrefix,
+};
+use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
+use namada_core::proto::SignedTxData;
+use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::ibc::IbcEvent as WrappedIbcEvent;
+use namada_core::types::storage::Key;
 use thiserror::Error;
 pub use token::{Error as IbcTokenError, IbcToken};
 
-use super::storage::{client_id, ibc_prefix, is_client_counter_key, IbcPrefix};
-use crate::ibc::core::ics02_client::context::ClientReader;
-use crate::ibc::events::IbcEvent;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::proto::SignedTxData;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::IbcEvent as WrappedIbcEvent;
-use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -358,7 +360,7 @@ mod tests {
     use crate::tendermint_proto::Protobuf;
 
     use super::get_dummy_header;
-    use super::super::handler::{
+    use namada_core::ledger::ibc::actions::{
         self, commitment_prefix, init_connection, make_create_client_event,
         make_open_ack_channel_event, make_open_ack_connection_event,
         make_open_confirm_channel_event, make_open_confirm_connection_event,

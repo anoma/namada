@@ -1,4 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::governance::{Proposal, ProposalError};
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
@@ -51,4 +52,29 @@ pub struct VoteProposalData {
     pub voter: Address,
     /// Delegator addreses
     pub delegations: Vec<Address>,
+}
+
+impl TryFrom<Proposal> for InitProposalData {
+    type Error = ProposalError;
+
+    fn try_from(proposal: Proposal) -> Result<Self, Self::Error> {
+        let proposal_code = if let Some(path) = proposal.proposal_code_path {
+            match std::fs::read(path) {
+                Ok(bytes) => Some(bytes),
+                Err(_) => return Err(Self::Error::InvalidProposalData),
+            }
+        } else {
+            None
+        };
+
+        Ok(InitProposalData {
+            id: proposal.id,
+            content: proposal.content.try_to_vec().unwrap(),
+            author: proposal.author,
+            voting_start_epoch: proposal.voting_start_epoch,
+            voting_end_epoch: proposal.voting_end_epoch,
+            grace_epoch: proposal.grace_epoch,
+            proposal_code,
+        })
+    }
 }

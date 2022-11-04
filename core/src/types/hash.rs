@@ -4,16 +4,16 @@ use std::fmt::{self, Display};
 use std::ops::Deref;
 use std::str::FromStr;
 
-use arse_merkle_tree::traits::Value;
-use arse_merkle_tree::Hash as TreeHash;
+// use arse_merkle_tree::traits::Value;
+// use arse_merkle_tree::Hash as TreeHash;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::tendermint::abci::transaction;
-use crate::tendermint::Hash as TmHash;
+// use crate::tendermint::abci::transaction;
+// use crate::tendermint::Hash as TmHash;
 
 /// The length of the raw transaction hash.
 pub const HASH_LENGTH: usize = 32;
@@ -130,17 +130,21 @@ impl Hash {
         Self(*digest.as_ref())
     }
 
+    fn zero() -> Self {
+        Self([0u8; 32])
+    }
+
     /// Check if the hash is all zeros
     pub fn is_zero(&self) -> bool {
         self == &Self::zero()
     }
 }
 
-impl From<Hash> for TmHash {
-    fn from(hash: Hash) -> Self {
-        TmHash::Sha256(hash.0)
-    }
-}
+// impl From<Hash> for TmHash {
+//     fn from(hash: Hash) -> Self {
+//         TmHash::Sha256(hash.0)
+//     }
+// }
 
 impl From<Hash> for TreeHash {
     fn from(hash: Hash) -> Self {

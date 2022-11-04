@@ -9,13 +9,13 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::address::Address;
-use super::hash::Hash;
-use super::key::common::{self, Signature};
-use super::key::SigScheme;
-use super::storage::Epoch;
-use super::token::SCALE;
-use super::transaction::governance::InitProposalData;
+use crate::types::address::Address;
+use crate::types::hash::Hash;
+use crate::types::key::common::{self, Signature};
+use crate::types::key::SigScheme;
+use crate::types::storage::Epoch;
+use crate::types::token::SCALE;
+use crate::types::transaction::governance::InitProposalData;
 
 /// Type alias for vote power
 pub type VotePower = u128;
