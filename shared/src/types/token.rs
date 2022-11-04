@@ -82,6 +82,13 @@ impl Amount {
             micro: change as u64,
         }
     }
+
+    /// Checked addition on amounts
+    pub fn checked_add(&self, amount: &Amount) -> Option<Self> {
+        self.micro
+            .checked_add(amount.micro)
+            .map(|micro| Self { micro })
+    }
 }
 
 impl serde::Serialize for Amount {
