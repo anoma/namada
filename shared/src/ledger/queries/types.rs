@@ -24,6 +24,10 @@ where
     /// tx WASM compilation cache
     #[cfg(feature = "wasm-runtime")]
     pub tx_wasm_cache: TxCache<WasmCacheRoAccess>,
+    /// Taken from config `storage_read_past_height_limit`. When set, will
+    /// limit the how many block heights in the past can the storage be
+    /// queried for reading values.
+    pub storage_read_past_height_limit: Option<u64>,
 }
 
 /// A `Router` handles parsing read-only query requests and dispatching them to
