@@ -6,6 +6,7 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+use namada::ledger::eth_bridge::parameters::EthereumBridgeConfig;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::{GenesisValidator, PosParams};
@@ -40,10 +41,10 @@ pub mod genesis_config {
     use thiserror::Error;
 
     use super::{
-        EstablishedAccount, Genesis, ImplicitAccount, TokenAccount, Validator,
+        EstablishedAccount, EthereumBridgeConfig, Genesis, ImplicitAccount,
+        TokenAccount, Validator,
     };
     use crate::cli;
-    use crate::config::ethereum_bridge;
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct HexString(pub String);
@@ -120,8 +121,7 @@ pub mod genesis_config {
         // Governance parameters
         pub gov_params: GovernanceParamsConfig,
         // Ethereum bridge config
-        pub ethereum_bridge_params:
-            Option<ethereum_bridge::params::GenesisConfig>,
+        pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }
@@ -588,6 +588,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
+            ethereum_bridge_params: config.ethereum_bridge_params,
         };
         genesis.init();
         genesis
@@ -635,6 +636,8 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
+    // Ethereum bridge config
+    pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
 }
 
 impl Genesis {
@@ -871,6 +874,7 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
+        ethereum_bridge_params: None,
     }
 }
 
