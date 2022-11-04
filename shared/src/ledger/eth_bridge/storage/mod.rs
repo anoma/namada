@@ -17,7 +17,6 @@ pub const BRIDGE_CONTRACT_SUBKEY: &str = "bridge_contract_address";
 /// Sub-key for storing the Ethereum address of the governance contract.
 pub const GOVERNANCE_CONTRACT_SUBKEY: &str = "governance_contract_address";
 
-
 /// Key prefix for the storage subspace
 pub fn prefix() -> Key {
     Key::from(ADDRESS.to_db_key())
