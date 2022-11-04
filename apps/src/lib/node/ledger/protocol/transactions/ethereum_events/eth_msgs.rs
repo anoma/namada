@@ -1,12 +1,8 @@
-use std::collections::BTreeSet;
-
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada::types::address::Address;
 use namada::types::ethereum_events::EthereumEvent;
-use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
-use crate::node::ledger::protocol::transactions::votes::Tally;
+use crate::node::ledger::protocol::transactions::votes::{Tally, Votes};
 
 /// Represents an Ethereum event being seen by some validators
 #[derive(
@@ -21,14 +17,12 @@ use crate::node::ledger::protocol::transactions::votes::Tally;
     BorshDeserialize,
 )]
 pub struct EthMsgUpdate {
-    /// The event being seen
+    /// The event being seen.
     pub body: EthereumEvent,
-    /// Addresses of the validators who have just seen this event. We use
-    /// [`BTreeSet`] even though ordering is not important here, so that we
-    /// can derive [`Hash`] for [`EthMsgUpdate`].
+    /// New votes for this event.
     // NOTE(feature = "abcipp"): This can just become BTreeSet<Address> because
     // BlockHeight will always be the previous block
-    pub seen_by: BTreeSet<(Address, BlockHeight)>,
+    pub seen_by: Votes,
 }
 
 impl From<MultiSignedEthEvent> for EthMsgUpdate {
@@ -80,10 +74,7 @@ mod tests {
         };
         let expected = EthMsgUpdate {
             body: event,
-            seen_by: BTreeSet::from_iter(vec![(
-                sole_validator,
-                BlockHeight(100),
-            )]),
+            seen_by: Votes::from([(sole_validator, BlockHeight(100))]),
         };
 
         let update: EthMsgUpdate = with_signers.into();
