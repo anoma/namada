@@ -580,11 +580,10 @@ pub trait PosActions: PosReadOnly {
             .into());
         }
 
-
         let rate_before_pipeline = *commission_rates
             .get_at_offset(
-                current_epoch - 1,
-                DynEpochOffset::PipelineLen,
+                current_epoch,
+                DynEpochOffset::PipelineLenMinusOne,
                 &params,
             )
             .expect("Could not find a rate in given epoch");
