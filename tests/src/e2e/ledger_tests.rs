@@ -474,7 +474,7 @@ fn masp_txs_and_queries() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: 60,
+                min_duration: 3600,
                 ..genesis.parameters
             };
             GenesisConfig {

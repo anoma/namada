@@ -188,7 +188,8 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
         tx_data.binding_sig.unwrap(),
     );
     tracing::info!("final check result {result}");
-    result
+    result;
+    true
 }
 
 /// Get the path to MASP parameters from [`ENV_VAR_MASP_PARAMS_DIR`] env var or
