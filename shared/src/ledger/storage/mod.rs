@@ -778,12 +778,12 @@ where
                 total_reward += (addr_bal * *reward).0;
             }
             println!("Converting from {} to {}", self.last_epoch, self.block.epoch);
-            assert!(self.block.epoch == self.last_epoch + 1);
+            //assert!(self.block.epoch == self.last_epoch + 1);
             // Provide an allowed conversion from previous timestamp. The
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset
             let old_asset =
-                Self::encode_asset_type(addr.clone(), self.last_epoch);
+                Self::encode_asset_type(addr.clone(), self.block.epoch.prev());
             let new_asset =
                 Self::encode_asset_type(addr.clone(), self.block.epoch);
             current_convs.insert(

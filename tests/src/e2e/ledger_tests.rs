@@ -662,6 +662,7 @@ fn masp_txs_and_queries() -> Result<()> {
         (
             vec![
                 "balance",
+                "--no-conversions",
                 "--owner",
                 AB_VIEWING_KEY,
                 "--ledger-address",
