@@ -777,6 +777,8 @@ where
                 // enough rewards to reimburse users
                 total_reward += (addr_bal * *reward).0;
             }
+            println!("Converting from {} to {}", self.last_epoch, self.block.epoch);
+            assert!(self.block.epoch == self.last_epoch + 1);
             // Provide an allowed conversion from previous timestamp. The
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset
