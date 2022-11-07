@@ -20,11 +20,11 @@ const VOTING_POWER_KEY_SEGMENT: &str = "voting_power";
 
 /// Generator for the keys under which details of votes for some piece of data
 /// is stored
-pub struct Keys<T: 'static> {
+pub struct Keys<T> {
     /// The prefix under which the details of a piece of data for which we are
     /// tallying votes is stored
     pub prefix: Key,
-    _phantom: std::marker::PhantomData<&'static T>,
+    _phantom: std::marker::PhantomData<*const T>,
 }
 
 impl<T> Keys<T> {
