@@ -667,7 +667,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--ledger-address",
                 &validator_one_rpc,
             ],
-            "BTC: 20",
+            "BTC : 20",
         ),
         // 13. Send 10 BTC from SK(B) to Bertha
         (
