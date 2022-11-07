@@ -941,10 +941,6 @@ pub mod testing {
                         address: owner.clone(),
                     });
 
-                    // IMPORTANT: we have to update `ValidatorSet` and
-                    // `TotalDeltas` before we update
-                    // `ValidatorDeltas` because they need to
-                    // read the total deltas before they change.
                     changes.extend([
                         PosStorageChange::ValidatorSet {
                             validator: validator.clone(),
@@ -965,11 +961,6 @@ pub mod testing {
                     changes.extend([
                         PosStorageChange::Bond {
                             owner,
-                            validator: validator.clone(),
-                            delta: token_delta,
-                            offset,
-                        },
-                        PosStorageChange::ValidatorDeltas {
                             validator,
                             delta: token_delta,
                             offset,
@@ -991,10 +982,6 @@ pub mod testing {
 
                     let mut changes = Vec::with_capacity(6);
 
-                    // IMPORTANT: we have to update `ValidatorSet` before we
-                    // update `ValidatorDeltas`, because
-                    // they needs to read the total deltas
-                    // before they change.
                     changes.extend([
                         PosStorageChange::ValidatorSet {
                             validator: validator.clone(),
@@ -1012,7 +999,6 @@ pub mod testing {
                         },
                     ]);
 
-                    // do I need ValidatorDeltas in here again??
                     changes.extend([
                         // IMPORTANT: we have to update `Unbond` before we
                         // update `Bond`, because it needs to read the bonds to
@@ -1024,11 +1010,6 @@ pub mod testing {
                         },
                         PosStorageChange::Bond {
                             owner,
-                            validator: validator.clone(),
-                            delta: token_delta,
-                            offset,
-                        },
-                        PosStorageChange::ValidatorDeltas {
                             validator,
                             delta: token_delta,
                             offset,
