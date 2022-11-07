@@ -175,8 +175,13 @@ where
     }
 }
 
-/// If `keys_changed` represents a valid set of changed keys, return them,
-/// otherwise return `None`.
+/// Checks if `keys_changed` represents a valid set of changed keys.
+/// Depending on which keys get changed, chooses which type of
+/// check to perform in the `validate_tx` function.
+///  1. If the Ethereum bridge escrow key was changed, we need to check
+///     that escrow was performed correctly.
+///  2. If two erc20 keys where changed, this is a transfer that needs
+///     to be checked.
 fn determine_check_type(
     keys_changed: &BTreeSet<Key>,
 ) -> Result<Option<CheckType>, Error> {
