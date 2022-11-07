@@ -380,7 +380,6 @@ fn process_queue(
 #[cfg(test)]
 mod test_oracle {
     use std::num::NonZeroU64;
-    use std::thread::JoinHandle;
 
     use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
     use tokio::sync::oneshot::{channel, Receiver};
@@ -411,9 +410,16 @@ mod test_oracle {
         oracle: Oracle,
         control_sender: control::Sender,
         config: Config,
-    ) -> JoinHandle<()> {
-        let handle = std::thread::spawn(move || {
-            tokio_test::block_on(run_oracle_aux(oracle));
+    ) -> tokio::task::JoinHandle<()> {
+        let handle = tokio::task::spawn_blocking(move || {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async move {
+                LocalSet::new()
+                    .run_until(async move {
+                        run_oracle_aux(oracle).await;
+                    })
+                    .await
+            });
         });
         control_sender
             .send(control::Command::SendConfig { config })
@@ -479,7 +485,7 @@ mod test_oracle {
             .send(TestCmd::Unresponsive)
             .expect("Test failed");
         drop(eth_recv);
-        oracle.join().expect("Test failed");
+        oracle.await.expect("Test failed");
     }
 
     /// Test that if no logs are received from the web3
@@ -510,7 +516,7 @@ mod test_oracle {
             time -= std::time::Duration::from_millis(10);
         }
         drop(eth_recv);
-        oracle.join().expect("Test failed");
+        oracle.await.expect("Test failed");
     }
 
     /// Test that if a new block height doesn't increase,
@@ -561,7 +567,7 @@ mod test_oracle {
             time -= std::time::Duration::from_millis(10);
         }
         drop(eth_recv);
-        oracle.join().expect("Test failed");
+        oracle.await.expect("Test failed");
     }
 
     /// Test that the oracle waits until new logs
@@ -625,7 +631,7 @@ mod test_oracle {
         admin_channel.send(TestCmd::Normal).expect("Test failed");
         seen.await.expect("Test failed");
         drop(eth_recv);
-        oracle.join().expect("Test failed");
+        oracle.await.expect("Test failed");
     }
 
     /// Test that events are only sent when they
@@ -743,7 +749,7 @@ mod test_oracle {
         }
 
         drop(eth_recv);
-        oracle.join().expect("Test failed");
+        oracle.await.expect("Test failed");
     }
 
     /// Test that Ethereum blocks are processed in sequence up to the latest
@@ -806,7 +812,7 @@ mod test_oracle {
         assert_eq!(block_processed, Uint256::from(confirmed_block_height + 1));
 
         drop(eth_recv);
-        oracle.join().expect("Test failed");
+        oracle.await.expect("Test failed");
     }
 
     /// Test that if the Ethereum RPC endpoint returns a latest block that is
@@ -865,6 +871,6 @@ mod test_oracle {
         }
 
         drop(eth_recv);
-        oracle.join().expect("Test failed");
+        oracle.await.expect("Test failed");
     }
 }
