@@ -13,6 +13,7 @@ use std::array;
 
 use thiserror::Error;
 
+use self::traits::StorageHasher;
 use super::parameters::Parameters;
 use super::storage_api::{ResultExt, StorageRead, StorageWrite};
 use super::{parameters, storage_api};
@@ -24,7 +25,6 @@ use crate::ledger::storage::merkle_tree::{
 pub use crate::ledger::storage::merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
-pub use crate::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};

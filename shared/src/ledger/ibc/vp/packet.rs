@@ -32,7 +32,8 @@ use crate::ibc::core::ics24_host::identifier::{
 };
 use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ibc::proofs::Proofs;
-use crate::ledger::storage::{self, StorageHasher};
+use crate::ledger::storage;
+use crate::ledger::storage::traits::StorageHasher;
 use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;

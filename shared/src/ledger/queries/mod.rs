@@ -8,7 +8,8 @@ pub use types::{
     EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
 };
 
-use super::storage::{DBIter, StorageHasher, DB};
+use super::storage::traits::StorageHasher;
+use super::storage::{DBIter, DB};
 use super::storage_api;
 
 #[macro_use]

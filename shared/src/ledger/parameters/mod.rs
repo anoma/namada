@@ -11,7 +11,8 @@ use super::governance::vp::is_proposal_accepted;
 use super::storage::types::{decode, encode};
 use super::storage::{types, Storage};
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::time::DurationSecs;
@@ -150,7 +151,7 @@ impl Parameters {
     pub fn init_storage<DB, H>(&self, storage: &mut Storage<DB, H>)
     where
         DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-        H: ledger_storage::StorageHasher,
+        H: ledger_storage::traits::StorageHasher,
     {
         // write epoch parameters
         let epoch_key = storage::get_epoch_storage_key();
@@ -198,7 +199,7 @@ pub fn update_max_expected_time_per_block_parameter<DB, H>(
 ) -> std::result::Result<u64, WriteError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: ledger_storage::StorageHasher,
+    H: ledger_storage::traits::StorageHasher,
 {
     let key = storage::get_max_expected_time_per_block_key();
     update(storage, value, key)
@@ -212,7 +213,7 @@ pub fn update_vp_whitelist_parameter<DB, H>(
 ) -> std::result::Result<u64, WriteError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: ledger_storage::StorageHasher,
+    H: ledger_storage::traits::StorageHasher,
 {
     let key = storage::get_vp_whitelist_storage_key();
     update(storage, &value, key)
@@ -226,7 +227,7 @@ pub fn update_tx_whitelist_parameter<DB, H>(
 ) -> std::result::Result<u64, WriteError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: ledger_storage::StorageHasher,
+    H: ledger_storage::traits::StorageHasher,
 {
     let key = storage::get_tx_whitelist_storage_key();
     update(storage, &value, key)
@@ -240,7 +241,7 @@ pub fn update_epoch_parameter<DB, H>(
 ) -> std::result::Result<u64, WriteError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: ledger_storage::StorageHasher,
+    H: ledger_storage::traits::StorageHasher,
 {
     let key = storage::get_epoch_storage_key();
     update(storage, value, key)
@@ -255,7 +256,7 @@ pub fn update<DB, H, T>(
 ) -> std::result::Result<u64, WriteError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: ledger_storage::StorageHasher,
+    H: ledger_storage::traits::StorageHasher,
     T: BorshSerialize,
 {
     let serialized_value = value
@@ -273,7 +274,7 @@ pub fn read_epoch_parameter<DB, H>(
 ) -> std::result::Result<(EpochDuration, u64), ReadError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: ledger_storage::StorageHasher,
+    H: ledger_storage::traits::StorageHasher,
 {
     // read epoch
     let epoch_key = storage::get_epoch_storage_key();
@@ -293,7 +294,7 @@ pub fn read<DB, H>(
 ) -> std::result::Result<(Parameters, u64), ReadError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: ledger_storage::StorageHasher,
+    H: ledger_storage::traits::StorageHasher,
 {
     // read epoch
     let (epoch_duration, gas_epoch) = read_epoch_parameter(storage)

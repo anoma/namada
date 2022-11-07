@@ -5,8 +5,9 @@ use namada::ledger::governance::utils::{
 use namada::ledger::governance::vp::ADDRESS as gov_address;
 use namada::ledger::protocol;
 use namada::ledger::slash_fund::ADDRESS as slash_fund_address;
+use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::types::encode;
-use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::ledger::storage::{DBIter, DB};
 use namada::types::address::{nam, Address};
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;

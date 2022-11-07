@@ -796,7 +796,7 @@ macro_rules! router {
             ) -> $crate::ledger::storage_api::Result<$crate::ledger::queries::EncodedResponseQuery>
             where
                 D: 'static + $crate::ledger::storage::DB + for<'iter> $crate::ledger::storage::DBIter<'iter> + Sync,
-                H: 'static + $crate::ledger::storage::StorageHasher + Sync,
+                H: 'static + $crate::ledger::storage::traits::StorageHasher + Sync,
             {
 
                 // Import for `.into_storage_result()`
@@ -841,7 +841,8 @@ mod test_rpc_handlers {
     use crate::ledger::queries::{
         EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery,
     };
-    use crate::ledger::storage::{DBIter, StorageHasher, DB};
+    use crate::ledger::storage::traits::StorageHasher;
+    use crate::ledger::storage::{DBIter, DB};
     use crate::ledger::storage_api::{self, ResultExt};
     use crate::types::storage::Epoch;
     use crate::types::token;

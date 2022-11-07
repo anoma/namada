@@ -3,7 +3,8 @@ use tendermint_proto::crypto::{ProofOp, ProofOps};
 
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
-use crate::ledger::storage::{DBIter, StorageHasher, DB};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::types::storage::{self, Epoch, PrefixValue};
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]

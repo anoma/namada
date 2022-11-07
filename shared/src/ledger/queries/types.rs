@@ -1,6 +1,7 @@
 use tendermint_proto::crypto::ProofOps;
 
-use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::ledger::storage_api;
 use crate::types::storage::BlockHeight;
 #[cfg(feature = "wasm-runtime")]

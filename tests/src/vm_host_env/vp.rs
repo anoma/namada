@@ -98,7 +98,7 @@ mod native_vp_host_env {
 
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
-    use namada::ledger::storage::Sha256Hasher;
+    use namada::ledger::storage::traits::Sha256Hasher;
     use namada::vm::host_env::*;
     use namada::vm::WasmCacheRwAccess;
 

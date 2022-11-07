@@ -53,7 +53,8 @@ use crate::ibc::proofs::Proofs;
 use crate::ibc::timestamp::Timestamp;
 use crate::ledger::native_vp::{Error as NativeVpError, VpEnv};
 use crate::ledger::parameters;
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{self as ledger_storage};
 use crate::tendermint::Time;
 use crate::tendermint_proto::Protobuf;
 use crate::types::ibc::data::{

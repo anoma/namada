@@ -28,7 +28,8 @@ use crate::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTr
 use crate::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use crate::ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
 use crate::ledger::native_vp::VpEnv;
-use crate::ledger::storage::{self, StorageHasher};
+use crate::ledger::storage;
+use crate::ledger::storage::traits::StorageHasher;
 use crate::tendermint_proto::Protobuf;
 use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
 use crate::types::storage::{BlockHeight, Epoch, Key};

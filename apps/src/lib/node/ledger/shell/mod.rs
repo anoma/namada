@@ -25,10 +25,9 @@ use namada::ledger::pos::namada_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
+use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
-use namada::ledger::storage::{
-    DBIter, Sha256Hasher, Storage, StorageHasher, DB,
-};
+use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::ledger::{ibc, pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::chain::ChainId;
@@ -601,7 +600,8 @@ mod test_utils {
     use std::path::PathBuf;
 
     use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
+    use namada::ledger::storage::traits::Sha256Hasher;
+    use namada::ledger::storage::{BlockStateWrite, MerkleTree};
     use namada::types::address::{nam, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
