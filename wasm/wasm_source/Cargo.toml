@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_wasm"
 resolver = "2"
-version = "0.8.1"
+version = "0.9.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -17,16 +17,13 @@ tx_bridge_pool = ["namada_tx_prelude"]
 tx_from_intent = ["namada_tx_prelude"]
 tx_ibc = ["namada_tx_prelude"]
 tx_init_account = ["namada_tx_prelude"]
-tx_init_nft = ["namada_tx_prelude"]
 tx_init_proposal = ["namada_tx_prelude"]
 tx_init_validator = ["namada_tx_prelude"]
-tx_mint_nft = ["namada_tx_prelude"]
 tx_transfer = ["namada_tx_prelude"]
 tx_unbond = ["namada_tx_prelude"]
 tx_update_vp = ["namada_tx_prelude"]
 tx_vote_proposal = ["namada_tx_prelude"]
 tx_withdraw = ["namada_tx_prelude"]
-vp_nft = ["namada_vp_prelude"]
 vp_testnet_faucet = ["namada_vp_prelude", "once_cell"]
 vp_token = ["namada_vp_prelude"]
 vp_user = ["namada_vp_prelude", "once_cell", "rust_decimal"]

@@ -10,7 +10,7 @@
   * Rosetta integration
   * Datahub integration
 * WalletConnect integration
-* Ledger integration
+* [Ledger integration](../masp/ledger-integration.md)
 * External integrations
   * Figment
   * P2P

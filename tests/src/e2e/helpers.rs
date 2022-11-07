@@ -3,6 +3,7 @@
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
+use std::time::{Duration, Instant};
 use std::{env, time};
 
 use color_eyre::eyre::Result;
@@ -14,7 +15,7 @@ use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada_apps::config::{Config, TendermintMode};
 
-use super::setup::{Test, ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES};
+use super::setup::{sleep, Test, ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES};
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::run;
 
@@ -146,6 +147,63 @@ pub fn get_epoch(test: &Test, ledger_address: &str) -> Result<Epoch> {
         ))
     })?;
     Ok(Epoch(epoch))
+}
+
+/// Get the last committed block height.
+pub fn get_height(test: &Test, ledger_address: &str) -> Result<u64> {
+    let mut find = run!(
+        test,
+        Bin::Client,
+        &["block", "--ledger-address", ledger_address],
+        Some(10)
+    )?;
+    let (unread, matched) = find.exp_regex("Last committed block ID: .*")?;
+    // Expected `matched` string is e.g.:
+    //
+    // ```
+    // Last committed block F10B5E77F972F68CA051D289474B6E75574B446BF713A7B7B71D7ECFC61A3B21, height: 4, time: 2022-10-20T10:52:28.828745Z
+    // ```
+    let height_str = strip_trailing_newline(&matched)
+        .trim()
+        // Find the height part ...
+        .split_once("height: ")
+        .unwrap()
+        // ... take what's after it ...
+        .1
+        // ... find the next comma ...
+        .rsplit_once(',')
+        .unwrap()
+        // ... and take what's before it.
+        .0;
+    u64::from_str(height_str).map_err(|e| {
+        eyre!(format!(
+            "Height parsing failed from {} trimmed from {}, Error: \
+             {}\n\nUnread output: {}",
+            height_str, matched, e, unread
+        ))
+    })
+}
+
+/// Sleep until the given height is reached or panic when time out is reached
+/// before the height
+pub fn wait_for_block_height(
+    test: &Test,
+    ledger_address: &str,
+    height: u64,
+    timeout_secs: u64,
+) -> Result<()> {
+    let start = Instant::now();
+    let loop_timeout = Duration::new(timeout_secs, 0);
+    loop {
+        let current = get_height(test, ledger_address)?;
+        if current >= height {
+            break Ok(());
+        }
+        if Instant::now().duration_since(start) > loop_timeout {
+            panic!("Timed out waiting for height {height}, current {current}");
+        }
+        sleep(1);
+    }
 }
 
 pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {

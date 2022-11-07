@@ -4,7 +4,7 @@ pub mod vote_tallies;
 pub mod wrapped_erc20s;
 
 use super::ADDRESS;
-use crate::types::address::xan;
+use crate::types::address::nam;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token::balance_key;
 
@@ -24,7 +24,7 @@ pub fn prefix() -> Key {
 
 /// The key to the escrow of the VP.
 pub fn escrow_key() -> Key {
-    balance_key(&xan(), &ADDRESS)
+    balance_key(&nam(), &ADDRESS)
 }
 
 /// Returns whether a key belongs to this account or not

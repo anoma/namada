@@ -2,15 +2,15 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use eyre::eyre;
 use itertools::Itertools;
-use namada::ledger::pos::types::{VotingPower, WeightedValidator};
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, Storage, DB};
-use namada::types::address::Address;
-use namada::types::storage::BlockHeight;
-use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
-use namada::types::voting_power::FractionalVotingPower;
+use namada_proof_of_stake::PosBase;
 
-use crate::node::ledger::shell::queries::QueriesExt;
+use crate::ledger::pos::types::{VotingPower, WeightedValidator};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{DBIter, Storage, DB};
+use crate::types::address::Address;
+use crate::types::storage::BlockHeight;
+use crate::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
+use crate::types::voting_power::FractionalVotingPower;
 
 pub(super) fn get_active_validators<D, H>(
     storage: &Storage<D, H>,
@@ -22,11 +22,14 @@ where
 {
     let mut active_validators = BTreeMap::default();
     for height in block_heights.into_iter() {
-        let epoch = storage.get_epoch(height).expect(
+        let epoch = storage.block.pred_epochs.get_epoch(height).expect(
             "The epoch of the last block height should always be known",
         );
-        _ = active_validators
-            .insert(height, storage.get_active_validators(Some(epoch)));
+        let validator_set = storage.read_validator_set();
+        let validator_set = validator_set
+            .get(epoch)
+            .expect("Validators for an epoch should be known");
+        _ = active_validators.insert(height, validator_set.active.clone());
     }
     active_validators
 }
@@ -116,12 +119,12 @@ mod tests {
     use std::collections::HashSet;
 
     use assert_matches::assert_matches;
-    use namada::types::address;
-    use namada::types::ethereum_events::testing::{
-        arbitrary_single_transfer, arbitrary_voting_power,
-    };
 
     use super::*;
+    use crate::types::address;
+    use crate::types::ethereum_events::testing::{
+        arbitrary_single_transfer, arbitrary_voting_power,
+    };
 
     #[test]
     /// Test getting the voting power for the sole active validator from the set

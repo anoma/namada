@@ -6,9 +6,8 @@
 //! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
 //! ```
 
-use namada::types::hash::Hash;
-
-use crate::node::ledger::events::{Event, EventType};
+use crate::ledger::events::{Event, EventType};
+use crate::types::hash::Hash;
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
 /// given Tendermint query.
@@ -59,7 +58,7 @@ impl QueryMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::ledger::events::EventLevel;
+    use crate::ledger::events::EventLevel;
 
     /// Test if query matching is working as expected.
     #[test]
