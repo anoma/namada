@@ -59,7 +59,7 @@ pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
     if response.code != Code::Ok {
         println!("{}", response.info);
     } else {
-        println!("ABI Encoded Proof:\n {:#?}", response.value);
+        println!("Ethereum ABI-encoded proof:\n {:#?}", response.value);
     }
 }
 
