@@ -254,8 +254,7 @@ fn determine_check_type(
 /// amount, and that the changes balance each other out. If the balance changes
 /// are invalid, the reason is logged and a `None` is returned. Otherwise,
 /// return the `Address` of the owner of the balance which is decreasing,
-/// and by how much it decreased, which should be authorizing the balance
-/// change.
+/// as by how much it decreased, which should be authorizing the balance change.
 pub(super) fn check_balance_changes(
     reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,
