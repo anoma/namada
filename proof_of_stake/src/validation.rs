@@ -309,7 +309,6 @@ pub struct NewValidator<PublicKey> {
     has_state: bool,
     has_consensus_key: Option<PublicKey>,
     has_total_deltas: bool,
-    has_bonded_stake: bool,
     has_address_raw_hash: Option<String>,
     bonded_stake: u64,
     has_commission_rate: bool,
@@ -677,7 +676,6 @@ where
                         has_state,
                         has_consensus_key,
                         has_total_deltas,
-                        has_bonded_stake,
                         has_address_raw_hash,
                         bonded_stake,
                         has_commission_rate,
@@ -686,7 +684,6 @@ where
                     // The new validator must have set all the required fields
                     if !(*has_state
                         && *has_total_deltas
-                        && *has_bonded_stake
                         && *has_commission_rate
                         && *has_max_commission_rate_change)
                     {
@@ -1354,6 +1351,9 @@ where
                 }
                 let validator = new_validators.entry(address).or_default();
                 validator.has_total_deltas = true;
+                validator.bonded_stake =
+                    u64::try_from(Into::<i128>::into(deltas))
+                        .unwrap_or_default();
             }
             (Some(_), None) => {
                 errors.push(Error::MissingValidatorDeltas(address))
@@ -1361,6 +1361,7 @@ where
             (None, None) => {}
         }
     }
+
     fn validator_commission_rate(
         constants: &Constants,
         errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
@@ -1464,7 +1465,7 @@ where
             )),
         }
     }
-    
+
     fn balance(
         errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
         balance_delta: &mut TokenChange,
