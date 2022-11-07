@@ -2,6 +2,7 @@
 
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
+use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
 use namada::proto::Tx;
 use namada::types::storage::BlockHeight;
 use namada::types::transaction::tx_types::TxType;
@@ -15,7 +16,6 @@ use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 use crate::facade::tendermint_proto::abci::{
     tx_record::TxAction, ExtendedCommitInfo, TxRecord,
 };
-use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
 use crate::node::ledger::shell::vote_extensions::{
     iter_protocol_txs, split_vote_extensions,
 };
@@ -284,6 +284,7 @@ mod test_prepare_proposal {
         VotingPower, WeightedValidator,
     };
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
+    use namada::ledger::storage_api::queries::QueriesExt;
     use namada::proto::{Signed, SignedTxData};
     use namada::types::address::nam;
     use namada::types::ethereum_events::EthereumEvent;
@@ -301,7 +302,6 @@ mod test_prepare_proposal {
     use crate::facade::tendermint_proto::abci::{
         tx_record::TxAction, ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
-    use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };

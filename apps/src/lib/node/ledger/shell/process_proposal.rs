@@ -3,11 +3,11 @@
 
 use data_encoding::HEXUPPER;
 use namada::ledger::pos::types::VotingPower;
+use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
-use super::queries::{QueriesExt, SendValsetUpd};
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;

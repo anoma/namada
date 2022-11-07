@@ -1,13 +1,6 @@
 //! Shell methods for querying state
-use std::cmp::max;
-use std::default::Default;
 
-use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
-use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
-use namada::ledger::storage_api;
-use namada::types::address::Address;
-use namada::types::storage::Epoch;
 
 use super::*;
 use crate::node::ledger::response;
@@ -72,9 +65,8 @@ where
 // access to the `Shell` there
 #[cfg(test)]
 mod test_queries {
-    use namada::ledger::storage_api::queries::{
-        self, QueriesExt, SendValsetUpd,
-    };
+    use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
+    use namada::types::storage::Epoch;
 
     use super::*;
     use crate::node::ledger::shell::test_utils;
