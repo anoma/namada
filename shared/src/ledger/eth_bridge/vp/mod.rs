@@ -12,7 +12,7 @@ use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::traits::StorageHasher;
-use crate::types::address::{xan, Address, InternalAddress};
+use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
@@ -26,7 +26,7 @@ where
     D: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let escrow_key = balance_key(&xan(), &super::ADDRESS);
+    let escrow_key = balance_key(&nam(), &super::ADDRESS);
     storage
         .write(
             &escrow_key,

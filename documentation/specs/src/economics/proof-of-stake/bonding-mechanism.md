@@ -1,9 +1,5 @@
 # Bonding mechanism
 
-## Epoch
-
-An epoch is a range of blocks or time that is defined by the base ledger and made available to the PoS system. This document assumes that epochs are identified by consecutive natural numbers. All the data relevant to PoS are [associated with epochs](#epoched-data).
-
 ### Epoched data
 
 Epoched data is data associated with a specific epoch that is set in advance.
@@ -16,16 +12,11 @@ The data relevant to the PoS system in the ledger's state are epoched. Each data
 
 Changes to the epoched data do not take effect immediately. Instead, changes in epoch `n` are queued to take effect in the epoch `n + pipeline_length` for most cases and `n + unboding_length` for [unbonding](#unbond) actions. Should the same validator's data or same bonds (i.e. with the same identity) be updated more than once in the same epoch, the later update overrides the previously queued-up update. For bonds, the token amounts are added up. Once the epoch `n` has ended, the queued-up updates for epoch `n + pipeline_length` are final and the values become immutable.
 
-## Entities
-
-- [Validator](#validator): An account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
-- [Delegator](#delegator): An account that delegates some tokens to a validator. A delegator may not also be a validator.
-
 Additionally, any account may submit evidence for [a slashable misbehaviour](#slashing).
 
 ### Validator
 
-A validator must have a public consensus key. Additionally, it may also specify optional metadata fields (TBA).
+A validator must have a public consensus key.
 
 A validator may be in one of the following states:
 - *inactive*:
@@ -115,7 +106,7 @@ Once an offence has been reported:
   - [cubic slashing](./cubic-slashing.md): escalated slashing
 
 
-Instead of absolute values, validators' total bonded token amounts and bonds' and unbonds' token amounts are stored as their deltas (i.e. the change of quantity from a previous epoch) to allow distinguishing changes for different epoch, which is essential for determining whether tokens should be slashed. However, because slashes for a fault that occurred in epoch `n` may only be applied before the beginning of epoch `n + unbonding_length`, in epoch `m` we can sum all the deltas of total bonded token amounts and bonds and unbond with the same source and validator for epoch equal or less than `m - unboding_length` into a single total bonded token amount, single bond and single unbond record. This is to keep the total number of total bonded token amounts for a unique validator and bonds and unbonds for a unique pair of source and validator bound to a maximum number (equal to `unbonding_length`).
+Instead of absolute values, validators' total bonded token amounts and bonds' and unbonds' token amounts are stored as their deltas (i.e. the change of quantity from a previous epoch) to allow distinguishing changes for different epoch, which is essential for determining whether tokens should be slashed. Slashes for a fault that occurred in epoch `n` may only be applied before the beginning of epoch `n + unbonding_length`. For this reason, in epoch `m` we can sum all the deltas of total bonded token amounts and bonds and unbond with the same source and validator for epoch equal or less than `m - unboding_length` into a single total bonded token amount, single bond and single unbond record. This is to keep the total number of total bonded token amounts for a unique validator and bonds and unbonds for a unique pair of source and validator bound to a maximum number (equal to `unbonding_length`).
 
 To disincentivize validators misbehaviour in the PoS system a validator may be slashed for any fault that it has done. An evidence of misbehaviour may be submitted by any account for a fault that occurred in epoch `n` anytime before the beginning of epoch `n + unbonding_length`.
 
@@ -123,6 +114,11 @@ A valid evidence reduces the validator's total bonded token amount by the slash 
 
 The invariant is that the sum of amounts that may be withdrawn from a misbehaving validator must always add up to the total bonded token amount.
 
+## Initialization
+
+An initial validator set with self-bonded token amounts must be given on system initialization.
+
+This set is used to pre-compute epochs in the genesis block from epoch `0` to epoch `pipeline_length - 1`.
 
 ## System parameters
 
@@ -296,8 +292,4 @@ struct Slash {
 }
 ```
 
-## Initialization
 
-An initial validator set with self-bonded token amounts must be given on system initialization.
-
-This set is used to pre-compute epochs in the genesis block from epoch `0` to epoch `pipeline_length - 1`.

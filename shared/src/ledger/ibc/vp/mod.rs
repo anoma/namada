@@ -1464,7 +1464,7 @@ mod tests {
             source_port: get_port_id(),
             source_channel: get_channel_id(),
             token: Some(Coin {
-                denom: "XAN".to_string(),
+                denom: "NAM".to_string(),
                 amount: 100u64.to_string(),
             }),
             sender: Signer::new("sender"),
@@ -1723,7 +1723,7 @@ mod tests {
             source_port: get_port_id(),
             source_channel: get_channel_id(),
             token: Some(Coin {
-                denom: "XAN".to_string(),
+                denom: "NAM".to_string(),
                 amount: 100u64.to_string(),
             }),
             sender: Signer::new("sender"),

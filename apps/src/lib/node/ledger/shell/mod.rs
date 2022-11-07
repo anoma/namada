@@ -19,18 +19,20 @@ use std::mem;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::ledger::events::log::EventLog;
+use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
-use namada::ledger::pos;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ActiveValidator, ValidatorSetUpdate,
 };
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
+use namada::ledger::protocol::ShellParams;
 use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, DB};
+use namada::ledger::{pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::address;
 use namada::types::chain::ChainId;
@@ -48,19 +50,15 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
-use super::protocol::ShellParams;
-use super::rpc;
 use crate::config::{genesis, TendermintMode};
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
 use crate::facade::tendermint_proto::crypto::public_key;
 use crate::facade::tower_abci::{request, response};
-use crate::node::ledger::events::log::EventLog;
-use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
-use crate::node::ledger::{protocol, storage, tendermint_node};
+use crate::node::ledger::{storage, tendermint_node};
 #[allow(unused_imports)]
 use crate::wallet::{ValidatorData, ValidatorKeys};
 use crate::{config, wallet};
@@ -334,9 +332,13 @@ where
     pub(super) vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
     pub(super) tx_wasm_cache: TxCache<WasmCacheRwAccess>,
+    /// Taken from config `storage_read_past_height_limit`. When set, will
+    /// limit the how many block heights in the past can the storage be
+    /// queried for reading values.
+    storage_read_past_height_limit: Option<u64>,
     /// Proposal execution tracking
     pub proposal_data: HashSet<u64>,
-    /// Log of events emitted by `FinalizeBlock`.
+    /// Log of events emitted by `FinalizeBlock` ABCI calls.
     event_log: EventLog,
 }
 
@@ -360,6 +362,8 @@ where
         let db_path = config.shell.db_dir(&chain_id);
         let base_dir = config.shell.base_dir;
         let mode = config.tendermint.tendermint_mode;
+        let storage_read_past_height_limit =
+            config.shell.storage_read_past_height_limit;
         if !Path::new(&base_dir).is_dir() {
             std::fs::create_dir(&base_dir)
                 .expect("Creating directory for Anoma should not fail");
@@ -451,6 +455,7 @@ where
                 tx_wasm_cache_dir,
                 tx_wasm_compilation_cache as usize,
             ),
+            storage_read_past_height_limit,
             proposal_data: HashSet::new(),
             // TODO: config event log params
             event_log: EventLog::default(),
@@ -705,44 +710,6 @@ where
         response
     }
 
-    /// Simulate validation and application of a transaction.
-    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
-        let mut response = response::Query::default();
-        let mut gas_meter = BlockGasMeter::default();
-        let mut write_log = WriteLog::default();
-        let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
-        let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
-        match Tx::try_from(tx_bytes) {
-            Ok(tx) => {
-                match protocol::apply_wasm_tx(
-                    tx,
-                    tx_bytes.len(),
-                    ShellParams {
-                        block_gas_meter: &mut gas_meter,
-                        write_log: &mut write_log,
-                        storage: &self.storage,
-                        vp_wasm_cache: &mut vp_wasm_cache,
-                        tx_wasm_cache: &mut tx_wasm_cache,
-                    },
-                )
-                .map_err(Error::TxApply)
-                {
-                    Ok(result) => response.info = result.to_string(),
-                    Err(error) => {
-                        response.code = 1;
-                        response.log = format!("{}", error);
-                    }
-                }
-                response
-            }
-            Err(err) => {
-                response.code = 1;
-                response.log = format!("{}", Error::TxDecoding(err));
-                response
-            }
-        }
-    }
-
     /// Lookup a validator's keypair for their established account from their
     /// wallet. If the node is not validator, this function returns None
     #[allow(dead_code)]
@@ -779,6 +746,23 @@ where
     }
 }
 
+impl<'a, D, H> From<&'a mut Shell<D, H>>
+    for ShellParams<'a, D, H, namada::vm::WasmCacheRwAccess>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    fn from(shell: &'a mut Shell<D, H>) -> Self {
+        Self {
+            block_gas_meter: &mut shell.gas_meter,
+            write_log: &mut shell.write_log,
+            storage: &shell.storage,
+            vp_wasm_cache: &mut shell.vp_wasm_cache,
+            tx_wasm_cache: &mut shell.tx_wasm_cache,
+        }
+    }
+}
+
 /// Helper functions and types for writing unit tests
 /// for the shell
 #[cfg(test)]
@@ -791,7 +775,7 @@ mod test_utils {
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::traits::Sha256Hasher;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree};
-    use namada::types::address::{xan, EstablishedAddressGen};
+    use namada::types::address::{nam, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -1091,7 +1075,7 @@ mod test_utils {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: xan(),
+                token: nam(),
             },
             &keypair,
             Epoch(0),
