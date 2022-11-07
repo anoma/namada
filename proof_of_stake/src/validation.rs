@@ -59,10 +59,10 @@ where
     MissingNewValidatorCommissionRate(u64),
     #[error("Invalid validator commission rate update in epoch {0}")]
     InvalidValidatorCommissionRateUpdate(u64),
-    #[error("Unexpectedly missing total deltas value for validator {0}")]
-    MissingValidatorTotalDeltas(Address),
-    #[error("The sum of total deltas for validator {0} are negative")]
-    NegativeValidatorTotalDeltasSum(Address),
+    #[error("Unexpectedly missing deltas value for validator {0}")]
+    MissingValidatorDeltas(Address),
+    #[error("The sum of deltas for validator {0} is negative")]
+    NegativeValidatorDeltasSum(Address),
     #[error("Unexpectedly missing balance value")]
     MissingBalance,
     #[error("Last update should be equal to the current epoch")]
@@ -434,7 +434,7 @@ where
     // Check that all bonds also have a total deltas update
     for validator in bond_delta.keys() {
         if !total_deltas.contains_key(validator) {
-            errors.push(Error::MissingValidatorTotalDeltas(validator.clone()))
+            errors.push(Error::MissingValidatorDeltas(validator.clone()))
         }
     }
     // Check that all positive unbond deltas also have a total deltas update.
@@ -444,7 +444,7 @@ where
         if *delta > TokenChange::default()
             && !total_deltas.contains_key(validator)
         {
-            errors.push(Error::MissingValidatorTotalDeltas(validator.clone()));
+            errors.push(Error::MissingValidatorDeltas(validator.clone()));
         }
     }
 
@@ -998,7 +998,7 @@ where
                         address,
                         data,
                     ),
-                    ValidatorDeltas(data) => Self::validator_total_deltas(
+                    ValidatorDeltas(data) => Self::validator_deltas(
                         constants,
                         errors,
                         total_deltas,
@@ -1195,7 +1195,7 @@ where
         }
     }
 
-    fn validator_total_deltas(
+    fn validator_deltas(
         constants: &Constants,
         errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
         total_deltas: &mut HashMap<Address, TokenChange>,
@@ -1292,7 +1292,7 @@ where
                     }
                 }
                 if post_deltas_sum < TokenChange::default() {
-                    errors.push(Error::NegativeValidatorTotalDeltasSum(
+                    errors.push(Error::NegativeValidatorDeltasSum(
                         address.clone(),
                     ))
                 }
@@ -1343,7 +1343,7 @@ where
                     }
                 }
                 if deltas < TokenChange::default() {
-                    errors.push(Error::NegativeValidatorTotalDeltasSum(
+                    errors.push(Error::NegativeValidatorDeltasSum(
                         address.clone(),
                     ))
                 }
@@ -1356,7 +1356,7 @@ where
                 validator.has_total_deltas = true;
             }
             (Some(_), None) => {
-                errors.push(Error::MissingValidatorTotalDeltas(address))
+                errors.push(Error::MissingValidatorDeltas(address))
             }
             (None, None) => {}
         }
