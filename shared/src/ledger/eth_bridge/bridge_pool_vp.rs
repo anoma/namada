@@ -25,7 +25,7 @@ use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::proto::SignedTxData;
-use crate::types::address::{nam, wnam, Address, InternalAddress};
+use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
@@ -1204,7 +1204,7 @@ mod test_bridge_pool_vp {
         let storage = setup_storage();
         let tx = Tx::new(vec![], None);
         let eb_account_key =
-            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
+            balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
