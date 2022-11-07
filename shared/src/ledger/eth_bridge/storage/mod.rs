@@ -4,7 +4,9 @@ pub mod vote_tallies;
 pub mod wrapped_erc20s;
 
 use super::ADDRESS;
+use crate::types::address::nam;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
+use crate::types::token::balance_key;
 
 /// Sub-key for storing the minimum confirmations parameter
 pub const MIN_CONFIRMATIONS_SUBKEY: &str = "min_confirmations";
@@ -20,9 +22,15 @@ pub fn prefix() -> Key {
     Key::from(ADDRESS.to_db_key())
 }
 
+/// The key to the escrow of the VP.
+pub fn escrow_key() -> Key {
+    balance_key(&nam(), &ADDRESS)
+}
+
 /// Returns whether a key belongs to this account or not
 pub fn is_eth_bridge_key(key: &Key) -> bool {
-    matches!(key.segments.get(0), Some(first_segment) if first_segment == &ADDRESS.to_db_key())
+    key == &escrow_key()
+        || matches!(key.segments.get(0), Some(first_segment) if first_segment == &ADDRESS.to_db_key())
 }
 
 /// Storage key for the minimum confirmations parameter.
