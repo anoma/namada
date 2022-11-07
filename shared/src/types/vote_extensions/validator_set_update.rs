@@ -9,8 +9,8 @@ use num_rational::Ratio;
 use crate::ledger::pos::types::VotingPower;
 use crate::proto::Signed;
 use crate::types::address::Address;
+use crate::types::eth_abi::{AbiEncode, Encode, Token};
 use crate::types::ethereum_events::{EthAddress, Uint};
-use crate::types::keccak::encode::{AbiEncode, Encode, Token};
 use crate::types::keccak::KeccakHash;
 use crate::types::key::common::{self, Signature};
 use crate::types::storage::BlockHeight;
@@ -307,7 +307,7 @@ mod tag {
 
     use super::{bheight_to_token, Vext, VotingPowersMapExt};
     use crate::proto::SignedSerialize;
-    use crate::types::keccak::encode::{AbiEncode, Encode, Token};
+    use crate::types::eth_abi::{AbiEncode, Encode, Token};
     use crate::types::keccak::KeccakHash;
 
     /// Tag type that indicates we should use [`AbiEncode`]
