@@ -64,6 +64,14 @@ pub enum SendValsetUpd {
 /// Methods used to query blockchain state, such as the currently
 /// active set of validators.
 pub trait QueriesExt {
+    /// TODO: when Rust 1.65 becomes available in Namada, we should return this
+    /// iterator type from [`QueriesExt::get_active_eth_addresses`], to
+    /// avoid a heap allocation; `F` will be the closure used to process the
+    /// iterator we currently return in the `Storage` impl
+    // ```ignore
+    // type ActiveEthAddressesIter<'db, F>: Iterator<(EthAddrBook, Address, VotingPower)>;
+    // ```
+
     /// Get the set of active validators for a given epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
     fn get_active_validators(
