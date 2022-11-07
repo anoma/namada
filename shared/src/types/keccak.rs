@@ -112,11 +112,10 @@ pub mod encode {
 
     use super::*;
 
-    /// A container for data types that are able to be `encode`
-    /// or `encodePacked` Ethereum ABI-encoded.
+    /// A container for data types that are able to be Ethereum ABI-encoded.
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     #[repr(transparent)]
-    pub struct EncodeCell<T> {
+    pub struct EncodeCell<T: ?Sized> {
         /// ABI-encoded value of type `T`.
         encoded_data: Vec<u8>,
         /// Indicate we do not own values of type `T`.
@@ -133,7 +132,10 @@ pub mod encode {
         where
             T: Encode<N>,
         {
-            let encoded_data = value.encode();
+            let encoded_data = {
+                let tokens = value.tokenize();
+                ethabi::encode(tokens.as_slice())
+            };
             Self {
                 encoded_data,
                 _marker: PhantomData,
@@ -147,21 +149,20 @@ pub mod encode {
     }
 
     /// Contains a method to encode data to a format compatible with Ethereum.
-    pub trait Encode<const N: usize> {
+    pub trait Encode<const N: usize>: Sized {
         /// Encodes a struct into a sequence of ABI
         /// [`Token`] instances.
         fn tokenize(&self) -> [Token; N];
 
-        /// Returns the encoded [`Token`] instances.
-        fn encode(&self) -> Vec<u8> {
-            let tokens = self.tokenize();
-            ethabi::encode(tokens.as_slice())
+        /// Returns the encoded [`Token`] instances, in a type-safe enclosure.
+        fn encode(&self) -> EncodeCell<Self> {
+            EncodeCell::new(self)
         }
 
         /// Encodes a slice of [`Token`] instances, and returns the
         /// keccak hash of the encoded string.
         fn keccak256(&self) -> KeccakHash {
-            keccak_hash(self.encode().as_slice())
+            keccak_hash(self.encode().into_inner().as_slice())
         }
 
         /// Encodes a slice of [`Token`] instances, and returns the
@@ -171,7 +172,7 @@ pub mod encode {
             let mut output = [0; 32];
 
             let eth_message = {
-                let message = self.encode();
+                let message = self.encode().into_inner();
 
                 let mut eth_message =
                     format!("\x19Ethereum Signed Message:\n{}", message.len())
@@ -218,7 +219,7 @@ pub mod encode {
                 Token::Uint(U256::from(42u64)),
                 Token::String("test".into()),
             ]);
-            assert_eq!(expected, got);
+            assert_eq!(expected, got.into_inner());
         }
 
         /// Sanity check our keccak hash implementation.

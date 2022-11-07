@@ -715,7 +715,8 @@ mod test {
             // TODO: Use a real nonce
             nonce: 0.into(),
         }
-        .encode();
+        .encode()
+        .into_inner();
         assert_eq!(proof, resp.data.into_inner());
     }
 
