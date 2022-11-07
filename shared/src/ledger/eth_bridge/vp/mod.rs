@@ -454,7 +454,7 @@ mod tests {
 
         // setup a user with a balance
         let balance_key = balance_key(
-            &xan(),
+            &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         storage
@@ -628,7 +628,7 @@ mod tests {
         let storage = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
-            &xan(),
+            &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         writelog
@@ -639,7 +639,7 @@ mod tests {
             .expect("Test failed");
 
         // credit the balance to the escrow
-        let escrow_key = balance_key(&xan(), &super::super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
         writelog
             .write(
                 &escrow_key,
@@ -671,7 +671,7 @@ mod tests {
         let storage = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
-            &xan(),
+            &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         writelog
@@ -682,7 +682,7 @@ mod tests {
             .expect("Test failed");
 
         // do not credit the balance to the escrow
-        let escrow_key = balance_key(&xan(), &super::super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
         writelog
             .write(
                 &escrow_key,
@@ -715,7 +715,7 @@ mod tests {
         let storage = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
-            &xan(),
+            &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         writelog
@@ -726,7 +726,7 @@ mod tests {
             .expect("Test failed");
 
         // credit the balance to the escrow
-        let escrow_key = balance_key(&xan(), &super::super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
         writelog
             .write(
                 &escrow_key,
