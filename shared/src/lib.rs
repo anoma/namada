@@ -7,12 +7,13 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 #[cfg(not(feature = "abcipp"))]
-pub use {ibc, ibc_proto, tendermint, tendermint_proto};
+pub use {ibc, ibc_proto, tendermint, tendermint_proto, tendermint_rpc};
 #[cfg(feature = "abcipp")]
 pub use {
     ibc_abcipp as ibc, ibc_proto_abcipp as ibc_proto,
     tendermint_abcipp as tendermint,
     tendermint_proto_abcipp as tendermint_proto,
+    tendermint_rpc_abcipp as tendermint_rpc,
 };
 
 pub mod bytes;

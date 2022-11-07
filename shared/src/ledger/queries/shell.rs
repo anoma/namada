@@ -3,6 +3,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use tendermint::merkle::proof::Proof;
+use tendermint_proto::crypto::{ProofOp, ProofOps};
 
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
