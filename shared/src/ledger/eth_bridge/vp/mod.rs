@@ -65,7 +65,7 @@ where
         &self,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool, Error> {
-        let escrow_key = balance_key(&xan(), &super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &super::ADDRESS);
         let escrow_pre: Amount = if let Ok(Some(bytes)) =
             self.ctx.read_bytes_pre(&escrow_key)
         {

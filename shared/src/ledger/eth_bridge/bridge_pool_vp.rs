@@ -24,7 +24,7 @@ use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::proto::SignedTxData;
-use crate::types::address::{wnam, nam, Address, InternalAddress};
+use crate::types::address::{nam, wnam, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
@@ -1067,7 +1067,7 @@ mod test_bridge_pool_vp {
         let mut write_log = new_writelog();
         // initialize the eth bridge balance to 0
         let eb_account_key =
-            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
+            balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
         write_log
             .write(
                 &eb_account_key,
@@ -1109,7 +1109,7 @@ mod test_bridge_pool_vp {
         };
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
-        let account_key = balance_key(&xan(), &bertha_address());
+        let account_key = balance_key(&nam(), &bertha_address());
         write_log
             .write(
                 &account_key,
@@ -1118,7 +1118,7 @@ mod test_bridge_pool_vp {
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        let bp_account_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         write_log
             .write(
                 &bp_account_key,
@@ -1169,7 +1169,7 @@ mod test_bridge_pool_vp {
         let mut write_log = new_writelog();
         // initialize the eth bridge balance to 0
         let eb_account_key =
-            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
+            balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
         write_log
             .write(
                 &eb_account_key,
@@ -1211,7 +1211,7 @@ mod test_bridge_pool_vp {
         };
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
-        let account_key = balance_key(&xan(), &bertha_address());
+        let account_key = balance_key(&nam(), &bertha_address());
         write_log
             .write(
                 &account_key,
@@ -1220,7 +1220,7 @@ mod test_bridge_pool_vp {
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        let bp_account_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         write_log
             .write(
                 &bp_account_key,
@@ -1271,7 +1271,7 @@ mod test_bridge_pool_vp {
         let mut write_log = new_writelog();
         // initialize the eth bridge balance to 0
         let eb_account_key =
-            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
+            balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
         write_log
             .write(
                 &eb_account_key,
@@ -1280,7 +1280,7 @@ mod test_bridge_pool_vp {
             .expect("Test failed");
         // initialize the gas payers account
         let gas_payer_balance_key =
-            balance_key(&xan(), &established_address_1());
+            balance_key(&nam(), &established_address_1());
         write_log
             .write(
                 &gas_payer_balance_key,
@@ -1324,7 +1324,7 @@ mod test_bridge_pool_vp {
         };
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
-        let account_key = balance_key(&xan(), &bertha_address());
+        let account_key = balance_key(&nam(), &bertha_address());
         write_log
             .write(
                 &account_key,
@@ -1341,7 +1341,7 @@ mod test_bridge_pool_vp {
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        let bp_account_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         write_log
             .write(
                 &bp_account_key,
