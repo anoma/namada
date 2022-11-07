@@ -21,8 +21,8 @@ use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, VerifySigError,
 };
+use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::EthAddress;
-use crate::types::keccak::encode::Encode;
 
 /// The provided constant is for a traditional
 /// signature on this curve. For Ethereum, an extra byte is included

@@ -11,11 +11,11 @@ use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, MerkleTree, StoreRef, StoreType, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
+use crate::types::eth_abi::EncodeCell;
 use crate::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
 };
 use crate::types::hash::Hash;
-use crate::types::keccak::encode::EncodeCell;
 use crate::types::storage::MembershipProof::BridgePool;
 use crate::types::storage::{self, Epoch, MerkleValue, PrefixValue};
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
@@ -421,12 +421,12 @@ mod test {
     use crate::ledger::storage_api::{self, StorageWrite};
     use crate::proto::Tx;
     use crate::types::address::Address;
+    use crate::types::eth_abi::Encode;
     use crate::types::eth_bridge_pool::{
         GasFee, MultiSignedMerkleRoot, PendingTransfer, RelayProof,
         TransferToEthereum,
     };
     use crate::types::ethereum_events::EthAddress;
-    use crate::types::keccak::encode::Encode;
     use crate::types::{address, token};
 
     const TX_NO_OP_WASM: &str = "../wasm_for_tests/tx_no_op.wasm";
@@ -715,7 +715,8 @@ mod test {
             // TODO: Use a real nonce
             nonce: 0.into(),
         }
-        .encode();
+        .encode()
+        .into_inner();
         assert_eq!(proof, resp.data.into_inner());
     }
 
