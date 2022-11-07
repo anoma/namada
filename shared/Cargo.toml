@@ -60,12 +60,17 @@ tendermint-rpc = [
   "async-client",
   "dep:tendermint-rpc",
 ]
+tendermint-rpc-abcipp = [
+  "async-client",
+  "dep:tendermint-rpc-abcipp",
+]
 
 abcipp = [
   "ibc-proto-abcipp",
   "ibc-abcipp",
   "tendermint-abcipp",
-  "tendermint-proto-abcipp"
+  "tendermint-proto-abcipp",
+  "tendermint-rpc-abcipp",
 ]
 
 abciplus = [
@@ -73,6 +78,7 @@ abciplus = [
   "ibc-proto",
   "tendermint",
   "tendermint-proto",
+  "tendermint-rpc",
 ]
 
 [dependencies]

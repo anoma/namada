@@ -54,7 +54,7 @@ pub async fn query_epoch(args: args::Query) -> Epoch {
 /// Query the last committed block
 pub async fn query_block(
     args: args::Query,
-) -> tendermint_rpc::endpoint::block::Response {
+) -> crate::facade::tendermint_rpc::endpoint::block::Response {
     let client = HttpClient::new(args.ledger_address).unwrap();
     let response = client.latest_block().await.unwrap();
     println!(

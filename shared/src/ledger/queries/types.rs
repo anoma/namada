@@ -1,7 +1,6 @@
-use tendermint_proto::crypto::ProofOps;
-
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api;
+use crate::tendermint_proto::crypto::ProofOps;
 use crate::types::storage::BlockHeight;
 #[cfg(feature = "wasm-runtime")]
 use crate::vm::wasm::{TxCache, VpCache};
@@ -141,12 +140,12 @@ impl RequestQuery {
     /// spec. A negative block height will cause an error.
     pub fn try_from_tm<D, H>(
         storage: &Storage<D, H>,
-        tendermint_proto::abci::RequestQuery {
+        crate::tendermint_proto::abci::RequestQuery {
             data,
             path,
             height,
             prove,
-        }: tendermint_proto::abci::RequestQuery,
+        }: crate::tendermint_proto::abci::RequestQuery,
     ) -> Result<Self, String>
     where
         D: DB + for<'iter> DBIter<'iter>,

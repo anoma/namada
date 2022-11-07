@@ -1,10 +1,10 @@
 use borsh::BorshSerialize;
-use tendermint_proto::crypto::{ProofOp, ProofOps};
 
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
+use crate::tendermint_proto::crypto::{ProofOp, ProofOps};
 use crate::types::storage::{self, Epoch, PrefixValue};
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 use crate::types::transaction::TxResult;
