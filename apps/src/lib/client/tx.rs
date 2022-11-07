@@ -554,6 +554,7 @@ impl ShieldedContext {
 
     /// Save this shielded context into its associated context directory
     pub fn save(&self) -> std::io::Result<()> {
+        // TODO: use mktemp crate?
         let tmp_path = self.context_dir.join(TMP_FILE_NAME);
         {
             // First serialize the shielded context into a temporary file.

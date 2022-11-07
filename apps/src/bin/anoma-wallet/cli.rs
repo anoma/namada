@@ -124,6 +124,7 @@ fn spending_keys_list(
             let spending_key_opt = known_spend_keys.get(&alias);
             // If this alias is associated with a spending key, indicate whether
             // or not the spending key is encrypted
+            // TODO: consider turning if let into match
             if let Some(spending_key) = spending_key_opt {
                 if spending_key.is_encrypted() {
                     writeln!(w, " (encrypted):")

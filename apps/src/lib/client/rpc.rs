@@ -300,6 +300,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
             }
         }
         // Then display the shielded changes afterwards
+        // TODO: turn this to a display impl
         for (account, amt) in shielded_accounts {
             if fvk_map.contains_key(&account) {
                 print!("  {}:", fvk_map[&account]);
