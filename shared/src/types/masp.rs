@@ -368,6 +368,15 @@ impl TransferSource {
     }
 }
 
+impl Display for TransferSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Address(x) => x.fmt(f),
+            Self::ExtendedSpendingKey(x) => x.fmt(f),
+        }
+    }
+}
+
 /// Represents a target for the funds of a transfer
 #[derive(Debug, Clone)]
 pub enum TransferTarget {
@@ -401,6 +410,15 @@ impl TransferTarget {
         match self {
             Self::Address(x) => Some(x.clone()),
             _ => None,
+        }
+    }
+}
+
+impl Display for TransferTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Address(x) => x.fmt(f),
+            Self::PaymentAddress(x) => x.fmt(f),
         }
     }
 }

@@ -296,6 +296,9 @@ pub trait DBIter<'iter> {
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// reverse ordered by the storage keys.
     fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
+
+    /// Read results subspace key value pairs from the DB
+    fn iter_results(&'iter self) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.
@@ -505,6 +508,11 @@ where
         prefix: &Key,
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
         (self.db.rev_iter_prefix(prefix), prefix.len() as _)
+    }
+
+    /// Returns a prefix iterator and the gas cost
+    pub fn iter_results(&self) -> (<D as DBIter<'_>>::PrefixIter, u64) {
+        (self.db.iter_results(), 0)
     }
 
     /// Write a value to the specified subspace and returns the gas cost and the
