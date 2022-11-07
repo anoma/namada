@@ -1434,6 +1434,7 @@ dependencies = [
  "namada_tx_prelude",
  "namada_vp_prelude",
  "prost",
+ "rust_decimal",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",

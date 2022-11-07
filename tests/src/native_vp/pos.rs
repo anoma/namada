@@ -400,6 +400,7 @@ mod tests {
                     ValidPosAction::InitValidator {
                         address,
                         consensus_key,
+                        commission_rate: _,
                     } => {
                         !state.is_validator(address)
                             && !state.is_used_key(consensus_key)
@@ -578,6 +579,7 @@ pub mod testing {
     use namada_tx_prelude::proof_of_stake::epoched::{
         DynEpochOffset, Epoched, EpochedDelta,
     };
+    use namada_tx_prelude::proof_of_stake::parameters::testing::arb_rate;
     use namada_tx_prelude::proof_of_stake::types::{
         Bond, Unbond, ValidatorState, VotingPower, VotingPowerDelta,
         WeightedValidator,
@@ -587,6 +589,7 @@ pub mod testing {
     };
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
+    use rust_decimal::Decimal;
 
     use crate::tx::{self, tx_host_env};
 
@@ -611,6 +614,7 @@ pub mod testing {
         InitValidator {
             address: Address,
             consensus_key: PublicKey,
+            commission_rate: Decimal,
         },
         Bond {
             amount: token::Amount,
@@ -700,6 +704,10 @@ pub mod testing {
             #[derivative(Debug = "ignore")]
             consensus_key: PublicKey,
         },
+        ValidatorCommissionRate {
+            address: Address,
+            rate: Decimal,
+        },
     }
 
     pub fn arb_valid_pos_action(
@@ -717,11 +725,13 @@ pub mod testing {
         let init_validator = (
             address::testing::arb_established_address(),
             key::testing::arb_common_keypair(),
+            arb_rate(),
         )
-            .prop_map(|(addr, consensus_key)| {
+            .prop_map(|(addr, consensus_key, commission_rate)| {
                 ValidPosAction::InitValidator {
                     address: Address::Established(addr),
                     consensus_key: consensus_key.ref_to(),
+                    commission_rate,
                 }
             });
 
@@ -869,6 +879,7 @@ pub mod testing {
                 ValidPosAction::InitValidator {
                     address,
                     consensus_key,
+                    commission_rate,
                 } => {
                     let offset = DynEpochOffset::PipelineLen;
                     vec![
@@ -902,9 +913,13 @@ pub mod testing {
                             offset,
                         },
                         PosStorageChange::ValidatorVotingPower {
-                            validator: address,
+                            validator: address.clone(),
                             vp_delta: 0,
                             offset: Either::Left(offset),
+                        },
+                        PosStorageChange::ValidatorCommissionRate {
+                            address,
+                            rate: commission_rate,
                         },
                     ]
                 }
@@ -1486,6 +1501,22 @@ pub mod testing {
                     tx::ctx().read_unbond(&bond_id).unwrap().unwrap();
                 unbonds.delete_current(current_epoch, params);
                 tx::ctx().write_unbond(&bond_id, unbonds).unwrap();
+            }
+            // TODO: figure this out
+            PosStorageChange::ValidatorCommissionRate { address, rate } => {
+                let rates = tx::ctx()
+                    .read_validator_commission_rate(&address)
+                    .unwrap()
+                    .map(|mut rates| {
+                        rates.set(rate, current_epoch, params);
+                        rates
+                    })
+                    .unwrap_or_else(|| {
+                        Epoched::init_at_genesis(rate, current_epoch)
+                    });
+                tx::ctx()
+                    .write_validator_commission_rate(&address, rates)
+                    .unwrap();
             }
         }
     }
