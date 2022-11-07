@@ -359,8 +359,7 @@ where
                     // check that the fee payer has sufficient balance
                     let balance = self
                         .storage
-                        .get_balance(&wrapper.fee.token, &wrapper.fee_payer())
-                        .unwrap_or_default();
+                        .get_balance(&wrapper.fee.token, &wrapper.fee_payer());
 
                     if wrapper.fee.amount <= balance {
                         TxResult {
