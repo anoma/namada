@@ -474,7 +474,7 @@ fn masp_txs_and_queries() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: 60,
+                min_duration: 3600,
                 ..genesis.parameters
             };
             GenesisConfig {
@@ -613,7 +613,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--ledger-address",
                 &validator_one_rpc,
             ],
-            "ChangeIsNegative",
+            "is lower than the amount to be transferred and fees",
         ),
         // 9. Spend 6 BTC at SK(A) to PA(B)
         (

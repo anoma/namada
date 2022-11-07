@@ -129,7 +129,6 @@ pub async fn query_tx_deltas(
     query_token: &Option<Address>,
 ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, TransferDelta, TransactionDelta)>
 {
-    use masp_primitives::transaction::components::Amount;
     const TXS_PER_PAGE: u8 = 100;
     // Connect to the Tendermint server holding the transactions
     let client = HttpClient::new(ledger_address.clone()).unwrap();
