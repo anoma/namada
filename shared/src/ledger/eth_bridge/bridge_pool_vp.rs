@@ -24,7 +24,7 @@ use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::proto::SignedTxData;
-use crate::types::address::{wnam, xan, Address, InternalAddress};
+use crate::types::address::{wnam, nam, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
@@ -50,7 +50,7 @@ where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
-    let escrow_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+    let escrow_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
     storage
         .write(
             &escrow_key,
@@ -84,7 +84,7 @@ where
     /// Get the change in the balance of an account
     /// associated with an address
     fn account_balance_delta(&self, address: &Address) -> Option<SignedAmount> {
-        let account_key = balance_key(&xan(), address);
+        let account_key = balance_key(&nam(), address);
         let before: Amount = (&self.ctx)
             .read_pre_value(&account_key)
             .unwrap_or_else(|error| {
@@ -492,9 +492,9 @@ mod test_bridge_pool_vp {
         // get the balance keys
         let token_key =
             wrapped_erc20s::Keys::from(&ASSET).balance(&balance.owner);
-        let account_key = balance_key(&xan(), &balance.owner);
+        let account_key = balance_key(&nam(), &balance.owner);
 
-        // update the balance of xan
+        // update the balance of nam
         let new_balance = match gas_delta {
             SignedAmount::Positive(amount) => balance.balance + amount,
             SignedAmount::Negative(amount) => balance.balance - amount,

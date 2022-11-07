@@ -2,7 +2,7 @@
 
 use namada::ledger::governance::storage;
 use namada::ledger::governance::vp::ADDRESS as governance_address;
-use namada::types::address::xan as m1t;
+use namada::types::address::nam;
 use namada::types::token::Amount;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -59,7 +59,7 @@ pub fn init_proposal(ctx: &mut Ctx, data: InitProposalData) -> TxResult {
         ctx,
         &data.author,
         &governance_address,
-        &m1t(),
+        &nam(),
         None,
         min_proposal_funds,
     )

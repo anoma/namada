@@ -54,6 +54,9 @@ mod tests {
     use namada::ledger::storage::types;
     use namada::types::chain::ChainId;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use proptest::test_runner::Config;
     use tempfile::TempDir;
 
     use super::*;
@@ -210,5 +213,111 @@ mod tests {
             storage.validity_predicate(&addr).expect("VP load failed");
         assert_eq!(vp.expect("no VP"), vp1);
         assert_eq!(gas, (key.len() + vp1.len()) as u64);
+    }
+
+    proptest! {
+        #![proptest_config(Config {
+            cases: 5,
+            .. Config::default()
+        })]
+        #[test]
+        fn test_read_with_height(blocks_write_value in vec(any::<bool>(), 20)) {
+            test_read_with_height_aux(blocks_write_value).unwrap()
+        }
+    }
+
+    /// Test reads at arbitrary block heights.
+    ///
+    /// We generate `blocks_write_value` with random bools as the input to this
+    /// function, then:
+    ///
+    /// 1. For each `blocks_write_value`, write the current block height if true
+    ///    or delete otherwise.
+    /// 2. We try to read from these heights to check that we get back expected
+    ///    value if was written at that block height or `None` if it was
+    ///    deleted.
+    /// 3. We try to read past the last height and we expect the last written
+    ///    value, if any.
+    fn test_read_with_height_aux(
+        blocks_write_value: Vec<bool>,
+    ) -> namada::ledger::storage::Result<()> {
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
+        let mut storage =
+            PersistentStorage::open(db_path.path(), ChainId::default(), None);
+
+        // 1. For each `blocks_write_value`, write the current block height if
+        // true or delete otherwise.
+        // We `.enumerate()` height (starting from `0`)
+        let blocks_write_value = blocks_write_value
+            .into_iter()
+            .enumerate()
+            .map(|(height, write_value)| {
+                println!(
+                    "At height {height} will {}",
+                    if write_value { "write" } else { "delete" }
+                );
+                (BlockHeight::from(height as u64), write_value)
+            });
+
+        let key = Key::parse("key").expect("cannot parse the key string");
+        for (height, write_value) in blocks_write_value.clone() {
+            let hash = BlockHash::default();
+            storage.begin_block(hash, height)?;
+            assert_eq!(
+                height, storage.block.height,
+                "sanity check - height is as expected"
+            );
+
+            if write_value {
+                let value_bytes = types::encode(&storage.block.height);
+                storage.write(&key, value_bytes)?;
+            } else {
+                storage.delete(&key)?;
+            }
+            storage.commit()?;
+        }
+
+        // 2. We try to read from these heights to check that we get back
+        // expected value if was written at that block height or
+        // `None` if it was deleted.
+        for (height, write_value) in blocks_write_value.clone() {
+            let (value_bytes, _gas) = storage.read_with_height(&key, height)?;
+            if write_value {
+                let value_bytes = value_bytes.unwrap_or_else(|| {
+                    panic!("Couldn't read from height {height}")
+                });
+                let value: BlockHeight = types::decode(value_bytes).unwrap();
+                assert_eq!(value, height);
+            } else if value_bytes.is_some() {
+                let value: BlockHeight =
+                    types::decode(value_bytes.unwrap()).unwrap();
+                panic!("Expected no value at height {height}, got {}", value,);
+            }
+        }
+
+        // 3. We try to read past the last height and we expect the last written
+        // value, if any.
+
+        // If height is >= storage.last_height, it should read the latest state.
+        let is_last_write = blocks_write_value.last().unwrap().1;
+
+        // The upper bound is arbitrary.
+        for height in storage.last_height.0..storage.last_height.0 + 10 {
+            let height = BlockHeight::from(height);
+            let (value_bytes, _gas) = storage.read_with_height(&key, height)?;
+            if is_last_write {
+                let value_bytes =
+                    value_bytes.expect("Should have been written");
+                let value: BlockHeight = types::decode(value_bytes).unwrap();
+                assert_eq!(value, storage.last_height);
+            } else if value_bytes.is_some() {
+                let value: BlockHeight =
+                    types::decode(value_bytes.unwrap()).unwrap();
+                panic!("Expected no value at height {height}, got {}", value,);
+            }
+        }
+
+        Ok(())
     }
 }
