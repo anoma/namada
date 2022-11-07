@@ -169,17 +169,19 @@ pub mod cmds {
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
+                // Ethereum bridge pool
+                .subcommand(AddToEthBridgePool::def().display_order(3))
                 // Queries
-                .subcommand(QueryEpoch::def().display_order(3))
-                .subcommand(QueryBalance::def().display_order(3))
-                .subcommand(QueryBonds::def().display_order(3))
-                .subcommand(QueryVotingPower::def().display_order(3))
-                .subcommand(QuerySlashes::def().display_order(3))
-                .subcommand(QueryResult::def().display_order(3))
-                .subcommand(QueryRawBytes::def().display_order(3))
-                .subcommand(QueryProposal::def().display_order(3))
-                .subcommand(QueryProposalResult::def().display_order(3))
-                .subcommand(QueryProtocolParameters::def().display_order(3))
+                .subcommand(QueryEpoch::def().display_order(4))
+                .subcommand(QueryBalance::def().display_order(4))
+                .subcommand(QueryBonds::def().display_order(4))
+                .subcommand(QueryVotingPower::def().display_order(4))
+                .subcommand(QuerySlashes::def().display_order(4))
+                .subcommand(QueryResult::def().display_order(4))
+                .subcommand(QueryRawBytes::def().display_order(4))
+                .subcommand(QueryProposal::def().display_order(4))
+                .subcommand(QueryProposalResult::def().display_order(4))
+                .subcommand(QueryProtocolParameters::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -214,6 +216,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
+            let add_to_eth_bridge_pool =
+                Self::parse_with_ctx(matches, AddToEthBridgePool);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -227,6 +231,7 @@ pub mod cmds {
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
+                .or(add_to_eth_bridge_pool)
                 .or(query_epoch)
                 .or(query_balance)
                 .or(query_bonds)
@@ -286,6 +291,7 @@ pub mod cmds {
         Bond(Bond),
         Unbond(Unbond),
         Withdraw(Withdraw),
+        AddToEthBridgePool(AddToEthBridgePool),
         QueryEpoch(QueryEpoch),
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
@@ -1248,8 +1254,6 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
     pub enum EthBridgePool {
-        /// Add a transfer to the pool.
-        AddTransfer(args::EthereumBridgePool),
         /// Construct a proof that a set of transfers is in the pool.
         /// This can be used to relay transfers across the
         /// bridge to Ethereum.
@@ -1260,19 +1264,16 @@ pub mod cmds {
 
     impl Cmd for EthBridgePool {
         fn add_sub(app: App) -> App {
-            app.subcommand(AddToEthBridgePool::def().display_order(1))
-                .subcommand(ConstructProof::def().display_order(1))
+            app.subcommand(ConstructProof::def().display_order(1))
                 .subcommand(QueryEthBridgePool::def().display_order(1))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            let add_to_pool = AddToEthBridgePool::parse(matches)
-                .map(|add| Self::AddTransfer(add.0));
             let construct_proof = ConstructProof::parse(matches)
                 .map(|proof| Self::ConstructProof(proof.0));
             let query_pool = QueryEthBridgePool::parse(matches)
                 .map(|q| Self::QueryPool(q.0));
-            add_to_pool.or(construct_proof).or(query_pool)
+            construct_proof.or(query_pool)
         }
     }
 
@@ -1290,7 +1291,6 @@ pub mod cmds {
                      pool. This pool holds transfers waiting to be relayed to \
                      Ethereum.",
                 )
-                .subcommand(AddToEthBridgePool::def().display_order(1))
                 .subcommand(ConstructProof::def().display_order(1))
                 .subcommand(QueryEthBridgePool::def().display_order(1))
         }
