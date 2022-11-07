@@ -8,9 +8,9 @@ use ethabi::Token;
 use eyre::eyre;
 
 use crate::types::address::{Address, InternalAddress};
+use crate::types::eth_abi::Encode;
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::hash::Hash;
-use crate::types::keccak::encode::Encode;
 use crate::types::keccak::{keccak_hash, KeccakHash};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 

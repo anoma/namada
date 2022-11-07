@@ -62,7 +62,7 @@ It is also critical not to allow cycles. For example, if $\{(A_1, -1), (A_2, 2)\
 
 It may theoretically be possible to implement similar mechanisms with only the existing Spend and Output circuits. For example, a Merkle tree of many Notes could be created with asset generator $[-1] vb_1 + vb_2$ and many different values, allowing anyone to Spend these public Notes, which will only balance if proper amounts of asset type 1 are Spent and asset type 2 are Output.
 
-However, the Nullifier integrity check of the Spend circuit reveals the nullifier of each of these Notes, which removes the privacy of the conversion as the public nullifier is linkable to the allowed conversion. In addition, each Note has a fixed value, preventing arbitrary value conversions.
+However, the Nullifier integrity check of the Spend circuit reveals the nullifier of each of these Notes. This removes the privacy of the conversion as the public nullifier is linkable to the allowed conversion. In addition, each Note has a fixed value, preventing arbitrary value conversions.
 
 ## Conclusion
 

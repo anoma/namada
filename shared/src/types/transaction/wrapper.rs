@@ -337,7 +337,7 @@ pub mod wrapper_tx {
     mod test_wrapper_tx {
         use super::*;
         use crate::proto::SignedTxData;
-        use crate::types::address::xan;
+        use crate::types::address::nam;
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
@@ -360,7 +360,7 @@ pub mod wrapper_tx {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: 10.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &keypair,
                 Epoch(0),
@@ -386,7 +386,7 @@ pub mod wrapper_tx {
             let mut wrapper = WrapperTx::new(
                 Fee {
                     amount: 10.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &gen_keypair(),
                 Epoch(0),
@@ -418,7 +418,7 @@ pub mod wrapper_tx {
             let mut tx = WrapperTx::new(
                 Fee {
                     amount: 10.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &keypair,
                 Epoch(0),

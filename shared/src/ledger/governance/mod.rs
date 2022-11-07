@@ -18,7 +18,7 @@ use self::storage as gov_storage;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{self as ledger_storage};
-use crate::types::address::{xan as m1t, Address, InternalAddress};
+use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token as token_storage;
 use crate::vm::WasmCacheAccess;
@@ -236,7 +236,7 @@ where
             KeyType::COUNTER(vp::validate_counter_key)
         } else if gov_storage::is_parameter_key(value) {
             KeyType::PARAMETER(vp::validate_parameter_key)
-        } else if token_storage::is_balance_key(&m1t(), value).is_some() {
+        } else if token_storage::is_balance_key(&nam(), value).is_some() {
             KeyType::BALANCE(vp::validate_balance_key)
         } else if gov_storage::is_governance_key(value) {
             KeyType::UNKNOWN_GOVERNANCE(vp::validate_unknown_governance_key)

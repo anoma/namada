@@ -2,7 +2,7 @@
 
 - [Introduction](./introduction.md)
 - [Base ledger](./base-ledger.md)
-    - [Consensus](./base-ledger/consensus.md)
+    - [Core Concepts](./base-ledger/core-concepts.md)
     - [Execution](./base-ledger/execution.md)
     - [Governance](./base-ledger/governance.md)
     - [Default account](./base-ledger/default-account.md)

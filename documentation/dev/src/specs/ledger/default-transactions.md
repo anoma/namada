@@ -36,13 +36,13 @@ Attach [UpdateVp](../encoding.md#updatevp) to the `data`.
 
 ### tx_bond
 
-Self-bond `amount` of XAN token from `validator` (without `source`) or delegate to `validator` from `source`.
+Self-bond `amount` of NAM token from `validator` (without `source`) or delegate to `validator` from `source`.
 
 Attach [Bond](../encoding.md#bond) to the `data`.
 
 ### tx_unbond
 
-Unbond self-bonded `amount` of XAN token from the `validator` (without `source`) or unbond delegation from the `source` to the `validator`.
+Unbond self-bonded `amount` of NAM token from the `validator` (without `source`) or unbond delegation from the `source` to the `validator`.
 
 Attach [Bond](../encoding.md#bond) to the `data`.
 
