@@ -70,6 +70,7 @@ abcipp = [
   "ibc-abcipp",
   "tendermint-abcipp",
   "tendermint-proto-abcipp",
+  # it's OK to include the tendermint-rpc feature here, as we aren't currently building wasms with `abcipp`
   "tendermint-rpc-abcipp",
 ]
 
@@ -78,7 +79,6 @@ abciplus = [
   "ibc-proto",
   "tendermint",
   "tendermint-proto",
-  "tendermint-rpc",
 ]
 
 [dependencies]
