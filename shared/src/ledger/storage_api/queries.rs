@@ -71,6 +71,10 @@ pub trait QueriesExt {
     // ```ignore
     // type ActiveEthAddressesIter<'db, F>: Iterator<(EthAddrBook, Address, VotingPower)>;
     // ```
+    // a similar strategy can be used for [`QueriesExt::get_active_validators`]:
+    // ```ignore
+    // type ActiveValidatorsIter<'db, F>: Iterator<WeightedValidator<Address>>;
+    // ```
 
     /// Get the set of active validators for a given epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
