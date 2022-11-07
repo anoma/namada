@@ -56,14 +56,12 @@ use crate::client::tendermint_rpc_types::TxResponse;
 use crate::client::tx::{
     Conversions, PinnedBalanceError, TransactionDelta, TransferDelta,
 };
-use crate::facade::tendermint::abci::Code;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::error::Error as TError;
 use crate::facade::tendermint_rpc::query::Query;
 use crate::facade::tendermint_rpc::{
     Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
 };
-use crate::node::ledger::rpc::Path;
 use namada::types::storage::BlockResults;
 
 /// Query the epoch of the last committed block
@@ -92,30 +90,9 @@ pub async fn query_block(
 /// Query the results of the last committed block
 pub async fn query_results(args: args::Query) -> Vec<BlockResults> {
     let client = HttpClient::new(args.ledger_address).unwrap();
-    let path = Path::Results;
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => {
-            match Vec::<BlockResults>::try_from_slice(&response.value[..]) {
-                Ok(results) => {
-                    return results;
-                }
-
-                Err(err) => {
-                    eprintln!("Error decoding the results value: {}", err)
-                }
-            }
-        }
-        Code::Err(err) => eprintln!(
-            "Error in the query {} (error code {})",
-            response.info, err
-        ),
-    }
-    cli::safe_exit(1)
+    unwrap_client_response(
+        RPC.shell().read_results(&client).await
+    )
 }
 
 /// Obtain the known effects of all accepted shielded and transparent
@@ -2130,30 +2107,9 @@ pub async fn query_conversion(
     masp_primitives::transaction::components::Amount,
     MerklePath<Node>,
 )> {
-    let path = Path::Conversion(asset_type);
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => match BorshDeserialize::try_from_slice(&response.value[..])
-        {
-            Ok(value) => return Some(value),
-            Err(err) => eprintln!("Error decoding the conversion: {}", err),
-        },
-        Code::Err(err) => {
-            if err == 1 {
-                return None;
-            } else {
-                eprintln!(
-                    "Error in the query {} (error code {})",
-                    response.info, err
-                )
-            }
-        }
-    }
-    cli::safe_exit(1)
+    Some(unwrap_client_response(
+        RPC.shell().read_conversion(&client, &asset_type).await
+    ))
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
