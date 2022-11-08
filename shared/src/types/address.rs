@@ -500,7 +500,7 @@ impl Display for InternalAddress {
 }
 
 /// Temporary helper for testing
-pub fn xan() -> Address {
+pub fn nam() -> Address {
     Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").expect("The token address decoding shouldn't fail")
 }
 
@@ -548,7 +548,7 @@ pub const fn wnam() -> EthAddress {
 /// informal currency codes.
 pub fn tokens() -> HashMap<Address, &'static str> {
     vec![
-        (xan(), "XAN"),
+        (nam(), "NAM"),
         (btc(), "BTC"),
         (eth(), "ETH"),
         (dot(), "DOT"),

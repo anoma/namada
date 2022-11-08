@@ -25,7 +25,7 @@ pub use crate::ledger::storage::merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreRef,
     StoreType,
 };
-use crate::ledger::storage::traits::StorageHasher;
+pub use crate::ledger::storage::traits::StorageHasher;
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
@@ -190,11 +190,15 @@ pub trait DB: std::fmt::Debug {
     /// Read the latest value for account subspace key from the DB
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>>;
 
-    /// Read the value for account subspace key at the given height from the DB
+    /// Read the value for account subspace key at the given height from the DB.
+    /// In our `PersistentStorage` (rocksdb), to find a value from arbitrary
+    /// height requires looking for diffs from the given `height`, possibly
+    /// up to the `last_height`.
     fn read_subspace_val_with_height(
         &self,
         key: &Key,
-        _height: BlockHeight,
+        height: BlockHeight,
+        last_height: BlockHeight,
     ) -> Result<Option<Vec<u8>>>;
 
     /// Write the value with the given height and account subspace key to the
@@ -410,10 +414,14 @@ where
         key: &Key,
         height: BlockHeight,
     ) -> Result<(Option<Vec<u8>>, u64)> {
-        if height >= self.get_block_height().0 {
+        if height >= self.last_height {
             self.read(key)
         } else {
-            match self.db.read_subspace_val_with_height(key, height)? {
+            match self.db.read_subspace_val_with_height(
+                key,
+                height,
+                self.last_height,
+            )? {
                 Some(v) => {
                     let gas = key.len() + v.len();
                     Ok((Some(v), gas as _))
@@ -454,7 +462,7 @@ where
         let bytes = value.to_bytes();
         let gas = key.len() + bytes.len();
         let size_diff =
-            self.db.write_subspace_val(self.last_height, key, bytes)?;
+            self.db.write_subspace_val(self.block.height, key, bytes)?;
         Ok((gas as _, size_diff))
     }
 
@@ -467,7 +475,7 @@ where
         if self.has_key(key)?.0 {
             self.block.tree.delete(key)?;
             deleted_bytes_len =
-                self.db.delete_subspace_val(self.last_height, key)?;
+                self.db.delete_subspace_val(self.block.height, key)?;
         }
         let gas = key.len() + deleted_bytes_len as usize;
         Ok((gas as _, deleted_bytes_len))

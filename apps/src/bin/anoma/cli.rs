@@ -46,8 +46,6 @@ fn handle_command(cmd: cli::cmds::Anoma, raw_sub_cmd: String) -> Result<()> {
         | cli::cmds::Anoma::TxCustom(_)
         | cli::cmds::Anoma::TxTransfer(_)
         | cli::cmds::Anoma::TxUpdateVp(_)
-        | cli::cmds::Anoma::TxInitNft(_)
-        | cli::cmds::Anoma::TxMintNft(_)
         | cli::cmds::Anoma::TxInitProposal(_)
         | cli::cmds::Anoma::TxVoteProposal(_) => {
             handle_subcommand("namadac", sub_args)

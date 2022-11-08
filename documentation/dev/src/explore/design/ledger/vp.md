@@ -39,9 +39,9 @@ The Proof-of-Stake slash pool is a simple account with a native VP which can rec
 
 The [fungible token VP](https://github.com/anoma/anoma/tree/master/wasm/wasm_source) allows to associate accounts balances of a specific token under its account.
 
-For illustration, users `Albert` and `Bertha` might hold some amount of token with the address `XAN`. Their balances would be stored in the `XAN`'s storage sub-space under the storage keys `@XAN/balance/@Albert` and `@XAN/balance/@Bertha`, respectively. When `Albert` or `Bertha` attempt to transact with their `XAN` tokens, its validity predicate would be triggered to check:
+For illustration, users `Albert` and `Bertha` might hold some amount of token with the address `NAM`. Their balances would be stored in the `NAM`'s storage sub-space under the storage keys `@NAM/balance/@Albert` and `@NAM/balance/@Bertha`, respectively. When `Albert` or `Bertha` attempt to transact with their `NAM` tokens, its validity predicate would be triggered to check:
 
-- the total supply of `XAN` token is preserved (i.e. inputs = outputs)
+- the total supply of `NAM` token is preserved (i.e. inputs = outputs)
 - the senders (users whose balance has been deducted) are checked that their validity predicate has also been triggered
 
 Note that the fungible token VP doesn't need to know whether any of involved users accepted or rejected the transaction, because if any of the involved users rejects it, the whole transaction will be rejected.

@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::Address;
+use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::{EthAddress, Uint};
-use crate::types::keccak::encode::Encode;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{BlockHeight, DbKeySeg, Key};
 use crate::types::token::Amount;

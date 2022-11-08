@@ -1,10 +1,11 @@
 //! Helpers for writing to storage
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::Result;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, Storage, DB};
-use namada::types::storage;
-use namada::types::token::Amount;
+
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{DBIter, Storage, DB};
+use crate::types::storage;
+use crate::types::token::Amount;
 
 /// Reads the `Amount` from key, applies update then writes it back
 pub fn amount<D, H>(
@@ -43,8 +44,9 @@ where
 mod tests {
     use borsh::{BorshDeserialize, BorshSerialize};
     use eyre::{eyre, Result};
-    use namada::ledger::storage::testing::TestStorage;
-    use namada::types::storage;
+
+    use crate::ledger::storage::testing::TestStorage;
+    use crate::types::storage;
 
     #[test]
     /// Test updating a value

@@ -109,12 +109,13 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         nightly_version: [nightly-2022-05-20]
+        mold_version: [1.6.0]
         make:
           - name: ABCI
             suffix: ''
             cache_key: anoma
             cache_version: v1
-            wait_for: anoma-release-eth (ubuntu-latest, ABCI Release build, anoma-e2e-release, v1)
+            wait_for: anoma-release-eth (ubuntu-latest, 1.6.0, ABCI Release build, anoma-e2e-release, v1)
             tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
 
     env:
@@ -177,10 +178,18 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
+      - name: Install mold linker
+        run: |
+          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
       - name: Build
         run: make build${{ matrix.make.suffix }}
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Build test
         run: make build-test${{ matrix.make.suffix }}
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
@@ -188,8 +197,10 @@ jobs:
           path: ./wasm
       - name: Run unit test
         run: make test-unit${{ matrix.make.suffix }}
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Wait for release binaries
-        uses: lewagon/wait-on-check-action@master
+        uses: lewagon/wait-on-check-action@@v1.2.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           check-name: ${{ matrix.make.wait_for }}
@@ -228,10 +239,11 @@ jobs:
           ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: 20
           ANOMA_E2E_USE_PREBUILT_BINARIES: "true"
           ANOMA_E2E_KEEP_TEMP: "true"
-          ENV_VAR_TM_STDOUT: "false"
+          ANOMA_TM_STDOUT: "false"
           ANOMA_LOG_COLOR: "false"
           ANOMA_MASP_PARAMS_DIR: "/home/runner/work/masp"
           ANOMA_LOG: "info"
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload e2e logs
         if: success() || failure()
         uses: actions/upload-artifact@v3
@@ -240,7 +252,7 @@ jobs:
           path: |
             /tmp/.*/logs/
             /tmp/.*/e2e-test.*/setup/validator-*/.anoma/logs/*.log
-          retention-days: 5
+          retention-days: 3
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats
@@ -255,6 +267,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
+        mold_version: [1.6.0]
         make:
           - name: ABCI Release build
             suffix: ''
@@ -316,8 +329,14 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
+      - name: Install mold linker
+        run: |
+          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
       - name: Build
         run: make build-release${{ matrix.make.suffix }}
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload target binaries
         uses: actions/upload-artifact@v3
         with:

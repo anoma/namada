@@ -3,6 +3,7 @@
 pub mod address;
 pub mod chain;
 pub mod dylib;
+pub mod eth_abi;
 pub mod eth_bridge_pool;
 pub mod ethereum_events;
 pub mod governance;
@@ -11,7 +12,6 @@ pub mod ibc;
 pub mod internal;
 pub mod keccak;
 pub mod key;
-pub mod nft;
 pub mod storage;
 pub mod time;
 pub mod token;

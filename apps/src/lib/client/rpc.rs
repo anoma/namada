@@ -12,7 +12,9 @@ use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::BorshDeserialize;
 use data_encoding::HEXLOWER;
+use eyre::{eyre, Context as EyreContext};
 use itertools::Itertools;
+use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::Votes;
@@ -23,28 +25,27 @@ use namada::ledger::pos::types::{
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
+use namada::ledger::queries::{self, RPC};
 use namada::types::address::Address;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
     VotePower,
 };
+use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
+use tendermint_config::net::Address as TendermintAddress;
+use tendermint_rpc::error::Error as TError;
+use tendermint_rpc::query::Query;
+use tendermint_rpc::{
+    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
+};
 use tokio::time::{Duration, Instant};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
-use crate::facade::tendermint::abci::Code;
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
-use crate::facade::tendermint_rpc::error::Error as TError;
-use crate::facade::tendermint_rpc::query::Query;
-use crate::facade::tendermint_rpc::{
-    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
-};
-use crate::node::ledger::events::Event;
-use crate::node::ledger::rpc::Path;
 
 /// Query the status of a given transaction.
 ///
@@ -74,12 +75,8 @@ pub async fn query_tx_status(
         let mut backoff = ONE_SECOND;
 
         loop {
-            let data = vec![];
             tracing::debug!(query = ?status, "Querying tx status");
-            let response = match client
-                .abci_query(Some(status.into()), data, None, false)
-                .await
-            {
+            let maybe_event = match query_tx_events(&client, status).await {
                 Ok(response) => response,
                 Err(err) => {
                     tracing::debug!(%err, "ABCI query failed");
@@ -87,26 +84,7 @@ pub async fn query_tx_status(
                     continue;
                 }
             };
-            let mut events = match response.code {
-                Code::Ok => {
-                    match Vec::<Event>::try_from_slice(&response.value[..]) {
-                        Ok(events) => events,
-                        Err(err) => {
-                            eprintln!("Error decoding the event value: {err}");
-                            break Err(());
-                        }
-                    }
-                }
-                Code::Err(err) => {
-                    eprintln!(
-                        "Error in the query {} (error code {})",
-                        response.info, err
-                    );
-                    break Err(());
-                }
-            };
-            if let Some(e) = events.pop() {
-                // we should only have one event matching the query
+            if let Some(e) = maybe_event {
                 break Ok(e);
             }
             sleep_update(status, &mut backoff).await;
@@ -123,51 +101,38 @@ pub async fn query_tx_status(
 /// Query the epoch of the last committed block
 pub async fn query_epoch(args: args::Query) -> Epoch {
     let client = HttpClient::new(args.ledger_address).unwrap();
-    let path = Path::Epoch;
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => match Epoch::try_from_slice(&response.value[..]) {
-            Ok(epoch) => {
-                println!("Last committed epoch: {}", epoch);
-                return epoch;
-            }
+    let epoch = unwrap_client_response(RPC.shell().epoch(&client).await);
+    println!("Last committed epoch: {}", epoch);
+    epoch
+}
 
-            Err(err) => {
-                eprintln!("Error decoding the epoch value: {}", err)
-            }
-        },
-        Code::Err(err) => eprintln!(
-            "Error in the query {} (error code {})",
-            response.info, err
-        ),
-    }
-    cli::safe_exit(1)
+/// Query the last committed block
+pub async fn query_block(
+    args: args::Query,
+) -> tendermint_rpc::endpoint::block::Response {
+    let client = HttpClient::new(args.ledger_address).unwrap();
+    let response = client.latest_block().await.unwrap();
+    println!(
+        "Last committed block ID: {}, height: {}, time: {}",
+        response.block_id,
+        response.block.header.height,
+        response.block.header.time
+    );
+    response
 }
 
 /// Query the raw bytes of given storage key
 pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let path = Path::Value(args.storage_key);
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => {
-            println!("{}", HEXLOWER.encode(&response.value));
-        }
-        Code::Err(err) => {
-            eprintln!(
-                "Error in the query {}  (error code {})",
-                response.info, err
-            );
-            cli::safe_exit(1)
-        }
+    let response = unwrap_client_response(
+        RPC.shell()
+            .storage_value(&client, None, None, false, &args.storage_key)
+            .await,
+    );
+    if !response.data.is_empty() {
+        println!("Found data: 0x{}", HEXLOWER.encode(&response.data));
+    } else {
+        println!("No data found for key {}", args.storage_key);
     }
 }
 
@@ -211,11 +176,9 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
             let owner = ctx.get(&owner);
             for (token, _) in tokens {
                 let prefix = token.to_db_key().into();
-                let balances = query_storage_prefix::<token::Amount>(
-                    client.clone(),
-                    prefix,
-                )
-                .await;
+                let balances =
+                    query_storage_prefix::<token::Amount>(&client, &prefix)
+                        .await;
                 if let Some(balances) = balances {
                     print_balances(&ctx, balances, &token, Some(&owner));
                 }
@@ -225,7 +188,7 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
             let token = ctx.get(&token);
             let prefix = token.to_db_key().into();
             let balances =
-                query_storage_prefix::<token::Amount>(client, prefix).await;
+                query_storage_prefix::<token::Amount>(&client, &prefix).await;
             if let Some(balances) = balances {
                 print_balances(&ctx, balances, &token, None);
             }
@@ -234,8 +197,7 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
             for (token, _) in tokens {
                 let key = token::balance_prefix(&token);
                 let balances =
-                    query_storage_prefix::<token::Amount>(client.clone(), key)
-                        .await;
+                    query_storage_prefix::<token::Amount>(&client, &key).await;
                 if let Some(balances) = balances {
                     print_balances(&ctx, balances, &token, None);
                 }
@@ -736,18 +698,14 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             let owner = ctx.get(&owner);
             // Find owner's bonds to any validator
             let bonds_prefix = pos::bonds_for_source_prefix(&owner);
-            let bonds = query_storage_prefix::<pos::Bonds>(
-                client.clone(),
-                bonds_prefix,
-            )
-            .await;
+            let bonds =
+                query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix)
+                    .await;
             // Find owner's unbonds to any validator
             let unbonds_prefix = pos::unbonds_for_source_prefix(&owner);
-            let unbonds = query_storage_prefix::<pos::Unbonds>(
-                client.clone(),
-                unbonds_prefix,
-            )
-            .await;
+            let unbonds =
+                query_storage_prefix::<pos::Unbonds>(&client, &unbonds_prefix)
+                    .await;
 
             let mut total: token::Amount = 0.into();
             let mut total_active: token::Amount = 0.into();
@@ -856,18 +814,14 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
         (None, None) => {
             // Find all the bonds
             let bonds_prefix = pos::bonds_prefix();
-            let bonds = query_storage_prefix::<pos::Bonds>(
-                client.clone(),
-                bonds_prefix,
-            )
-            .await;
+            let bonds =
+                query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix)
+                    .await;
             // Find all the unbonds
             let unbonds_prefix = pos::unbonds_prefix();
-            let unbonds = query_storage_prefix::<pos::Unbonds>(
-                client.clone(),
-                unbonds_prefix,
-            )
-            .await;
+            let unbonds =
+                query_storage_prefix::<pos::Unbonds>(&client, &unbonds_prefix)
+                    .await;
 
             let mut total: token::Amount = 0.into();
             let mut total_active: token::Amount = 0.into();
@@ -1108,11 +1062,9 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
         None => {
             // Iterate slashes for all validators
             let slashes_prefix = pos::slashes_prefix();
-            let slashes = query_storage_prefix::<pos::Slashes>(
-                client.clone(),
-                slashes_prefix,
-            )
-            .await;
+            let slashes =
+                query_storage_prefix::<pos::Slashes>(&client, &slashes_prefix)
+                    .await;
 
             match slashes {
                 Some(slashes) => {
@@ -1151,12 +1103,12 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
 /// Dry run a transaction
 pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
     let client = HttpClient::new(ledger_address.clone()).unwrap();
-    let path = Path::DryRunTx;
-    let response = client
-        .abci_query(Some(path.into()), tx_bytes, None, false)
-        .await
-        .unwrap();
-    println!("{:#?}", response);
+    let (data, height, prove) = (Some(tx_bytes), None, false);
+    let result = unwrap_client_response(
+        RPC.shell().dry_run_tx(&client, data, height, prove).await,
+    )
+    .data;
+    println!("Dry-run result: {}", result);
 }
 
 /// Get account's public key stored in its storage sub-space
@@ -1189,7 +1141,7 @@ pub async fn is_delegator(
     let client = HttpClient::new(ledger_address).unwrap();
     let bonds_prefix = pos::bonds_for_source_prefix(address);
     let bonds =
-        query_storage_prefix::<pos::Bonds>(client.clone(), bonds_prefix).await;
+        query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix).await;
     bonds.is_some() && bonds.unwrap().count() > 0
 }
 
@@ -1199,8 +1151,7 @@ pub async fn is_delegator_at(
     epoch: Epoch,
 ) -> bool {
     let key = pos::bonds_for_source_prefix(address);
-    let bonds_iter =
-        query_storage_prefix::<pos::Bonds>(client.clone(), key).await;
+    let bonds_iter = query_storage_prefix::<pos::Bonds>(client, &key).await;
     if let Some(mut bonds) = bonds_iter {
         bonds.any(|(_, bond)| bond.get(epoch).is_some())
     } else {
@@ -1220,7 +1171,7 @@ pub async fn known_address(
         Address::Established(_) => {
             // Established account exists if it has a VP
             let key = storage::Key::validity_predicate(address);
-            query_has_storage_key(client, key).await
+            query_has_storage_key(&client, &key).await
         }
         Address::Implicit(_) | Address::Internal(_) => true,
     }
@@ -1369,100 +1320,77 @@ pub async fn query_storage_value<T>(
 where
     T: BorshDeserialize,
 {
-    let path = Path::Value(key.to_owned());
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => match T::try_from_slice(&response.value[..]) {
-            Ok(value) => return Some(value),
-            Err(err) => eprintln!("Error decoding the value: {}", err),
-        },
-        Code::Err(err) => {
-            if err == 1 {
-                return None;
-            } else {
-                eprintln!(
-                    "Error in the query {} (error code {})",
-                    response.info, err
-                )
-            }
-        }
+    // In case `T` is a unit (only thing that encodes to 0 bytes), we have to
+    // use `storage_has_key` instead of `storage_value`, because `storage_value`
+    // returns 0 bytes when the key is not found.
+    let maybe_unit = T::try_from_slice(&[]);
+    if let Ok(unit) = maybe_unit {
+        return if unwrap_client_response(
+            RPC.shell().storage_has_key(client, key).await,
+        ) {
+            Some(unit)
+        } else {
+            None
+        };
     }
-    cli::safe_exit(1)
+
+    let response = unwrap_client_response(
+        RPC.shell()
+            .storage_value(client, None, None, false, key)
+            .await,
+    );
+    if response.data.is_empty() {
+        return None;
+    }
+    T::try_from_slice(&response.data[..])
+        .map(Some)
+        .unwrap_or_else(|err| {
+            eprintln!("Error decoding the value: {}", err);
+            cli::safe_exit(1)
+        })
 }
 
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
 pub async fn query_storage_prefix<T>(
-    client: HttpClient,
-    key: storage::Key,
+    client: &HttpClient,
+    key: &storage::Key,
 ) -> Option<impl Iterator<Item = (storage::Key, T)>>
 where
     T: BorshDeserialize,
 {
-    let path = Path::Prefix(key);
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => {
-            match Vec::<PrefixValue>::try_from_slice(&response.value[..]) {
-                Ok(values) => {
-                    let decode = |PrefixValue { key, value }: PrefixValue| {
-                        match T::try_from_slice(&value[..]) {
-                            Err(_) => None,
-                            Ok(value) => Some((key, value)),
-                        }
-                    };
-                    return Some(values.into_iter().filter_map(decode));
-                }
-                Err(err) => eprintln!("Error decoding the values: {}", err),
-            }
-        }
-        Code::Err(err) => {
-            if err == 1 {
-                return None;
-            } else {
+    let values = unwrap_client_response(
+        RPC.shell()
+            .storage_prefix(client, None, None, false, key)
+            .await,
+    );
+    let decode =
+        |PrefixValue { key, value }: PrefixValue| match T::try_from_slice(
+            &value[..],
+        ) {
+            Err(err) => {
                 eprintln!(
-                    "Error in the query {} (error code {})",
-                    response.info, err
-                )
+                    "Skipping a value for key {}. Error in decoding: {}",
+                    key, err
+                );
+                None
             }
-        }
+            Ok(value) => Some((key, value)),
+        };
+    if values.data.is_empty() {
+        None
+    } else {
+        Some(values.data.into_iter().filter_map(decode))
     }
-    cli::safe_exit(1)
 }
 
 /// Query to check if the given storage key exists.
 pub async fn query_has_storage_key(
-    client: HttpClient,
-    key: storage::Key,
+    client: &HttpClient,
+    key: &storage::Key,
 ) -> bool {
-    let path = Path::HasKey(key);
-    let data = vec![];
-    let response = client
-        .abci_query(Some(path.into()), data, None, false)
-        .await
-        .unwrap();
-    match response.code {
-        Code::Ok => match bool::try_from_slice(&response.value[..]) {
-            Ok(value) => return value,
-            Err(err) => eprintln!("Error decoding the value: {}", err),
-        },
-        Code::Err(err) => {
-            eprintln!(
-                "Error in the query {} (error code {})",
-                response.info, err
-            )
-        }
-    }
-    cli::safe_exit(1)
+    unwrap_client_response(RPC.shell().storage_has_key(client, key).await)
 }
 
 /// Represents a query for an event pertaining to the specified transaction
@@ -1490,14 +1418,6 @@ impl<'a> TxEventQuery<'a> {
     }
 }
 
-impl<'a> From<TxEventQuery<'a>> for crate::facade::tendermint::abci::Path {
-    fn from(tx_query: TxEventQuery<'a>) -> Self {
-        format!("{}/{}", tx_query.event_type(), tx_query.tx_hash())
-            .parse()
-            .expect("This operation is infallible")
-    }
-}
-
 /// Transaction event queries are semantically a subset of general queries
 impl<'a> From<TxEventQuery<'a>> for Query {
     fn from(tx_query: TxEventQuery<'a>) -> Self {
@@ -1512,7 +1432,33 @@ impl<'a> From<TxEventQuery<'a>> for Query {
     }
 }
 
+/// Call the corresponding `tx_event_query` RPC method, to fetch
+/// the current status of a transation.
+pub async fn query_tx_events(
+    client: &HttpClient,
+    tx_event_query: TxEventQuery<'_>,
+) -> eyre::Result<Option<Event>> {
+    let tx_hash: Hash = tx_event_query.tx_hash().try_into()?;
+    match tx_event_query {
+        TxEventQuery::Accepted(_) => RPC
+            .shell()
+            .accepted(client, &tx_hash)
+            .await
+            .wrap_err_with(|| {
+                eyre!("Failed querying whether a transaction was accepted")
+            }),
+        TxEventQuery::Applied(_) => RPC
+            .shell()
+            .applied(client, &tx_hash)
+            .await
+            .wrap_err_with(|| {
+                eyre!("Error querying whether a transaction was applied")
+            }),
+    }
+}
+
 /// Lookup the full response accompanying the specified transaction event
+// TODO: maybe remove this in favor of `query_tx_status`
 pub async fn query_tx_response(
     ledger_address: &TendermintAddress,
     tx_query: TxEventQuery<'_>,
@@ -1640,8 +1586,7 @@ pub async fn get_proposal_votes(
     let vote_prefix_key =
         gov_storage::get_proposal_vote_prefix_key(proposal_id);
     let vote_iter =
-        query_storage_prefix::<ProposalVote>(client.clone(), vote_prefix_key)
-            .await;
+        query_storage_prefix::<ProposalVote>(client, &vote_prefix_key).await;
 
     let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
     let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
@@ -1746,7 +1691,7 @@ pub async fn get_proposal_offline_votes(
         {
             let key = pos::bonds_for_source_prefix(&proposal_vote.address);
             let bonds_iter =
-                query_storage_prefix::<pos::Bonds>(client.clone(), key).await;
+                query_storage_prefix::<pos::Bonds>(client, &key).await;
             if let Some(bonds) = bonds_iter {
                 for (key, epoched_bonds) in bonds {
                     // Look-up slashes for the validator in this key and
@@ -1991,8 +1936,7 @@ pub async fn get_delegators_delegation(
     _epoch: Epoch,
 ) -> Vec<Address> {
     let key = pos::bonds_for_source_prefix(address);
-    let bonds_iter =
-        query_storage_prefix::<pos::Bonds>(client.clone(), key).await;
+    let bonds_iter = query_storage_prefix::<pos::Bonds>(client, &key).await;
 
     let mut delegation_addresses: Vec<Address> = Vec::new();
     if let Some(bonds) = bonds_iter {
@@ -2053,4 +1997,12 @@ fn lookup_alias(ctx: &Context, addr: &Address) -> String {
         Some(alias) => format!("{}", alias),
         None => format!("{}", addr),
     }
+}
+
+/// A helper to unwrap client's response. Will shut down process on error.
+fn unwrap_client_response<T>(response: Result<T, queries::tm::Error>) -> T {
+    response.unwrap_or_else(|err| {
+        eprintln!("Error in the query {}", err);
+        cli::safe_exit(1)
+    })
 }
