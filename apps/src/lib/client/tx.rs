@@ -1584,7 +1584,8 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     // This has no side-effect because transaction is to self.
     let (default_signer, amount, token) =
         if source == masp_addr && target == masp_addr {
-            (TxSigningKey::SecretKey(masp_tx_key()), 0.into(), btc())
+            // TODO Refactor me, we shouldn't rely on any specific token here.
+            (TxSigningKey::SecretKey(masp_tx_key()), 0.into(), nam())
         } else if source == masp_addr {
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
