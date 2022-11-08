@@ -3,6 +3,7 @@
 
 pub mod collections;
 mod error;
+pub mod queries;
 pub mod validation;
 
 use borsh::{BorshDeserialize, BorshSerialize};

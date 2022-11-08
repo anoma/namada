@@ -10,7 +10,10 @@ pub mod write_log;
 
 use core::fmt::Debug;
 use std::array;
+use std::collections::BTreeSet;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+use ferveo_common::TendermintValidator;
 use thiserror::Error;
 
 use super::parameters::Parameters;
@@ -18,6 +21,10 @@ use super::storage_api::{ResultExt, StorageRead, StorageWrite};
 use super::{parameters, storage_api};
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::EpochDuration;
+use crate::ledger::pos::namada_proof_of_stake::types::VotingPower;
+use crate::ledger::pos::namada_proof_of_stake::PosBase;
+use crate::ledger::pos::types::WeightedValidator;
+use crate::ledger::pos::PosParams;
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
@@ -26,9 +33,15 @@ pub use crate::ledger::storage::merkle_tree::{
     StoreType,
 };
 pub use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage_api::queries::{self, QueriesExt, SendValsetUpd};
 use crate::tendermint::merkle::proof::Proof;
+use crate::tendermint_proto::google::protobuf;
+use crate::tendermint_proto::types::EvidenceParams;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
+use crate::types::ethereum_events::EthAddress;
+use crate::types::key;
+use crate::types::key::dkg_session_keys::DkgPublicKey;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::storage::TxQueue;
 use crate::types::storage::{
@@ -36,6 +49,9 @@ use crate::types::storage::{
     MembershipProof, MerkleValue, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
+use crate::types::token::{self, Amount};
+use crate::types::transaction::EllipticCurve;
+use crate::types::vote_extensions::validator_set_update::EthAddrBook;
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -886,6 +902,267 @@ where
             .delete_subspace_val(self.block.height, key)
             .into_storage_result()?;
         Ok(())
+    }
+}
+
+impl<D, H> QueriesExt for Storage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn get_active_validators(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> BTreeSet<WeightedValidator<Address>> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        let validator_set = self.read_validator_set();
+        validator_set
+            .get(epoch)
+            .expect("Validators for an epoch should be known")
+            .active
+            .clone()
+    }
+
+    fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
+        self.get_active_validators(epoch)
+            .iter()
+            .map(|validator| u64::from(validator.voting_power))
+            .sum::<u64>()
+            .into()
+    }
+
+    fn get_balance(&self, token: &Address, owner: &Address) -> Amount {
+        let balance = storage_api::StorageRead::read(
+            self,
+            &token::balance_key(token, owner),
+        );
+        // Storage read must not fail, but there might be no value, in which
+        // case default (0) is returned
+        balance
+            .expect("Storage read in the protocol must not fail")
+            .unwrap_or_default()
+    }
+
+    fn get_evidence_params(
+        &self,
+        epoch_duration: &EpochDuration,
+        pos_params: &PosParams,
+    ) -> EvidenceParams {
+        // Minimum number of epochs before tokens are unbonded and can be
+        // withdrawn
+        let len_before_unbonded =
+            std::cmp::max(pos_params.unbonding_len as i64 - 1, 0);
+        let max_age_num_blocks: i64 =
+            epoch_duration.min_num_of_blocks as i64 * len_before_unbonded;
+        let min_duration_secs = epoch_duration.min_duration.0 as i64;
+        let max_age_duration = Some(protobuf::Duration {
+            seconds: min_duration_secs * len_before_unbonded,
+            nanos: 0,
+        });
+        EvidenceParams {
+            max_age_num_blocks,
+            max_age_duration,
+            ..EvidenceParams::default()
+        }
+    }
+
+    fn get_validator_from_protocol_pk(
+        &self,
+        pk: &key::common::PublicKey,
+        epoch: Option<Epoch>,
+    ) -> queries::Result<TendermintValidator<EllipticCurve>> {
+        let pk_bytes = pk
+            .try_to_vec()
+            .expect("Serializing public key should not fail");
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.get_active_validators(Some(epoch))
+            .iter()
+            .find(|validator| {
+                let pk_key = key::protocol_pk_key(&validator.address);
+                match self.read(&pk_key) {
+                    Ok((Some(bytes), _)) => bytes == pk_bytes,
+                    _ => false,
+                }
+            })
+            .map(|validator| {
+                let dkg_key =
+                    key::dkg_session_keys::dkg_pk_key(&validator.address);
+                let bytes = self
+                    .read(&dkg_key)
+                    .expect("Validator should have public dkg key")
+                    .0
+                    .expect("Validator should have public dkg key");
+                let dkg_publickey =
+                    &<DkgPublicKey as BorshDeserialize>::deserialize(
+                        &mut bytes.as_ref(),
+                    )
+                    .expect(
+                        "DKG public key in storage should be deserializable",
+                    );
+                TendermintValidator {
+                    power: validator.voting_power.into(),
+                    address: validator.address.to_string(),
+                    public_key: dkg_publickey.into(),
+                }
+            })
+            .ok_or_else(|| {
+                queries::Error::NotValidatorKey(pk.to_string(), epoch)
+            })
+    }
+
+    fn get_validator_from_address(
+        &self,
+        address: &Address,
+        epoch: Option<Epoch>,
+    ) -> queries::Result<(VotingPower, key::common::PublicKey)> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.get_active_validators(Some(epoch))
+            .iter()
+            .find(|validator| address == &validator.address)
+            .map(|validator| {
+                let protocol_pk_key = key::protocol_pk_key(&validator.address);
+                let bytes = self
+                    .read(&protocol_pk_key)
+                    .expect("Validator should have public protocol key")
+                    .0
+                    .expect("Validator should have public protocol key");
+                let protocol_pk: key::common::PublicKey =
+                    BorshDeserialize::deserialize(&mut bytes.as_ref()).expect(
+                        "Protocol public key in storage should be \
+                         deserializable",
+                    );
+                (validator.voting_power, protocol_pk)
+            })
+            .ok_or_else(|| {
+                queries::Error::NotValidatorAddress(address.clone(), epoch)
+            })
+    }
+
+    fn get_validator_from_tm_address(
+        &self,
+        tm_address: &[u8],
+        epoch: Option<Epoch>,
+    ) -> queries::Result<Address> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        let validator_raw_hash = core::str::from_utf8(tm_address)
+            .map_err(|_| queries::Error::InvalidTMAddress)?;
+        self.read_validator_address_raw_hash(&validator_raw_hash)
+            .ok_or_else(|| {
+                queries::Error::NotValidatorKeyHash(
+                    validator_raw_hash.to_string(),
+                    epoch,
+                )
+            })
+    }
+
+    #[cfg(feature = "abcipp")]
+    fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
+        // TODO: implement this method for ABCI++; should only be able to send
+        // a validator set update at the second block of an epoch
+        true
+    }
+
+    #[cfg(not(feature = "abcipp"))]
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
+        // when checking vote extensions in Prepare
+        // and ProcessProposal, we simply return true
+        if matches!(can_send, SendValsetUpd::AtPrevHeight) {
+            return true;
+        }
+
+        let current_decision_height = self.get_current_decision_height();
+
+        // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
+        // is 0, because of a bug (should be 1), so this code needs to
+        // handle that case
+        //
+        // we can remove this check once that's fixed
+        match current_decision_height {
+            BlockHeight(1) => return false,
+            BlockHeight(2) => return true,
+            _ => (),
+        }
+
+        let fst_heights_of_each_epoch =
+            self.block.pred_epochs.first_block_heights();
+
+        fst_heights_of_each_epoch
+            .last()
+            .map(|&h| {
+                let second_height_of_epoch = h + 1;
+                current_decision_height == second_height_of_epoch
+            })
+            .unwrap_or(false)
+    }
+
+    #[inline]
+    fn get_epoch(&self, height: BlockHeight) -> Option<Epoch> {
+        self.block.pred_epochs.get_epoch(height)
+    }
+
+    #[inline]
+    fn get_current_decision_height(&self) -> BlockHeight {
+        self.last_height + 1
+    }
+
+    #[inline]
+    fn get_ethbridge_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.read_validator_eth_hot_key(validator)
+            .as_ref()
+            .and_then(|epk| epk.get(epoch).and_then(|pk| pk.try_into().ok()))
+    }
+
+    #[inline]
+    fn get_ethgov_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.read_validator_eth_cold_key(validator)
+            .as_ref()
+            .and_then(|epk| epk.get(epoch).and_then(|pk| pk.try_into().ok()))
+    }
+
+    #[inline]
+    fn get_active_eth_addresses<'db>(
+        &'db self,
+        epoch: Option<Epoch>,
+    ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, VotingPower)> + 'db>
+    {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        Box::new(self.get_active_validators(Some(epoch)).into_iter().map(
+            move |validator| {
+                let hot_key_addr = self
+                    .get_ethbridge_from_namada_addr(
+                        &validator.address,
+                        Some(epoch),
+                    )
+                    .expect(
+                        "All Namada validators should have an Ethereum bridge \
+                         key",
+                    );
+                let cold_key_addr = self
+                    .get_ethgov_from_namada_addr(
+                        &validator.address,
+                        Some(epoch),
+                    )
+                    .expect(
+                        "All Namada validators should have an Ethereum \
+                         governance key",
+                    );
+                let eth_addr_book = EthAddrBook {
+                    hot_key_addr,
+                    cold_key_addr,
+                };
+                (eth_addr_book, validator.address, validator.voting_power)
+            },
+        ))
     }
 }
 
