@@ -1066,7 +1066,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-async fn process_tx(
+pub async fn process_tx(
     ctx: Context,
     args: &args::Tx,
     tx: Tx,

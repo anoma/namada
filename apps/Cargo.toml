@@ -39,6 +39,12 @@ doc = false
 name = "namadaw"
 path = "src/bin/anoma-wallet/main.rs"
 
+# Namada relayer
+[[bin]]
+doc = false
+name = "namadar"
+path = "src/bin/anoma-relayer/main.rs"
+
 [features]
 default = ["std", "abciplus"]
 dev = ["namada/dev"]

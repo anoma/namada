@@ -51,6 +51,9 @@ fn handle_command(cmd: cli::cmds::Anoma, raw_sub_cmd: String) -> Result<()> {
             handle_subcommand("namadac", sub_args)
         }
         cli::cmds::Anoma::Wallet(_) => handle_subcommand("namadaw", sub_args),
+        cli::cmds::Anoma::EthBridgePool(_) => {
+            handle_subcommand("namadar", sub_args)
+        }
     }
 }
 
