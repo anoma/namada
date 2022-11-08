@@ -893,9 +893,11 @@ impl Epochs {
         block_height: BlockHeight,
         max_age_num_blocks: u64,
     ) {
-        let min_block_height_to_keep = (block_height.0 + 1)
-            .checked_sub(max_age_num_blocks)
-            .unwrap_or_default();
+        let min_block_height_to_keep = block_height
+            .0
+            .checked_add(1)
+            .expect("Block height overflow occurred!")
+            .saturating_sub(max_age_num_blocks);
         // trim off any epochs whose last block is before the limit
         while let Some((_first_known_epoch_height, rest)) =
             self.first_block_heights.split_first()
