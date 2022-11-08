@@ -12,7 +12,7 @@ use eyre::Result;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils;
 use crate::ledger::protocol::transactions::votes::{
-    calculate_new, calculate_updated, write, Votes,
+    calculate_new, calculate_updated, write,
 };
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -132,17 +132,9 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let mut seen_by = Votes::default();
-    for (address, block_height) in update.seen_by.into_iter() {
-        // TODO: more deterministic deduplication
-        if let Some(present) = seen_by.insert(address, block_height) {
-            tracing::warn!(?present, "Duplicate vote in digest");
-        }
-    }
-
     let (vote_tracking, changed, confirmed) = if !exists_in_storage {
         tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-        let vote_tracking = calculate_new(seen_by, voting_powers)?;
+        let vote_tracking = calculate_new(update.seen_by, voting_powers)?;
         let changed = eth_msg_keys.into_iter().collect();
         let confirmed = vote_tracking.seen;
         (vote_tracking, changed, confirmed)
@@ -152,7 +144,7 @@ where
             "Ethereum event already exists in storage",
         );
         let mut votes = HashMap::default();
-        seen_by.iter().for_each(|(address, block_height)| {
+        update.seen_by.iter().for_each(|(address, block_height)| {
             let voting_power = voting_powers
                 .get(&(address.to_owned(), block_height.to_owned()))
                 .unwrap();
@@ -199,6 +191,7 @@ mod tests {
     use crate::ledger::pos::namada_proof_of_stake::epoched::Epoched;
     use crate::ledger::pos::namada_proof_of_stake::PosBase;
     use crate::ledger::pos::types::{ValidatorSet, WeightedValidator};
+    use crate::ledger::protocol::transactions::votes::Votes;
     use crate::ledger::protocol::transactions::utils::GetVoters;
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::testing::TestStorage;
