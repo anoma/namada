@@ -164,7 +164,7 @@ impl RocksDB {
     /// it was changed.
     fn write_subspace_diff(
         &mut self,
-        height: BlockHeight,
+        height: Option<BlockHeight>,
         key: &Key,
         old_value: Option<&[u8]>,
         new_value: Option<&[u8]>,
@@ -201,7 +201,7 @@ impl RocksDB {
     /// it was changed in a batch write.
     fn batch_write_subspace_diff(
         batch: &mut RocksDBWriteBatch,
-        height: BlockHeight,
+        height: Option<BlockHeight>,
         key: &Key,
         old_value: Option<&[u8]>,
         new_value: Option<&[u8]>,
@@ -260,7 +260,7 @@ impl DB for RocksDB {
 
     fn read_last_block(&mut self) -> Result<Option<BlockStateRead>> {
         // Block height
-        let height: BlockHeight = match self
+        let height: Option<BlockHeight> = match self
             .0
             .get("height")
             .map_err(|e| Error::DBError(e.into_string()))?

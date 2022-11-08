@@ -667,6 +667,26 @@ impl KeySeg for String {
     }
 }
 
+impl KeySeg for Option<BlockHeight> {
+    fn parse(string: String) -> Result<Self> {
+        if string == "0" {
+            Ok(None)
+        } else {
+            let k: BlockHeight = KeySeg::parse(string)?;
+            Ok(Some(k))
+        }
+    }
+
+    fn raw(&self) -> String {
+        self.map(|h| format!("{}", h.0.get()))
+            .unwrap_or_else(|| "0".into())
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
 impl KeySeg for BlockHeight {
     fn parse(string: String) -> Result<Self> {
         let h = string.parse::<u64>().map_err(|e| {

@@ -113,8 +113,8 @@ pub struct BlockStateRead {
     pub merkle_tree_stores: MerkleTreeStoresRead,
     /// Hash of the block
     pub hash: BlockHash,
-    /// Height of the block
-    pub height: BlockHeight,
+    /// Height of the last committed block
+    pub height: Option<BlockHeight>,
     /// Epoch of the block
     pub epoch: Epoch,
     /// Predecessor block epochs
@@ -327,10 +327,10 @@ where
         {
             self.block.tree = MerkleTree::new(merkle_tree_stores);
             self.block.hash = hash;
-            self.block.height = height;
+            self.block.height = height.unwrap_or_default();
             self.block.epoch = epoch;
             self.block.pred_epochs = pred_epochs;
-            self.last_height = Some(height);
+            self.last_height = height;
             self.last_epoch = epoch;
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
