@@ -125,27 +125,8 @@ where
 /// Deterministically constructs a [`Votes`] map from a set of validator
 /// addresses and the block heights they signed something at. We arbitrarily
 /// take the earliest block height for each validator address encountered.
-pub fn dedupe(signers: &BTreeSet<(Address, BlockHeight)>) -> Votes {
-    let unique_voters: HashSet<_> =
-        signers.iter().map(|(addr, _)| addr.to_owned()).collect();
-    let mut earliest_votes = Votes::default();
-    for voter in unique_voters {
-        let earliest_vote_height = signers
-            .iter()
-            .filter_map(
-                |(addr, height)| {
-                    if *addr == voter { Some(*height) } else { None }
-                },
-            )
-            .min()
-            .unwrap_or_else(|| {
-                unreachable!(
-                    "we will always have at least one block height per voter"
-                )
-            });
-        _ = earliest_votes.insert(voter, earliest_vote_height);
-    }
-    earliest_votes
+pub fn dedupe(signers: BTreeSet<(Address, BlockHeight)>) -> Votes {
+    signers.into_iter().rev().collect()
 }
 
 #[cfg(test)]
@@ -160,7 +141,7 @@ mod tests {
     fn test_dedupe_empty() {
         let signers = BTreeSet::new();
 
-        let deduped = dedupe(&signers);
+        let deduped = dedupe(signers);
 
         assert_eq!(deduped, Votes::new());
     }
@@ -171,7 +152,7 @@ mod tests {
         let votes = [(sole_validator, BlockHeight(100))];
         let signers = BTreeSet::from(votes.clone());
 
-        let deduped = dedupe(&signers);
+        let deduped = dedupe(signers);
 
         assert_eq!(deduped, Votes::from(votes));
     }
@@ -192,7 +173,7 @@ mod tests {
         ];
         let signers = BTreeSet::from(votes);
 
-        let deduped = dedupe(&signers);
+        let deduped = dedupe(signers);
 
         assert_eq!(deduped, Votes::from([earliest_vote]));
     }
@@ -233,7 +214,7 @@ mod tests {
         ];
         let signers = BTreeSet::from(votes);
 
-        let deduped = dedupe(&signers);
+        let deduped = dedupe(signers);
 
         assert_eq!(
             deduped,

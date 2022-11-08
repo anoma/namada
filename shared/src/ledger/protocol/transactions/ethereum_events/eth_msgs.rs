@@ -31,7 +31,7 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
     ) -> Self {
         Self {
             body: event,
-            seen_by: dedupe(&signers),
+            seen_by: dedupe(signers),
         }
     }
 }
@@ -85,7 +85,7 @@ mod tests {
     fn test_dedupe_empty() {
         let signers = BTreeSet::new();
 
-        let deduped = dedupe(&signers);
+        let deduped = dedupe(signers);
 
         assert_eq!(deduped, Votes::new());
     }
@@ -96,7 +96,7 @@ mod tests {
         let votes = [(sole_validator, BlockHeight(100))];
         let signers = BTreeSet::from(votes.clone());
 
-        let deduped = dedupe(&signers);
+        let deduped = dedupe(signers);
 
         assert_eq!(deduped, Votes::from(votes));
     }
@@ -117,7 +117,7 @@ mod tests {
         ];
         let signers = BTreeSet::from(votes);
 
-        let deduped = dedupe(&signers);
+        let deduped = dedupe(signers);
 
         assert_eq!(deduped, Votes::from([earliest_vote]));
     }
@@ -158,7 +158,7 @@ mod tests {
         ];
         let signers = BTreeSet::from(votes);
 
-        let deduped = dedupe(&signers);
+        let deduped = dedupe(signers);
 
         assert_eq!(
             deduped,
