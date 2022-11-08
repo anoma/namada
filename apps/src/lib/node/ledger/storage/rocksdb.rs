@@ -260,7 +260,7 @@ impl DB for RocksDB {
 
     fn read_last_block(&mut self) -> Result<Option<BlockStateRead>> {
         // Block height
-        let height: Option<BlockHeight> = match self
+        let height: BlockHeight = match self
             .0
             .get("height")
             .map_err(|e| Error::DBError(e.into_string()))?
@@ -272,6 +272,15 @@ impl DB for RocksDB {
             }
             None => return Ok(None),
         };
+
+        // FIXME: any storage reads from here on out that return `None`
+        // should cause a panic, or some other error that can be propagated
+        // updwards in the stack; this is because the storage state can only be
+        // corrupted if we are able to successfully read the last committed
+        // block height, but not any other field that makes up the state of
+        // the last committed block. proceeding with the ledger's execution
+        // may cause us to arbitrarily deviate from the application state of
+        // honest nodes.
 
         // Epoch start height and time
         let next_epoch_min_start_height: BlockHeight = match self
