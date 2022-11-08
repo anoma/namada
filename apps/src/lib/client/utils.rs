@@ -697,8 +697,6 @@ pub fn init_network(
         let temp_validator_chain_dir =
             validator_dir.join(temp_chain_id.as_str());
         let validator_chain_dir = validator_dir.join(&chain_id.as_str());
-        fs::create_dir_all(&validator_chain_dir)
-            .expect("Couldn't create validator directory");
         // Rename the generated directories for validators from `temp_chain_id`
         // to `chain_id`
         std::fs::rename(&temp_validator_chain_dir, &validator_chain_dir)
