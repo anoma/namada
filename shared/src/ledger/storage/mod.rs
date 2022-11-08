@@ -462,11 +462,8 @@ where
 
         let len = value.len();
         let gas = key.len() + len;
-        let size_diff = self.db.write_subspace_val(
-            self.last_height.unwrap_or_default(),
-            key,
-            value,
-        )?;
+        let size_diff =
+            self.db.write_subspace_val(self.last_height, key, value)?;
         Ok((gas as _, size_diff))
     }
 
@@ -478,10 +475,8 @@ where
         let mut deleted_bytes_len = 0;
         if self.has_key(key)?.0 {
             self.block.tree.delete(key)?;
-            deleted_bytes_len = self.db.delete_subspace_val(
-                self.last_height.unwrap_or_default(),
-                key,
-            )?;
+            deleted_bytes_len =
+                self.db.delete_subspace_val(self.last_height, key)?;
         }
         let gas = key.len() + deleted_bytes_len as usize;
         Ok((gas as _, deleted_bytes_len))
