@@ -57,7 +57,7 @@ where
     /// The latest block header
     pub header: Option<Header>,
     /// The height of the committed block
-    pub last_height: BlockHeight,
+    pub last_height: Option<BlockHeight>,
     /// The epoch of the committed block
     pub last_epoch: Epoch,
     /// Minimum block height at which the next epoch may start
@@ -297,7 +297,7 @@ where
             chain_id,
             block,
             header: None,
-            last_height: BlockHeight(0),
+            last_height: None,
             last_epoch: Epoch::default(),
             next_epoch_min_start_height: BlockHeight::default(),
             next_epoch_min_start_time: DateTimeUtc::now(),
@@ -330,7 +330,7 @@ where
             self.block.height = height;
             self.block.epoch = epoch;
             self.block.pred_epochs = pred_epochs;
-            self.last_height = height;
+            self.last_height = Some(height);
             self.last_epoch = epoch;
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
@@ -462,8 +462,11 @@ where
 
         let len = value.len();
         let gas = key.len() + len;
-        let size_diff =
-            self.db.write_subspace_val(self.block.height, key, value)?;
+        let size_diff = self.db.write_subspace_val(
+            self.last_height.unwrap_or_default(),
+            key,
+            value,
+        )?;
         Ok((gas as _, size_diff))
     }
 
@@ -475,8 +478,10 @@ where
         let mut deleted_bytes_len = 0;
         if self.has_key(key)?.0 {
             self.block.tree.delete(key)?;
-            deleted_bytes_len =
-                self.db.delete_subspace_val(self.block.height, key)?;
+            deleted_bytes_len = self.db.delete_subspace_val(
+                self.last_height.unwrap_or_default(),
+                key,
+            )?;
         }
         let gas = key.len() + deleted_bytes_len as usize;
         Ok((gas as _, deleted_bytes_len))
@@ -906,7 +911,7 @@ pub mod testing {
                 chain_id,
                 block,
                 header: None,
-                last_height: BlockHeight(0),
+                last_height: None,
                 last_epoch: Epoch::default(),
                 next_epoch_min_start_height: BlockHeight::default(),
                 next_epoch_min_start_time: DateTimeUtc::now(),
