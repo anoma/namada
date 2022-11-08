@@ -206,6 +206,14 @@ pub fn wait_for_block_height(
     }
 }
 
+/// Are the E2E tests be running in debug mode?
+pub fn is_debug_mode() -> bool {
+    match env::var(ENV_VAR_DEBUG) {
+        Ok(val) => val.to_ascii_lowercase() != "false",
+        _ => false,
+    }
+}
+
 pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
     let use_prebuilt_binaries = match env::var(ENV_VAR_USE_PREBUILT_BINARIES) {
         Ok(var) => var.to_ascii_lowercase() != "false",
@@ -213,10 +221,7 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
     };
 
     // Allow to run in debug
-    let run_debug = match env::var(ENV_VAR_DEBUG) {
-        Ok(val) => val.to_ascii_lowercase() != "false",
-        _ => false,
-    };
+    let run_debug = is_debug_mode();
 
     if !use_prebuilt_binaries {
         let build_cmd = CargoBuild::new()
