@@ -156,14 +156,28 @@ impl RequestQuery {
         D: DB + for<'iter> DBIter<'iter>,
         H: StorageHasher,
     {
-        let height = match height {
-            0 => {
-                // `0` means last committed height
-                storage.last_height
+        let height = match (height, self.last_height) {
+            (_, None) => {
+                return Err(format!(
+                    "No block has been committed yet, therefore there is \
+                     nothing to query"
+                ));
             }
-            _ => BlockHeight(height.try_into().map_err(|_| {
-                format!("Query height cannot be negative, got: {}", height)
-            })?),
+            (height, Some(_)) if height < 0 => {
+                return Err(format!(
+                    "Query height cannot be negative, got: {height}"
+                ));
+            }
+            (height, Some(last_height)) if height > last_height => {
+                return Err(format!(
+                    "The queried height {height} is greater than the chain's \
+                     last committed block height {last_height}"
+                ));
+            }
+            (height, last_height) => {
+                // `0` means last committed height
+                BlockHeight::new(height as u64).or(last_height).unwrap()
+            }
         };
         Ok(Self {
             data,
