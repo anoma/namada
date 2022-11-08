@@ -23,6 +23,8 @@ use crate::types::token::Amount;
     Eq,
     PartialOrd,
     Ord,
+    Serialize,
+    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
@@ -50,6 +52,7 @@ impl From<u64> for Uint {
 /// Representation of address on Ethereum. The inner value is the last 20 bytes
 /// of the public key that controls the account.
 #[derive(
+    Copy,
     Clone,
     Debug,
     PartialEq,

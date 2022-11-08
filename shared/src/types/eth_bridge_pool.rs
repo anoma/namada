@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::token::Token;
+use serde::{Deserialize, Serialize};
 
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::Address;
@@ -27,6 +28,8 @@ const NAMESPACE: &str = "transfer";
     PartialEq,
     Ord,
     Eq,
+    Serialize,
+    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
@@ -54,6 +57,8 @@ pub struct TransferToEthereum {
     PartialEq,
     Ord,
     Eq,
+    Serialize,
+    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
@@ -102,6 +107,8 @@ impl From<&PendingTransfer> for Key {
     PartialEq,
     Ord,
     Eq,
+    Serialize,
+    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,

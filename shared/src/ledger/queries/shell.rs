@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use tendermint_proto::crypto::{ProofOp, ProofOps};
 
 use crate::ledger::eth_bridge::storage::bridge_pool::{
-    get_key_from_hash, get_pending_key, get_signed_root_key,
+    get_key_from_hash, get_signed_root_key,
 };
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -10,12 +10,13 @@ use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, MerkleTree, StoreRef, StoreType, DB};
-use crate::ledger::storage_api::{self, ResultExt, StorageRead};
+use crate::ledger::storage_api::{self, CustomError, ResultExt, StorageRead};
 use crate::types::eth_abi::EncodeCell;
 use crate::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
 };
 use crate::types::hash::Hash;
+use crate::types::keccak::KeccakHash;
 use crate::types::storage::MembershipProof::BridgePool;
 use crate::types::storage::{self, Epoch, MerkleValue, PrefixValue};
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
@@ -343,8 +344,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    if let Ok(transfers) =
-        <Vec<PendingTransfer>>::try_from_slice(request.data.as_slice())
+    if let Ok(transfer_hashes) =
+        <Vec<KeccakHash>>::try_from_slice(request.data.as_slice())
     {
         // get the latest signed merkle root of the Ethereum bridge pool
         let signed_root: MultiSignedMerkleRoot = match ctx
@@ -374,12 +375,39 @@ where
                      height",
                 ),
         );
-
+        // from the hashes of the transfers, get the actual values.
+        let mut missing_hashes = vec![];
+        let (keys, values): (Vec<_>, Vec<PendingTransfer>) = transfer_hashes
+            .iter()
+            .filter_map(|hash| {
+                let key = get_key_from_hash(hash);
+                match ctx.storage.read(&key) {
+                    Ok((Some(bytes), _)) => {
+                        PendingTransfer::try_from_slice(&bytes[..])
+                            .ok()
+                            .map(|transfer| (key, transfer))
+                    }
+                    _ => {
+                        missing_hashes.push(hash);
+                        None
+                    }
+                }
+            })
+            .unzip();
+        if !missing_hashes.is_empty() {
+            return Err(storage_api::Error::Custom(CustomError(
+                format!(
+                    "One or more of the provided hashes had no corresponding \
+                     transfer in storage: {:?}",
+                    missing_hashes
+                )
+                .into(),
+            )));
+        }
         // get the membership proof
-        let keys: Vec<_> = transfers.iter().map(get_pending_key).collect();
         match tree.get_sub_tree_existence_proof(
             &keys,
-            transfers.into_iter().map(MerkleValue::from).collect(),
+            values.into_iter().map(MerkleValue::from).collect(),
         ) {
             Ok(BridgePool(proof)) => {
                 let data = EncodeCell::new(&RelayProof {
@@ -693,7 +721,11 @@ mod test {
             .shell()
             .generate_bridge_pool_proof(
                 &client,
-                Some(vec![transfer.clone()].try_to_vec().expect("Test failed")),
+                Some(
+                    vec![transfer.keccak256()]
+                        .try_to_vec()
+                        .expect("Test failed"),
+                ),
                 None,
                 false,
             )
@@ -780,7 +812,11 @@ mod test {
             .shell()
             .generate_bridge_pool_proof(
                 &client,
-                Some(vec![transfer2].try_to_vec().expect("Test failed")),
+                Some(
+                    vec![transfer2.keccak256()]
+                        .try_to_vec()
+                        .expect("Test failed"),
+                ),
                 None,
                 false,
             )
