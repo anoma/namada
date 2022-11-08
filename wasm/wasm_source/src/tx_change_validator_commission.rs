@@ -81,7 +81,6 @@ mod tests {
         let signed_tx = tx.sign(&key);
         let tx_data = signed_tx.data.unwrap();
 
-        println!("\ndbg0\n");
         // Read the data before the tx is executed
         let commission_rates_pre: CommissionRates = ctx()
             .read_validator_commission_rate(&commission_change.validator)?
@@ -90,17 +89,14 @@ mod tests {
             .get(0)
             .expect("PoS validator must have commission rate at genesis");
         assert_eq!(commission_rate, initial_rate);
-        println!("\ndbg1\n");
 
         apply_tx(ctx(), tx_data)?;
-        println!("\ndbg2\n");
 
         // Read the data after the tx is executed
 
         // The following storage keys should be updated:
 
         //     - `#{PoS}/validator/#{validator}/commission_rate`
-        println!("dbg2.1");
 
         let commission_rates_post: CommissionRates = ctx()
             .read_validator_commission_rate(&commission_change.validator)?
@@ -124,7 +120,6 @@ mod tests {
                  change - checking in epoch: {epoch}"
             );
         }
-        println!("\ndbg3\n");
 
         // After pipeline, the commission rates should have changed
         for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
@@ -142,8 +137,6 @@ mod tests {
             );
         }
 
-        println!("\ndbg4\n");
-
         // Use the tx_env to run PoS VP
         let tx_env = tx_host_env::take();
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
@@ -154,7 +147,6 @@ mod tests {
             result,
             "PoS Validity predicate must accept this transaction"
         );
-        println!("\ndbg5\n");
 
         Ok(())
     }
@@ -164,7 +156,7 @@ mod tests {
             .to_u64()
             .unwrap_or_default();
         let int_max: u64 = (max * Decimal::from(100_000_u64)).to_u64().unwrap();
-        (int_min..int_max)
+        (int_min..=int_max)
             .prop_map(|num| Decimal::from(num) / Decimal::from(100_000_u64))
     }
 

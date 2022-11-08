@@ -10,6 +10,7 @@ use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use derivative::Derivative;
+use rust_decimal::Decimal;
 use thiserror::Error;
 
 use crate::btree_set::BTreeSetShims;
@@ -288,7 +289,7 @@ where
     /// Voting power update
     VotingPowerUpdate(Data<ValidatorVotingPowers>),
     /// Commission rate update
-    CommissionRateUpdate(Data<CommissionRates>),
+    CommissionRate(Data<CommissionRates>, Decimal),
 }
 
 /// Data update with prior and posterior state.
@@ -1148,13 +1149,14 @@ where
                         address,
                         data,
                     ),
-                    CommissionRateUpdate(data) => {
+                    CommissionRate(data, max_change) => {
                         Self::validator_commission_rate(
                             constants,
                             errors,
                             new_validators,
                             address,
                             data,
+                            max_change,
                         )
                     }
                 },
@@ -1500,10 +1502,9 @@ where
         new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
         address: Address,
         data: Data<CommissionRates>,
+        max_change: Decimal,
     ) {
         match (data.pre, data.post) {
-            // Should this case ever happen since commission rate should be init
-            // at genesis? (same w consensus key tho)
             (None, Some(post)) => {
                 if post.last_update() != constants.current_epoch {
                     errors.push(Error::InvalidLastUpdate)
@@ -1541,6 +1542,25 @@ where
                             ),
                         ),
                     }
+                }
+                // At the pipeline epoch, the rate must change by no larger than
+                // `max_change` relative to the previous epoch
+                match (
+                    pre.get(constants.pipeline_epoch - 1),
+                    post.get(constants.pipeline_epoch),
+                ) {
+                    (Some(prev_rate), Some(new_rate)) => {
+                        if (new_rate - prev_rate).abs() > max_change {
+                            errors.push(
+                                Error::InvalidValidatorCommissionRateUpdate(
+                                    constants.pipeline_epoch.into(),
+                                ),
+                            )
+                        }
+                    }
+                    _ => errors.push(Error::ValidatorCommissionRateIsRequired(
+                        address,
+                    )),
                 }
             }
             (Some(_), None) => {

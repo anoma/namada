@@ -182,7 +182,7 @@ pub mod testing {
     /// Get an arbitrary rate - a Decimal value between 0 and 1 inclusive, with
     /// some fixed precision
     pub fn arb_rate() -> impl Strategy<Value = Decimal> {
-        (0..100_001_u64)
+        (0..=100_000_u64)
             .prop_map(|num| Decimal::from(num) / Decimal::from(100_000_u64))
     }
 }

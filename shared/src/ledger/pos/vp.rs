@@ -264,6 +264,14 @@ where
                 changes.push(TotalVotingPower(Data { pre, post }));
             } else if let Some(address) = is_validator_commission_rate_key(key)
             {
+                let max_change = self
+                    .ctx
+                    .pre()
+                    .read_bytes(&validator_max_commission_rate_change_key(
+                        address,
+                    ))?
+                    .and_then(|bytes| Decimal::try_from_slice(&bytes[..]).ok())
+                    .unwrap();
                 let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     CommissionRates::try_from_slice(&bytes[..]).ok()
                 });
@@ -272,7 +280,7 @@ where
                 });
                 changes.push(Validator {
                     address: address.clone(),
-                    update: CommissionRateUpdate(Data { pre, post }),
+                    update: CommissionRate(Data { pre, post }, max_change),
                 });
             } else if key.segments.get(0) == Some(&addr.to_db_key()) {
                 // Unknown changes to this address space are disallowed

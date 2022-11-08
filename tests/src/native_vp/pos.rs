@@ -1502,7 +1502,6 @@ pub mod testing {
                 unbonds.delete_current(current_epoch, params);
                 tx::ctx().write_unbond(&bond_id, unbonds).unwrap();
             }
-            // TODO: figure this out
             PosStorageChange::ValidatorCommissionRate { address, rate } => {
                 let rates = tx::ctx()
                     .read_validator_commission_rate(&address)

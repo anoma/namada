@@ -976,7 +976,7 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
     println!("Total voting power: {}", total_voting_power);
 }
 
-/// Query PoS commssion rate
+/// Query PoS validator's commission rate
 pub async fn query_commission_rate(
     ctx: Context,
     args: args::QueryCommissionRate,
@@ -985,51 +985,50 @@ pub async fn query_commission_rate(
         Some(epoch) => epoch,
         None => query_epoch(args.query.clone()).await,
     };
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
+    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+    let validator = ctx.get(&args.validator);
+    let is_validator =
+        is_validator(&validator, args.query.ledger_address).await;
 
-    match args.validator {
-        Some(validator) => {
-            let validator = ctx.get(&validator);
-            let validator_commission_key =
-                pos::validator_commission_rate_key(&validator);
-            let validator_max_commission_change_key =
-                pos::validator_max_commission_rate_change_key(&validator);
-            let commission_rates = query_storage_value::<pos::CommissionRates>(
-                &client,
-                &validator_commission_key,
-            )
-            .await;
-            let max_rate_change = query_storage_value::<Decimal>(
-                &client,
-                &validator_max_commission_change_key,
-            )
-            .await;
-            let max_rate_change =
-                max_rate_change.expect("No max rate change found");
-            let commission_rates =
-                commission_rates.expect("No commission rate found ");
-            match commission_rates.get(epoch) {
-                Some(rate) => {
-                    println!(
-                        "Validator {} commission rate: {}, max change per \
-                         epoch: {}",
-                        validator.encode(),
-                        *rate,
-                        max_rate_change,
-                    )
-                }
-                None => {
-                    println!(
-                        "No commission rate found for {} in epoch {}",
-                        validator.encode(),
-                        epoch
-                    )
-                }
+    if is_validator {
+        let validator_commission_key =
+            pos::validator_commission_rate_key(&validator);
+        let validator_max_commission_change_key =
+            pos::validator_max_commission_rate_change_key(&validator);
+        let commission_rates = query_storage_value::<pos::CommissionRates>(
+            &client,
+            &validator_commission_key,
+        )
+        .await;
+        let max_rate_change = query_storage_value::<Decimal>(
+            &client,
+            &validator_max_commission_change_key,
+        )
+        .await;
+        let max_rate_change =
+            max_rate_change.expect("No max rate change found");
+        let commission_rates =
+            commission_rates.expect("No commission rate found ");
+        match commission_rates.get(epoch) {
+            Some(rate) => {
+                println!(
+                    "Validator {} commission rate: {}, max change per epoch: \
+                     {}",
+                    validator.encode(),
+                    *rate,
+                    max_rate_change,
+                )
+            }
+            None => {
+                println!(
+                    "No commission rate found for {} in epoch {}",
+                    validator.encode(),
+                    epoch
+                )
             }
         }
-        None => {
-            println!("No validator found from the args")
-        }
+    } else {
+        println!("Cannot find validator with address {}", validator);
     }
 }
 

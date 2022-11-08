@@ -2101,7 +2101,7 @@ pub mod args {
         /// Common query args
         pub query: Query,
         /// Address of a validator
-        pub validator: Option<WalletAddress>,
+        pub validator: WalletAddress,
         /// Epoch in which to find commission rate
         pub epoch: Option<Epoch>,
     }
@@ -2109,7 +2109,7 @@ pub mod args {
     impl Args for QueryCommissionRate {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
-            let validator = VALIDATOR_OPT.parse(matches);
+            let validator = VALIDATOR.parse(matches);
             let epoch = EPOCH.parse(matches);
             Self {
                 query,
@@ -2120,7 +2120,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query>()
-                .arg(VALIDATOR_OPT.def().about(
+                .arg(VALIDATOR.def().about(
                     "The validator's address whose commission rate to query.",
                 ))
                 .arg(EPOCH.def().about(
