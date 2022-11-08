@@ -1179,6 +1179,7 @@ mod test_bridge_pool_vp {
                 &verifiers,
             ),
         };
+
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
         let signed = SignedTxData {
@@ -1259,6 +1260,7 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         let verifiers = BTreeSet::default();
+
         // create the data to be given to the vp
         let vp = BridgePoolVp {
             ctx: setup_ctx(

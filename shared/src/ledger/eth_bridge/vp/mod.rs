@@ -254,7 +254,8 @@ fn determine_check_type(
 /// amount, and that the changes balance each other out. If the balance changes
 /// are invalid, the reason is logged and a `None` is returned. Otherwise,
 /// return the `Address` of the owner of the balance which is decreasing,
-/// as by how much it decreased, which should be authorizing the balance change.
+/// and by how much it decreased, which should be authorizing the balance
+/// change.
 pub(super) fn check_balance_changes(
     reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,
@@ -433,6 +434,9 @@ mod tests {
         "atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4";
     const ARBITRARY_OWNER_B_ADDRESS: &str =
         "atest1v4ehgw36xuunwd6989prwdfkxqmnvsfjxs6nvv6xxucrs3f3xcmns3fcxdzrvvz9xverzvzr56le8f";
+    const ARBITRARY_OWNER_A_INITIAL_BALANCE: u64 = 100;
+    const ESCROW_AMOUNT: u64 = 100;
+    const BRIDGE_POOL_ESCROW_INITIAL_BALANCE: u64 = 0;
 
     /// Return some arbitrary random key belonging to this account
     fn arbitrary_key() -> Key {
@@ -459,7 +463,9 @@ mod tests {
         storage
             .write(
                 &balance_key,
-                Amount::from(100).try_to_vec().expect("Test failed"),
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
@@ -633,7 +639,9 @@ mod tests {
         writelog
             .write(
                 &account_key,
-                Amount::from(0).try_to_vec().expect("Test failed"),
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
@@ -642,7 +650,11 @@ mod tests {
         writelog
             .write(
                 &escrow_key,
-                Amount::from(100).try_to_vec().expect("Test failed"),
+                Amount::from(
+                    BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
             )
             .expect("Test failed");
 
@@ -676,7 +688,9 @@ mod tests {
         writelog
             .write(
                 &account_key,
-                Amount::from(0).try_to_vec().expect("Test failed"),
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
@@ -685,7 +699,9 @@ mod tests {
         writelog
             .write(
                 &escrow_key,
-                Amount::from(0).try_to_vec().expect("Test failed"),
+                Amount::from(BRIDGE_POOL_ESCROW_INITIAL_BALANCE)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
@@ -720,7 +736,9 @@ mod tests {
         writelog
             .write(
                 &account_key,
-                Amount::from(0).try_to_vec().expect("Test failed"),
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
@@ -729,7 +747,11 @@ mod tests {
         writelog
             .write(
                 &escrow_key,
-                Amount::from(100).try_to_vec().expect("Test failed"),
+                Amount::from(
+                    BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
             )
             .expect("Test failed");
 
