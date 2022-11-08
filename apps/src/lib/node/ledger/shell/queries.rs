@@ -2,37 +2,26 @@
 use std::cmp::max;
 use std::default::Default;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use ferveo_common::TendermintValidator;
-use namada::ledger::eth_bridge::storage::bridge_pool::{
-    get_key_from_hash, get_signed_root_key,
-};
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::pos::types::WeightedValidator;
 use namada::ledger::pos::PosParams;
-use namada::ledger::storage::{MerkleTree, StoreRef, StoreType};
+use namada::ledger::queries::{RequestCtx, ResponseQuery};
+use namada::ledger::storage_api;
 use namada::types::address::Address;
-use namada::types::eth_bridge_pool::{
-    MultiSignedMerkleRoot, PendingTransfer, RelayProof,
-};
 use namada::types::ethereum_events::EthAddress;
-use namada::types::keccak::encode::Encode;
-use namada::types::keccak::KeccakHash;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::storage::MembershipProof::BridgePool;
-use namada::types::storage::{Epoch, Key, MerkleValue, PrefixValue};
+use namada::types::storage::Epoch;
 use namada::types::token::{self, Amount};
 use namada::types::vote_extensions::validator_set_update::EthAddrBook;
 
 use super::*;
-use crate::facade::tendermint_proto::crypto::{ProofOp, ProofOps};
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tendermint_proto::types::EvidenceParams;
-use crate::node::ledger::events::log::dumb_queries;
 use crate::node::ledger::response;
-use crate::node::ledger::rpc::BridgePoolSubpath;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -66,55 +55,41 @@ where
     /// the default if `path` is not a supported string.
     /// INVARIANT: This method must be stateless.
     pub fn query(&self, query: request::Query) -> response::Query {
-        use rpc::Path;
-        let height = match query.height {
-            0 => self.storage.get_block_height().0,
-            1.. => BlockHeight(query.height as u64),
-            _ => {
+        let ctx = RequestCtx {
+            storage: &self.storage,
+            event_log: self.event_log(),
+            vp_wasm_cache: self.vp_wasm_cache.read_only(),
+            tx_wasm_cache: self.tx_wasm_cache.read_only(),
+            storage_read_past_height_limit: self.storage_read_past_height_limit,
+        };
+
+        // Convert request to domain-type
+        let request = match namada::ledger::queries::RequestQuery::try_from_tm(
+            &self.storage,
+            query,
+        ) {
+            Ok(request) => request,
+            Err(err) => {
                 return response::Query {
                     code: 1,
-                    info: format!(
-                        "The query height is invalid: {}",
-                        query.height
-                    ),
+                    info: format!("Unexpected query: {}", err),
                     ..Default::default()
                 };
             }
         };
-        match Path::from_str(&query.path) {
-            Ok(path) => match path {
-                Path::DryRunTx => self.dry_run_tx(&query.data),
-                Path::Epoch => {
-                    let (epoch, _gas) = self.storage.get_last_epoch();
-                    let value = namada::ledger::storage::types::encode(&epoch);
-                    response::Query {
-                        value,
-                        ..Default::default()
-                    }
-                }
-                Path::Value(storage_key) => {
-                    self.read_storage_value(&storage_key, height, query.prove)
-                }
-                Path::Prefix(storage_key) => {
-                    self.read_storage_prefix(&storage_key, height, query.prove)
-                }
-                Path::HasKey(storage_key) => self.has_storage_key(&storage_key),
-                Path::EthereumBridgePool(subpath) => match subpath {
-                    BridgePoolSubpath::Contents => {
-                        self.read_ethereum_bridge_pool()
-                    }
-                    BridgePoolSubpath::Proof => {
-                        self.generate_bridge_pool_proof(query.data)
-                    }
-                },
-                Path::Accepted { tx_hash } => {
-                    let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
-                    self.query_event_log(matcher)
-                }
-                Path::Applied { tx_hash } => {
-                    let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
-                    self.query_event_log(matcher)
-                }
+
+        // Invoke the root RPC handler - returns borsh-encoded data on success
+        let result = namada::ledger::queries::handle_path(ctx, &request);
+        match result {
+            Ok(ResponseQuery {
+                data,
+                info,
+                proof_ops,
+            }) => response::Query {
+                value: data,
+                info,
+                proof_ops,
+                ..Default::default()
             },
             Err(err) => response::Query {
                 code: 1,
@@ -125,376 +100,20 @@ where
     }
 
     /// Query events in the event log matching the given query.
-    fn query_event_log(
+    pub fn query_event_log(
         &self,
-        matcher: dumb_queries::QueryMatcher,
-    ) -> response::Query {
-        let value = self
-            .event_log()
-            .iter_with_matcher(matcher)
-            .cloned()
-            .collect::<Vec<_>>()
-            .try_to_vec()
-            .unwrap();
-
-        response::Query {
-            value,
-            ..Default::default()
-        }
-    }
-
-    /// Query to check if a storage key exists.
-    fn has_storage_key(&self, key: &Key) -> response::Query {
-        match self.storage.has_key(key) {
-            Ok((has_key, _gas)) => response::Query {
-                value: has_key.try_to_vec().unwrap(),
-                ..Default::default()
-            },
-            Err(err) => response::Query {
-                code: 2,
-                info: format!("Storage error: {}", err),
-                ..Default::default()
-            },
-        }
-    }
-
-    /// Query to read a range of values from storage with a matching prefix. The
-    /// value in successful response is a [`Vec<PrefixValue>`] encoded with
-    /// [`BorshSerialize`].
-    fn read_storage_prefix(
-        &self,
-        key: &Key,
-        height: BlockHeight,
-        is_proven: bool,
-    ) -> response::Query {
-        if height != self.storage.get_block_height().0 {
-            return response::Query {
-                code: 2,
-                info: format!(
-                    "Prefix read works with only the latest height: height {}",
-                    height
-                ),
-                ..Default::default()
-            };
-        }
-        let (iter, _gas) = self.storage.iter_prefix(key);
-        let mut iter = iter.peekable();
-        if iter.peek().is_none() {
-            response::Query {
-                code: 1,
-                info: format!("No value found for key: {}", key),
-                ..Default::default()
-            }
-        } else {
-            let values: std::result::Result<
-                Vec<PrefixValue>,
-                namada::types::storage::Error,
-            > = iter
-                .map(|(key, value, _gas)| {
-                    let key = Key::parse(key)?;
-                    Ok(PrefixValue { key, value })
-                })
-                .collect();
-            match values {
-                Ok(values) => {
-                    let proof_ops = if is_proven {
-                        let mut ops = vec![];
-                        for PrefixValue { key, value } in &values {
-                            match self.storage.get_existence_proof(
-                                key,
-                                value.clone().into(),
-                                height,
-                            ) {
-                                Ok(p) => {
-                                    let mut cur_ops: Vec<ProofOp> = p
-                                        .ops
-                                        .into_iter()
-                                        .map(|op| {
-                                            #[cfg(feature = "abcipp")]
-                                            {
-                                                ProofOp {
-                                                    r#type: op.field_type,
-                                                    key: op.key,
-                                                    data: op.data,
-                                                }
-                                            }
-                                            #[cfg(not(feature = "abcipp"))]
-                                            {
-                                                op.into()
-                                            }
-                                        })
-                                        .collect();
-                                    ops.append(&mut cur_ops);
-                                }
-                                Err(err) => {
-                                    return response::Query {
-                                        code: 2,
-                                        info: format!("Storage error: {}", err),
-                                        ..Default::default()
-                                    };
-                                }
-                            }
-                        }
-                        // ops is not empty in this case
-                        Some(ProofOps { ops })
-                    } else {
-                        None
-                    };
-                    let value = values.try_to_vec().unwrap();
-                    response::Query {
-                        value,
-                        proof_ops,
-                        ..Default::default()
-                    }
-                }
-                Err(err) => response::Query {
-                    code: 1,
-                    info: format!(
-                        "Error parsing a storage key {}: {}",
-                        key, err
-                    ),
-                    ..Default::default()
-                },
-            }
-        }
-    }
-
-    /// Query to read a value from storage
-    fn read_storage_value(
-        &self,
-        key: &Key,
-        height: BlockHeight,
-        is_proven: bool,
-    ) -> response::Query {
-        match self.storage.read_with_height(key, height) {
-            Ok((Some(value), _gas)) => {
-                let proof_ops = if is_proven {
-                    match self.storage.get_existence_proof(
-                        key,
-                        value.clone().into(),
-                        height,
-                    ) {
-                        Ok(proof) => Some({
-                            #[cfg(feature = "abcipp")]
-                            {
-                                let ops = proof
-                                    .ops
-                                    .into_iter()
-                                    .map(|op| ProofOp {
-                                        r#type: op.field_type,
-                                        key: op.key,
-                                        data: op.data,
-                                    })
-                                    .collect();
-                                ProofOps { ops }
-                            }
-                            #[cfg(not(feature = "abcipp"))]
-                            {
-                                proof.into()
-                            }
-                        }),
-                        Err(err) => {
-                            return response::Query {
-                                code: 2,
-                                info: format!("Storage error: {}", err),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-                response::Query {
-                    value,
-                    proof_ops,
-                    ..Default::default()
-                }
-            }
-            Ok((None, _gas)) => {
-                let proof_ops = if is_proven {
-                    match self.storage.get_non_existence_proof(key, height) {
-                        Ok(proof) => Some({
-                            #[cfg(feature = "abcipp")]
-                            {
-                                let ops = proof
-                                    .ops
-                                    .into_iter()
-                                    .map(|op| ProofOp {
-                                        r#type: op.field_type,
-                                        key: op.key,
-                                        data: op.data,
-                                    })
-                                    .collect();
-                                ProofOps { ops }
-                            }
-                            #[cfg(not(feature = "abcipp"))]
-                            {
-                                proof.into()
-                            }
-                        }),
-                        Err(err) => {
-                            return response::Query {
-                                code: 2,
-                                info: format!("Storage error: {}", err),
-                                ..Default::default()
-                            };
-                        }
-                    }
-                } else {
-                    None
-                };
-                response::Query {
-                    code: 1,
-                    info: format!("No value found for key: {}", key),
-                    proof_ops,
-                    ..Default::default()
-                }
-            }
-            Err(err) => response::Query {
-                code: 2,
-                info: format!("Storage error: {}", err),
-                ..Default::default()
-            },
-        }
-    }
-
-    /// Read the current contents of the Ethereum bridge
-    /// pool.
-    fn read_ethereum_bridge_pool(&self) -> response::Query {
-        let stores = self
-            .storage
-            .db
-            .read_merkle_tree_stores(self.storage.last_height)
-            .expect("We should always be able to read the database")
-            .expect(
-                "Every signed root should correspond to an existing block \
-                 height",
-            );
-        let store = match stores.get_store(StoreType::BridgePool) {
-            StoreRef::BridgePool(store) => store,
-            _ => unreachable!(),
-        };
-
-        let transfers: Vec<PendingTransfer> = store
-            .iter()
-            .map(|hash| {
-                let res = self
-                    .storage
-                    .read(&get_key_from_hash(hash))
-                    .unwrap()
-                    .0
-                    .unwrap();
-                BorshDeserialize::try_from_slice(res.as_slice()).unwrap()
-            })
-            .collect();
-        response::Query {
-            code: 0,
-            value: transfers.try_to_vec().unwrap(),
-            ..Default::default()
-        }
-    }
-
-    /// Generate a merkle proof for the inclusion of the
-    /// requested transfers in the Ethereum bridge pool.
-    fn generate_bridge_pool_proof(
-        &self,
-        request_bytes: Vec<u8>,
-    ) -> response::Query {
-        if let Ok(transfer_hashes) =
-            <Vec<KeccakHash>>::try_from_slice(request_bytes.as_slice())
-        {
-            // get the latest signed merkle root of the Ethereum bridge pool
-            let signed_root: MultiSignedMerkleRoot = match self
-                .storage
-                .read(&get_signed_root_key())
-                .expect("Reading the database should not faile")
-            {
-                (Some(bytes), _) => {
-                    BorshDeserialize::try_from_slice(bytes.as_slice()).unwrap()
-                }
-                _ => {
-                    return response::Query {
-                        code: 1,
-                        log: "No signed root for the Ethereum bridge pool \
-                              exists in storage."
-                            .into(),
-                        info: "No signed root for the Ethereum bridge pool \
-                               exists in storage."
-                            .into(),
-                        ..Default::default()
-                    };
-                }
-            };
-
-            // get the merkle tree corresponding to the above root.
-            let tree = MerkleTree::<H>::new(
-                self.storage
-                    .db
-                    .read_merkle_tree_stores(signed_root.height)
-                    .expect("We should always be able to read the database")
-                    .expect(
-                        "Every signed root should correspond to an existing \
-                         block height",
-                    ),
-            );
-            // from the hashes of the transfers, get the actual values.
-            let keys: Vec<_> =
-                transfer_hashes.iter().map(get_key_from_hash).collect();
-            let values: Vec<PendingTransfer> = keys
-                .iter()
-                .filter_map(|key| match self.storage.read(key) {
-                    Ok((Some(bytes), _)) => {
-                        BorshDeserialize::try_from_slice(&bytes[..]).ok()
-                    }
-                    _ => None,
-                })
-                .collect();
-            if values.len() != keys.len() {
-                return response::Query {
-                    code: 1,
-                    log: "One or more of the provided hashes had no \
-                          corresponding transfer in storage."
-                        .into(),
-                    info: "One or more of the provided hashes had no \
-                           corresponding transfer in storage."
-                        .into(),
-                    ..Default::default()
-                };
-            }
-            // get the membership proof
-            match tree.get_sub_tree_existence_proof(
-                &keys,
-                values.into_iter().map(MerkleValue::from).collect(),
-            ) {
-                Ok(BridgePool(proof)) => response::Query {
-                    code: 0,
-                    value: RelayProof {
-                        // TODO: use actual validators
-                        validator_args: Default::default(),
-                        root: signed_root,
-                        proof,
-                        // TODO: Use real nonce
-                        nonce: 0.into(),
-                    }
-                    .encode(),
-                    ..Default::default()
-                },
-                Err(e) => response::Query {
-                    code: 1,
-                    log: e.to_string(),
-                    info: e.to_string(),
-                    ..Default::default()
-                },
-                _ => unreachable!(),
-            }
-        } else {
-            response::Query {
-                code: 1,
-                log: "Could not deserialize transfers".into(),
-                info: "Could not deserialize transfers".into(),
-                ..Default::default()
-            }
-        }
+        token: &Address,
+        owner: &Address,
+    ) -> token::Amount {
+        let balance = storage_api::StorageRead::read(
+            &self.storage,
+            &token::balance_key(token, owner),
+        );
+        // Storage read must not fail, but there might be no value, in which
+        // case default (0) is returned
+        balance
+            .expect("Storage read in the protocol must not fail")
+            .unwrap_or_default()
     }
 }
 
@@ -551,17 +170,9 @@ pub(crate) trait QueriesExt {
     ) -> std::result::Result<Address, Error>;
 
     /// Determines if it is possible to send a validator set update vote
-    /// extension at the provided [`BlockHeight`].
+    /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
     ///
-    /// This is done by checking if we are at the first block of a new epoch,
-    /// or if we are at block height 1 of the first epoch.
-    ///
-    /// The genesis block will not have vote extensions,
-    /// therefore it is a special case, which we account for
-    /// by checking if the block height is 1. Otherwise,
-    /// validator set update votes will always extend
-    /// Tendermint's PreCommit phase of the first block of
-    /// an epoch.
+    /// This is done by checking if we are at the second block of a new epoch.
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
@@ -762,41 +373,43 @@ where
     }
 
     #[cfg(feature = "abcipp")]
-    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
-        let (check_prev_heights, height) = match can_send {
-            SendValsetUpd::Now => (false, self.get_current_decision_height()),
-            SendValsetUpd::AtPrevHeight => (false, self.last_height),
-            SendValsetUpd::AtFixedHeight(h) => (true, h),
-        };
+    fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
+        // TODO: implement this method for ABCI++; should only be able to send
+        // a validator set update at the second block of an epoch
+        true
+    }
 
-        // handle genesis block corner case
-        if height == BlockHeight(1) {
+    #[cfg(not(feature = "abcipp"))]
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
+        // when checking vote extensions in Prepare
+        // and ProcessProposal, we simply return true
+        if matches!(can_send, SendValsetUpd::AtPrevHeight) {
             return true;
+        }
+
+        let current_decision_height = self.get_current_decision_height();
+
+        // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
+        // is 0, because of a bug (should be 1), so this code needs to
+        // handle that case
+        //
+        // we can remove this check once that's fixed
+        match current_decision_height {
+            BlockHeight(1) => return false,
+            BlockHeight(2) => return true,
+            _ => (),
         }
 
         let fst_heights_of_each_epoch =
             self.block.pred_epochs.first_block_heights();
 
-        // tentatively check if the last stored height
-        // is the one we are looking for
-        if fst_heights_of_each_epoch
+        fst_heights_of_each_epoch
             .last()
-            .map(|&h| h == height)
+            .map(|&h| {
+                let second_height_of_epoch = h + 1;
+                current_decision_height == second_height_of_epoch
+            })
             .unwrap_or(false)
-        {
-            return true;
-        }
-
-        // the values in `fst_block_heights_of_each_epoch` are stored in
-        // ascending order, so we can just do a binary search over them
-        check_prev_heights
-            && fst_heights_of_each_epoch.binary_search(&height).is_ok()
-    }
-
-    #[cfg(not(feature = "abcipp"))]
-    #[inline(always)]
-    fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
-        true
     }
 
     #[inline]
@@ -879,65 +492,27 @@ pub enum SendValsetUpd {
     /// Check if it is possible to send a validator set update
     /// vote extension at the previous block height.
     AtPrevHeight,
-    /// Check if it is possible to send a validator set update
-    /// vote extension at any given block height.
-    #[allow(dead_code)]
-    AtFixedHeight(BlockHeight),
 }
 
 #[cfg(test)]
 mod test_queries {
-    use namada::ledger::eth_bridge::storage::bridge_pool::{
-        get_pending_key, BridgePoolTree,
-    };
-    use namada::types::eth_bridge_pool::{GasFee, TransferToEthereum};
-    use namada::types::ethereum_events::EthAddress;
-
     use super::*;
     use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
-
-    /// An established user address for testing & development
-    fn bertha_address() -> Address {
-        Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
-            .expect("The token address decoding shouldn't fail")
-    }
 
     macro_rules! test_can_send_validator_set_update {
         (epoch_assertions: $epoch_assertions:expr $(,)?) => {
             /// Test if [`QueriesExt::can_send_validator_set_update`] behaves as
             /// expected.
             #[test]
-            #[ignore]
-            // TODO: we should fix this test to cope with epoch changes only
-            // happening at the first block of a new epoch. an erroneous change
-            // was introduced to the ledger, that updated the epoch correctly
-            // at the first block of the new epoch, but recorded `height + 1`
-            // instead of the actual height of the epoch change. since this
-            // test depended on that erroneous logic to pass, it's busted.
-            //
-            // linked issues:
-            // - <https://github.com/anoma/namada/issues/599>
-            // - <https://github.com/anoma/namada/issues/600>
             fn test_can_send_validator_set_update() {
                 let (mut shell, _recv, _) = test_utils::setup_at_height(0u64);
 
                 let epoch_assertions = $epoch_assertions;
 
-                // TODO: switch to `Result::into_ok_or_err` when it becomes
-                // stable
-                const fn extract(
-                    can_send: ::std::result::Result<bool, bool>,
-                ) -> bool {
-                    match can_send {
-                        Ok(x) => x,
-                        Err(x) => x,
-                    }
-                }
-
                 // test `SendValsetUpd::Now`  and `SendValsetUpd::AtPrevHeight`
-                for (idx, (curr_epoch, curr_block_height, can_send)) in
-                    epoch_assertions.iter().copied().enumerate()
+                for (curr_epoch, curr_block_height, can_send) in
+                    epoch_assertions
                 {
                     shell.storage.last_height =
                         BlockHeight(curr_block_height - 1);
@@ -953,52 +528,35 @@ mod test_queries {
                         shell
                             .storage
                             .can_send_validator_set_update(SendValsetUpd::Now),
-                        extract(can_send)
+                        can_send,
                     );
-                    if let Some((epoch, height, can_send)) =
-                        epoch_assertions.get(idx.wrapping_sub(1)).copied()
-                    {
-                        assert_eq!(
-                            shell.storage.get_epoch(height.into()),
-                            Some(Epoch(epoch))
-                        );
-                        assert_eq!(
-                            shell.storage.can_send_validator_set_update(
-                                SendValsetUpd::AtPrevHeight
-                            ),
-                            extract(can_send)
-                        );
-                    }
-                    if epoch_assertions
-                        .get(idx + 1)
-                        .map(|&(_, _, change_epoch)| change_epoch.is_ok())
-                        .unwrap_or(false)
-                    {
-                        let time = namada::types::time::DateTimeUtc::now();
-                        let mut req = FinalizeBlock::default();
-                        req.header.time = time;
-                        shell.finalize_block(req).expect("Test failed");
-                        shell.commit();
-                        shell.storage.next_epoch_min_start_time = time;
-                    }
-                }
-
-                // test `SendValsetUpd::AtFixedHeight`
-                for (curr_epoch, curr_block_height, can_send) in
-                    epoch_assertions.iter().copied()
-                {
-                    assert_eq!(
-                        shell.storage.get_epoch(curr_block_height.into()),
-                        Some(Epoch(curr_epoch))
-                    );
-                    assert_eq!(
-                        shell.storage.can_send_validator_set_update(
-                            SendValsetUpd::AtFixedHeight(
-                                curr_block_height.into()
-                            )
-                        ),
-                        extract(can_send)
-                    );
+                    // TODO(feature = "abcipp"): test
+                    // `SendValsetUpd::AtPrevHeight`; `idx` is the value
+                    // of the current index being iterated over
+                    // the array `epoch_assertions`
+                    //
+                    // ```ignore
+                    // if let Some((epoch, height, can_send)) =
+                    //     epoch_assertions.get(_idx.wrapping_sub(1)).copied()
+                    // {
+                    //     assert_eq!(
+                    //         shell.storage.get_epoch(height.into()),
+                    //         Some(Epoch(epoch))
+                    //     );
+                    //     assert_eq!(
+                    //         shell.storage.can_send_validator_set_update(
+                    //             SendValsetUpd::AtPrevHeight
+                    //         ),
+                    //         can_send,
+                    //     );
+                    // }
+                    // ```
+                    let time = namada::types::time::DateTimeUtc::now();
+                    let mut req = FinalizeBlock::default();
+                    req.header.time = time;
+                    shell.finalize_block(req).expect("Test failed");
+                    shell.commit();
+                    shell.storage.next_epoch_min_start_time = time;
                 }
             }
         };
@@ -1006,311 +564,44 @@ mod test_queries {
 
     #[cfg(feature = "abcipp")]
     test_can_send_validator_set_update! {
-        epoch_assertions: [
-            // (current epoch, current block height, can send valset upd / Ok = change epoch)
-            (0, 1, Ok(true)),
-            (0, 2, Err(false)),
-            (0, 3, Err(false)),
-            (0, 4, Err(false)),
-            (0, 5, Err(false)),
-            (0, 6, Err(false)),
-            (0, 7, Err(false)),
-            (0, 8, Err(false)),
-            (0, 9, Err(false)),
-            (0, 10, Err(false)),
-            (0, 11, Err(false)),
-            // we will change epoch here
-            (1, 12, Ok(true)),
-            (1, 13, Err(false)),
-            (1, 14, Err(false)),
-            (1, 15, Err(false)),
-            (1, 16, Err(false)),
-            (1, 17, Err(false)),
-            (1, 18, Err(false)),
-            (1, 19, Err(false)),
-            (1, 20, Err(false)),
-            (1, 21, Err(false)),
-            (1, 22, Err(false)),
-            (1, 23, Err(false)),
-            (1, 24, Err(false)),
-            // we will change epoch here
-            (2, 25, Ok(true)),
-            (2, 26, Err(false)),
-            (2, 27, Err(false)),
-            (2, 28, Err(false)),
-        ],
+        // TODO(feature = "abcipp"): add some epoch assertions
+        epoch_assertions: []
     }
 
     #[cfg(not(feature = "abcipp"))]
     test_can_send_validator_set_update! {
         epoch_assertions: [
-            // (current epoch, current block height, can send valset upd / Ok = change epoch)
-            (0, 1, Ok(true)),
-            (0, 2, Err(true)),
-            (0, 3, Err(true)),
-            (0, 4, Err(true)),
-            (0, 5, Err(true)),
-            (0, 6, Err(true)),
-            (0, 7, Err(true)),
-            (0, 8, Err(true)),
-            (0, 9, Err(true)),
-            (0, 10, Err(true)),
-            (0, 11, Err(true)),
+            // (current epoch, current block height, can send valset upd)
+            (0, 1, false),
+            (0, 2, true),
+            (0, 3, false),
+            (0, 4, false),
+            (0, 5, false),
+            (0, 6, false),
+            (0, 7, false),
+            (0, 8, false),
+            (0, 9, false),
             // we will change epoch here
-            (1, 12, Ok(true)),
-            (1, 13, Err(true)),
-            (1, 14, Err(true)),
-            (1, 15, Err(true)),
-            (1, 16, Err(true)),
-            (1, 17, Err(true)),
-            (1, 18, Err(true)),
-            (1, 19, Err(true)),
-            (1, 20, Err(true)),
-            (1, 21, Err(true)),
-            (1, 22, Err(true)),
-            (1, 23, Err(true)),
-            (1, 24, Err(true)),
+            (0, 10, false),
+            (1, 11, true),
+            (1, 12, false),
+            (1, 13, false),
+            (1, 14, false),
+            (1, 15, false),
+            (1, 16, false),
+            (1, 17, false),
+            (1, 18, false),
+            (1, 19, false),
             // we will change epoch here
-            (2, 25, Ok(true)),
-            (2, 26, Err(true)),
-            (2, 27, Err(true)),
-            (2, 28, Err(true)),
+            (1, 20, false),
+            (2, 21, true),
+            (2, 22, false),
+            (2, 23, false),
+            (2, 24, false),
+            (2, 25, false),
+            (2, 26, false),
+            (2, 27, false),
+            (2, 28, false),
         ],
-    }
-
-    /// Test that reading the bridge pool works
-    #[test]
-    fn test_read_bridge_pool() {
-        let (mut shell, _, _) = test_utils::setup();
-        let transfer = PendingTransfer {
-            transfer: TransferToEthereum {
-                asset: EthAddress([0; 20]),
-                recipient: EthAddress([0; 20]),
-                sender: bertha_address(),
-                amount: 0.into(),
-                nonce: 0.into(),
-            },
-            gas_fee: GasFee {
-                amount: 0.into(),
-                payer: bertha_address(),
-            },
-        };
-
-        // write a transfer into the bridge pool
-        shell
-            .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
-            .expect("Test failed");
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // check the response
-        let resp = shell.read_ethereum_bridge_pool();
-        assert_eq!(resp.code, 0);
-        let pool =
-            BTreeSet::<PendingTransfer>::try_from_slice(resp.value.as_slice())
-                .expect("Test failed");
-        assert_eq!(pool, BTreeSet::from([transfer]));
-    }
-
-    /// Test that reading the bridge pool always gets
-    /// the latest pool
-    #[test]
-    fn test_bridge_pool_updates() {
-        let (mut shell, _, _) = test_utils::setup();
-        let transfer = PendingTransfer {
-            transfer: TransferToEthereum {
-                asset: EthAddress([0; 20]),
-                recipient: EthAddress([0; 20]),
-                sender: bertha_address(),
-                amount: 0.into(),
-                nonce: 0.into(),
-            },
-            gas_fee: GasFee {
-                amount: 0.into(),
-                payer: bertha_address(),
-            },
-        };
-
-        // write a transfer into the bridge pool
-        shell
-            .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
-            .expect("Test failed");
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // update the pool
-        shell
-            .storage
-            .delete(&get_pending_key(&transfer))
-            .expect("Test failed");
-        let mut transfer2 = transfer;
-        transfer2.transfer.amount = 1.into();
-        shell
-            .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
-            .expect("Test failed");
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // check the response
-        let resp = shell.read_ethereum_bridge_pool();
-        assert_eq!(resp.code, 0);
-        let pool =
-            BTreeSet::<PendingTransfer>::try_from_slice(resp.value.as_slice())
-                .expect("Test failed");
-        assert_eq!(pool, BTreeSet::from([transfer2]));
-    }
-
-    /// Test that we can get a merkle proof even if the signed
-    /// merkle roots is lagging behind the pool
-    #[test]
-    fn test_get_merkle_proof() {
-        let (mut shell, _, _) = test_utils::setup();
-        let transfer = PendingTransfer {
-            transfer: TransferToEthereum {
-                asset: EthAddress([0; 20]),
-                recipient: EthAddress([0; 20]),
-                sender: bertha_address(),
-                amount: 0.into(),
-                nonce: 0.into(),
-            },
-            gas_fee: GasFee {
-                amount: 0.into(),
-                payer: bertha_address(),
-            },
-        };
-
-        // write a transfer into the bridge pool
-        shell
-            .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
-            .expect("Test failed");
-
-        // create a signed Merkle root for this pool
-        let signed_root = MultiSignedMerkleRoot {
-            sigs: Default::default(),
-            root: transfer.keccak256(),
-            height: Default::default(),
-        };
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // update the pool
-        let mut transfer2 = transfer.clone();
-        transfer2.transfer.amount = 1.into();
-        shell
-            .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
-            .expect("Test failed");
-
-        // add the signature for the pool at the previous block height
-        shell
-            .storage
-            .write(&get_signed_root_key(), signed_root.try_to_vec().unwrap())
-            .expect("Test failed");
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        let resp = shell.generate_bridge_pool_proof(
-            vec![transfer.keccak256()]
-                .try_to_vec()
-                .expect("Test failed"),
-        );
-        assert_eq!(resp.code, 0);
-
-        let tree = BridgePoolTree::new(
-            transfer.keccak256(),
-            BTreeSet::from([transfer.keccak256()]),
-        );
-        let proof = tree
-            .get_membership_proof(vec![transfer])
-            .expect("Test failed");
-
-        let proof = RelayProof {
-            validator_args: Default::default(),
-            root: signed_root,
-            proof,
-            // TODO: Use a real nonce
-            nonce: 0.into(),
-        }
-        .encode();
-        assert_eq!(proof, resp.value);
-    }
-
-    /// Test if the no merkle tree including a transfer
-    /// has had its root signed, then we cannot generate
-    /// a proof.
-    #[test]
-    fn test_cannot_get_proof() {
-        let (mut shell, _, _) = test_utils::setup();
-        let transfer = PendingTransfer {
-            transfer: TransferToEthereum {
-                asset: EthAddress([0; 20]),
-                recipient: EthAddress([0; 20]),
-                sender: bertha_address(),
-                amount: 0.into(),
-                nonce: 0.into(),
-            },
-            gas_fee: GasFee {
-                amount: 0.into(),
-                payer: bertha_address(),
-            },
-        };
-
-        // write a transfer into the bridge pool
-        shell
-            .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
-            .expect("Test failed");
-
-        // create a signed Merkle root for this pool
-        let signed_root = MultiSignedMerkleRoot {
-            sigs: Default::default(),
-            root: transfer.keccak256(),
-            height: Default::default(),
-        };
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // update the pool
-        let mut transfer2 = transfer;
-        transfer2.transfer.amount = 1.into();
-        shell
-            .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
-            .expect("Test failed");
-
-        // add the signature for the pool at the previous block height
-        shell
-            .storage
-            .write(&get_signed_root_key(), signed_root.try_to_vec().unwrap())
-            .expect("Test failed");
-
-        // commit the changes and increase block height
-        shell.storage.commit().expect("Test failed");
-        shell.storage.block.height = shell.storage.block.height + 1;
-
-        // this is in the pool, but its merkle root has not been signed yet
-        let resp = shell.generate_bridge_pool_proof(
-            vec![transfer2.keccak256()]
-                .try_to_vec()
-                .expect("Test failed"),
-        );
-        // thus proof generation should fail
-        assert_eq!(resp.code, 1);
     }
 }

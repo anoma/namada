@@ -12,7 +12,7 @@ use crate::ledger::eth_bridge::storage::{self, escrow_key, wrapped_erc20s};
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::traits::StorageHasher;
-use crate::types::address::{xan, Address, InternalAddress};
+use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
@@ -26,7 +26,7 @@ where
     D: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let escrow_key = balance_key(&xan(), &super::ADDRESS);
+    let escrow_key = balance_key(&nam(), &super::ADDRESS);
     storage
         .write(
             &escrow_key,
@@ -65,7 +65,7 @@ where
         &self,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool, Error> {
-        let escrow_key = balance_key(&xan(), &super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &super::ADDRESS);
         let escrow_pre: Amount = if let Ok(Some(bytes)) =
             self.ctx.read_bytes_pre(&escrow_key)
         {
@@ -175,8 +175,13 @@ where
     }
 }
 
-/// If `keys_changed` represents a valid set of changed keys, return them,
-/// otherwise return `None`.
+/// Checks if `keys_changed` represents a valid set of changed keys.
+/// Depending on which keys get changed, chooses which type of
+/// check to perform in the `validate_tx` function.
+///  1. If the Ethereum bridge escrow key was changed, we need to check
+///     that escrow was performed correctly.
+///  2. If two erc20 keys where changed, this is a transfer that needs
+///     to be checked.
 fn determine_check_type(
     keys_changed: &BTreeSet<Key>,
 ) -> Result<Option<CheckType>, Error> {
@@ -249,7 +254,8 @@ fn determine_check_type(
 /// amount, and that the changes balance each other out. If the balance changes
 /// are invalid, the reason is logged and a `None` is returned. Otherwise,
 /// return the `Address` of the owner of the balance which is decreasing,
-/// as by how much it decreased, which should be authorizing the balance change.
+/// and by how much it decreased, which should be authorizing the balance
+/// change.
 pub(super) fn check_balance_changes(
     reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,
@@ -428,6 +434,9 @@ mod tests {
         "atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4";
     const ARBITRARY_OWNER_B_ADDRESS: &str =
         "atest1v4ehgw36xuunwd6989prwdfkxqmnvsfjxs6nvv6xxucrs3f3xcmns3fcxdzrvvz9xverzvzr56le8f";
+    const ARBITRARY_OWNER_A_INITIAL_BALANCE: u64 = 100;
+    const ESCROW_AMOUNT: u64 = 100;
+    const BRIDGE_POOL_ESCROW_INITIAL_BALANCE: u64 = 0;
 
     /// Return some arbitrary random key belonging to this account
     fn arbitrary_key() -> Key {
@@ -448,13 +457,15 @@ mod tests {
 
         // setup a user with a balance
         let balance_key = balance_key(
-            &xan(),
+            &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         storage
             .write(
                 &balance_key,
-                Amount::from(100).try_to_vec().expect("Test failed"),
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
@@ -622,22 +633,28 @@ mod tests {
         let storage = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
-            &xan(),
+            &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         writelog
             .write(
                 &account_key,
-                Amount::from(0).try_to_vec().expect("Test failed"),
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
         // credit the balance to the escrow
-        let escrow_key = balance_key(&xan(), &super::super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
         writelog
             .write(
                 &escrow_key,
-                Amount::from(100).try_to_vec().expect("Test failed"),
+                Amount::from(
+                    BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
             )
             .expect("Test failed");
 
@@ -665,22 +682,26 @@ mod tests {
         let storage = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
-            &xan(),
+            &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         writelog
             .write(
                 &account_key,
-                Amount::from(0).try_to_vec().expect("Test failed"),
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
         // do not credit the balance to the escrow
-        let escrow_key = balance_key(&xan(), &super::super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
         writelog
             .write(
                 &escrow_key,
-                Amount::from(0).try_to_vec().expect("Test failed"),
+                Amount::from(BRIDGE_POOL_ESCROW_INITIAL_BALANCE)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
@@ -709,22 +730,28 @@ mod tests {
         let storage = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
-            &xan(),
+            &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         writelog
             .write(
                 &account_key,
-                Amount::from(0).try_to_vec().expect("Test failed"),
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
         // credit the balance to the escrow
-        let escrow_key = balance_key(&xan(), &super::super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
         writelog
             .write(
                 &escrow_key,
-                Amount::from(100).try_to_vec().expect("Test failed"),
+                Amount::from(
+                    BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
             )
             .expect("Test failed");
 

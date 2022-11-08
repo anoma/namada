@@ -5,7 +5,7 @@
 genesis_time = "2021-09-30T10:00:00Z"
 
 [validator.validator-0]
-# Validator's staked XAN at genesis.
+# Validator's staked NAM at genesis.
 tokens = 200000
 # Amount of the validator's genesis token balance which is not staked.
 non_staked_balance = 1000000000000
@@ -20,10 +20,10 @@ net_address = "127.0.0.1:27656"
 
 # Some tokens present at genesis.
 
-[token.XAN]
+[token.NAM]
 address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5"
 vp = "vp_token"
-[token.XAN.balances]
+[token.NAM.balances]
 Albert = 1000000
 "Albert.public_key" = 100
 Bertha = 1000000
@@ -168,7 +168,7 @@ light_client_attack_slash_rate = 500
 
 # Governance parameters.
 [gov_params]
-# minimum amount of xan token to lock
+# minimum amount of nam token to lock
 min_proposal_fund = 500
 # proposal code size in bytes
 max_proposal_code_size = 300000

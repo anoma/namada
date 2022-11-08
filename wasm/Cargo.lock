@@ -394,6 +394,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "circular-queue"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d34327ead1c743a10db339de35fb58957564b99d248a67985c55638b22c59b5"
+dependencies = [
+ "version_check",
+]
+
+[[package]]
 name = "clru"
 version = "0.5.0"
 source = "git+https://github.com/marmeladema/clru-rs.git?rev=71ca566#71ca566915f21f3c308091ca7756a91b0f8b5afc"
@@ -1471,13 +1480,15 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "ark-bls12-381",
  "ark-serialize",
+ "async-trait",
  "bech32",
  "borsh",
  "chrono",
+ "circular-queue",
  "clru",
  "data-encoding",
  "derivative",
@@ -1495,12 +1506,14 @@ dependencies = [
  "namada_proof_of_stake",
  "num-rational",
  "parity-wasm",
+ "paste",
  "proptest",
  "prost",
  "prost-types",
  "pwasm-utils",
  "rand",
  "rand_core 0.6.4",
+ "rayon",
  "rust_decimal",
  "serde",
  "serde_json",
@@ -1525,7 +1538,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "quote",
  "syn",
@@ -1533,7 +1546,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "derivative",
@@ -1543,7 +1556,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -1562,7 +1575,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "namada",
@@ -1574,7 +1587,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "namada",
@@ -1582,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "namada",
@@ -1594,7 +1607,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "getrandom",
@@ -2549,7 +2562,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2577,7 +2590,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -2589,7 +2602,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "bytes",
  "flex-error",
@@ -2606,7 +2619,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=87be41b8c9cc2850830f4d8028c1fe1bd9f96284#87be41b8c9cc2850830f4d8028c1fe1bd9f96284"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",
@@ -2764,7 +2777,7 @@ dependencies = [
 
 [[package]]
 name = "tx_template"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "getrandom",
@@ -2829,7 +2842,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_template"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "borsh",
  "getrandom",

@@ -15,7 +15,6 @@ use once_cell::unsync::Lazy;
 enum KeyType<'a> {
     Token(&'a Address),
     PoS,
-    Nft(&'a Address),
     Vp(&'a Address),
     GovernanceVote(&'a Address),
     Unknown,
@@ -31,8 +30,6 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::Token(address)
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
-        } else if let Some(address) = nft::is_nft_key(key) {
-            Self::Nft(address)
         } else if gov_storage::is_vote_key(key) {
             let voter_address = gov_storage::get_voter_address(key);
             if let Some(address) = voter_address {
@@ -141,13 +138,6 @@ fn validate_tx(
                 );
                 valid
             }
-            KeyType::Nft(owner) => {
-                if owner == &addr {
-                    *valid_sig
-                } else {
-                    true
-                }
-            }
             KeyType::GovernanceVote(voter) => {
                 if voter == &addr {
                     *valid_sig
@@ -231,7 +221,7 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
-        let token = address::xan();
+        let token = address::nam();
         let amount = token::Amount::from(10_098_123);
 
         // Spawn the accounts to be able to modify their storage
@@ -275,7 +265,7 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let target = address::testing::established_address_2();
-        let token = address::xan();
+        let token = address::nam();
         let amount = token::Amount::from(10_098_123);
 
         // Spawn the accounts to be able to modify their storage
@@ -321,7 +311,7 @@ mod tests {
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
         let target = address::testing::established_address_2();
-        let token = address::xan();
+        let token = address::nam();
         let amount = token::Amount::from(10_098_123);
 
         // Spawn the accounts to be able to modify their storage
@@ -371,7 +361,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
         let target = address::testing::established_address_3();
-        let token = address::xan();
+        let token = address::nam();
         let amount = token::Amount::from(10_098_123);
 
         // Spawn the accounts to be able to modify their storage

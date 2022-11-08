@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## v0.9.0
+
+Namada 0.9.0 is a scheduled minor release.
+
+### BUG FIXES
+
+- Add back consensus commit timeout configuration set in tendermint
+  ([#671](https://github.com/anoma/namada/pull/671))
+- Fix info logs to show by default for namadan
+  ([#702](https://github.com/anoma/namada/pull/702))
+
+### FEATURES
+
+- Client: Add a command to query the last committed block's hash, height and
+  timestamp. ([#658](https://github.com/anoma/namada/issues/658))
+
+### IMPROVEMENTS
+
+- Replace the handcrafted RPC paths with a new `router!` macro RPC queries
+  definition that handles dynamic path matching, type-safe handler function
+  dispatch and also generates type-safe client methods for the queries.
+  ([#553](https://github.com/anoma/namada/pull/553))
+- Move all shell RPC endpoints under the /shell path. This is a breaking change
+  to RPC consumers. ([#569](https://github.com/anoma/namada/pull/569))
+
+### MISCELLANEOUS
+
+- Renamed native token from XAN to NAM
+  ([#632](https://github.com/anoma/namada/pull/632))
+
 ## v0.8.1
 
 Namada 0.8.1 is a point release focused on standardizing Tendermint

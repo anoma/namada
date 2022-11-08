@@ -1,11 +1,11 @@
 use std::convert::TryFrom;
 
+use namada::ledger::events::Event;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use serde::Serialize;
 
 use crate::cli::safe_exit;
-use crate::node::ledger::events::Event;
 
 /// Data needed for broadcasting a tx and
 /// monitoring its progress on chain

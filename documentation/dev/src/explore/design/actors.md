@@ -1,6 +1,6 @@
 # Actors and Incentives
 
-Namada consists of various actors fulfilling various roles in the network. They are all incentivized to act for the good of the network. The native Namada token `XAN` is used to settle transaction fees and pay for the incentives in Namada.
+Namada consists of various actors fulfilling various roles in the network. They are all incentivized to act for the good of the network. The native Namada token `NAM` is used to settle transaction fees and pay for the incentives in Namada.
 
 ## Fees associated with a transaction
 
@@ -9,7 +9,7 @@ Users of Namada can
 - transfer private assets they hold to other users and
 - barter assets with other users.
 
-Each transaction may be associated with the following fees, paid in `XAN`:
+Each transaction may be associated with the following fees, paid in `NAM`:
 
 - **Execution fees** to compensate for computing, storage and memory costs, charges at 2 stages:
   - **initial fee (init_f)**: charged before the transaction is settled

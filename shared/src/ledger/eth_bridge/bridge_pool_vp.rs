@@ -25,7 +25,7 @@ use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::proto::SignedTxData;
-use crate::types::address::{xan, Address, InternalAddress};
+use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
@@ -52,7 +52,7 @@ where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
-    let escrow_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+    let escrow_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
     storage
         .write(
             &escrow_key,
@@ -86,7 +86,7 @@ where
     /// Get the change in the balance of an account
     /// associated with an address
     fn account_balance_delta(&self, address: &Address) -> Option<SignedAmount> {
-        let account_key = balance_key(&xan(), address);
+        let account_key = balance_key(&nam(), address);
         let before: Amount = (&self.ctx)
             .read_pre_value(&account_key)
             .unwrap_or_else(|error| {
@@ -522,9 +522,9 @@ mod test_bridge_pool_vp {
         // get the balance keys
         let token_key =
             wrapped_erc20s::Keys::from(&ASSET).balance(&balance.owner);
-        let account_key = balance_key(&xan(), &balance.owner);
+        let account_key = balance_key(&nam(), &balance.owner);
 
-        // update the balance of xan
+        // update the balance of nam
         let new_balance = match gas_delta {
             SignedAmount::Positive(amount) => balance.balance + amount,
             SignedAmount::Negative(amount) => balance.balance - amount,
@@ -1111,7 +1111,7 @@ mod test_bridge_pool_vp {
         // setup
         let mut write_log = new_writelog();
         let eb_account_key =
-            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
+            balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
         write_log.commit_tx();
         let storage = setup_storage();
         let tx = Tx::new(vec![], None);
@@ -1143,7 +1143,7 @@ mod test_bridge_pool_vp {
         };
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
-        let account_key = balance_key(&xan(), &bertha_address());
+        let account_key = balance_key(&nam(), &bertha_address());
         write_log
             .write(
                 &account_key,
@@ -1152,7 +1152,7 @@ mod test_bridge_pool_vp {
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        let bp_account_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         write_log
             .write(
                 &bp_account_key,
@@ -1179,6 +1179,7 @@ mod test_bridge_pool_vp {
                 &verifiers,
             ),
         };
+
         let to_sign = transfer.try_to_vec().expect("Test failed");
         let sig = common::SigScheme::sign(&bertha_keypair(), &to_sign);
         let signed = SignedTxData {
@@ -1205,7 +1206,7 @@ mod test_bridge_pool_vp {
         let storage = setup_storage();
         let tx = Tx::new(vec![], None);
         let eb_account_key =
-            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
+            balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1234,7 +1235,7 @@ mod test_bridge_pool_vp {
         };
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
-        let account_key = balance_key(&xan(), &bertha_address());
+        let account_key = balance_key(&nam(), &bertha_address());
         write_log
             .write(
                 &account_key,
@@ -1243,7 +1244,7 @@ mod test_bridge_pool_vp {
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        let bp_account_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         write_log
             .write(
                 &bp_account_key,
@@ -1259,6 +1260,7 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         let verifiers = BTreeSet::default();
+
         // create the data to be given to the vp
         let vp = BridgePoolVp {
             ctx: setup_ctx(
@@ -1294,7 +1296,7 @@ mod test_bridge_pool_vp {
         let mut write_log = new_writelog();
         // initialize the eth bridge balance to 0
         let eb_account_key =
-            balance_key(&xan(), &Address::Internal(InternalAddress::EthBridge));
+            balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
         write_log
             .write(
                 &eb_account_key,
@@ -1303,7 +1305,7 @@ mod test_bridge_pool_vp {
             .expect("Test failed");
         // initialize the gas payers account
         let gas_payer_balance_key =
-            balance_key(&xan(), &established_address_1());
+            balance_key(&nam(), &established_address_1());
         write_log
             .write(
                 &gas_payer_balance_key,
@@ -1343,7 +1345,7 @@ mod test_bridge_pool_vp {
         };
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
-        let account_key = balance_key(&xan(), &bertha_address());
+        let account_key = balance_key(&nam(), &bertha_address());
         write_log
             .write(
                 &account_key,
@@ -1360,7 +1362,7 @@ mod test_bridge_pool_vp {
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        let bp_account_key = balance_key(&xan(), &BRIDGE_POOL_ADDRESS);
+        let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         write_log
             .write(
                 &bp_account_key,

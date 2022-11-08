@@ -102,7 +102,7 @@ pub trait PosReadOnly {
     const POS_ADDRESS: Self::Address;
 
     /// Address of the staking token
-    /// TODO: this should be `const`, but in the ledger `address::xan` is not a
+    /// TODO: this should be `const`, but in the ledger `address::nam` is not a
     /// `const fn`
     fn staking_token_address() -> Self::Address;
 
@@ -613,7 +613,7 @@ pub trait PosBase {
     /// Address of the PoS account
     const POS_ADDRESS: Self::Address;
     /// Address of the staking token
-    /// TODO: this should be `const`, but in the ledger `address::xan` is not a
+    /// TODO: this should be `const`, but in the ledger `address::nam` is not a
     /// `const fn`
     fn staking_token_address() -> Self::Address;
     /// Address of the slash pool, into which slashed tokens are transferred.
