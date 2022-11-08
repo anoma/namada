@@ -10,7 +10,7 @@ use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, MerkleTree, StoreRef, StoreType, DB};
-use crate::ledger::storage_api::{self, ResultExt, StorageRead};
+use crate::ledger::storage_api::{self, CustomError, ResultExt, StorageRead};
 use crate::types::eth_abi::EncodeCell;
 use crate::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
@@ -376,22 +376,33 @@ where
                 ),
         );
         // from the hashes of the transfers, get the actual values.
-        let keys: Vec<_> =
-            transfer_hashes.iter().map(get_key_from_hash).collect();
-        let values: Vec<PendingTransfer> = keys
+        let mut missing_hashes = vec![];
+        let (keys, values): (Vec<_>, Vec<PendingTransfer>) = transfer_hashes
             .iter()
-            .filter_map(|key| match ctx.storage.read(key) {
-                Ok((Some(bytes), _)) => {
-                    BorshDeserialize::try_from_slice(&bytes[..]).ok()
+            .filter_map(|hash| {
+                let key = get_key_from_hash(hash);
+                match ctx.storage.read(&key) {
+                    Ok((Some(bytes), _)) => {
+                        PendingTransfer::try_from_slice(&bytes[..])
+                            .ok()
+                            .map(|transfer| (key, transfer))
+                    }
+                    _ => {
+                        missing_hashes.push(hash);
+                        None
+                    }
                 }
-                _ => None,
             })
-            .collect();
-        if values.len() != keys.len() {
-            return Err(storage_api::Error::SimpleMessage(
-                "One or more of the provided hashes had no corresponding \
-                 transfer in storage.",
-            ));
+            .unzip();
+        if !missing_hashes.is_empty() {
+            return Err(storage_api::Error::Custom(CustomError(
+                format!(
+                    "One or more of the provided hashes had no corresponding \
+                     transfer in storage: {:?}",
+                    missing_hashes
+                )
+                .into(),
+            )));
         }
         // get the membership proof
         match tree.get_sub_tree_existence_proof(

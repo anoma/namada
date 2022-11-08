@@ -1261,7 +1261,7 @@ pub mod cmds {
     pub struct AddToEthBridgePool(pub args::EthereumBridgePool);
 
     impl SubCmd for AddToEthBridgePool {
-        const CMD: &'static str = "add-transfer";
+        const CMD: &'static str = "add-erc20-transfer";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
@@ -2954,5 +2954,5 @@ fn anoma_relayer_app() -> App {
         .version(anoma_version())
         .about("Anoma Ethereum bridge pool command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::AnomaWallet::add_sub(args::Global::def(app))
+    cmds::EthBridgePool::add_sub(args::Global::def(app))
 }
