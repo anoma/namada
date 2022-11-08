@@ -36,7 +36,7 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
 use namada::proto::Tx;
-use namada::types::address::{btc, masp, masp_tx_key, nam, Address};
+use namada::types::address::{masp, masp_tx_key, nam, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
@@ -1582,7 +1582,8 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     // This has no side-effect because transaction is to self.
     let (default_signer, amount, token) =
         if source == masp_addr && target == masp_addr {
-            (TxSigningKey::SecretKey(masp_tx_key()), 0.into(), btc())
+            // TODO Refactor me, we shouldn't rely on any specific token here.
+            (TxSigningKey::SecretKey(masp_tx_key()), 0.into(), nam())
         } else if source == masp_addr {
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
