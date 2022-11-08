@@ -16,7 +16,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         ctx,
         payer,
         &bridge_pool::BRIDGE_POOL_ADDRESS,
-        &address::xan(),
+        &address::nam(),
         None,
         amount,
     )?;
@@ -32,7 +32,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
             ctx,
             sender,
             &eth_bridge::ADDRESS,
-            &address::xan(),
+            &address::nam(),
             None,
             amount,
         )?;
