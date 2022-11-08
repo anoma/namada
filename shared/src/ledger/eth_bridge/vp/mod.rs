@@ -4,17 +4,41 @@ mod authorize;
 
 use std::collections::{BTreeSet, HashSet};
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, Result};
 use itertools::Itertools;
 
-use crate::ledger::eth_bridge::storage::{self, wrapped_erc20s};
-use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
+use crate::ledger::eth_bridge::storage::{self, escrow_key, wrapped_erc20s};
+use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage::traits::StorageHasher;
-use crate::types::address::{Address, InternalAddress};
+use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::storage::Key;
-use crate::types::token::Amount;
+use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
+
+/// Initialize the storage owned by the Ethereum Bridge VP.
+///
+/// This means that the amount of escrowed Nam is
+/// initialized to 0.
+pub fn init_storage<D, H>(storage: &mut ledger_storage::Storage<D, H>)
+where
+    D: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: StorageHasher,
+{
+    let escrow_key = balance_key(&nam(), &super::ADDRESS);
+    storage
+        .write(
+            &escrow_key,
+            Amount::default()
+                .try_to_vec()
+                .expect("Serializing an amount shouldn't fail."),
+        )
+        .expect(
+            "Initializing the escrow balance of the Ethereum Bridge VP \
+             shouldn't fail.",
+        );
+}
 
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, DB, H, CA>
@@ -25,6 +49,73 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, DB, H, CA>,
+}
+
+impl<'ctx, DB, H, CA> EthBridge<'ctx, DB, H, CA>
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    /// If the bridge's escrow key was changed, we check
+    /// that the balance increased and that the bridge pool
+    /// VP has been triggered. The bridge pool VP will carry
+    /// out the rest of the checks.
+    fn check_escrow(
+        &self,
+        verifiers: &BTreeSet<Address>,
+    ) -> Result<bool, Error> {
+        let escrow_key = balance_key(&nam(), &super::ADDRESS);
+        let escrow_pre: Amount = if let Ok(Some(bytes)) =
+            self.ctx.read_bytes_pre(&escrow_key)
+        {
+            BorshDeserialize::try_from_slice(bytes.as_slice()).map_err(
+                |_| Error(eyre!("Couldn't deserialize a balance from storage")),
+            )?
+        } else {
+            tracing::debug!(
+                "Could not retrieve the Ethereum bridge VP's balance from \
+                 storage"
+            );
+            return Ok(false);
+        };
+        let escrow_post: Amount =
+            if let Ok(Some(bytes)) = self.ctx.read_bytes_post(&escrow_key) {
+                BorshDeserialize::try_from_slice(bytes.as_slice()).map_err(
+                    |_| {
+                        Error(eyre!(
+                            "Couldn't deserialize the balance of the Ethereum \
+                             bridge VP from storage."
+                        ))
+                    },
+                )?
+            } else {
+                tracing::debug!(
+                    "Could not retrieve the modified Ethereum bridge VP's \
+                     balance after applying tx"
+                );
+                return Ok(false);
+            };
+
+        // The amount escrowed should increase.
+        if escrow_pre < escrow_post {
+            Ok(verifiers.contains(&storage::bridge_pool::BRIDGE_POOL_ADDRESS))
+        } else {
+            tracing::info!(
+                "A normal tx cannot decrease the amount of Nam escrowed in \
+                 the Ethereum bridge"
+            );
+            Ok(false)
+        }
+    }
+}
+
+/// One of the the two types of checks
+/// this VP must perform.
+#[derive(Debug)]
+enum CheckType {
+    Escrow,
+    Erc20Transfer(wrapped_erc20s::Key, wrapped_erc20s::Key),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -50,6 +141,7 @@ where
     ///   decreased by the same amount
     /// - a wrapped ERC20's balance key to decrease iff another one of its
     ///   balance keys increased by the same amount
+    /// - Escrowing Nam in order to mint wrapped Nam on Ethereum
     ///
     /// Some other changes to the storage subspace of this account are expected
     /// to happen natively i.e. bypassing this validity predicate. For example,
@@ -67,8 +159,10 @@ where
             verifiers_len = verifiers.len(),
             "Ethereum Bridge VP triggered",
         );
-        let (key_a, key_b) = match extract_valid_keys_changed(keys_changed)? {
-            Some((key_a, key_b)) => (key_a, key_b),
+
+        let (key_a, key_b) = match determine_check_type(keys_changed)? {
+            Some(CheckType::Erc20Transfer(key_a, key_b)) => (key_a, key_b),
+            Some(CheckType::Escrow) => return self.check_escrow(verifiers),
             None => return Ok(false),
         };
         let (sender, _) = match check_balance_changes(&self.ctx, key_a, key_b)?
@@ -81,11 +175,16 @@ where
     }
 }
 
-/// If `keys_changed` represents a valid set of changed keys, return them,
-/// otherwise return `None`.
-fn extract_valid_keys_changed(
+/// Checks if `keys_changed` represents a valid set of changed keys.
+/// Depending on which keys get changed, chooses which type of
+/// check to perform in the `validate_tx` function.
+///  1. If the Ethereum bridge escrow key was changed, we need to check
+///     that escrow was performed correctly.
+///  2. If two erc20 keys where changed, this is a transfer that needs
+///     to be checked.
+fn determine_check_type(
     keys_changed: &BTreeSet<Key>,
-) -> Result<Option<(wrapped_erc20s::Key, wrapped_erc20s::Key)>, Error> {
+) -> Result<Option<CheckType>, Error> {
     // we aren't concerned with keys that changed outside of our account
     let keys_changed: HashSet<_> = keys_changed
         .iter()
@@ -101,8 +200,9 @@ fn extract_valid_keys_changed(
         relevant_keys.len = keys_changed.len(),
         "Found keys changed under our account"
     );
-
-    if keys_changed.len() != 2 {
+    if keys_changed.len() == 1 && keys_changed.contains(&escrow_key()) {
+        return Ok(Some(CheckType::Escrow));
+    } else if keys_changed.len() != 2 {
         tracing::debug!(
             relevant_keys.len = keys_changed.len(),
             "Rejecting transaction as only two keys should have changed"
@@ -147,15 +247,14 @@ fn extract_valid_keys_changed(
         );
         return Ok(None);
     }
-    Ok(Some((key_a, key_b)))
+    Ok(Some(CheckType::Erc20Transfer(key_a, key_b)))
 }
 
 /// Checks that the balances at both `key_a` and `key_b` have changed by some
 /// amount, and that the changes balance each other out. If the balance changes
 /// are invalid, the reason is logged and a `None` is returned. Otherwise,
 /// return the `Address` of the owner of the balance which is decreasing,
-/// and by how much it decreased, which should be authorizing the balance
-/// change.
+/// as by how much it decreased, which should be authorizing the balance change.
 pub(super) fn check_balance_changes(
     reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,
@@ -330,7 +429,7 @@ mod tests {
     fn test_error_if_triggered_without_keys_changed() {
         let keys_changed = BTreeSet::new();
 
-        let result = extract_valid_keys_changed(&keys_changed);
+        let result = determine_check_type(&keys_changed);
 
         assert!(result.is_err());
     }
@@ -338,20 +437,20 @@ mod tests {
     #[test]
     fn test_rejects_if_not_two_keys_changed() {
         {
-            let keys_changed = BTreeSet::from_iter(vec![arbitrary_key()]);
+            let keys_changed = BTreeSet::from_iter(vec![arbitrary_key(); 3]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
         {
             let keys_changed = BTreeSet::from_iter(vec![
-                arbitrary_key(),
+                escrow_key(),
                 arbitrary_key(),
                 arbitrary_key(),
             ]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -363,7 +462,7 @@ mod tests {
             let keys_changed =
                 BTreeSet::from_iter(vec![arbitrary_key(), arbitrary_key()]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -377,7 +476,7 @@ mod tests {
                 .supply(),
             ]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -394,7 +493,7 @@ mod tests {
                 ),
             ]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -420,7 +519,7 @@ mod tests {
                 ),
             ]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }
@@ -438,7 +537,7 @@ mod tests {
                 ),
             ]);
 
-            let result = extract_valid_keys_changed(&keys_changed);
+            let result = determine_check_type(&keys_changed);
 
             assert_matches!(result, Ok(None));
         }

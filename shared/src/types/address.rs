@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::types::ethereum_events::EthAddress;
 use crate::types::key;
 use crate::types::key::PublicKeyHash;
 
@@ -499,7 +500,7 @@ impl Display for InternalAddress {
 }
 
 /// Temporary helper for testing
-pub fn xan() -> Address {
+pub fn nam() -> Address {
     Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").expect("The token address decoding shouldn't fail")
 }
 
@@ -533,11 +534,21 @@ pub fn kartoffel() -> Address {
     Address::decode("atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90").expect("The token address decoding shouldn't fail")
 }
 
+/// Temporary helper for testing
+pub const fn wnam() -> EthAddress {
+    // TODO: Replace this with the real wNam ERC20 address once it exists
+    // "DEADBEEF DEADBEEF DEADBEEF DEADBEEF DEADBEEF"
+    EthAddress([
+        222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222, 173,
+        190, 239, 222, 173, 190, 239,
+    ])
+}
+
 /// Temporary helper for testing, a hash map of tokens addresses with their
 /// informal currency codes.
 pub fn tokens() -> HashMap<Address, &'static str> {
     vec![
-        (xan(), "XAN"),
+        (nam(), "NAM"),
         (btc(), "BTC"),
         (eth(), "ETH"),
         (dot(), "DOT"),

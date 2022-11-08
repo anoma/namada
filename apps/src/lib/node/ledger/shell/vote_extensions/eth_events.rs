@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
+use namada::ledger::storage_api::queries::QueriesExt;
 use namada::proto::Signed;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::BlockHeight;
@@ -15,7 +16,6 @@ use namada::types::vote_extensions::ethereum_events::{
 use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
-use crate::node::ledger::shell::queries::QueriesExt;
 use crate::node::ledger::shell::{Shell, ShellMode};
 
 impl<D, H> Shell<D, H>
@@ -298,6 +298,7 @@ mod test_vote_extensions {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
+    use namada::ledger::storage_api::queries::QueriesExt;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum,
     };
@@ -311,7 +312,6 @@ mod test_vote_extensions {
     use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
     #[cfg(feature = "abcipp")]
     use crate::facade::tower_abci::request;
-    use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 

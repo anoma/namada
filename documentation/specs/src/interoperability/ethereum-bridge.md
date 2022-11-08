@@ -36,6 +36,3 @@ Ethereum side.
 - [ICS20](https://github.com/cosmos/ibc/tree/master/spec/app/ics-020-fungible-token-transfer)
 - [Rainbow Bridge contracts](https://github.com/aurora-is-near/rainbow-bridge/tree/master/contracts)
 - [IBC in Solidity](https://github.com/hyperledger-labs/yui-ibc-solidity)
-
-Operational notes:
-1. We will bundle the Ethereum full node with the `namada` daemon executable.

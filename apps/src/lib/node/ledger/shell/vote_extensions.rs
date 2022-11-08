@@ -5,6 +5,7 @@ pub mod val_set_update;
 
 #[cfg(feature = "abcipp")]
 use borsh::BorshDeserialize;
+use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
 use namada::proto::Signed;
 use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::vote_extensions::{
@@ -14,7 +15,6 @@ use namada::types::vote_extensions::{
 use super::*;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedVoteInfo;
-use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
 #[cfg(not(feature = "abcipp"))]
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
