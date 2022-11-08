@@ -899,17 +899,21 @@ impl Epochs {
             .expect("Block height overflow occurred!")
             .saturating_sub(max_age_num_blocks);
         // trim off any epochs whose last block is before the limit
+        let mut first_block_heights = &self.first_block_heights[..];
         while let Some((_first_known_epoch_height, rest)) =
-            self.first_block_heights.split_first()
+            first_block_heights.split_first()
         {
             if let Some(second_known_epoch_height) = rest.first() {
                 if second_known_epoch_height.0 < min_block_height_to_keep {
                     self.first_known_epoch = self.first_known_epoch.next();
-                    self.first_block_heights = rest.to_vec();
+                    first_block_heights = rest;
                     continue;
                 }
             }
             break;
+        }
+        if first_block_heights.get(0) != self.first_block_heights.get(0) {
+            self.first_block_heights = first_block_heights.to_vec();
         }
         self.first_block_heights.push(block_height);
     }
