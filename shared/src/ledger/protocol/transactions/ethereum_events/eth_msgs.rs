@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 
 use crate::ledger::protocol::transactions::votes::{Tally, Votes};
@@ -29,9 +31,28 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
     fn from(
         MultiSignedEthEvent { event, signers }: MultiSignedEthEvent,
     ) -> Self {
+        let unique_voters: HashSet<_> =
+            signers.iter().map(|(addr, _)| addr.to_owned()).collect();
+        let mut earliest_votes = Votes::default();
+        for voter in unique_voters {
+            let earliest_vote_height =
+                signers
+                    .iter()
+                    .filter_map(|(addr, height)| {
+                        if *addr == voter { Some(*height) } else { None }
+                    })
+                    .min()
+                    .unwrap_or_else(|| {
+                        unreachable!(
+                            "we will always have at least one block height \
+                             per voter"
+                        )
+                    });
+            _ = earliest_votes.insert(voter, earliest_vote_height);
+        }
         Self {
             body: event,
-            seen_by: signers.into_iter().collect(),
+            seen_by: earliest_votes,
         }
     }
 }
