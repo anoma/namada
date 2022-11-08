@@ -943,7 +943,7 @@ impl Default for Epochs {
     fn default() -> Self {
         Self {
             first_known_epoch: Epoch::default(),
-            first_block_heights: vec![BlockHeight::default()],
+            first_block_heights: vec![BlockHeight(1)],
         }
     }
 }
@@ -1131,13 +1131,14 @@ mod tests {
     #[test]
     fn test_predecessor_epochs() {
         let mut epochs = Epochs::default();
-        assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch(BlockHeight(1)), Some(Epoch(0)));
         let mut max_age_num_blocks = 100;
 
         // epoch 1
         epochs.new_epoch(BlockHeight(10), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch(BlockHeight(0)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(1)), Some(Epoch(0)));
         assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
         assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
         assert_eq!(epochs.get_epoch(BlockHeight(11)), Some(Epoch(1)));
@@ -1146,7 +1147,8 @@ mod tests {
         // epoch 2
         epochs.new_epoch(BlockHeight(20), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch(BlockHeight(0)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(1)), Some(Epoch(0)));
         assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
         assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
         assert_eq!(epochs.get_epoch(BlockHeight(11)), Some(Epoch(1)));
@@ -1157,6 +1159,7 @@ mod tests {
         epochs.new_epoch(BlockHeight(200), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
         assert_eq!(epochs.get_epoch(BlockHeight(0)), None);
+        assert_eq!(epochs.get_epoch(BlockHeight(1)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(9)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(10)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(11)), None);
