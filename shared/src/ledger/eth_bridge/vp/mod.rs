@@ -254,7 +254,8 @@ fn determine_check_type(
 /// amount, and that the changes balance each other out. If the balance changes
 /// are invalid, the reason is logged and a `None` is returned. Otherwise,
 /// return the `Address` of the owner of the balance which is decreasing,
-/// as by how much it decreased, which should be authorizing the balance change.
+/// and by how much it decreased, which should be authorizing the balance
+/// change.
 pub(super) fn check_balance_changes(
     reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,
@@ -406,15 +407,36 @@ fn calculate_delta(balance_pre: i128, balance_post: i128) -> Result<i128> {
 
 #[cfg(test)]
 mod tests {
+    use std::default::Default;
+    use std::env::temp_dir;
+
     use rand::Rng;
 
     use super::*;
+    use crate::ledger::eth_bridge::parameters::{
+        Contracts, EthereumBridgeConfig, UpgradeableContract,
+    };
+    use crate::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
+    use crate::ledger::gas::VpGasMeter;
+    use crate::ledger::storage::mockdb::MockDB;
+    use crate::ledger::storage::traits::Sha256Hasher;
+    use crate::ledger::storage::write_log::WriteLog;
+    use crate::ledger::storage::Storage;
+    use crate::proto::Tx;
+    use crate::types::address::wnam;
+    use crate::types::chain::ChainId;
     use crate::types::ethereum_events;
+    use crate::types::ethereum_events::EthAddress;
+    use crate::vm::wasm::VpCache;
+    use crate::vm::WasmCacheRwAccess;
 
     const ARBITRARY_OWNER_A_ADDRESS: &str =
         "atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4";
     const ARBITRARY_OWNER_B_ADDRESS: &str =
         "atest1v4ehgw36xuunwd6989prwdfkxqmnvsfjxs6nvv6xxucrs3f3xcmns3fcxdzrvvz9xverzvzr56le8f";
+    const ARBITRARY_OWNER_A_INITIAL_BALANCE: u64 = 100;
+    const ESCROW_AMOUNT: u64 = 100;
+    const BRIDGE_POOL_ESCROW_INITIAL_BALANCE: u64 = 0;
 
     /// Return some arbitrary random key belonging to this account
     fn arbitrary_key() -> Key {
@@ -423,6 +445,67 @@ mod tests {
         storage::prefix()
             .push(&format!("arbitrary key segment {}", rn))
             .expect("should always be able to construct this key")
+    }
+
+    /// Initialize some dummy storage for testing
+    fn setup_storage() -> Storage<MockDB, Sha256Hasher> {
+        let mut storage = Storage::<MockDB, Sha256Hasher>::open(
+            std::path::Path::new(""),
+            ChainId::default(),
+            None,
+        );
+
+        // setup a user with a balance
+        let balance_key = balance_key(
+            &nam(),
+            &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
+        );
+        storage
+            .write(
+                &balance_key,
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // a dummy config for testing
+        let config = EthereumBridgeConfig {
+            min_confirmations: Default::default(),
+            contracts: Contracts {
+                native_erc20: wnam(),
+                bridge: UpgradeableContract {
+                    address: EthAddress([42; 20]),
+                    version: Default::default(),
+                },
+                governance: UpgradeableContract {
+                    address: EthAddress([18; 20]),
+                    version: Default::default(),
+                },
+            },
+        };
+        config.init_storage(&mut storage);
+        storage
+    }
+
+    /// Setup a ctx for running native vps
+    fn setup_ctx<'a>(
+        tx: &'a Tx,
+        storage: &'a Storage<MockDB, Sha256Hasher>,
+        write_log: &'a WriteLog,
+        keys_changed: &'a BTreeSet<Key>,
+        verifiers: &'a BTreeSet<Address>,
+    ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
+        Ctx::new(
+            &super::super::ADDRESS,
+            storage,
+            write_log,
+            tx,
+            VpGasMeter::new(0u64),
+            keys_changed,
+            verifiers,
+            VpCache::new(temp_dir(), 100usize),
+        )
     }
 
     #[test]
@@ -541,5 +624,151 @@ mod tests {
 
             assert_matches!(result, Ok(None));
         }
+    }
+
+    /// Test that escrowing Nam is accepted.
+    #[test]
+    fn test_escrow_nam_accepted() {
+        let mut writelog = WriteLog::default();
+        let storage = setup_storage();
+        // debit the user's balance
+        let account_key = balance_key(
+            &nam(),
+            &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
+        );
+        writelog
+            .write(
+                &account_key,
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // credit the balance to the escrow
+        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
+        writelog
+            .write(
+                &escrow_key,
+                Amount::from(
+                    BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        let keys_changed = BTreeSet::from([account_key, escrow_key]);
+        let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
+
+        // set up the VP
+        let tx = Tx::new(vec![], None);
+        let vp = EthBridge {
+            ctx: setup_ctx(&tx, &storage, &writelog, &keys_changed, &verifiers),
+        };
+
+        let res = vp.validate_tx(
+            &tx.try_to_vec().expect("Test failed"),
+            &keys_changed,
+            &verifiers,
+        );
+        assert!(res.expect("Test failed"));
+    }
+
+    /// Test that escrowing must increase the balance
+    #[test]
+    fn test_escrowed_nam_must_increase() {
+        let mut writelog = WriteLog::default();
+        let storage = setup_storage();
+        // debit the user's balance
+        let account_key = balance_key(
+            &nam(),
+            &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
+        );
+        writelog
+            .write(
+                &account_key,
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // do not credit the balance to the escrow
+        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
+        writelog
+            .write(
+                &escrow_key,
+                Amount::from(BRIDGE_POOL_ESCROW_INITIAL_BALANCE)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        let keys_changed = BTreeSet::from([account_key, escrow_key]);
+        let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
+
+        // set up the VP
+        let tx = Tx::new(vec![], None);
+        let vp = EthBridge {
+            ctx: setup_ctx(&tx, &storage, &writelog, &keys_changed, &verifiers),
+        };
+
+        let res = vp.validate_tx(
+            &tx.try_to_vec().expect("Test failed"),
+            &keys_changed,
+            &verifiers,
+        );
+        assert!(!res.expect("Test failed"));
+    }
+
+    /// Test that the VP checks that the bridge pool vp will
+    /// be triggered if escrowing occurs.
+    #[test]
+    fn test_escrowing_must_trigger_bridge_pool_vp() {
+        let mut writelog = WriteLog::default();
+        let storage = setup_storage();
+        // debit the user's balance
+        let account_key = balance_key(
+            &nam(),
+            &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
+        );
+        writelog
+            .write(
+                &account_key,
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // credit the balance to the escrow
+        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
+        writelog
+            .write(
+                &escrow_key,
+                Amount::from(
+                    BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        let keys_changed = BTreeSet::from([account_key, escrow_key]);
+        let verifiers = BTreeSet::from([]);
+
+        // set up the VP
+        let tx = Tx::new(vec![], None);
+        let vp = EthBridge {
+            ctx: setup_ctx(&tx, &storage, &writelog, &keys_changed, &verifiers),
+        };
+
+        let res = vp.validate_tx(
+            &tx.try_to_vec().expect("Test failed"),
+            &keys_changed,
+            &verifiers,
+        );
+        assert!(!res.expect("Test failed"));
     }
 }
