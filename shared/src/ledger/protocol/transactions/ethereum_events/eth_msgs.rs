@@ -43,7 +43,6 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
 /// Deterministically constructs a `Votes` map from a set of validator addresses
 /// and the block heights they signed something at. We arbitrarily take the
 /// earliest block height for each validator address encountered.
-// TODO: consume `signers` instead of cloning stuff
 fn dedupe(signers: &BTreeSet<(Address, BlockHeight)>) -> Votes {
     let unique_voters: HashSet<_> =
         signers.iter().map(|(addr, _)| addr.to_owned()).collect();
