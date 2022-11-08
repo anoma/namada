@@ -2,7 +2,7 @@
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::Write;
-use std::num::ParseIntError;
+use std::num::{NonZeroU64, ParseIntError};
 use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
 
@@ -53,9 +53,14 @@ pub const VP_KEY_PREFIX: char = '?';
 /// The reserved storage key for validity predicates
 pub const RESERVED_VP_KEY: &str = "?";
 
-/// Height of a block, i.e. the level.
+/// The height of a certain block. In other words, this is
+/// the level (or offset) of a block in the chain.
+///
+/// We consider the same definition of block height as Tendermint, where
+/// only heights greater than zero are valid. The first valid block height
+/// has a value of one, and its corresponding block is decided through
+/// BFT consensus.
 #[derive(
-    Default,
     Clone,
     Copy,
     BorshSerialize,
@@ -70,11 +75,20 @@ pub const RESERVED_VP_KEY: &str = "?";
     Serialize,
     Deserialize,
 )]
-pub struct BlockHeight(pub u64);
+pub struct BlockHeight(NonZeroU64);
+
+impl Default for BlockHeight {
+    fn default() -> Self {
+        // SAFETY: `NonZeroU64::new_unchecked` is only considered unsafe if we
+        // construct values of `NonZeroU64` with 0 as argument, which is not
+        // the case here.
+        unsafe { BlockHeight(NonZeroU64::new_unchecked(1)) }
+    }
+}
 
 impl Display for BlockHeight {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.0.get())
     }
 }
 
@@ -82,13 +96,13 @@ impl Add<u64> for BlockHeight {
     type Output = BlockHeight;
 
     fn add(self, rhs: u64) -> Self::Output {
-        Self(self.0 + rhs)
+        self.checked_add(rhs).expect("Block height overflow")
     }
 }
 
 impl From<BlockHeight> for u64 {
     fn from(height: BlockHeight) -> Self {
-        height.0
+        height.0.get()
     }
 }
 
@@ -114,9 +128,12 @@ impl From<Hash> for BlockHash {
     }
 }
 
-impl From<u64> for BlockHeight {
-    fn from(height: u64) -> Self {
-        BlockHeight(height)
+impl TryFrom<u64> for BlockHeight {
+    type Error = String;
+
+    fn try_from(value: u64) -> std::result::Result<Self, Self::Error> {
+        BlockHeight::new(value)
+            .ok_or_else(|| "Tried constructing BlockHeight of value 0")
     }
 }
 
@@ -130,10 +147,24 @@ impl TryFrom<i64> for BlockHeight {
             .map_err(|e| format!("Unexpected height value {}, {}", value, e))
     }
 }
+
 impl BlockHeight {
+    /// Construct a new [`BlockHeight`] value from a non-zero integer.
+    #[inline]
+    pub fn new(value: u64) -> Option<Self> {
+        NonZeroU64::new(value).map(Self)
+    }
+
     /// Get the height of the next block
-    pub fn next_height(&self) -> BlockHeight {
-        BlockHeight(self.0 + 1)
+    #[inline]
+    pub fn next_height(self) -> BlockHeight {
+        self + 1
+    }
+
+    /// Add `rhs` to the current value of [`BlockHeight`].
+    #[inline]
+    pub fn checked_add(self, rhs: u64) -> Option<BlockHeight> {
+        self.0.checked_add(rhs).map(BlockHeight)
     }
 }
 
@@ -644,11 +675,11 @@ impl KeySeg for BlockHeight {
                 string, e
             ))
         })?;
-        Ok(BlockHeight(h))
+        BlockHeight::try_from(h).map_err(Error::ParseKeySeg)
     }
 
     fn raw(&self) -> String {
-        self.0.raw()
+        format!("{}", self.0.get())
     }
 
     fn to_db_key(&self) -> DbKeySeg {
