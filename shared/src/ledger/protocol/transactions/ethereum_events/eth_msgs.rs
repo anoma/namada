@@ -1,9 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 
 use crate::ledger::protocol::transactions::votes::{Tally, Votes};
+use crate::types::address::Address;
 use crate::types::ethereum_events::EthereumEvent;
+use crate::types::storage::BlockHeight;
 use crate::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
 /// Represents an Ethereum event being seen by some validators
@@ -31,30 +33,38 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
     fn from(
         MultiSignedEthEvent { event, signers }: MultiSignedEthEvent,
     ) -> Self {
-        let unique_voters: HashSet<_> =
-            signers.iter().map(|(addr, _)| addr.to_owned()).collect();
-        let mut earliest_votes = Votes::default();
-        for voter in unique_voters {
-            let earliest_vote_height =
-                signers
-                    .iter()
-                    .filter_map(|(addr, height)| {
-                        if *addr == voter { Some(*height) } else { None }
-                    })
-                    .min()
-                    .unwrap_or_else(|| {
-                        unreachable!(
-                            "we will always have at least one block height \
-                             per voter"
-                        )
-                    });
-            _ = earliest_votes.insert(voter, earliest_vote_height);
-        }
         Self {
             body: event,
-            seen_by: earliest_votes,
+            seen_by: dedupe(&signers),
         }
     }
+}
+
+/// Deterministically constructs a `Votes` map from a set of validator addresses
+/// and the block heights they signed something at. We arbitrarily take the
+/// earliest block height for each validator address encountered.
+// TODO: consume `signers` instead of cloning stuff
+fn dedupe(signers: &BTreeSet<(Address, BlockHeight)>) -> Votes {
+    let unique_voters: HashSet<_> =
+        signers.iter().map(|(addr, _)| addr.to_owned()).collect();
+    let mut earliest_votes = Votes::default();
+    for voter in unique_voters {
+        let earliest_vote_height = signers
+            .iter()
+            .filter_map(
+                |(addr, height)| {
+                    if *addr == voter { Some(*height) } else { None }
+                },
+            )
+            .min()
+            .unwrap_or_else(|| {
+                unreachable!(
+                    "we will always have at least one block height per voter"
+                )
+            });
+        _ = earliest_votes.insert(voter, earliest_vote_height);
+    }
+    earliest_votes
 }
 
 /// Represents an event stored under `eth_msgs`
