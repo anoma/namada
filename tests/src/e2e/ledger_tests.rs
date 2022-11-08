@@ -27,7 +27,7 @@ use namada_apps::config::genesis::genesis_config::{
 use serde_json::json;
 use setup::constants::*;
 
-use super::helpers::{get_height, wait_for_block_height};
+use super::helpers::{get_height, wait_for_block_height, is_debug_mode};
 use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_voting_power, get_actor_rpc, get_epoch,
@@ -474,7 +474,8 @@ fn masp_txs_and_queries() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: 3600,
+                min_duration: if is_debug_mode() { 3600 } else { 360 },
+                min_num_of_blocks: 1,
                 ..genesis.parameters
             };
             GenesisConfig {
@@ -888,7 +889,8 @@ fn masp_incentives() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: 240,
+                min_duration: if is_debug_mode() { 240 } else { 60 },
+                min_num_of_blocks: 1,
                 ..genesis.parameters
             };
             GenesisConfig {
