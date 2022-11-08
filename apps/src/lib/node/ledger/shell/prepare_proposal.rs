@@ -285,7 +285,7 @@ mod test_prepare_proposal {
     };
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::proto::{Signed, SignedTxData};
-    use namada::types::address::xan;
+    use namada::types::address::nam;
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::{common, RefTo};
     use namada::types::storage::{BlockHeight, Epoch};
@@ -910,7 +910,7 @@ mod test_prepare_proposal {
                 WrapperTx::new(
                     Fee {
                         amount: 0.into(),
-                        token: xan(),
+                        token: nam(),
                     },
                     &keypair,
                     Epoch(0),
@@ -981,7 +981,7 @@ mod test_prepare_proposal {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: xan(),
+                    token: nam(),
                 },
                 &keypair,
                 Epoch(0),

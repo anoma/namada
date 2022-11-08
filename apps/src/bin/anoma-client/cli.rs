@@ -3,7 +3,7 @@
 use color_eyre::eyre::Result;
 use namada_apps::cli;
 use namada_apps::cli::cmds::*;
-use namada_apps::client::{rpc, tx, utils};
+use namada_apps::client::{eth_bridge_pool, rpc, tx, utils};
 
 pub async fn main() -> Result<()> {
     match cli::anoma_client_cli()? {
@@ -27,12 +27,6 @@ pub async fn main() -> Result<()> {
                 Sub::TxInitValidator(TxInitValidator(args)) => {
                     tx::submit_init_validator(ctx, args).await;
                 }
-                Sub::TxInitNft(TxInitNft(args)) => {
-                    tx::submit_init_nft(ctx, args).await;
-                }
-                Sub::TxMintNft(TxMintNft(args)) => {
-                    tx::submit_mint_nft(ctx, args).await;
-                }
                 Sub::TxInitProposal(TxInitProposal(args)) => {
                     tx::submit_init_proposal(ctx, args).await;
                 }
@@ -48,9 +42,16 @@ pub async fn main() -> Result<()> {
                 Sub::Withdraw(Withdraw(args)) => {
                     tx::submit_withdraw(ctx, args).await;
                 }
+                // Eth bridge pool
+                Sub::AddToEthBridgePool(args) => {
+                    eth_bridge_pool::add_to_eth_bridge_pool(ctx, args.0).await;
+                }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
                     rpc::query_epoch(args).await;
+                }
+                Sub::QueryBlock(QueryBlock(args)) => {
+                    rpc::query_block(args).await;
                 }
                 Sub::QueryBalance(QueryBalance(args)) => {
                     rpc::query_balance(ctx, args).await;

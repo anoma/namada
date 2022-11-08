@@ -8,7 +8,7 @@ use std::default::Default;
 
 use circular_queue::CircularQueue;
 
-use crate::node::ledger::events::Event;
+use crate::ledger::events::Event;
 
 pub mod dumb_queries;
 
@@ -79,10 +79,9 @@ impl EventLog {
 
 #[cfg(test)]
 mod tests {
-    use namada::types::hash::Hash;
-
     use super::*;
-    use crate::node::ledger::events::{EventLevel, EventType};
+    use crate::ledger::events::{EventLevel, EventType};
+    use crate::types::hash::Hash;
 
     const HASH: &str =
         "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF";
