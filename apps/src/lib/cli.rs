@@ -1380,13 +1380,11 @@ pub mod args {
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
+    const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+        arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".into()));
     const FORCE: ArgFlag = flag("force");
-    const GAS_AMOUNT: ArgDefault<token::Amount> =
-        arg_default("gas-amount", DefaultFn(|| token::Amount::from(0)));
     const GAS_LIMIT: ArgDefault<token::Amount> =
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
-    const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
     const HASH_LIST: Arg<String> = arg("hash-list");
@@ -2413,10 +2411,10 @@ pub mod args {
                  initialized, the alias will be the prefix of each new \
                  address joined with a number.",
             ))
-            .arg(GAS_AMOUNT.def().about(
+            .arg(FEE_AMOUNT.def().about(
                 "The amount being paid for the inclusion of this transaction",
             ))
-            .arg(GAS_TOKEN.def().about("The token for paying the fee"))
+            .arg(FEE_TOKEN.def().about("The token for paying the fee"))
             .arg(
                 GAS_LIMIT.def().about(
                     "The maximum amount of gas needed to run transaction",
@@ -2449,8 +2447,8 @@ pub mod args {
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
-            let fee_amount = GAS_AMOUNT.parse(matches);
-            let fee_token = GAS_TOKEN.parse(matches);
+            let fee_amount = FEE_AMOUNT.parse(matches);
+            let fee_token = FEE_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
 
             let signing_key = SIGNING_KEY_OPT.parse(matches);
