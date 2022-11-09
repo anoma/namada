@@ -1896,7 +1896,7 @@ fn update_validator_set<Address, TokenChange>(
 {
     validator_set.update_from_offset(
         |validator_set, epoch| {
-            // Find the validator's voting power at the epoch that's being
+            // Find the validator's bonded stake at the epoch that's being
             // updated from its total deltas
             let tokens_pre = validator_deltas
                 .and_then(|d| d.get(epoch))

@@ -21,8 +21,7 @@ use namada::ledger::pos::types::{
     decimal_mult_u64, Epoch as PosEpoch, WeightedValidator,
 };
 use namada::ledger::pos::{
-    self, into_tm_voting_power, is_validator_slashes_key, BondId, Bonds,
-    PosParams, Slash, Unbonds,
+    self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
 use namada::ledger::queries::{self, RPC};
 use namada::types::address::Address;
@@ -34,7 +33,7 @@ use namada::types::key::*;
 use namada::types::storage::{Epoch, Key, KeySeg, PrefixValue};
 use namada::types::token::{balance_key, Amount};
 use namada::types::{address, storage, token};
-use rust_decimal::prelude::{Decimal, ToPrimitive};
+use rust_decimal::prelude::Decimal;
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
@@ -879,8 +878,8 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
     }
 }
 
-/// Query PoS voting power
-pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
+/// Query PoS bonded stake
+pub async fn query_bonded_stake(ctx: Context, args: args::QueryBondedStake) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
         None => query_epoch(args.query.clone()).await,
@@ -897,17 +896,10 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
         .get(epoch)
         .expect("Validator set should be always set in the current epoch");
 
-    // Get the PoS params
-    let pos_params_key = pos::params_key();
-    let pos_params =
-        query_storage_value::<pos::PosParams>(&client, &pos_params_key)
-            .await
-            .expect("PoS parameters should always exist in storage");
-
     match args.validator {
         Some(validator) => {
             let validator = ctx.get(&validator);
-            // Find voting power for the given validator
+            // Find bonded stake for the given validator
             let validator_deltas_key = pos::validator_deltas_key(&validator);
             let validator_deltas = query_storage_value::<pos::ValidatorDeltas>(
                 &client,
@@ -931,15 +923,10 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
                         );
                     }
                     println!(
-                        "Validator {} is {}, bonded stake: {}, voting power: \
-                         {}",
+                        "Validator {} is {}, bonded stake: {}",
                         validator.encode(),
                         if is_active { "active" } else { "inactive" },
                         bonded_stake,
-                        (Decimal::from(bonded_stake)
-                            * pos_params.tm_votes_per_token)
-                            .to_u64()
-                            .unwrap(),
                     )
                 }
                 None => {
@@ -987,10 +974,8 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
     let total_bonded_stake: u64 = total_bonded_stake
         .try_into()
         .expect("total_bonded_stake should be a positive value");
-    let total_voting_power =
-        into_tm_voting_power(pos_params.tm_votes_per_token, total_bonded_stake);
 
-    println!("Total voting power: {}", total_voting_power);
+    println!("Total bonded stake: {}", total_bonded_stake);
 }
 
 /// Query PoS validator's commission rate
