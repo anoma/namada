@@ -129,6 +129,7 @@ where
             .map_err(|err| {
                 tracing::error!(
                     ?err,
+                    ?ext.sig,
                     %validator,
                     "Failed to verify the signature of an Ethereum events vote \
                      extension issued by some validator"

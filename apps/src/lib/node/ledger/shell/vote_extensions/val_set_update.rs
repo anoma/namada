@@ -150,6 +150,7 @@ where
             .map_err(|err| {
                 tracing::error!(
                     ?err,
+                    ?ext.sig,
                     %validator,
                     "Failed to verify the signature of a valset upd vote \
                      extension issued by some validator"
