@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     container: 
-      image: ghcr.io/anoma/namada:wasm-0.6.1
+      image: ghcr.io/anoma/namada:wasm-0.8.0
     strategy:
       fail-fast: false
       matrix:
@@ -200,7 +200,7 @@ jobs:
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Wait for release binaries
-        uses: lewagon/wait-on-check-action@@v1.2.0
+        uses: lewagon/wait-on-check-action@v1.2.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           check-name: ${{ matrix.make.wait_for }}
@@ -327,12 +327,12 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
-      - name: Start sccache server
-        run: sccache --start-server
       - name: Install mold linker
         run: |
           wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
           mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
+      - name: Start sccache server
+        run: sccache --start-server
       - name: Build
         run: make build-release${{ matrix.make.suffix }}
         env:
