@@ -100,9 +100,7 @@
 
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::types::storage::Epoch;
-use namada_tx_prelude::proof_of_stake::{
-    staking_token_address, GenesisValidator, PosParams,
-};
+use namada_tx_prelude::proof_of_stake::{GenesisValidator, PosParams};
 
 use crate::tx::tx_host_env;
 
@@ -118,7 +116,8 @@ pub fn init_pos(
     tx_host_env::with(|tx_env| {
         // Ensure that all the used
         // addresses exist
-        tx_env.spawn_accounts([&staking_token_address()]);
+        let native_token = tx_env.storage.native_token.clone();
+        tx_env.spawn_accounts([&native_token]);
         for validator in genesis_validators {
             tx_env.spawn_accounts([&validator.address]);
         }
@@ -583,7 +582,7 @@ pub mod testing {
         WeightedValidator,
     };
     use namada_tx_prelude::proof_of_stake::{
-        staking_token_address, BondId, Bonds, PosParams, Unbonds,
+        BondId, Bonds, PosParams, Unbonds,
     };
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
@@ -1461,7 +1460,7 @@ pub mod testing {
             }
             PosStorageChange::StakingTokenPosBalance { delta } => {
                 let balance_key = token::balance_key(
-                    &staking_token_address(),
+                    &tx::ctx().get_native_token().unwrap(),
                     &<namada_tx_prelude::Ctx as PosRead>::POS_ADDRESS,
                 );
                 let mut balance: token::Amount =

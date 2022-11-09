@@ -33,9 +33,7 @@ mod tests {
     use namada_vp_prelude::proof_of_stake::types::{
         Bond, Unbond, VotingPower, VotingPowerDelta,
     };
-    use namada_vp_prelude::proof_of_stake::{
-        staking_token_address, BondId, GenesisValidator, PosVP,
-    };
+    use namada_vp_prelude::proof_of_stake::{BondId, GenesisValidator, PosVP};
     use proptest::prelude::*;
 
     use super::*;
@@ -83,7 +81,8 @@ mod tests {
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
-        tx_host_env::with(|tx_env| {
+        let native_token = tx_host_env::with(|tx_env| {
+            let native_token = tx_env.storage.native_token.clone();
             if is_delegation {
                 let source = unbond.source.as_ref().unwrap();
                 tx_env.spawn_accounts([source]);
@@ -92,12 +91,9 @@ mod tests {
                 // bond first.
                 // First, credit the bond's source with the initial stake,
                 // before we initialize the bond below
-                tx_env.credit_tokens(
-                    source,
-                    &staking_token_address(),
-                    initial_stake,
-                );
+                tx_env.credit_tokens(source, &native_token, initial_stake);
             }
+            native_token
         });
 
         if is_delegation {
@@ -127,7 +123,7 @@ mod tests {
         };
 
         let pos_balance_key = token::balance_key(
-            &staking_token_address(),
+            &native_token,
             &Address::Internal(InternalAddress::PoS),
         );
         let pos_balance_pre: token::Amount = ctx()

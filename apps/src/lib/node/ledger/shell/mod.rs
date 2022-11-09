@@ -31,6 +31,7 @@ use namada::ledger::storage::{
 };
 use namada::ledger::{ibc, pos, protocol};
 use namada::proto::{self, Tx};
+use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key};
@@ -229,6 +230,7 @@ where
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
+        native_token: Address,
     ) -> Self {
         let chain_id = config.chain_id;
         let db_path = config.shell.db_dir(&chain_id);
@@ -239,7 +241,8 @@ where
                 .expect("Creating directory for Anoma should not fail");
         }
         // load last state from storage
-        let mut storage = Storage::open(db_path, chain_id.clone(), db_cache);
+        let mut storage =
+            Storage::open(db_path, chain_id.clone(), native_token, db_cache);
         storage
             .load_last_state()
             .map_err(|e| {
@@ -602,7 +605,7 @@ mod test_utils {
 
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
-    use namada::types::address::{nam, EstablishedAddressGen};
+    use namada::types::address::EstablishedAddressGen;
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -700,6 +703,7 @@ mod test_utils {
                         None,
                         vp_wasm_compilation_cache,
                         tx_wasm_compilation_cache,
+                        address::nam(),
                     ),
                 },
                 receiver,
@@ -801,6 +805,7 @@ mod test_utils {
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
+        let native_token = address::nam();
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
                 base_dir.clone(),
@@ -812,6 +817,7 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
+            native_token.clone(),
         );
         let keypair = gen_keypair();
         // enqueue a wrapper tx
@@ -822,7 +828,7 @@ mod test_utils {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: native_token,
             },
             &keypair,
             Epoch(0),
@@ -870,6 +876,7 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
+            address::nam(),
         );
         assert!(!shell.storage.tx_queue.is_empty());
     }

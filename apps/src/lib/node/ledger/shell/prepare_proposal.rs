@@ -140,7 +140,6 @@ pub(super) mod record {
 #[cfg(test)]
 mod test_prepare_proposal {
     use borsh::BorshSerialize;
-    use namada::types::address::nam;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{Fee, WrapperTx};
 
@@ -189,7 +188,7 @@ mod test_prepare_proposal {
                 WrapperTx::new(
                     Fee {
                         amount: 0.into(),
-                        token: nam(),
+                        token: shell.storage.native_token.clone(),
                     },
                     &keypair,
                     Epoch(0),
@@ -244,7 +243,7 @@ mod test_prepare_proposal {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),

@@ -15,7 +15,7 @@ pub use vp::PosVP;
 
 use super::storage_api;
 use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
-use crate::types::address::{self, Address, InternalAddress};
+use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Epoch;
 use crate::types::{key, token};
 
@@ -25,11 +25,6 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
 /// Address of the PoS slash pool account
 pub const SLASH_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::PosSlashPool);
-
-/// Address of the staking token (NAM)
-pub fn staking_token_address() -> Address {
-    address::nam()
-}
 
 /// Initialize storage in the genesis block.
 pub fn init_genesis_storage<'a, DB, H>(
@@ -157,8 +152,9 @@ mod macros {
 
             const POS_ADDRESS: Self::Address = $crate::ledger::pos::ADDRESS;
 
-            fn staking_token_address() -> Self::Address {
-                $crate::ledger::pos::staking_token_address()
+            fn staking_token_address(&self) -> Self::Address {
+                $crate::ledger::storage_api::StorageRead::get_native_token(self)
+                    .expect("Native token must be available")
             }
 
             fn read_pos_params(&self) -> std::result::Result<PosParams, Self::Error> {

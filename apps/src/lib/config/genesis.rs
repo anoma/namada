@@ -104,10 +104,13 @@ pub mod genesis_config {
     pub struct GenesisConfig {
         // Genesis timestamp
         pub genesis_time: Rfc3339String,
+        // Name of the native token - this must one of the tokens included in
+        // the `token` field
+        pub native_token: String,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
-        pub token: Option<HashMap<String, TokenAccountConfig>>,
+        pub token: HashMap<String, TokenAccountConfig>,
         // Established accounts present at genesis
         pub established: Option<HashMap<String, EstablishedAccountConfig>>,
         // Implicit accounts present at genesis
@@ -451,32 +454,53 @@ pub mod genesis_config {
     }
 
     pub fn load_genesis_config(config: GenesisConfig) -> Genesis {
-        let wasms = config.wasm;
-        let validators: HashMap<String, Validator> = config
-            .validator
+        let GenesisConfig {
+            genesis_time,
+            native_token,
+            validator,
+            token,
+            established,
+            implicit,
+            parameters,
+            pos_params,
+            gov_params,
+            wasm,
+        } = config;
+
+        let native_token = Address::decode(
+            token
+                .get(&native_token)
+                .expect(
+                    "Native token's alias must be present in the declared \
+                     tokens",
+                )
+                .address
+                .as_ref()
+                .expect("Missing native token address"),
+        )
+        .expect("Invalid address");
+
+        let validators: HashMap<String, Validator> = validator
             .iter()
-            .map(|(name, cfg)| (name.clone(), load_validator(cfg, &wasms)))
+            .map(|(name, cfg)| (name.clone(), load_validator(cfg, &wasm)))
             .collect();
-        let established_accounts: HashMap<String, EstablishedAccount> = config
-            .established
-            .unwrap_or_default()
-            .iter()
-            .map(|(name, cfg)| (name.clone(), load_established(cfg, &wasms)))
-            .collect();
-        let implicit_accounts: HashMap<String, ImplicitAccount> = config
-            .implicit
+        let established_accounts: HashMap<String, EstablishedAccount> =
+            established
+                .unwrap_or_default()
+                .iter()
+                .map(|(name, cfg)| (name.clone(), load_established(cfg, &wasm)))
+                .collect();
+        let implicit_accounts: HashMap<String, ImplicitAccount> = implicit
             .unwrap_or_default()
             .iter()
             .map(|(name, cfg)| (name.clone(), load_implicit(cfg)))
             .collect();
-        let token_accounts = config
-            .token
-            .unwrap_or_default()
+        let token_accounts = token
             .iter()
             .map(|(_name, cfg)| {
                 load_token(
                     cfg,
-                    &wasms,
+                    &wasm,
                     &validators,
                     &established_accounts,
                     &implicit_accounts,
@@ -486,53 +510,66 @@ pub mod genesis_config {
 
         let parameters = Parameters {
             epoch_duration: EpochDuration {
-                min_num_of_blocks: config.parameters.min_num_of_blocks,
+                min_num_of_blocks: parameters.min_num_of_blocks,
                 min_duration: namada::types::time::Duration::seconds(
-                    config.parameters.min_duration,
+                    parameters.min_duration,
                 )
                 .into(),
             },
             max_expected_time_per_block:
                 namada::types::time::Duration::seconds(
-                    config.parameters.max_expected_time_per_block,
+                    parameters.max_expected_time_per_block,
                 )
                 .into(),
-            vp_whitelist: config.parameters.vp_whitelist.unwrap_or_default(),
-            tx_whitelist: config.parameters.tx_whitelist.unwrap_or_default(),
+            vp_whitelist: parameters.vp_whitelist.unwrap_or_default(),
+            tx_whitelist: parameters.tx_whitelist.unwrap_or_default(),
         };
 
+        let GovernanceParamsConfig {
+            min_proposal_fund,
+            max_proposal_code_size,
+            min_proposal_period,
+            max_proposal_content_size,
+            min_proposal_grace_epochs,
+            max_proposal_period,
+        } = gov_params;
         let gov_params = GovParams {
-            min_proposal_fund: config.gov_params.min_proposal_fund,
-            max_proposal_code_size: config.gov_params.max_proposal_code_size,
-            min_proposal_period: config.gov_params.min_proposal_period,
-            max_proposal_period: config.gov_params.max_proposal_period,
-            max_proposal_content_size: config
-                .gov_params
-                .max_proposal_content_size,
-            min_proposal_grace_epochs: config
-                .gov_params
-                .min_proposal_grace_epochs,
+            min_proposal_fund,
+            max_proposal_code_size,
+            min_proposal_period,
+            max_proposal_content_size,
+            min_proposal_grace_epochs,
+            max_proposal_period,
         };
 
+        let PosParamsConfig {
+            max_validator_slots,
+            pipeline_len,
+            unbonding_len,
+            votes_per_token,
+            block_proposer_reward,
+            block_vote_reward,
+            duplicate_vote_slash_rate,
+            light_client_attack_slash_rate,
+        } = pos_params;
         let pos_params = PosParams {
-            max_validator_slots: config.pos_params.max_validator_slots,
-            pipeline_len: config.pos_params.pipeline_len,
-            unbonding_len: config.pos_params.unbonding_len,
-            votes_per_token: BasisPoints::new(
-                config.pos_params.votes_per_token,
-            ),
-            block_proposer_reward: config.pos_params.block_proposer_reward,
-            block_vote_reward: config.pos_params.block_vote_reward,
+            max_validator_slots,
+            pipeline_len,
+            unbonding_len,
+            votes_per_token: BasisPoints::new(votes_per_token),
+            block_proposer_reward,
+            block_vote_reward,
             duplicate_vote_slash_rate: BasisPoints::new(
-                config.pos_params.duplicate_vote_slash_rate,
+                duplicate_vote_slash_rate,
             ),
             light_client_attack_slash_rate: BasisPoints::new(
-                config.pos_params.light_client_attack_slash_rate,
+                light_client_attack_slash_rate,
             ),
         };
 
         let mut genesis = Genesis {
-            genesis_time: config.genesis_time.try_into().unwrap(),
+            genesis_time: genesis_time.try_into().unwrap(),
+            native_token,
             validators: validators.into_values().collect(),
             token_accounts,
             established_accounts: established_accounts.into_values().collect(),
@@ -580,6 +617,7 @@ pub mod genesis_config {
 #[borsh_init(init)]
 pub struct Genesis {
     pub genesis_time: DateTimeUtc,
+    pub native_token: Address,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
@@ -795,6 +833,7 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
+        native_token: address::nam(),
     }
 }
 

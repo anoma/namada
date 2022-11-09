@@ -28,6 +28,7 @@ use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
+use crate::node::ledger::config::genesis;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
@@ -421,6 +422,10 @@ fn start_abci_broadcaster_shell(
     // Construct our ABCI application.
     let tendermint_mode = config.tendermint.tendermint_mode.clone();
     let ledger_address = config.shell.ledger_address;
+    #[cfg(not(feature = "dev"))]
+    let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
+    #[cfg(feature = "dev")]
+    let genesis = genesis::genesis();
     let (shell, abci_service) = AbcippShim::new(
         config,
         wasm_dir,
@@ -428,6 +433,7 @@ fn start_abci_broadcaster_shell(
         &db_cache,
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
+        genesis.native_token,
     );
 
     // Channel for signalling shut down to ABCI server

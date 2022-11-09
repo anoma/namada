@@ -18,11 +18,11 @@ use thiserror::Error;
 use super::{
     bond_key, is_bond_key, is_params_key, is_total_voting_power_key,
     is_unbond_key, is_validator_set_key, is_validator_total_deltas_key,
-    is_validator_voting_power_key, params_key, staking_token_address,
-    total_voting_power_key, unbond_key, validator_consensus_key_key,
-    validator_set_key, validator_slashes_key, validator_state_key,
-    validator_total_deltas_key, validator_voting_power_key, BondId, Bonds,
-    Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
+    is_validator_voting_power_key, params_key, total_voting_power_key,
+    unbond_key, validator_consensus_key_key, validator_set_key,
+    validator_slashes_key, validator_state_key, validator_total_deltas_key,
+    validator_voting_power_key, BondId, Bonds, Unbonds, ValidatorConsensusKeys,
+    ValidatorSets, ValidatorTotalDeltas,
 };
 use crate::impl_pos_read_only;
 use crate::ledger::governance::vp::is_proposal_accepted;
@@ -120,6 +120,7 @@ where
         let addr = Address::Internal(Self::ADDR);
         let mut changes: Vec<DataUpdate<_, _, _, _>> = vec![];
         let current_epoch = self.ctx.pre().get_block_epoch()?;
+        let staking_token_address = self.ctx.pre().get_native_token()?;
 
         for key in keys_changed {
             if is_params_key(key) {
@@ -197,7 +198,7 @@ where
                     data: Data { pre, post },
                 });
             } else if let Some(owner) =
-                token::is_balance_key(&staking_token_address(), key)
+                token::is_balance_key(&staking_token_address, key)
             {
                 if owner != &addr {
                     continue;

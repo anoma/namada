@@ -167,6 +167,20 @@ impl StorageRead<'_> for Ctx {
         Ok(Epoch(unsafe { anoma_tx_get_block_epoch() }))
     }
 
+    /// Get the native token address
+    fn get_native_token(&self) -> Result<Address, Error> {
+        let result = Vec::with_capacity(address::ADDRESS_LEN);
+        unsafe {
+            anoma_tx_get_native_token(result.as_ptr() as _);
+        }
+        let slice = unsafe {
+            slice::from_raw_parts(result.as_ptr(), address::ADDRESS_LEN)
+        };
+        let address_str =
+            std::str::from_utf8(slice).expect("Cannot decode native address");
+        Ok(Address::decode(address_str).expect("Cannot decode native address"))
+    }
+
     fn iter_prefix(
         &self,
         prefix: &namada::types::storage::Key,
