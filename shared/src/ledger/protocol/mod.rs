@@ -202,14 +202,31 @@ where
     use crate::types::vote_extensions::ethereum_events;
 
     match tx {
-        ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
-            events,
-            ..
-        }) => self::transactions::ethereum_events::apply_derived_tx(
-            storage, events,
-        )
-        .map_err(Error::ProtocolTxError),
-        ProtocolTxType::ValidatorSetUpdate(_) => Ok(TxResult::default()),
+        ProtocolTxType::EthereumEvents(ext) => {
+            let ethereum_events::VextDigest { events, .. } = ext;
+            self::transactions::ethereum_events::apply_derived_tx(
+                storage, events,
+            )
+            .map_err(Error::ProtocolTxError)
+        }
+        ProtocolTxType::ValidatorSetUpdate(ext) => {
+            // NOTE(feature = "abcipp"): we will not need to apply any
+            // storage changes when we rollback to ABCI++; this is because
+            // the decided vote extension digest should have >2/3 of the
+            // voting power already, which is the whole reason why we
+            // have to apply state updates with `abciplus` - we need
+            // to aggregate votes consisting of >2/3 of the voting power
+            // on a validator set update.
+            //
+            // we could, however, emit some kind of event, notifying a
+            // relayer process of a newly available validator set update;
+            // for this, we need to receive a mutable reference to the
+            // event log, in `apply_protocol_tx()`
+            self::transactions::validator_set_update::aggregate_votes(
+                storage, ext,
+            )
+            .map_err(Error::ProtocolTxError)
+        }
         _ => {
             tracing::error!(
                 "Attempt made to apply an unsupported protocol transaction! - \

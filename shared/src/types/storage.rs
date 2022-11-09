@@ -27,18 +27,20 @@ use crate::types::time::DateTimeUtc;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("TEMPORARY error: {error}")]
-    Temporary { error: String },
     #[error("Error parsing address: {0}")]
     ParseAddress(address::Error),
     #[error("Error parsing address from a storage key")]
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
-    #[error("Error parsing key segment {0}")]
+    #[error("Error parsing key segment: {0}")]
     ParseKeySeg(String),
-    #[error("Could not parse string into a key segment: {0}")]
-    ParseError(String),
+    #[error("Error parsing block hash: {0}")]
+    ParseBlockHash(String),
+    #[error("The key is empty")]
+    EmptyKey,
+    #[error("They key is missing sub-key segments: {0}")]
+    MissingSegments(String),
 }
 
 /// Result for functions that may fail
@@ -145,13 +147,11 @@ impl TryFrom<&[u8]> for BlockHash {
 
     fn try_from(value: &[u8]) -> Result<Self> {
         if value.len() != BLOCK_HASH_LENGTH {
-            return Err(Error::Temporary {
-                error: format!(
-                    "Unexpected block hash length {}, expected {}",
-                    value.len(),
-                    BLOCK_HASH_LENGTH
-                ),
-            });
+            return Err(Error::ParseBlockHash(format!(
+                "Unexpected block hash length {}, expected {}",
+                value.len(),
+                BLOCK_HASH_LENGTH
+            )));
         }
         let mut hash = [0; 32];
         hash.copy_from_slice(value);
@@ -163,18 +163,7 @@ impl TryFrom<Vec<u8>> for BlockHash {
     type Error = self::Error;
 
     fn try_from(value: Vec<u8>) -> Result<Self> {
-        if value.len() != BLOCK_HASH_LENGTH {
-            return Err(Error::Temporary {
-                error: format!(
-                    "Unexpected block hash length {}, expected {}",
-                    value.len(),
-                    BLOCK_HASH_LENGTH
-                ),
-            });
-        }
-        let mut hash = [0; 32];
-        hash.copy_from_slice(&value);
-        Ok(BlockHash(hash))
+        value.as_slice().try_into()
     }
 }
 
@@ -517,21 +506,14 @@ impl Key {
         match self.segments.split_first() {
             Some((_, rest)) => {
                 if rest.is_empty() {
-                    Err(Error::Temporary {
-                        error: format!(
-                            "The key doesn't have the sub segments: {}",
-                            self
-                        ),
-                    })
+                    Err(Error::MissingSegments(format!("{self}")))
                 } else {
                     Ok(Self {
                         segments: rest.to_vec(),
                     })
                 }
             }
-            None => Err(Error::Temporary {
-                error: "The key is empty".to_owned(),
-            }),
+            None => Err(Error::EmptyKey),
         }
     }
 
@@ -688,6 +670,36 @@ impl KeySeg for BlockHeight {
     }
 }
 
+impl KeySeg for Epoch {
+    fn parse(string: String) -> Result<Self> {
+        string
+            .split_once('=')
+            .and_then(|(prefix, epoch)| (prefix == "E").then(|| epoch))
+            .ok_or_else(|| {
+                Error::ParseKeySeg(format!(
+                    "Invalid epoch prefix on key: {string}"
+                ))
+            })
+            .and_then(|epoch| {
+                epoch.parse::<u64>().map_err(|e| {
+                    Error::ParseKeySeg(format!(
+                        "Unexpected epoch value {epoch}, {e}"
+                    ))
+                })
+            })
+            .map(Epoch)
+    }
+
+    fn raw(&self) -> String {
+        let &Epoch(epoch) = self;
+        format!("E={epoch}")
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
 impl KeySeg for Address {
     fn parse(mut seg: String) -> Result<Self> {
         match seg.chars().next() {
@@ -711,7 +723,7 @@ impl KeySeg for Address {
 impl KeySeg for Hash {
     fn parse(seg: String) -> Result<Self> {
         seg.try_into().map_err(|e: crate::types::hash::Error| {
-            Error::ParseError(e.to_string())
+            Error::ParseKeySeg(e.to_string())
         })
     }
 
@@ -727,7 +739,7 @@ impl KeySeg for Hash {
 impl KeySeg for KeccakHash {
     fn parse(seg: String) -> Result<Self> {
         seg.try_into()
-            .map_err(|e: TryFromError| Error::ParseError(e.to_string()))
+            .map_err(|e: TryFromError| Error::ParseKeySeg(e.to_string()))
     }
 
     fn raw(&self) -> String {
@@ -1067,6 +1079,19 @@ mod tests {
             let addr = address::testing::established_address_1();
             let key = Key::from(addr.to_db_key()).push(&s).expect("cannnot push the segment");
             assert_eq!(key.segments[1].raw(), s);
+        }
+
+        /// Test roundtrip parsing of key segments derived from [`Epoch`]
+        /// values.
+        #[test]
+        fn test_parse_epoch_key_segment(e in 0..=u64::MAX) {
+            let original_epoch = Epoch(e);
+            let key_seg = match original_epoch.to_db_key() {
+                DbKeySeg::StringSeg(s) => s,
+                _ => panic!("Test failed"),
+            };
+            let parsed_epoch: Epoch = KeySeg::parse(key_seg).expect("Test failed");
+            assert_eq!(original_epoch, parsed_epoch);
         }
     }
 
