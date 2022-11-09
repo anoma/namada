@@ -22,6 +22,25 @@ use crate::node::ledger::shell::vote_extensions::{
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
+/// Alloted space for transactions in some proposed block.
+///
+/// We keep track of the current space utilized by:
+///
+///   - Protocol transactions.
+///   - DKG decrypted transactions.
+///   - DKG encrypted transactions.
+struct TxAllotedSpace {
+    /// The total space Tendermint has allotted to the
+    /// application for the current block height.
+    provided_by_tendermint: u64,
+    /// The current space utilized by protocol transactions.
+    current_for_protocol_txs: u64,
+    /// The current space utilized by DKG encrypted transactions.
+    current_for_encrypted_txs: u64,
+    /// The current space utilized by DKG decrypted transactions.
+    current_for_decrypted_txs: u64,
+}
+
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
