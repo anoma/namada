@@ -56,6 +56,8 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
     /// them in the next block).
+    // TODO: change second paragraph of the docstr, to reflect new
+    // alloted space per block design
     pub fn prepare_proposal(
         &mut self,
         req: RequestPrepareProposal,
