@@ -23,11 +23,11 @@ use crate::types::transaction::TxResult;
 use crate::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use crate::types::voting_power::FractionalVotingPower;
 
-impl utils::GetVoters for [MultiSignedEthEvent] {
+impl utils::GetVoters for HashSet<EthMsgUpdate> {
     #[inline]
     fn get_voters(&self) -> HashSet<(Address, BlockHeight)> {
-        self.iter().fold(HashSet::new(), |mut voters, event| {
-            voters.extend(event.signers.iter().cloned());
+        self.iter().fold(HashSet::new(), |mut voters, update| {
+            voters.extend(update.seen_by.clone().into_iter());
             voters
         })
     }
@@ -57,9 +57,9 @@ where
          protocol transaction"
     );
 
-    let voting_powers = utils::get_voting_powers(storage, events.as_slice())?;
-
     let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
+
+    let voting_powers = utils::get_voting_powers(storage, &updates)?;
 
     let changed_keys = apply_updates(storage, updates, voting_powers)?;
 
@@ -411,22 +411,22 @@ mod tests {
 
     #[test]
     /// Assert we don't return anything if we try to get the votes for an empty
-    /// vec of events
-    pub fn test_get_votes_for_events_empty() {
-        let events = vec![];
-        assert!(events.as_slice().get_voters().is_empty());
+    /// vec of updates
+    pub fn test_get_votes_for_updates_empty() {
+        let updates = HashSet::new();
+        assert!(updates.get_voters().is_empty());
     }
 
     #[test]
-    /// Test that we correctly get the votes from a vec of events
+    /// Test that we correctly get the votes from a vec of updates
     pub fn test_get_votes_for_events() {
-        let events = vec![
-            MultiSignedEthEvent {
-                event: arbitrary_single_transfer(
+        let updates = HashSet::from([
+            EthMsgUpdate {
+                body: arbitrary_single_transfer(
                     1.into(),
                     address::testing::established_address_1(),
                 ),
-                signers: BTreeSet::from([
+                seen_by: Votes::from([
                     (
                         address::testing::established_address_1(),
                         BlockHeight(100),
@@ -437,12 +437,12 @@ mod tests {
                     ),
                 ]),
             },
-            MultiSignedEthEvent {
-                event: arbitrary_single_transfer(
+            EthMsgUpdate {
+                body: arbitrary_single_transfer(
                     2.into(),
                     address::testing::established_address_2(),
                 ),
-                signers: BTreeSet::from([
+                seen_by: Votes::from([
                     (
                         address::testing::established_address_1(),
                         BlockHeight(101),
@@ -453,41 +453,15 @@ mod tests {
                     ),
                 ]),
             },
-        ];
-        let voters = events.as_slice().get_voters();
+        ]);
+        let voters = updates.get_voters();
         assert_eq!(
             voters,
-            HashSet::from_iter(vec![
+            HashSet::from([
                 (address::testing::established_address_1(), BlockHeight(100)),
                 (address::testing::established_address_1(), BlockHeight(101)),
                 (address::testing::established_address_2(), BlockHeight(102)),
                 (address::testing::established_address_3(), BlockHeight(100))
-            ])
-        )
-    }
-
-    #[test]
-    /// Test that we correctly get the votes from a vec of events in the case
-    /// where there are multiple signatures from the same validator
-    fn test_get_votes_for_events_multiple_signatures_same_validator() {
-        let events = vec![MultiSignedEthEvent {
-            event: arbitrary_single_transfer(
-                1.into(),
-                address::testing::established_address_1(),
-            ),
-            signers: BTreeSet::from([
-                (address::testing::established_address_1(), BlockHeight(100)),
-                (address::testing::established_address_1(), BlockHeight(101)),
-                (address::testing::established_address_2(), BlockHeight(200)),
-            ]),
-        }];
-        let voters = events.as_slice().get_voters();
-        assert_eq!(
-            voters,
-            HashSet::from_iter(vec![
-                (address::testing::established_address_1(), BlockHeight(100)),
-                (address::testing::established_address_1(), BlockHeight(101)),
-                (address::testing::established_address_2(), BlockHeight(200))
             ])
         )
     }
