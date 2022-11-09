@@ -282,7 +282,6 @@ where
                 return Ok(false);
             } else {
                 // Unknown changes anywhere else are permitted
-                return Ok(true);
             }
         }
 
