@@ -9,6 +9,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::Result;
 
+use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils;
 use crate::ledger::protocol::transactions::votes::{
@@ -17,13 +18,10 @@ use crate::ledger::protocol::transactions::votes::{
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::types::address::Address;
-use crate::types::storage::{self, BlockHeight};
+use crate::types::storage::BlockHeight;
 use crate::types::transaction::TxResult;
 use crate::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use crate::types::voting_power::FractionalVotingPower;
-
-/// The keys changed while applying a protocol transaction
-type ChangedKeys = BTreeSet<storage::Key>;
 
 impl utils::GetVoters for [MultiSignedEthEvent] {
     #[inline]
@@ -184,7 +182,6 @@ mod tests {
     use std::collections::{BTreeSet, HashMap, HashSet};
 
     use borsh::BorshDeserialize;
-    use storage::BlockHeight;
 
     use super::*;
     use crate::ledger::eth_bridge::storage::wrapped_erc20s;
