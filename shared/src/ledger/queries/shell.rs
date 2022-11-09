@@ -103,6 +103,19 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    if let Some(past_height_limit) = ctx.storage_read_past_height_limit {
+        if request.height.0 + past_height_limit < ctx.storage.last_height.0 {
+            return Err(storage_api::Error::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "Cannot query more than {past_height_limit} blocks in the \
+                     past (configured via \
+                     `shell.storage_read_past_height_limit`)."
+                ),
+            )));
+        }
+    }
+
     match ctx
         .storage
         .read_with_height(&storage_key, request.height)

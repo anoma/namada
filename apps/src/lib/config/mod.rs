@@ -88,6 +88,9 @@ pub struct Shell {
     /// Tx WASM compilation in-memory cache maximum size in bytes.
     /// When not set, defaults to 1/6 of the available memory.
     pub tx_wasm_compilation_cache_bytes: Option<u64>,
+    /// When set, will limit the how many block heights in the past can the
+    /// storage be queried for reading values.
+    pub storage_read_past_height_limit: Option<u64>,
     /// Use the [`Ledger::db_dir()`] method to read the value.
     db_dir: PathBuf,
     /// Use the [`Ledger::tendermint_dir()`] method to read the value.
@@ -135,6 +138,8 @@ impl Ledger {
                 block_cache_bytes: None,
                 vp_wasm_compilation_cache_bytes: None,
                 tx_wasm_compilation_cache_bytes: None,
+                // Default corresponds to 1 hour of past blocks at 1 block/sec
+                storage_read_past_height_limit: Some(3600),
                 db_dir: DB_DIR.into(),
                 tendermint_dir: TENDERMINT_DIR.into(),
             },
