@@ -34,7 +34,8 @@ use crate::ledger::native_vp::{
 };
 use crate::ledger::pos::{
     is_validator_address_raw_hash_key, is_validator_commission_rate_key,
-    is_validator_consensus_key_key, is_validator_state_key,
+    is_validator_consensus_key_key,
+    is_validator_max_commission_rate_change_key, is_validator_state_key,
 };
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::{self, StorageRead};
@@ -270,8 +271,7 @@ where
                     .read_bytes(&validator_max_commission_rate_change_key(
                         address,
                     ))?
-                    .and_then(|bytes| Decimal::try_from_slice(&bytes[..]).ok())
-                    .unwrap();
+                    .and_then(|bytes| Decimal::try_from_slice(&bytes[..]).ok());
                 let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     CommissionRates::try_from_slice(&bytes[..]).ok()
                 });
@@ -281,6 +281,21 @@ where
                 changes.push(Validator {
                     address: address.clone(),
                     update: CommissionRate(Data { pre, post }, max_change),
+                });
+            } else if let Some(address) =
+                is_validator_max_commission_rate_change_key(key)
+            {
+                let pre =
+                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                        Decimal::try_from_slice(&bytes[..]).ok()
+                    });
+                let post =
+                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                        Decimal::try_from_slice(&bytes[..]).ok()
+                    });
+                changes.push(Validator {
+                    address: address.clone(),
+                    update: MaxCommissionRateChange(Data { pre, post }),
                 });
             } else if key.segments.get(0) == Some(&addr.to_db_key()) {
                 // Unknown changes to this address space are disallowed

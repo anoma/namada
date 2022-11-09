@@ -179,6 +179,16 @@ where
     NewValidatorMissingInValidatorSet(Address),
     #[error("Validator set has not been updated for new validators.")]
     MissingValidatorSetUpdate,
+    #[error(
+        "Changing the maximum commission rate change per epoch for validator \
+         {0} is forbidden."
+    )]
+    ValidatorMaxCommissionRateChangeForbidden(Address),
+    #[error(
+        "Invalid value of maximum commission rate change per epoch for \
+         validator {0}, got {1}."
+    )]
+    InvalidMaxCommissionRateChange(Address, Decimal),
 }
 
 /// An update of PoS data.
@@ -289,7 +299,9 @@ where
     /// Voting power update
     VotingPowerUpdate(Data<ValidatorVotingPowers>),
     /// Commission rate update
-    CommissionRate(Data<CommissionRates>, Decimal),
+    CommissionRate(Data<CommissionRates>, Option<Decimal>),
+    /// Maximum commission rate change update
+    MaxCommissionRateChange(Data<Decimal>),
 }
 
 /// Data update with prior and posterior state.
@@ -317,6 +329,7 @@ pub struct NewValidator<PublicKey> {
     has_address_raw_hash: Option<String>,
     voting_power: VotingPower,
     has_commission_rate: bool,
+    has_max_commission_rate_change: bool,
 }
 
 /// Validation constants
@@ -810,12 +823,14 @@ where
                         has_address_raw_hash,
                         voting_power,
                         has_commission_rate,
+                        has_max_commission_rate_change,
                     } = &new_validator;
                     // The new validator must have set all the required fields
                     if !(*has_state
                         && *has_total_deltas
                         && *has_voting_power
-                        && *has_commission_rate)
+                        && *has_commission_rate
+                        && *has_max_commission_rate_change)
                     {
                         errors.push(Error::InvalidNewValidator(
                             address.clone(),
@@ -1157,6 +1172,14 @@ where
                             address,
                             data,
                             max_change,
+                        )
+                    }
+                    MaxCommissionRateChange(data) => {
+                        Self::validator_max_commission_rate_change(
+                            errors,
+                            new_validators,
+                            address,
+                            data,
                         )
                     }
                 },
@@ -1502,14 +1525,14 @@ where
         new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
         address: Address,
         data: Data<CommissionRates>,
-        max_change: Decimal,
+        max_change: Option<Decimal>,
     ) {
         match (data.pre, data.post) {
             (None, Some(post)) => {
                 if post.last_update() != constants.current_epoch {
                     errors.push(Error::InvalidLastUpdate)
                 }
-                // The value must be known at pipeline epoch
+                // The value must be known at the pipeline epoch
                 match post.get(constants.pipeline_epoch) {
                     Some(_) => {
                         let validator =
@@ -1525,7 +1548,11 @@ where
                 if post.last_update() != constants.current_epoch {
                     errors.push(Error::InvalidLastUpdate)
                 }
-                // Before pipeline epoch, the commission rate must not change
+                if max_change.is_none() {
+                    errors.push(Error::InvalidLastUpdate)
+                }
+                // Before the pipeline epoch, the commission rate must not
+                // change
                 for epoch in Epoch::iter_range(
                     constants.current_epoch,
                     constants.pipeline_offset,
@@ -1550,7 +1577,9 @@ where
                     post.get(constants.pipeline_epoch),
                 ) {
                     (Some(prev_rate), Some(new_rate)) => {
-                        if (new_rate - prev_rate).abs() > max_change {
+                        if (new_rate - prev_rate).abs()
+                            > max_change.unwrap_or_default()
+                        {
                             errors.push(
                                 Error::InvalidValidatorCommissionRateUpdate(
                                     constants.pipeline_epoch.into(),
@@ -1567,6 +1596,30 @@ where
                 errors.push(Error::ValidatorCommissionRateIsRequired(address))
             }
             (None, None) => {}
+        }
+    }
+
+    fn validator_max_commission_rate_change(
+        errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
+        new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
+        address: Address,
+        data: Data<Decimal>,
+    ) {
+        match (data.pre, data.post) {
+            (None, Some(post)) => {
+                if post < Decimal::ZERO || post > Decimal::ONE {
+                    errors.push(Error::InvalidMaxCommissionRateChange(
+                        address.clone(),
+                        post,
+                    ))
+                }
+
+                let validator = new_validators.entry(address).or_default();
+                validator.has_max_commission_rate_change = true;
+            }
+            _ => errors.push(Error::ValidatorMaxCommissionRateChangeForbidden(
+                address,
+            )),
         }
     }
 

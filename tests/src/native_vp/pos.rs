@@ -401,7 +401,10 @@ mod tests {
                         address,
                         consensus_key,
                         commission_rate: _,
+                        max_commission_rate_change: _,
                     } => {
+                        // TODO: should there be preconditions for commission
+                        // rates here?
                         !state.is_validator(address)
                             && !state.is_used_key(consensus_key)
                     }
@@ -615,6 +618,7 @@ pub mod testing {
             address: Address,
             consensus_key: PublicKey,
             commission_rate: Decimal,
+            max_commission_rate_change: Decimal,
         },
         Bond {
             amount: token::Amount,
@@ -708,6 +712,10 @@ pub mod testing {
             address: Address,
             rate: Decimal,
         },
+        ValidatorMaxCommissionRateChange {
+            address: Address,
+            change: Decimal,
+        },
     }
 
     pub fn arb_valid_pos_action(
@@ -726,14 +734,23 @@ pub mod testing {
             address::testing::arb_established_address(),
             key::testing::arb_common_keypair(),
             arb_rate(),
+            arb_rate(),
         )
-            .prop_map(|(addr, consensus_key, commission_rate)| {
-                ValidPosAction::InitValidator {
-                    address: Address::Established(addr),
-                    consensus_key: consensus_key.ref_to(),
+            .prop_map(
+                |(
+                    addr,
+                    consensus_key,
                     commission_rate,
-                }
-            });
+                    max_commission_rate_change,
+                )| {
+                    ValidPosAction::InitValidator {
+                        address: Address::Established(addr),
+                        consensus_key: consensus_key.ref_to(),
+                        commission_rate,
+                        max_commission_rate_change,
+                    }
+                },
+            );
 
         if validators.is_empty() {
             // When there is no validator, we can only initialize new ones
@@ -880,6 +897,7 @@ pub mod testing {
                     address,
                     consensus_key,
                     commission_rate,
+                    max_commission_rate_change,
                 } => {
                     let offset = DynEpochOffset::PipelineLen;
                     vec![
@@ -918,8 +936,12 @@ pub mod testing {
                             offset: Either::Left(offset),
                         },
                         PosStorageChange::ValidatorCommissionRate {
-                            address,
+                            address: address.clone(),
                             rate: commission_rate,
+                        },
+                        PosStorageChange::ValidatorMaxCommissionRateChange {
+                            address,
+                            change: max_commission_rate_change,
                         },
                     ]
                 }
@@ -1515,6 +1537,20 @@ pub mod testing {
                     });
                 tx::ctx()
                     .write_validator_commission_rate(&address, rates)
+                    .unwrap();
+            }
+            PosStorageChange::ValidatorMaxCommissionRateChange {
+                address,
+                change,
+            } => {
+                let max_change = tx::ctx()
+                    .read_validator_max_commission_rate_change(&address)
+                    .unwrap()
+                    .unwrap_or(change);
+                tx::ctx()
+                    .write_validator_max_commission_rate_change(
+                        &address, max_change,
+                    )
                     .unwrap();
             }
         }
