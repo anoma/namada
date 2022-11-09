@@ -2095,6 +2095,42 @@ pub mod args {
         }
     }
 
+    #[derive(Clone, Debug)]
+    /// Commission rate change args
+    pub struct TxCommissionRateChange {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Validator address (should be self)
+        pub validator: WalletAddress,
+        /// Value to which the tx changes the commission rate
+        pub rate: Decimal,
+    }
+
+    impl Args for TxCommissionRateChange {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let rate = COMMISSION_RATE.parse(matches);
+            Self {
+                tx,
+                validator,
+                rate,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(VALIDATOR.def().about(
+                    "The validator's address whose commission rate to change.",
+                ))
+                .arg(
+                    COMMISSION_RATE
+                        .def()
+                        .about("The desired new commission rate."),
+                )
+        }
+    }
+
     /// Query PoS commission rate
     #[derive(Clone, Debug)]
     pub struct QueryCommissionRate {
