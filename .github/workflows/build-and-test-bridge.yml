@@ -200,7 +200,7 @@ jobs:
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Wait for release binaries
-        uses: lewagon/wait-on-check-action@@v1.2.0
+        uses: lewagon/wait-on-check-action@v1.2.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           check-name: ${{ matrix.make.wait_for }}
