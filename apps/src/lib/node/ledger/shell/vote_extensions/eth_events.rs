@@ -130,6 +130,7 @@ where
                 tracing::error!(
                     ?err,
                     ?ext.sig,
+                    ?pk,
                     %validator,
                     "Failed to verify the signature of an Ethereum events vote \
                      extension issued by some validator"
