@@ -327,12 +327,12 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
-      - name: Start sccache server
-        run: sccache --start-server
       - name: Install mold linker
         run: |
           wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
           mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
+      - name: Start sccache server
+        run: sccache --start-server
       - name: Build
         run: make build-release${{ matrix.make.suffix }}
         env:
