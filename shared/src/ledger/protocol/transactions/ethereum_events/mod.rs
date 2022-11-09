@@ -411,14 +411,14 @@ mod tests {
 
     #[test]
     /// Assert we don't return anything if we try to get the votes for an empty
-    /// vec of updates
+    /// set of updates
     pub fn test_get_votes_for_updates_empty() {
         let updates = HashSet::new();
         assert!(updates.get_voters().is_empty());
     }
 
     #[test]
-    /// Test that we correctly get the votes from a vec of updates
+    /// Test that we correctly get the votes from a set of updates
     pub fn test_get_votes_for_events() {
         let updates = HashSet::from([
             EthMsgUpdate {
