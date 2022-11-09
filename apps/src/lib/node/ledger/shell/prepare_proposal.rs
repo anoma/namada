@@ -22,7 +22,8 @@ use crate::node::ledger::shell::vote_extensions::{
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
-/// Alloted space for transactions in some proposed block.
+/// Alloted space for transactions in some proposed block,
+/// measured in bytes.
 ///
 /// We keep track of the current space utilized by:
 ///
