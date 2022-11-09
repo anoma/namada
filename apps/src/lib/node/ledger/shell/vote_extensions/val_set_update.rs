@@ -266,12 +266,16 @@ where
             }
 
             #[cfg(not(feature = "abcipp"))]
-            if let Some(sig) = signatures.insert((addr, block_height), sig) {
+            if let Some(existing_sig) =
+                signatures.insert((addr, block_height), sig.clone())
+            {
                 tracing::warn!(
                     ?sig,
+                    ?existing_sig,
                     ?validator_addr,
                     "Overwrote old signature from validator while \
-                     constructing validator_set_update::VextDigest"
+                     constructing validator_set_update::VextDigest - maybe \
+                     private key of validator is being used by multiple nodes?"
                 );
             }
         }

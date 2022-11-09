@@ -263,12 +263,16 @@ where
             }
 
             #[cfg(not(feature = "abcipp"))]
-            if let Some(sig) = signatures.insert((addr, block_height), sig) {
+            if let Some(existing_sig) =
+                signatures.insert((addr, block_height), sig.clone())
+            {
                 tracing::warn!(
                     ?sig,
+                    ?existing_sig,
                     ?validator_addr,
                     "Overwrote old signature from validator while \
-                     constructing ethereum_events::VextDigest"
+                     constructing ethereum_events::VextDigest - maybe private \
+                     key of validator is being used by multiple nodes?"
                 );
             }
         }
