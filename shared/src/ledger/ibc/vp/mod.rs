@@ -25,7 +25,7 @@ use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::proto::SignedTxData;
 use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::data::{Error as IbcDataError};
+use crate::types::ibc::data::Error as IbcDataError;
 use crate::types::ibc::IbcEvent as WrappedIbcEvent;
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -1060,11 +1060,22 @@ mod tests {
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let ctx = Ctx::new(&storage, &write_log, &tx, gas_meter, vp_wasm_cache);
 
         let mut keys_changed = BTreeSet::new();
         keys_changed.insert(conn_key);
         keys_changed.insert(conn_ids_key);
+
+        let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &storage,
+            &write_log,
+            &tx,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
 
         let verifiers = BTreeSet::new();
 

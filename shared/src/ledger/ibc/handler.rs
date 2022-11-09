@@ -351,24 +351,30 @@ pub trait IbcActions {
     /// Add a connection id to a list of the client's open connection ids
     /// The list is stored as a string of comma separated ids
     fn add_connection_id(
-        &self,
+        &mut self,
         client_id: &ClientId,
         conn_id: &ConnectionId,
-    ) -> Result<()> {
+    ) -> std::result::Result<(), Self::Error> {
         let conn_ids_key = storage::connection_ids_key(client_id);
-        let conn_ids_list = match self.read_ibc_data(&conn_ids_key) {
-            Some(v) => {
-                let old_list = String::from_utf8(v).map_err(|_| {
-                    Error::Connection(format!(
-                        "Decoding the connection list failed: client ID {}",
-                        client_id
-                    ))
-                })?;
-                format!("{},{}", old_list, conn_id.as_str())
-            }
-            None => conn_id.to_string(),
-        };
-        self.write_ibc_data(&conn_ids_key, conn_ids_list.as_bytes());
+        let conn_ids_list =
+            match self.read_ibc_data(&conn_ids_key).map_err(|_| {
+                Error::Connection(format!(
+                    "The connection ID list doesn't exist: client ID {}",
+                    client_id
+                ))
+            })? {
+                Some(v) => {
+                    let old_list = String::from_utf8(v).map_err(|_| {
+                        Error::Connection(format!(
+                            "Decoding the connection list failed: client ID {}",
+                            client_id
+                        ))
+                    })?;
+                    format!("{},{}", old_list, conn_id.as_str())
+                }
+                None => conn_id.to_string(),
+            };
+        self.write_ibc_data(&conn_ids_key, conn_ids_list.as_bytes())?;
         Ok(())
     }
 
