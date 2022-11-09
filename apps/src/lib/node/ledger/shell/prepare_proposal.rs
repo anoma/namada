@@ -30,6 +30,8 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 ///   - Protocol transactions.
 ///   - DKG decrypted transactions.
 ///   - DKG encrypted transactions.
+#[derive(Default)]
+#[allow(dead_code)]
 struct TxAllotedSpace {
     /// The total space Tendermint has allotted to the
     /// application for the current block height.
@@ -40,6 +42,19 @@ struct TxAllotedSpace {
     current_for_encrypted_txs: u64,
     /// The current space utilized by DKG decrypted transactions.
     current_for_decrypted_txs: u64,
+}
+
+impl TxAllotedSpace {
+    /// Construct a new [`TxAllotedSpace`], with an upper bound
+    /// on the max number of txs in a block defined by Tendermint.
+    #[allow(dead_code)]
+    #[inline]
+    fn init_from(req: &RequestPrepareProposal) -> Self {
+        Self {
+            provided_by_tendermint: req.max_tx_bytes as u64,
+            ..Default::default()
+        }
+    }
 }
 
 impl<D, H> Shell<D, H>
