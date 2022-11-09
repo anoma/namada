@@ -1,5 +1,6 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
+use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
 use namada::types::storage::{BlockHash, Header};
 
@@ -286,6 +287,7 @@ where
     fn update_epoch(&self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
         let (current_epoch, _gas) = self.storage.get_current_epoch();
+        let pos_params = self.storage.read_pos_params();
         // TODO ABCI validator updates on block H affects the validator set
         // on block H+2, do we need to update a block earlier?
         self.storage.validator_set_update(current_epoch, |update| {
@@ -294,9 +296,10 @@ where
                     consensus_key,
                     bonded_stake,
                 }) => {
-                    let power: i64 = bonded_stake
-                        .try_into()
-                        .expect("unexpected validator's voting power");
+                    let power: i64 = into_tm_voting_power(
+                        pos_params.tm_votes_per_token,
+                        bonded_stake,
+                    );
                     (consensus_key, power)
                 }
                 ValidatorSetUpdate::Deactivated(consensus_key) => {
