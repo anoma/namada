@@ -155,10 +155,6 @@ epochs_per_year = 365
 pos_gain_p = 0.1
 # The D gain factor in the Proof of Stake rewards controller
 pos_gain_d = 0.1
-# The ratio of tokens locked in Proof of Stake to the total token supply
-staked_ratio = 0
-# The last inflation amount distributed for Proof of Stake
-pos_inflation_amount = 0
 
 # Proof of stake parameters.
 [pos_params]

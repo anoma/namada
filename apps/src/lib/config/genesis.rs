@@ -238,10 +238,6 @@ pub mod genesis_config {
         pub pos_gain_p: Decimal,
         /// PoS gain d
         pub pos_gain_d: Decimal,
-        /// PoS staked ratio
-        pub staked_ratio: Decimal,
-        /// PoS inflation rate last epoch
-        pub pos_inflation_amount: u64,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -545,8 +541,8 @@ pub mod genesis_config {
             epochs_per_year: config.parameters.epochs_per_year,
             pos_gain_p: config.parameters.pos_gain_p,
             pos_gain_d: config.parameters.pos_gain_d,
-            staked_ratio: config.parameters.staked_ratio,
-            pos_inflation_amount: config.parameters.pos_inflation_amount,
+            staked_ratio: Decimal::ZERO,
+            pos_inflation_amount: 0,
         };
 
         let gov_params = GovParams {
