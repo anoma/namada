@@ -52,8 +52,8 @@ This should sync your node to the ledger and will take a while (depending on you
 ## Account
 
 Accounts on Namada are divided into two subcategories:
-* Implicit accounts (no attached Validity Predicate)
-* Established accounts (attached Validity Predicate)
+* Implicit accounts (all use the same Validity Predicate)
+* Established accounts (can use a chosen Validity Predicate)
 
 In order to make transactions on Namada, an account is required, and an implicit account can be created easily.
 
