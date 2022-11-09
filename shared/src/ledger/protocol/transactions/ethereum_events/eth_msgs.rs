@@ -80,4 +80,37 @@ mod tests {
 
         assert_eq!(update, expected);
     }
+
+    #[test]
+    /// Test that `From<MultiSignedEthEvent>` for `EthMsgUpdate` does in fact
+    /// dedupe votes
+    fn test_from_multi_signed_eth_event_for_eth_msg_update_dedupes() {
+        let validator_1 = address::testing::established_address_1();
+        let validator_2 = address::testing::established_address_2();
+        let signers = BTreeSet::from([
+            (validator_1.clone(), BlockHeight(100)),
+            (validator_2.clone(), BlockHeight(200)),
+            (validator_1, BlockHeight(300)),
+            (validator_2, BlockHeight(400)),
+        ]);
+
+        let event = arbitrary_single_transfer(
+            arbitrary_nonce(),
+            address::testing::established_address_3(),
+        );
+        let with_signers = MultiSignedEthEvent {
+            event: event.clone(),
+            signers: signers.clone(),
+        };
+
+        let update: EthMsgUpdate = with_signers.into();
+
+        assert_eq!(
+            update,
+            EthMsgUpdate {
+                body: event,
+                seen_by: dedupe(signers),
+            }
+        );
+    }
 }
