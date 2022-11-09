@@ -263,10 +263,15 @@ where
                 );
             }
 
+            let key = (addr, block_height);
+            tracing::debug!(
+                ?key,
+                ?sig,
+                ?validator_addr,
+                "Inserting signature into ethereum_events::VextDigest"
+            );
             #[cfg(not(feature = "abcipp"))]
-            if let Some(existing_sig) =
-                signatures.insert((addr, block_height), sig.clone())
-            {
+            if let Some(existing_sig) = signatures.insert(key, sig.clone()) {
                 tracing::warn!(
                     ?sig,
                     ?existing_sig,

@@ -265,11 +265,15 @@ where
                      constructing validator_set_update::VextDigest"
                 );
             }
-
+            let key = (addr, block_height);
+            tracing::debug!(
+                ?key,
+                ?sig,
+                ?validator_addr,
+                "Inserting signature into validator_set_update::VextDigest"
+            );
             #[cfg(not(feature = "abcipp"))]
-            if let Some(existing_sig) =
-                signatures.insert((addr, block_height), sig.clone())
-            {
+            if let Some(existing_sig) = signatures.insert(key, sig.clone()) {
                 tracing::warn!(
                     ?sig,
                     ?existing_sig,
