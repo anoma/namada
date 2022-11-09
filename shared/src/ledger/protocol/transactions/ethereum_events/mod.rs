@@ -191,8 +191,8 @@ mod tests {
     use crate::ledger::pos::namada_proof_of_stake::epoched::Epoched;
     use crate::ledger::pos::namada_proof_of_stake::PosBase;
     use crate::ledger::pos::types::{ValidatorSet, WeightedValidator};
-    use crate::ledger::protocol::transactions::votes::Votes;
     use crate::ledger::protocol::transactions::utils::GetVoters;
+    use crate::ledger::protocol::transactions::votes::Votes;
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::testing::TestStorage;
     use crate::ledger::storage::traits::Sha256Hasher;
