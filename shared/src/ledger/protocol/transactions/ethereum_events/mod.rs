@@ -465,4 +465,30 @@ mod tests {
             ])
         )
     }
+
+    #[test]
+    /// Test that we correctly get the votes from a vec of events in the case
+    /// where there are multiple signatures from the same validator
+    fn test_get_votes_for_events_multiple_signatures_same_validator() {
+        let events = vec![MultiSignedEthEvent {
+            event: arbitrary_single_transfer(
+                1.into(),
+                address::testing::established_address_1(),
+            ),
+            signers: BTreeSet::from([
+                (address::testing::established_address_1(), BlockHeight(100)),
+                (address::testing::established_address_1(), BlockHeight(101)),
+                (address::testing::established_address_2(), BlockHeight(200)),
+            ]),
+        }];
+        let voters = events.as_slice().get_voters();
+        assert_eq!(
+            voters,
+            HashSet::from_iter(vec![
+                (address::testing::established_address_1(), BlockHeight(100)),
+                (address::testing::established_address_1(), BlockHeight(101)),
+                (address::testing::established_address_2(), BlockHeight(200))
+            ])
+        )
+    }
 }
