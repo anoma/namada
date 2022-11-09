@@ -123,25 +123,42 @@ pub struct GasFee {
 /// A Merkle root (Keccak hash) of the Ethereum
 /// bridge pool that has been signed by validators'
 /// Ethereum keys.
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Debug, Default, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct MultiSignedMerkleRoot {
-    /// The signatures from validators
+    /// The signatures from validators over keccak(root | nonce).
     pub sigs: BTreeSet<crate::types::key::secp256k1::Signature>,
-    /// The Merkle root being signed
+    /// The Merkle root being signed.
     pub root: KeccakHash,
-    /// The block height at which this root was valid
+    /// A batch nonce for the transfer.
+    pub nonce: Uint,
+    /// The block height at which this root was valid.
     pub height: BlockHeight,
 }
 
-impl Encode<2> for MultiSignedMerkleRoot {
-    fn tokenize(&self) -> [Token; 2] {
-        let MultiSignedMerkleRoot { sigs, root, .. } = self;
+/// A signed Merkle root of the bridge pool tree and
+/// who signed it.
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct BridgePoolRoot {
+    /// The signed Merkle tree root.
+    pub signed_root: MultiSignedMerkleRoot,
+    /// Who signed it.
+    pub validators: ValidatorSetArgs,
+}
+
+impl Encode<3> for MultiSignedMerkleRoot {
+    fn tokenize(&self) -> [Token; 3] {
+        let MultiSignedMerkleRoot {
+            sigs, root, nonce, ..
+        } = self;
         // TODO: check the tokenization of the signatures
         let sigs = Token::Array(
             sigs.iter().map(|sig| sig.tokenize()[0].clone()).collect(),
         );
         let root = Token::FixedBytes(root.0.to_vec());
-        [sigs, root]
+        let nonce = Token::Uint(nonce.clone().into());
+        [sigs, root, nonce]
     }
 }
 
@@ -155,23 +172,13 @@ pub struct RelayProof {
     pub root: MultiSignedMerkleRoot,
     /// A membership proof
     pub proof: BridgePoolProof,
-    /// A nonce for the batch for replay protection
-    pub nonce: Uint,
 }
 
 impl Encode<7> for RelayProof {
     fn tokenize(&self) -> [Token; 7] {
         let [val_set_args] = self.validator_args.tokenize();
-        let [sigs, root] = self.root.tokenize();
+        let [sigs, root, nonce] = self.root.tokenize();
         let [proof, transfers, flags] = self.proof.tokenize();
-        [
-            val_set_args,
-            sigs,
-            transfers,
-            root,
-            proof,
-            flags,
-            Token::Uint(self.nonce.clone().into()),
-        ]
+        [val_set_args, sigs, transfers, root, proof, flags, nonce]
     }
 }

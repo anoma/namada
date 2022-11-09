@@ -268,17 +268,45 @@ fn compute_hash(
     ])
 }
 
+/// Normalized voting power for Ethereum smart contracts.
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct NormalizedVotingPower(Uint);
+
+impl NormalizedVotingPower {
+    #[allow(dead_code)]
+    fn new(power: VotingPower, total_voting_power: VotingPower) -> Self {
+        let voting_power: u64 = power.into();
+
+        // normalize the voting power
+        // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
+        const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
+
+        let voting_power = Ratio::new(voting_power, total_voting_power.into())
+            * NORMALIZED_VOTING_POWER;
+        let voting_power = voting_power.round().to_integer();
+        Self(voting_power.into())
+    }
+}
+
+impl Encode<1> for NormalizedVotingPower {
+    fn tokenize(&self) -> [Token; 1] {
+        [Token::Uint(self.0.clone().into())]
+    }
+}
+
 /// Struct for serializing validator set
 /// arguments with ABI for Ethereum smart
 /// contracts.
-#[derive(Debug, Clone, Default)]
+#[derive(
+    Debug, Clone, Default, BorshSerialize, BorshDeserialize, BorshSchema,
+)]
 pub struct ValidatorSetArgs {
     /// Ethereum address of validators
     pub validators: Vec<EthAddress>,
     /// Voting powers of validators
-    pub powers: Vec<Uint>,
+    pub powers: Vec<NormalizedVotingPower>,
     /// A nonce
-    pub nonce: Uint,
+    pub block_height: BlockHeight,
 }
 
 impl Encode<1> for ValidatorSetArgs {
@@ -292,10 +320,13 @@ impl Encode<1> for ValidatorSetArgs {
         let powers = Token::Array(
             self.powers
                 .iter()
-                .map(|power| Token::Uint(power.clone().into()))
+                .map(|power| {
+                    let [token] = power.tokenize();
+                    token
+                })
                 .collect(),
         );
-        let nonce = Token::Uint(self.nonce.clone().into());
+        let nonce = Token::Uint(self.block_height.0.into());
         [Token::Tuple(vec![addrs, powers, nonce])]
     }
 }

@@ -13,7 +13,7 @@ use crate::ledger::storage::{DBIter, MerkleTree, StoreRef, StoreType, DB};
 use crate::ledger::storage_api::{self, CustomError, ResultExt, StorageRead};
 use crate::types::eth_abi::EncodeCell;
 use crate::types::eth_bridge_pool::{
-    MultiSignedMerkleRoot, PendingTransfer, RelayProof,
+    BridgePoolRoot, PendingTransfer, RelayProof,
 };
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
@@ -348,10 +348,13 @@ where
         <Vec<KeccakHash>>::try_from_slice(request.data.as_slice())
     {
         // get the latest signed merkle root of the Ethereum bridge pool
-        let signed_root: MultiSignedMerkleRoot = match ctx
+        let BridgePoolRoot {
+            signed_root,
+            validators,
+        } = match ctx
             .storage
             .read(&get_signed_root_key())
-            .expect("Reading the database should not faile")
+            .expect("Reading the database should not fail")
         {
             (Some(bytes), _) => {
                 BorshDeserialize::try_from_slice(bytes.as_slice()).unwrap()
@@ -397,8 +400,8 @@ where
         if !missing_hashes.is_empty() {
             return Err(storage_api::Error::Custom(CustomError(
                 format!(
-                    "One or more of the provided hashes had no corresponding \
-                     transfer in storage: {:?}",
+                    "One or more of the provided hashes is not covered by a \
+                     merkle root signed by validators: {:?}",
                     missing_hashes
                 )
                 .into(),
@@ -411,12 +414,9 @@ where
         ) {
             Ok(BridgePool(proof)) => {
                 let data = EncodeCell::new(&RelayProof {
-                    // TODO: use actual validators
-                    validator_args: Default::default(),
+                    validator_args: validators,
                     root: signed_root,
                     proof,
-                    // TODO: Use real nonce
-                    nonce: 0.into(),
                 })
                 .try_to_vec()
                 .into_storage_result()?;
@@ -451,8 +451,8 @@ mod test {
     use crate::types::address::Address;
     use crate::types::eth_abi::Encode;
     use crate::types::eth_bridge_pool::{
-        GasFee, MultiSignedMerkleRoot, PendingTransfer, RelayProof,
-        TransferToEthereum,
+        BridgePoolRoot, GasFee, MultiSignedMerkleRoot, PendingTransfer,
+        RelayProof, TransferToEthereum,
     };
     use crate::types::ethereum_events::EthAddress;
     use crate::types::{address, token};
@@ -690,9 +690,12 @@ mod test {
 
         // create a signed Merkle root for this pool
         let signed_root = MultiSignedMerkleRoot {
-            sigs: Default::default(),
             root: transfer.keccak256(),
-            height: Default::default(),
+            ..Default::default()
+        };
+        let bridge_pool_root = BridgePoolRoot {
+            signed_root,
+            validators: Default::default(),
         };
 
         // commit the changes and increase block height
@@ -710,7 +713,10 @@ mod test {
         // add the signature for the pool at the previous block height
         client
             .storage
-            .write(&get_signed_root_key(), signed_root.try_to_vec().unwrap())
+            .write(
+                &get_signed_root_key(),
+                bridge_pool_root.try_to_vec().unwrap(),
+            )
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -741,11 +747,9 @@ mod test {
             .expect("Test failed");
 
         let proof = RelayProof {
-            validator_args: Default::default(),
-            root: signed_root,
+            validator_args: bridge_pool_root.validators,
+            root: bridge_pool_root.signed_root,
             proof,
-            // TODO: Use a real nonce
-            nonce: 0.into(),
         }
         .encode()
         .into_inner();
@@ -780,9 +784,12 @@ mod test {
 
         // create a signed Merkle root for this pool
         let signed_root = MultiSignedMerkleRoot {
-            sigs: Default::default(),
             root: transfer.keccak256(),
-            height: Default::default(),
+            ..Default::default()
+        };
+        let bridge_pool_root = BridgePoolRoot {
+            signed_root,
+            validators: Default::default(),
         };
 
         // commit the changes and increase block height
@@ -800,7 +807,10 @@ mod test {
         // add the signature for the pool at the previous block height
         client
             .storage
-            .write(&get_signed_root_key(), signed_root.try_to_vec().unwrap())
+            .write(
+                &get_signed_root_key(),
+                bridge_pool_root.try_to_vec().unwrap(),
+            )
             .expect("Test failed");
 
         // commit the changes and increase block height

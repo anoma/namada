@@ -410,7 +410,6 @@ macro_rules! pattern_and_handler_to_method {
                     <CLIENT as $crate::ledger::queries::Client>::Error
                 >
                 where CLIENT: $crate::ledger::queries::Client + std::marker::Sync {
-                    println!("IMMA VEC!!!!!!");
                     let path = self.storage_value_path( $( $param ),* );
 
                     let $crate::ledger::queries::ResponseQuery {
@@ -463,7 +462,6 @@ macro_rules! pattern_and_handler_to_method {
                     <CLIENT as $crate::ledger::queries::Client>::Error
                 >
                 where CLIENT: $crate::ledger::queries::Client + std::marker::Sync {
-                    println!("IMMA not a VEC!!!!!!");
                     let path = self.[<$handle _path>]( $( $param ),* );
 
                     let $crate::ledger::queries::ResponseQuery {
