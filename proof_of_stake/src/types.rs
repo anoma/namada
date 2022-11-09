@@ -94,7 +94,7 @@ pub enum ValidatorSetUpdate<PK> {
     Deactivated(PK),
 }
 
-/// Active validator's consensus key and its voting power.
+/// Active validator's consensus key and its bonded stake.
 #[derive(Debug, Clone)]
 pub struct ActiveValidator<PK> {
     /// A public key used for signing validator's consensus actions
@@ -187,7 +187,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} with voting power {}",
+            "{} with bonded stake {}",
             self.address, self.bonded_stake
         )
     }

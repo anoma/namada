@@ -666,7 +666,7 @@ pub struct Validator {
     pub protocol_key: common::PublicKey,
     /// The public DKG session key used during the DKG protocol
     pub dkg_public_key: DkgPublicKey,
-    /// These tokens are no staked and hence do not contribute to the
+    /// These tokens are not staked and hence do not contribute to the
     /// validator's voting power
     pub non_staked_balance: token::Amount,
     /// Validity predicate code WASM
