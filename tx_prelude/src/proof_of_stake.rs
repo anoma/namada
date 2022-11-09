@@ -40,6 +40,25 @@ impl Ctx {
         )
     }
 
+    /// NEW: Self-bond tokens to a validator when `source` is `None` or equal to
+    /// the `validator` address, or delegate tokens from the `source` to the
+    /// `validator`.
+    pub fn bond_tokens_new(
+        &mut self,
+        source: Option<&Address>,
+        validator: &Address,
+        amount: token::Amount,
+    ) -> TxResult {
+        let current_epoch = self.get_block_epoch()?;
+        namada_proof_of_stake::PosActions::bond_tokens(
+            self,
+            source,
+            validator,
+            amount,
+            current_epoch,
+        )
+    }
+
     /// Unbond self-bonded tokens from a validator when `source` is `None` or
     /// equal to the `validator` address, or unbond delegated tokens from
     /// the `source` to the `validator`.

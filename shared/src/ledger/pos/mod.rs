@@ -2,6 +2,9 @@
 
 pub mod vp;
 
+pub use namada_core::ledger::storage_api;
+pub use namada_core::types::key::common;
+pub use namada_core::types::token;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::storage::*;
@@ -64,3 +67,25 @@ pub fn init_genesis_storage_NEW<DB, H>(
     )
     .expect("Initialize PoS genesis storage");
 }
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type ValidatorConsensusKeys =
+    namada_proof_of_stake::types::ValidatorConsensusKeys;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type ValidatorDeltas = namada_proof_of_stake::types::ValidatorDeltas;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type Bonds = namada_proof_of_stake::types::Bonds;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type Unbonds = namada_proof_of_stake::types::Unbonds;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type ValidatorSets = namada_proof_of_stake::types::ValidatorSets;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type BondId = namada_proof_of_stake::types::BondId;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type GenesisValidator = namada_proof_of_stake::types::GenesisValidator;

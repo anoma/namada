@@ -8,6 +8,7 @@ use std::hash::Hash;
 use std::ops::Add;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::ledger::storage_api::collections::LazyMap;
 use namada_core::types::address::Address;
 use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
@@ -25,6 +26,58 @@ pub type ValidatorConsensusKeys_NEW = crate::epoched_new::Epoched<
     crate::epoched_new::OffsetPipelineLen,
     0,
 >;
+
+/// Epoched validator's state.
+pub type ValidatorStates_NEW = crate::epoched_new::Epoched<
+    ValidatorState,
+    crate::epoched_new::OffsetPipelineLen,
+    0,
+>;
+
+/// Epoched active validator sets.
+pub type ActiveValidatorSets_NEW = crate::epoched_new::Epoched<
+    ValidatorSetNew,
+    crate::epoched_new::OffsetPipelineLen,
+    2,
+>;
+
+/// Epoched inactive validator sets.
+pub type InactiveValidatorSets_NEW = crate::epoched_new::Epoched<
+    ValidatorSetNew,
+    crate::epoched_new::OffsetPipelineLen,
+    2,
+>;
+
+/// Epoched validator's deltas.
+pub type ValidatorDeltas_NEW = crate::epoched_new::EpochedDelta<
+    token::Change,
+    // TODO: check the offsets
+    crate::epoched_new::OffsetUnbondingLen,
+    21,
+>;
+
+/// Epoched total deltas.
+pub type TotalDeltas_NEW = crate::epoched_new::EpochedDelta<
+    token::Change,
+    // TODO: check the offsets
+    crate::epoched_new::OffsetPipelineLen,
+    21,
+>;
+
+/// Epoched validator commission rate
+pub type CommissionRates_NEW = crate::epoched_new::Epoched<
+    Decimal,
+    crate::epoched_new::OffsetPipelineLen,
+    2,
+>;
+
+/// Epoched validator's bonds
+pub type Bonds_NEW = crate::epoched_new::EpochedDelta<
+    token::Change,
+    crate::epoched_new::OffsetPipelineLen,
+    21,
+>;
+
 /// Epoched validator's consensus key.
 pub type ValidatorConsensusKeys = Epoched<common::PublicKey, OffsetPipelineLen>;
 /// Epoched validator's state.
@@ -67,8 +120,6 @@ pub struct GenesisValidator {
     /// Maximum change in commission rate permitted per epoch
     pub max_commission_rate_change: Decimal,
 }
-pub type GenesisValidator_NEW =
-    GenesisValidator<Address, token::Amount, key::common::PublicKey>;
 
 /// An update of the active and inactive validator set.
 #[derive(Debug, Clone)]
@@ -102,26 +153,6 @@ pub struct ActiveValidator {
     BorshSchema,
 )]
 pub struct BondId {
-    /// (Un)bond's source address is the owner of the bonded tokens.
-    pub source: Address,
-    /// (Un)bond's validator address.
-    pub validator: Address,
-}
-
-/// ID of a bond and/or an unbond.
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    BorshDeserialize,
-    BorshSerialize,
-    BorshSchema,
-)]
-pub struct BondId_NEW {
     /// (Un)bond's source address is the owner of the bonded tokens.
     pub source: Address,
     /// (Un)bond's validator address.
@@ -180,6 +211,9 @@ pub struct ValidatorSet {
     pub inactive: BTreeSet<WeightedValidator>,
 }
 
+// New Validator set construction
+pub type ValidatorSetNew = LazyMap<u64, Address>;
+
 /// Validator's state.
 #[derive(
     Debug,
@@ -221,6 +255,8 @@ pub struct Bond {
     /// epoch.
     pub neg_deltas: token::Amount,
 }
+
+// pub type Bond_NEW = LazyMap<(Epoch, Option<Epoch>), token::Amount>;
 
 /// An unbond contains unbonded tokens from a validator's self-bond or a
 /// delegation from a regular account to a validator.
