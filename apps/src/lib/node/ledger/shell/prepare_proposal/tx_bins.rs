@@ -16,6 +16,9 @@
 // too big to fit in their respective bin? in these special block
 // decisions, we would only decide proposals with "large" txs
 
+// TODO: refactor our measure of space to also reflect gas costs!
+// we can only pick txs up to a certain cumulative gas cost
+
 use num_rational::Ratio;
 
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -207,8 +210,31 @@ mod tests {
         /// [`TxAllotedSpace`] corresponds to the total space ceded
         /// by Tendermint.
         #[test]
-        fn test_bin_capacity_eq_provided_space(max in 0..u64::MAX) {
+        fn test_bin_capacity_eq_provided_space(max in prop::num::u64::ANY) {
             proptest_bin_capacity_eq_provided_space(max)
         }
+    }
+
+    prop_compose! {
+        // WIP: generate vecs of vecs, each inner vec with a random length
+        // (contains tx payloads of arb length)
+        fn arb_transactions_with_min_block_space
+            // the minimum block space Tendermint will give us
+            (min_block_space: u64)
+            // create base strategies
+            (
+                tendermint_max_block_space in min_block_space..u64::MAX,
+                no_of_mempool_txs in prop::num::u64::ANY,
+            )
+            // compose strategies
+            (
+                max_length in Just((Ratio::new_raw(1, 3) * tendermint_max_block_space).to_integer()),
+                tx in prop::collection::vec(0u8.., max_length),
+                tx_kinds in prop::collection::vec(0u8..3, no_of_mempool_txs),
+            )
+            -> {
+                ()
+            }
+
     }
 }
