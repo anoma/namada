@@ -10,7 +10,9 @@ use eyre::Result;
 
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
-use crate::ledger::protocol::transactions::utils;
+use crate::ledger::protocol::transactions::utils::{
+    self, construct_fractional_voting_powers_by_address,
+};
 use crate::ledger::protocol::transactions::votes::{
     self, calculate_new, calculate_updated,
 };
@@ -140,24 +142,11 @@ where
             %eth_msg_keys.prefix,
             "Ethereum event already exists in storage",
         );
-        let mut fractional_voting_powers = HashMap::default();
-        update.seen_by.iter().for_each(|(address, block_height)| {
-            let fract_voting_power = voting_powers
-                .get(&(address.to_owned(), block_height.to_owned()))
-                .unwrap();
-            if let Some(already_present_fract_voting_power) =
-                fractional_voting_powers
-                    .insert(address.to_owned(), fract_voting_power.to_owned())
-            {
-                tracing::warn!(
-                    ?address,
-                    ?already_present_fract_voting_power,
-                    new_fract_voting_power = ?fract_voting_power,
-                    "Validator voted more than once on Ethereum event, \
-                     arbitrarily using later value"
-                )
-            }
-        });
+        let fractional_voting_powers =
+            construct_fractional_voting_powers_by_address(
+                &update.seen_by,
+                voting_powers,
+            );
         let (vote_tracking, changed) = calculate_updated(
             storage,
             &eth_msg_keys,

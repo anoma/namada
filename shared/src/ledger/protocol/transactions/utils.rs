@@ -18,6 +18,30 @@ pub(super) trait GetVoters {
     fn get_voters(&self) -> HashSet<(Address, BlockHeight)>;
 }
 
+pub(super) fn construct_fractional_voting_powers_by_address(
+    vote_heights: &BTreeMap<Address, BlockHeight>,
+    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+) -> HashMap<Address, FractionalVotingPower> {
+    let mut fractional_voting_powers = HashMap::default();
+    vote_heights.iter().for_each(|(address, block_height)| {
+        let fract_voting_power = voting_powers
+            .get(&(address.clone(), block_height.to_owned()))
+            .unwrap();
+        if let Some(already_present_fract_voting_power) =
+            fractional_voting_powers
+                .insert(address.clone(), fract_voting_power.to_owned())
+        {
+            tracing::warn!(
+                ?address,
+                ?already_present_fract_voting_power,
+                new_fract_voting_power = ?fract_voting_power,
+                "Validator voted more than once, arbitrarily using later value"
+            )
+        }
+    });
+    fractional_voting_powers
+}
+
 /// Returns a map whose keys are addresses of validators and the block height at
 /// which they signed some arbitrary object, and whose values are the voting
 /// powers of these validators at the key's given block height.

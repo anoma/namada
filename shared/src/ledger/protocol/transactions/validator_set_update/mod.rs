@@ -6,7 +6,9 @@ use eyre::Result;
 
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
-use crate::ledger::protocol::transactions::utils;
+use crate::ledger::protocol::transactions::utils::{
+    self, construct_fractional_voting_powers_by_address,
+};
 use crate::ledger::protocol::transactions::votes::{self, Votes};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -110,24 +112,11 @@ where
             %valset_upd_keys.prefix,
             "Validator set update votes already in storage",
         );
-        let mut fractional_voting_powers = HashMap::default();
-        seen_by.iter().for_each(|(address, block_height)| {
-            let fract_voting_power = voting_powers
-                .get(&(address.clone(), block_height.to_owned()))
-                .unwrap();
-            if let Some(already_present_fract_voting_power) =
-                fractional_voting_powers
-                    .insert(address.clone(), fract_voting_power.to_owned())
-            {
-                tracing::warn!(
-                    ?address,
-                    ?already_present_fract_voting_power,
-                    new_fract_voting_power = ?fract_voting_power,
-                    "Validator voted more than once on validator set update, \
-                     arbitrarily using later value"
-                )
-            }
-        });
+        let fractional_voting_powers =
+            construct_fractional_voting_powers_by_address(
+                &seen_by,
+                &voting_powers,
+            );
         let (tally, changed) = votes::calculate_updated(
             storage,
             &valset_upd_keys,
