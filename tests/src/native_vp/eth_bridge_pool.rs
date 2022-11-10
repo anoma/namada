@@ -11,7 +11,7 @@ mod test_bridge_pool_vp {
     use namada::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada::ledger::eth_bridge::ADDRESS;
     use namada::proto::Tx;
-    use namada::types::address::{wnam, xan};
+    use namada::types::address::{wnam, nam};
     use namada::types::eth_bridge_pool::{
         GasFee, PendingTransfer, TransferToEthereum,
     };
