@@ -1,8 +1,8 @@
+use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS_CHECKSUMMED;
+
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
-use crate::e2e::setup::constants::{
-    wasm_abs_path, ALBERT, TX_WRITE_STORAGE_KEY_WASM,
-};
+use crate::e2e::setup::constants::{wasm_abs_path, ALBERT, TX_WRITE_STORAGE_KEY_WASM, BERTHA, NAM};
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
 
@@ -91,4 +91,63 @@ fn everything() {
             .unwrap();
         anomac_tx.assert_success();
     }
+}
+
+#[test]
+fn test_add_to_bridge_pool() {
+    const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 30;
+    const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 30;
+    const SOLE_VALIDATOR: Who = Who::Validator(0);
+
+    let test = setup::single_node_net().unwrap();
+
+    let mut anoman_ledger = run_as!(
+        test,
+        SOLE_VALIDATOR,
+        Bin::Node,
+        &["ledger"],
+        Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
+    )
+        .unwrap();
+    anoman_ledger
+        .exp_string("Anoma ledger node started")
+        .unwrap();
+    anoman_ledger.exp_string("Tendermint node started").unwrap();
+    anoman_ledger.exp_string("Committed block hash").unwrap();
+    let _bg_ledger = anoman_ledger.background();
+
+    let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
+    let tx_args = vec![
+        "add-erc20-transfer",
+        "--address",
+        BERTHA,
+        "--signer",
+        BERTHA,
+        "--amount",
+        "100",
+        "--erc20",
+        DAI_ERC20_ETH_ADDRESS_CHECKSUMMED,
+        "--ethereum-address",
+        "DAI_ERC20_ETH_ADDRESS_CHECKSUMMED",
+        "--fee-amount",
+        "10",
+        "--fee-payer",
+        BERTHA,
+        "--gas-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--gas-token",
+        NAM,
+        "--ledger-address",
+        &ledger_addr,
+    ];
+
+    let mut anomac_tx = run!(
+            test,
+            Bin::Client,
+            tx_args,
+            Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
+        )
+        .unwrap();
 }
