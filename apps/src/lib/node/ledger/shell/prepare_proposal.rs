@@ -60,6 +60,15 @@ impl TxAllotedSpace {
             decrypted_txs: TxBin::init_from(max, THRES),
         }
     }
+
+    /// The total space, in bytes, occupied by each transaction.
+    #[allow(dead_code)]
+    #[inline]
+    fn occupied_space(&self) -> u64 {
+        self.protocol_txs.current_space
+            + self.encrypted_txs.current_space
+            + self.decrypted_txs.current_space
+    }
 }
 
 /// Alloted space for a batch of transactions of the same kind in some
@@ -67,9 +76,9 @@ impl TxAllotedSpace {
 #[derive(Default)]
 #[allow(dead_code)]
 struct TxBin {
-    /// The current space utilized by a batch of transactions.
+    /// The current space utilized by the batch of transactions.
     current_space: u64,
-    /// The maximum space a batch of transactions of the same kind
+    /// The maximum space the batch of transactions of the same kind
     /// may occupy.
     alloted_space: u64,
 }
@@ -79,11 +88,24 @@ impl TxBin {
     /// of txs defined by a ratio over Tendermint's own max.
     #[allow(dead_code)]
     #[inline]
-    fn init_from(provided_by_tendermint: u64, frac: f64) -> Self {
-        let alloted_space = (provided_by_tendermint as f64 * frac) as u64;
+    fn init_from(tendermint_max_block_space: u64, frac: f64) -> Self {
+        let alloted_space = (tendermint_max_block_space as f64 * frac) as u64;
         Self {
             alloted_space,
             current_space: 0,
+        }
+    }
+
+    /// Try to dump a new tx into this [`TxBin`].
+    #[allow(dead_code)]
+    #[inline]
+    fn maybe_dump(&mut self, tx: &[u8]) -> Option<()> {
+        let new_space = self.current_space + tx.len() as u64;
+        if new_space > alloted_space {
+            self.current_space = new_space;
+            Some(())
+        } else {
+            None
         }
     }
 }
