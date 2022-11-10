@@ -2,7 +2,11 @@
 //! of bytes utilized by the current consensus round's proposal.
 //!
 //! This is important, because Tendermint places an upper bound
-//! on the size of a block.
+//! on the size of a block, rejecting blocks whose size exceeds
+//! the limit stated in [`RequestPrepareProposal`].
+//!
+//! In the current implementation, each kind of transaction in
+//! Namada gets a portion of the total alloted space.
 
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
@@ -34,14 +38,12 @@ impl TxAllotedSpace {
     #[allow(dead_code)]
     #[inline]
     pub fn init_from(req: &RequestPrepareProposal) -> Self {
-        // each tx bin gets 1/3 of the alloted space
-        const THRES: f64 = 1.0 / 3.0;
         let max = req.max_tx_bytes as u64;
         Self {
             provided_by_tendermint: max,
-            protocol_txs: TxBin::init_from(max, THRES),
-            encrypted_txs: TxBin::init_from(max, THRES),
-            decrypted_txs: TxBin::init_from(max, THRES),
+            protocol_txs: TxBin::init_from(max, thres::PROTOCOL_TX),
+            encrypted_txs: TxBin::init_from(max, thres::ENCRYPTED_TX),
+            decrypted_txs: TxBin::init_from(max, thres::DECRYPTED_TX),
         }
     }
 
@@ -111,5 +113,45 @@ impl TxBin {
         } else {
             false
         }
+    }
+}
+
+mod thres {
+    //! Transaction allotment thresholds.
+
+    /// The threshold over Tendermint's alloted space for protocol txs.
+    pub const PROTOCOL_TX: f64 = 1.0 / 3.0;
+
+    /// The threshold over Tendermint's alloted space for DKG encrypted txs.
+    pub const ENCRYPTED_TX: f64 = 1.0 / 3.0;
+
+    /// The threshold over Tendermint's alloted space for DKG decrypted txs.
+    pub const DECRYPTED_TX: f64 = 1.0 / 3.0;
+
+    /// Return the sum of all individual transaction allotment thresholds,
+    /// defined for each kind of transaction in Namada.
+    #[allow(dead_code)]
+    pub fn sum_individual_tx_thresholds() -> f64 {
+        // NOTE: VERY IMPORTANT !! !!11!!!!ONE!
+        // ====================================
+        // remember to add new kinds of transactions here,
+        // as the codebase mutates and evolves over time
+        PROTOCOL_TX + ENCRYPTED_TX + DECRYPTED_TX
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Check if the sum of all individual tx thresholds does
+    /// not exceed one.
+    ///
+    /// This is important, because we do not want to exceed
+    /// the maximum block size in Tendermint, and get randomly
+    /// rejected blocks.
+    #[test]
+    fn test_tx_thres_doesnt_exceed_one() {
+        assert!(thres::sum_individual_tx_thresholds() <= 1.0)
     }
 }
