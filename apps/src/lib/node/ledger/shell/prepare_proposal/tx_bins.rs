@@ -16,7 +16,7 @@ use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 ///   - DKG encrypted transactions.
 #[derive(Default)]
 #[allow(dead_code)]
-struct TxAllotedSpace {
+pub struct TxAllotedSpace {
     /// The total space Tendermint has allotted to the
     /// application for the current block height.
     provided_by_tendermint: u64,
@@ -33,7 +33,7 @@ impl TxAllotedSpace {
     /// on the max number of txs in a block defined by Tendermint.
     #[allow(dead_code)]
     #[inline]
-    fn init_from(req: &RequestPrepareProposal) -> Self {
+    pub fn init_from(req: &RequestPrepareProposal) -> Self {
         // each tx bin gets 1/3 of the alloted space
         const THRES: f64 = 1.0 / 3.0;
         let max = req.max_tx_bytes as u64;
@@ -45,10 +45,31 @@ impl TxAllotedSpace {
         }
     }
 
+    /// Try to allocate space for a new protocol transaction.
+    #[allow(dead_code)]
+    #[inline]
+    pub fn try_alloc_protocol_tx(&mut self, tx: &[u8]) -> bool {
+        self.protocol_txs.try_dump(tx)
+    }
+
+    /// Try to allocate space for a new DKG encrypted transaction.
+    #[allow(dead_code)]
+    #[inline]
+    pub fn try_alloc_encrypted_tx(&mut self, tx: &[u8]) -> bool {
+        self.encrypted_txs.try_dump(tx)
+    }
+
+    /// Try to allocate space for a new DKG decrypted transaction.
+    #[allow(dead_code)]
+    #[inline]
+    pub fn try_alloc_decrypted_tx(&mut self, tx: &[u8]) -> bool {
+        self.decrypted_txs.try_dump(tx)
+    }
+
     /// The total space, in bytes, occupied by each transaction.
     #[allow(dead_code)]
     #[inline]
-    fn occupied_space(&self) -> u64 {
+    pub fn occupied_space(&self) -> u64 {
         self.protocol_txs.current_space
             + self.encrypted_txs.current_space
             + self.decrypted_txs.current_space
@@ -62,8 +83,7 @@ impl TxAllotedSpace {
 struct TxBin {
     /// The current space utilized by the batch of transactions.
     current_space: u64,
-    /// The maximum space the batch of transactions of the same kind
-    /// may occupy.
+    /// The maximum space the batch of transactions may occupy.
     alloted_space: u64,
 }
 
@@ -80,16 +100,16 @@ impl TxBin {
         }
     }
 
-    /// Try to dump a new tx into this [`TxBin`].
+    /// Try to dump a new transaction into this [`TxBin`].
     #[allow(dead_code)]
     #[inline]
-    fn maybe_dump(&mut self, tx: &[u8]) -> Option<()> {
+    fn try_dump(&mut self, tx: &[u8]) -> bool {
         let new_space = self.current_space + tx.len() as u64;
         if new_space > self.alloted_space {
             self.current_space = new_space;
-            Some(())
+            true
         } else {
-            None
+            false
         }
     }
 }
