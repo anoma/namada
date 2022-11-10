@@ -78,8 +78,8 @@ pub fn calculate_new(
 pub fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
-    voting_powers: &HashMap<Address, FractionalVotingPower>,
-    votes: &Votes,
+    vote_powers: &HashMap<Address, FractionalVotingPower>,
+    vote_heights: &BTreeMap<Address, BlockHeight>,
 ) -> Result<(Tally, ChangedKeys)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -96,7 +96,8 @@ where
         seen_by,
         seen,
     };
-    let tally_post = calculate_update(keys, &tally_pre, voting_powers, votes);
+    let tally_post =
+        calculate_update(keys, &tally_pre, vote_powers, vote_heights);
     let changed_keys = validate_update(keys, &tally_pre, &tally_post)?;
 
     tracing::warn!(
@@ -114,10 +115,10 @@ where
 fn calculate_update<T>(
     keys: &vote_tallies::Keys<T>,
     pre: &Tally,
-    voting_powers: &HashMap<Address, FractionalVotingPower>,
-    votes: &Votes,
+    vote_powers: &HashMap<Address, FractionalVotingPower>,
+    vote_heights: &BTreeMap<Address, BlockHeight>,
 ) -> Tally {
-    let new_voters: BTreeSet<Address> = voting_powers.keys().cloned().collect();
+    let new_voters: BTreeSet<Address> = vote_powers.keys().cloned().collect();
 
     // For any event and validator, only the first vote by that validator for
     // that event counts, later votes we encounter here can just be ignored. We
@@ -143,12 +144,12 @@ fn calculate_update<T>(
         );
         seen_by_post.insert(
             validator.to_owned(),
-            votes
+            vote_heights
                 .get(validator)
                 .expect("Validator must be in votes!")
                 .to_owned(),
         );
-        voting_power_post += voting_powers.get(validator).expect(
+        voting_power_post += vote_powers.get(validator).expect(
             "voting powers map must have all validators from newly_seen_by",
         );
     }
