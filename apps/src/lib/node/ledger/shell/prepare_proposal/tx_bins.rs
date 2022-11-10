@@ -33,13 +33,21 @@ pub struct TxAllotedSpace {
     decrypted_txs: TxBin,
 }
 
+impl From<&RequestPrepareProposal> for TxAllotedSpace {
+    #[inline]
+    fn from(req: &RequestPrepareProposal) -> Self {
+        let tendermint_max_block_space = req.max_tx_bytes as u64;
+        Self::init(tendermint_max_block_space)
+    }
+}
+
 impl TxAllotedSpace {
     /// Construct a new [`TxAllotedSpace`], with an upper bound
     /// on the max number of txs in a block defined by Tendermint.
     #[allow(dead_code)]
     #[inline]
-    pub fn init_from(req: &RequestPrepareProposal) -> Self {
-        let max = req.max_tx_bytes as u64;
+    pub fn init(tendermint_max_block_space: u64) -> Self {
+        let max = tendermint_max_block_space;
         Self {
             provided_by_tendermint: max,
             protocol_txs: TxBin::init_from(max, thres::PROTOCOL_TX),
@@ -76,6 +84,21 @@ impl TxAllotedSpace {
         self.protocol_txs.current_space
             + self.encrypted_txs.current_space
             + self.decrypted_txs.current_space
+    }
+
+    /// Return the amount, in bytes, of free space in this
+    /// [`TxAllotedSpace`].
+    #[allow(dead_code)]
+    #[inline]
+    pub fn free_space(&self) -> u64 {
+        self.provided_by_tendermint - self.occupied_space()
+    }
+
+    /// Checks if this [`TxAllotedSpace`] has any free space remaining.
+    #[allow(dead_code)]
+    #[inline]
+    pub fn has_free_space(&self) -> bool {
+        self.free_space() > 0
     }
 }
 
@@ -128,21 +151,12 @@ mod thres {
 
     /// The threshold over Tendermint's alloted space for DKG decrypted txs.
     pub const DECRYPTED_TX: f64 = 1.0 / 3.0;
-
-    /// Return the sum of all individual transaction allotment thresholds,
-    /// defined for each kind of transaction in Namada.
-    #[allow(dead_code)]
-    pub fn sum_individual_tx_thresholds() -> f64 {
-        // NOTE: VERY IMPORTANT !! !!11!!!!ONE!
-        // ====================================
-        // remember to add new kinds of transactions here,
-        // as the codebase mutates and evolves over time
-        PROTOCOL_TX + ENCRYPTED_TX + DECRYPTED_TX
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
 
     /// Check if the sum of all individual tx thresholds does
@@ -153,6 +167,29 @@ mod tests {
     /// rejected blocks.
     #[test]
     fn test_tx_thres_doesnt_exceed_one() {
-        assert!(thres::sum_individual_tx_thresholds() <= 1.0)
+        let sum =
+            thres::PROTOCOL_TX + thres::ENCRYPTED_TX + thres::DECRYPTED_TX;
+        assert!(sum <= 1.0)
+    }
+
+    /// Implementation of [`test_bin_capacity_eq_provided_space`].
+    fn proptest_bin_capacity_eq_provided_space(
+        tendermint_max_block_space: u64,
+    ) {
+        let bins = TxAllotedSpace::init(tendermint_max_block_space);
+        let total_bin_space = bins.protocol_txs.alloted_space
+            + bins.encrypted_txs.alloted_space
+            + bins.decrypted_txs.alloted_space;
+        assert_eq!(bins.provided_by_tendermint, total_bin_space);
+    }
+
+    proptest! {
+        /// Check if the sum of all individual bin allotments for a
+        /// [`TxAllotedSpace`] corresponds to the total space ceded
+        /// by Tendermint.
+        #[test]
+        fn test_bin_capacity_eq_provided_space(max in 0..u64::MAX) {
+            proptest_bin_capacity_eq_provided_space(max)
+        }
     }
 }
