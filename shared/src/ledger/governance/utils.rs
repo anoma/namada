@@ -200,3 +200,14 @@ where
         nay_delegators,
     })
 }
+
+/// Calculate the valid voting window for validator given a proposal epoch
+/// details
+pub fn is_valid_validator_voting_period(
+    current_epoch: Epoch,
+    voting_start_epoch: Epoch,
+    voting_end_epoch: Epoch,
+) -> bool {
+    voting_start_epoch < voting_end_epoch
+        && current_epoch * 3 <= voting_start_epoch + voting_end_epoch * 2
+}

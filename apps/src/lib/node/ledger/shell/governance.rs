@@ -1,8 +1,9 @@
-use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::{
     compute_tally, get_proposal_votes, ProposalEvent,
 };
-use namada::ledger::governance::vp::ADDRESS as gov_address;
+use namada::ledger::governance::{
+    storage as gov_storage, ADDRESS as gov_address,
+};
 use namada::ledger::protocol;
 use namada::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::ledger::storage::types::encode;
