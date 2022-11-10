@@ -192,10 +192,7 @@ mod tests {
         tendermint_max_block_space: u64,
     ) {
         let bins = TxAllotedSpace::init(tendermint_max_block_space);
-        let total_bin_space = bins.protocol_txs.alloted_space
-            + bins.encrypted_txs.alloted_space
-            + bins.decrypted_txs.alloted_space;
-        assert_eq!(bins.provided_by_tendermint, total_bin_space);
+        assert_eq!(0, bins.leftover_space());
     }
 
     proptest! {
