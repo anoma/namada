@@ -137,8 +137,9 @@ fn validate_tx(
                 };
                 let comm =
                     proof_of_stake::is_validator_commission_rate_key(key);
+                // Validator's commission rate change must be signed
                 let valid_commission_rate_change = match comm {
-                    Some(source) => *source == addr && *valid_sig,
+                    Some(source) => *source != addr || *valid_sig,
                     None => true,
                 };
                 let valid =

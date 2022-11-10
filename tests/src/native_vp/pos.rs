@@ -403,8 +403,6 @@ mod tests {
                         commission_rate: _,
                         max_commission_rate_change: _,
                     } => {
-                        // TODO: should there be preconditions for commission
-                        // rates here?
                         !state.is_validator(address)
                             && !state.is_used_key(consensus_key)
                     }

@@ -988,64 +988,56 @@ pub async fn submit_validator_commission_change(
     let tx_code = ctx.read_wasm(TX_CHANGE_COMMISSION_WASM);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
-    // Check that the submitter of the tx is a validator
-    match ctx.wallet.get_validator_data() {
-        Some(data) => {
-            if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
-                eprintln!(
-                    "Invalid new commission rate, received {}",
-                    args.rate
-                );
-                if !args.tx.force {
-                    safe_exit(1)
-                }
+    let validator = ctx.get(&args.validator);
+    if rpc::is_validator(&validator, args.tx.ledger_address.clone()).await {
+        if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
+            eprintln!("Invalid new commission rate, received {}", args.rate);
+            if !args.tx.force {
+                safe_exit(1)
             }
+        }
 
-            let commission_rate_key =
-                ledger::pos::validator_commission_rate_key(&data.address);
-            let max_commission_rate_change_key =
-                ledger::pos::validator_max_commission_rate_change_key(
-                    &data.address,
-                );
-            let commission_rates = rpc::query_storage_value::<CommissionRates>(
-                &client,
-                &commission_rate_key,
-            )
-            .await;
-            let max_change = rpc::query_storage_value::<Decimal>(
-                &client,
-                &max_commission_rate_change_key,
-            )
-            .await;
+        let commission_rate_key =
+            ledger::pos::validator_commission_rate_key(&validator);
+        let max_commission_rate_change_key =
+            ledger::pos::validator_max_commission_rate_change_key(&validator);
+        let commission_rates = rpc::query_storage_value::<CommissionRates>(
+            &client,
+            &commission_rate_key,
+        )
+        .await;
+        let max_change = rpc::query_storage_value::<Decimal>(
+            &client,
+            &max_commission_rate_change_key,
+        )
+        .await;
 
-            match (commission_rates, max_change) {
-                (Some(rates), Some(max_change)) => {
-                    // Assuming that pipeline length = 2
-                    let rate_next_epoch = rates.get(epoch + 1).unwrap();
-                    if (args.rate - rate_next_epoch).abs() > max_change {
-                        eprintln!(
-                            "New rate is too large of a change with respect \
-                             to the predecessor epoch in which the rate will \
-                             take effect."
-                        );
-                        if !args.tx.force {
-                            safe_exit(1)
-                        }
-                    }
-                }
-                _ => {
-                    eprintln!("Error retrieving from storage");
+        match (commission_rates, max_change) {
+            (Some(rates), Some(max_change)) => {
+                // Assuming that pipeline length = 2
+                let rate_next_epoch = rates.get(epoch + 1).unwrap();
+                if (args.rate - rate_next_epoch).abs() > max_change {
+                    eprintln!(
+                        "New rate is too large of a change with respect to \
+                         the predecessor epoch in which the rate will take \
+                         effect."
+                    );
                     if !args.tx.force {
                         safe_exit(1)
                     }
                 }
             }
-        }
-        None => {
-            eprintln!("Cannot change the commission rate of the validator");
-            if !args.tx.force {
-                safe_exit(1)
+            _ => {
+                eprintln!("Error retrieving from storage");
+                if !args.tx.force {
+                    safe_exit(1)
+                }
             }
+        }
+    } else {
+        eprintln!("The given address {validator} is not a validator.");
+        if !args.tx.force {
+            safe_exit(1)
         }
     }
 
