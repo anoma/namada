@@ -9,6 +9,8 @@
 //! Namada gets a portion of (i.e. threshold over) the total
 //! alloted space.
 
+use num_rational::Ratio;
+
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
 /// Alloted space for a batch of transactions in some proposed block,
@@ -59,7 +61,7 @@ impl TxAllotedSpace {
         bins
     }
 
-    /// Return leftover space in bins, resulting from float conversions.
+    /// Return leftover space in bins, resulting from ratio conversions.
     fn leftover_space(&self) -> u64 {
         let total_bin_space = self.protocol_txs.alloted_space
             + self.encrypted_txs.alloted_space
@@ -129,8 +131,8 @@ impl TxBin {
     /// of storable txs defined by a ratio over Tendermint max block size.
     #[allow(dead_code)]
     #[inline]
-    fn init_from(tendermint_max_block_space: u64, frac: f64) -> Self {
-        let alloted_space = (tendermint_max_block_space as f64 * frac) as u64;
+    fn init_from(tendermint_max_block_space: u64, frac: Ratio<u64>) -> Self {
+        let alloted_space = (frac * tendermint_max_block_space).to_integer();
         Self {
             alloted_space,
             current_space: 0,
@@ -154,14 +156,16 @@ impl TxBin {
 mod thres {
     //! Transaction allotment thresholds.
 
+    use num_rational::Ratio;
+
     /// The threshold over Tendermint's alloted space for protocol txs.
-    pub const PROTOCOL_TX: f64 = 1.0 / 3.0;
+    pub const PROTOCOL_TX: Ratio<u64> = Ratio::new_raw(1, 3);
 
     /// The threshold over Tendermint's alloted space for DKG encrypted txs.
-    pub const ENCRYPTED_TX: f64 = 1.0 / 3.0;
+    pub const ENCRYPTED_TX: Ratio<u64> = Ratio::new_raw(1, 3);
 
     /// The threshold over Tendermint's alloted space for DKG decrypted txs.
-    pub const DECRYPTED_TX: f64 = 1.0 / 3.0;
+    pub const DECRYPTED_TX: Ratio<u64> = Ratio::new_raw(1, 3);
 }
 
 #[cfg(test)]
@@ -180,7 +184,7 @@ mod tests {
     fn test_tx_thres_doesnt_exceed_one() {
         let sum =
             thres::PROTOCOL_TX + thres::ENCRYPTED_TX + thres::DECRYPTED_TX;
-        assert!(sum <= 1.0)
+        assert_eq!(sum.to_integer(), 1);
     }
 
     /// Implementation of [`test_bin_capacity_eq_provided_space`].
