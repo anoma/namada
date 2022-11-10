@@ -1,12 +1,13 @@
 //! Primitives that facilitate keeping track of the number
-//! of bytes utilized by the current consensus round's proposal.
+//! of bytes utilized by some Tendermint consensus round's proposal.
 //!
 //! This is important, because Tendermint places an upper bound
 //! on the size of a block, rejecting blocks whose size exceeds
 //! the limit stated in [`RequestPrepareProposal`].
 //!
 //! In the current implementation, each kind of transaction in
-//! Namada gets a portion of the total alloted space.
+//! Namada gets a portion of (i.e. threshold over) the total
+//! alloted space.
 
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
