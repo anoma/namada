@@ -89,7 +89,7 @@ struct TxBin {
 
 impl TxBin {
     /// Construct a new [`TxBin`], with an upper bound on the max number
-    /// of txs defined by a ratio over Tendermint's own max.
+    /// of storable txs defined by a ratio over Tendermint max block size.
     #[allow(dead_code)]
     #[inline]
     fn init_from(tendermint_max_block_space: u64, frac: f64) -> Self {
