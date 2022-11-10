@@ -48,12 +48,23 @@ impl TxAllotedSpace {
     #[inline]
     pub fn init(tendermint_max_block_space: u64) -> Self {
         let max = tendermint_max_block_space;
-        Self {
+        let mut bins = Self {
             provided_by_tendermint: max,
             protocol_txs: TxBin::init_from(max, thres::PROTOCOL_TX),
             encrypted_txs: TxBin::init_from(max, thres::ENCRYPTED_TX),
             decrypted_txs: TxBin::init_from(max, thres::DECRYPTED_TX),
-        }
+        };
+        // concede leftover space to protocol txs
+        bins.protocol_txs.alloted_space += bins.leftover_space();
+        bins
+    }
+
+    /// Return leftover space in bins, resulting from float conversions.
+    fn leftover_space(&self) -> u64 {
+        let total_bin_space = self.protocol_txs.alloted_space
+            + self.encrypted_txs.alloted_space
+            + self.decrypted_txs.alloted_space;
+        self.provided_by_tendermint - total_bin_space
     }
 
     /// Try to allocate space for a new protocol transaction.
