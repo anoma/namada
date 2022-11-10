@@ -9,6 +9,7 @@ use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
+use num_rational::Ratio;
 
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -22,7 +23,7 @@ use crate::node::ledger::shell::vote_extensions::{
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
-/// Alloted space for transactions in some proposed block,
+/// Alloted space for a batch of transactions in some proposed block,
 /// measured in bytes.
 ///
 /// We keep track of the current space utilized by:
@@ -37,11 +38,11 @@ struct TxAllotedSpace {
     /// application for the current block height.
     provided_by_tendermint: u64,
     /// The current space utilized by protocol transactions.
-    current_for_protocol_txs: u64,
+    protocol_txs: TxBin,
     /// The current space utilized by DKG encrypted transactions.
-    current_for_encrypted_txs: u64,
+    encrypted_txs: TxBin,
     /// The current space utilized by DKG decrypted transactions.
-    current_for_decrypted_txs: u64,
+    decrypted_txs: TxBin,
 }
 
 impl TxAllotedSpace {
@@ -50,9 +51,40 @@ impl TxAllotedSpace {
     #[allow(dead_code)]
     #[inline]
     fn init_from(req: &RequestPrepareProposal) -> Self {
+        // each tx bin gets 1/3 of the alloted space
+        let thres = Ratio::new(1, 3);
+        let max = req.max_tx_bytes as u64;
         Self {
-            provided_by_tendermint: req.max_tx_bytes as u64,
-            ..Default::default()
+            provided_by_tendermint: max,
+            protocol_txs: TxBin::init_from(max, thres),
+            encrypted_txs: TxBin::init_from(max, thres),
+            decrypted_txs: TxBin::init_from(max, thres),
+        }
+    }
+}
+
+/// Alloted space for a batch of transactions of the same kind in some
+/// proposed block, measured in bytes.
+#[derive(Default)]
+#[allow(dead_code)]
+struct TxBin {
+    /// The current space utilized by a batch of transactions.
+    current_space: u64,
+    /// The maximum space a batch of transactions of the same kind
+    /// may occupy.
+    alloted_space: u64,
+}
+
+impl TxBin {
+    /// Construct a new [`TxBin`], with an upper bound on the max number
+    /// of txs defined by a ratio over Tendermint's own max.
+    #[allow(dead_code)]
+    #[inline]
+    fn init_from(provided_by_tendermint: u64, frac: Ratio<u64>) -> Self {
+        let alloted_space = (frac * provided_by_tendermint).to_integer();
+        Self {
+            alloted_space,
+            current_space: 0,
         }
     }
 }
