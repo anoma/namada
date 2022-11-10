@@ -9,6 +9,13 @@
 //! Namada gets a portion of (i.e. threshold over) the total
 //! alloted space.
 
+// TODO: what if a tx has a size greater than the threshold for
+// its bin? how do we handle this? if we keep it in the mempool
+// forever, it'll be a DoS vec, as we can make nodes run out of
+// memory! maybe we should allow block decisions for txs that are
+// too big to fit in their respective bin? in these special block
+// decisions, we would only decide proposals with "large" txs
+
 use num_rational::Ratio;
 
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
