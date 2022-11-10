@@ -273,6 +273,7 @@ pub mod cmds {
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
         QueryVotingPower(QueryVotingPower),
+        QueryCommissionRate(QueryCommissionRate),
         QuerySlashes(QuerySlashes),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
@@ -1000,6 +1001,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryCommissionRate(pub args::QueryCommissionRate);
+
+    impl SubCmd for QueryCommissionRate {
+        const CMD: &'static str = "commission-rate";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryCommissionRate(args::QueryCommissionRate::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query commission rate.")
+                .add_args::<args::QueryCommissionRate>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QuerySlashes(pub args::QuerySlashes);
 
     impl SubCmd for QuerySlashes {
@@ -1217,6 +1237,7 @@ pub mod args {
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
     use namada::types::transaction::GasLimit;
+    use rust_decimal::Decimal;
 
     use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
     use super::utils::*;
@@ -1245,6 +1266,7 @@ pub mod args {
     const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
+    const COMMISSION_RATE: Arg<Decimal> = arg("commission-rate");
     const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
@@ -1276,6 +1298,8 @@ pub mod args {
 
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
+    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
+        arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
@@ -1527,6 +1551,8 @@ pub mod args {
         pub account_key: Option<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
         pub protocol_key: Option<WalletPublicKey>,
+        pub commission_rate: Decimal,
+        pub max_commission_rate_change: Decimal,
         pub validator_vp_code_path: Option<PathBuf>,
         pub unsafe_dont_encrypt: bool,
     }
@@ -1539,6 +1565,9 @@ pub mod args {
             let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
+            let commission_rate = COMMISSION_RATE.parse(matches);
+            let max_commission_rate_change =
+                MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
@@ -1548,6 +1577,8 @@ pub mod args {
                 account_key,
                 consensus_key,
                 protocol_key,
+                commission_rate,
+                max_commission_rate_change,
                 validator_vp_code_path,
                 unsafe_dont_encrypt,
             }
@@ -1573,6 +1604,17 @@ pub mod args {
                 .arg(PROTOCOL_KEY.def().about(
                     "A public key for signing protocol transactions. A new \
                      one will be generated if none given.",
+                ))
+                .arg(COMMISSION_RATE.def().about(
+                    "The commission rate charged by the validator for \
+                     delegation rewards. Expressed as a decimal between 0 and \
+                     1. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. \
+                     Expressed as a decimal between 0 and 1. This is a \
+                     required parameter.",
                 ))
                 .arg(VALIDATOR_CODE_PATH.def().about(
                     "The path to the validity predicate WASM code to be used \
@@ -2045,6 +2087,77 @@ pub mod args {
             app.add_args::<Query>()
                 .arg(VALIDATOR_OPT.def().about(
                     "The validator's address whose voting power to query.",
+                ))
+                .arg(EPOCH.def().about(
+                    "The epoch at which to query (last committed, if not \
+                     specified).",
+                ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    /// Commission rate change args
+    pub struct TxCommissionRateChange {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Validator address (should be self)
+        pub validator: WalletAddress,
+        /// Value to which the tx changes the commission rate
+        pub rate: Decimal,
+    }
+
+    impl Args for TxCommissionRateChange {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let rate = COMMISSION_RATE.parse(matches);
+            Self {
+                tx,
+                validator,
+                rate,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(VALIDATOR.def().about(
+                    "The validator's address whose commission rate to change.",
+                ))
+                .arg(
+                    COMMISSION_RATE
+                        .def()
+                        .about("The desired new commission rate."),
+                )
+        }
+    }
+
+    /// Query PoS commission rate
+    #[derive(Clone, Debug)]
+    pub struct QueryCommissionRate {
+        /// Common query args
+        pub query: Query,
+        /// Address of a validator
+        pub validator: WalletAddress,
+        /// Epoch in which to find commission rate
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for QueryCommissionRate {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self {
+                query,
+                validator,
+                epoch,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(VALIDATOR.def().about(
+                    "The validator's address whose commission rate to query.",
                 ))
                 .arg(EPOCH.def().about(
                     "The epoch at which to query (last committed, if not \
@@ -2552,6 +2665,8 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
         pub alias: String,
+        pub commission_rate: Decimal,
+        pub max_commission_rate_change: Decimal,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
@@ -2560,6 +2675,9 @@ pub mod args {
     impl Args for InitGenesisValidator {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let commission_rate = COMMISSION_RATE.parse(matches);
+            let max_commission_rate_change =
+                MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let key_scheme = SCHEME.parse(matches);
@@ -2568,6 +2686,8 @@ pub mod args {
                 net_address,
                 unsafe_dont_encrypt,
                 key_scheme,
+                commission_rate,
+                max_commission_rate_change,
             }
         }
 
@@ -2577,6 +2697,15 @@ pub mod args {
                     "Static {host:port} of your validator node's P2P address. \
                      Anoma uses port `26656` for P2P connections by default, \
                      but you can configure a different value.",
+                ))
+                .arg(COMMISSION_RATE.def().about(
+                    "The commission rate charged by the validator for \
+                     delegation rewards. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. This is \
+                     a required parameter.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \

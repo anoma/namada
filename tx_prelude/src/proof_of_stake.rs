@@ -3,7 +3,8 @@
 pub use namada::ledger::pos::*;
 use namada::ledger::pos::{
     bond_key, namada_proof_of_stake, params_key, total_voting_power_key,
-    unbond_key, validator_address_raw_hash_key, validator_consensus_key_key,
+    unbond_key, validator_address_raw_hash_key, validator_commission_rate_key,
+    validator_consensus_key_key, validator_max_commission_rate_change_key,
     validator_set_key, validator_slashes_key, validator_state_key,
     validator_total_deltas_key, validator_voting_power_key,
 };
@@ -13,6 +14,7 @@ use namada::types::{key, token};
 pub use namada_proof_of_stake::{
     epoched, parameters, types, PosActions as PosWrite, PosReadOnly as PosRead,
 };
+use rust_decimal::Decimal;
 
 use super::*;
 
@@ -72,6 +74,21 @@ impl Ctx {
         )
     }
 
+    /// Change validator commission rate.
+    pub fn change_validator_commission_rate(
+        &mut self,
+        validator: &Address,
+        rate: &Decimal,
+    ) -> TxResult {
+        let current_epoch = self.get_block_epoch()?;
+        namada_proof_of_stake::PosActions::change_validator_commission_rate(
+            self,
+            validator,
+            *rate,
+            current_epoch,
+        )
+    }
+
     /// Attempt to initialize a validator account. On success, returns the
     /// initialized validator account's address.
     pub fn init_validator(
@@ -81,6 +98,8 @@ impl Ctx {
             consensus_key,
             protocol_key,
             dkg_key,
+            commission_rate,
+            max_commission_rate_change,
             validator_vp_code,
         }: InitValidator,
     ) -> EnvResult<Address> {
@@ -98,6 +117,8 @@ impl Ctx {
             &validator_address,
             &consensus_key,
             current_epoch,
+            commission_rate,
+            max_commission_rate_change,
         )?;
 
         Ok(validator_address)
@@ -112,6 +133,7 @@ namada::impl_pos_read_only! {
 impl namada_proof_of_stake::PosActions for Ctx {
     type BecomeValidatorError = crate::Error;
     type BondError = crate::Error;
+    type CommissionRateChangeError = crate::Error;
     type UnbondError = crate::Error;
     type WithdrawError = crate::Error;
 
@@ -145,6 +167,22 @@ impl namada_proof_of_stake::PosActions for Ctx {
         value: ValidatorStates,
     ) -> Result<(), Self::Error> {
         self.write(&validator_state_key(key), &value)
+    }
+
+    fn write_validator_commission_rate(
+        &mut self,
+        key: &Self::Address,
+        value: CommissionRates,
+    ) -> Result<(), Self::Error> {
+        self.write(&validator_commission_rate_key(key), &value)
+    }
+
+    fn write_validator_max_commission_rate_change(
+        &mut self,
+        key: &Self::Address,
+        value: Decimal,
+    ) -> Result<(), Self::Error> {
+        self.write(&validator_max_commission_rate_change_key(key), &value)
     }
 
     fn write_validator_total_deltas(

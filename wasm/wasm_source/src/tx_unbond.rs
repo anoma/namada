@@ -66,6 +66,8 @@ mod tests {
         let is_delegation = matches!(
             &unbond.source, Some(source) if *source != unbond.validator);
         let consensus_key = key::testing::keypair_1().ref_to();
+        let commission_rate = rust_decimal::Decimal::new(5, 2);
+        let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
 
         let genesis_validators = [GenesisValidator {
             address: unbond.validator.clone(),
@@ -77,6 +79,8 @@ mod tests {
                 initial_stake
             },
             consensus_key,
+            commission_rate,
+            max_commission_rate_change,
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
