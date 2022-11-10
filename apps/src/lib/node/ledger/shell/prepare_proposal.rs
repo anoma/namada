@@ -9,7 +9,6 @@ use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
-use num_rational::Ratio;
 
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -52,13 +51,13 @@ impl TxAllotedSpace {
     #[inline]
     fn init_from(req: &RequestPrepareProposal) -> Self {
         // each tx bin gets 1/3 of the alloted space
-        let thres = Ratio::new(1, 3);
+        const THRES: f64 = 1.0 / 3.0;
         let max = req.max_tx_bytes as u64;
         Self {
             provided_by_tendermint: max,
-            protocol_txs: TxBin::init_from(max, thres),
-            encrypted_txs: TxBin::init_from(max, thres),
-            decrypted_txs: TxBin::init_from(max, thres),
+            protocol_txs: TxBin::init_from(max, THRES),
+            encrypted_txs: TxBin::init_from(max, THRES),
+            decrypted_txs: TxBin::init_from(max, THRES),
         }
     }
 }
@@ -80,8 +79,8 @@ impl TxBin {
     /// of txs defined by a ratio over Tendermint's own max.
     #[allow(dead_code)]
     #[inline]
-    fn init_from(provided_by_tendermint: u64, frac: Ratio<u64>) -> Self {
-        let alloted_space = (frac * provided_by_tendermint).to_integer();
+    fn init_from(provided_by_tendermint: u64, frac: f64) -> Self {
+        let alloted_space = (provided_by_tendermint as f64 * frac) as u64;
         Self {
             alloted_space,
             current_space: 0,
