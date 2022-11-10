@@ -158,7 +158,8 @@ where
             validator_set_update,
         })
         .map(|tx| tx.sign(protocol_key).to_bytes())
-        // TODO: remove this later, when we get rid of `abciplus`
+        // TODO(feature = "abcipp"): remove this later, when we get rid of
+        // `abciplus`
         .chain(protocol_txs.into_iter())
         .collect()
     }
