@@ -948,8 +948,7 @@ mod imp {
 
 #[cfg(test)]
 mod test {
-    use namada::ledger::storage::traits::Sha256Hasher;
-    use namada::ledger::storage::MerkleTree;
+    use namada::ledger::storage::{MerkleTree, Sha256Hasher};
     use namada::types::address::EstablishedAddressGen;
     use namada::types::storage::{BlockHash, Epoch, Epochs};
     use tempfile::tempdir;

@@ -1,13 +1,9 @@
 //! Traits needed to provide a uniform interface over
 //! all the different Merkle trees used for storage
-use std::convert::TryInto;
-use std::fmt;
-
 use arse_merkle_tree::traits::{Hasher, Value};
 use arse_merkle_tree::{Key as TreeKey, H256};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof};
-use sha2::{Digest, Sha256};
 
 use super::merkle_tree::{Amt, Error, Smt};
 use super::{ics23_specs, IBC_KEY_LIMIT};
@@ -231,46 +227,4 @@ impl Value for TreeBytes {
 pub trait StorageHasher: Hasher + Default {
     /// Hash the value to store
     fn hash(value: impl AsRef<[u8]>) -> H256;
-}
-
-/// The storage hasher used for the merkle tree.
-#[derive(Default)]
-pub struct Sha256Hasher(Sha256);
-
-impl Hasher for Sha256Hasher {
-    fn write_bytes(&mut self, h: &[u8]) {
-        self.0.update(h)
-    }
-
-    fn finish(self) -> H256 {
-        let hash = self.0.finalize();
-        let bytes: [u8; 32] = hash
-            .as_slice()
-            .try_into()
-            .expect("Sha256 output conversion to fixed array shouldn't fail");
-        bytes.into()
-    }
-
-    fn hash_op() -> ics23::HashOp {
-        ics23::HashOp::Sha256
-    }
-}
-
-impl StorageHasher for Sha256Hasher {
-    fn hash(value: impl AsRef<[u8]>) -> H256 {
-        let mut hasher = Sha256::new();
-        hasher.update(value.as_ref());
-        let hash = hasher.finalize();
-        let bytes: [u8; 32] = hash
-            .as_slice()
-            .try_into()
-            .expect("Sha256 output conversion to fixed array shouldn't fail");
-        bytes.into()
-    }
-}
-
-impl fmt::Debug for Sha256Hasher {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Sha256Hasher")
-    }
 }

@@ -544,7 +544,7 @@ impl From<MtError> for Error {
 mod test {
     use super::*;
     use crate::ledger::storage::ics23_specs::{ibc_proof_specs, proof_specs};
-    use crate::ledger::storage::traits::Sha256Hasher;
+    use crate::ledger::storage::Sha256Hasher;
     use crate::types::storage::KeySeg;
 
     #[test]

@@ -7,10 +7,13 @@ pub mod mockdb;
 pub mod traits;
 pub mod types;
 pub mod write_log;
-
 use core::fmt::Debug;
-use std::array;
+use std::convert::TryInto;
+use std::{array, fmt};
 
+use arse_merkle_tree::traits::Hasher;
+use arse_merkle_tree::H256;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use self::traits::StorageHasher;
@@ -873,12 +876,54 @@ impl From<MerkleTreeError> for Error {
     }
 }
 
+/// The storage hasher used for the merkle tree.
+#[derive(Default)]
+pub struct Sha256Hasher(Sha256);
+
+impl Hasher for Sha256Hasher {
+    fn write_bytes(&mut self, h: &[u8]) {
+        self.0.update(h)
+    }
+
+    fn finish(self) -> H256 {
+        let hash = self.0.finalize();
+        let bytes: [u8; 32] = hash
+            .as_slice()
+            .try_into()
+            .expect("Sha256 output conversion to fixed array shouldn't fail");
+        bytes.into()
+    }
+
+    fn hash_op() -> ics23::HashOp {
+        ics23::HashOp::Sha256
+    }
+}
+
+impl StorageHasher for Sha256Hasher {
+    fn hash(value: impl AsRef<[u8]>) -> H256 {
+        let mut hasher = Sha256::new();
+        hasher.update(value.as_ref());
+        let hash = hasher.finalize();
+        let bytes: [u8; 32] = hash
+            .as_slice()
+            .try_into()
+            .expect("Sha256 output conversion to fixed array shouldn't fail");
+        bytes.into()
+    }
+}
+
+impl fmt::Debug for Sha256Hasher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Sha256Hasher")
+    }
+}
+
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::mockdb::MockDB;
     use super::*;
-    use crate::ledger::storage::traits::Sha256Hasher;
+    use crate::ledger::storage::Sha256Hasher;
     /// Storage with a mock DB for testing
     pub type TestStorage = Storage<MockDB, Sha256Hasher>;
 

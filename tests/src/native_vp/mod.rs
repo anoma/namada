@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage::mockdb::MockDB;
-use namada::ledger::storage::traits::Sha256Hasher;
+use namada::ledger::storage::Sha256Hasher;
 use namada::types::address::Address;
 use namada::types::storage;
 use namada::vm::WasmCacheRwAccess;
