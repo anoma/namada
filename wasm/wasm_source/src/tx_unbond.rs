@@ -217,8 +217,6 @@ mod tests {
         }
 
         {
-            // TODO: should this loop over epochs after this one as well? Are
-            // there any?
             let epoch = pos_params.unbonding_len + 1;
             let expected_stake =
                 i128::from(initial_stake) - i128::from(unbond.amount);
@@ -298,7 +296,6 @@ mod tests {
             );
         }
         {
-            // TODO: checl logic here
             let epoch = pos_params.unbonding_len + 1;
             let bond: Bond<token::Amount> = bonds_post.get(epoch).unwrap();
             let expected_bond =

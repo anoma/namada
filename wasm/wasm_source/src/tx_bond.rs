@@ -131,8 +131,6 @@ mod tests {
         // Check that the validator set and deltas are unchanged before pipeline
         // length and that they are updated between the pipeline and
         // unbonding lengths
-        //
-        // TODO: should end be pipeline + unbonding now?
         if bond.amount == token::Amount::from(0) {
             // None of the optional storage fields should have been updated
             assert_eq!(validator_sets_pre, validator_sets_post);
