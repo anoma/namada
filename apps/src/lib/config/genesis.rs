@@ -220,9 +220,6 @@ pub mod genesis_config {
         // Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
-        // Minimum duration of an epoch (in seconds).
-        // TODO: this is i64 because datetime wants it
-        pub min_duration: i64,
         // Maximum duration per block (in seconds).
         // TODO: this is i64 because datetime wants it
         pub max_expected_time_per_block: i64,
@@ -523,11 +520,13 @@ pub mod genesis_config {
             })
             .collect();
 
+        let min_duration: i64 =
+            60 * 60 * 24 * 365 / (config.parameters.epochs_per_year as i64);
         let parameters = Parameters {
             epoch_duration: EpochDuration {
                 min_num_of_blocks: config.parameters.min_num_of_blocks,
                 min_duration: namada::types::time::Duration::seconds(
-                    config.parameters.min_duration,
+                    min_duration,
                 )
                 .into(),
             },
@@ -775,10 +774,8 @@ pub fn genesis() -> Genesis {
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         vp_whitelist: vec![],
         tx_whitelist: vec![],
-        epochs_per_year: 105_120, /* seconds in yr (60*60*24*365) div seconds
-                                   * per epoch (300 =
-                                   * max_expected_time_per_block *
-                                   * min_num_of_blocks from above) */
+        epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
+                                   * per epoch (60 = min_duration) */
         pos_gain_p: dec!(0.1),
         pos_gain_d: dec!(0.1),
         staked_ratio: dec!(0.0),

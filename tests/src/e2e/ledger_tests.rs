@@ -573,8 +573,8 @@ fn pos_bonds() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 2,
-                min_duration: 1,
                 max_expected_time_per_block: 1,
+                epochs_per_year: 31_536_000,
                 ..genesis.parameters
             };
             let pos_params = PosParamsConfig {
@@ -766,7 +766,7 @@ fn pos_init_validator() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 2,
-                min_duration: 1,
+                epochs_per_year: 31_536_000,
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
             };
@@ -1036,7 +1036,6 @@ fn proposal_submission() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 1,
-                min_duration: 1,
                 max_expected_time_per_block: 1,
                 vp_whitelist: Some(get_all_wasms_hashes(
                     &working_dir,
@@ -1048,7 +1047,7 @@ fn proposal_submission() -> Result<()> {
                     &working_dir,
                     Some("tx_"),
                 )),
-                epochs_per_year: 31_526_000,
+                epochs_per_year: 31_536_000,
                 pos_gain_p: dec!(0.1),
                 pos_gain_d: dec!(0.1),
             };
