@@ -181,6 +181,30 @@ impl TxBin {
             AllocStatus::Rejected
         }
     }
+
+    /// Try to dump a new batch of transactions into this [`TxBin`].
+    ///
+    /// If an allocation fails, rollback the state of the [`TxBin`],
+    /// and return the respective status of the failure.
+    #[inline]
+    #[allow(dead_code)]
+    fn try_dump_all<'tx, T>(&mut self, txs: T) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        let mut space_diff = 0;
+        for tx in txs {
+            match self.try_dump(tx) {
+                AllocStatus::Accepted => space_diff += tx.len() as u64,
+                status
+                @ (AllocStatus::Rejected | AllocStatus::OverflowsBin) => {
+                    self.current_space -= space_diff;
+                    return status;
+                }
+            }
+        }
+        AllocStatus::Accepted
+    }
 }
 
 mod thres {
