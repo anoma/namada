@@ -217,15 +217,12 @@ mod tests {
     }
 
     prop_compose! {
-        // WIP: generate vecs of vecs, each inner vec with a random length
-        // (contains tx payloads of arb length)
-        fn arb_transactions_with_min_block_space
-            // the minimum block space Tendermint will give us
-            (min_block_space: u64)
+        /// Generate arbitrarily sized txs of different kinds.
+        fn arb_transactions_with_min_block_space()
             // create base strategies
             (
                 (tendermint_max_block_space, protocol_tx_max_bin_size, encrypted_tx_max_bin_size,
-                 decrypted_tx_max_bin_size) in arb_max_bin_sizes(min_block_space),
+                 decrypted_tx_max_bin_size) in arb_max_bin_sizes(),
             )
             // compose strategies
             (
@@ -237,15 +234,13 @@ mod tests {
             -> (u64, Vec<u8>, Vec<u8>, Vec<u8>) {
                 (tendermint_max_block_space, protocol_txs, encrypted_txs, decrypted_txs)
             }
-
     }
 
     /// Return random bin sizes for a [`TxAllotedSpace`].
     #[allow(dead_code)]
-    fn arb_max_bin_sizes(
-        min_block_space: u64,
-    ) -> impl Strategy<Value = (u64, usize, usize, usize)> {
-        (min_block_space..u64::MAX).prop_map(|tendermint_max_block_space| {
+    fn arb_max_bin_sizes() -> impl Strategy<Value = (u64, usize, usize, usize)>
+    {
+        (1..=u64::MAX).prop_map(|tendermint_max_block_space| {
             (
                 tendermint_max_block_space,
                 (thres::PROTOCOL_TX * tendermint_max_block_space).to_integer()
