@@ -93,12 +93,50 @@ impl TxAllottedSpace {
         self.bytes_provided_by_tendermint - total_bin_space
     }
 
+    /// The total space, in bytes, occupied by each transaction.
+    #[inline]
+    pub fn occupied_space(&self) -> u64 {
+        self.protocol_txs.current_space
+            + self.encrypted_txs.current_space
+            + self.decrypted_txs.current_space
+    }
+
+    /// Return the amount, in bytes, of free space in this
+    /// [`TxAllotedSpace`].
+    #[inline]
+    pub fn free_space(&self) -> u64 {
+        self.provided_by_tendermint - self.occupied_space()
+    }
+
+    /// Checks if this [`TxAllotedSpace`] has any free space remaining.
+    #[allow(dead_code)]
+    #[inline]
+    pub fn has_free_space(&self) -> bool {
+        self.free_space() > 0
+    }
+}
+
+// all allocation boilerplate code shall
+// be shunned to this impl block -- shame!
+impl TxAllotedSpace {
     /// Try to allocate space for a new protocol transaction.
     #[allow(dead_code)]
     #[inline]
     pub fn try_alloc_protocol_tx(&mut self, tx: &[u8]) -> AllocStatus {
         self.protocol_txs.try_dump(tx)
     }
+
+    /// Try to allocate space for a new batch of protocol transactions.
+    #[allow(dead_code)]
+    #[inline]
+    pub fn try_alloc_protocol_tx_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        self.protocol_txs.try_dump_all(txs)
+    }
+
+    // --------------------------------------------------- //
 
     /// Try to allocate space for a new DKG encrypted transaction.
     #[allow(dead_code)]
@@ -107,11 +145,17 @@ impl TxAllottedSpace {
         self.encrypted_txs.try_dump(tx)
     }
 
-    /// Try to allocate space for a new DKG decrypted transaction.
+    /// Try to allocate space for a new batch of DKG encrypted transactions.
     #[allow(dead_code)]
     #[inline]
-    pub fn try_alloc_decrypted_tx(&mut self, tx: &[u8]) -> AllocStatus {
-        self.decrypted_txs.try_dump(tx)
+    pub fn try_alloc_encrypted_tx_batch<'tx, T>(
+        &mut self,
+        txs: T,
+    ) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        self.encrypted_txs.try_dump_all(txs)
     }
 
     /// The total space, in bytes, occupied by each transaction.
@@ -187,7 +231,6 @@ impl TxBin {
     /// If an allocation fails, rollback the state of the [`TxBin`],
     /// and return the respective status of the failure.
     #[inline]
-    #[allow(dead_code)]
     fn try_dump_all<'tx, T>(&mut self, txs: T) -> AllocStatus
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
