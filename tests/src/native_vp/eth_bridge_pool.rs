@@ -11,7 +11,7 @@ mod test_bridge_pool_vp {
     use namada::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada::ledger::eth_bridge::ADDRESS;
     use namada::proto::Tx;
-    use namada::types::address::{wnam, nam};
+    use namada::types::address::{nam, wnam};
     use namada::types::eth_bridge_pool::{
         GasFee, PendingTransfer, TransferToEthereum,
     };
@@ -80,18 +80,18 @@ mod test_bridge_pool_vp {
         // initialize Ethereum bridge storage
         config.init_storage(&mut env.storage);
         // initialize Bertha's account
-        env.spawn_accounts([&albert_address(), &bertha_address(), &xan()]);
+        env.spawn_accounts([&albert_address(), &bertha_address(), &nam()]);
         // enrich Albert
         env.credit_tokens(
             &albert_address(),
-            &xan(),
+            &nam(),
             None,
             BERTHA_WEALTH.into(),
         );
         // enrich Bertha
         env.credit_tokens(
             &bertha_address(),
-            &xan(),
+            &nam(),
             None,
             BERTHA_WEALTH.into(),
         );

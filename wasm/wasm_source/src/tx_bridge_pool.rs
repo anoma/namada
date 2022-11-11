@@ -32,13 +32,13 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
             ctx,
             sender,
             &eth_bridge::ADDRESS,
-            &address::xan(),
+            &address::nam(),
             None,
             amount,
         )?;
     } else {
         // Otherwise we escrow ERC20 tokens.
-        let sub_prefix = wrapped_erc20s::sub_prefix(&transfer.transfer.asset);
+        let sub_prefix = wrapped_erc20s::sub_prefix(asset);
         token::transfer(
             ctx,
             sender,
