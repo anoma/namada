@@ -12,5 +12,6 @@
     "tx_withdraw.wasm": "tx_withdraw.11cbcae2e91916d4816348ecd5045f063db71e813e9b1493deff9ca412e31747.wasm",
     "vp_testnet_faucet.wasm": "vp_testnet_faucet.283f0019331726ed9075a7de2c750fcddb01d998be26ab69b7f719aa5c4481dc.wasm",
     "vp_token.wasm": "vp_token.ac5cba1238db7a18e51324063229b73d6c6b56d426be8acb4d2e2534e5a3b8e8.wasm",
-    "vp_user.wasm": "vp_user.d9fd5c495e0137652313983f6b060e9881d18097edee40956542cdd56ddbc2d4.wasm"
+    "vp_user.wasm": "vp_user.d9fd5c495e0137652313983f6b060e9881d18097edee40956542cdd56ddbc2d4.wasm",
+    "vp_validator.wasm": "vp_validator.8eb2482a5a83a13824fe809d08f0066c778427a573d703550bd0a9e67a0eaa63.wasm"
 }
