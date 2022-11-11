@@ -9,27 +9,25 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::Result;
 
+use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils;
 use crate::ledger::protocol::transactions::votes::{
-    calculate_new, calculate_updated, write, Votes,
+    calculate_new, calculate_updated, write,
 };
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::types::address::Address;
-use crate::types::storage::{self, BlockHeight};
+use crate::types::storage::BlockHeight;
 use crate::types::transaction::TxResult;
 use crate::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use crate::types::voting_power::FractionalVotingPower;
 
-/// The keys changed while applying a protocol transaction
-type ChangedKeys = BTreeSet<storage::Key>;
-
-impl utils::GetVoters for [MultiSignedEthEvent] {
+impl utils::GetVoters for HashSet<EthMsgUpdate> {
     #[inline]
     fn get_voters(&self) -> HashSet<(Address, BlockHeight)> {
-        self.iter().fold(HashSet::new(), |mut voters, event| {
-            voters.extend(event.signers.iter().cloned());
+        self.iter().fold(HashSet::new(), |mut voters, update| {
+            voters.extend(update.seen_by.clone().into_iter());
             voters
         })
     }
@@ -59,9 +57,9 @@ where
          protocol transaction"
     );
 
-    let voting_powers = utils::get_voting_powers(storage, events.as_slice())?;
-
     let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
+
+    let voting_powers = utils::get_voting_powers(storage, &updates)?;
 
     let changed_keys = apply_updates(storage, updates, voting_powers)?;
 
@@ -132,17 +130,9 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let mut seen_by = Votes::default();
-    for (address, block_height) in update.seen_by.into_iter() {
-        // TODO: more deterministic deduplication
-        if let Some(present) = seen_by.insert(address, block_height) {
-            tracing::warn!(?present, "Duplicate vote in digest");
-        }
-    }
-
     let (vote_tracking, changed, confirmed) = if !exists_in_storage {
         tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-        let vote_tracking = calculate_new(seen_by, voting_powers)?;
+        let vote_tracking = calculate_new(update.seen_by, voting_powers)?;
         let changed = eth_msg_keys.into_iter().collect();
         let confirmed = vote_tracking.seen;
         (vote_tracking, changed, confirmed)
@@ -152,7 +142,7 @@ where
             "Ethereum event already exists in storage",
         );
         let mut votes = HashMap::default();
-        seen_by.iter().for_each(|(address, block_height)| {
+        update.seen_by.iter().for_each(|(address, block_height)| {
             let voting_power = voting_powers
                 .get(&(address.to_owned(), block_height.to_owned()))
                 .unwrap();
@@ -192,7 +182,6 @@ mod tests {
     use std::collections::{BTreeSet, HashMap, HashSet};
 
     use borsh::BorshDeserialize;
-    use storage::BlockHeight;
 
     use super::*;
     use crate::ledger::eth_bridge::storage::wrapped_erc20s;
@@ -200,6 +189,7 @@ mod tests {
     use crate::ledger::pos::namada_proof_of_stake::PosBase;
     use crate::ledger::pos::types::{ValidatorSet, WeightedValidator};
     use crate::ledger::protocol::transactions::utils::GetVoters;
+    use crate::ledger::protocol::transactions::votes::Votes;
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::testing::TestStorage;
     use crate::ledger::storage::traits::Sha256Hasher;
@@ -421,22 +411,22 @@ mod tests {
 
     #[test]
     /// Assert we don't return anything if we try to get the votes for an empty
-    /// vec of events
-    pub fn test_get_votes_for_events_empty() {
-        let events = vec![];
-        assert!(events.as_slice().get_voters().is_empty());
+    /// set of updates
+    pub fn test_get_votes_for_updates_empty() {
+        let updates = HashSet::new();
+        assert!(updates.get_voters().is_empty());
     }
 
     #[test]
-    /// Test that we correctly get the votes from a vec of events
+    /// Test that we correctly get the votes from a set of updates
     pub fn test_get_votes_for_events() {
-        let events = vec![
-            MultiSignedEthEvent {
-                event: arbitrary_single_transfer(
+        let updates = HashSet::from([
+            EthMsgUpdate {
+                body: arbitrary_single_transfer(
                     1.into(),
                     address::testing::established_address_1(),
                 ),
-                signers: BTreeSet::from([
+                seen_by: Votes::from([
                     (
                         address::testing::established_address_1(),
                         BlockHeight(100),
@@ -447,12 +437,12 @@ mod tests {
                     ),
                 ]),
             },
-            MultiSignedEthEvent {
-                event: arbitrary_single_transfer(
+            EthMsgUpdate {
+                body: arbitrary_single_transfer(
                     2.into(),
                     address::testing::established_address_2(),
                 ),
-                signers: BTreeSet::from([
+                seen_by: Votes::from([
                     (
                         address::testing::established_address_1(),
                         BlockHeight(101),
@@ -463,11 +453,11 @@ mod tests {
                     ),
                 ]),
             },
-        ];
-        let voters = events.as_slice().get_voters();
+        ]);
+        let voters = updates.get_voters();
         assert_eq!(
             voters,
-            HashSet::from_iter(vec![
+            HashSet::from([
                 (address::testing::established_address_1(), BlockHeight(100)),
                 (address::testing::established_address_1(), BlockHeight(101)),
                 (address::testing::established_address_2(), BlockHeight(102)),
