@@ -179,6 +179,7 @@ mod thres {
     pub const DECRYPTED_TX: Ratio<u64> = Ratio::new_raw(1, 3);
 }
 
+// TOOD: write bin dump rejected test (tests full cap of bin)
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
