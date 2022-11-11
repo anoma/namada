@@ -324,7 +324,7 @@ mod tests {
     /// Return a list of txs.
     fn arb_tx_list(max_bin_size: usize) -> impl Strategy<Value = Vec<Vec<u8>>> {
         const MAX_TX_NUM: usize = 64;
-        let tx = prop::collection::vec(prop::num::u8::ANY, 1..=max_bin_size);
+        let tx = prop::collection::vec(prop::num::u8::ANY, 0..=max_bin_size);
         prop::collection::vec(tx, 0..=MAX_TX_NUM)
     }
 }
