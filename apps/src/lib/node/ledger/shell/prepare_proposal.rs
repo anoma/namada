@@ -12,8 +12,8 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
 
-use super::super::*;
 use self::tx_bins::TxAllotedSpace;
+use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::{
