@@ -85,12 +85,16 @@ impl TxAllottedSpace {
 
     /// Try to allocate space for a new transaction.
     #[allow(dead_code)]
-    pub fn try_alloc_tx(&mut self, tx_bytes: &[u8]) -> Result<bool, TxError> {
+    pub fn try_alloc_tx(&mut self, tx_bytes: &[u8]) -> bool {
         let tx = Tx::try_from(tx_bytes)
             .map_err(|err| TxError::Deserialization(format!("{err}")))
-            .and_then(process_tx)?;
+            .and_then(process_tx)
+            .expect(
+                "Mempool validation passed for the given tx, so it should be \
+                 a valid tx",
+            );
 
-        Ok(match tx {
+        match tx {
             TxType::Raw(_) => {
                 // nothing to do for raw txs
                 true
@@ -98,7 +102,7 @@ impl TxAllottedSpace {
             TxType::Protocol(_) => self.try_alloc_protocol_tx(tx_bytes),
             TxType::Wrapper(_) => self.try_alloc_encrypted_tx(tx_bytes),
             TxType::Decrypted(_) => self.try_alloc_decrypted_tx(tx_bytes),
-        })
+        }
     }
 
     /// Try to allocate space for a new protocol transaction.
