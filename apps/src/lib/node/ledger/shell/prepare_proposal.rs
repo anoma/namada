@@ -12,7 +12,9 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
 
-use self::tx_bins::TxAllotedSpace;
+// ```ignore
+// use self::tx_bins::TxAllotedSpace;
+// ```
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
@@ -53,7 +55,9 @@ where
             // TODO: add some info logging?
 
             // start counting allotted space for txs
-            let mut bins = TxAllotedSpace::from(&req);
+            // ```ignore
+            // let mut bins = TxAllotedSpace::from(&req);
+            // ```
 
             // add ethereum events and validator set updates as protocol txs
             #[cfg(feature = "abcipp")]
