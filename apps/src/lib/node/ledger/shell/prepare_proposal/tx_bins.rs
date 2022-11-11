@@ -16,8 +16,9 @@
 // too big to fit in their respective bin? in these special block
 // decisions, we would only decide proposals with "large" txs
 
-// TODO: refactor our measure of space to also reflect gas costs!
-// we can only pick txs up to a certain cumulative gas cost
+// TODO: refactor our measure of space to also reflect gas costs.
+// the total gas of all chosen txs cannot exceed the configured max
+// gas per block, otherwise a proposal will be rejected!
 
 use num_rational::Ratio;
 
@@ -223,18 +224,37 @@ mod tests {
             (min_block_space: u64)
             // create base strategies
             (
-                tendermint_max_block_space in min_block_space..u64::MAX,
-                no_of_mempool_txs in prop::num::u64::ANY,
+                (tendermint_max_block_space, protocol_tx_max_bin_size, encrypted_tx_max_bin_size,
+                 decrypted_tx_max_bin_size) in arb_max_bin_sizes(min_block_space),
             )
             // compose strategies
             (
-                max_length in Just((Ratio::new_raw(1, 3) * tendermint_max_block_space).to_integer()),
-                tx in prop::collection::vec(0u8.., max_length),
-                tx_kinds in prop::collection::vec(0u8..3, no_of_mempool_txs),
+                tendermint_max_block_space in Just(tendermint_max_block_space),
+                protocol_txs in prop::collection::vec(prop::num::u8::ANY, 0..=protocol_tx_max_bin_size),
+                encrypted_txs in prop::collection::vec(prop::num::u8::ANY, 0..=encrypted_tx_max_bin_size),
+                decrypted_txs in prop::collection::vec(prop::num::u8::ANY, 0..=decrypted_tx_max_bin_size),
             )
-            -> {
-                ()
+            -> (u64, Vec<u8>, Vec<u8>, Vec<u8>) {
+                (tendermint_max_block_space, protocol_txs, encrypted_txs, decrypted_txs)
             }
 
+    }
+
+    /// Return random bin sizes for a [`TxAllotedSpace`].
+    #[allow(dead_code)]
+    fn arb_max_bin_sizes(
+        min_block_space: u64,
+    ) -> impl Strategy<Value = (u64, usize, usize, usize)> {
+        (min_block_space..u64::MAX).prop_map(|tendermint_max_block_space| {
+            (
+                tendermint_max_block_space,
+                (thres::PROTOCOL_TX * tendermint_max_block_space).to_integer()
+                    as usize,
+                (thres::ENCRYPTED_TX * tendermint_max_block_space).to_integer()
+                    as usize,
+                (thres::DECRYPTED_TX * tendermint_max_block_space).to_integer()
+                    as usize,
+            )
+        })
     }
 }
