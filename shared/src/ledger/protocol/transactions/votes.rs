@@ -73,13 +73,14 @@ pub fn calculate_new(
     })
 }
 
+type VoteInfo = HashMap<Address, (BlockHeight, FractionalVotingPower)>;
+
 /// Calculate an updated [`Tally`] based on one that is in storage under `keys`,
 /// with some new `voters`.
 pub fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
-    vote_powers: &HashMap<Address, FractionalVotingPower>,
-    vote_heights: &BTreeMap<Address, BlockHeight>,
+    vote_info: &VoteInfo,
 ) -> Result<(Tally, ChangedKeys)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -96,8 +97,7 @@ where
         seen_by,
         seen,
     };
-    let tally_post =
-        calculate_update(keys, &tally_pre, vote_powers, vote_heights);
+    let tally_post = calculate_update(keys, &tally_pre, &vote_info);
     let changed_keys = validate_update(keys, &tally_pre, &tally_post)?;
 
     tracing::warn!(
@@ -115,10 +115,9 @@ where
 fn calculate_update<T>(
     keys: &vote_tallies::Keys<T>,
     pre: &Tally,
-    vote_powers: &HashMap<Address, FractionalVotingPower>,
-    vote_heights: &BTreeMap<Address, BlockHeight>,
+    vote_info: &VoteInfo,
 ) -> Tally {
-    let new_voters: BTreeSet<Address> = vote_powers.keys().cloned().collect();
+    let new_voters: BTreeSet<Address> = vote_info.keys().cloned().collect();
 
     // For any event and validator, only the first vote by that validator for
     // that event counts, later votes we encounter here can just be ignored. We
@@ -144,14 +143,19 @@ fn calculate_update<T>(
         );
         seen_by_post.insert(
             validator.to_owned(),
-            vote_heights
+            vote_info
                 .get(validator)
                 .expect("Validator must be in votes!")
+                .0
                 .to_owned(),
         );
-        voting_power_post += vote_powers.get(validator).expect(
-            "voting powers map must have all validators from newly_seen_by",
-        );
+        voting_power_post += vote_info
+            .get(validator)
+            .expect(
+                "voting powers map must have all validators from newly_seen_by",
+            )
+            .1
+            .to_owned();
     }
 
     let seen_post = if voting_power_post > FractionalVotingPower::TWO_THIRDS {

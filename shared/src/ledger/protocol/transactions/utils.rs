@@ -20,30 +20,33 @@ pub(super) trait GetVoters {
 }
 
 /// Constructs a map of validator [`Address`]es from `votes` to the relevant
-/// [`FractionalVotingPower`] from `voting_powers`
-pub(super) fn filter_fractional_voting_powers_by_address(
+/// [`BlockHeight`] and also [`FractionalVotingPower`] from `voting_powers`
+pub(super) fn construct_vote_info(
     votes: Votes,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> HashMap<Address, FractionalVotingPower> {
-    let mut fractional_voting_powers = HashMap::default();
+) -> HashMap<Address, (BlockHeight, FractionalVotingPower)> {
+    let mut map = HashMap::default();
     votes.into_iter().for_each(|(address, block_height)| {
         let fract_voting_power =
             voting_powers.get(&(address.clone(), block_height)).unwrap();
-        if let Some(already_present_fract_voting_power) =
-            fractional_voting_powers
-                .insert(address.clone(), fract_voting_power.to_owned())
-        {
+        if let Some((
+            already_present_block_height,
+            already_present_fract_voting_power,
+        )) = map.insert(
+            address.clone(),
+            (block_height, fract_voting_power.to_owned()),
+        ) {
             tracing::warn!(
                 ?address,
+                ?already_present_block_height,
                 ?already_present_fract_voting_power,
                 new_fract_voting_power = ?fract_voting_power,
                 "Validator voted more than once, arbitrarily using later value"
             )
         }
     });
-    fractional_voting_powers
+    map
 }
-
 /// Returns a map whose keys are addresses of validators and the block height at
 /// which they signed some arbitrary object, and whose values are the voting
 /// powers of these validators at the key's given block height.

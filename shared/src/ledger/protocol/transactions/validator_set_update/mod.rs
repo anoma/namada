@@ -6,9 +6,7 @@ use eyre::Result;
 
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
-use crate::ledger::protocol::transactions::utils::{
-    self, filter_fractional_voting_powers_by_address,
-};
+use crate::ledger::protocol::transactions::utils::{self, construct_vote_info};
 use crate::ledger::protocol::transactions::votes::{self, Votes};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -112,17 +110,9 @@ where
             %valset_upd_keys.prefix,
             "Validator set update votes already in storage",
         );
-        let fractional_voting_powers =
-            filter_fractional_voting_powers_by_address(
-                seen_by.clone(),
-                &voting_powers,
-            );
-        let (tally, changed) = votes::calculate_updated(
-            storage,
-            &valset_upd_keys,
-            &fractional_voting_powers,
-            &seen_by,
-        )?;
+        let voters = construct_vote_info(seen_by.clone(), &voting_powers);
+        let (tally, changed) =
+            votes::calculate_updated(storage, &valset_upd_keys, &voters)?;
         let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
         (tally, changed, confirmed)
     };
