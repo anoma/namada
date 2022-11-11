@@ -24,6 +24,18 @@ use num_rational::Ratio;
 
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
+/// All status responses from trying to allocate block space for a tx.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum AllocStatus {
+    /// The transaction is able to be included in the current block.
+    Accepted,
+    /// The transaction can only be included in an upcoming block.
+    Rejected,
+    /// The transaction would overflow the allotted bin space,
+    /// therefore it needs to be handled separately.
+    OverflowsBin,
+}
+
 /// Allotted space for a batch of transactions in some proposed block,
 /// measured in bytes.
 ///
@@ -84,21 +96,21 @@ impl TxAllottedSpace {
     /// Try to allocate space for a new protocol transaction.
     #[allow(dead_code)]
     #[inline]
-    pub fn try_alloc_protocol_tx(&mut self, tx: &[u8]) -> bool {
+    pub fn try_alloc_protocol_tx(&mut self, tx: &[u8]) -> AllocStatus {
         self.protocol_txs.try_dump(tx)
     }
 
     /// Try to allocate space for a new DKG encrypted transaction.
     #[allow(dead_code)]
     #[inline]
-    pub fn try_alloc_encrypted_tx(&mut self, tx: &[u8]) -> bool {
+    pub fn try_alloc_encrypted_tx(&mut self, tx: &[u8]) -> AllocStatus {
         self.encrypted_txs.try_dump(tx)
     }
 
     /// Try to allocate space for a new DKG decrypted transaction.
     #[allow(dead_code)]
     #[inline]
-    pub fn try_alloc_decrypted_tx(&mut self, tx: &[u8]) -> bool {
+    pub fn try_alloc_decrypted_tx(&mut self, tx: &[u8]) -> AllocStatus {
         self.decrypted_txs.try_dump(tx)
     }
 
@@ -152,14 +164,21 @@ impl TxBin {
     }
 
     /// Try to dump a new transaction into this [`TxBin`].
+    ///
+    /// Signal the caller if the tx is larger than its max
+    /// allotted bin space.
     #[inline]
-    fn try_dump(&mut self, tx: &[u8]) -> bool {
-        let occupied = self.current_space_in_bytes + tx.len() as u64;
-        if occupied <= self.allotted_space_in_bytes {
-            self.current_space_in_bytes = occupied;
-            true
+    fn try_dump(&mut self, tx: &[u8]) -> AllocStatus {
+        let tx_len = tx.len() as u64;
+        if tx_len > self.alloted_space {
+            return AllocStatus::OverflowsBin;
+        }
+        let occupied = self.current_space + tx_len;
+        if occupied <= self.alloted_space {
+            self.current_space = occupied;
+            AllocStatus::Accepted
         } else {
-            false
+            AllocStatus::Rejected
         }
     }
 }
@@ -246,7 +265,10 @@ mod tests {
             bins.decrypted_txs.allotted_space_in_bytes;
 
         // make sure we can't dump any new decrypted txs in the bin
-        assert!(!bins.try_alloc_decrypted_tx(b"arbitrary tx bytes"));
+        assert_eq!(
+            bins.try_alloc_decrypted_tx(b"arbitrary tx bytes"),
+            AllocStatus::Rejected
+        );
     }
 
     /// Implementation of [`test_bin_capacity_eq_provided_space`].
@@ -292,13 +314,22 @@ mod tests {
         // make sure we can keep dumping txs,
         // without overflowing the bins
         for tx in protocol_txs {
-            assert!(bins.borrow_mut().try_alloc_protocol_tx(&tx));
+            assert_eq!(
+                bins.borrow_mut().try_alloc_protocol_tx(&tx),
+                AllocStatus::Accepted
+            );
         }
         for tx in encrypted_txs {
-            assert!(bins.borrow_mut().try_alloc_encrypted_tx(&tx));
+            assert_eq!(
+                bins.borrow_mut().try_alloc_encrypted_tx(&tx),
+                AllocStatus::Accepted
+            );
         }
         for tx in decrypted_txs {
-            assert!(bins.borrow_mut().try_alloc_decrypted_tx(&tx));
+            assert_eq!(
+                bins.borrow_mut().try_alloc_decrypted_tx(&tx),
+                AllocStatus::Accepted
+            );
         }
     }
 
