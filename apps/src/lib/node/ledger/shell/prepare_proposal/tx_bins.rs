@@ -20,6 +20,8 @@
 // the total gas of all chosen txs cannot exceed the configured max
 // gas per block, otherwise a proposal will be rejected!
 
+use namada::proto::Tx;
+use namada::types::transaction::{process_tx, TxError, TxType};
 use num_rational::Ratio;
 
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -81,24 +83,39 @@ impl TxAllottedSpace {
         self.bytes_provided_by_tendermint - total_bin_space
     }
 
-    /// Try to allocate space for a new protocol transaction.
+    /// Try to allocate space for a new transaction.
     #[allow(dead_code)]
+    pub fn try_alloc_tx(&mut self, tx_bytes: &[u8]) -> Result<bool, TxError> {
+        let tx = Tx::try_from(tx_bytes)
+            .map_err(|err| TxError::Deserialization(format!("{err}")))
+            .and_then(process_tx)?;
+
+        Ok(match tx {
+            TxType::Raw(_) => {
+                // nothing to do for raw txs
+                true
+            }
+            TxType::Protocol(_) => self.try_alloc_protocol_tx(tx_bytes),
+            TxType::Wrapper(_) => self.try_alloc_encrypted_tx(tx_bytes),
+            TxType::Decrypted(_) => self.try_alloc_decrypted_tx(tx_bytes),
+        })
+    }
+
+    /// Try to allocate space for a new protocol transaction.
     #[inline]
-    pub fn try_alloc_protocol_tx(&mut self, tx: &[u8]) -> bool {
+    fn try_alloc_protocol_tx(&mut self, tx: &[u8]) -> bool {
         self.protocol_txs.try_dump(tx)
     }
 
     /// Try to allocate space for a new DKG encrypted transaction.
-    #[allow(dead_code)]
     #[inline]
-    pub fn try_alloc_encrypted_tx(&mut self, tx: &[u8]) -> bool {
+    fn try_alloc_encrypted_tx(&mut self, tx: &[u8]) -> bool {
         self.encrypted_txs.try_dump(tx)
     }
 
     /// Try to allocate space for a new DKG decrypted transaction.
-    #[allow(dead_code)]
     #[inline]
-    pub fn try_alloc_decrypted_tx(&mut self, tx: &[u8]) -> bool {
+    fn try_alloc_decrypted_tx(&mut self, tx: &[u8]) -> bool {
         self.decrypted_txs.try_dump(tx)
     }
 
