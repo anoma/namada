@@ -128,7 +128,7 @@ impl TxAllotedSpace {
 
 /// Alloted space for a batch of transactions of the same kind in some
 /// proposed block, measured in bytes.
-#[derive(Default)]
+#[derive(Copy, Clone, Default)]
 #[allow(dead_code)]
 struct TxBin {
     /// The current space utilized by the batch of transactions.
@@ -247,20 +247,23 @@ mod tests {
             RefCell::new(TxAllotedSpace::init(tendermint_max_block_space));
 
         // produce new txs until we overflow the bins
+        //
+        // TODO: ideally the proptest strategy would already return
+        // txs whose total added size would be bounded
         let protocol_txs = protocol_txs.into_iter().take_while(|tx| {
-            let bins = bins.borrow();
-            let new_size = bins.protocol_txs.current_space + tx.len() as u64;
-            new_size < bins.protocol_txs.alloted_space
+            let bin = bins.borrow().protocol_txs;
+            let new_size = bin.current_space + tx.len() as u64;
+            new_size < bin.alloted_space
         });
         let encrypted_txs = encrypted_txs.into_iter().take_while(|tx| {
-            let bins = bins.borrow();
-            let new_size = bins.encrypted_txs.current_space + tx.len() as u64;
-            new_size < bins.encrypted_txs.alloted_space
+            let bin = bins.borrow().encrypted_txs;
+            let new_size = bin.current_space + tx.len() as u64;
+            new_size < bin.alloted_space
         });
         let decrypted_txs = decrypted_txs.into_iter().take_while(|tx| {
-            let bins = bins.borrow();
-            let new_size = bins.decrypted_txs.current_space + tx.len() as u64;
-            new_size < bins.decrypted_txs.alloted_space
+            let bin = bins.borrow().decrypted_txs;
+            let new_size = bin.current_space + tx.len() as u64;
+            new_size < bin.alloted_space
         });
 
         // make sure we can keep dumping txs,
@@ -304,7 +307,8 @@ mod tests {
     /// Return random bin sizes for a [`TxAllotedSpace`].
     fn arb_max_bin_sizes() -> impl Strategy<Value = (u64, usize, usize, usize)>
     {
-        (1..=u64::MAX).prop_map(|tendermint_max_block_space| {
+        const MAX_BLOCK_SIZE_BYTES: u64 = 1000;
+        (1..=MAX_BLOCK_SIZE_BYTES).prop_map(|tendermint_max_block_space| {
             (
                 tendermint_max_block_space,
                 (thres::PROTOCOL_TX * tendermint_max_block_space).to_integer()
@@ -319,8 +323,8 @@ mod tests {
 
     /// Return a list of txs.
     fn arb_tx_list(max_bin_size: usize) -> impl Strategy<Value = Vec<Vec<u8>>> {
-        const MAX_TX_NUM: usize = 8;
-        let tx = prop::collection::vec(prop::num::u8::ANY, 0..=max_bin_size);
+        const MAX_TX_NUM: usize = 64;
+        let tx = prop::collection::vec(prop::num::u8::ANY, 1..=max_bin_size);
         prop::collection::vec(tx, 0..=MAX_TX_NUM)
     }
 }
