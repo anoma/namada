@@ -11,7 +11,7 @@ use eyre::Result;
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils::{
-    self, construct_fractional_voting_powers_by_address,
+    self, filter_fractional_voting_powers_by_address,
 };
 use crate::ledger::protocol::transactions::votes::{
     self, calculate_new, calculate_updated,
@@ -146,8 +146,8 @@ where
             "Ethereum event already exists in storage",
         );
         let fractional_voting_powers =
-            construct_fractional_voting_powers_by_address(
-                &update.seen_by,
+            filter_fractional_voting_powers_by_address(
+                update.seen_by.clone(),
                 voting_powers,
             );
         let (vote_tracking, changed) = calculate_updated(

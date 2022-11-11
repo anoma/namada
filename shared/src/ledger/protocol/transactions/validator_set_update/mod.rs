@@ -7,7 +7,7 @@ use eyre::Result;
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils::{
-    self, construct_fractional_voting_powers_by_address,
+    self, filter_fractional_voting_powers_by_address,
 };
 use crate::ledger::protocol::transactions::votes::{self, Votes};
 use crate::ledger::storage::traits::StorageHasher;
@@ -113,8 +113,8 @@ where
             "Validator set update votes already in storage",
         );
         let fractional_voting_powers =
-            construct_fractional_voting_powers_by_address(
-                &seen_by,
+            filter_fractional_voting_powers_by_address(
+                seen_by.clone(),
                 &voting_powers,
             );
         let (tally, changed) = votes::calculate_updated(
