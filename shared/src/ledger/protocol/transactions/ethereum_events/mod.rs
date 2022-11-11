@@ -70,7 +70,9 @@ where
     })
 }
 
-/// Apply an Ethereum state update + act on any events which are confirmed
+/// Apply votes to Ethereum events in storage and act on any events which are
+/// confirmed. The `voting_powers` map must contain a voting power for all
+/// `(Address, BlockHeight)`s that occur in any of the `updates`.
 pub(super) fn apply_updates<D, H>(
     storage: &mut Storage<D, H>,
     updates: HashSet<EthMsgUpdate>,
