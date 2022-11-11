@@ -179,7 +179,6 @@ mod thres {
     pub const DECRYPTED_TX: Ratio<u64> = Ratio::new_raw(1, 3);
 }
 
-// TOOD: write bin dump rejected test (tests full cap of bin)
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
@@ -212,6 +211,13 @@ mod tests {
     }
 
     proptest! {
+        /// Check if we reject a tx when its respective bin
+        /// capacity has been reached on a [`TxAllotedSpace`].
+        #[test]
+        fn test_reject_tx_on_bin_cap_reached(max in prop::num::u64::ANY) {
+            proptest_reject_tx_on_bin_cap_reached(max)
+        }
+
         /// Check if the sum of all individual bin allotments for a
         /// [`TxAllotedSpace`] corresponds to the total space ceded
         /// by Tendermint.
@@ -226,6 +232,17 @@ mod tests {
         fn test_tx_dump_doesnt_overflow_bin(args in arb_transactions()) {
             proptest_tx_dump_doesnt_overflow_bin(args)
         }
+    }
+
+    /// Implementation of [`test_reject_tx_on_bin_cap_reached`].
+    fn proptest_reject_tx_on_bin_cap_reached(tendermint_max_block_space: u64) {
+        let mut bins = TxAllotedSpace::init(tendermint_max_block_space);
+
+        // fill the entire bin of decrypted txs
+        bins.decrypted_txs.current_space = bins.decrypted_txs.alloted_space;
+
+        // make sure we can't
+        assert!(!bins.try_alloc_decrypted_tx(b"arbitrary tx bytes"));
     }
 
     /// Implementation of [`test_bin_capacity_eq_provided_space`].
