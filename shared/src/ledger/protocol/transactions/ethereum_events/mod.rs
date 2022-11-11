@@ -116,7 +116,8 @@ where
 }
 
 /// Apply an [`EthMsgUpdate`] to storage. Returns any keys changed and whether
-/// the event was newly seen.
+/// the event was newly seen. The `voting_powers` map must contain a voting
+/// power for all `(Address, BlockHeight)`s that occur in `update`.
 fn apply_update<D, H>(
     storage: &mut Storage<D, H>,
     update: EthMsgUpdate,
