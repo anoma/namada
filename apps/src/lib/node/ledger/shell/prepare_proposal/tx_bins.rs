@@ -33,7 +33,6 @@ use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 ///   - DKG decrypted transactions.
 ///   - DKG encrypted transactions.
 #[derive(Default)]
-#[allow(dead_code)]
 pub struct TxAllotedSpace {
     /// The total space Tendermint has allotted to the
     /// application for the current block height.
@@ -57,7 +56,6 @@ impl From<&RequestPrepareProposal> for TxAllotedSpace {
 impl TxAllotedSpace {
     /// Construct a new [`TxAllotedSpace`], with an upper bound
     /// on the max number of txs in a block defined by Tendermint.
-    #[allow(dead_code)]
     #[inline]
     pub fn init(tendermint_max_block_space: u64) -> Self {
         let max = tendermint_max_block_space;
@@ -102,7 +100,6 @@ impl TxAllotedSpace {
     }
 
     /// The total space, in bytes, occupied by each transaction.
-    #[allow(dead_code)]
     #[inline]
     pub fn occupied_space(&self) -> u64 {
         self.protocol_txs.current_space
@@ -112,7 +109,6 @@ impl TxAllotedSpace {
 
     /// Return the amount, in bytes, of free space in this
     /// [`TxAllotedSpace`].
-    #[allow(dead_code)]
     #[inline]
     pub fn free_space(&self) -> u64 {
         self.provided_by_tendermint - self.occupied_space()
@@ -129,7 +125,6 @@ impl TxAllotedSpace {
 /// Alloted space for a batch of transactions of the same kind in some
 /// proposed block, measured in bytes.
 #[derive(Copy, Clone, Default)]
-#[allow(dead_code)]
 struct TxBin {
     /// The current space utilized by the batch of transactions.
     current_space: u64,
@@ -140,7 +135,6 @@ struct TxBin {
 impl TxBin {
     /// Construct a new [`TxBin`], with an upper bound on the max number
     /// of storable txs defined by a ratio over Tendermint max block size.
-    #[allow(dead_code)]
     #[inline]
     fn init_from(tendermint_max_block_space: u64, frac: Ratio<u64>) -> Self {
         let alloted_space = (frac * tendermint_max_block_space).to_integer();
@@ -151,7 +145,6 @@ impl TxBin {
     }
 
     /// Try to dump a new transaction into this [`TxBin`].
-    #[allow(dead_code)]
     #[inline]
     fn try_dump(&mut self, tx: &[u8]) -> bool {
         let occupied = self.current_space + tx.len() as u64;
