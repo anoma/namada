@@ -13,6 +13,7 @@ use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
 
 use super::super::*;
+use self::tx_bins::TxAllotedSpace;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::{
@@ -50,6 +51,9 @@ where
         self.gas_meter.reset();
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // TODO: add some info logging?
+
+            // start counting allotted space for txs
+            let mut bins = TxAllotedSpace::from(&req);
 
             // add ethereum events and validator set updates as protocol txs
             #[cfg(feature = "abcipp")]
