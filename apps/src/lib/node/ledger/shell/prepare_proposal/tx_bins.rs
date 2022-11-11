@@ -66,12 +66,15 @@ impl TxAllotedSpace {
             decrypted_txs: TxBin::init_from(max, thres::DECRYPTED_TX),
         };
         // concede leftover space to protocol txs
-        bins.protocol_txs.alloted_space += bins.leftover_space();
+        bins.protocol_txs.alloted_space += bins.init_leftover_space();
         bins
     }
 
     /// Return leftover space in bins, resulting from ratio conversions.
-    fn leftover_space(&self) -> u64 {
+    ///
+    /// This method should not be used outside of [`TxAllotedSpace`]
+    /// instance construction or unit testing.
+    fn init_leftover_space(&self) -> u64 {
         let total_bin_space = self.protocol_txs.alloted_space
             + self.encrypted_txs.alloted_space
             + self.decrypted_txs.alloted_space;
@@ -243,7 +246,7 @@ mod tests {
         tendermint_max_block_space: u64,
     ) {
         let bins = TxAllotedSpace::init(tendermint_max_block_space);
-        assert_eq!(0, bins.leftover_space());
+        assert_eq!(0, bins.init_leftover_space());
     }
 
     /// Implementation of [`test_tx_dump_doesnt_overflow_bin`].
