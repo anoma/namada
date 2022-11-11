@@ -73,11 +73,56 @@ pub fn calculate_new(
     })
 }
 
-type VoteInfo = HashMap<Address, (BlockHeight, FractionalVotingPower)>;
+pub(super) struct VoteInfo {
+    inner: HashMap<Address, (BlockHeight, FractionalVotingPower)>,
+}
+
+impl VoteInfo {
+    pub fn new(
+        votes: Votes,
+        voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    ) -> Self {
+        let mut inner = HashMap::default();
+        votes.into_iter().for_each(|(address, block_height)| {
+            let fract_voting_power =
+                voting_powers.get(&(address.clone(), block_height)).unwrap();
+            if let Some((
+                already_present_block_height,
+                already_present_fract_voting_power,
+            )) = inner.insert(
+                address.clone(),
+                (block_height, fract_voting_power.to_owned()),
+            ) {
+                tracing::warn!(
+                    ?address,
+                    ?already_present_block_height,
+                    ?already_present_fract_voting_power,
+                    new_fract_voting_power = ?fract_voting_power,
+                    "Validator voted more than once, arbitrarily using later value"
+                )
+            }
+        });
+        Self { inner }
+    }
+
+    pub fn voters(&self) -> BTreeSet<Address> {
+        self.inner.keys().cloned().collect()
+    }
+
+    pub fn get_vote_height(&self, validator: &Address) -> BlockHeight {
+        // TODO: don't unwrap
+        self.inner.get(validator).unwrap().0
+    }
+
+    pub fn get_vote_power(&self, validator: &Address) -> FractionalVotingPower {
+        // TODO: don't unwrap
+        self.inner.get(validator).unwrap().1.clone()
+    }
+}
 
 /// Calculate an updated [`Tally`] based on one that is in storage under `keys`,
 /// with some new `voters`.
-pub fn calculate_updated<D, H, T>(
+pub(super) fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
     vote_info: &VoteInfo,
@@ -117,7 +162,7 @@ fn calculate_update<T>(
     pre: &Tally,
     vote_info: &VoteInfo,
 ) -> Tally {
-    let new_voters: BTreeSet<Address> = vote_info.keys().cloned().collect();
+    let new_voters: BTreeSet<Address> = vote_info.voters();
 
     // For any event and validator, only the first vote by that validator for
     // that event counts, later votes we encounter here can just be ignored. We
@@ -141,21 +186,9 @@ fn calculate_update<T>(
             ?validator,
             "Recording validator as having voted for this event"
         );
-        seen_by_post.insert(
-            validator.to_owned(),
-            vote_info
-                .get(validator)
-                .expect("Validator must be in votes!")
-                .0
-                .to_owned(),
-        );
-        voting_power_post += vote_info
-            .get(validator)
-            .expect(
-                "voting powers map must have all validators from newly_seen_by",
-            )
-            .1
-            .to_owned();
+        seen_by_post
+            .insert(validator.to_owned(), vote_info.get_vote_height(validator));
+        voting_power_post += vote_info.get_vote_power(validator);
     }
 
     let seen_post = if voting_power_post > FractionalVotingPower::TWO_THIRDS {

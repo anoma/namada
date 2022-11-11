@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use eyre::eyre;
 use itertools::Itertools;
 
-use super::votes::Votes;
 use crate::ledger::pos::types::{VotingPower, WeightedValidator};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -19,34 +18,6 @@ pub(super) trait GetVoters {
     fn get_voters(&self) -> HashSet<(Address, BlockHeight)>;
 }
 
-/// Constructs a map of validator [`Address`]es from `votes` to the relevant
-/// [`BlockHeight`] and also [`FractionalVotingPower`] from `voting_powers`
-pub(super) fn construct_vote_info(
-    votes: Votes,
-    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> HashMap<Address, (BlockHeight, FractionalVotingPower)> {
-    let mut map = HashMap::default();
-    votes.into_iter().for_each(|(address, block_height)| {
-        let fract_voting_power =
-            voting_powers.get(&(address.clone(), block_height)).unwrap();
-        if let Some((
-            already_present_block_height,
-            already_present_fract_voting_power,
-        )) = map.insert(
-            address.clone(),
-            (block_height, fract_voting_power.to_owned()),
-        ) {
-            tracing::warn!(
-                ?address,
-                ?already_present_block_height,
-                ?already_present_fract_voting_power,
-                new_fract_voting_power = ?fract_voting_power,
-                "Validator voted more than once, arbitrarily using later value"
-            )
-        }
-    });
-    map
-}
 /// Returns a map whose keys are addresses of validators and the block height at
 /// which they signed some arbitrary object, and whose values are the voting
 /// powers of these validators at the key's given block height.

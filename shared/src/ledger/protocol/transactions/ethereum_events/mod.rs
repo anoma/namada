@@ -10,9 +10,9 @@ use eyre::Result;
 
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
-use crate::ledger::protocol::transactions::utils::{self, construct_vote_info};
+use crate::ledger::protocol::transactions::utils::{self};
 use crate::ledger::protocol::transactions::votes::{
-    self, calculate_new, calculate_updated,
+    calculate_new, calculate_updated, write, VoteInfo,
 };
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -143,7 +143,7 @@ where
             %eth_msg_keys.prefix,
             "Ethereum event already exists in storage",
         );
-        let voters = construct_vote_info(update.seen_by.clone(), voting_powers);
+        let voters = VoteInfo::new(update.seen_by.clone(), voting_powers);
         let (vote_tracking, changed) =
             calculate_updated(storage, &eth_msg_keys, &voters)?;
         let confirmed =
