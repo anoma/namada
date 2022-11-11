@@ -234,7 +234,7 @@ mod tests {
         // fill the entire bin of decrypted txs
         bins.decrypted_txs.current_space = bins.decrypted_txs.alloted_space;
 
-        // make sure we can't
+        // make sure we can't dump any new decrypted txs in the bin
         assert!(!bins.try_alloc_decrypted_tx(b"arbitrary tx bytes"));
     }
 
