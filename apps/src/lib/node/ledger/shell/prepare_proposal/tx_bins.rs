@@ -154,9 +154,9 @@ impl TxBin {
     #[allow(dead_code)]
     #[inline]
     fn try_dump(&mut self, tx: &[u8]) -> bool {
-        let new_space = self.current_space + tx.len() as u64;
-        if new_space > self.alloted_space {
-            self.current_space = new_space;
+        let occupied = self.current_space + tx.len() as u64;
+        if occupied <= self.alloted_space {
+            self.current_space = occupied;
             true
         } else {
             false
