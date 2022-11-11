@@ -97,7 +97,7 @@ where
         seen_by,
         seen,
     };
-    let tally_post = calculate_update(keys, &tally_pre, &vote_info);
+    let tally_post = calculate_update(keys, &tally_pre, vote_info);
     let changed_keys = validate_update(keys, &tally_pre, &tally_post)?;
 
     tracing::warn!(
