@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use eyre::eyre;
 use itertools::Itertools;
 
+use super::votes::Votes;
 use crate::ledger::pos::types::{VotingPower, WeightedValidator};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -18,15 +19,16 @@ pub(super) trait GetVoters {
     fn get_voters(&self) -> HashSet<(Address, BlockHeight)>;
 }
 
+/// Constructs a map of validator [`Address`]es from `votes` to the relevant
+/// [`FractionalVotingPower`] from `voting_powers`
 pub(super) fn filter_fractional_voting_powers_by_address(
-    vote_heights: BTreeMap<Address, BlockHeight>,
+    votes: Votes,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> HashMap<Address, FractionalVotingPower> {
     let mut fractional_voting_powers = HashMap::default();
-    vote_heights.into_iter().for_each(|(address, block_height)| {
-        let fract_voting_power = voting_powers
-            .get(&(address.clone(), block_height))
-            .unwrap();
+    votes.into_iter().for_each(|(address, block_height)| {
+        let fract_voting_power =
+            voting_powers.get(&(address.clone(), block_height)).unwrap();
         if let Some(already_present_fract_voting_power) =
             fractional_voting_powers
                 .insert(address.clone(), fract_voting_power.to_owned())
