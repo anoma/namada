@@ -12,9 +12,7 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
 
-// ```ignore
-// use self::tx_bins::TxAllotedSpace;
-// ```
+use self::tx_bins::TxAllotedSpace;
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
@@ -55,15 +53,14 @@ where
             // TODO: add some info logging?
 
             // start counting allotted space for txs
-            // ```ignore
-            // let mut bins = TxAllotedSpace::from(&req);
-            // ```
+            let mut bins = TxAllotedSpace::from(&req);
 
             // add ethereum events and validator set updates as protocol txs
             #[cfg(feature = "abcipp")]
-            let txs = self.build_vote_extensions_txs(req.local_last_commit);
+            let txs = self
+                .build_vote_extensions_txs(&mut bins, req.local_last_commit);
             #[cfg(not(feature = "abcipp"))]
-            let mut txs = self.build_vote_extensions_txs(&req.txs);
+            let mut txs = self.build_vote_extensions_txs(&mut bins, &req.txs);
             #[cfg(feature = "abcipp")]
             let mut txs: Vec<TxRecord> =
                 txs.into_iter().map(record::add).collect();
@@ -108,6 +105,7 @@ where
     /// events and, optionally, a validator set update
     fn build_vote_extensions_txs(
         &mut self,
+        _bins: &mut TxAllotedSpace,
         #[cfg(feature = "abcipp")] local_last_commit: Option<
             ExtendedCommitInfo,
         >,
@@ -170,6 +168,22 @@ where
         // `abciplus`
         .chain(protocol_txs.into_iter())
         .collect()
+
+        // ```ignore
+        // for tx in txs.iter().map(Vec::as_slice) {
+        //     match bins.try_alloc_protocol_tx(tx) {
+        //         AllocStatus::Accepted => (),
+        //         AllocStatus::Rejected => {
+        //             // TODO: handle bin space full for protocol txs;
+        //             // if we include a vote extension digest, we need
+        //             // to include its corresponding protocol tx votes!
+        //             // otherwise, we will get the same votes in future
+        //             // block proposals
+        //             tracing::debug!("No more space left for protocol transactions");
+        //         }.
+        //     }
+        // }
+        // ```
     }
 
     /// Builds a batch of mempool transactions
