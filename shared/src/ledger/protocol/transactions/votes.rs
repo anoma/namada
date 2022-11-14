@@ -103,7 +103,7 @@ impl VoteInfo {
     }
 
     pub fn get_vote_power(&self, validator: &Address) -> Option<FractionalVotingPower> {
-        self.inner.get(validator).map(|(_, voting_power)| *voting_power)
+        self.inner.get(validator).map(|(_, voting_power)| voting_power.clone())
     }
 }
 
@@ -121,7 +121,7 @@ where
 {
     tracing::info!(
         ?keys.prefix,
-        ?vote_info.voters(),
+        validators = ?vote_info.voters(),
         "Recording validators as having voted for this event"
     );
     let tally_pre = read(store, keys)?;
@@ -150,7 +150,7 @@ where
 
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
 /// voters from `vote_info`. Returns an error if any new voters have already voted previously.
-fn calculate_update<T>(
+fn calculate_update(
     pre: &Tally,
     vote_info: &VoteInfo,
 ) -> Result<Tally> {
@@ -159,7 +159,7 @@ fn calculate_update<T>(
     let duplicate_voters: BTreeSet<_> = previous_voters.intersection(&new_voters).collect();
     if !duplicate_voters.is_empty() {
         // TODO: this is a programmer error and should never happen
-        return Err(eyre!("Duplicate voters found - {}", duplicate_voters));
+        return Err(eyre!("Duplicate voters found - {:?}", duplicate_voters));
     }
 
     let mut voting_power_post = pre.voting_power.clone();
