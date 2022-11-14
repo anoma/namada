@@ -904,7 +904,7 @@ impl ShieldedContext {
     /// Query the ledger for the conversion that is allowed for the given asset
     /// type and cache it.
     async fn query_allowed_conversion<'a>(
-        &mut self,
+        &'a mut self,
         client: HttpClient,
         asset_type: AssetType,
         conversions: &'a mut Conversions,
