@@ -98,12 +98,15 @@ impl VoteInfo {
         self.inner.keys().cloned().collect()
     }
 
-    pub fn get_vote_height(&self, validator: &Address) -> Option<BlockHeight> {
-        self.inner.get(validator).map(|(height, _)| *height)
-    }
-
-    pub fn get_vote_power(&self, validator: &Address) -> Option<FractionalVotingPower> {
-        self.inner.get(validator).map(|(_, voting_power)| voting_power.clone())
+    pub fn iter(
+        &self,
+    ) -> BTreeSet<(Address, BlockHeight, FractionalVotingPower)> {
+        self.inner
+            .iter()
+            .map(|(address, (block_height, fract_voting_power))| {
+                (address.clone(), *block_height, fract_voting_power.clone())
+            })
+            .collect()
     }
 }
 
@@ -149,14 +152,13 @@ where
 }
 
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
-/// voters from `vote_info`. Returns an error if any new voters have already voted previously.
-fn calculate_update(
-    pre: &Tally,
-    vote_info: &VoteInfo,
-) -> Result<Tally> {
+/// voters from `vote_info`. Returns an error if any new voters have already
+/// voted previously.
+fn calculate_update(pre: &Tally, vote_info: &VoteInfo) -> Result<Tally> {
     let previous_voters: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
     let new_voters = vote_info.voters();
-    let duplicate_voters: BTreeSet<_> = previous_voters.intersection(&new_voters).collect();
+    let duplicate_voters: BTreeSet<_> =
+        previous_voters.intersection(&new_voters).collect();
     if !duplicate_voters.is_empty() {
         // TODO: this is a programmer error and should never happen
         return Err(eyre!("Duplicate voters found - {:?}", duplicate_voters));
@@ -164,10 +166,9 @@ fn calculate_update(
 
     let mut voting_power_post = pre.voting_power.clone();
     let mut seen_by_post = pre.seen_by.clone();
-    for validator in new_voters {
-        _ = seen_by_post
-            .insert(validator.to_owned(), vote_info.get_vote_height(&validator).expect("We can always get the vote height for a voter"));
-        voting_power_post += vote_info.get_vote_power(&validator).expect("We can always get the voting power for a voter");
+    for (validator, vote_height, voting_power) in vote_info.iter() {
+        _ = seen_by_post.insert(validator, vote_height);
+        voting_power_post += voting_power;
     }
 
     let seen_post = voting_power_post > FractionalVotingPower::TWO_THIRDS;
