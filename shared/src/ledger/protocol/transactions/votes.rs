@@ -134,7 +134,19 @@ where
     let tally_post = calculate_update(keys, &tally_pre, vote_info);
     let changed_keys = validate_update(keys, &tally_pre, &tally_post)?;
 
-    tracing::warn!(
+    if tally_post.seen {
+        tracing::info!(
+            ?keys.prefix,
+            "Event has been seen by a quorum of validators",
+        );
+    } else {
+        tracing::debug!(
+            ?keys.prefix,
+            "Event is not yet seen by a quorum of validators",
+        );
+    };
+
+    tracing::debug!(
         ?tally_pre,
         ?tally_post,
         "Calculated and validated vote tracking updates",
@@ -150,15 +162,16 @@ fn calculate_update<T>(
     vote_info: &VoteInfo,
 ) -> Tally {
     // TODO: no need to accept `keys` - it is just accepted for logging, is there a better way?
-    let new_voters: BTreeSet<Address> = vote_info.voters();
+
+    let previous_voters: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
+    let new_voters: BTreeSet<_> = previous_voters.difference(&vote_info.voters()).cloned().collect();
 
     // For any event and validator, only the first vote by that validator for
     // that event counts, later votes we encounter here can just be ignored. We
     // can warn here when we encounter duplicate votes but these are
     // reasonably likely to occur so this perhaps shouldn't be a warning unless
-    // it is happening a lot
-    let already_voted: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
-    for validator in already_voted.intersection(&new_voters) {
+    // it is happening a lot.
+    for validator in previous_voters.intersection(&new_voters) {
         tracing::warn!(
             ?keys.prefix,
             ?validator,
@@ -168,30 +181,18 @@ fn calculate_update<T>(
 
     let mut voting_power_post = pre.voting_power.clone();
     let mut seen_by_post = pre.seen_by.clone();
-    for validator in new_voters.difference(&already_voted) {
+    for validator in new_voters {
         tracing::info!(
             ?keys.prefix,
             ?validator,
             "Recording validator as having voted for this event"
         );
-        seen_by_post
-            .insert(validator.to_owned(), vote_info.get_vote_height(validator));
-        voting_power_post += vote_info.get_vote_power(validator);
+        _ = seen_by_post
+            .insert(validator.to_owned(), vote_info.get_vote_height(&validator));
+        voting_power_post += vote_info.get_vote_power(&validator);
     }
 
-    let seen_post = if voting_power_post > FractionalVotingPower::TWO_THIRDS {
-        tracing::info!(
-            ?keys.prefix,
-            "Event has been seen by a quorum of validators",
-        );
-        true
-    } else {
-        tracing::debug!(
-            ?keys.prefix,
-            "Event is not yet seen by a quorum of validators",
-        );
-        false
-    };
+    let seen_post = voting_power_post > FractionalVotingPower::TWO_THIRDS;
 
     Tally {
         voting_power: voting_power_post,
