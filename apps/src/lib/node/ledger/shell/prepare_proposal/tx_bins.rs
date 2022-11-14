@@ -218,25 +218,6 @@ impl<State> BlockSpaceAllocator<State> {
 //
 // WIP
 impl<State> BlockSpaceAllocator<State> {
-    /// Try to allocate space for a new protocol transaction.
-    #[allow(dead_code)]
-    #[inline]
-    pub fn try_alloc_protocol_tx(&mut self, tx: &[u8]) -> AllocStatus {
-        self.protocol_txs.try_dump(tx)
-    }
-
-    /// Try to allocate space for a new batch of protocol transactions.
-    #[allow(dead_code)]
-    #[inline]
-    pub fn try_alloc_protocol_tx_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
-    where
-        T: IntoIterator<Item = &'tx [u8]> + 'tx,
-    {
-        self.protocol_txs.try_dump_all(txs)
-    }
-
-    // --------------------------------------------------- //
-
     /// Try to allocate space for a new DKG encrypted transaction.
     #[allow(dead_code)]
     #[inline]
