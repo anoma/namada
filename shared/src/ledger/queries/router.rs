@@ -94,7 +94,7 @@ macro_rules! handle_match {
         return Ok($crate::ledger::queries::EncodedResponseQuery {
             data,
             info: Default::default(),
-            proof_ops: None,
+            proof: None,
         });
     };
 }
@@ -414,13 +414,13 @@ macro_rules! pattern_and_handler_to_method {
                     let path = self.storage_value_path( $( $param ),* );
 
                     let $crate::ledger::queries::ResponseQuery {
-                        data, info, proof_ops
+                        data, info, proof
                     } = client.request(path, data, height, prove).await?;
 
                     Ok($crate::ledger::queries::ResponseQuery {
                         data,
                         info,
-                        proof_ops,
+                        proof,
                     })
             }
         }
@@ -467,7 +467,7 @@ macro_rules! pattern_and_handler_to_method {
                     let path = self.[<$handle _path>]( $( $param ),* );
 
                     let $crate::ledger::queries::ResponseQuery {
-                        data, info, proof_ops
+                        data, info, proof
                     } = client.request(path, data, height, prove).await?;
 
                     let decoded: $return_type =
@@ -476,7 +476,7 @@ macro_rules! pattern_and_handler_to_method {
                     Ok($crate::ledger::queries::ResponseQuery {
                         data: decoded,
                         info,
-                        proof_ops,
+                        proof,
                     })
             }
         }

@@ -3,6 +3,7 @@
 mod channel;
 mod client;
 mod connection;
+mod denom;
 mod packet;
 mod port;
 mod sequence;
@@ -46,6 +47,8 @@ pub enum Error {
     PacketError(packet::Error),
     #[error("Sequence validation error: {0}")]
     SequenceError(sequence::Error),
+    #[error("Denom validation error: {0}")]
+    DenomError(denom::Error),
     #[error("IBC event error: {0}")]
     IbcEvent(String),
     #[error("Decoding transaction data error: {0}")]
@@ -141,6 +144,7 @@ where
                     }
                     IbcPrefix::Ack => self.validate_ack(key)?,
                     IbcPrefix::Event => {}
+                    IbcPrefix::Denom => self.validate_denom(tx_data)?,
                     IbcPrefix::Unknown => {
                         return Err(Error::KeyError(format!(
                             "Invalid IBC-related key: {}",
@@ -285,6 +289,12 @@ impl From<packet::Error> for Error {
 impl From<sequence::Error> for Error {
     fn from(err: sequence::Error) -> Self {
         Self::SequenceError(err)
+    }
+}
+
+impl From<denom::Error> for Error {
+    fn from(err: denom::Error) -> Self {
+        Self::DenomError(err)
     }
 }
 
@@ -1570,7 +1580,7 @@ mod tests {
             .write(&key, PacketReceipt::default().as_bytes().to_vec())
             .expect("write failed");
         let key = ack_key(&get_port_id(), &get_channel_id(), sequence);
-        let ack = PacketAck::default().encode_to_vec();
+        let ack = PacketAck::result_success().encode_to_vec();
         write_log.write(&key, ack).expect("write failed");
 
         let tx_code = vec![];
@@ -1648,7 +1658,7 @@ mod tests {
         write_log.commit_block(&mut storage).expect("commit failed");
 
         // prepare data
-        let ack = PacketAck::default().encode_to_vec();
+        let ack = PacketAck::result_success().encode_to_vec();
         let proof_packet = CommitmentProofBytes::try_from(vec![0]).unwrap();
         let proofs =
             Proofs::new(proof_packet, None, None, None, Height::new(0, 1))
@@ -1837,7 +1847,7 @@ mod tests {
             &msg.packet.destination_channel,
             msg.packet.sequence,
         );
-        let ack = PacketAck::default().encode_to_vec();
+        let ack = PacketAck::result_success().encode_to_vec();
         write_log.write(&ack_key, ack).expect("write failed");
         write_log.commit_tx();
 
@@ -1886,7 +1896,7 @@ mod tests {
             .expect("write failed");
         let ack_key =
             ack_key(&get_port_id(), &get_channel_id(), Sequence::from(1));
-        let ack = PacketAck::default().encode_to_vec();
+        let ack = PacketAck::result_success().encode_to_vec();
         write_log.write(&ack_key, ack).expect("write failed");
         write_log.commit_tx();
 

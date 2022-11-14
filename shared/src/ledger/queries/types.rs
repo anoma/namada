@@ -1,4 +1,4 @@
-use tendermint_proto::crypto::ProofOps;
+use tendermint::merkle::proof::Proof;
 
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api;
@@ -131,7 +131,7 @@ pub struct ResponseQuery<T> {
     /// Non-deterministic log of the request execution
     pub info: String,
     /// Optional proof - used for storage value reads which request `prove`
-    pub proof_ops: Option<ProofOps>,
+    pub proof: Option<Proof>,
 }
 
 /// [`ResponseQuery`] with borsh-encoded `data` field

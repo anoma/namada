@@ -1,5 +1,5 @@
 use borsh::BorshSerialize;
-use tendermint_proto::crypto::{ProofOp, ProofOps};
+use tendermint::merkle::proof::Proof;
 
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
@@ -83,7 +83,7 @@ where
     let data = data.try_to_vec().into_storage_result()?;
     Ok(EncodedResponseQuery {
         data,
-        proof_ops: None,
+        proof: None,
         info: Default::default(),
     })
 }
@@ -138,13 +138,13 @@ where
                         request.height,
                     )
                     .into_storage_result()?;
-                Some(proof.into())
+                Some(proof)
             } else {
                 None
             };
             Ok(EncodedResponseQuery {
                 data: value,
-                proof_ops: proof,
+                proof,
                 info: Default::default(),
             })
         }
@@ -154,13 +154,13 @@ where
                     .storage
                     .get_non_existence_proof(&storage_key, request.height)
                     .into_storage_result()?;
-                Some(proof.into())
+                Some(proof)
             } else {
                 None
             };
             Ok(EncodedResponseQuery {
                 data: vec![],
-                proof_ops: proof,
+                proof,
                 info: format!("No value found for key: {}", storage_key),
             })
         }
@@ -186,26 +186,25 @@ where
         })
         .collect();
     let data = data?;
-    let proof_ops = if request.prove {
+    let proof = if request.prove {
         let mut ops = vec![];
         for PrefixValue { key, value } in &data {
-            let proof = ctx
+            let mut proof = ctx
                 .storage
                 .get_existence_proof(key, value.clone().into(), request.height)
                 .into_storage_result()?;
-            let mut cur_ops: Vec<ProofOp> =
-                proof.ops.into_iter().map(|op| op.into()).collect();
-            ops.append(&mut cur_ops);
+            ops.append(&mut proof.ops);
         }
         // ops is not empty in this case
-        Some(ProofOps { ops })
+        let proof = Proof { ops };
+        Some(proof)
     } else {
         None
     };
     let data = data.try_to_vec().into_storage_result()?;
     Ok(EncodedResponseQuery {
         data,
-        proof_ops,
+        proof,
         ..Default::default()
     })
 }

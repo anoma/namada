@@ -131,7 +131,7 @@ pub mod tm {
                 tendermint::abci::Code::Ok => Ok(EncodedResponseQuery {
                     data: response.value,
                     info: response.info,
-                    proof_ops: response.proof.map(Into::into),
+                    proof: response.proof,
                 }),
                 tendermint::abci::Code::Err(code) => {
                     Err(Error::Query(response.info, code))

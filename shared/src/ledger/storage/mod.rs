@@ -1,6 +1,6 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
-mod ics23_specs;
+pub mod ics23_specs;
 mod merkle_tree;
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;

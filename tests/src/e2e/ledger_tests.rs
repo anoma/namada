@@ -28,7 +28,7 @@ use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     find_address, find_voting_power, get_actor_rpc, get_epoch,
 };
-use crate::e2e::setup::{self, sleep, Bin, Who};
+use crate::e2e::setup::{self, default_port_offset, sleep, Bin, Who};
 use crate::{run, run_as};
 
 /// Test that when we "run-ledger" with all the possible command
@@ -65,8 +65,10 @@ fn run_ledger() -> Result<()> {
 #[test]
 fn test_node_connectivity() -> Result<()> {
     // Setup 2 genesis validator nodes
-    let test =
-        setup::network(|genesis| setup::add_validators(1, genesis), None)?;
+    let test = setup::network(
+        |genesis| setup::set_validators(2, genesis, default_port_offset),
+        None,
+    )?;
 
     // 1. Run 2 genesis validator ledger nodes and 1 non-validator node
     let args = ["ledger"];
@@ -1676,7 +1678,7 @@ fn test_genesis_validators() -> Result<()> {
             config.validator_vp = Some("vp_user".into());
             config.staking_reward_vp = Some("vp_user".into());
             // Setup the validator ports same as what
-            // `setup::add_validators` would do
+            // `setup::set_validators` would do
             let mut net_address = net_address_0;
             // 6 ports for each validator
             let first_port = get_first_port(ix);
@@ -1945,8 +1947,10 @@ fn double_signing_gets_slashed() -> Result<()> {
     use namada_apps::config::Config;
 
     // Setup 2 genesis validator nodes
-    let test =
-        setup::network(|genesis| setup::add_validators(1, genesis), None)?;
+    let test = setup::network(
+        |genesis| setup::set_validators(2, genesis, default_port_offset),
+        None,
+    )?;
 
     // 1. Run 2 genesis validator ledger nodes
     let args = ["ledger"];

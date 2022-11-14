@@ -46,6 +46,7 @@ pub mod cmds {
         // Inlined commands from the client.
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
+        TxIbcTransfer(TxIbcTransfer),
         TxUpdateVp(TxUpdateVp),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
@@ -59,6 +60,7 @@ pub mod cmds {
                 .subcommand(Ledger::def())
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
+                .subcommand(TxIbcTransfer::def())
                 .subcommand(TxUpdateVp::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
@@ -71,6 +73,8 @@ pub mod cmds {
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
+            let tx_ibc_transfer =
+                SubCmd::parse(matches).map(Self::TxIbcTransfer);
             let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
             let tx_init_proposal =
                 SubCmd::parse(matches).map(Self::TxInitProposal);
@@ -81,6 +85,7 @@ pub mod cmds {
                 .or(ledger)
                 .or(tx_custom)
                 .or(tx_transfer)
+                .or(tx_ibc_transfer)
                 .or(tx_update_vp)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
@@ -144,6 +149,7 @@ pub mod cmds {
                 // Simple transactions
                 .subcommand(TxCustom::def().display_order(1))
                 .subcommand(TxTransfer::def().display_order(1))
+                .subcommand(TxIbcTransfer::def().display_order(1))
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxInitValidator::def().display_order(1))
@@ -174,6 +180,7 @@ pub mod cmds {
             use AnomaClientWithContext::*;
             let tx_custom = Self::parse_with_ctx(matches, TxCustom);
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
+            let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
             let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateVp);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
@@ -202,6 +209,7 @@ pub mod cmds {
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
+                .or(tx_ibc_transfer)
                 .or(tx_update_vp)
                 .or(tx_init_account)
                 .or(tx_init_validator)
@@ -259,6 +267,7 @@ pub mod cmds {
         // Ledger cmds
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
+        TxIbcTransfer(TxIbcTransfer),
         QueryResult(QueryResult),
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
@@ -782,6 +791,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxIbcTransfer(pub args::TxIbcTransfer);
+
+    impl SubCmd for TxIbcTransfer {
+        const CMD: &'static str = "ibc-transfer";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxIbcTransfer(args::TxIbcTransfer::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Send a signed IBC transfer transaction.")
+                .add_args::<args::TxIbcTransfer>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxUpdateVp(pub args::TxUpdateVp);
 
     impl SubCmd for TxUpdateVp {
@@ -1210,6 +1238,7 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
+    use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::governance::ProposalVote;
@@ -1243,6 +1272,7 @@ pub mod args {
     const CHAIN_ID: Arg<ChainId> = arg("chain-id");
     const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
     const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
+    const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
     const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
@@ -1279,6 +1309,10 @@ pub mod args {
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
+    const PORT_ID: ArgDefault<PortId> = arg_default(
+        "port-id",
+        DefaultFn(|| PortId::from_str("transfer").unwrap()),
+    );
     const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
@@ -1289,6 +1323,7 @@ pub mod args {
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
+    const RECEIVER: Arg<String> = arg("receiver");
     const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
     const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
     const SCHEME: ArgDefault<SchemeType> =
@@ -1301,6 +1336,8 @@ pub mod args {
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     const TARGET: Arg<WalletAddress> = arg("target");
+    const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
+    const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     const TOKEN: Arg<WalletAddress> = arg("token");
     const TX_HASH: Arg<String> = arg("tx-hash");
@@ -1473,6 +1510,80 @@ pub mod args {
                 .arg(TOKEN.def().about("The transfer token."))
                 .arg(SUB_PREFIX.def().about("The token's sub prefix."))
                 .arg(AMOUNT.def().about("The amount to transfer in decimal."))
+        }
+    }
+
+    /// IBC transfer transaction arguments
+    #[derive(Clone, Debug)]
+    pub struct TxIbcTransfer {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Transfer source address
+        pub source: WalletAddress,
+        /// Transfer target address
+        pub receiver: String,
+        /// Transferred token address
+        pub token: WalletAddress,
+        /// Transferred token address
+        pub sub_prefix: Option<String>,
+        /// Transferred token amount
+        pub amount: token::Amount,
+        /// Port ID
+        pub port_id: PortId,
+        /// Channel ID
+        pub channel_id: ChannelId,
+        /// Timeout height of the destination chain
+        pub timeout_height: Option<u64>,
+        /// Timeout timestamp offset
+        pub timeout_sec_offset: Option<u64>,
+    }
+
+    impl Args for TxIbcTransfer {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let source = SOURCE.parse(matches);
+            let receiver = RECEIVER.parse(matches);
+            let token = TOKEN.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
+            let amount = AMOUNT.parse(matches);
+            let port_id = PORT_ID.parse(matches);
+            let channel_id = CHANNEL_ID.parse(matches);
+            let timeout_height = TIMEOUT_HEIGHT.parse(matches);
+            let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
+            Self {
+                tx,
+                source,
+                receiver,
+                token,
+                sub_prefix,
+                amount,
+                port_id,
+                channel_id,
+                timeout_height,
+                timeout_sec_offset,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(SOURCE.def().about(
+                    "The source account address. The source's key is used to \
+                     produce the signature.",
+                ))
+                .arg(RECEIVER.def().about(
+                    "The receiver address on the destination chain as string.",
+                ))
+                .arg(TOKEN.def().about("The transfer token."))
+                .arg(SUB_PREFIX.def().about("The token's sub prefix."))
+                .arg(AMOUNT.def().about("The amount to transfer in decimal."))
+                .arg(PORT_ID.def().about("The port ID."))
+                .arg(CHANNEL_ID.def().about("The channel ID."))
+                .arg(
+                    TIMEOUT_HEIGHT
+                        .def()
+                        .about("The timeout height of the destination chain."),
+                )
+                .arg(TIMEOUT_SEC_OFFSET.def().about("The timeout as seconds."))
         }
     }
 
