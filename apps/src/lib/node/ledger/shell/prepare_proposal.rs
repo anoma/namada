@@ -12,7 +12,7 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
 
-use self::tx_bins::TxAllotedSpace;
+use self::tx_bins::{AllocStatus, TxAllotedSpace};
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
@@ -66,11 +66,11 @@ where
                 txs.into_iter().map(record::add).collect();
 
             // add mempool txs
-            let mut mempool_txs = self.build_mempool_txs(req.txs);
+            let mut mempool_txs = self.build_mempool_txs(&mut bins, req.txs);
             txs.append(&mut mempool_txs);
 
             // decrypt the wrapper txs included in the previous block
-            let decrypted_txs = self.build_decrypted_txs();
+            let decrypted_txs = self.build_decrypted_txs(&mut bins);
             #[cfg(feature = "abcipp")]
             let decrypted_txs: Vec<TxRecord> =
                 decrypted_txs.into_iter().map(record::add).collect();
@@ -105,7 +105,7 @@ where
     /// events and, optionally, a validator set update
     fn build_vote_extensions_txs(
         &mut self,
-        _bins: &mut TxAllotedSpace,
+        bins: &mut TxAllotedSpace,
         #[cfg(feature = "abcipp")] local_last_commit: Option<
             ExtendedCommitInfo,
         >,
@@ -159,7 +159,7 @@ where
             .get_protocol_key()
             .expect("Validators should always have a protocol key");
 
-        iter_protocol_txs(VoteExtensionDigest {
+        let txs: Vec<_> = iter_protocol_txs(VoteExtensionDigest {
             ethereum_events,
             validator_set_update,
         })
@@ -167,53 +167,51 @@ where
         // TODO(feature = "abcipp"): remove this later, when we get rid of
         // `abciplus`
         .chain(protocol_txs.into_iter())
-        .collect()
+        .collect();
 
-        // ```ignore
-        // for tx in txs.iter().map(Vec::as_slice) {
-        //     match bins.try_alloc_protocol_tx(tx) {
-        //         AllocStatus::Accepted => (),
-        //         AllocStatus::Rejected => {
-        //             // TODO: handle bin space full for protocol txs;
-        //             // if we include a vote extension digest, we need
-        //             // to include its corresponding protocol tx votes!
-        //             // otherwise, we will get the same votes in future
-        //             // block proposals
-        //             tracing::debug!("No more space left for protocol transactions");
-        //         }.
-        //     }
-        // }
-        // ```
+        match bins.try_alloc_protocol_tx_batch(txs.iter().map(Vec::as_slice)) {
+            AllocStatus::Accepted => txs,
+            AllocStatus::Rejected => {
+                // no space left for tx batch, so we
+                // do not include any protocol tx in
+                // this block
+                //
+                // TODO: maybe we should find a way to include
+                // validator set updates all the time. for instance,
+                // we could have recursive bins -> bin space within
+                // a bin is partitioned into yet more bins. so, we
+                // could have, say, 2/3 of the bin space available
+                // for eth events, and 1/3 available for valset
+                // upds
+                vec![]
+            }
+            AllocStatus::OverflowsBin => {
+                // TODO: handle tx whose size is greater
+                // than bin size
+                vec![]
+            }
+        }
     }
 
     /// Builds a batch of mempool transactions
     #[cfg(feature = "abcipp")]
-    fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxRecord> {
-        // filter in half of the new txs from Tendermint, only keeping
-        // wrappers
-        let number_of_new_txs = 1 + txs.len() / 2;
-        txs.into_iter()
-            .take(number_of_new_txs)
-            .map(|tx_bytes| {
-                if let Ok(Ok(TxType::Wrapper(_))) =
-                    Tx::try_from(tx_bytes.as_slice()).map(process_tx)
-                {
-                    record::keep(tx_bytes)
-                } else {
-                    record::remove(tx_bytes)
-                }
-            })
-            .collect()
+    fn build_mempool_txs(
+        &mut self,
+        _bins: &mut TxAllotedSpace,
+        txs: Vec<Vec<u8>>,
+    ) -> Vec<TxRecord> {
+        // TODO(feature = "abcipp"): implement building batch of mempool txs
+        todo!()
     }
 
     /// Builds a batch of mempool transactions
     #[cfg(not(feature = "abcipp"))]
-    fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxBytes> {
-        // filter in half of the new txs from Tendermint, only keeping
-        // wrappers
-        let number_of_new_txs = 1 + txs.len() / 2;
+    fn build_mempool_txs(
+        &mut self,
+        bins: &mut TxAllotedSpace,
+        txs: Vec<Vec<u8>>,
+    ) -> Vec<TxBytes> {
         txs.into_iter()
-            .take(number_of_new_txs)
             .filter_map(|tx_bytes| {
                 if let Ok(Ok(TxType::Wrapper(_))) =
                     Tx::try_from(tx_bytes.as_slice()).map(process_tx)
@@ -222,6 +220,10 @@ where
                 } else {
                     None
                 }
+            })
+            // TODO: handle bin overflows
+            .take_while(|tx_bytes| {
+                bins.try_alloc_encrypted_tx(&*tx_bytes) == AllocStatus::Accepted
             })
             .collect()
     }
@@ -234,9 +236,13 @@ where
     // sources:
     // - https://specs.anoma.net/main/releases/v2.html
     // - https://github.com/anoma/ferveo
-    fn build_decrypted_txs(&mut self) -> Vec<TxBytes> {
+    fn build_decrypted_txs(
+        &mut self,
+        bins: &mut TxAllotedSpace,
+    ) -> Vec<TxBytes> {
         // TODO: This should not be hardcoded
-        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+        let privkey =
+            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
         self.storage
             .tx_queue
@@ -247,6 +253,10 @@ where
                     _ => DecryptedTx::Undecryptable(tx.clone()),
                 })
                 .to_bytes()
+            })
+            // TODO: handle bin overflows
+            .take_while(|tx_bytes| {
+                bins.try_alloc_decrypted_tx(&*tx_bytes) == AllocStatus::Accepted
             })
             .collect()
     }
