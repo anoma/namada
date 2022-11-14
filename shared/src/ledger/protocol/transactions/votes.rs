@@ -1,7 +1,7 @@
 //! Logic and data types relating to tallying validators' votes for pieces of
 //! data stored in the ledger, where those pieces of data should only be acted
 //! on once they have received enough votes
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
@@ -120,4 +120,105 @@ where
     storage.write(&keys.seen_by(), &tally.seen_by.try_to_vec()?)?;
     storage.write(&keys.voting_power(), &tally.voting_power.try_to_vec()?)?;
     Ok(())
+}
+
+/// Deterministically constructs a [`Votes`] map from a set of validator
+/// addresses and the block heights they signed something at. We arbitrarily
+/// take the earliest block height for each validator address encountered.
+pub fn dedupe(signers: BTreeSet<(Address, BlockHeight)>) -> Votes {
+    signers.into_iter().rev().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+    use crate::types::address;
+    use crate::types::storage::BlockHeight;
+
+    #[test]
+    fn test_dedupe_empty() {
+        let signers = BTreeSet::new();
+
+        let deduped = dedupe(signers);
+
+        assert_eq!(deduped, Votes::new());
+    }
+
+    #[test]
+    fn test_dedupe_single_vote() {
+        let sole_validator = address::testing::established_address_1();
+        let votes = [(sole_validator, BlockHeight(100))];
+        let signers = BTreeSet::from(votes.clone());
+
+        let deduped = dedupe(signers);
+
+        assert_eq!(deduped, Votes::from(votes));
+    }
+
+    #[test]
+    fn test_dedupe_multiple_votes_same_voter() {
+        let sole_validator = address::testing::established_address_1();
+        let earliest_vote_height = 100;
+        let earliest_vote =
+            (sole_validator.clone(), BlockHeight(earliest_vote_height));
+        let votes = [
+            earliest_vote.clone(),
+            (
+                sole_validator.clone(),
+                BlockHeight(earliest_vote_height + 1),
+            ),
+            (sole_validator, BlockHeight(earliest_vote_height + 100)),
+        ];
+        let signers = BTreeSet::from(votes);
+
+        let deduped = dedupe(signers);
+
+        assert_eq!(deduped, Votes::from([earliest_vote]));
+    }
+
+    #[test]
+    fn test_dedupe_multiple_votes_multiple_voters() {
+        let validator_1 = address::testing::established_address_1();
+        let validator_2 = address::testing::established_address_2();
+        let validator_1_earliest_vote_height = 100;
+        let validator_1_earliest_vote = (
+            validator_1.clone(),
+            BlockHeight(validator_1_earliest_vote_height),
+        );
+        let validator_2_earliest_vote_height = 200;
+        let validator_2_earliest_vote = (
+            validator_2.clone(),
+            BlockHeight(validator_2_earliest_vote_height),
+        );
+        let votes = [
+            validator_1_earliest_vote.clone(),
+            (
+                validator_1.clone(),
+                BlockHeight(validator_1_earliest_vote_height + 1),
+            ),
+            (
+                validator_1,
+                BlockHeight(validator_1_earliest_vote_height + 100),
+            ),
+            validator_2_earliest_vote.clone(),
+            (
+                validator_2.clone(),
+                BlockHeight(validator_2_earliest_vote_height + 1),
+            ),
+            (
+                validator_2,
+                BlockHeight(validator_2_earliest_vote_height + 100),
+            ),
+        ];
+        let signers = BTreeSet::from(votes);
+
+        let deduped = dedupe(signers);
+
+        assert_eq!(
+            deduped,
+            Votes::from([validator_1_earliest_vote, validator_2_earliest_vote])
+        );
+    }
 }

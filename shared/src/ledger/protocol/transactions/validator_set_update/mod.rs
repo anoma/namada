@@ -88,8 +88,9 @@ where
 
     let mut seen_by = Votes::default();
     for (address, block_height) in ext.signatures.into_keys() {
-        // TODO: more deterministic deduplication
         if let Some(present) = seen_by.insert(address, block_height) {
+            // TODO(namada#770): this shouldn't be happening in any case and we
+            // should be refactoring to get rid of `BlockHeight`
             tracing::warn!(?present, "Duplicate vote in digest");
         }
     }
