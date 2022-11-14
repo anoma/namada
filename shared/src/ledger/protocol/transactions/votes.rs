@@ -128,7 +128,7 @@ where
         "Recording validators as having voted for this event"
     );
     let tally_pre = read(store, keys)?;
-    let tally_post = calculate_update(&tally_pre, vote_info)?;
+    let tally_post = calculate_tally_post(&tally_pre, vote_info)?;
     let changed_keys = validate_update(keys, &tally_pre, &tally_post)?;
 
     if tally_post.seen {
@@ -154,7 +154,7 @@ where
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
 /// voters from `vote_info`. Returns an error if any new voters have already
 /// voted previously.
-fn calculate_update(pre: &Tally, vote_info: &VoteInfo) -> Result<Tally> {
+fn calculate_tally_post(pre: &Tally, vote_info: &VoteInfo) -> Result<Tally> {
     let previous_voters: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
     let new_voters = vote_info.voters();
     let duplicate_voters: BTreeSet<_> =
