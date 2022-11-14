@@ -33,6 +33,8 @@ use std::marker::PhantomData;
 
 use num_rational::Ratio;
 
+#[doc(inline)]
+pub use self::states::State;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
 /// All status responses from trying to allocate block space for a tx.
@@ -94,49 +96,46 @@ impl TxAllottedSpace<states::BuildingDecryptedTxBatch> {
             decrypted_txs: TxBin::init(max),
         }
     }
+}
 
-    /// Try to allocate space for a new DKG decrypted transaction.
-    #[allow(dead_code)]
+impl states::State for TxAllottedSpace<states::BuildingDecryptedTxBatch> {
+    // TODO: change to `TxAllottedSpace<states::BuildingProtocolTxBatch>`
+    type Next = ();
+
     #[inline]
-    pub fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
         self.decrypted_txs.try_dump(tx)
     }
 
-    /// Try to allocate space for a new batch of DKG decrypted transactions.
-    #[allow(dead_code)]
     #[inline]
-    pub fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
     {
         self.decrypted_txs.try_dump_all(txs)
     }
 
-    /// Transition to the next state in the [`TxAllottedSpace`] state machine.
-    ///
-    /// For more info, read the module docs of
-    /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
-    #[allow(dead_code)]
     #[inline]
-    pub fn next_state(
-        self,
-    ) -> TxAllottedSpace<states::BuildingProtocolTxBatch> {
-        let Self {
-            max_block_space_in_bytes,
-            mut protocol_txs,
-            encrypted_txs,
-            decrypted_txs,
-            ..
-        } = self;
-        // TODO: reserve space for protocol txs
-        protocol_txs.allotted_space_in_bytes = 0;
-        TxAllottedSpace {
-            _state: PhantomData,
-            max_block_space_in_bytes,
-            protocol_txs,
-            encrypted_txs,
-            decrypted_txs,
-        }
+    fn next_state(self) -> Self::Next {
+        // ```ignore
+        // let Self {
+        //     max_block_space_in_bytes,
+        //     mut protocol_txs,
+        //     encrypted_txs,
+        //     decrypted_txs,
+        //     ..
+        // } = self;
+        // // TODO: reserve space for protocol txs
+        // protocol_txs.allotted_space_in_bytes = 0;
+        // TxAllottedSpace {
+        //     _state: PhantomData,
+        //     max_block_space_in_bytes,
+        //     protocol_txs,
+        //     encrypted_txs,
+        //     decrypted_txs,
+        // }
+        // ```
+        todo!()
     }
 }
 
@@ -359,6 +358,10 @@ mod states {
 mod states_impl {
     //! Implements [`super::states`].
 
+    use super::AllocStatus;
+    #[allow(unused_imports)]
+    use super::TxAllottedSpace;
+
     /// The leader of the current Tendermint round is building
     /// a new batch of DKG decrypted transactions.
     ///
@@ -411,6 +414,46 @@ mod states_impl {
     /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
     #[allow(dead_code)]
     pub enum WithoutEncryptedTxs {}
+
+    impl State for () {
+        type Next = ();
+
+        fn try_alloc(&mut self, _: &[u8]) -> AllocStatus {
+            panic!("Can't do anything in the empty state");
+        }
+
+        fn try_alloc_batch<'tx, T>(&mut self, _: T) -> AllocStatus
+        where
+            T: IntoIterator<Item = &'tx [u8]> + 'tx,
+        {
+            panic!("Can't do anything in the empty state");
+        }
+
+        fn next_state(self) -> Self::Next {
+            panic!("Can't do anything in the empty state");
+        }
+    }
+
+    /// Represents a state in the [`TxAllottedSpace`] state machine.
+    ///
+    /// For more info, read the module docs of
+    /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+    pub trait State {
+        /// The next state in the [`TxAllottedSpace`] state machine.
+        type Next: State;
+
+        /// Try to allocate space for a new transaction.
+        fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus;
+
+        /// Try to allocate space for a new batch of transactions.
+        fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+        where
+            T: IntoIterator<Item = &'tx [u8]> + 'tx;
+
+        /// Transition to the next state in the [`TxAllottedSpace`] state
+        /// machine.
+        fn next_state(self) -> Self::Next;
+    }
 }
 
 // ```ignore
