@@ -211,6 +211,10 @@ where
     vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
     tx_wasm_cache: TxCache<WasmCacheRwAccess>,
+    /// Taken from config `storage_read_past_height_limit`. When set, will
+    /// limit the how many block heights in the past can the storage be
+    /// queried for reading values.
+    storage_read_past_height_limit: Option<u64>,
     /// Proposal execution tracking
     pub proposal_data: HashSet<u64>,
 }
@@ -234,6 +238,8 @@ where
         let db_path = config.shell.db_dir(&chain_id);
         let base_dir = config.shell.base_dir;
         let mode = config.tendermint.tendermint_mode;
+        let storage_read_past_height_limit =
+            config.shell.storage_read_past_height_limit;
         if !Path::new(&base_dir).is_dir() {
             std::fs::create_dir(&base_dir)
                 .expect("Creating directory for Anoma should not fail");
@@ -317,6 +323,7 @@ where
                 tx_wasm_cache_dir,
                 tx_wasm_compilation_cache as usize,
             ),
+            storage_read_past_height_limit,
             proposal_data: HashSet::new(),
         }
     }

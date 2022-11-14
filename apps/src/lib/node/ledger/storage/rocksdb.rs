@@ -614,31 +614,81 @@ impl DB for RocksDB {
         &self,
         key: &Key,
         height: BlockHeight,
+        last_height: BlockHeight,
     ) -> Result<Option<Vec<u8>>> {
-        if self.read_subspace_val(key)?.is_none() {
-            return Ok(None);
+        // Check if the value changed at this height
+        let key_prefix = Key::from(height.to_db_key())
+            .push(&"diffs".to_owned())
+            .map_err(Error::KeyError)?;
+        let new_val_key = key_prefix
+            .push(&"new".to_owned())
+            .map_err(Error::KeyError)?
+            .join(key)
+            .to_string();
+
+        // If it has a "new" val, it was written at this height
+        match self
+            .0
+            .get(new_val_key)
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(new_val) => {
+                return Ok(Some(new_val));
+            }
+            None => {
+                let old_val_key = key_prefix
+                    .push(&"old".to_owned())
+                    .map_err(Error::KeyError)?
+                    .join(key)
+                    .to_string();
+                // If it has an "old" val, it was deleted at this height
+                if self.0.key_may_exist(old_val_key) {
+                    return Ok(None);
+                }
+            }
         }
 
-        let mut height = height.0;
-        while height > 0 {
-            let key_prefix = Key::from(BlockHeight(height).to_db_key())
+        // If the value didn't change at the given height, we try to look for it
+        // at successor heights, up to the `last_height`
+        let mut raw_height = height.0 + 1;
+        loop {
+            // Try to find the next diff on this key
+            let key_prefix = Key::from(BlockHeight(raw_height).to_db_key())
                 .push(&"diffs".to_owned())
                 .map_err(Error::KeyError)?;
-            let new_val_key = key_prefix
-                .push(&"new".to_owned())
+            let old_val_key = key_prefix
+                .push(&"old".to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
-            let val = self
+            let old_val = self
                 .0
-                .get(new_val_key)
+                .get(old_val_key)
                 .map_err(|e| Error::DBError(e.into_string()))?;
-            match val {
+            // If it has an "old" val, it's the one we're looking for
+            match old_val {
                 Some(bytes) => return Ok(Some(bytes)),
-                None => height -= 1,
+                None => {
+                    // Check if the value was created at this height instead,
+                    // which would mean that it wasn't present before
+                    let new_val_key = key_prefix
+                        .push(&"new".to_owned())
+                        .map_err(Error::KeyError)?
+                        .join(key)
+                        .to_string();
+                    if self.0.key_may_exist(new_val_key) {
+                        return Ok(None);
+                    }
+
+                    if raw_height >= last_height.0 {
+                        // Read from latest height
+                        return self.read_subspace_val(key);
+                    } else {
+                        raw_height += 1
+                    }
+                }
             }
         }
-        Ok(None)
     }
 
     fn write_subspace_val(
@@ -690,7 +740,7 @@ impl DB for RocksDB {
         // Check the length of previous value, if any
         let prev_len = match self
             .0
-            .get(key.to_string())
+            .get(subspace_key.to_string())
             .map_err(|e| Error::DBError(e.into_string()))?
         {
             Some(prev_value) => {
@@ -1033,7 +1083,7 @@ mod test {
         db.exec_batch(batch.0).unwrap();
 
         let prev_value = db
-            .read_subspace_val_with_height(&key, BlockHeight(100))
+            .read_subspace_val_with_height(&key, BlockHeight(100), last_height)
             .expect("read should succeed");
         assert_eq!(prev_value, Some(vec![1_u8, 1, 1, 1]));
 

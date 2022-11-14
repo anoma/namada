@@ -25,6 +25,7 @@ where
             storage: &self.storage,
             vp_wasm_cache: self.vp_wasm_cache.read_only(),
             tx_wasm_cache: self.tx_wasm_cache.read_only(),
+            storage_read_past_height_limit: self.storage_read_past_height_limit,
         };
 
         // Convert request to domain-type
