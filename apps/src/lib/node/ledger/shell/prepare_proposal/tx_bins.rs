@@ -78,7 +78,8 @@ impl TxAllottedSpace {
             decrypted_txs: TxBin::init_from(max, thres::DECRYPTED_TX),
         };
         // concede all uninitialized space to protocol txs
-        bins.protocol_txs.allotted_space_in_bytes += bins.uninitialized_space();
+        bins.protocol_txs.allotted_space_in_bytes +=
+            bins.uninitialized_space_in_bytes();
         bins
     }
 
@@ -86,7 +87,7 @@ impl TxAllottedSpace {
     ///
     /// This method should not be used outside of [`TxAllottedSpace`]
     /// instance construction or unit testing.
-    fn uninitialized_space(&self) -> u64 {
+    fn uninitialized_space_in_bytes(&self) -> u64 {
         let total_bin_space = self.protocol_txs.allotted_space_in_bytes
             + self.encrypted_txs.allotted_space_in_bytes
             + self.decrypted_txs.allotted_space_in_bytes;
@@ -95,30 +96,30 @@ impl TxAllottedSpace {
 
     /// The total space, in bytes, occupied by each transaction.
     #[inline]
-    pub fn occupied_space(&self) -> u64 {
-        self.protocol_txs.current_space
-            + self.encrypted_txs.current_space
-            + self.decrypted_txs.current_space
+    pub fn occupied_space_in_bytes(&self) -> u64 {
+        self.protocol_txs.current_space_in_bytes
+            + self.encrypted_txs.current_space_in_bytes
+            + self.decrypted_txs.current_space_in_bytes
     }
 
     /// Return the amount, in bytes, of free space in this
-    /// [`TxAllotedSpace`].
+    /// [`TxAllottedSpace`].
     #[inline]
-    pub fn free_space(&self) -> u64 {
-        self.provided_by_tendermint - self.occupied_space()
+    pub fn free_space_in_bytes(&self) -> u64 {
+        self.bytes_provided_by_tendermint - self.occupied_space_in_bytes()
     }
 
-    /// Checks if this [`TxAllotedSpace`] has any free space remaining.
+    /// Checks if this [`TxAllottedSpace`] has any free space remaining.
     #[allow(dead_code)]
     #[inline]
     pub fn has_free_space(&self) -> bool {
-        self.free_space() > 0
+        self.free_space_in_bytes() > 0
     }
 }
 
 // all allocation boilerplate code shall
 // be shunned to this impl block -- shame!
-impl TxAllotedSpace {
+impl TxAllottedSpace {
     /// Try to allocate space for a new protocol transaction.
     #[allow(dead_code)]
     #[inline]
@@ -158,26 +159,26 @@ impl TxAllotedSpace {
         self.encrypted_txs.try_dump_all(txs)
     }
 
-    /// The total space, in bytes, occupied by each transaction.
-    #[inline]
-    pub fn occupied_space_in_bytes(&self) -> u64 {
-        self.protocol_txs.current_space_in_bytes
-            + self.encrypted_txs.current_space_in_bytes
-            + self.decrypted_txs.current_space_in_bytes
-    }
+    // --------------------------------------------------- //
 
-    /// Return the amount, in bytes, of free space in this
-    /// [`TxAllottedSpace`].
-    #[inline]
-    pub fn free_space_in_bytes(&self) -> u64 {
-        self.bytes_provided_by_tendermint - self.occupied_space_in_bytes()
-    }
-
-    /// Checks if this [`TxAllottedSpace`] has any free space remaining.
+    /// Try to allocate space for a new DKG decrypted transaction.
     #[allow(dead_code)]
     #[inline]
-    pub fn has_free_space(&self) -> bool {
-        self.free_space_in_bytes() > 0
+    pub fn try_alloc_decrypted_tx(&mut self, tx: &[u8]) -> AllocStatus {
+        self.decrypted_txs.try_dump(tx)
+    }
+
+    /// Try to allocate space for a new batch of DKG decrypted transactions.
+    #[allow(dead_code)]
+    #[inline]
+    pub fn try_alloc_decrypted_tx_batch<'tx, T>(
+        &mut self,
+        txs: T,
+    ) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        self.decrypted_txs.try_dump_all(txs)
     }
 }
 
@@ -214,12 +215,12 @@ impl TxBin {
     #[inline]
     fn try_dump(&mut self, tx: &[u8]) -> AllocStatus {
         let tx_len = tx.len() as u64;
-        if tx_len > self.alloted_space {
+        if tx_len > self.allotted_space_in_bytes {
             return AllocStatus::OverflowsBin;
         }
-        let occupied = self.current_space + tx_len;
-        if occupied <= self.alloted_space {
-            self.current_space = occupied;
+        let occupied = self.current_space_in_bytes + tx_len;
+        if occupied <= self.allotted_space_in_bytes {
+            self.current_space_in_bytes = occupied;
             AllocStatus::Accepted
         } else {
             AllocStatus::Rejected
@@ -241,7 +242,7 @@ impl TxBin {
                 AllocStatus::Accepted => space_diff += tx.len() as u64,
                 status
                 @ (AllocStatus::Rejected | AllocStatus::OverflowsBin) => {
-                    self.current_space -= space_diff;
+                    self.current_space_in_bytes -= space_diff;
                     return status;
                 }
             }
@@ -356,7 +357,7 @@ mod tests {
         tendermint_max_block_space_in_bytes: u64,
     ) {
         let bins = TxAllottedSpace::init(tendermint_max_block_space_in_bytes);
-        assert_eq!(0, bins.uninitialized_space());
+        assert_eq!(0, bins.uninitialized_space_in_bytes());
     }
 
     /// Implementation of [`test_tx_dump_doesnt_overflow_bin`].

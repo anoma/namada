@@ -12,7 +12,7 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
 
-use self::tx_bins::{AllocStatus, TxAllotedSpace};
+use self::tx_bins::{AllocStatus, TxAllottedSpace};
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
@@ -40,7 +40,7 @@ where
     /// the proposal is rejected (unless we can simply overwrite
     /// them in the next block).
     // TODO: change second paragraph of the docstr, to reflect new
-    // alloted space per block design
+    // allotted space per block design
     pub fn prepare_proposal(
         &mut self,
         req: RequestPrepareProposal,
@@ -53,7 +53,7 @@ where
             // TODO: add some info logging?
 
             // start counting allotted space for txs
-            let mut bins = TxAllotedSpace::from(&req);
+            let mut bins = TxAllottedSpace::from(&req);
 
             // NOTE: AD-HOC SOLUTION
             // ======================
@@ -118,7 +118,7 @@ where
     /// events and, optionally, a validator set update
     fn build_vote_extensions_txs(
         &mut self,
-        bins: &mut TxAllotedSpace,
+        bins: &mut TxAllottedSpace,
         #[cfg(feature = "abcipp")] local_last_commit: Option<
             ExtendedCommitInfo,
         >,
@@ -210,7 +210,7 @@ where
     #[cfg(feature = "abcipp")]
     fn build_mempool_txs(
         &mut self,
-        _bins: &mut TxAllotedSpace,
+        _bins: &mut TxAllottedSpace,
         txs: Vec<Vec<u8>>,
     ) -> Vec<TxRecord> {
         // TODO(feature = "abcipp"): implement building batch of mempool txs
@@ -221,7 +221,7 @@ where
     #[cfg(not(feature = "abcipp"))]
     fn build_mempool_txs(
         &mut self,
-        bins: &mut TxAllotedSpace,
+        bins: &mut TxAllottedSpace,
         txs: Vec<Vec<u8>>,
     ) -> Vec<TxBytes> {
         txs.into_iter()
@@ -251,7 +251,7 @@ where
     // - https://github.com/anoma/ferveo
     fn build_decrypted_txs(
         &mut self,
-        bins: &mut TxAllotedSpace,
+        bins: &mut TxAllottedSpace,
     ) -> Vec<TxBytes> {
         // TODO: This should not be hardcoded
         let privkey =
