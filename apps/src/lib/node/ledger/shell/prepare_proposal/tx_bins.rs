@@ -58,8 +58,8 @@ pub enum AllocStatus {
 ///   - DKG decrypted transactions.
 ///   - DKG encrypted transactions.
 #[derive(Default)]
-pub struct TxAllottedSpace<State> {
-    /// The current state of the [`TxAllottedSpace`] state machine.
+pub struct BlockSpaceAllocator<State> {
+    /// The current state of the [`BlockSpaceAllocator`] state machine.
     _state: PhantomData<*const State>,
     /// The total space Tendermint has allotted to the
     /// application for the current block height.
@@ -73,7 +73,7 @@ pub struct TxAllottedSpace<State> {
 }
 
 impl From<&RequestPrepareProposal>
-    for TxAllottedSpace<states::BuildingDecryptedTxBatch>
+    for BlockSpaceAllocator<states::BuildingDecryptedTxBatch>
 {
     #[inline]
     fn from(req: &RequestPrepareProposal) -> Self {
@@ -82,8 +82,8 @@ impl From<&RequestPrepareProposal>
     }
 }
 
-impl TxAllottedSpace<states::BuildingDecryptedTxBatch> {
-    /// Construct a new [`TxAllottedSpace`], with an upper bound
+impl BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
+    /// Construct a new [`BlockSpaceAllocator`], with an upper bound
     /// on the max size of all txs in a block defined by Tendermint.
     #[inline]
     pub fn init(tendermint_max_block_space_in_bytes: u64) -> Self {
@@ -98,8 +98,8 @@ impl TxAllottedSpace<states::BuildingDecryptedTxBatch> {
     }
 }
 
-impl states::State for TxAllottedSpace<states::BuildingDecryptedTxBatch> {
-    // TODO: change to `TxAllottedSpace<states::BuildingProtocolTxBatch>`
+impl states::State for BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
+    // TODO: change to `BlockSpaceAllocator<states::BuildingProtocolTxBatch>`
     type Next = ();
 
     #[inline]
@@ -127,7 +127,7 @@ impl states::State for TxAllottedSpace<states::BuildingDecryptedTxBatch> {
         // } = self;
         // // TODO: reserve space for protocol txs
         // protocol_txs.allotted_space_in_bytes = 0;
-        // TxAllottedSpace {
+        // BlockSpaceAllocator {
         //     _state: PhantomData,
         //     max_block_space_in_bytes,
         //     protocol_txs,
@@ -140,10 +140,10 @@ impl states::State for TxAllottedSpace<states::BuildingDecryptedTxBatch> {
 }
 
 // WIP
-impl<State> TxAllottedSpace<State> {
+impl<State> BlockSpaceAllocator<State> {
     /// Return uninitialized space in tx bins, resulting from ratio conversions.
     ///
-    /// This method should not be used outside of [`TxAllottedSpace`]
+    /// This method should not be used outside of [`BlockSpaceAllocator`]
     /// instance construction or unit testing.
     #[allow(dead_code)]
     fn uninitialized_space_in_bytes(&self) -> u64 {
@@ -162,13 +162,13 @@ impl<State> TxAllottedSpace<State> {
     }
 
     /// Return the amount, in bytes, of free space in this
-    /// [`TxAllottedSpace`].
+    /// [`BlockSpaceAllocator`].
     #[inline]
     pub fn free_space_in_bytes(&self) -> u64 {
         self.max_block_space_in_bytes - self.occupied_space_in_bytes()
     }
 
-    /// Checks if this [`TxAllottedSpace`] has any free space remaining.
+    /// Checks if this [`BlockSpaceAllocator`] has any free space remaining.
     #[allow(dead_code)]
     #[inline]
     pub fn has_free_space(&self) -> bool {
@@ -180,7 +180,7 @@ impl<State> TxAllottedSpace<State> {
 // be shunned to this impl block -- shame!
 //
 // WIP
-impl<State> TxAllottedSpace<State> {
+impl<State> BlockSpaceAllocator<State> {
     /// Try to allocate space for a new protocol transaction.
     #[allow(dead_code)]
     #[inline]
@@ -323,7 +323,7 @@ mod thres {
 // hacky workaround to get module docstrings formatted properly
 #[rustfmt::skip]
 mod states {
-    //! All the states of the [`TxAllottedSpace`] state machine,
+    //! All the states of the [`BlockSpaceAllocator`] state machine,
     //! over the extent of a Tendermint consensus round
     //! block proposal.
     //!
@@ -349,7 +349,7 @@ mod states {
     //!    same two modes of operation defined above.
 
     #[allow(unused_imports)]
-    use super::TxAllottedSpace;
+    use super::BlockSpaceAllocator;
 
     #[doc(inline)]
     pub use super::states_impl::*;
@@ -360,7 +360,7 @@ mod states_impl {
 
     use super::AllocStatus;
     #[allow(unused_imports)]
-    use super::TxAllottedSpace;
+    use super::BlockSpaceAllocator;
 
     /// The leader of the current Tendermint round is building
     /// a new batch of DKG decrypted transactions.
@@ -434,12 +434,12 @@ mod states_impl {
         }
     }
 
-    /// Represents a state in the [`TxAllottedSpace`] state machine.
+    /// Represents a state in the [`BlockSpaceAllocator`] state machine.
     ///
     /// For more info, read the module docs of
     /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
     pub trait State {
-        /// The next state in the [`TxAllottedSpace`] state machine.
+        /// The next state in the [`BlockSpaceAllocator`] state machine.
         type Next: State;
 
         /// Try to allocate space for a new transaction.
@@ -450,7 +450,7 @@ mod states_impl {
         where
             T: IntoIterator<Item = &'tx [u8]> + 'tx;
 
-        /// Transition to the next state in the [`TxAllottedSpace`] state
+        /// Transition to the next state in the [`BlockSpaceAllocator`] state
         /// machine.
         fn next_state(self) -> Self::Next;
     }
@@ -490,14 +490,14 @@ mod states_impl {
 //
 //     proptest! {
 //         /// Check if we reject a tx when its respective bin
-//         /// capacity has been reached on a [`TxAllottedSpace`].
+//         /// capacity has been reached on a [`BlockSpaceAllocator`].
 //         #[test]
 //         fn test_reject_tx_on_bin_cap_reached(max in prop::num::u64::ANY) {
 //             proptest_reject_tx_on_bin_cap_reached(max)
 //         }
 //
 //         /// Check if the sum of all individual bin allotments for a
-//         /// [`TxAllottedSpace`] corresponds to the total space ceded
+//         /// [`BlockSpaceAllocator`] corresponds to the total space ceded
 //         /// by Tendermint.
 //         #[test]
 //         fn test_bin_capacity_eq_provided_space(max in prop::num::u64::ANY) {
@@ -517,7 +517,7 @@ mod states_impl {
 //         tendermint_max_block_space_in_bytes: u64,
 //     ) {
 //         let mut bins =
-//             TxAllottedSpace::init(tendermint_max_block_space_in_bytes);
+//             BlockSpaceAllocator::init(tendermint_max_block_space_in_bytes);
 //
 //         // fill the entire bin of decrypted txs
 //         bins.decrypted_txs.current_space_in_bytes =
@@ -534,7 +534,7 @@ mod states_impl {
 //     fn proptest_bin_capacity_eq_provided_space(
 //         tendermint_max_block_space_in_bytes: u64,
 //     ) {
-//         let bins = TxAllottedSpace::init(tendermint_max_block_space_in_bytes);
+//         let bins = BlockSpaceAllocator::init(tendermint_max_block_space_in_bytes);
 //         assert_eq!(0, bins.uninitialized_space_in_bytes());
 //     }
 //
@@ -546,7 +546,7 @@ mod states_impl {
 //             encrypted_txs,
 //             decrypted_txs,
 //         } = args;
-//         let bins = RefCell::new(TxAllottedSpace::init(
+//         let bins = RefCell::new(BlockSpaceAllocator::init(
 //             tendermint_max_block_space_in_bytes,
 //         ));
 //
@@ -617,7 +617,7 @@ mod states_impl {
 //             }
 //     }
 //
-//     /// Return random bin sizes for a [`TxAllottedSpace`].
+//     /// Return random bin sizes for a [`BlockSpaceAllocator`].
 //     fn arb_max_bin_sizes() -> impl Strategy<Value = (u64, usize, usize, usize)>
 //     {
 //         const MAX_BLOCK_SIZE_BYTES: u64 = 1000;
