@@ -110,9 +110,9 @@ where
             %valset_upd_keys.prefix,
             "Validator set update votes already in storage",
         );
-        let voters = VoteInfo::new(seen_by.clone(), &voting_powers);
+        let vote_info = VoteInfo::new(seen_by.clone(), &voting_powers);
         let (tally, changed) =
-            votes::calculate_updated(storage, &valset_upd_keys, &voters)?;
+            votes::calculate_updated(storage, &valset_upd_keys, &vote_info)?;
         let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
         (tally, changed, confirmed)
     };
