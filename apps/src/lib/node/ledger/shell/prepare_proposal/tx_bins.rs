@@ -275,8 +275,96 @@ mod thres {
     pub const DECRYPTED_TX: Ratio<u64> = ENCRYPTED_TX;
 }
 
+// hacky workaround to get module docstrings formatted properly
+#[rustfmt::skip]
 mod states {
-    //! Different states of the tx bin allotments state machine.
+    //! All the states of the [`TxAllottedSpace`] state machine,
+    //! over the extent of a Tendermint consensus round
+    //! block proposal.
+    //!
+    //! # States
+    //!
+    //! The state machine moves through the following states:
+    //!
+    //! 1. [`BuildingDecryptedTxBatch`] - the initial state. In
+    //!    this state, we populate a block with DKG decrypted txs.
+    //! 2. [`BuildingProtocolTxBatch`] - the second state. In
+    //!    this state, we populate a block with protocol txs.
+    //! 3. [`BuildingEncryptedTxBatch`] - the third state. In
+    //!    this state, we populate a block with DKG encrypted txs.
+    //!    This state supports two modes of operation, which you can
+    //!    think of as two states diverging from [`BuildingProtocolTxBatch`]:
+    //!   1. [`WithoutEncryptedTxs`] - When this mode is active, no encrypted txs
+    //!      are included in a block proposal.
+    //!   2. [`WithEncryptedTxs`] - When this mode is active, we are able
+    //!      to include encrypted txs in a block proposal.
+    //! 4. [`FillingRemainingSpace`] - the fourth and final state.
+    //!    During this phase, we fill all remaining block space with arbitrary
+    //!    transactions that haven't been included yet. This state supports the
+    //!    same two modes of operation defined above.
+
+    #[allow(unused_imports)]
+    use super::TxAllottedSpace;
+
+    #[doc(inline)]
+    pub use super::states_impl::*;
+}
+
+mod states_impl {
+    //! Implements [`super::states`].
+
+    /// The leader of the current Tendermint round is building
+    /// a new batch of DKG decrypted transactions.
+    ///
+    /// For more info, read the module docs of
+    /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+    #[allow(dead_code)]
+    pub enum BuildingDecryptedTxBatch {}
+
+    /// The leader of the current Tendermint round is building
+    /// a new batch of Namada protocol transactions.
+    ///
+    /// For more info, read the module docs of
+    /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+    #[allow(dead_code)]
+    pub enum BuildingProtocolTxBatch {}
+
+    /// The leader of the current Tendermint round is building
+    /// a new batch of DKG encrypted transactions.
+    ///
+    /// For more info, read the module docs of
+    /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+    #[allow(dead_code)]
+    pub struct BuildingEncryptedTxBatch<Mode> {
+        /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
+        _mode: Mode,
+    }
+
+    /// The leader of the current Tendermint round is populating
+    /// all remaining space in a block proposal with arbitrary
+    /// transactions.
+    ///
+    /// For more info, read the module docs of
+    /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+    #[allow(dead_code)]
+    pub struct FillingRemainingSpace<Mode> {
+        /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
+        _mode: Mode,
+    }
+
+    /// Allow block proposals to include encrypted txs.
+    ///
+    /// For more info, read the module docs of
+    /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+    #[allow(dead_code)]
+    pub enum WithEncryptedTxs {}
+
+    /// Prohibit block proposals from including encrypted txs.
+    ///
+    /// For more info, read the module docs of
+    /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+    #[allow(dead_code)]
+    pub enum WithoutEncryptedTxs {}
 }
 
 #[cfg(test)]
