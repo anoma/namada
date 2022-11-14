@@ -86,21 +86,10 @@ impl VoteInfo {
         votes.into_iter().for_each(|(address, block_height)| {
             let fract_voting_power =
                 voting_powers.get(&(address.clone(), block_height)).unwrap();
-            if let Some((
-                already_present_block_height,
-                already_present_fract_voting_power,
-            )) = inner.insert(
+            _ = inner.insert(
                 address.clone(),
                 (block_height, fract_voting_power.to_owned()),
-            ) {
-                tracing::warn!(
-                    ?address,
-                    ?already_present_block_height,
-                    ?already_present_fract_voting_power,
-                    new_fract_voting_power = ?fract_voting_power,
-                    "Validator voted more than once, arbitrarily using later value"
-                )
-            }
+            );
         });
         Self { inner }
     }
