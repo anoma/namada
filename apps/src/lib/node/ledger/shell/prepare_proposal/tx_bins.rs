@@ -262,7 +262,16 @@ mod thres {
     pub const ENCRYPTED_TX: Ratio<u64> = Ratio::new_raw(1, 3);
 
     /// The threshold over Tendermint's allotted space for DKG decrypted txs.
-    pub const DECRYPTED_TX: Ratio<u64> = Ratio::new_raw(1, 3);
+    ///
+    /// Do not edit this threshold value. We should always have the
+    /// same or less space for decrypted txs as the one reserved
+    /// for encrypted txs.
+    ///
+    /// The reason for this is that during the decision process of
+    /// block height `H`, we must include the same number of decrypted
+    /// txs in the block as the number of encrypted txs proposed during
+    /// block height `H - 1`.
+    pub const DECRYPTED_TX: Ratio<u64> = ENCRYPTED_TX;
 }
 
 #[cfg(test)]
