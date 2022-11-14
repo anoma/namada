@@ -61,7 +61,7 @@ pub struct TxAllottedSpace<State> {
     _state: PhantomData<*const State>,
     /// The total space Tendermint has allotted to the
     /// application for the current block height.
-    bytes_provided_by_tendermint: u64,
+    max_block_space_in_bytes: u64,
     /// The current space utilized by protocol transactions.
     protocol_txs: TxBin,
     /// The current space utilized by DKG encrypted transactions.
@@ -82,13 +82,13 @@ impl From<&RequestPrepareProposal>
 
 impl TxAllottedSpace<states::BuildingDecryptedTxBatch> {
     /// Construct a new [`TxAllottedSpace`], with an upper bound
-    /// on the max number of txs in a block defined by Tendermint.
+    /// on the max size of all txs in a block defined by Tendermint.
     #[inline]
     pub fn init(tendermint_max_block_space_in_bytes: u64) -> Self {
         let max = tendermint_max_block_space_in_bytes;
         Self {
             _state: PhantomData,
-            bytes_provided_by_tendermint: max,
+            max_block_space_in_bytes: max,
             protocol_txs: TxBin::default(),
             encrypted_txs: TxBin::default(),
             decrypted_txs: TxBin::init(max),
@@ -122,7 +122,7 @@ impl TxAllottedSpace<states::BuildingDecryptedTxBatch> {
         self,
     ) -> TxAllottedSpace<states::BuildingProtocolTxBatch> {
         let Self {
-            bytes_provided_by_tendermint,
+            max_block_space_in_bytes,
             mut protocol_txs,
             encrypted_txs,
             decrypted_txs,
@@ -132,7 +132,7 @@ impl TxAllottedSpace<states::BuildingDecryptedTxBatch> {
         protocol_txs.allotted_space_in_bytes = 0;
         TxAllottedSpace {
             _state: PhantomData,
-            bytes_provided_by_tendermint,
+            max_block_space_in_bytes,
             protocol_txs,
             encrypted_txs,
             decrypted_txs,
@@ -151,7 +151,7 @@ impl<State> TxAllottedSpace<State> {
         let total_bin_space = self.protocol_txs.allotted_space_in_bytes
             + self.encrypted_txs.allotted_space_in_bytes
             + self.decrypted_txs.allotted_space_in_bytes;
-        self.bytes_provided_by_tendermint - total_bin_space
+        self.max_block_space_in_bytes - total_bin_space
     }
 
     /// The total space, in bytes, occupied by each transaction.
@@ -166,7 +166,7 @@ impl<State> TxAllottedSpace<State> {
     /// [`TxAllottedSpace`].
     #[inline]
     pub fn free_space_in_bytes(&self) -> u64 {
-        self.bytes_provided_by_tendermint - self.occupied_space_in_bytes()
+        self.max_block_space_in_bytes - self.occupied_space_in_bytes()
     }
 
     /// Checks if this [`TxAllottedSpace`] has any free space remaining.
