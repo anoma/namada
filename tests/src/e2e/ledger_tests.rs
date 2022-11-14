@@ -18,16 +18,17 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada::types::address::{btc, eth, masp_rewards};
+use namada::types::address::{btc, eth, masp_rewards, masp_tx_key};
 use namada::types::token;
 use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
+use namada::types::storage::Epoch;
 use serde_json::json;
 use setup::constants::*;
 
-use super::helpers::{get_height, wait_for_block_height, is_debug_mode};
+use super::helpers::{get_height, wait_for_block_height};
 use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_voting_power, get_actor_rpc, get_epoch,
@@ -107,7 +108,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
 
     // 2. Cross over epoch to check for consensus with multiple nodes
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
-    let _ = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let _ = epoch_sleep(&test, &validator_one_rpc, None, 720)?;
 
     // 3. Submit a valid token transfer tx
     let tx_args = [
@@ -474,8 +475,8 @@ fn masp_txs_and_queries() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: if is_debug_mode() { 3600 } else { 360 },
-                min_num_of_blocks: 1,
+                min_duration: 360,
+                min_num_of_blocks: 15,
                 ..genesis.parameters
             };
             GenesisConfig {
@@ -495,6 +496,14 @@ fn masp_txs_and_queries() -> Result<()> {
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    let masp_tx_key = &masp_tx_key().to_string();
+    let tx_transfer = wasm_abs_path(TX_TRANSFER_WASM);
+    let tx_data_path0 = wasm_abs_path("wasm_for_tests/masp_txs_and_queries_0.data");
+    let tx_data_path1 = wasm_abs_path("wasm_for_tests/masp_txs_and_queries_1.data");
+    let tx_data_path2 = wasm_abs_path("wasm_for_tests/masp_txs_and_queries_2.data");
+    let tx_data_path3 = wasm_abs_path("wasm_for_tests/masp_txs_and_queries_3.data");
+    let tx_data_path4 = wasm_abs_path("wasm_for_tests/masp_txs_and_queries_4.data");
 
     let txs_args = vec![
         // 2. Attempt to spend 10 BTC at SK(A) to PA(B)
@@ -534,15 +543,13 @@ fn masp_txs_and_queries() -> Result<()> {
         // 4. Send 20 BTC from Albert to PA(A)
         (
             vec![
-                "transfer",
-                "--source",
+                "tx",
+                "--signer",
                 ALBERT,
-                "--target",
-                AA_PAYMENT_ADDRESS,
-                "--token",
-                BTC,
-                "--amount",
-                "20",
+                "--code-path",
+                tx_transfer.to_str().unwrap(),
+                "--data-path",
+                tx_data_path0.to_str().unwrap(),
                 "--ledger-address",
                 &validator_one_rpc,
             ],
@@ -568,15 +575,13 @@ fn masp_txs_and_queries() -> Result<()> {
         // 6. Spend 7 BTC at SK(A) to PA(B)
         (
             vec![
-                "transfer",
-                "--source",
-                A_SPENDING_KEY,
-                "--target",
-                AB_PAYMENT_ADDRESS,
-                "--token",
-                BTC,
-                "--amount",
-                "7",
+                "tx",
+                "--signing-key",
+                masp_tx_key,
+                "--code-path",
+                tx_transfer.to_str().unwrap(),
+                "--data-path",
+                tx_data_path1.to_str().unwrap(),
                 "--ledger-address",
                 &validator_one_rpc,
             ],
@@ -585,15 +590,13 @@ fn masp_txs_and_queries() -> Result<()> {
         // 7. Spend 7 BTC at SK(A) to PA(B)
         (
             vec![
-                "transfer",
-                "--source",
-                A_SPENDING_KEY,
-                "--target",
-                BB_PAYMENT_ADDRESS,
-                "--token",
-                BTC,
-                "--amount",
-                "7",
+                "tx",
+                "--signing-key",
+                masp_tx_key,
+                "--code-path",
+                tx_transfer.to_str().unwrap(),
+                "--data-path",
+                tx_data_path2.to_str().unwrap(),
                 "--ledger-address",
                 &validator_one_rpc,
             ],
@@ -619,15 +622,13 @@ fn masp_txs_and_queries() -> Result<()> {
         // 9. Spend 6 BTC at SK(A) to PA(B)
         (
             vec![
-                "transfer",
-                "--source",
-                A_SPENDING_KEY,
-                "--target",
-                BB_PAYMENT_ADDRESS,
-                "--token",
-                BTC,
-                "--amount",
-                "6",
+                "tx",
+                "--signing-key",
+                masp_tx_key,
+                "--code-path",
+                tx_transfer.to_str().unwrap(),
+                "--data-path",
+                tx_data_path3.to_str().unwrap(),
                 "--ledger-address",
                 &validator_one_rpc,
             ],
@@ -673,15 +674,13 @@ fn masp_txs_and_queries() -> Result<()> {
         // 13. Send 10 BTC from SK(B) to Bertha
         (
             vec![
-                "transfer",
-                "--source",
-                B_SPENDING_KEY,
-                "--target",
-                BERTHA,
-                "--token",
-                BTC,
-                "--amount",
-                "20",
+                "tx",
+                "--signing-key",
+                masp_tx_key,
+                "--code-path",
+                tx_transfer.to_str().unwrap(),
+                "--data-path",
+                tx_data_path4.to_str().unwrap(),
                 "--ledger-address",
                 &validator_one_rpc,
             ],
@@ -690,11 +689,11 @@ fn masp_txs_and_queries() -> Result<()> {
     ];
 
     // Wait till epoch boundary
-    let _ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let _ep0 = epoch_sleep(&test, &validator_one_rpc, Some(Epoch(1)), 720)?;
 
     for (tx_args, tx_result) in &txs_args {
         for &dry_run in &[true, false] {
-            let tx_args = if dry_run && tx_args[0] == "transfer" {
+            let tx_args = if dry_run && (tx_args[0] == "transfer" || tx_args[0] == "tx") {
                 vec![tx_args.clone(), vec!["--dry-run"]].concat()
             } else {
                 tx_args.clone()
@@ -729,7 +728,8 @@ fn masp_pinned_txs() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: 60,
+                min_duration: 30,
+                min_num_of_blocks: 2,
                 ..genesis.parameters
             };
             GenesisConfig {
@@ -750,8 +750,11 @@ fn masp_pinned_txs() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+    let tx_transfer = wasm_abs_path(TX_TRANSFER_WASM);
+    let tx_data_path0 = wasm_abs_path("wasm_for_tests/masp_pinned_txs_0.data");
+
     // Wait till epoch boundary
-    let _ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let _ep0 = epoch_sleep(&test, &validator_one_rpc, None, 720)?;
 
     // Assert PPA(C) cannot be recognized by incorrect viewing key
     let mut client = run!(
@@ -796,15 +799,13 @@ fn masp_pinned_txs() -> Result<()> {
         test,
         Bin::Client,
         vec![
-            "transfer",
-            "--source",
+            "tx",
+            "--signer",
             ALBERT,
-            "--target",
-            AC_PAYMENT_ADDRESS,
-            "--token",
-            BTC,
-            "--amount",
-            "20",
+            "--code-path",
+            tx_transfer.to_str().unwrap(),
+            "--data-path",
+            tx_data_path0.to_str().unwrap(),
             "--ledger-address",
             &validator_one_rpc
         ],
@@ -852,7 +853,7 @@ fn masp_pinned_txs() -> Result<()> {
     client.assert_success();
 
     // Wait till epoch boundary
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, None, 720)?;
 
     // Assert PPA(C) does not NAM pinned to it on epoch boundary
     let mut client = run!(
@@ -889,8 +890,8 @@ fn masp_incentives() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: if is_debug_mode() { 240 } else { 60 },
-                min_num_of_blocks: 1,
+                min_duration: 30,
+                min_num_of_blocks: 2,
                 ..genesis.parameters
             };
             GenesisConfig {
@@ -911,23 +912,30 @@ fn masp_incentives() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+    let masp_tx_key = &masp_tx_key().to_string();
+    let tx_transfer = wasm_abs_path(TX_TRANSFER_WASM);
+    let tx_data_path1 = wasm_abs_path("wasm_for_tests/masp_incentives_1.data");
+    let tx_data_path4 = wasm_abs_path("wasm_for_tests/masp_incentives_4.data");
+    let tx_data_path6 = wasm_abs_path("wasm_for_tests/masp_incentives_6.data");
+    let tx_data_path7 = wasm_abs_path("wasm_for_tests/masp_incentives_7.data");
+    let tx_data_path9 = wasm_abs_path("wasm_for_tests/masp_incentives_9.data");
+    let tx_data_path10 = wasm_abs_path("wasm_for_tests/masp_incentives_10.data");
+
     // Wait till epoch boundary
-    let ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep0 = epoch_sleep(&test, &validator_one_rpc, Some(Epoch(1)), 720)?;
 
     // Send 20 BTC from Albert to PA(A)
     let mut client = run!(
         test,
         Bin::Client,
         vec![
-            "transfer",
-            "--source",
+            "tx",
+            "--signer",
             ALBERT,
-            "--target",
-            AA_PAYMENT_ADDRESS,
-            "--token",
-            BTC,
-            "--amount",
-            "20",
+            "--code-path",
+            tx_transfer.to_str().unwrap(),
+            "--data-path",
+            tx_data_path1.to_str().unwrap(),
             "--ledger-address",
             &validator_one_rpc
         ],
@@ -975,7 +983,7 @@ fn masp_incentives() -> Result<()> {
     let masp_rewards = masp_rewards();
 
     // Wait till epoch boundary
-    let ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep1 = epoch_sleep(&test, &validator_one_rpc, None, 720)?;
 
     // Assert BTC balance at VK(A) is 20
     let mut client = run!(
@@ -1041,7 +1049,7 @@ fn masp_incentives() -> Result<()> {
     client.assert_success();
 
     // Wait till epoch boundary
-    let ep2 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep2 = epoch_sleep(&test, &validator_one_rpc, None, 720)?;
 
     // Assert BTC balance at VK(A) is 20
     let mut client = run!(
@@ -1104,22 +1112,20 @@ fn masp_incentives() -> Result<()> {
     client.assert_success();
 
     // Wait till epoch boundary
-    let ep3 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep3 = epoch_sleep(&test, &validator_one_rpc, Some(Epoch(4)), 720)?;
 
     // Send 30 ETH from Albert to PA(B)
     let mut client = run!(
         test,
         Bin::Client,
         vec![
-            "transfer",
-            "--source",
+            "tx",
+            "--signer",
             ALBERT,
-            "--target",
-            AB_PAYMENT_ADDRESS,
-            "--token",
-            ETH,
-            "--amount",
-            "30",
+            "--code-path",
+            tx_transfer.to_str().unwrap(),
+            "--data-path",
+            tx_data_path4.to_str().unwrap(),
             "--ledger-address",
             &validator_one_rpc
         ],
@@ -1165,7 +1171,7 @@ fn masp_incentives() -> Result<()> {
     client.assert_success();
 
     // Wait till epoch boundary
-    let ep4 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep4 = epoch_sleep(&test, &validator_one_rpc, None, 720)?;
 
     // Assert ETH balance at VK(B) is 30
     let mut client = run!(
@@ -1230,22 +1236,20 @@ fn masp_incentives() -> Result<()> {
     client.assert_success();
 
     // Wait till epoch boundary
-    let ep5 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep5 = epoch_sleep(&test, &validator_one_rpc, Some(Epoch(6)), 720)?;
 
     // Send 30 ETH from SK(B) to Christel
     let mut client = run!(
         test,
         Bin::Client,
         vec![
-            "transfer",
-            "--source",
-            B_SPENDING_KEY,
-            "--target",
-            CHRISTEL,
-            "--token",
-            ETH,
-            "--amount",
-            "30",
+            "tx",
+            "--signing-key",
+            masp_tx_key,
+            "--code-path",
+            tx_transfer.to_str().unwrap(),
+            "--data-path",
+            tx_data_path6.to_str().unwrap(),
             "--ledger-address",
             &validator_one_rpc
         ],
@@ -1320,22 +1324,20 @@ fn masp_incentives() -> Result<()> {
     client.assert_success();
 
     // Wait till epoch boundary
-    let ep6 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep6 = epoch_sleep(&test, &validator_one_rpc, Some(Epoch(7)), 720)?;
 
     // Send 20 BTC from SK(A) to Christel
     let mut client = run!(
         test,
         Bin::Client,
         vec![
-            "transfer",
-            "--source",
-            A_SPENDING_KEY,
-            "--target",
-            CHRISTEL,
-            "--token",
-            BTC,
-            "--amount",
-            "20",
+            "tx",
+            "--signing-key",
+            masp_tx_key,
+            "--code-path",
+            tx_transfer.to_str().unwrap(),
+            "--data-path",
+            tx_data_path7.to_str().unwrap(),
             "--ledger-address",
             &validator_one_rpc
         ],
@@ -1407,7 +1409,7 @@ fn masp_incentives() -> Result<()> {
     client.assert_success();
 
     // Wait till epoch boundary
-    let _ep7 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let _ep7 = epoch_sleep(&test, &validator_one_rpc, None, 720)?;
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
     let mut client = run!(
@@ -1476,22 +1478,20 @@ fn masp_incentives() -> Result<()> {
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
-    let _ep8 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let _ep8 = epoch_sleep(&test, &validator_one_rpc, Some(Epoch(9)), 720)?;
 
     // Send 30*ETH_reward*(epoch_5-epoch_3) NAM from SK(B) to Christel
     let mut client = run!(
         test,
         Bin::Client,
         vec![
-            "transfer",
-            "--source",
-            B_SPENDING_KEY,
-            "--target",
-            CHRISTEL,
-            "--token",
-            NAM,
-            "--amount",
-            &((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)).to_string(),
+            "tx",
+            "--signing-key",
+            masp_tx_key,
+            "--code-path",
+            tx_transfer.to_str().unwrap(),
+            "--data-path",
+            tx_data_path9.to_str().unwrap(),
             "--ledger-address",
             &validator_one_rpc
         ],
@@ -1501,22 +1501,20 @@ fn masp_incentives() -> Result<()> {
     client.assert_success();
 
     // Wait till epoch boundary
-    let _ep9 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let _ep9 = epoch_sleep(&test, &validator_one_rpc, Some(Epoch(10)), 720)?;
 
     // Send 20*BTC_reward*(epoch_6-epoch_0) NAM from SK(A) to Bertha
     let mut client = run!(
         test,
         Bin::Client,
         vec![
-            "transfer",
-            "--source",
-            A_SPENDING_KEY,
-            "--target",
-            BERTHA,
-            "--token",
-            NAM,
-            "--amount",
-            &((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)).to_string(),
+            "tx",
+            "--signing-key",
+            masp_tx_key,
+            "--code-path",
+            tx_transfer.to_str().unwrap(),
+            "--data-path",
+            tx_data_path10.to_str().unwrap(),
             "--ledger-address",
             &validator_one_rpc
         ],

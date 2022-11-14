@@ -101,12 +101,15 @@ faucet = 9223372036854
 vp = "vp_testnet_faucet"
 
 [established.Albert]
+address = "atest1v4ehgw36gdznysfjgs6nq3fcxqcnsd69gcerssfnx9pnxwp3x5crxw2xxuuygd3jxycn2sesz4zm80"
 vp = "vp_user"
 
 [established.Bertha]
+address = "atest1v4ehgw36gcm5yvjpgycyvsjzgeprxvzygcuyx32zg5c5yd6xgger2s2zxdp5vdfcx56y2d3sw9p2eh"
 vp = "vp_user"
 
 [established.Christel]
+address = "atest1v4ehgw36ggm52v34xpqnj3jr8pqnvv6pgyu5zdzx8qerzvfn8prryvjpggcrzd2rxepyysjpjzpc9p"
 vp = "vp_user"
 
 [established.masp]

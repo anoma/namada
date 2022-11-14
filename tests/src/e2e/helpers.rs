@@ -282,6 +282,7 @@ fn strip_trailing_newline(input: &str) -> &str {
 pub fn epoch_sleep(
     test: &Test,
     ledger_address: &str,
+    target: Option<Epoch>,
     timeout_secs: u64,
 ) -> Result<Epoch> {
     let old_epoch = get_epoch(test, ledger_address)?;
@@ -292,10 +293,15 @@ pub fn epoch_sleep(
             panic!("Timed out waiting for the next epoch");
         }
         let epoch = get_epoch(test, ledger_address)?;
-        if epoch > old_epoch {
+        if let Some(target) = target {
+            if epoch == target {
+                break Ok(epoch);
+            } else if epoch > target {
+                panic!("Missed the target epoch {}", target);
+            }
+        } else if epoch > old_epoch {
             break Ok(epoch);
-        } else {
-            sleep(10);
         }
+        sleep(10);
     }
 }
