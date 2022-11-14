@@ -327,10 +327,10 @@ mod tests {
         }
 
         /// Test that dumping txs whose total combined size
-        /// is less than the bin cap does not overflow the bin.
+        /// is less than the bin cap does not fill up the bin.
         #[test]
-        fn test_tx_dump_doesnt_overflow_bin(args in arb_transactions()) {
-            proptest_tx_dump_doesnt_overflow_bin(args)
+        fn test_tx_dump_doesnt_fill_up_bin(args in arb_transactions()) {
+            proptest_tx_dump_doesnt_fill_up_bin(args)
         }
     }
 
@@ -360,8 +360,8 @@ mod tests {
         assert_eq!(0, bins.uninitialized_space_in_bytes());
     }
 
-    /// Implementation of [`test_tx_dump_doesnt_overflow_bin`].
-    fn proptest_tx_dump_doesnt_overflow_bin(args: PropTx) {
+    /// Implementation of [`test_tx_dump_doesnt_fill_up_bin`].
+    fn proptest_tx_dump_doesnt_fill_up_bin(args: PropTx) {
         let PropTx {
             tendermint_max_block_space_in_bytes,
             protocol_txs,
@@ -372,7 +372,7 @@ mod tests {
             tendermint_max_block_space_in_bytes,
         ));
 
-        // produce new txs until we overflow the bins
+        // produce new txs until we fill up the bins
         //
         // TODO: ideally the proptest strategy would already return
         // txs whose total added size would be bounded
@@ -393,7 +393,7 @@ mod tests {
         });
 
         // make sure we can keep dumping txs,
-        // without overflowing the bins
+        // without filling up the bins
         for tx in protocol_txs {
             assert_eq!(
                 bins.borrow_mut().try_alloc_protocol_tx(&tx),
