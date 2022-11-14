@@ -117,25 +117,23 @@ impl states::State for BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
 
     #[inline]
     fn next_state(self) -> Self::Next {
-        // ```ignore
-        // let Self {
-        //     max_block_space_in_bytes,
-        //     mut protocol_txs,
-        //     encrypted_txs,
-        //     decrypted_txs,
-        //     ..
-        // } = self;
-        // // TODO: reserve space for protocol txs
-        // protocol_txs.allotted_space_in_bytes = 0;
-        // BlockSpaceAllocator {
-        //     _state: PhantomData,
-        //     max_block_space_in_bytes,
-        //     protocol_txs,
-        //     encrypted_txs,
-        //     decrypted_txs,
-        // }
-        // ```
-        todo!()
+        let Self {
+            max_block_space_in_bytes,
+            mut protocol_txs,
+            encrypted_txs,
+            decrypted_txs,
+            ..
+        } = self;
+        // TODO: reserve space for protocol txs
+        protocol_txs.allotted_space_in_bytes = 0;
+        let _alloc: BlockSpaceAllocator<states::BuildingProtocolTxBatch> =
+            BlockSpaceAllocator {
+                _state: PhantomData,
+                max_block_space_in_bytes,
+                protocol_txs,
+                encrypted_txs,
+                decrypted_txs,
+            };
     }
 }
 
