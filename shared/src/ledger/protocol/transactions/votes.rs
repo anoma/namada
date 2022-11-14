@@ -154,9 +154,7 @@ where
 }
 
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
-/// validators which have seen it. `voting_powers` should map validators who
-/// have newly seen the event to their fractional voting power at a block height
-/// at which they saw the event.
+/// validators which have seen it.
 fn calculate_update<T>(
     keys: &vote_tallies::Keys<T>,
     pre: &Tally,
