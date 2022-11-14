@@ -55,7 +55,7 @@ pub enum AllocStatus {
 ///   - Protocol transactions.
 ///   - DKG decrypted transactions.
 ///   - DKG encrypted transactions.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct BlockSpaceAllocator<State> {
     /// The current state of the [`BlockSpaceAllocator`] state machine.
     _state: PhantomData<*const State>,
@@ -91,14 +91,17 @@ impl BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
             max_block_space_in_bytes: max,
             protocol_txs: TxBin::default(),
             encrypted_txs: TxBin::default(),
+            // decrypted txs can use as much space as needed; in practice,
+            // we'll only need, at most, the amount of space reserved for
+            // encrypted txs at the prev block height
             decrypted_txs: TxBin::init(max),
         }
     }
 }
 
 impl states::State for BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
-    // TODO: change to `BlockSpaceAllocator<states::BuildingProtocolTxBatch>`
-    type Next = ();
+    type Next = BlockSpaceAllocator<states::BuildingProtocolTxBatch>;
+    type Transition = ();
 
     #[inline]
     fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
@@ -114,24 +117,62 @@ impl states::State for BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
     }
 
     #[inline]
-    fn next_state(self) -> Self::Next {
+    fn next_state(mut self, _: ()) -> Self::Next {
+        // seal decrypted txs
+        self.decrypted_txs.allotted_space_in_bytes =
+            self.decrypted_txs.current_space_in_bytes;
+
+        // reserve space for protocol txs
+        //
+        // TODO: need to use some kind of ratio here, to constrain the aomunt of
+        // protocol txs in a block
+        let free_space = self.free_space_in_bytes();
+        self.protocol_txs.allotted_space_in_bytes = free_space;
+
+        // cast state
         let Self {
             max_block_space_in_bytes,
-            mut protocol_txs,
+            protocol_txs,
             encrypted_txs,
             decrypted_txs,
             ..
         } = self;
-        // TODO: reserve space for protocol txs
-        protocol_txs.allotted_space_in_bytes = 0;
-        let _alloc: BlockSpaceAllocator<states::BuildingProtocolTxBatch> =
-            BlockSpaceAllocator {
-                _state: PhantomData,
-                max_block_space_in_bytes,
-                protocol_txs,
-                encrypted_txs,
-                decrypted_txs,
-            };
+
+        BlockSpaceAllocator {
+            _state: PhantomData,
+            max_block_space_in_bytes,
+            protocol_txs,
+            encrypted_txs,
+            decrypted_txs,
+        }
+    }
+}
+
+impl states::State for BlockSpaceAllocator<states::BuildingProtocolTxBatch> {
+    // TODO: change to
+    // Either<BlockSpaceAllocator<states::BuildingEncryptedTxBatch<states::
+    // WithEncryptedTxs>>, BlockSpaceAllocator<states::
+    // BuildingEncryptedTxBatch<states::WithoutEncryptedTxs>>>
+    type Next = ();
+    // TODO: change to enum, for readability
+    type Transition = bool;
+
+    #[inline]
+    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+        self.protocol_txs.try_dump(tx)
+    }
+
+    #[inline]
+    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        self.protocol_txs.try_dump_all(txs)
+    }
+
+    #[inline]
+    fn next_state(self, _with_encrypted: bool) -> Self::Next {
+        todo!()
     }
 }
 
@@ -219,7 +260,7 @@ impl<State> BlockSpaceAllocator<State> {
 
 /// Allotted space for a batch of transactions of the same kind in some
 /// proposed block, measured in bytes.
-#[derive(Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default)]
 struct TxBin {
     /// The current space utilized by the batch of transactions.
     current_space_in_bytes: u64,
@@ -413,6 +454,7 @@ mod states_impl {
 
     impl State for () {
         type Next = ();
+        type Transition = ();
 
         fn try_alloc(&mut self, _: &[u8]) -> AllocStatus {
             panic!("Can't do anything in the empty state");
@@ -425,7 +467,7 @@ mod states_impl {
             panic!("Can't do anything in the empty state");
         }
 
-        fn next_state(self) -> Self::Next {
+        fn next_state(self, _: ()) -> Self::Next {
             panic!("Can't do anything in the empty state");
         }
     }
@@ -434,9 +476,14 @@ mod states_impl {
     ///
     /// For more info, read the module docs of
     /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+    // TODO: change to `State<Transition>`
     pub trait State {
         /// The next state in the [`BlockSpaceAllocator`] state machine.
+        // TODO: change to `type Next<T>: State<T>` with GATs
         type Next: State;
+
+        /// The transition function for some [`BlockSpaceAllocator`] state.
+        type Transition;
 
         /// Try to allocate space for a new transaction.
         fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus;
@@ -448,7 +495,10 @@ mod states_impl {
 
         /// Transition to the next state in the [`BlockSpaceAllocator`] state
         /// machine.
-        fn next_state(self) -> Self::Next;
+        fn next_state(
+            self,
+            transition_function: Self::Transition,
+        ) -> Self::Next;
     }
 }
 
