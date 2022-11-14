@@ -121,21 +121,12 @@ where
     H: 'static + StorageHasher + Sync,
     T: BorshDeserialize,
 {
-    let seen: bool = read::value(store, &keys.seen())?;
-    let seen_by: Votes = read::value(store, &keys.seen_by())?;
-    let voting_power: FractionalVotingPower =
-        read::value(store, &keys.voting_power())?;
-
-    let tally_pre = Tally {
-        voting_power,
-        seen_by,
-        seen,
-    };
     tracing::info!(
         ?keys.prefix,
         ?vote_info.voters(),
         "Recording validators as having voted for this event"
     );
+    let tally_pre = read(store, keys)?;
     let tally_post = calculate_update(&tally_pre, vote_info)?;
     let changed_keys = validate_update(keys, &tally_pre, &tally_post)?;
 
