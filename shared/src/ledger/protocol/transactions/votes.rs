@@ -98,14 +98,12 @@ impl VoteInfo {
         self.inner.keys().cloned().collect()
     }
 
-    pub fn get_vote_height(&self, validator: &Address) -> BlockHeight {
-        // TODO: don't unwrap
-        self.inner.get(validator).unwrap().0
+    pub fn get_vote_height(&self, validator: &Address) -> Option<BlockHeight> {
+        self.inner.get(validator).map(|(height, _)| *height)
     }
 
-    pub fn get_vote_power(&self, validator: &Address) -> FractionalVotingPower {
-        // TODO: don't unwrap
-        self.inner.get(validator).unwrap().1.clone()
+    pub fn get_vote_power(&self, validator: &Address) -> Option<FractionalVotingPower> {
+        self.inner.get(validator).map(|(_, voting_power)| *voting_power)
     }
 }
 
@@ -168,8 +166,8 @@ fn calculate_update<T>(
     let mut seen_by_post = pre.seen_by.clone();
     for validator in new_voters {
         _ = seen_by_post
-            .insert(validator.to_owned(), vote_info.get_vote_height(&validator));
-        voting_power_post += vote_info.get_vote_power(&validator);
+            .insert(validator.to_owned(), vote_info.get_vote_height(&validator).expect("We can always get the vote height for a voter"));
+        voting_power_post += vote_info.get_vote_power(&validator).expect("We can always get the voting power for a voter");
     }
 
     let seen_post = voting_power_post > FractionalVotingPower::TWO_THIRDS;
