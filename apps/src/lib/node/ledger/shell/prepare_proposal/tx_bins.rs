@@ -33,8 +33,6 @@ use std::marker::PhantomData;
 
 use num_rational::Ratio;
 
-#[doc(inline)]
-pub use self::states::State;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
 /// All status responses from trying to allocate block space for a tx.
@@ -320,7 +318,7 @@ mod thres {
 
 // hacky workaround to get module docstrings formatted properly
 #[rustfmt::skip]
-mod states {
+pub mod states {
     //! All the states of the [`BlockSpaceAllocator`] state machine,
     //! over the extent of a Tendermint consensus round
     //! block proposal.
