@@ -165,13 +165,14 @@ fn calculate_update<T>(
 
     let previous_voters: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
     let new_voters: BTreeSet<_> = previous_voters.difference(&vote_info.voters()).cloned().collect();
+    let duplicate_voters: BTreeSet<_> = previous_voters.intersection(&vote_info.voters()).cloned().collect();
 
     // For any event and validator, only the first vote by that validator for
     // that event counts, later votes we encounter here can just be ignored. We
     // can warn here when we encounter duplicate votes but these are
     // reasonably likely to occur so this perhaps shouldn't be a warning unless
     // it is happening a lot.
-    for validator in previous_voters.intersection(&new_voters) {
+    for validator in duplicate_voters {
         tracing::warn!(
             ?keys.prefix,
             ?validator,
