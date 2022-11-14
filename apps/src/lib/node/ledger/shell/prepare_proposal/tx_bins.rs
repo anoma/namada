@@ -20,6 +20,8 @@
 // the total gas of all chosen txs cannot exceed the configured max
 // gas per block, otherwise a proposal will be rejected!
 
+use std::marker::PhantomData;
+
 use num_rational::Ratio;
 
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -45,7 +47,9 @@ pub enum AllocStatus {
 ///   - DKG decrypted transactions.
 ///   - DKG encrypted transactions.
 #[derive(Default)]
-pub struct TxAllottedSpace {
+pub struct TxAllottedSpace<State> {
+    /// The current state of the [`TxAllottedSpace`] state machine.
+    _state: PhantomData<*const State>,
     /// The total space Tendermint has allotted to the
     /// application for the current block height.
     bytes_provided_by_tendermint: u64,
@@ -57,7 +61,9 @@ pub struct TxAllottedSpace {
     decrypted_txs: TxBin,
 }
 
-impl From<&RequestPrepareProposal> for TxAllottedSpace {
+impl From<&RequestPrepareProposal>
+    for TxAllottedSpace<states::BuildingDecryptedTxBatch>
+{
     #[inline]
     fn from(req: &RequestPrepareProposal) -> Self {
         let tendermint_max_block_space_in_bytes = req.max_tx_bytes as u64;
@@ -65,28 +71,73 @@ impl From<&RequestPrepareProposal> for TxAllottedSpace {
     }
 }
 
-impl TxAllottedSpace {
+impl TxAllottedSpace<states::BuildingDecryptedTxBatch> {
     /// Construct a new [`TxAllottedSpace`], with an upper bound
     /// on the max number of txs in a block defined by Tendermint.
     #[inline]
     pub fn init(tendermint_max_block_space_in_bytes: u64) -> Self {
         let max = tendermint_max_block_space_in_bytes;
-        let mut bins = Self {
+        Self {
+            _state: PhantomData,
             bytes_provided_by_tendermint: max,
-            protocol_txs: TxBin::init_from(max, thres::PROTOCOL_TX),
-            encrypted_txs: TxBin::init_from(max, thres::ENCRYPTED_TX),
-            decrypted_txs: TxBin::init_from(max, thres::DECRYPTED_TX),
-        };
-        // concede all uninitialized space to protocol txs
-        bins.protocol_txs.allotted_space_in_bytes +=
-            bins.uninitialized_space_in_bytes();
-        bins
+            protocol_txs: TxBin::default(),
+            encrypted_txs: TxBin::default(),
+            decrypted_txs: TxBin::init(max),
+        }
     }
 
+    /// Try to allocate space for a new DKG decrypted transaction.
+    #[allow(dead_code)]
+    #[inline]
+    pub fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+        self.decrypted_txs.try_dump(tx)
+    }
+
+    /// Try to allocate space for a new batch of DKG decrypted transactions.
+    #[allow(dead_code)]
+    #[inline]
+    pub fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        self.decrypted_txs.try_dump_all(txs)
+    }
+
+    /// Transition to the next state in the [`TxAllottedSpace`] state machine.
+    ///
+    /// For more info, read the module docs of
+    /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+    #[allow(dead_code)]
+    #[inline]
+    pub fn next_state(
+        self,
+    ) -> TxAllottedSpace<states::BuildingProtocolTxBatch> {
+        let Self {
+            bytes_provided_by_tendermint,
+            mut protocol_txs,
+            encrypted_txs,
+            decrypted_txs,
+            ..
+        } = self;
+        // TODO: reserve space for protocol txs
+        protocol_txs.allotted_space_in_bytes = 0;
+        TxAllottedSpace {
+            _state: PhantomData,
+            bytes_provided_by_tendermint,
+            protocol_txs,
+            encrypted_txs,
+            decrypted_txs,
+        }
+    }
+}
+
+// WIP
+impl<State> TxAllottedSpace<State> {
     /// Return uninitialized space in tx bins, resulting from ratio conversions.
     ///
     /// This method should not be used outside of [`TxAllottedSpace`]
     /// instance construction or unit testing.
+    #[allow(dead_code)]
     fn uninitialized_space_in_bytes(&self) -> u64 {
         let total_bin_space = self.protocol_txs.allotted_space_in_bytes
             + self.encrypted_txs.allotted_space_in_bytes
@@ -119,7 +170,9 @@ impl TxAllottedSpace {
 
 // all allocation boilerplate code shall
 // be shunned to this impl block -- shame!
-impl TxAllottedSpace {
+//
+// WIP
+impl<State> TxAllottedSpace<State> {
     /// Try to allocate space for a new protocol transaction.
     #[allow(dead_code)]
     #[inline]
@@ -158,28 +211,6 @@ impl TxAllottedSpace {
     {
         self.encrypted_txs.try_dump_all(txs)
     }
-
-    // --------------------------------------------------- //
-
-    /// Try to allocate space for a new DKG decrypted transaction.
-    #[allow(dead_code)]
-    #[inline]
-    pub fn try_alloc_decrypted_tx(&mut self, tx: &[u8]) -> AllocStatus {
-        self.decrypted_txs.try_dump(tx)
-    }
-
-    /// Try to allocate space for a new batch of DKG decrypted transactions.
-    #[allow(dead_code)]
-    #[inline]
-    pub fn try_alloc_decrypted_tx_batch<'tx, T>(
-        &mut self,
-        txs: T,
-    ) -> AllocStatus
-    where
-        T: IntoIterator<Item = &'tx [u8]> + 'tx,
-    {
-        self.decrypted_txs.try_dump_all(txs)
-    }
 }
 
 /// Allotted space for a batch of transactions of the same kind in some
@@ -194,16 +225,22 @@ struct TxBin {
 
 impl TxBin {
     /// Construct a new [`TxBin`], with an upper bound on the max number
-    /// of storable txs defined by a ratio over Tendermint's max block size.
+    /// of storable txs defined by a ratio over `max_bytes`.
     #[inline]
-    fn init_from(
-        tendermint_max_block_space_in_bytes: u64,
-        frac: Ratio<u64>,
-    ) -> Self {
-        let allotted_space_in_bytes =
-            (frac * tendermint_max_block_space_in_bytes).to_integer();
+    #[allow(dead_code)]
+    fn init_over_ratio(max_bytes: u64, frac: Ratio<u64>) -> Self {
+        let allotted_space_in_bytes = (frac * max_bytes).to_integer();
         Self {
             allotted_space_in_bytes,
+            current_space_in_bytes: 0,
+        }
+    }
+
+    /// Construct a new [`TxBin`], with a capacity of `max_bytes`.
+    #[inline]
+    fn init(max_bytes: u64) -> Self {
+        Self {
+            allotted_space_in_bytes: max_bytes,
             current_space_in_bytes: 0,
         }
     }
@@ -257,21 +294,21 @@ mod thres {
     use num_rational::Ratio;
 
     /// The threshold over Tendermint's allotted space for protocol txs.
+    #[allow(dead_code)]
     pub const PROTOCOL_TX: Ratio<u64> = Ratio::new_raw(1, 3);
 
     /// The threshold over Tendermint's allotted space for DKG encrypted txs.
+    #[allow(dead_code)]
     pub const ENCRYPTED_TX: Ratio<u64> = Ratio::new_raw(1, 3);
 
     /// The threshold over Tendermint's allotted space for DKG decrypted txs.
     ///
-    /// Do not edit this threshold value. We should always have the
-    /// same or less space for decrypted txs as the one reserved
-    /// for encrypted txs.
-    ///
-    /// The reason for this is that during the decision process of
+    /// This value should always be the same as [`ENCRYPTED_TX`].
+    /// The reason for which is that during the decision process of
     /// block height `H`, we must include the same number of decrypted
-    /// txs in the block as the number of encrypted txs proposed during
-    /// block height `H - 1`.
+    /// txs as the number of encrypted txs proposed during block height
+    /// `H - 1`.
+    #[allow(dead_code)]
     pub const DECRYPTED_TX: Ratio<u64> = ENCRYPTED_TX;
 }
 
