@@ -1,5 +1,7 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
+mod tx_bins;
+
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
@@ -36,6 +38,8 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
     /// them in the next block).
+    // TODO: change second paragraph of the docstr, to reflect new
+    // alloted space per block design
     pub fn prepare_proposal(
         &mut self,
         req: RequestPrepareProposal,
@@ -154,7 +158,8 @@ where
             validator_set_update,
         })
         .map(|tx| tx.sign(protocol_key).to_bytes())
-        // TODO: remove this later, when we get rid of `abciplus`
+        // TODO(feature = "abcipp"): remove this later, when we get rid of
+        // `abciplus`
         .chain(protocol_txs.into_iter())
         .collect()
     }
