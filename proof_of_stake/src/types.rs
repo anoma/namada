@@ -6,9 +6,10 @@ use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::num::TryFromIntError;
-use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 
 use crate::epoched::{
@@ -326,7 +327,7 @@ pub struct Slash {
     /// A type of slashsable event.
     pub r#type: SlashType,
     /// A rate is the portion of staked tokens that are slashed.
-    pub rate: BasisPoints,
+    pub rate: Decimal,
 }
 
 /// Slashes applied to validator, to punish byzantine behavior by removing
@@ -342,23 +343,6 @@ pub enum SlashType {
     LightClientAttack,
 }
 
-/// ‱ (Parts per ten thousand). This can be multiplied by any type that
-/// implements [`Into<u64>`] or [`Into<i128>`].
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    BorshDeserialize,
-    BorshSerialize,
-    BorshSchema,
-    PartialOrd,
-    Ord,
-    PartialEq,
-    Eq,
-    Hash,
-)]
-pub struct BasisPoints(u64);
-
 /// Derive Tendermint raw hash from the public key
 pub trait PublicKeyTmRawHash {
     /// Derive Tendermint raw hash from the public key
@@ -369,8 +353,8 @@ impl VotingPower {
     /// Convert token amount into a voting power.
     pub fn from_tokens(tokens: impl Into<u64>, params: &PosParams) -> Self {
         // The token amount is expected to be in micro units
-        let whole_tokens = tokens.into() / 1_000_000;
-        Self(params.votes_per_token * whole_tokens)
+        let tokens: u64 = tokens.into();
+        Self(decimal_mult_u64(params.tm_votes_per_token, tokens))
     }
 }
 
@@ -397,8 +381,8 @@ impl VotingPowerDelta {
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
         // The token amount is expected to be in micro units
-        let whole_tokens = change.into() / 1_000_000;
-        let delta: i128 = params.votes_per_token * whole_tokens;
+        let change: i128 = change.into();
+        let delta = decimal_mult_i128(params.tm_votes_per_token, change);
         let delta: i64 = TryFrom::try_from(delta)?;
         Ok(Self(delta))
     }
@@ -409,9 +393,9 @@ impl VotingPowerDelta {
         params: &PosParams,
     ) -> Result<Self, TryFromIntError> {
         // The token amount is expected to be in micro units
-        let whole_tokens = tokens.into() / 1_000_000;
-        let delta: i64 =
-            TryFrom::try_from(params.votes_per_token * whole_tokens)?;
+        let tokens: u64 = tokens.into();
+        let delta = decimal_mult_u64(params.tm_votes_per_token, tokens);
+        let delta: i64 = TryFrom::try_from(delta)?;
         Ok(Self(delta))
     }
 }
@@ -720,7 +704,7 @@ where
 impl SlashType {
     /// Get the slash rate applicable to the given slash type from the PoS
     /// parameters.
-    pub fn get_slash_rate(&self, params: &PosParams) -> BasisPoints {
+    pub fn get_slash_rate(&self, params: &PosParams) -> Decimal {
         match self {
             SlashType::DuplicateVote => params.duplicate_vote_slash_rate,
             SlashType::LightClientAttack => {
@@ -739,35 +723,20 @@ impl Display for SlashType {
     }
 }
 
-impl BasisPoints {
-    /// Initialize basis points from an integer.
-    pub fn new(value: u64) -> Self {
-        Self(value)
-    }
+/// Multiply a value of type Decimal with one of type u64 and then return the
+/// truncated u64
+pub fn decimal_mult_u64(dec: Decimal, int: u64) -> u64 {
+    let prod = dec * Decimal::from(int);
+    // truncate the number to the floor
+    prod.to_u64().expect("Product is out of bounds")
 }
 
-impl Display for BasisPoints {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}‱", self.0)
-    }
-}
-
-impl Mul<u64> for BasisPoints {
-    type Output = u64;
-
-    fn mul(self, rhs: u64) -> Self::Output {
-        // TODO checked arithmetics
-        rhs * self.0 / 10_000
-    }
-}
-
-impl Mul<i128> for BasisPoints {
-    type Output = i128;
-
-    fn mul(self, rhs: i128) -> Self::Output {
-        // TODO checked arithmetics
-        rhs * self.0 as i128 / 10_000
-    }
+/// Multiply a value of type Decimal with one of type i128 and then return the
+/// truncated i128
+pub fn decimal_mult_i128(dec: Decimal, int: i128) -> i128 {
+    let prod = dec * Decimal::from(int);
+    // truncate the number to the floor
+    prod.to_i128().expect("Product is out of bounds")
 }
 
 #[cfg(test)]

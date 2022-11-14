@@ -4,6 +4,7 @@ pub mod storage;
 use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use rust_decimal::Decimal;
 use thiserror::Error;
 
 use self::storage as parameter_storage;
@@ -121,14 +122,24 @@ pub enum WriteError {
     BorshSchema,
 )]
 pub struct Parameters {
-    /// Epoch duration
+    /// Epoch duration (read only)
     pub epoch_duration: EpochDuration,
-    /// Maximum expected time per block
+    /// Maximum expected time per block (read only)
     pub max_expected_time_per_block: DurationSecs,
-    /// Whitelisted validity predicate hashes
+    /// Whitelisted validity predicate hashes (read only)
     pub vp_whitelist: Vec<String>,
-    /// Whitelisted tx hashes
+    /// Whitelisted tx hashes (read only)
     pub tx_whitelist: Vec<String>,
+    /// Expected number of epochs per year (read only)
+    pub epochs_per_year: u64,
+    /// PoS gain p (read only)
+    pub pos_gain_p: Decimal,
+    /// PoS gain d (read only)
+    pub pos_gain_d: Decimal,
+    /// PoS staked ratio (read + write for every epoch)
+    pub staked_ratio: Decimal,
+    /// PoS inflation amount from the last epoch (read + write for every epoch)
+    pub pos_inflation_amount: u64,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -160,7 +171,7 @@ impl Parameters {
         H: ledger_storage::StorageHasher,
     {
         // write epoch parameters
-        let epoch_key = storage::get_epoch_storage_key();
+        let epoch_key = storage::get_epoch_duration_storage_key();
         let epoch_value = encode(&self.epoch_duration);
         storage.write(&epoch_key, epoch_value).expect(
             "Epoch parameters must be initialized in the genesis block",
@@ -194,6 +205,41 @@ impl Parameters {
                 "Max expected time per block parameters must be initialized \
                  in the genesis block",
             );
+
+        let epochs_per_year_key = storage::get_epochs_per_year_key();
+        let epochs_per_year_value = encode(&self.epochs_per_year);
+        storage
+            .write(&epochs_per_year_key, epochs_per_year_value)
+            .expect(
+                "Epochs per year parameter must be initialized in the genesis \
+                 block",
+            );
+
+        let pos_gain_p_key = storage::get_pos_gain_p_key();
+        let pos_gain_p_value = encode(&self.pos_gain_p);
+        storage.write(&pos_gain_p_key, pos_gain_p_value).expect(
+            "PoS P-gain parameter must be initialized in the genesis block",
+        );
+
+        let pos_gain_d_key = storage::get_pos_gain_d_key();
+        let pos_gain_d_value = encode(&self.pos_gain_d);
+        storage.write(&pos_gain_d_key, pos_gain_d_value).expect(
+            "PoS D-gain parameter must be initialized in the genesis block",
+        );
+
+        let staked_ratio_key = storage::get_staked_ratio_key();
+        let staked_ratio_val = encode(&self.staked_ratio);
+        storage.write(&staked_ratio_key, staked_ratio_val).expect(
+            "PoS staked ratio parameter must be initialized in the genesis \
+             block",
+        );
+
+        let pos_inflation_key = storage::get_pos_inflation_amount_key();
+        let pos_inflation_val = encode(&self.pos_inflation_amount);
+        storage.write(&pos_inflation_key, pos_inflation_val).expect(
+            "PoS inflation rate parameter must be initialized in the genesis \
+             block",
+        );
     }
 }
 
@@ -249,7 +295,77 @@ where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: ledger_storage::StorageHasher,
 {
-    let key = storage::get_epoch_storage_key();
+    let key = storage::get_epoch_duration_storage_key();
+    update(storage, value, key)
+}
+
+/// Update the epochs_per_year parameter in storage. Returns the parameters and
+/// gas cost.
+pub fn update_epochs_per_year_parameter<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &EpochDuration,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_epochs_per_year_key();
+    update(storage, value, key)
+}
+
+/// Update the PoS P-gain parameter in storage. Returns the parameters and gas
+/// cost.
+pub fn update_pos_gain_p_parameter<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &EpochDuration,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_pos_gain_p_key();
+    update(storage, value, key)
+}
+
+/// Update the PoS D-gain parameter in storage. Returns the parameters and gas
+/// cost.
+pub fn update_pos_gain_d_parameter<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &EpochDuration,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_pos_gain_d_key();
+    update(storage, value, key)
+}
+
+/// Update the PoS staked ratio parameter in storage. Returns the parameters and
+/// gas cost.
+pub fn update_staked_ratio_parameter<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &EpochDuration,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_staked_ratio_key();
+    update(storage, value, key)
+}
+
+/// Update the PoS inflation rate parameter in storage. Returns the parameters
+/// and gas cost.
+pub fn update_pos_inflation_amount_parameter<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &EpochDuration,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_pos_inflation_amount_key();
     update(storage, value, key)
 }
 
@@ -275,7 +391,7 @@ where
 }
 
 /// Read the the epoch duration parameter from store
-pub fn read_epoch_parameter<DB, H>(
+pub fn read_epoch_duration_parameter<DB, H>(
     storage: &Storage<DB, H>,
 ) -> std::result::Result<(EpochDuration, u64), ReadError>
 where
@@ -283,7 +399,7 @@ where
     H: ledger_storage::StorageHasher,
 {
     // read epoch
-    let epoch_key = storage::get_epoch_storage_key();
+    let epoch_key = storage::get_epoch_duration_storage_key();
     let (value, gas) =
         storage.read(&epoch_key).map_err(ReadError::StorageError)?;
     let epoch_duration: EpochDuration =
@@ -302,8 +418,8 @@ where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: ledger_storage::StorageHasher,
 {
-    // read epoch
-    let (epoch_duration, gas_epoch) = read_epoch_parameter(storage)
+    // read epoch duration
+    let (epoch_duration, gas_epoch) = read_epoch_duration_parameter(storage)
         .expect("Couldn't read epoch duration parameters");
 
     // read vp whitelist
@@ -333,14 +449,72 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
+    // read epochs per year
+    let epochs_per_year_key = storage::get_epochs_per_year_key();
+    let (value, gas_epy) = storage
+        .read(&epochs_per_year_key)
+        .map_err(ReadError::StorageError)?;
+    let epochs_per_year: u64 =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
+    // read PoS gain P
+    let pos_gain_p_key = storage::get_pos_gain_p_key();
+    let (value, gas_gain_p) = storage
+        .read(&pos_gain_p_key)
+        .map_err(ReadError::StorageError)?;
+    let pos_gain_p: Decimal =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
+    // read PoS gain D
+    let pos_gain_d_key = storage::get_pos_gain_d_key();
+    let (value, gas_gain_d) = storage
+        .read(&pos_gain_d_key)
+        .map_err(ReadError::StorageError)?;
+    let pos_gain_d: Decimal =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
+    // read staked ratio
+    let staked_ratio_key = storage::get_staked_ratio_key();
+    let (value, gas_staked) = storage
+        .read(&staked_ratio_key)
+        .map_err(ReadError::StorageError)?;
+    let staked_ratio: Decimal =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
+    // read PoS inflation rate
+    let pos_inflation_key = storage::get_pos_inflation_amount_key();
+    let (value, gas_reward) = storage
+        .read(&pos_inflation_key)
+        .map_err(ReadError::StorageError)?;
+    let pos_inflation_amount: u64 =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
     Ok((
         Parameters {
             epoch_duration,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            staked_ratio,
+            pos_inflation_amount,
         },
-        gas_epoch + gas_tx + gas_vp + gas_time,
+        gas_epoch
+            + gas_tx
+            + gas_vp
+            + gas_time
+            + gas_epy
+            + gas_gain_p
+            + gas_gain_d
+            + gas_staked
+            + gas_reward,
     ))
 }
 
