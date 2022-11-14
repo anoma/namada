@@ -274,6 +274,10 @@ mod thres {
     pub const DECRYPTED_TX: Ratio<u64> = ENCRYPTED_TX;
 }
 
+mod states {
+    //! Different states of the tx bin allotments state machine.
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
