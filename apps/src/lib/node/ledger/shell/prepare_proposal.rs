@@ -55,6 +55,19 @@ where
             // start counting allotted space for txs
             let mut bins = TxAllotedSpace::from(&req);
 
+            // NOTE: AD-HOC SOLUTION
+            // ======================
+            // TODO: choose txs in this order:
+            // - decrypted txs (ALL OF THEM)
+            // - protocol txs (we should give priority to valset upds)
+            // - encrypted txs (it's fine if this bin is empty)
+            //
+            // at the beginning of an epoch, do not pick any
+            // encrypted txs :) inspired by solana
+            //
+            // `tracing::warn!()` log we are not accepting encrypted
+            // txs for a given block height
+
             // add ethereum events and validator set updates as protocol txs
             #[cfg(feature = "abcipp")]
             let txs = self
