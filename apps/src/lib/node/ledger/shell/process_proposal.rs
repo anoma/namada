@@ -159,8 +159,8 @@ where
                             masp()
                         };
                         // check that the fee payer has sufficient balance
-                        let balance = self
-                            .get_balance(&tx.fee.token, &fee_payer);
+                        let balance =
+                            self.get_balance(&tx.fee.token, &fee_payer);
 
                         if tx.fee.amount <= balance {
                             TxResult {

@@ -1113,7 +1113,6 @@ pub mod cmds {
             })
         }
 
-
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query currently applicable conversions.")
@@ -1201,14 +1200,14 @@ pub mod cmds {
     pub struct QueryTransfers(pub args::QueryTransfers);
 
     impl SubCmd for QueryTransfers {
-         const CMD: &'static str = "show-transfers";
- 
-         fn parse(matches: &ArgMatches) -> Option<Self> {
-             matches.subcommand_matches(Self::CMD).map(|matches| {
+        const CMD: &'static str = "show-transfers";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
                 QueryTransfers(args::QueryTransfers::parse(matches))
-             })
-         }
- 
+            })
+        }
+
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the accepted transfers to date.")

@@ -1,11 +1,11 @@
 mod abortable;
 mod broadcaster;
 pub mod events;
+pub mod rpc;
 mod shell;
 mod shims;
 pub mod storage;
 pub mod tendermint_node;
-pub mod rpc;
 
 use std::convert::TryInto;
 use std::net::SocketAddr;

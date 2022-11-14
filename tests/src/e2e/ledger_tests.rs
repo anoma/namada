@@ -27,7 +27,7 @@ use namada_apps::config::genesis::genesis_config::{
 use serde_json::json;
 use setup::constants::*;
 
-use super::helpers::{get_height, wait_for_block_height, is_debug_mode};
+use super::helpers::{get_height, is_debug_mode, wait_for_block_height};
 use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_voting_power, get_actor_rpc, get_epoch,

@@ -565,6 +565,7 @@ where
         response
     }
 
+    #[allow(dead_code)]
     /// Simulate validation and application of a transaction.
     fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
         let mut response = response::Query::default();

@@ -1277,11 +1277,8 @@ impl ShieldedContext {
             let decoded =
                 self.decode_asset_type(client.clone(), *asset_type).await;
             // Only assets with the target timestamp count
-            match decoded {
-                Some((addr, epoch)) => {
-                    res += &Amount::from_pair((addr, epoch), *val).unwrap()
-                }
-                _ => {}
+            if let Some((addr, epoch)) = decoded {
+                res += &Amount::from_pair((addr, epoch), *val).unwrap()
             }
         }
         res
@@ -1639,20 +1636,24 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
                 // Save the update state so that future fetches can be
                 // short-circuited
                 let _ = ctx.shielded.save();
-                let stx_result = gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
-                    .await;
+                let stx_result =
+                    gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
+                        .await;
                 match stx_result {
                     Ok(stx) => stx.map(|x| x.0),
                     Err(builder::Error::ChangeIsNegative(_)) => {
                         eprintln!(
-                            "The balance of the source {} is lower than \
-                             the amount to be transferred and fees. Amount to \
+                            "The balance of the source {} is lower than the \
+                             amount to be transferred and fees. Amount to \
                              transfer is {} {} and fees are {} {}.",
-                            parsed_args.source, args.amount, parsed_args.token,
-                            args.tx.fee_amount, parsed_args.tx.fee_token,
+                            parsed_args.source,
+                            args.amount,
+                            parsed_args.token,
+                            args.tx.fee_amount,
+                            parsed_args.tx.fee_token,
                         );
                         safe_exit(1)
-                    },
+                    }
                     Err(err) => panic!("{}", err),
                 }
             }

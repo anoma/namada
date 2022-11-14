@@ -204,7 +204,7 @@ impl StorageRead<'_> for Ctx {
         &self,
     ) -> Result<namada::types::storage::TxIndex, storage_api::Error> {
         let tx_index = unsafe { anoma_tx_get_tx_index() };
-        Ok(TxIndex(tx_index.try_into().unwrap()))
+        Ok(TxIndex(tx_index))
     }
 }
 

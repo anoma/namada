@@ -6,6 +6,7 @@ pub use namada::types::token::*;
 
 use super::*;
 
+#[allow(clippy::too_many_arguments)]
 /// A token transfer that can be used in a transaction.
 pub fn transfer(
     ctx: &mut Ctx,

@@ -31,10 +31,10 @@ use namada::ledger::pos::types::{
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
+use namada::ledger::queries::{self, RPC};
 use namada::ledger::storage::ConversionState;
 use namada::proto::{SignedTxData, Tx};
 use namada::types::address::{masp, tokens, Address};
-use namada::ledger::queries::{self, RPC};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
     VotePower,
@@ -42,7 +42,7 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{
-    BlockHeight, Epoch, Key, KeySeg, PrefixValue, TxIndex,
+    BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
 };
 use namada::types::token::{balance_key, Transfer};
 use namada::types::transaction::{
@@ -62,7 +62,6 @@ use crate::facade::tendermint_rpc::query::Query;
 use crate::facade::tendermint_rpc::{
     Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
 };
-use namada::types::storage::BlockResults;
 
 /// Query the epoch of the last committed block
 pub async fn query_epoch(args: args::Query) -> Epoch {
@@ -90,9 +89,7 @@ pub async fn query_block(
 /// Query the results of the last committed block
 pub async fn query_results(args: args::Query) -> Vec<BlockResults> {
     let client = HttpClient::new(args.ledger_address).unwrap();
-    unwrap_client_response(
-        RPC.shell().read_results(&client).await
-    )
+    unwrap_client_response(RPC.shell().read_results(&client).await)
 }
 
 /// Obtain the known effects of all accepted shielded and transparent
@@ -448,7 +445,7 @@ pub async fn query_transparent_balance(
                         .await;
                 if let Some(balances) = balances {
                     print_balances(
-                        &ctx,
+                        ctx,
                         balances,
                         &token,
                         owner.address().as_ref(),
@@ -462,7 +459,7 @@ pub async fn query_transparent_balance(
             let balances =
                 query_storage_prefix::<token::Amount>(&client, &prefix).await;
             if let Some(balances) = balances {
-                print_balances(&ctx, balances, &token, None);
+                print_balances(ctx, balances, &token, None);
             }
         }
         (None, None) => {
@@ -471,7 +468,7 @@ pub async fn query_transparent_balance(
                 let balances =
                     query_storage_prefix::<token::Amount>(&client, &key).await;
                 if let Some(balances) = balances {
-                    print_balances(&ctx, balances, &token, None);
+                    print_balances(ctx, balances, &token, None);
                 }
             }
         }
@@ -837,23 +834,20 @@ pub async fn query_shielded_balance(
             // Query the multi-asset balance at the given spending key
             let viewing_key =
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
-            let balance;
-            if no_conversions {
-                balance = ctx
-                    .shielded
+            let balance: Amount<AssetType> = if no_conversions {
+                ctx.shielded
                     .compute_shielded_balance(&viewing_key)
-                    .expect("context should contain viewing key");
+                    .expect("context should contain viewing key")
             } else {
-                balance = ctx
-                    .shielded
+                ctx.shielded
                     .compute_exchanged_balance(
                         client.clone(),
                         &viewing_key,
                         epoch,
                     )
                     .await
-                    .expect("context should contain viewing key");
-            }
+                    .expect("context should contain viewing key")
+            };
             // Compute the unique asset identifier from the token address
             let token = ctx.get(&token);
             let asset_type = AssetType::new(
@@ -885,23 +879,20 @@ pub async fn query_shielded_balance(
             for fvk in viewing_keys {
                 // Query the multi-asset balance at the given spending key
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
-                let balance;
-                if no_conversions {
-                    balance = ctx
-                        .shielded
+                let balance = if no_conversions {
+                    ctx.shielded
                         .compute_shielded_balance(&viewing_key)
-                        .expect("context should contain viewing key");
+                        .expect("context should contain viewing key")
                 } else {
-                    balance = ctx
-                        .shielded
+                    ctx.shielded
                         .compute_exchanged_balance(
                             client.clone(),
                             &viewing_key,
                             epoch,
                         )
                         .await
-                        .expect("context should contain viewing key");
-                }
+                        .expect("context should contain viewing key")
+                };
                 for (asset_type, value) in balance.components() {
                     if !balances.contains_key(asset_type) {
                         balances.insert(*asset_type, Vec::new());
@@ -980,23 +971,20 @@ pub async fn query_shielded_balance(
             for fvk in viewing_keys {
                 // Query the multi-asset balance at the given spending key
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
-                let balance;
-                if no_conversions {
-                    balance = ctx
-                        .shielded
+                let balance = if no_conversions {
+                    ctx.shielded
                         .compute_shielded_balance(&viewing_key)
-                        .expect("context should contain viewing key");
+                        .expect("context should contain viewing key")
                 } else {
-                    balance = ctx
-                        .shielded
+                    ctx.shielded
                         .compute_exchanged_balance(
                             client.clone(),
                             &viewing_key,
                             epoch,
                         )
                         .await
-                        .expect("context should contain viewing key");
-                }
+                        .expect("context should contain viewing key")
+                };
                 if balance[&asset_type] != 0 {
                     let asset_value =
                         token::Amount::from(balance[&asset_type] as u64);
@@ -2053,14 +2041,10 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
         let amt: masp_primitives::transaction::components::Amount =
             conv.clone().into();
         // If the user has specified any targets, then meet them
-        if matches!(&target_token, Some(target) if target != addr) {
-            continue;
-        } else if matches!(&args.epoch, Some(target) if target != epoch) {
-            continue;
-        }
         // If we have a sentinel conversion, then skip printing
-        else if amt
-            == masp_primitives::transaction::components::Amount::zero()
+        if matches!(&target_token, Some(target) if target != addr)
+            || matches!(&args.epoch, Some(target) if target != epoch)
+            || amt == masp_primitives::transaction::components::Amount::zero()
         {
             continue;
         }
@@ -2069,7 +2053,7 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
         let addr_enc = addr.encode();
         print!(
             "{}[{}]: ",
-            tokens.get(&addr).cloned().unwrap_or(addr_enc.as_str()),
+            tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -2084,7 +2068,7 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
                 "{}{} {}[{}]",
                 prefix,
                 val,
-                tokens.get(&addr).cloned().unwrap_or(addr_enc.as_str()),
+                tokens.get(addr).cloned().unwrap_or(addr_enc.as_str()),
                 epoch
             );
             // Future iterations need to be prefixed with +
@@ -2109,7 +2093,7 @@ pub async fn query_conversion(
     MerklePath<Node>,
 )> {
     Some(unwrap_client_response(
-        RPC.shell().read_conversion(&client, &asset_type).await
+        RPC.shell().read_conversion(&client, &asset_type).await,
     ))
 }
 
