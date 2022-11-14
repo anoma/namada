@@ -14,7 +14,16 @@
 // forever, it'll be a DoS vec, as we can make nodes run out of
 // memory! maybe we should allow block decisions for txs that are
 // too big to fit in their respective bin? in these special block
-// decisions, we would only decide proposals with "large" txs
+// decisions, we would only decide proposals with "large" txs??
+//
+// MAYBE: in the state machine impl, reset to beginning state, and
+// and alloc space for large tx right at the start. the problem with
+// this is that then we may not have enough space for decrypted txs
+
+// TODO: panic if we don't have enough space reserved for a
+// decrypted tx; in theory, we should always have enough space
+// reserved for decrypted txs, given the invariants of the state
+// machine
 
 // TODO: refactor our measure of space to also reflect gas costs.
 // the total gas of all chosen txs cannot exceed the configured max
