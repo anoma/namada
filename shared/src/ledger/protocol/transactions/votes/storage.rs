@@ -1,9 +1,10 @@
 use borsh::BorshSerialize;
 use eyre::Result;
 
-use super::Tally;
+use super::{Tally, Votes};
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use crate::types::voting_power::FractionalVotingPower;
 
 pub fn write<D, H, T>(
     storage: &mut Storage<D, H>,
@@ -21,6 +22,27 @@ where
     storage.write(&keys.seen_by(), &tally.seen_by.try_to_vec()?)?;
     storage.write(&keys.voting_power(), &tally.voting_power.try_to_vec()?)?;
     Ok(())
+}
+
+#[allow(dead_code)]
+pub fn read<D, H, T>(
+    storage: &mut Storage<D, H>,
+    keys: &vote_tallies::Keys<T>,
+) -> Result<Tally>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let seen: bool = super::read::value(storage, &keys.seen())?;
+    let seen_by: Votes = super::read::value(storage, &keys.seen_by())?;
+    let voting_power: FractionalVotingPower =
+        super::read::value(storage, &keys.voting_power())?;
+
+    Ok(Tally {
+        voting_power,
+        seen_by,
+        seen,
+    })
 }
 
 #[cfg(test)]
@@ -64,5 +86,43 @@ mod tests {
             voting_power,
             Some(tally.voting_power.try_to_vec().unwrap())
         );
+    }
+
+    #[test]
+    fn test_read_tally() {
+        let mut storage = TestStorage::default();
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 0.into(),
+            transfers: vec![],
+        };
+        let keys = vote_tallies::Keys::from(&event);
+        let tally = Tally {
+            voting_power: FractionalVotingPower::new(1, 3).unwrap(),
+            seen_by: BTreeMap::from([(
+                address::testing::established_address_1(),
+                10.into(),
+            )]),
+            seen: false,
+        };
+        storage
+            .write(&keys.body(), &event.try_to_vec().unwrap())
+            .unwrap();
+        storage
+            .write(&keys.seen(), &tally.seen.try_to_vec().unwrap())
+            .unwrap();
+        storage
+            .write(&keys.seen_by(), &tally.seen_by.try_to_vec().unwrap())
+            .unwrap();
+        storage
+            .write(
+                &keys.voting_power(),
+                &tally.voting_power.try_to_vec().unwrap(),
+            )
+            .unwrap();
+
+        let result = read(&mut storage, &keys);
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), tally);
     }
 }
