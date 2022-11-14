@@ -15,6 +15,8 @@ use crate::types::address::Address;
 use crate::types::storage::BlockHeight;
 use crate::types::voting_power::FractionalVotingPower;
 
+pub(super) mod storage;
+
 /// The addresses of validators that voted for something, and the block
 /// heights at which they voted. We use a [`BTreeMap`] to enforce that a
 /// validator (as uniquely identified by an [`Address`]) may vote at most once,
@@ -102,24 +104,6 @@ where
          will be identical to the one in storage",
     );
     Ok((tally, ChangedKeys::default()))
-}
-
-pub fn write<D, H, T>(
-    storage: &mut Storage<D, H>,
-    keys: &vote_tallies::Keys<T>,
-    body: &T,
-    tally: &Tally,
-) -> Result<()>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-    T: BorshSerialize,
-{
-    storage.write(&keys.body(), &body.try_to_vec()?)?;
-    storage.write(&keys.seen(), &tally.seen.try_to_vec()?)?;
-    storage.write(&keys.seen_by(), &tally.seen_by.try_to_vec()?)?;
-    storage.write(&keys.voting_power(), &tally.voting_power.try_to_vec()?)?;
-    Ok(())
 }
 
 /// Deterministically constructs a [`Votes`] map from a set of validator

@@ -13,7 +13,7 @@ use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils;
 use crate::ledger::protocol::transactions::votes::{
-    calculate_new, calculate_updated, write,
+    self, calculate_new, calculate_updated,
 };
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -168,7 +168,7 @@ where
         votes: vote_tracking,
     };
     tracing::debug!("writing EthMsg - {:#?}", &eth_msg_post);
-    write(
+    votes::storage::write(
         storage,
         &eth_msg_keys,
         &eth_msg_post.body,
