@@ -1,15 +1,28 @@
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
+use masp_primitives::asset_type::AssetType;
+use masp_primitives::merkle_tree::MerklePath;
+use masp_primitives::sapling::Node;
 use tendermint::merkle::proof::Proof;
 
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
-use crate::types::storage::{self, Epoch, PrefixValue};
+use crate::types::address::Address;
+#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+use crate::types::storage::TxIndex;
+use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 use crate::types::transaction::TxResult;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 use crate::types::transaction::{DecryptedTx, TxType};
+
+type Conversion = (
+    Address,
+    Epoch,
+    masp_primitives::transaction::components::Amount,
+    MerklePath<Node>,
+);
 
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 router! {SHELL,
@@ -29,7 +42,13 @@ router! {SHELL,
 
     // Raw storage access - is given storage key present?
     ( "has_key" / [storage_key: storage::Key] )
-        -> bool = storage_has_key,
+       -> bool = storage_has_key,
+
+    // Conversion state access - read conversion
+    ( "conv" / [asset_type: AssetType] ) -> Conversion = read_conversion,
+
+    // Block results access - read bit-vec
+    ( "results" ) -> Vec<BlockResults> = read_results,
 }
 
 #[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
@@ -47,7 +66,13 @@ router! {SHELL,
 
     // Raw storage access - is given storage key present?
     ( "has_key" / [storage_key: storage::Key] )
-        -> bool = storage_has_key,
+       -> bool = storage_has_key,
+
+    // Conversion state access - read conversion
+    ( "conv" / [asset_type: AssetType] ) -> Conversion = read_conversion,
+
+    // Block results access - read bit-vec
+    ( "results" ) -> Vec<BlockResults> = read_results,
 }
 
 // Handlers:
@@ -73,6 +98,7 @@ where
     let data = protocol::apply_tx(
         tx,
         request.data.len(),
+        TxIndex(0),
         &mut gas_meter,
         &mut write_log,
         ctx.storage,
@@ -86,6 +112,57 @@ where
         proof: None,
         info: Default::default(),
     })
+}
+
+/// Query to read block results from storage
+pub fn read_results<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<Vec<BlockResults>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let (iter, _gas) = ctx.storage.iter_results();
+    let mut results =
+        vec![BlockResults::default(); ctx.storage.block.height.0 as usize + 1];
+    iter.for_each(|(key, value, _gas)| {
+        let key = key
+            .parse::<usize>()
+            .expect("expected integer for block height");
+        let value = BlockResults::try_from_slice(&value)
+            .expect("expected BlockResults bytes");
+        results[key] = value;
+    });
+    Ok(results)
+}
+
+/// Query to read a conversion from storage
+fn read_conversion<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    asset_type: AssetType,
+) -> storage_api::Result<Conversion>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    // Conversion values are constructed on request
+    if let Some((addr, epoch, conv, pos)) =
+        ctx.storage.conversion_state.assets.get(&asset_type)
+    {
+        Ok((
+            addr.clone(),
+            *epoch,
+            Into::<masp_primitives::transaction::components::Amount>::into(
+                conv.clone(),
+            ),
+            ctx.storage.conversion_state.tree.path(*pos),
+        ))
+    } else {
+        Err(storage_api::Error::new(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("No conversion found for asset type: {}", asset_type),
+        )))
+    }
 }
 
 fn epoch<D, H>(ctx: RequestCtx<'_, D, H>) -> storage_api::Result<Epoch>

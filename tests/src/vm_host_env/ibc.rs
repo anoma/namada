@@ -65,7 +65,7 @@ use namada::proto::Tx;
 use namada::tendermint_proto::Protobuf;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::ibc::data::{FungibleTokenPacketData, PacketAck};
-use namada::types::storage::{self, BlockHash, BlockHeight, Key};
+use namada::types::storage::{self, BlockHash, BlockHeight, Key, TxIndex};
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_tx_prelude::StorageWrite;
@@ -132,6 +132,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
         &tx_env.storage,
         &tx_env.write_log,
         tx,
+        &TxIndex(0),
         VpGasMeter::new(0),
         &keys_changed,
         &verifiers,
@@ -166,6 +167,7 @@ pub fn validate_token_vp_from_tx<'a>(
         &tx_env.storage,
         &tx_env.write_log,
         tx,
+        &TxIndex(0),
         VpGasMeter::new(0),
         &keys_changed,
         &verifiers,

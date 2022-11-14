@@ -15,7 +15,7 @@ use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
 use crate::proto::Tx;
 use crate::types::hash::Hash;
 use crate::types::key::common;
-use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key};
+use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
 pub trait VpEnv<'view> {
@@ -65,6 +65,9 @@ pub trait VpEnv<'view> {
     /// current transaction is being applied.
     fn get_block_epoch(&'view self) -> Result<Epoch, storage_api::Error>;
 
+    /// Get the shielded transaction index.
+    fn get_tx_index(&'view self) -> Result<TxIndex, storage_api::Error>;
+
     /// Storage prefix iterator, ordered by storage keys. It will try to get an
     /// iterator from the storage.
     fn iter_prefix(
@@ -102,6 +105,9 @@ pub trait VpEnv<'view> {
 
     /// Get a tx hash
     fn get_tx_code_hash(&self) -> Result<Hash, storage_api::Error>;
+
+    /// Verify a MASP transaction
+    fn verify_masp(&self, tx: Vec<u8>) -> Result<bool, storage_api::Error>;
 
     // ---- Methods below have default implementation via `pre/post` ----
 
@@ -432,6 +438,16 @@ where
     let (epoch, gas) = storage.get_current_epoch();
     add_gas(gas_meter, gas)?;
     Ok(epoch)
+}
+
+/// Getting the block epoch. The epoch is that of the block to which the
+/// current transaction is being applied.
+pub fn get_tx_index(
+    gas_meter: &mut VpGasMeter,
+    tx_index: &TxIndex,
+) -> EnvResult<TxIndex> {
+    add_gas(gas_meter, MIN_STORAGE_GAS)?;
+    Ok(*tx_index)
 }
 
 /// Storage prefix iterator, ordered by storage keys. It will try to get an

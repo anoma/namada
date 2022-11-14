@@ -6,10 +6,11 @@ use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use masp_primitives::transaction::Transaction;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::types::address::{Address, Error as AddressError};
+use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::ibc::data::FungibleTokenPacketData;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
@@ -154,6 +155,27 @@ impl Add for Amount {
     }
 }
 
+impl Mul<u64> for Amount {
+    type Output = Amount;
+
+    fn mul(mut self, rhs: u64) -> Self::Output {
+        self.micro *= rhs;
+        self
+    }
+}
+
+/// A combination of Euclidean division and fractions:
+/// x*(a,b) = (a*(x//b), x%b)
+impl Mul<(u64, u64)> for Amount {
+    type Output = (Amount, Amount);
+
+    fn mul(mut self, rhs: (u64, u64)) -> Self::Output {
+        let ant = Amount::from((self.micro / rhs.1) * rhs.0);
+        self.micro %= rhs.1;
+        (ant, self)
+    }
+}
+
 impl Mul<Amount> for u64 {
     type Output = Amount;
 
@@ -239,6 +261,14 @@ impl From<Amount> for Change {
 
 /// Key segment for a balance key
 pub const BALANCE_STORAGE_KEY: &str = "balance";
+/// Key segment for head shielded transaction pointer key
+pub const HEAD_TX_KEY: &str = "head-tx";
+/// Key segment prefix for shielded transaction key
+pub const TX_KEY_PREFIX: &str = "tx-";
+/// Key segment prefix for MASP conversions
+pub const CONVERSION_KEY_PREFIX: &str = "conv";
+/// Key segment prefix for pinned shielded transactions
+pub const PIN_KEY_PREFIX: &str = "pin-";
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
@@ -299,6 +329,21 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
             DbKeySeg::AddressSeg(owner),
         ] if key == BALANCE_STORAGE_KEY => Some(owner),
         _ => None,
+    }
+}
+
+/// Check if the given storage key is a masp key
+pub fn is_masp_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
+            if *addr == masp()
+                && (key == HEAD_TX_KEY
+                    || key.starts_with(TX_KEY_PREFIX)
+                    || key.starts_with(PIN_KEY_PREFIX)) =>
+        {
+            true
+        }
+        _ => false,
     }
 }
 
@@ -372,6 +417,10 @@ pub struct Transfer {
     pub sub_prefix: Option<Key>,
     /// The amount of tokens
     pub amount: Amount,
+    /// The unused storage location at which to place TxId
+    pub key: Option<String>,
+    /// Shielded transaction part
+    pub shielded: Option<Transaction>,
 }
 
 #[allow(missing_docs)]
@@ -405,6 +454,8 @@ impl TryFrom<FungibleTokenPacketData> for Transfer {
             token,
             sub_prefix: None,
             amount,
+            key: None,
+            shielded: None,
         })
     }
 }

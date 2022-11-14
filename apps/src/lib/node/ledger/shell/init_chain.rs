@@ -54,8 +54,11 @@ where
             .try_into()
             .expect("Unexpected block height");
         // TODO hacky conversion, depends on https://github.com/informalsystems/tendermint-rs/issues/870
-        let genesis_time: DateTimeUtc =
-            (Utc.timestamp(ts.seconds, ts.nanos as u32)).into();
+        let genesis_time: DateTimeUtc = (Utc
+            .timestamp_opt(ts.seconds, ts.nanos as u32))
+        .single()
+        .expect("genesis time should be a valid timestamp")
+        .into();
 
         genesis.parameters.init_storage(&mut self.storage);
         genesis.gov_params.init_storage(&mut self.storage);

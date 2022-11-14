@@ -31,9 +31,10 @@ use namada::ledger::storage::{
 };
 use namada::ledger::{ibc, pos, protocol};
 use namada::proto::{self, Tx};
+use namada::types::address::{masp, masp_tx_key};
 use namada::types::chain::ChainId;
 use namada::types::key::*;
-use namada::types::storage::{BlockHeight, Key};
+use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
@@ -564,10 +565,49 @@ where
         response
     }
 
+    #[allow(dead_code)]
+    /// Simulate validation and application of a transaction.
+    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
+        let mut response = response::Query::default();
+        let mut gas_meter = BlockGasMeter::default();
+        let mut write_log = WriteLog::default();
+        let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
+        let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
+        match Tx::try_from(tx_bytes) {
+            Ok(tx) => {
+                let tx = TxType::Decrypted(DecryptedTx::Decrypted(tx));
+                match protocol::apply_tx(
+                    tx,
+                    tx_bytes.len(),
+                    TxIndex::default(),
+                    &mut gas_meter,
+                    &mut write_log,
+                    &self.storage,
+                    &mut vp_wasm_cache,
+                    &mut tx_wasm_cache,
+                )
+                .map_err(Error::TxApply)
+                {
+                    Ok(result) => response.info = result.to_string(),
+                    Err(error) => {
+                        response.code = 1;
+                        response.log = format!("{}", error);
+                    }
+                }
+                response
+            }
+            Err(err) => {
+                response.code = 1;
+                response.log = format!("{}", Error::TxDecoding(err));
+                response
+            }
+        }
+    }
+
     /// Lookup a validator's keypair for their established account from their
     /// wallet. If the node is not validator, this function returns None
     #[allow(dead_code)]
-    fn get_account_keypair(&self) -> Option<Rc<common::SecretKey>> {
+    fn get_account_keypair(&self) -> Option<common::SecretKey> {
         let wallet_path = &self.base_dir.join(self.chain_id.as_str());
         let genesis_path = &self
             .base_dir
@@ -613,7 +653,7 @@ mod test_utils {
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHash, Epoch, Header};
+    use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
@@ -858,6 +898,7 @@ mod test_utils {
                 next_epoch_min_start_height: BlockHeight(3),
                 next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: &address_gen,
+                results: &BlockResults::default(),
                 tx_queue: &shell.storage.tx_queue,
             })
             .expect("Test failed");

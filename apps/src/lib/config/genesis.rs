@@ -767,7 +767,7 @@ pub fn genesis() -> Genesis {
     let parameters = Parameters {
         epoch_duration: EpochDuration {
             min_num_of_blocks: 10,
-            min_duration: namada::types::time::Duration::seconds(60).into(),
+            min_duration: namada::types::time::Duration::seconds(600).into(),
         },
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         vp_whitelist: vec![],
@@ -792,6 +792,13 @@ pub fn genesis() -> Genesis {
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
         public_key: Some(wallet::defaults::christel_keypair().ref_to()),
+        storage: HashMap::default(),
+    };
+    let masp = EstablishedAccount {
+        address: namada::types::address::masp(),
+        vp_code_path: "vp_masp.wasm".into(),
+        vp_sha256: Default::default(),
+        public_key: None,
         storage: HashMap::default(),
     };
     let implicit_accounts = vec![ImplicitAccount {
@@ -833,7 +840,7 @@ pub fn genesis() -> Genesis {
     Genesis {
         genesis_time: DateTimeUtc::now(),
         validators: vec![validator],
-        established_accounts: vec![albert, bertha, christel],
+        established_accounts: vec![albert, bertha, christel, masp],
         implicit_accounts,
         token_accounts,
         parameters,

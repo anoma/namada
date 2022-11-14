@@ -49,6 +49,12 @@ pub async fn main() -> Result<()> {
                 Sub::QueryEpoch(QueryEpoch(args)) => {
                     rpc::query_epoch(args).await;
                 }
+                Sub::QueryTransfers(QueryTransfers(args)) => {
+                    rpc::query_transfers(ctx, args).await;
+                }
+                Sub::QueryConversions(QueryConversions(args)) => {
+                    rpc::query_conversions(ctx, args).await;
+                }
                 Sub::QueryBlock(QueryBlock(args)) => {
                     rpc::query_block(args).await;
                 }

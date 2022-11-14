@@ -14,7 +14,9 @@ use crate::ledger::ibc::storage as ibc_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::proto::SignedTxData;
-use crate::types::address::{Address, Error as AddressError, InternalAddress};
+use crate::types::address::{
+    Address, DecodeError as AddressError, InternalAddress,
+};
 use crate::types::ibc::data::{
     Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
 };

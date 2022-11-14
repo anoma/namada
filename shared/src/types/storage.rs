@@ -1,16 +1,17 @@
 //! Storage types
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
-use std::io::Write;
 use std::num::ParseIntError;
 use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
+use bit_vec::BitVec;
+use borsh::maybestd::io::Write;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ics23::CommitmentProof;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
 #[cfg(feature = "ferveo-tpke")]
@@ -27,7 +28,7 @@ pub enum Error {
     #[error("TEMPORARY error: {error}")]
     Temporary { error: String },
     #[error("Error parsing address: {0}")]
-    ParseAddress(address::Error),
+    ParseAddress(address::DecodeError),
     #[error("Error parsing address from a storage key")]
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
@@ -52,6 +53,115 @@ pub const RESERVED_ADDRESS_PREFIX: char = '#';
 pub const VP_KEY_PREFIX: char = '?';
 /// The reserved storage key for validity predicates
 pub const RESERVED_VP_KEY: &str = "?";
+
+/// Transaction index within block.
+#[derive(
+    Default,
+    Clone,
+    Copy,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Debug,
+    Serialize,
+    Deserialize,
+)]
+pub struct TxIndex(pub u32);
+
+impl Display for TxIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Add<u32> for TxIndex {
+    type Output = TxIndex;
+
+    fn add(self, rhs: u32) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl From<TxIndex> for u32 {
+    fn from(index: TxIndex) -> Self {
+        index.0
+    }
+}
+
+fn serialize_bitvec<S>(x: &BitVec, s: S) -> std::result::Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    Serialize::serialize(&x.to_bytes(), s)
+}
+
+fn deserialize_bitvec<'de, D>(
+    deserializer: D,
+) -> std::result::Result<BitVec, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Vec<u8> = Deserialize::deserialize(deserializer)?;
+    Ok(BitVec::from_bytes(&s))
+}
+
+/// Represents the accepted transactions in a block
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Debug,
+    Serialize,
+    Deserialize,
+    Default,
+)]
+pub struct BlockResults(
+    #[serde(serialize_with = "serialize_bitvec")]
+    #[serde(deserialize_with = "deserialize_bitvec")]
+    BitVec,
+);
+
+impl BlockResults {
+    /// Create `len` rejection results
+    pub fn with_len(len: usize) -> Self {
+        BlockResults(BitVec::from_elem(len, true))
+    }
+
+    /// Accept the tx at the given position
+    pub fn accept(&mut self, idx: usize) {
+        self.0.set(idx, false)
+    }
+
+    /// Reject the tx at the given position
+    pub fn reject(&mut self, idx: usize) {
+        self.0.set(idx, true)
+    }
+
+    /// Check if the tx at the given position is accepted
+    pub fn is_accepted(&self, idx: usize) -> bool {
+        !self.0[idx]
+    }
+}
+
+impl BorshSerialize for BlockResults {
+    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.0.to_bytes(), writer)
+    }
+}
+
+impl BorshDeserialize for BlockResults {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        let vec: Vec<_> = BorshDeserialize::deserialize(buf)?;
+        Ok(Self(BitVec::from_bytes(&vec)))
+    }
+}
 
 /// Height of a block, i.e. the level.
 #[derive(
@@ -775,6 +885,12 @@ impl Epoch {
     /// Change to the next epoch
     pub fn next(&self) -> Self {
         Self(self.0 + 1)
+    }
+
+    /// Change to the previous epoch. This will underflow if the given epoch is
+    /// `0`.
+    pub fn prev(&self) -> Self {
+        Self(self.0 - 1)
     }
 }
 
