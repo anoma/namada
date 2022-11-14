@@ -131,7 +131,12 @@ where
         seen_by,
         seen,
     };
-    let tally_post = calculate_update(keys, &tally_pre, vote_info);
+    tracing::info!(
+        ?keys.prefix,
+        ?vote_info.voters(),
+        "Recording validators as having voted for this event"
+    );
+    let tally_post = calculate_update(&tally_pre, vote_info)?;
     let changed_keys = validate_update(keys, &tally_pre, &tally_post)?;
 
     if tally_post.seen {
@@ -155,39 +160,22 @@ where
 }
 
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
-/// validators which have seen it.
+/// voters from `vote_info`. Returns an error if any new voters have already voted previously.
 fn calculate_update<T>(
-    keys: &vote_tallies::Keys<T>,
     pre: &Tally,
     vote_info: &VoteInfo,
-) -> Tally {
-    // TODO: no need to accept `keys` - it is just accepted for logging, is there a better way?
-
+) -> Result<Tally> {
     let previous_voters: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
-    let new_voters: BTreeSet<_> = previous_voters.difference(&vote_info.voters()).cloned().collect();
-    let duplicate_voters: BTreeSet<_> = previous_voters.intersection(&vote_info.voters()).cloned().collect();
-
-    // For any event and validator, only the first vote by that validator for
-    // that event counts, later votes we encounter here can just be ignored. We
-    // can warn here when we encounter duplicate votes but these are
-    // reasonably likely to occur so this perhaps shouldn't be a warning unless
-    // it is happening a lot.
-    for validator in duplicate_voters {
-        tracing::warn!(
-            ?keys.prefix,
-            ?validator,
-            "Encountered duplicate vote for an event by a validator, ignoring"
-        );
+    let new_voters = vote_info.voters();
+    let duplicate_voters: BTreeSet<_> = previous_voters.intersection(&new_voters).collect();
+    if !duplicate_voters.is_empty() {
+        // TODO: this is a programmer error and should never happen
+        return Err(eyre!("Duplicate voters found - {}", duplicate_voters));
     }
 
     let mut voting_power_post = pre.voting_power.clone();
     let mut seen_by_post = pre.seen_by.clone();
     for validator in new_voters {
-        tracing::info!(
-            ?keys.prefix,
-            ?validator,
-            "Recording validator as having voted for this event"
-        );
         _ = seen_by_post
             .insert(validator.to_owned(), vote_info.get_vote_height(&validator));
         voting_power_post += vote_info.get_vote_power(&validator);
@@ -195,11 +183,11 @@ fn calculate_update<T>(
 
     let seen_post = voting_power_post > FractionalVotingPower::TWO_THIRDS;
 
-    Tally {
+    Ok(Tally {
         voting_power: voting_power_post,
         seen_by: seen_by_post,
         seen: seen_post,
-    }
+    })
 }
 
 /// Validates that `post` is an updated version of `pre`, and returns keys which
