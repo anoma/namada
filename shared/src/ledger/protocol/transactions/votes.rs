@@ -160,6 +160,7 @@ fn calculate_update<T>(
     pre: &Tally,
     vote_info: &VoteInfo,
 ) -> Tally {
+    // TODO: no need to accept `keys` - it is just accepted for logging, is there a better way?
     let new_voters: BTreeSet<Address> = vote_info.voters();
 
     // For any event and validator, only the first vote by that validator for
