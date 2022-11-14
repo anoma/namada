@@ -18,10 +18,9 @@ use crate::epoched::DynEpochOffset;
 use crate::parameters::PosParams;
 use crate::types::{
     decimal_mult_i128, decimal_mult_u64, BondId, Bonds, CommissionRates, Epoch,
-    PublicKeyTmRawHash, Slash, Slashes, TotalVotingPowers, Unbonds,
-    ValidatorConsensusKeys, ValidatorSets, ValidatorState, ValidatorStates,
-    ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
-    WeightedValidator,
+    PublicKeyTmRawHash, Slash, Slashes, TotalDeltas, Unbonds,
+    ValidatorConsensusKeys, ValidatorDeltas, ValidatorSets, ValidatorState,
+    ValidatorStates, WeightedValidator,
 };
 
 #[allow(missing_docs)]
@@ -60,10 +59,10 @@ where
     MissingNewValidatorCommissionRate(u64),
     #[error("Invalid validator commission rate update in epoch {0}")]
     InvalidValidatorCommissionRateUpdate(u64),
-    #[error("Unexpectedly missing total deltas value for validator {0}")]
-    MissingValidatorTotalDeltas(Address),
-    #[error("The sum of total deltas for validator {0} are negative")]
-    NegativeValidatorTotalDeltasSum(Address),
+    #[error("Unexpectedly missing deltas value for validator {0}")]
+    MissingValidatorDeltas(Address),
+    #[error("The sum of deltas for validator {0} is negative")]
+    NegativeValidatorDeltasSum(Address),
     #[error("Unexpectedly missing balance value")]
     MissingBalance,
     #[error("Last update should be equal to the current epoch")]
@@ -152,24 +151,10 @@ where
     ValidatorSetNotUpdated,
     #[error("Invalid voting power changes")]
     InvalidVotingPowerChanges,
-    #[error(
-        "Invalid validator {0} voting power changes. Expected {1}, but got \
-         {2:?}"
-    )]
-    InvalidValidatorVotingPowerChange(
-        Address,
-        VotingPower,
-        Option<VotingPower>,
-    ),
     #[error("Unexpectedly missing total voting power")]
     MissingTotalVotingPower,
     #[error("Total voting power should be updated when voting powers change")]
     TotalVotingPowerNotUpdated,
-    #[error(
-        "Invalid total voting power change in epoch {0}. Expected {1}, but \
-         got {2}"
-    )]
-    InvalidTotalVotingPowerChange(u64, VotingPowerDelta, VotingPowerDelta),
     #[error("Invalid address raw hash, got {0}, expected {1}")]
     InvalidAddressRawHash(String, String),
     #[error("Invalid address raw hash update")]
@@ -262,8 +247,8 @@ where
     },
     /// Validator set update
     ValidatorSet(Data<ValidatorSets<Address>>),
-    /// Total voting power update
-    TotalVotingPower(Data<TotalVotingPowers>),
+    /// Total deltas update
+    TotalDeltas(Data<TotalDeltas<TokenChange>>),
     /// Validator's address raw hash
     ValidatorAddressRawHash {
         /// Raw hash value
@@ -295,10 +280,8 @@ where
     State(Data<ValidatorStates>),
     /// Consensus key update
     ConsensusKey(Data<ValidatorConsensusKeys<PublicKey>>),
-    /// Total deltas update
-    TotalDeltas(Data<ValidatorTotalDeltas<TokenChange>>),
-    /// Voting power update
-    VotingPowerUpdate(Data<ValidatorVotingPowers>),
+    /// Validator deltas update
+    ValidatorDeltas(Data<ValidatorDeltas<TokenChange>>),
     /// Commission rate update
     CommissionRate(Data<CommissionRates>, Option<Decimal>),
     /// Maximum commission rate change update
@@ -326,9 +309,8 @@ pub struct NewValidator<PublicKey> {
     has_state: bool,
     has_consensus_key: Option<PublicKey>,
     has_total_deltas: bool,
-    has_voting_power: bool,
     has_address_raw_hash: Option<String>,
-    voting_power: VotingPower,
+    bonded_stake: u64,
     has_commission_rate: bool,
     has_max_commission_rate_change: bool,
 }
@@ -422,20 +404,19 @@ where
     let mut errors = vec![];
 
     let Accumulator {
-        balance_delta,
-        bond_delta,
-        unbond_delta,
-        total_deltas,
-        total_stake_by_epoch,
-        expected_total_voting_power_delta_by_epoch,
-        voting_power_by_epoch,
-        validator_set_pre,
-        validator_set_post,
-        total_voting_power_delta_by_epoch,
-        new_validators,
-    } = Validate::<Address, TokenAmount, TokenChange, PublicKey>::accumulate_changes(
-        changes, params, &constants, &mut errors
-    );
+            balance_delta,
+            bond_delta,
+            unbond_delta,
+            total_deltas,
+            total_stake_by_epoch,
+            validator_set_pre,
+            validator_set_post,
+            total_deltas_by_epoch: _,
+            bonded_stake_by_epoch,
+            new_validators,
+        } = Validate::<Address, TokenAmount, TokenChange, PublicKey>::accumulate_changes(
+            changes, params, &constants, &mut errors
+        );
 
     // Check total deltas against bonds
     for (validator, total_delta) in total_deltas.iter() {
@@ -452,7 +433,7 @@ where
     // Check that all bonds also have a total deltas update
     for validator in bond_delta.keys() {
         if !total_deltas.contains_key(validator) {
-            errors.push(Error::MissingValidatorTotalDeltas(validator.clone()))
+            errors.push(Error::MissingValidatorDeltas(validator.clone()))
         }
     }
     // Check that all positive unbond deltas also have a total deltas update.
@@ -462,7 +443,7 @@ where
         if *delta > TokenChange::default()
             && !total_deltas.contains_key(validator)
         {
-            errors.push(Error::MissingValidatorTotalDeltas(validator.clone()));
+            errors.push(Error::MissingValidatorDeltas(validator.clone()));
         }
     }
 
@@ -481,8 +462,8 @@ where
                     Some(min_active_validator),
                 ) = (post.inactive.last_shim(), post.active.first_shim())
                 {
-                    if max_inactive_validator.voting_power
-                        > min_active_validator.voting_power
+                    if max_inactive_validator.bonded_stake
+                        > min_active_validator.bonded_stake
                     {
                         errors.push(Error::ValidatorSetOutOfOrder(
                             max_inactive_validator.clone(),
@@ -502,14 +483,12 @@ where
                         for validator in &post.active {
                             match total_stakes.get(&validator.address) {
                                 Some((_stake_pre, stake_post)) => {
-                                    let voting_power = VotingPower::from_tokens(
-                                        *stake_post,
-                                        params,
-                                    );
                                     // Any validator who's total deltas changed,
                                     // should
                                     // be up-to-date
-                                    if validator.voting_power != voting_power {
+                                    if validator.bonded_stake
+                                        != Into::<u64>::into(*stake_post)
+                                    {
                                         errors.push(
                                             Error::InvalidActiveValidator(
                                                 validator.clone(),
@@ -549,14 +528,11 @@ where
                                                         .get(&validator.address)
                                                 })
                                             {
-                                                let voting_power =
-                                                    VotingPower::from_tokens(
-                                                        *last_total_stake,
-                                                        params,
-                                                    );
                                                 is_valid = validator
-                                                    .voting_power
-                                                    == voting_power;
+                                                    .bonded_stake
+                                                    == Into::<u64>::into(
+                                                        *last_total_stake,
+                                                    );
                                                 break;
                                             } else {
                                                 search_epoch -= 1;
@@ -579,11 +555,9 @@ where
                             // be up-to-date
                             match total_stakes.get(&validator.address) {
                                 Some((_stake_pre, stake_post)) => {
-                                    let voting_power = VotingPower::from_tokens(
-                                        *stake_post,
-                                        params,
-                                    );
-                                    if validator.voting_power != voting_power {
+                                    if validator.bonded_stake
+                                        != Into::<u64>::into(*stake_post)
+                                    {
                                         errors.push(
                                             Error::InvalidInactiveValidator(
                                                 validator.clone(),
@@ -623,14 +597,11 @@ where
                                                         .get(&validator.address)
                                                 })
                                             {
-                                                let voting_power =
-                                                    VotingPower::from_tokens(
-                                                        *last_total_stake,
-                                                        params,
-                                                    );
                                                 is_valid = validator
-                                                    .voting_power
-                                                    == voting_power;
+                                                    .bonded_stake
+                                                    == Into::<u64>::into(
+                                                        *last_total_stake,
+                                                    );
                                                 break;
                                             } else {
                                                 search_epoch -= 1;
@@ -660,12 +631,8 @@ where
                         for (validator, (_stake_pre, tokens_at_epoch)) in
                             total_stake
                         {
-                            let voting_power = VotingPower::from_tokens(
-                                *tokens_at_epoch,
-                                params,
-                            );
                             let weighted_validator = WeightedValidator {
-                                voting_power,
+                                bonded_stake: (*tokens_at_epoch).into(),
                                 address: validator.clone(),
                             };
                             if !post.active.contains(&weighted_validator) {
@@ -694,119 +661,8 @@ where
                 }
             }
         }
-    } else if !voting_power_by_epoch.is_empty() {
+    } else if !bonded_stake_by_epoch.is_empty() {
         errors.push(Error::ValidatorSetNotUpdated)
-    }
-
-    // Check voting power changes against validator total stakes
-    for (epoch, voting_powers) in &voting_power_by_epoch {
-        let mut epoch = *epoch;
-        let mut total_stakes;
-        // Try to find the stakes for this epoch
-        loop {
-            total_stakes = total_stake_by_epoch.get(&epoch);
-            // If there's no stake values in this epoch, it means it hasn't
-            // changed, so we can try to find it from predecessor epochs
-            if total_stakes.is_none() && epoch > current_epoch {
-                epoch = epoch - 1;
-            } else {
-                break;
-            }
-        }
-        if let Some(total_stakes) = total_stakes {
-            for (validator, voting_power) in voting_powers {
-                if let Some((_stake_pre, stake_post)) =
-                    total_stakes.get(validator)
-                {
-                    let voting_power_from_stake =
-                        VotingPower::from_tokens(*stake_post, params);
-                    if *voting_power != voting_power_from_stake {
-                        errors.push(Error::InvalidVotingPowerChanges)
-                    }
-                } else {
-                    errors.push(Error::InvalidVotingPowerChanges)
-                }
-            }
-        } else {
-            errors.push(Error::InvalidVotingPowerChanges);
-        }
-    }
-
-    let mut prev_epoch = None;
-    // Check expected voting power changes at each epoch
-    for (epoch, expected_total_stakes) in total_stake_by_epoch {
-        for (validator, (stake_pre, stake_post)) in expected_total_stakes {
-            let voting_power_pre = VotingPower::from_tokens(stake_pre, params);
-            let expected_voting_power =
-                VotingPower::from_tokens(stake_post, params);
-            match voting_power_by_epoch
-                .get(&epoch)
-                .and_then(|voting_powers| voting_powers.get(&validator))
-            {
-                Some(actual_voting_power) => {
-                    if *actual_voting_power != expected_voting_power {
-                        errors.push(Error::InvalidValidatorVotingPowerChange(
-                            validator,
-                            expected_voting_power,
-                            Some(*actual_voting_power),
-                        ));
-                    }
-                }
-                None => {
-                    // If there's no voting power change, it's expected that
-                    // there should be no record in `voting_power_by_epoch`.
-                    if voting_power_pre == expected_voting_power {
-                        continue;
-                    }
-
-                    // If there's no actual voting power change present in this
-                    // epoch, it might have been unbond that
-                    // didn't affect the voting power bundled
-                    // together with a bond with the same ID.
-                    if let Some(prev_epoch) = prev_epoch.as_ref() {
-                        if let Some(actual_voting_power) =
-                            voting_power_by_epoch.get(prev_epoch)
-                        {
-                            // This is the case when there's some voting power
-                            // change at the previous epoch that is equal to
-                            // the expected value, because then the voting power
-                            // at this epoch is the same.
-                            if actual_voting_power.get(&validator)
-                                == Some(&expected_voting_power)
-                            {
-                                continue;
-                            }
-                        }
-                    }
-                    errors.push(Error::InvalidValidatorVotingPowerChange(
-                        validator,
-                        expected_voting_power,
-                        None,
-                    ))
-                }
-            }
-        }
-        prev_epoch = Some(epoch);
-    }
-
-    // Check expected total voting power change
-    for (epoch, expected_delta) in expected_total_voting_power_delta_by_epoch {
-        match total_voting_power_delta_by_epoch.get(&epoch) {
-            Some(actual_delta) => {
-                if *actual_delta != expected_delta {
-                    errors.push(Error::InvalidTotalVotingPowerChange(
-                        epoch.into(),
-                        expected_delta,
-                        *actual_delta,
-                    ));
-                }
-            }
-            None => {
-                if expected_delta != VotingPowerDelta::default() {
-                    errors.push(Error::TotalVotingPowerNotUpdated)
-                }
-            }
-        }
     }
 
     // Check new validators are initialized with all the required fields
@@ -820,16 +676,14 @@ where
                         has_state,
                         has_consensus_key,
                         has_total_deltas,
-                        has_voting_power,
                         has_address_raw_hash,
-                        voting_power,
+                        bonded_stake,
                         has_commission_rate,
                         has_max_commission_rate_change,
                     } = &new_validator;
                     // The new validator must have set all the required fields
                     if !(*has_state
                         && *has_total_deltas
-                        && *has_voting_power
                         && *has_commission_rate
                         && *has_max_commission_rate_change)
                     {
@@ -854,7 +708,7 @@ where
                         )),
                     }
                     let weighted_validator = WeightedValidator {
-                        voting_power: *voting_power,
+                        bonded_stake: *bonded_stake,
                         address: address.clone(),
                     };
                     match validator_sets {
@@ -961,13 +815,10 @@ where
     total_stake_by_epoch:
         HashMap<Epoch, HashMap<Address, (TokenAmount, TokenAmount)>>,
     /// Total voting power delta calculated from validators' total deltas
-    expected_total_voting_power_delta_by_epoch:
-        HashMap<Epoch, VotingPowerDelta>,
-    /// Changes of validators' voting power data
-    voting_power_by_epoch: HashMap<Epoch, HashMap<Address, VotingPower>>,
+    total_deltas_by_epoch: HashMap<Epoch, TokenChange>,
+    bonded_stake_by_epoch: HashMap<Epoch, HashMap<Address, TokenChange>>,
     validator_set_pre: Option<ValidatorSets<Address>>,
     validator_set_post: Option<ValidatorSets<Address>>,
-    total_voting_power_delta_by_epoch: HashMap<Epoch, VotingPowerDelta>,
     new_validators: HashMap<Address, NewValidator<PublicKey>>,
 }
 
@@ -1030,11 +881,10 @@ where
             unbond_delta: Default::default(),
             total_deltas: Default::default(),
             total_stake_by_epoch: Default::default(),
-            expected_total_voting_power_delta_by_epoch: Default::default(),
-            voting_power_by_epoch: Default::default(),
+            total_deltas_by_epoch: Default::default(),
+            bonded_stake_by_epoch: Default::default(),
             validator_set_pre: Default::default(),
             validator_set_post: Default::default(),
-            total_voting_power_delta_by_epoch: Default::default(),
             new_validators: Default::default(),
         }
     }
@@ -1107,7 +957,7 @@ where
 {
     fn accumulate_changes(
         changes: Vec<DataUpdate<Address, TokenAmount, TokenChange, PublicKey>>,
-        params: &PosParams,
+        _params: &PosParams,
         constants: &Constants,
         errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
     ) -> Accumulator<Address, TokenAmount, TokenChange, PublicKey> {
@@ -1121,11 +971,10 @@ where
             unbond_delta,
             total_deltas,
             total_stake_by_epoch,
-            expected_total_voting_power_delta_by_epoch,
-            voting_power_by_epoch,
+            total_deltas_by_epoch,
+            bonded_stake_by_epoch: _,
             validator_set_pre,
             validator_set_post,
-            total_voting_power_delta_by_epoch,
             new_validators,
         } = &mut accumulator;
 
@@ -1146,21 +995,11 @@ where
                         address,
                         data,
                     ),
-                    TotalDeltas(data) => Self::validator_total_deltas(
+                    ValidatorDeltas(data) => Self::validator_deltas(
                         constants,
                         errors,
                         total_deltas,
                         total_stake_by_epoch,
-                        new_validators,
-                        address,
-                        data,
-                    ),
-                    VotingPowerUpdate(data) => Self::validator_voting_power(
-                        params,
-                        constants,
-                        errors,
-                        voting_power_by_epoch,
-                        expected_total_voting_power_delta_by_epoch,
                         new_validators,
                         address,
                         data,
@@ -1203,10 +1042,10 @@ where
                     validator_set_post,
                     data,
                 ),
-                TotalVotingPower(data) => Self::total_voting_power(
+                TotalDeltas(data) => Self::total_deltas(
                     constants,
                     errors,
-                    total_voting_power_delta_by_epoch,
+                    total_deltas_by_epoch,
                     data,
                 ),
                 ValidatorAddressRawHash { raw_hash, data } => {
@@ -1353,7 +1192,7 @@ where
         }
     }
 
-    fn validator_total_deltas(
+    fn validator_deltas(
         constants: &Constants,
         errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
         total_deltas: &mut HashMap<Address, TokenChange>,
@@ -1363,7 +1202,7 @@ where
         >,
         new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
         address: Address,
-        data: Data<ValidatorTotalDeltas<TokenChange>>,
+        data: Data<ValidatorDeltas<TokenChange>>,
     ) {
         match (data.pre, data.post) {
             (Some(pre), Some(post)) => {
@@ -1450,7 +1289,7 @@ where
                     }
                 }
                 if post_deltas_sum < TokenChange::default() {
-                    errors.push(Error::NegativeValidatorTotalDeltasSum(
+                    errors.push(Error::NegativeValidatorDeltasSum(
                         address.clone(),
                     ))
                 }
@@ -1501,7 +1340,7 @@ where
                     }
                 }
                 if deltas < TokenChange::default() {
-                    errors.push(Error::NegativeValidatorTotalDeltasSum(
+                    errors.push(Error::NegativeValidatorDeltasSum(
                         address.clone(),
                     ))
                 }
@@ -1512,9 +1351,12 @@ where
                 }
                 let validator = new_validators.entry(address).or_default();
                 validator.has_total_deltas = true;
+                validator.bonded_stake =
+                    u64::try_from(Into::<i128>::into(deltas))
+                        .unwrap_or_default();
             }
             (Some(_), None) => {
-                errors.push(Error::MissingValidatorTotalDeltas(address))
+                errors.push(Error::MissingValidatorDeltas(address))
             }
             (None, None) => {}
         }
@@ -1621,104 +1463,6 @@ where
             _ => errors.push(Error::ValidatorMaxCommissionRateChangeForbidden(
                 address,
             )),
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn validator_voting_power(
-        params: &PosParams,
-        constants: &Constants,
-        errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
-        voting_power_by_epoch: &mut HashMap<
-            Epoch,
-            HashMap<Address, VotingPower>,
-        >,
-        expected_total_voting_power_delta_by_epoch: &mut HashMap<
-            Epoch,
-            VotingPowerDelta,
-        >,
-        new_validators: &mut HashMap<Address, NewValidator<PublicKey>>,
-        address: Address,
-        data: Data<ValidatorVotingPowers>,
-    ) {
-        match (&data.pre, data.post) {
-            (Some(_), Some(post)) | (None, Some(post)) => {
-                if post.last_update() != constants.current_epoch {
-                    errors.push(Error::InvalidLastUpdate)
-                }
-                let mut voting_power = VotingPowerDelta::default();
-                // Iter from the current epoch to the last epoch of
-                // `post`
-                for epoch in Epoch::iter_range(
-                    constants.current_epoch,
-                    constants.unbonding_offset + 1,
-                ) {
-                    if let Some(delta_post) = post.get_delta_at_epoch(epoch) {
-                        voting_power += *delta_post;
-
-                        // If the delta is not the same as in pre-state,
-                        // accumulate the expected total voting power
-                        // change
-                        let delta_pre = data
-                            .pre
-                            .as_ref()
-                            .and_then(|data| {
-                                if epoch == constants.current_epoch {
-                                    // On the first epoch, we have to
-                                    // get the sum of all deltas at and
-                                    // before that epoch as the `pre`
-                                    // could have been set in an older
-                                    // epoch
-                                    data.get(epoch)
-                                } else {
-                                    data.get_delta_at_epoch(epoch).copied()
-                                }
-                            })
-                            .unwrap_or_default();
-                        if delta_pre != *delta_post {
-                            let current_delta =
-                                expected_total_voting_power_delta_by_epoch
-                                    .entry(epoch)
-                                    .or_insert_with(Default::default);
-                            *current_delta += *delta_post - delta_pre;
-                        }
-
-                        let vp: i64 = Into::into(voting_power);
-                        match u64::try_from(vp) {
-                            Ok(vp) => {
-                                let vp = VotingPower::from(vp);
-                                voting_power_by_epoch
-                                    .entry(epoch)
-                                    .or_insert_with(HashMap::default)
-                                    .insert(address.clone(), vp);
-                            }
-                            Err(_) => {
-                                errors.push(Error::InvalidValidatorVotingPower(
-                                    address.clone(),
-                                    vp,
-                                ))
-                            }
-                        }
-                    }
-                }
-                if data.pre.is_none() {
-                    let validator = new_validators.entry(address).or_default();
-                    validator.has_voting_power = true;
-                    validator.voting_power = post
-                        .get_at_offset(
-                            constants.current_epoch,
-                            DynEpochOffset::PipelineLen,
-                            params,
-                        )
-                        .unwrap_or_default()
-                        .try_into()
-                        .unwrap_or_default()
-                }
-            }
-            (Some(_), None) => {
-                errors.push(Error::MissingValidatorVotingPower(address))
-            }
-            (None, None) => {}
         }
     }
 
@@ -2210,14 +1954,11 @@ where
         }
     }
 
-    fn total_voting_power(
+    fn total_deltas(
         constants: &Constants,
         errors: &mut Vec<Error<Address, TokenChange, PublicKey>>,
-        total_voting_power_delta_by_epoch: &mut HashMap<
-            Epoch,
-            VotingPowerDelta,
-        >,
-        data: Data<TotalVotingPowers>,
+        total_delta_by_epoch: &mut HashMap<Epoch, TokenChange>,
+        data: Data<TotalDeltas<TokenChange>>,
     ) {
         match (data.pre, data.post) {
             (Some(pre), Some(post)) => {
@@ -2246,7 +1987,7 @@ where
                         .copied()
                         .unwrap_or_default();
                     if delta_pre != delta_post {
-                        total_voting_power_delta_by_epoch
+                        total_delta_by_epoch
                             .insert(epoch, delta_post - delta_pre);
                     }
                 }

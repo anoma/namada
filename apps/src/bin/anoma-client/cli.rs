@@ -55,8 +55,8 @@ pub async fn main() -> Result<()> {
                 Sub::QueryBonds(QueryBonds(args)) => {
                     rpc::query_bonds(ctx, args).await;
                 }
-                Sub::QueryVotingPower(QueryVotingPower(args)) => {
-                    rpc::query_voting_power(ctx, args).await;
+                Sub::QueryBondedStake(QueryBondedStake(args)) => {
+                    rpc::query_bonded_stake(ctx, args).await;
                 }
                 Sub::QueryCommissionRate(QueryCommissionRate(args)) => {
                     rpc::query_commission_rate(ctx, args).await;
