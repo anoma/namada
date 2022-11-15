@@ -252,6 +252,58 @@ impl states::State
     }
 }
 
+impl states::State
+    for BlockSpaceAllocator<
+        states::FillingRemainingSpace<states::WithEncryptedTxs>,
+    >
+{
+    type Next = ();
+
+    #[inline]
+    fn try_alloc(&mut self, _tx: &[u8]) -> AllocStatus {
+        todo!()
+    }
+
+    #[inline]
+    fn try_alloc_batch<'tx, T>(&mut self, _txs: T) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        todo!()
+    }
+
+    #[inline]
+    fn next_state(self) -> Self::Next {
+        // NOOP
+    }
+}
+
+impl states::State
+    for BlockSpaceAllocator<
+        states::FillingRemainingSpace<states::WithoutEncryptedTxs>,
+    >
+{
+    type Next = ();
+
+    #[inline]
+    fn try_alloc(&mut self, _tx: &[u8]) -> AllocStatus {
+        todo!()
+    }
+
+    #[inline]
+    fn try_alloc_batch<'tx, T>(&mut self, _txs: T) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        todo!()
+    }
+
+    #[inline]
+    fn next_state(self) -> Self::Next {
+        // NOOP
+    }
+}
+
 impl<State> BlockSpaceAllocator<State> {
     /// Return uninitialized space in tx bins, resulting from ratio conversions.
     ///
