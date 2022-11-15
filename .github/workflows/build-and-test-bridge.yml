@@ -106,7 +106,6 @@ jobs:
       - name: Check wasm up-to-date
         run: cmp -- wasm/checksums.json wasm/original-checksums.json || true
       - name: Print diff
-        if: failure()
         run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines || true
 
   update-wasm:
