@@ -123,11 +123,8 @@ impl states::State for BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
             self.decrypted_txs.current_space_in_bytes;
 
         // reserve space for protocol txs
-        //
-        // TODO: need to use some kind of ratio here, to constrain the aomunt of
-        // protocol txs in a block
-        let free_space = self.free_space_in_bytes();
-        self.protocol_txs.allotted_space_in_bytes = free_space;
+        let uninit = self.uninitialized_space_in_bytes();
+        self.protocol_txs = TxBin::init_over_ratio(uninit, thres::ONE_THIRD);
 
         // cast state
         let Self {
@@ -319,23 +316,9 @@ mod thres {
 
     use num_rational::Ratio;
 
-    /// The threshold over Tendermint's allotted space for protocol txs.
-    #[allow(dead_code)]
-    pub const PROTOCOL_TX: Ratio<u64> = Ratio::new_raw(1, 3);
-
-    /// The threshold over Tendermint's allotted space for DKG encrypted txs.
-    #[allow(dead_code)]
-    pub const ENCRYPTED_TX: Ratio<u64> = Ratio::new_raw(1, 3);
-
-    /// The threshold over Tendermint's allotted space for DKG decrypted txs.
-    ///
-    /// This value should always be the same as [`ENCRYPTED_TX`].
-    /// The reason for which is that during the decision process of
-    /// block height `H`, we must include the same number of decrypted
-    /// txs as the number of encrypted txs proposed during block height
-    /// `H - 1`.
-    #[allow(dead_code)]
-    pub const DECRYPTED_TX: Ratio<u64> = ENCRYPTED_TX;
+    /// The threshold over Tendermint's allotted space for all three
+    /// (major) kinds of Namada transations.
+    pub const ONE_THIRD: Ratio<u64> = Ratio::new_raw(1, 3);
 }
 
 // hacky workaround to get module docstrings formatted properly
