@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use super::super::{AllocStatus, BlockSpaceAllocator};
 use super::{
     BuildingEncryptedTxBatch, FillingRemainingSpace, State, WithEncryptedTxs,
@@ -22,7 +24,7 @@ impl State for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>> {
 
     #[inline]
     fn next_state(self) -> Self::Next {
-        todo!()
+        next_state(self)
     }
 }
 
@@ -46,6 +48,33 @@ impl State
 
     #[inline]
     fn next_state(self) -> Self::Next {
-        todo!()
+        next_state(self)
+    }
+}
+
+#[inline]
+fn next_state<Mode>(
+    mut alloc: BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
+) -> BlockSpaceAllocator<FillingRemainingSpace<Mode>> {
+    alloc.encrypted_txs.shrink();
+
+    // reserve space for any remaining txs
+    alloc.claim_block_space();
+
+    // cast state
+    let BlockSpaceAllocator {
+        block,
+        protocol_txs,
+        encrypted_txs,
+        decrypted_txs,
+        ..
+    } = alloc;
+
+    BlockSpaceAllocator {
+        _state: PhantomData,
+        block,
+        protocol_txs,
+        encrypted_txs,
+        decrypted_txs,
     }
 }
