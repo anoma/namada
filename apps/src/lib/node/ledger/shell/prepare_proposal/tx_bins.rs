@@ -196,6 +196,62 @@ impl states::State<states::WithoutEncryptedTxs>
     }
 }
 
+impl states::State
+    for BlockSpaceAllocator<
+        states::BuildingEncryptedTxBatch<states::WithEncryptedTxs>,
+    >
+{
+    type Next = BlockSpaceAllocator<
+        states::FillingRemainingSpace<states::WithEncryptedTxs>,
+    >;
+
+    #[inline]
+    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+        self.encrypted_txs.try_dump(tx)
+    }
+
+    #[inline]
+    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        self.encrypted_txs.try_dump_all(txs)
+    }
+
+    #[inline]
+    fn next_state(self) -> Self::Next {
+        todo!()
+    }
+}
+
+impl states::State
+    for BlockSpaceAllocator<
+        states::BuildingEncryptedTxBatch<states::WithoutEncryptedTxs>,
+    >
+{
+    type Next = BlockSpaceAllocator<
+        states::FillingRemainingSpace<states::WithoutEncryptedTxs>,
+    >;
+
+    #[inline]
+    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+        self.encrypted_txs.try_dump(tx)
+    }
+
+    #[inline]
+    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        self.encrypted_txs.try_dump_all(txs)
+    }
+
+    #[inline]
+    fn next_state(self) -> Self::Next {
+        todo!()
+    }
+}
+
 impl<State> BlockSpaceAllocator<State> {
     /// Return uninitialized space in tx bins, resulting from ratio conversions.
     ///
@@ -229,32 +285,6 @@ impl<State> BlockSpaceAllocator<State> {
     #[inline]
     pub fn has_free_space(&self) -> bool {
         self.free_space_in_bytes() > 0
-    }
-}
-
-// all allocation boilerplate code shall
-// be shunned to this impl block -- shame!
-//
-// WIP
-impl<State> BlockSpaceAllocator<State> {
-    /// Try to allocate space for a new DKG encrypted transaction.
-    #[allow(dead_code)]
-    #[inline]
-    pub fn try_alloc_encrypted_tx(&mut self, tx: &[u8]) -> AllocStatus {
-        self.encrypted_txs.try_dump(tx)
-    }
-
-    /// Try to allocate space for a new batch of DKG encrypted transactions.
-    #[allow(dead_code)]
-    #[inline]
-    pub fn try_alloc_encrypted_tx_batch<'tx, T>(
-        &mut self,
-        txs: T,
-    ) -> AllocStatus
-    where
-        T: IntoIterator<Item = &'tx [u8]> + 'tx,
-    {
-        self.encrypted_txs.try_dump_all(txs)
     }
 }
 
