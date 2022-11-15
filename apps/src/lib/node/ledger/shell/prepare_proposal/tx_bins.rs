@@ -196,7 +196,6 @@ impl states::State<states::WithoutEncryptedTxs>
     }
 }
 
-// WIP
 impl<State> BlockSpaceAllocator<State> {
     /// Return uninitialized space in tx bins, resulting from ratio conversions.
     ///
@@ -474,6 +473,8 @@ mod states_impl {
         }
     }
 
+    impl<S> StateWithEncryptedTxs for S where S: State<WithEncryptedTxs> {}
+
     /// Convenience extension of [`State`], to transition to a new
     /// state without encrypted txs in a block.
     pub trait StateWithoutEncryptedTxs: State<WithoutEncryptedTxs> {
@@ -487,6 +488,8 @@ mod states_impl {
             self.next_state()
         }
     }
+
+    impl<S> StateWithoutEncryptedTxs for S where S: State<WithoutEncryptedTxs> {}
 }
 
 // ```ignore
