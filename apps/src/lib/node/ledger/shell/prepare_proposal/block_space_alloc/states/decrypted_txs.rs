@@ -21,9 +21,7 @@ impl State for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
 
     #[inline]
     fn next_state(mut self) -> Self::Next {
-        // seal decrypted txs
-        self.decrypted_txs.allotted_space_in_bytes =
-            self.decrypted_txs.current_space_in_bytes;
+        self.decrypted_txs.shrink();
 
         // reserve space for protocol txs
         let uninit = self.uninitialized_space_in_bytes();

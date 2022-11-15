@@ -1,4 +1,6 @@
-use super::super::{AllocStatus, BlockSpaceAllocator};
+use std::marker::PhantomData;
+
+use super::super::{AllocStatus, BlockSpaceAllocator, TxBin};
 use super::{
     BuildingEncryptedTxBatch, BuildingProtocolTxBatch, State, WithEncryptedTxs,
     WithoutEncryptedTxs,
@@ -21,8 +23,29 @@ impl State<WithEncryptedTxs> for BlockSpaceAllocator<BuildingProtocolTxBatch> {
     }
 
     #[inline]
-    fn next_state(self) -> Self::Next {
-        todo!()
+    fn next_state(mut self) -> Self::Next {
+        self.protocol_txs.shrink();
+
+        // reserve space for encrypted txs
+        let free_space = self.uninitialized_space_in_bytes();
+        self.protocol_txs = TxBin::init(free_space);
+
+        // cast state
+        let Self {
+            max_block_space_in_bytes,
+            protocol_txs,
+            encrypted_txs,
+            decrypted_txs,
+            ..
+        } = self;
+
+        BlockSpaceAllocator {
+            _state: PhantomData,
+            max_block_space_in_bytes,
+            protocol_txs,
+            encrypted_txs,
+            decrypted_txs,
+        }
     }
 }
 

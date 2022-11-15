@@ -151,7 +151,6 @@ impl TxBin {
     /// Construct a new [`TxBin`], with an upper bound on the max number
     /// of storable txs defined by a ratio over `max_bytes`.
     #[inline]
-    #[allow(dead_code)]
     fn init_over_ratio(max_bytes: u64, frac: Ratio<u64>) -> Self {
         let allotted_space_in_bytes = (frac * max_bytes).to_integer();
         Self {
@@ -167,6 +166,12 @@ impl TxBin {
             allotted_space_in_bytes: max_bytes,
             current_space_in_bytes: 0,
         }
+    }
+
+    /// Shrink the allotted space of this [`TxBin`] to whatever
+    /// space is currently being utilized.
+    fn shrink(&mut self) {
+        self.allotted_space_in_bytes = self.current_space_in_bytes;
     }
 
     /// Try to dump a new transaction into this [`TxBin`].
