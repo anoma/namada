@@ -101,7 +101,6 @@ impl BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
 
 impl states::State for BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
     type Next = BlockSpaceAllocator<states::BuildingProtocolTxBatch>;
-    type Transition = ();
 
     #[inline]
     fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
@@ -117,7 +116,7 @@ impl states::State for BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
     }
 
     #[inline]
-    fn next_state_over(mut self, _: ()) -> Self::Next {
+    fn next_state(mut self) -> Self::Next {
         // seal decrypted txs
         self.decrypted_txs.allotted_space_in_bytes =
             self.decrypted_txs.current_space_in_bytes;
@@ -145,14 +144,12 @@ impl states::State for BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
     }
 }
 
-impl states::State for BlockSpaceAllocator<states::BuildingProtocolTxBatch> {
-    // TODO: change to
-    // Either<BlockSpaceAllocator<states::BuildingEncryptedTxBatch<states::
-    // WithEncryptedTxs>>, BlockSpaceAllocator<states::
-    // BuildingEncryptedTxBatch<states::WithoutEncryptedTxs>>>
-    type Next = ();
-    // TODO: change to enum, for readability
-    type Transition = bool;
+impl states::State<states::WithEncryptedTxs>
+    for BlockSpaceAllocator<states::BuildingProtocolTxBatch>
+{
+    type Next = BlockSpaceAllocator<
+        states::BuildingEncryptedTxBatch<states::WithEncryptedTxs>,
+    >;
 
     #[inline]
     fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
@@ -168,7 +165,33 @@ impl states::State for BlockSpaceAllocator<states::BuildingProtocolTxBatch> {
     }
 
     #[inline]
-    fn next_state_over(self, _with_encrypted: bool) -> Self::Next {
+    fn next_state(self) -> Self::Next {
+        todo!()
+    }
+}
+
+impl states::State<states::WithoutEncryptedTxs>
+    for BlockSpaceAllocator<states::BuildingProtocolTxBatch>
+{
+    type Next = BlockSpaceAllocator<
+        states::BuildingEncryptedTxBatch<states::WithoutEncryptedTxs>,
+    >;
+
+    #[inline]
+    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+        self.protocol_txs.try_dump(tx)
+    }
+
+    #[inline]
+    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    where
+        T: IntoIterator<Item = &'tx [u8]> + 'tx,
+    {
+        self.protocol_txs.try_dump_all(txs)
+    }
+
+    #[inline]
+    fn next_state(self) -> Self::Next {
         todo!()
     }
 }
@@ -416,36 +439,13 @@ mod states_impl {
     #[allow(dead_code)]
     pub enum WithoutEncryptedTxs {}
 
-    impl State for () {
-        type Next = ();
-        type Transition = ();
-
-        fn try_alloc(&mut self, _: &[u8]) -> AllocStatus {
-            panic!("Can't do anything in the empty state");
-        }
-
-        fn try_alloc_batch<'tx, T>(&mut self, _: T) -> AllocStatus
-        where
-            T: IntoIterator<Item = &'tx [u8]> + 'tx,
-        {
-            panic!("Can't do anything in the empty state");
-        }
-
-        fn next_state_over(self, _: ()) -> Self::Next {
-            panic!("Can't do anything in the empty state");
-        }
-    }
-
     /// Represents a state in the [`BlockSpaceAllocator`] state machine.
     ///
     /// For more info, read the module docs of
     /// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
-    pub trait State {
+    pub trait State<Transition = ()> {
         /// The next state in the [`BlockSpaceAllocator`] state machine.
-        type Next: State;
-
-        /// The transition function for some [`BlockSpaceAllocator`] state.
-        type Transition;
+        type Next;
 
         /// Try to allocate space for a new transaction.
         fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus;
@@ -457,23 +457,7 @@ mod states_impl {
 
         /// Transition to the next state in the [`BlockSpaceAllocator`] state
         /// machine.
-        fn next_state_over(
-            self,
-            transition_function: Self::Transition,
-        ) -> Self::Next;
-    }
-
-    /// Convenience extension of [`State`].
-    pub trait NextState: State<Transition = ()> {
-        /// Transition to the next state in the [`BlockSpaceAllocator`] state
-        /// machine, for states whose transition function is the unit value.
-        #[inline]
-        fn next_state(self) -> Self::Next
-        where
-            Self: Sized,
-        {
-            self.next_state_over(())
-        }
+        fn next_state(self) -> Self::Next;
     }
 }
 
