@@ -5,6 +5,12 @@
 //! on the size of a block, rejecting blocks whose size exceeds
 //! the limit stated in [`RequestPrepareProposal`].
 //!
+//! The code in this module doesn't perform any deserializing to
+//! verify if we are, in fact, allocating space for the correct
+//! kind of tx for the current [`BlockSpaceAllocator`] state. It
+//! is up to the user to dispatch the correct kind of tx into the
+//! current state of the allocator.
+//!
 //! # How space is allocated
 //!
 //! In the current implementation, we allocate space for transactions
