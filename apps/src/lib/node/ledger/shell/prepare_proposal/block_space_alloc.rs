@@ -126,6 +126,20 @@ impl<State> BlockSpaceAllocator<State> {
             + self.decrypted_txs.allotted_space_in_bytes;
         self.block.allotted_space_in_bytes - total_bin_space
     }
+
+    /// Claim all the space used by the [`TxBin`] instances
+    /// as block space.
+    fn claim_block_space(&mut self) {
+        let used_space = self.protocol_txs.current_space_in_bytes
+            + self.encrypted_txs.current_space_in_bytes
+            + self.decrypted_txs.current_space_in_bytes;
+
+        self.block.current_space_in_bytes = used_space;
+
+        self.decrypted_txs.current_space_in_bytes = 0;
+        self.protocol_txs.current_space_in_bytes = 0;
+        self.encrypted_txs.current_space_in_bytes = 0;
+    }
 }
 
 /// Allotted space for a batch of transactions of the same kind in some
