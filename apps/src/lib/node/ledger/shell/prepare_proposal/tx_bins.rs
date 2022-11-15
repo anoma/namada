@@ -459,6 +459,34 @@ mod states_impl {
         /// machine.
         fn next_state(self) -> Self::Next;
     }
+
+    /// Convenience extension of [`State`], to transition to a new
+    /// state with encrypted txs in a block.
+    pub trait StateWithEncryptedTxs: State<WithEncryptedTxs> {
+        /// Transition to the next state in the [`BlockSpaceAllocator`] state,
+        /// ensuring we include encrypted txs in a block.
+        #[inline]
+        fn next_state_with_encrypted_txs(self) -> Self::Next
+        where
+            Self: Sized,
+        {
+            self.next_state()
+        }
+    }
+
+    /// Convenience extension of [`State`], to transition to a new
+    /// state without encrypted txs in a block.
+    pub trait StateWithoutEncryptedTxs: State<WithoutEncryptedTxs> {
+        /// Transition to the next state in the [`BlockSpaceAllocator`] state,
+        /// ensuring we do not include encrypted txs in a block.
+        #[inline]
+        fn next_state_without_encrypted_txs(self) -> Self::Next
+        where
+            Self: Sized,
+        {
+            self.next_state()
+        }
+    }
 }
 
 // ```ignore
