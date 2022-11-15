@@ -4,7 +4,7 @@
 //!
 //! # States
 //!
-//! The state machine moves through the following states:
+//! The state machine moves through the following state tree:
 //!
 //! 1. [`BuildingDecryptedTxBatch`] - the initial state. In
 //!    this state, we populate a block with DKG decrypted txs.
