@@ -5,9 +5,22 @@
 //! on the size of a block, rejecting blocks whose size exceeds
 //! the limit stated in [`RequestPrepareProposal`].
 //!
-//! In the current implementation, each kind of transaction in
-//! Namada gets a portion of (i.e. threshold over) the total
-//! allotted space.
+//! # How space is allocated
+//!
+//! In the current implementation, we allocate space for transactions
+//! in the following order of preference:
+//!
+//! - First, we allocate space for DKG decrypted txs.
+//! - Next, we allocate space for protocol txs. Protocol txs get 1/3 of the
+//!   block space allotted to them.
+//! - Finally, we allocate space for encrypted txs.
+//! - If any space remains, we try to fit other smaller txs in the block.
+//!
+//! Since decrypted txs will utilize at most as much space as
+//! encrypted txs will utilize, and we allocate 1/3 of space
+//! that has already been taken up by decrypted txs to protocol
+//! txs, we roughly divide the block space in 3 for each kind
+//! of major tx type.
 
 pub mod states;
 
