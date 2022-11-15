@@ -57,6 +57,10 @@ impl State<WithoutEncryptedTxs>
 
     #[inline]
     fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+        // TODO: prioritize certain kinds of protocol txs;
+        // this can be done at the `CheckTx` level,
+        // we don't need the `TxBin`s to be aware
+        // of different prioriy hints for protocol txs
         self.protocol_txs.try_dump(tx)
     }
 
