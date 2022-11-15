@@ -88,6 +88,7 @@ use crate::e2e::setup::{self, sleep, AnomaCmd, Bin, Test, Who};
 use crate::{run, run_as};
 
 #[test]
+#[ignore]
 fn run_ledger_ibc() -> Result<()> {
     let (test_a, test_b) = setup::two_single_node_nets()?;
 
