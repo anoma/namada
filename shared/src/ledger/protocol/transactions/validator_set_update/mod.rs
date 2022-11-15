@@ -137,7 +137,12 @@ where
         ?ext.voting_powers,
         "Applying validator set update state changes"
     );
-    votes::write(storage, &valset_upd_keys, &ext.voting_powers, &tally)?;
+    votes::storage::write(
+        storage,
+        &valset_upd_keys,
+        &ext.voting_powers,
+        &tally,
+    )?;
 
     if confirmed {
         tracing::debug!(
