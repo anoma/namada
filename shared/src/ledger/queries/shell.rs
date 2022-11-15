@@ -9,13 +9,9 @@ use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::types::address::Address;
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
-use crate::types::storage::TxIndex;
 use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+#[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
-use crate::types::transaction::{DecryptedTx, TxType};
 
 type Conversion = (
     Address,
@@ -24,7 +20,6 @@ type Conversion = (
     MerklePath<Node>,
 );
 
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 router! {SHELL,
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
@@ -35,30 +30,6 @@ router! {SHELL,
 
     // Dry run a transaction
     ( "dry_run_tx" ) -> TxResult = (with_options dry_run_tx),
-
-    // Raw storage access - prefix iterator
-    ( "prefix" / [storage_key: storage::Key] )
-        -> Vec<PrefixValue> = (with_options storage_prefix),
-
-    // Raw storage access - is given storage key present?
-    ( "has_key" / [storage_key: storage::Key] )
-       -> bool = storage_has_key,
-
-    // Conversion state access - read conversion
-    ( "conv" / [asset_type: AssetType] ) -> Conversion = read_conversion,
-
-    // Block results access - read bit-vec
-    ( "results" ) -> Vec<BlockResults> = read_results,
-}
-
-#[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
-router! {SHELL,
-    // Epoch of the last committed block
-    ( "epoch" ) -> Epoch = epoch,
-
-    // Raw storage access - read value
-    ( "value" / [storage_key: storage::Key] )
-        -> Vec<u8> = (with_options storage_value),
 
     // Raw storage access - prefix iterator
     ( "prefix" / [storage_key: storage::Key] )
@@ -90,6 +61,8 @@ where
     use crate::ledger::protocol;
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
+    use crate::types::storage::TxIndex;
+    use crate::types::transaction::{DecryptedTx, TxType};
 
     let mut gas_meter = BlockGasMeter::default();
     let mut write_log = WriteLog::default();
@@ -163,6 +136,18 @@ where
             format!("No conversion found for asset type: {}", asset_type),
         )))
     }
+}
+
+#[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
+fn dry_run_tx<D, H>(
+    _ctx: RequestCtx<'_, D, H>,
+    _request: &RequestQuery,
+) -> storage_api::Result<EncodedResponseQuery>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    unimplemented!("Dry running tx requires \"wasm-runtime\" feature.")
 }
 
 fn epoch<D, H>(ctx: RequestCtx<'_, D, H>) -> storage_api::Result<Epoch>
@@ -255,10 +240,10 @@ where
 {
     require_latest_height(&ctx, request)?;
 
-    let (iter, _gas) = ctx.storage.iter_prefix(&storage_key);
+    let iter = storage_api::iter_prefix_bytes(ctx.storage, &storage_key)?;
     let data: storage_api::Result<Vec<PrefixValue>> = iter
-        .map(|(key, value, _gas)| {
-            let key = storage::Key::parse(key).into_storage_result()?;
+        .map(|iter_result| {
+            let (key, value) = iter_result?;
             Ok(PrefixValue { key, value })
         })
         .collect();
