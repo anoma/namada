@@ -106,34 +106,11 @@ impl<State> BlockSpaceAllocator<State> {
     ///
     /// This method should not be used outside of [`BlockSpaceAllocator`]
     /// instance construction or unit testing.
-    #[allow(dead_code)]
     fn uninitialized_space_in_bytes(&self) -> u64 {
         let total_bin_space = self.protocol_txs.allotted_space_in_bytes
             + self.encrypted_txs.allotted_space_in_bytes
             + self.decrypted_txs.allotted_space_in_bytes;
         self.max_block_space_in_bytes - total_bin_space
-    }
-
-    /// The total space, in bytes, occupied by each transaction.
-    #[inline]
-    pub fn occupied_space_in_bytes(&self) -> u64 {
-        self.protocol_txs.current_space_in_bytes
-            + self.encrypted_txs.current_space_in_bytes
-            + self.decrypted_txs.current_space_in_bytes
-    }
-
-    /// Return the amount, in bytes, of free space in this
-    /// [`BlockSpaceAllocator`].
-    #[inline]
-    pub fn free_space_in_bytes(&self) -> u64 {
-        self.max_block_space_in_bytes - self.occupied_space_in_bytes()
-    }
-
-    /// Checks if this [`BlockSpaceAllocator`] has any free space remaining.
-    #[allow(dead_code)]
-    #[inline]
-    pub fn has_free_space(&self) -> bool {
-        self.free_space_in_bytes() > 0
     }
 }
 
