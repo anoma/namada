@@ -425,8 +425,6 @@ mod thres {
     pub const ONE_THIRD: Ratio<u64> = Ratio::new_raw(1, 3);
 }
 
-// hacky workaround to get module docstrings formatted properly
-#[rustfmt::skip]
 pub mod states {
     //! All the states of the [`BlockSpaceAllocator`] state machine,
     //! over the extent of a Tendermint consensus round
@@ -444,24 +442,14 @@ pub mod states {
     //!    this state, we populate a block with DKG encrypted txs.
     //!    This state supports two modes of operation, which you can
     //!    think of as two states diverging from [`BuildingProtocolTxBatch`]:
-    //!   1. [`WithoutEncryptedTxs`] - When this mode is active, no encrypted txs
-    //!      are included in a block proposal.
-    //!   2. [`WithEncryptedTxs`] - When this mode is active, we are able
-    //!      to include encrypted txs in a block proposal.
+    //!   * [`WithoutEncryptedTxs`] - When this mode is active, no encrypted txs
+    //!     are included in a block proposal.
+    //!   * [`WithEncryptedTxs`] - When this mode is active, we are able to
+    //!     include encrypted txs in a block proposal.
     //! 4. [`FillingRemainingSpace`] - the fourth and final state.
     //!    During this phase, we fill all remaining block space with arbitrary
     //!    transactions that haven't been included yet. This state supports the
     //!    same two modes of operation defined above.
-
-    #[allow(unused_imports)]
-    use super::BlockSpaceAllocator;
-
-    #[doc(inline)]
-    pub use super::states_impl::*;
-}
-
-mod states_impl {
-    //! Implements [`super::states`].
 
     use super::AllocStatus;
     #[allow(unused_imports)]
