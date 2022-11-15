@@ -106,6 +106,7 @@ impl<State> BlockSpaceAllocator<State> {
     ///
     /// This method should not be used outside of [`BlockSpaceAllocator`]
     /// instance construction or unit testing.
+    #[inline]
     fn uninitialized_space_in_bytes(&self) -> u64 {
         let total_bin_space = self.protocol_txs.allotted_space_in_bytes
             + self.encrypted_txs.allotted_space_in_bytes
@@ -147,6 +148,7 @@ impl TxBin {
 
     /// Shrink the allotted space of this [`TxBin`] to whatever
     /// space is currently being utilized.
+    #[inline]
     fn shrink(&mut self) {
         self.allotted_space_in_bytes = self.current_space_in_bytes;
     }
@@ -155,7 +157,6 @@ impl TxBin {
     ///
     /// Signal the caller if the tx is larger than its max
     /// allotted bin space.
-    #[inline]
     fn try_dump(&mut self, tx: &[u8]) -> AllocStatus {
         let tx_len = tx.len() as u64;
         if tx_len > self.allotted_space_in_bytes {
@@ -174,7 +175,6 @@ impl TxBin {
     ///
     /// If an allocation fails, rollback the state of the [`TxBin`],
     /// and return the respective status of the failure.
-    #[inline]
     fn try_dump_all<'tx, T>(&mut self, txs: T) -> AllocStatus
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
