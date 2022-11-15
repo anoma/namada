@@ -1,6 +1,6 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
-mod tx_bins;
+mod block_space_alloc;
 
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
