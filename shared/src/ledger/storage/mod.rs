@@ -641,7 +641,7 @@ where
         key: &Key,
         height: BlockHeight,
     ) -> Result<Proof> {
-        if height >= self.get_block_height().0 {
+        if height >= self.last_height {
             Ok(self.block.tree.get_non_existence_proof(key)?)
         } else {
             match self.db.read_merkle_tree_stores(height)? {
