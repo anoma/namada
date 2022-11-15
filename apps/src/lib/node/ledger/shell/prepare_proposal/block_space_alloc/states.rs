@@ -37,7 +37,6 @@ use super::BlockSpaceAllocator;
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-#[allow(dead_code)]
 pub enum BuildingDecryptedTxBatch {}
 
 /// The leader of the current Tendermint round is building
@@ -45,7 +44,6 @@ pub enum BuildingDecryptedTxBatch {}
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-#[allow(dead_code)]
 pub enum BuildingProtocolTxBatch {}
 
 /// The leader of the current Tendermint round is building
@@ -53,7 +51,6 @@ pub enum BuildingProtocolTxBatch {}
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-#[allow(dead_code)]
 pub struct BuildingEncryptedTxBatch<Mode> {
     /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
     _mode: Mode,
@@ -65,7 +62,6 @@ pub struct BuildingEncryptedTxBatch<Mode> {
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-#[allow(dead_code)]
 pub struct FillingRemainingSpace<Mode> {
     /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
     _mode: Mode,
@@ -75,14 +71,12 @@ pub struct FillingRemainingSpace<Mode> {
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-#[allow(dead_code)]
 pub enum WithEncryptedTxs {}
 
 /// Prohibit block proposals from including encrypted txs.
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-#[allow(dead_code)]
 pub enum WithoutEncryptedTxs {}
 
 /// Represents a state in the [`BlockSpaceAllocator`] state machine.
