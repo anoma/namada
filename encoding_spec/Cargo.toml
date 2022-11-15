@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_encoding_spec"
 readme = "../README.md"
 resolver = "2"
-version = "0.9.0"
+version = "0.10.0"
 
 [features]
 default = []
