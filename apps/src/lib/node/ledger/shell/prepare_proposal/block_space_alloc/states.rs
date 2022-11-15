@@ -23,6 +23,11 @@
 //!    transactions that haven't been included yet. This state supports the
 //!    same two modes of operation defined above.
 
+mod decrypted_txs;
+mod encrypted_txs;
+mod protocol_txs;
+mod remaining_txs;
+
 use super::AllocStatus;
 #[allow(unused_imports)]
 use super::BlockSpaceAllocator;
