@@ -661,8 +661,16 @@ impl DB for RocksDB {
                     .join(key)
                     .to_string();
                 // If it has an "old" val, it was deleted at this height
-                if self.0.key_may_exist(old_val_key) {
-                    return Ok(None);
+                if self.0.key_may_exist(old_val_key.clone()) {
+                    // check if it actually exists
+                    if self
+                        .0
+                        .get(old_val_key)
+                        .map_err(|e| Error::DBError(e.into_string()))?
+                        .is_some()
+                    {
+                        return Ok(None);
+                    }
                 }
             }
         }
@@ -695,8 +703,16 @@ impl DB for RocksDB {
                         .map_err(Error::KeyError)?
                         .join(key)
                         .to_string();
-                    if self.0.key_may_exist(new_val_key) {
-                        return Ok(None);
+                    if self.0.key_may_exist(new_val_key.clone()) {
+                        // check if it actually exists
+                        if self
+                            .0
+                            .get(new_val_key)
+                            .map_err(|e| Error::DBError(e.into_string()))?
+                            .is_some()
+                        {
+                            return Ok(None);
+                        }
                     }
 
                     if raw_height >= last_height.0 {
