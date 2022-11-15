@@ -129,6 +129,7 @@ impl<State> BlockSpaceAllocator<State> {
 
     /// Claim all the space used by the [`TxBin`] instances
     /// as block space.
+    #[inline]
     fn claim_block_space(&mut self) {
         let used_space = self.protocol_txs.current_space_in_bytes
             + self.encrypted_txs.current_space_in_bytes
