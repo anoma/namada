@@ -13,7 +13,7 @@
 //! - First, we allocate space for DKG decrypted txs.
 //! - Next, we allocate space for protocol txs. Protocol txs get 1/3 of the
 //!   block space allotted to them.
-//! - Finally, we allocate space for encrypted txs.
+//! - Finally, we allocate space for DKG encrypted txs.
 //! - If any space remains, we try to fit other smaller txs in the block.
 //!
 //! Since decrypted txs will utilize at most as much space as
