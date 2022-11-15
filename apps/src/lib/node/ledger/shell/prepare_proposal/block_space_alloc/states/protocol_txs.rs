@@ -69,7 +69,24 @@ impl State<WithoutEncryptedTxs>
     }
 
     #[inline]
-    fn next_state(self) -> Self::Next {
-        todo!()
+    fn next_state(mut self) -> Self::Next {
+        self.protocol_txs.shrink();
+
+        // cast state
+        let Self {
+            max_block_space_in_bytes,
+            protocol_txs,
+            encrypted_txs,
+            decrypted_txs,
+            ..
+        } = self;
+
+        BlockSpaceAllocator {
+            _state: PhantomData,
+            max_block_space_in_bytes,
+            protocol_txs,
+            encrypted_txs,
+            decrypted_txs,
+        }
     }
 }
