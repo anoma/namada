@@ -76,7 +76,7 @@ pub struct BlockSpaceAllocator<State> {
     _state: PhantomData<*const State>,
     /// The total space Tendermint has allotted to the
     /// application for the current block height.
-    max_block_space_in_bytes: u64,
+    block: TxBin,
     /// The current space utilized by protocol transactions.
     protocol_txs: TxBin,
     /// The current space utilized by DKG encrypted transactions.
@@ -103,7 +103,7 @@ impl BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
         let max = tendermint_max_block_space_in_bytes;
         Self {
             _state: PhantomData,
-            max_block_space_in_bytes: max,
+            block: TxBin::init(max),
             protocol_txs: TxBin::default(),
             encrypted_txs: TxBin::default(),
             // decrypted txs can use as much space as needed; in practice,
@@ -124,7 +124,7 @@ impl<State> BlockSpaceAllocator<State> {
         let total_bin_space = self.protocol_txs.allotted_space_in_bytes
             + self.encrypted_txs.allotted_space_in_bytes
             + self.decrypted_txs.allotted_space_in_bytes;
-        self.max_block_space_in_bytes - total_bin_space
+        self.block.allotted_space_in_bytes - total_bin_space
     }
 }
 

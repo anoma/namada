@@ -29,7 +29,7 @@ impl State for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
 
         // cast state
         let Self {
-            max_block_space_in_bytes,
+            block,
             protocol_txs,
             encrypted_txs,
             decrypted_txs,
@@ -38,7 +38,7 @@ impl State for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
 
         BlockSpaceAllocator {
             _state: PhantomData,
-            max_block_space_in_bytes,
+            block,
             protocol_txs,
             encrypted_txs,
             decrypted_txs,

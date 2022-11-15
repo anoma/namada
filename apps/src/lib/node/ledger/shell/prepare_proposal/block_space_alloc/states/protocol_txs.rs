@@ -32,7 +32,7 @@ impl State<WithEncryptedTxs> for BlockSpaceAllocator<BuildingProtocolTxBatch> {
 
         // cast state
         let Self {
-            max_block_space_in_bytes,
+            block,
             protocol_txs,
             encrypted_txs,
             decrypted_txs,
@@ -41,7 +41,7 @@ impl State<WithEncryptedTxs> for BlockSpaceAllocator<BuildingProtocolTxBatch> {
 
         BlockSpaceAllocator {
             _state: PhantomData,
-            max_block_space_in_bytes,
+            block,
             protocol_txs,
             encrypted_txs,
             decrypted_txs,
@@ -78,7 +78,7 @@ impl State<WithoutEncryptedTxs>
 
         // cast state
         let Self {
-            max_block_space_in_bytes,
+            block,
             protocol_txs,
             encrypted_txs,
             decrypted_txs,
@@ -87,7 +87,7 @@ impl State<WithoutEncryptedTxs>
 
         BlockSpaceAllocator {
             _state: PhantomData,
-            max_block_space_in_bytes,
+            block,
             protocol_txs,
             encrypted_txs,
             decrypted_txs,
