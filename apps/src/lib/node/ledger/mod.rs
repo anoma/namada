@@ -234,7 +234,9 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
 
     // Start oracle if necessary
     let (eth_receiver, oracle) =
-        match maybe_start_ethereum_oracle(&config, abort_sender).await {
+        match maybe_start_ethereum_oracle(&mut spawner, &config, abort_sender)
+            .await
+        {
             EthereumOracleTask::NotEnabled {
                 handle,
                 eth_receiver,
@@ -646,6 +648,7 @@ enum EthereumOracleTask {
 
 /// Potentially starts an Ethereum event oracle.
 async fn maybe_start_ethereum_oracle(
+    spawner: &mut AbortableSpawner,
     config: &config::Ledger,
     abort_sender: oneshot::Sender<()>,
 ) -> EthereumOracleTask {
@@ -681,10 +684,44 @@ async fn maybe_start_ethereum_oracle(
             }
         }
         ethereum_bridge::ledger::Mode::EventsEndpoint => {
-            let handle = ethereum_node::test_tools::events_endpoint::serve(
-                eth_sender,
-                abort_sender,
-            );
+            let (oracle_abort_send, oracle_abort_recv) =
+                tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>(
+                );
+            let handle = spawner
+                .spawn_abortable(
+                    "Ethereum Events Endpoint",
+                    move |aborter| async move {
+                        ethereum_node::test_tools::events_endpoint::serve(
+                            eth_sender,
+                            oracle_abort_recv,
+                        )
+                        .await;
+                        tracing::info!(
+                            "Ethereum events endpoint is no longer running."
+                        );
+
+                        drop(aborter);
+                    },
+                )
+                .with_cleanup(async move {
+                    let (oracle_abort_resp_send, oracle_abort_resp_recv) =
+                        tokio::sync::oneshot::channel::<()>();
+
+                    if let Ok(()) =
+                        oracle_abort_send.send(oracle_abort_resp_send)
+                    {
+                        match oracle_abort_resp_recv.await {
+                            Ok(()) => {}
+                            Err(err) => {
+                                tracing::error!(
+                                    "Failed to receive an abort response from \
+                                     the Ethereum events endpoint task: {}",
+                                    err
+                                );
+                            }
+                        }
+                    }
+                });
             EthereumOracleTask::EventsEndpoint {
                 handle,
                 eth_receiver,
