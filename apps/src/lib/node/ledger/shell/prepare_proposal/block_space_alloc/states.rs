@@ -31,7 +31,7 @@ use super::BlockSpaceAllocator;
 /// a new batch of DKG decrypted transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
 #[allow(dead_code)]
 pub enum BuildingDecryptedTxBatch {}
 
@@ -39,7 +39,7 @@ pub enum BuildingDecryptedTxBatch {}
 /// a new batch of Namada protocol transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
 #[allow(dead_code)]
 pub enum BuildingProtocolTxBatch {}
 
@@ -47,7 +47,7 @@ pub enum BuildingProtocolTxBatch {}
 /// a new batch of DKG encrypted transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
 #[allow(dead_code)]
 pub struct BuildingEncryptedTxBatch<Mode> {
     /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
@@ -59,7 +59,7 @@ pub struct BuildingEncryptedTxBatch<Mode> {
 /// transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
 #[allow(dead_code)]
 pub struct FillingRemainingSpace<Mode> {
     /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
@@ -69,21 +69,21 @@ pub struct FillingRemainingSpace<Mode> {
 /// Allow block proposals to include encrypted txs.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
 #[allow(dead_code)]
 pub enum WithEncryptedTxs {}
 
 /// Prohibit block proposals from including encrypted txs.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
 #[allow(dead_code)]
 pub enum WithoutEncryptedTxs {}
 
 /// Represents a state in the [`BlockSpaceAllocator`] state machine.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::tx_bins::states`].
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
 pub trait State<Transition = ()> {
     /// The next state in the [`BlockSpaceAllocator`] state machine.
     type Next;
