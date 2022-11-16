@@ -1608,6 +1608,7 @@ pub mod args {
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const RECEIVER: Arg<String> = arg("receiver");
+    const RELEASE_ARCHIVE: Arg<PathBuf> = arg("release-archive");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
@@ -3216,6 +3217,7 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct JoinNetwork {
         pub chain_id: ChainId,
+        pub release_archive: PathBuf,
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
         pub dont_prefetch_wasm: bool,
@@ -3224,11 +3226,13 @@ pub mod args {
     impl Args for JoinNetwork {
         fn parse(matches: &ArgMatches) -> Self {
             let chain_id = CHAIN_ID.parse(matches);
+            let release_archive = RELEASE_ARCHIVE.parse(matches);
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
             let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
             Self {
                 chain_id,
+                release_archive,
                 genesis_validator,
                 pre_genesis_path,
                 dont_prefetch_wasm,
@@ -3236,12 +3240,31 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
-                .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
-                .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
-            .arg(DONT_PREFETCH_WASM.def().about(
-                "Do not pre-fetch WASM.",
-            ))
+            app.arg(
+                    CHAIN_ID
+                        .def()
+                        .about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository.")
+                        .conflicts_with(RELEASE_ARCHIVE.name)
+                )
+                .arg(
+                    RELEASE_ARCHIVE
+                        .def()
+                        .about("The path to a local release archive (.tar.gz).")
+                )
+                .arg(
+                    GENESIS_VALIDATOR
+                        .def()
+                        .about("The alias of the genesis validator that you want to set up as, if any.")
+                )
+                .arg(
+                    PRE_GENESIS_PATH
+                        .def()
+                        .about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\".")
+                )
+                .arg(
+                    DONT_PREFETCH_WASM
+                        .def()
+                        .about("Do not pre-fetch WASM."))
         }
     }
 

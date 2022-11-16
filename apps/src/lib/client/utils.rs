@@ -50,6 +50,7 @@ pub async fn join_network(
     global_args: args::Global,
     args::JoinNetwork {
         chain_id,
+        release_archive,
         genesis_validator,
         pre_genesis_path,
         dont_prefetch_wasm,
