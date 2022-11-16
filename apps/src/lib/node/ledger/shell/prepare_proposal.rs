@@ -428,7 +428,7 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![non_wrapper_tx.to_bytes()],
-            max_tx_bytes: 0,
+            max_tx_bytes: i64::MAX,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
@@ -993,7 +993,7 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![wrapper.clone()],
-            max_tx_bytes: 0,
+            max_tx_bytes: i64::MAX,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
@@ -1031,7 +1031,7 @@ mod test_prepare_proposal {
 
         let mut req = RequestPrepareProposal {
             txs: vec![],
-            max_tx_bytes: 0,
+            max_tx_bytes: i64::MAX,
             ..Default::default()
         };
         // create a request with two new wrappers from mempool and
