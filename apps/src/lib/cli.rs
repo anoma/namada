@@ -2389,6 +2389,11 @@ pub mod args {
                         "Whether not to automatically perform conversions.",
                     ),
                 )
+                .arg(
+                    SUB_PREFIX.def().about(
+                        "The token's sub prefix whose balance to query.",
+                    ),
+                )
         }
     }
 
