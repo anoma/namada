@@ -114,6 +114,15 @@ pub async fn join_network(
             )
         });
 
+    let wasm_dir = global_args.wasm_dir.as_ref().cloned().or_else(|| {
+        if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
+            let wasm_dir: PathBuf = wasm_dir.into();
+            Some(wasm_dir)
+        } else {
+            None
+        }
+    });
+
     // If the base-dir is non-default, unpack the archive into a temp dir inside
     // first.
     let cwd = env::current_dir().unwrap();
@@ -242,15 +251,6 @@ pub async fn join_network(
             .await
             .unwrap();
     }
-
-    let wasm_dir = global_args.wasm_dir.as_ref().cloned().or_else(|| {
-        if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
-            let wasm_dir: PathBuf = wasm_dir.into();
-            Some(wasm_dir)
-        } else {
-            None
-        }
-    });
 
     // Move wasm-dir and update config if it's non-default
     if let Some(wasm_dir) = wasm_dir.as_ref() {
