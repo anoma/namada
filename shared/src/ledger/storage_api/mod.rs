@@ -8,6 +8,7 @@ pub mod validation;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 
+use crate::types::address::Address;
 use crate::types::storage::{self, BlockHash, BlockHeight, Epoch, TxIndex};
 
 /// Common storage read interface
@@ -99,6 +100,9 @@ pub trait StorageRead<'iter> {
 
     /// Get the transaction index.
     fn get_tx_index(&self) -> Result<TxIndex>;
+
+    /// Get the native token address
+    fn get_native_token(&self) -> Result<Address>;
 }
 
 /// Common storage write interface

@@ -7,8 +7,9 @@ use super::storage as gov_storage;
 use crate::ledger::native_vp::{self, Ctx};
 use crate::ledger::pos::{self as pos_storage, BondId, Bonds};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage_api::StorageRead;
 use crate::ledger::vp_env::VpEnv;
-use crate::types::address::{nam, Address, InternalAddress};
+use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
@@ -53,7 +54,12 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    let balance_key = token::balance_key(&nam(), &ADDRESS);
+    let balance_key = token::balance_key(
+        &ctx.pre()
+            .get_native_token()
+            .expect("Native token must be available"),
+        &ADDRESS,
+    );
     let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
     let min_funds_parameter: Option<token::Amount> =
         read(ctx, &min_funds_parameter_key, ReadType::PRE).ok();
@@ -164,7 +170,12 @@ where
     CA: 'static + WasmCacheAccess,
 {
     let funds_key = gov_storage::get_funds_key(proposal_id);
-    let balance_key = token::balance_key(&nam(), &ADDRESS);
+    let balance_key = token::balance_key(
+        &ctx.pre()
+            .get_native_token()
+            .expect("Native token must be available"),
+        &ADDRESS,
+    );
     let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
     let min_funds_parameter: Option<token::Amount> =
         read(ctx, &min_funds_parameter_key, ReadType::PRE).ok();
@@ -534,17 +545,11 @@ where
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Native VP error: {0}")]
-    NativeVpError(native_vp::Error),
+    NativeVpError(#[from] native_vp::Error),
     #[error("Native VP error deserialization: {0}")]
     NativeVpDeserializationError(std::io::Error),
     #[error("Native VP error non-existing key: {0}")]
     NativeVpNonExistingKeyError(String),
-}
-
-impl From<native_vp::Error> for Error {
-    fn from(err: native_vp::Error) -> Self {
-        Self::NativeVpError(err)
-    }
 }
 
 /// Check if a vote is from a delegator

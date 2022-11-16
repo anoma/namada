@@ -330,7 +330,6 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use namada::types::address::nam;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};
 
@@ -358,7 +357,7 @@ mod test_finalize_block {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -429,7 +428,7 @@ mod test_finalize_block {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -481,7 +480,7 @@ mod test_finalize_block {
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
@@ -547,7 +546,7 @@ mod test_finalize_block {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -578,7 +577,7 @@ mod test_finalize_block {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),

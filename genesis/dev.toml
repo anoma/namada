@@ -1,5 +1,6 @@
 # Example genesis with dev settings.
 genesis_time = "2021-09-30:10:00.00Z"
+native_token = "NAM"
 
 # A genesis validator with alias "validator".
 [validator.validator]
@@ -20,10 +21,10 @@ net_address = "127.0.0.1:26656"
 
 # Some tokens present at genesis.
 
-[token.nam]
+[token.NAM]
 address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5"
 vp = "vp_token"
-[token.nam.balances]
+[token.NAM.balances]
 # In token balances, we can use:
 # 1. An address any account
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
@@ -36,28 +37,28 @@ bertha = 1000000
 "bertha.public_key" = 100
 "validator.public_key" = 100
 
-[token.btc]
+[token.BTC]
 address = "atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp"
 vp = "vp_token"
-[token.btc.balances]
+[token.BTC.balances]
 atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
 
-[token.eth]
+[token.ETH]
 address = "atest1v4ehgw36xqmr2d3nx3ryvd2xxgmrq33j8qcns33sxezrgv6zxdzrydjrxveygd2yxumrsdpsf9jc2p"
 vp = "vp_token"
-[token.eth.balances]
+[token.ETH.balances]
 atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
 
-[token.dot]
+[token.DOT]
 address = "atest1v4ehgw36gg6nvs2zgfpyxsfjgc65yv6pxy6nwwfsxgungdzrggeyzv35gveyxsjyxymyz335hur2jn"
 vp = "vp_token"
-[token.dot.balances]
+[token.DOT.balances]
 atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
@@ -162,7 +163,7 @@ light_client_attack_slash_rate = 500
 
 # Governance parameters.
 [gov_params]
-# minimum amount of nam token to lock
+# minimum amount of NAM token to lock
 min_proposal_fund = 500
 # proposal code size in bytes
 max_proposal_code_size = 300000

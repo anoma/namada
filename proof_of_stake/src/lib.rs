@@ -101,9 +101,7 @@ pub trait PosReadOnly {
     const POS_ADDRESS: Self::Address;
 
     /// Address of the staking token
-    /// TODO: this should be `const`, but in the ledger `address::nam` is not a
-    /// `const fn`
-    fn staking_token_address() -> Self::Address;
+    fn staking_token_address(&self) -> Self::Address;
 
     /// Read PoS parameters.
     fn read_pos_params(&self) -> Result<PosParams, Self::Error>;
@@ -434,7 +432,7 @@ pub trait PosActions: PosReadOnly {
 
         // Transfer the bonded tokens from the source to PoS
         self.transfer(
-            &Self::staking_token_address(),
+            &self.staking_token_address(),
             amount,
             source,
             &Self::POS_ADDRESS,
@@ -564,7 +562,7 @@ pub trait PosActions: PosReadOnly {
 
         // Transfer the tokens from PoS back to the source
         self.transfer(
-            &Self::staking_token_address(),
+            &self.staking_token_address(),
             withdrawn,
             &Self::POS_ADDRESS,
             source,
@@ -636,9 +634,7 @@ pub trait PosBase {
     /// Address of the PoS account
     const POS_ADDRESS: Self::Address;
     /// Address of the staking token
-    /// TODO: this should be `const`, but in the ledger `address::nam` is not a
-    /// `const fn`
-    fn staking_token_address() -> Self::Address;
+    fn staking_token_address(&self) -> Self::Address;
     /// Address of the slash pool, into which slashed tokens are transferred.
     const POS_SLASH_POOL_ADDRESS: Self::Address;
 
@@ -795,7 +791,7 @@ pub trait PosBase {
         self.write_total_voting_power(&total_voting_power);
         // Credit the bonded tokens to the PoS account
         self.credit_tokens(
-            &Self::staking_token_address(),
+            &self.staking_token_address(),
             &Self::POS_ADDRESS,
             total_bonded_balance,
         );
@@ -970,7 +966,7 @@ pub trait PosBase {
         self.write_total_voting_power(&total_voting_power);
         // Transfer the slashed tokens to the PoS slash pool
         self.transfer(
-            &Self::staking_token_address(),
+            &self.staking_token_address(),
             slashed_amount,
             &Self::POS_ADDRESS,
             &Self::POS_SLASH_POOL_ADDRESS,

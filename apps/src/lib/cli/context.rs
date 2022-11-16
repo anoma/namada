@@ -73,6 +73,8 @@ pub struct Context {
     pub config: Config,
     /// The context fr shielded operations
     pub shielded: ShieldedContext,
+    /// Native token's address
+    pub native_token: Address,
 }
 
 impl Context {
@@ -92,10 +94,12 @@ impl Context {
         let genesis_file_path = global_args
             .base_dir
             .join(format!("{}.toml", global_config.default_chain_id.as_str()));
-        let wallet = Wallet::load_or_new_from_genesis(
-            &chain_dir,
-            genesis_config::open_genesis_config(&genesis_file_path)?,
-        );
+        let genesis = genesis_config::read_genesis_config(&genesis_file_path);
+        let native_token = genesis.native_token;
+        let default_genesis =
+            genesis_config::open_genesis_config(genesis_file_path)?;
+        let wallet =
+            Wallet::load_or_new_from_genesis(&chain_dir, default_genesis);
 
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {
@@ -115,6 +119,7 @@ impl Context {
             global_config,
             config,
             shielded: ShieldedContext::new(chain_dir),
+            native_token,
         })
     }
 
