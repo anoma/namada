@@ -28,7 +28,7 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::governance::utils::Votes;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{
-    Epoch as PosEpoch, VotingPower, WeightedValidator,
+    decimal_mult_u64, Epoch as PosEpoch, VotingPower, WeightedValidator,
 };
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
@@ -1299,7 +1299,7 @@ pub async fn query_protocol_parameters(
     println!("Governance Parameters\n {:4}", gov_parameters);
 
     println!("Protocol parameters");
-    let key = param_storage::get_epoch_storage_key();
+    let key = param_storage::get_epoch_duration_storage_key();
     let epoch_duration = query_storage_value::<EpochDuration>(&client, &key)
         .await
         .expect("Parameter should be definied.");
@@ -1357,7 +1357,7 @@ pub async fn query_protocol_parameters(
     );
     println!("{:4}Pipeline length: {}", "", pos_params.pipeline_len);
     println!("{:4}Unbonding length: {}", "", pos_params.unbonding_len);
-    println!("{:4}Votes per token: {}", "", pos_params.votes_per_token);
+    println!("{:4}Votes per token: {}", "", pos_params.tm_votes_per_token);
 }
 
 /// Query PoS bond(s)
@@ -2028,7 +2028,8 @@ fn apply_slashes(
                 .unwrap();
             }
             let raw_delta: u64 = delta.into();
-            let current_slashed = token::Amount::from(slash.rate * raw_delta);
+            let current_slashed =
+                token::Amount::from(decimal_mult_u64(slash.rate, raw_delta));
             slashed += current_slashed;
             delta -= current_slashed;
         }

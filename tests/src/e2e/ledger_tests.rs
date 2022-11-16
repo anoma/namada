@@ -483,7 +483,9 @@ fn masp_txs_and_queries() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: if is_debug_mode() { 3600 } else { 360 },
+                epochs_per_year: epochs_per_year_from_min_duration(
+                    if is_debug_mode() { 3600 } else { 360 },
+                ),
                 min_num_of_blocks: 1,
                 ..genesis.parameters
             };
@@ -738,7 +740,7 @@ fn masp_pinned_txs() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: 60,
+                epochs_per_year: epochs_per_year_from_min_duration(60),
                 ..genesis.parameters
             };
             GenesisConfig {
@@ -898,7 +900,9 @@ fn masp_incentives() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: if is_debug_mode() { 240 } else { 60 },
+                epochs_per_year: epochs_per_year_from_min_duration(
+                    if is_debug_mode() { 240 } else { 60 },
+                ),
                 min_num_of_blocks: 1,
                 ..genesis.parameters
             };
@@ -1738,8 +1742,8 @@ fn pos_bonds() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 2,
-                min_duration: 1,
                 max_expected_time_per_block: 1,
+                epochs_per_year: 31_536_000,
                 ..genesis.parameters
             };
             let pos_params = PosParamsConfig {
@@ -1931,7 +1935,7 @@ fn pos_init_validator() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 2,
-                min_duration: 1,
+                epochs_per_year: 31_536_000,
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
             };
@@ -2098,7 +2102,7 @@ fn pos_init_validator() -> Result<()> {
     // 7. Check the new validator's voting power
     let voting_power =
         find_voting_power(&test, new_validator, &validator_one_rpc)?;
-    assert_eq!(voting_power, 11);
+    assert_eq!(voting_power, 11_000_500_000);
 
     Ok(())
 }
@@ -2200,8 +2204,8 @@ fn proposal_submission() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(1),
                 min_num_of_blocks: 1,
-                min_duration: 1,
                 max_expected_time_per_block: 1,
                 vp_whitelist: Some(get_all_wasms_hashes(
                     &working_dir,
@@ -3373,4 +3377,10 @@ fn prepare_proposal_data(test: &setup::Test, source: Address) -> PathBuf {
         &valid_proposal_json,
     );
     valid_proposal_json_path
+}
+
+/// Convert epoch `min_duration` in seconds to `epochs_per_year` genesis
+/// parameter.
+fn epochs_per_year_from_min_duration(min_duration: u64) -> u64 {
+    60 * 60 * 24 * 365 / min_duration
 }

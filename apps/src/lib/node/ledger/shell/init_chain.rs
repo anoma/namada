@@ -69,6 +69,11 @@ where
             tx_whitelist,
             implicit_vp_code_path,
             implicit_vp_sha256,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            staked_ratio,
+            pos_inflation_amount,
         } = genesis.parameters;
         let implicit_vp =
             wasm_loader::read_wasm(&self.wasm_dir, &implicit_vp_code_path)
@@ -94,6 +99,11 @@ where
             vp_whitelist,
             tx_whitelist,
             implicit_vp,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            staked_ratio,
+            pos_inflation_amount,
         };
         parameters.init_storage(&mut self.storage);
 

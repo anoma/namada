@@ -1200,6 +1200,7 @@ pub mod testing {
 mod tests {
     use chrono::{TimeZone, Utc};
     use proptest::prelude::*;
+    use rust_decimal_macros::dec;
 
     use super::testing::*;
     use super::*;
@@ -1272,6 +1273,11 @@ mod tests {
                 vp_whitelist: vec![],
                 tx_whitelist: vec![],
                 implicit_vp: vec![],
+                epochs_per_year: 100,
+                pos_gain_p: dec!(0.1),
+                pos_gain_d: dec!(0.1),
+                staked_ratio: dec!(0.1),
+                pos_inflation_amount: 0,
             };
             parameters.init_storage(&mut storage);
 
