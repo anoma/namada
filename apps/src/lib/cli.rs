@@ -3216,7 +3216,7 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct JoinNetwork {
-        pub chain_id: ChainId,
+        pub chain_id: Option<ChainId>,
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
         pub dont_prefetch_wasm: bool,
@@ -3224,7 +3224,7 @@ pub mod args {
 
     impl Args for JoinNetwork {
         fn parse(matches: &ArgMatches) -> Self {
-            let chain_id = CHAIN_ID.parse(matches);
+            let chain_id = CHAIN_ID_OPT.parse(matches);
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
             let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
@@ -3237,7 +3237,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
+            app.arg(CHAIN_ID_OPT.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
                 .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
             .arg(DONT_PREFETCH_WASM.def().about(

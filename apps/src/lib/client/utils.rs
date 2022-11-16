@@ -113,6 +113,9 @@ pub async fn join_network(
             )
         });
 
+    // TODO: get chain ID from argument (if provided), *or* from unpacking the
+    // release archive
+    let chain_id = chain_id.unwrap();
     // Check if the base-dir has already got this chain ID
     if fs::canonicalize(base_dir.join(chain_id.as_str()))
         .await
