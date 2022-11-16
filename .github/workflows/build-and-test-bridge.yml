@@ -115,7 +115,7 @@ jobs:
             cache_key: anoma
             cache_version: v1
             wait_for: anoma-release-eth (ubuntu-latest, ABCI Release build, anoma-e2e-release, v1)
-            tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
+            tendermint_artifact: tendermint-unreleased-v0.1.3-abciplus
 
     env:
       CARGO_INCREMENTAL: 0
