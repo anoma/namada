@@ -29,7 +29,7 @@ fn storage_key(path: &str) -> String {
 >>>>>>> f9fd97652 (Don't use duplicate ETH_BRIDGE_ADDRESS)
 
 #[test]
-fn everything() {
+fn test_unauthorized_tx_cannot_write_storage() {
     const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 30;
     const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 30;
     const SOLE_VALIDATOR: Who = Who::Validator(0);
