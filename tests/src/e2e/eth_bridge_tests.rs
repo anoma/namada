@@ -39,8 +39,8 @@ fn test_unauthorized_tx_cannot_write_storage() {
     ledger.exp_string("Committed block hash").unwrap();
     let _bg_ledger = ledger.background();
 
-    let tx_data_path = test.test_dir.path().join("queue_storage_key.txt");
-    std::fs::write(&tx_data_path, &storage_key("queue")[..]).unwrap();
+    let tx_data_path = test.test_dir.path().join("arbitrary_storage_key.txt");
+    std::fs::write(&tx_data_path, &storage_key("arbitrary")[..]).unwrap();
 
     let tx_code_path = wasm_abs_path(TX_WRITE_STORAGE_KEY_WASM);
 
@@ -59,32 +59,19 @@ fn test_unauthorized_tx_cannot_write_storage() {
         &ledger_addr,
     ];
 
-    for &dry_run in &[true, false] {
-        let tx_args = if dry_run {
-            vec![tx_args.clone(), vec!["--dry-run"]].concat()
-        } else {
-            tx_args.clone()
-        };
-        let mut client_tx = run!(
-            test,
-            Bin::Client,
-            tx_args,
-            Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
-        )
-        .unwrap();
+    let mut client_tx = run!(
+        test,
+        Bin::Client,
+        tx_args,
+        Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
+    )
+    .unwrap();
 
-        if !dry_run {
-            client_tx.exp_string("Transaction accepted").unwrap();
-            client_tx.exp_string("Transaction applied").unwrap();
-        }
-        // TODO: we should check here explicitly with the ledger via a
-        //  Tendermint RPC call that the path `value/#EthBridge/queue`
-        //  is unchanged rather than relying solely  on looking at namadac
-        //  stdout.
-        client_tx.exp_string("Transaction is invalid").unwrap();
-        client_tx
-            .exp_string(&format!("Rejected: {}", eth_bridge::vp::ADDRESS))
-            .unwrap();
-        client_tx.assert_success();
-    }
+    client_tx.exp_string("Transaction accepted").unwrap();
+    client_tx.exp_string("Transaction applied").unwrap();
+    client_tx.exp_string("Transaction is invalid").unwrap();
+    client_tx
+        .exp_string(&format!("Rejected: {}", eth_bridge::vp::ADDRESS))
+        .unwrap();
+    client_tx.assert_success();
 }
