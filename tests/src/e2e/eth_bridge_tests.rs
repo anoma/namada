@@ -18,6 +18,8 @@ fn storage_key(path: &str) -> String {
     format!("#{}/{}", eth_bridge::vp::ADDRESS, path)
 }
 
+/// Test that a regular transaction cannot modify arbitrary keys of the Ethereum
+/// bridge VP.
 #[test]
 fn test_unauthorized_tx_cannot_write_storage() {
     const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 30;
