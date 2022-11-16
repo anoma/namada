@@ -36,7 +36,7 @@ fn test_unauthorized_tx_cannot_write_storage() {
 
     let test = setup::single_node_net().unwrap();
 
-    let mut namadan_ledger = run_as!(
+    let mut ledger = run_as!(
         test,
         SOLE_VALIDATOR,
         Bin::Node,
@@ -44,14 +44,10 @@ fn test_unauthorized_tx_cannot_write_storage() {
         Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
     )
     .unwrap();
-    namadan_ledger
-        .exp_string("Namada ledger node started")
-        .unwrap();
-    namadan_ledger
-        .exp_string("Tendermint node started")
-        .unwrap();
-    namadan_ledger.exp_string("Committed block hash").unwrap();
-    let _bg_ledger = namadan_ledger.background();
+    ledger.exp_string("Namada ledger node started").unwrap();
+    ledger.exp_string("Tendermint node started").unwrap();
+    ledger.exp_string("Committed block hash").unwrap();
+    let _bg_ledger = ledger.background();
 
     let tx_data_path = test.test_dir.path().join("queue_storage_key.txt");
     std::fs::write(
@@ -88,7 +84,7 @@ fn test_unauthorized_tx_cannot_write_storage() {
         } else {
             tx_args.clone()
         };
-        let mut namadac_tx = run!(
+        let mut client_tx = run!(
             test,
             Bin::Client,
             tx_args,
@@ -97,17 +93,17 @@ fn test_unauthorized_tx_cannot_write_storage() {
         .unwrap();
 
         if !dry_run {
-            namadac_tx.exp_string("Transaction accepted").unwrap();
-            namadac_tx.exp_string("Transaction applied").unwrap();
+            client_tx.exp_string("Transaction accepted").unwrap();
+            client_tx.exp_string("Transaction applied").unwrap();
         }
         // TODO: we should check here explicitly with the ledger via a
         //  Tendermint RPC call that the path `value/#EthBridge/queue`
         //  is unchanged rather than relying solely  on looking at namadac
         //  stdout.
-        namadac_tx.exp_string("Transaction is invalid").unwrap();
-        namadac_tx
+        client_tx.exp_string("Transaction is invalid").unwrap();
+        client_tx
             .exp_string(&format!("Rejected: {}", eth_bridge::vp::ADDRESS))
             .unwrap();
-        namadac_tx.assert_success();
+        client_tx.assert_success();
     }
 }
