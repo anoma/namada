@@ -1,3 +1,5 @@
+use namada::ledger::eth_bridge;
+
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
 use crate::e2e::setup::constants::{
@@ -6,8 +8,6 @@ use crate::e2e::setup::constants::{
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
 
-const ETH_BRIDGE_ADDRESS: &str = "atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew";
-
 /// # Examples
 ///
 /// ```
@@ -15,7 +15,7 @@ const ETH_BRIDGE_ADDRESS: &str = "atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpq
 /// assert_eq!(storage_key, "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/queue");
 /// ```
 fn storage_key(path: &str) -> String {
-    format!("#{ETH_BRIDGE_ADDRESS}/{}", path)
+    format!("#{}/{}", eth_bridge::vp::ADDRESS, path)
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn everything() {
         //  stdout.
         namadac_tx.exp_string("Transaction is invalid").unwrap();
         namadac_tx
-            .exp_string(&format!("Rejected: {}", ETH_BRIDGE_ADDRESS))
+            .exp_string(&format!("Rejected: {}", eth_bridge::vp::ADDRESS))
             .unwrap();
         namadac_tx.assert_success();
     }
