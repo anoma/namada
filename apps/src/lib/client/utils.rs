@@ -60,22 +60,18 @@ pub async fn join_network(
     let base_dir = global_args.base_dir;
 
     // If the base-dir doesn't exist yet, create it
-    if let Err(err) = fs::canonicalize(&base_dir).await {
-        if err.kind() == std::io::ErrorKind::NotFound {
-            fs::create_dir_all(&base_dir).await.unwrap();
+    let base_dir_full = match fs::canonicalize(&base_dir).await {
+        Ok(base_dir_full) => base_dir_full,
+        Err(err) => {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                fs::create_dir_all(&base_dir).await.unwrap();
+                fs::canonicalize(&base_dir).await.unwrap()
+            } else {
+                eprintln!("Could not canonicalize base dir: {:?}", err);
+                cli::safe_exit(1)
+            }
         }
-    } else {
-        // If the base-dir exists, check if it's already got this chain ID
-        if fs::canonicalize(base_dir.join(chain_id.as_str()))
-            .await
-            .is_ok()
-        {
-            eprintln!("The chain directory for {} already exists.", chain_id);
-            cli::safe_exit(1);
-        }
-    }
-    let base_dir_full = fs::canonicalize(&base_dir).await.unwrap();
-    let chain_dir = base_dir_full.join(chain_id.as_str());
+    };
 
     let validator_alias_and_dir = pre_genesis_path
         .and_then(|path| {
@@ -116,6 +112,16 @@ pub async fn join_network(
                     }),
             )
         });
+
+    // Check if the base-dir has already got this chain ID
+    if fs::canonicalize(base_dir.join(chain_id.as_str()))
+        .await
+        .is_ok()
+    {
+        eprintln!("The chain directory for {} already exists.", chain_id);
+        cli::safe_exit(1);
+    }
+    let chain_dir = base_dir_full.join(chain_id.as_str());
 
     let release_filename = format!("{}.tar.gz", chain_id);
     let release_url = format!(
