@@ -12,7 +12,11 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
 
-use self::tx_bins::{AllocStatus, TxAllottedSpace};
+use self::block_space_alloc::states::{
+    BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
+    BuildingProtocolTxBatch, State,
+};
+use self::block_space_alloc::{AllocStatus, BlockSpaceAllocator};
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
@@ -53,7 +57,7 @@ where
             // TODO: add some info logging?
 
             // start counting allotted space for txs
-            let mut bins = TxAllottedSpace::from(&req);
+            let mut alloc = BlockSpaceAllocator::from(&req);
 
             // NOTE: AD-HOC SOLUTION
             // ======================
@@ -68,27 +72,28 @@ where
             // `tracing::warn!()` log we are not accepting encrypted
             // txs for a given block height
 
-            // add ethereum events and validator set updates as protocol txs
-            #[cfg(feature = "abcipp")]
-            let txs = self
-                .build_vote_extensions_txs(&mut bins, req.local_last_commit);
-            #[cfg(not(feature = "abcipp"))]
-            let mut txs = self.build_vote_extensions_txs(&mut bins, &req.txs);
-            #[cfg(feature = "abcipp")]
-            let mut txs: Vec<TxRecord> =
-                txs.into_iter().map(record::add).collect();
-
-            // add mempool txs
-            let mut mempool_txs = self.build_mempool_txs(&mut bins, req.txs);
-            txs.append(&mut mempool_txs);
-
             // decrypt the wrapper txs included in the previous block
-            let decrypted_txs = self.build_decrypted_txs(&mut bins);
+            let decrypted_txs = self.build_decrypted_txs(&mut alloc);
             #[cfg(feature = "abcipp")]
             let decrypted_txs: Vec<TxRecord> =
                 decrypted_txs.into_iter().map(record::add).collect();
-            let mut decrypted_txs = decrypted_txs;
-            txs.append(&mut decrypted_txs);
+            let mut txs = decrypted_txs;
+
+            // add ethereum events and validator set updates as protocol txs
+            #[cfg(feature = "abcipp")]
+            let protocol_txs = self
+                .build_vote_extensions_txs(&mut alloc, req.local_last_commit);
+            #[cfg(not(feature = "abcipp"))]
+            let mut protocol_txs =
+                self.build_vote_extensions_txs(&mut alloc, &req.txs);
+            #[cfg(feature = "abcipp")]
+            let mut protocol_txs: Vec<TxRecord> =
+                protocol_txs.into_iter().map(record::add).collect();
+            txs.append(&mut protocol_txs);
+
+            // add mempool txs
+            let mut mempool_txs = self.build_mempool_txs(&mut alloc, req.txs);
+            txs.append(&mut mempool_txs);
 
             txs
         } else {
@@ -118,7 +123,7 @@ where
     /// events and, optionally, a validator set update
     fn build_vote_extensions_txs(
         &mut self,
-        bins: &mut TxAllottedSpace,
+        alloc: &mut BlockSpaceAllocator<BuildingProtocolTxBatch>,
         #[cfg(feature = "abcipp")] local_last_commit: Option<
             ExtendedCommitInfo,
         >,
@@ -182,7 +187,7 @@ where
         .chain(protocol_txs.into_iter())
         .collect();
 
-        match bins.try_alloc_protocol_tx_batch(txs.iter().map(Vec::as_slice)) {
+        match alloc.try_alloc_batch(txs.iter().map(Vec::as_slice)) {
             AllocStatus::Accepted => txs,
             AllocStatus::Rejected => {
                 // no space left for tx batch, so we
@@ -208,9 +213,9 @@ where
 
     /// Builds a batch of mempool transactions
     #[cfg(feature = "abcipp")]
-    fn build_mempool_txs(
+    fn build_mempool_txs<Mode>(
         &mut self,
-        _bins: &mut TxAllottedSpace,
+        _alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
         txs: Vec<Vec<u8>>,
     ) -> Vec<TxRecord> {
         // TODO(feature = "abcipp"): implement building batch of mempool txs
@@ -219,9 +224,9 @@ where
 
     /// Builds a batch of mempool transactions
     #[cfg(not(feature = "abcipp"))]
-    fn build_mempool_txs(
+    fn build_mempool_txs<Mode>(
         &mut self,
-        bins: &mut TxAllottedSpace,
+        alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
         txs: Vec<Vec<u8>>,
     ) -> Vec<TxBytes> {
         txs.into_iter()
@@ -236,7 +241,7 @@ where
             })
             // TODO: handle bin overflows
             .take_while(|tx_bytes| {
-                bins.try_alloc_encrypted_tx(&*tx_bytes) == AllocStatus::Accepted
+                alloc.try_alloc(&*tx_bytes) == AllocStatus::Accepted
             })
             .collect()
     }
@@ -251,7 +256,7 @@ where
     // - https://github.com/anoma/ferveo
     fn build_decrypted_txs(
         &mut self,
-        bins: &mut TxAllottedSpace,
+        alloc: &mut BlockSpaceAllocator<BuildingDecryptedTxBatch>,
     ) -> Vec<TxBytes> {
         // TODO: This should not be hardcoded
         let privkey =
@@ -268,8 +273,9 @@ where
                 .to_bytes()
             })
             // TODO: handle bin overflows
+            // TODO: all txs should be accepted
             .take_while(|tx_bytes| {
-                bins.try_alloc_decrypted_tx(&*tx_bytes) == AllocStatus::Accepted
+                alloc.try_alloc(&*tx_bytes) == AllocStatus::Accepted
             })
             .collect()
     }
