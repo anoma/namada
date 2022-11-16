@@ -231,12 +231,10 @@ where
 {
     verifiers
         .par_iter()
-        // TODO temporary pending on <https://github.com/anoma/anoma/issues/193>
-        .filter(|addr| !matches!(addr, Address::Implicit(_)))
         .try_fold(VpsResult::default, |mut result, addr| {
             let mut gas_meter = VpGasMeter::new(initial_gas);
             let accept = match &addr {
-                Address::Established(_) => {
+                Address::Implicit(_) | Address::Established(_) => {
                     let (vp, gas) = storage
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
@@ -376,8 +374,6 @@ where
 
                     accepted
                 }
-                // TODO temporary pending on <https://github.com/anoma/anoma/issues/193>
-                Address::Implicit(_) => unreachable!(),
             };
 
             // Returning error from here will short-circuit the VP parallel

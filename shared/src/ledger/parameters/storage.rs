@@ -6,6 +6,7 @@ const EPOCH_DURATION_KEY: &str = "epoch_duration";
 const VP_WHITELIST_KEY: &str = "vp_whitelist";
 const TX_WHITELIST_KEY: &str = "tx_whitelist";
 const MAX_EXPECTED_TIME_PER_BLOCK_KEY: &str = "max_expected_time_per_block";
+const IMPLICIT_VP_KEY: &str = "implicit_vp";
 
 /// Returns if the key is a parameter key.
 pub fn is_parameter_key(key: &Key) -> bool {
@@ -52,6 +53,14 @@ pub fn is_vp_whitelist_key(key: &Key) -> bool {
     ] if addr == &ADDRESS && vp_whitelist == VP_WHITELIST_KEY)
 }
 
+/// Returns if the key is the implicit VP key.
+pub fn is_implicit_vp_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+        DbKeySeg::AddressSeg(addr),
+        DbKeySeg::StringSeg(sub_key),
+    ] if addr == &ADDRESS && sub_key == IMPLICIT_VP_KEY)
+}
+
 /// Storage key used for epoch parameter.
 pub fn get_epoch_storage_key() -> Key {
     Key {
@@ -88,6 +97,16 @@ pub fn get_max_expected_time_per_block_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(MAX_EXPECTED_TIME_PER_BLOCK_KEY.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for implicit VP parameter.
+pub fn get_implicit_vp_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(IMPLICIT_VP_KEY.to_string()),
         ],
     }
 }
