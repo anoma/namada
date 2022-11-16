@@ -159,8 +159,6 @@ pub mod genesis_config {
         pub consensus_public_key: Option<HexString>,
         // Public key for validator account. (default: generate)
         pub account_public_key: Option<HexString>,
-        // Public key for staking reward account. (default: generate)
-        pub staking_reward_public_key: Option<HexString>,
         // Public protocol signing key for validator account. (default:
         // generate)
         pub protocol_public_key: Option<HexString>,
@@ -168,8 +166,6 @@ pub mod genesis_config {
         pub dkg_public_key: Option<HexString>,
         // Validator address (default: generate).
         pub address: Option<String>,
-        // Staking reward account address (default: generate).
-        pub staking_reward_address: Option<String>,
         // Total number of tokens held at genesis.
         // XXX: u64 doesn't work with toml-rs!
         pub tokens: Option<u64>,
@@ -178,8 +174,6 @@ pub mod genesis_config {
         pub non_staked_balance: Option<u64>,
         // Filename of validator VP. (default: default validator VP)
         pub validator_vp: Option<String>,
-        // Filename of staking reward account VP. (default: user VP)
-        pub staking_reward_vp: Option<String>,
         // IP:port of the validator. (used in generation only)
         pub net_address: Option<String>,
         /// Tendermint node key is used to derive Tendermint node ID for node
@@ -277,26 +271,14 @@ pub mod genesis_config {
     ) -> Validator {
         let validator_vp_name = config.validator_vp.as_ref().unwrap();
         let validator_vp_config = wasm.get(validator_vp_name).unwrap();
-        let reward_vp_name = config.staking_reward_vp.as_ref().unwrap();
-        let reward_vp_config = wasm.get(reward_vp_name).unwrap();
 
         Validator {
             pos_data: GenesisValidator {
                 address: Address::decode(&config.address.as_ref().unwrap())
                     .unwrap(),
-                staking_reward_address: Address::decode(
-                    &config.staking_reward_address.as_ref().unwrap(),
-                )
-                .unwrap(),
                 tokens: token::Amount::whole(config.tokens.unwrap_or_default()),
                 consensus_key: config
                     .consensus_public_key
-                    .as_ref()
-                    .unwrap()
-                    .to_public_key()
-                    .unwrap(),
-                staking_reward_key: config
-                    .staking_reward_public_key
                     .as_ref()
                     .unwrap()
                     .to_public_key()
@@ -328,16 +310,6 @@ pub mod genesis_config {
                 .sha256
                 .clone()
                 .unwrap()
-                .to_sha256_bytes()
-                .unwrap(),
-            reward_vp_code_path: reward_vp_config.filename.to_owned(),
-            reward_vp_sha256: reward_vp_config
-                .sha256
-                .clone()
-                .unwrap_or_else(|| {
-                    eprintln!("Unknown validator VP WASM sha256");
-                    cli::safe_exit(1);
-                })
                 .to_sha256_bytes()
                 .unwrap(),
         }
@@ -658,10 +630,6 @@ pub struct Validator {
     pub validator_vp_code_path: String,
     /// Expected SHA-256 hash of the validator VP
     pub validator_vp_sha256: [u8; 32],
-    /// Staking reward account code WASM
-    pub reward_vp_code_path: String,
-    /// Expected SHA-256 hash of the staking reward VP
-    pub reward_vp_sha256: [u8; 32],
 }
 
 #[derive(
@@ -736,23 +704,13 @@ pub fn genesis() -> Genesis {
     // `tests::gen_genesis_validator` below.
     let consensus_keypair = wallet::defaults::validator_keypair();
     let account_keypair = wallet::defaults::validator_keypair();
-    let ed_staking_reward_keypair = ed25519::SecretKey::try_from_slice(&[
-        61, 198, 87, 204, 44, 94, 234, 228, 217, 72, 245, 27, 40, 2, 151, 174,
-        24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 77, 162, 243, 125, 240, 206,
-    ])
-    .unwrap();
-    let staking_reward_keypair =
-        common::SecretKey::try_from_sk(&ed_staking_reward_keypair).unwrap();
     let address = wallet::defaults::validator_address();
-    let staking_reward_address = Address::decode("atest1v4ehgw36xcersvee8qerxd35x9prsw2xg5erxv6pxfpygd2x89z5xsf5xvmnysejgv6rwd2rnj2avt").unwrap();
     let (protocol_keypair, dkg_keypair) = wallet::defaults::validator_keys();
     let validator = Validator {
         pos_data: GenesisValidator {
             address,
-            staking_reward_address,
             tokens: token::Amount::whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
-            staking_reward_key: staking_reward_keypair.ref_to(),
         },
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),
@@ -761,8 +719,6 @@ pub fn genesis() -> Genesis {
         // TODO replace with https://github.com/anoma/anoma/issues/25)
         validator_vp_code_path: vp_user_path.into(),
         validator_vp_sha256: Default::default(),
-        reward_vp_code_path: vp_user_path.into(),
-        reward_vp_sha256: Default::default(),
     };
     let parameters = Parameters {
         epoch_duration: EpochDuration {
@@ -860,24 +816,18 @@ pub mod tests {
     use crate::wallet;
 
     /// Run `cargo test gen_genesis_validator -- --nocapture` to generate a
-    /// new genesis validator address, staking reward address and keypair.
+    /// new genesis validator address and keypair.
     #[test]
     fn gen_genesis_validator() {
         let address = gen_established_address();
-        let staking_reward_address = gen_established_address();
         let mut rng: ThreadRng = thread_rng();
         let keypair: common::SecretKey =
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
         let kp_arr = keypair.try_to_vec().unwrap();
-        let staking_reward_keypair: common::SecretKey =
-            ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
-        let srkp_arr = staking_reward_keypair.try_to_vec().unwrap();
         let (protocol_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
         println!("address: {}", address);
-        println!("staking_reward_address: {}", staking_reward_address);
         println!("keypair: {:?}", kp_arr);
-        println!("staking_reward_keypair: {:?}", srkp_arr);
         println!("protocol_keypair: {:?}", protocol_keypair);
         println!("dkg_keypair: {:?}", dkg_keypair.try_to_vec().unwrap());
     }

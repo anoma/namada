@@ -39,8 +39,6 @@ pub struct ValidatorWallet {
     pub account_key: common::SecretKey,
     /// Cryptographic keypair for consensus key
     pub consensus_key: common::SecretKey,
-    /// Cryptographic keypair for rewards key
-    pub rewards_key: common::SecretKey,
     /// Cryptographic keypair for Tendermint node key
     pub tendermint_node_key: common::SecretKey,
 }
@@ -53,8 +51,6 @@ pub struct ValidatorStore {
     pub account_key: wallet::StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for consensus key
     pub consensus_key: wallet::StoredKeypair<common::SecretKey>,
-    /// Cryptographic keypair for rewards key
-    pub rewards_key: wallet::StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for Tendermint node key
     pub tendermint_node_key: wallet::StoredKeypair<common::SecretKey>,
     /// Special validator keys
@@ -106,7 +102,6 @@ impl ValidatorWallet {
 
                 let password = if store.account_key.is_encrypted()
                     || store.consensus_key.is_encrypted()
-                    || store.rewards_key.is_encrypted()
                     || store.account_key.is_encrypted()
                 {
                     Some(wallet::read_password("Enter decryption password: "))
@@ -118,8 +113,6 @@ impl ValidatorWallet {
                     store.account_key.get(true, password.clone())?;
                 let consensus_key =
                     store.consensus_key.get(true, password.clone())?;
-                let rewards_key =
-                    store.rewards_key.get(true, password.clone())?;
                 let tendermint_node_key =
                     store.tendermint_node_key.get(true, password)?;
 
@@ -127,7 +120,6 @@ impl ValidatorWallet {
                     store,
                     account_key,
                     consensus_key,
-                    rewards_key,
                     tendermint_node_key,
                 })
             }
@@ -148,7 +140,6 @@ impl ValidatorWallet {
             SchemeType::Ed25519,
             &password,
         );
-        let (rewards_key, rewards_sk) = gen_key_to_store(scheme, &password);
         let (tendermint_node_key, tendermint_node_sk) = gen_key_to_store(
             // Note that TM only allows ed25519 for node IDs
             SchemeType::Ed25519,
@@ -158,7 +149,6 @@ impl ValidatorWallet {
         let store = ValidatorStore {
             account_key,
             consensus_key,
-            rewards_key,
             tendermint_node_key,
             validator_keys,
         };
@@ -166,7 +156,6 @@ impl ValidatorWallet {
             store,
             account_key: account_sk,
             consensus_key: consensus_sk,
-            rewards_key: rewards_sk,
             tendermint_node_key: tendermint_node_sk,
         }
     }

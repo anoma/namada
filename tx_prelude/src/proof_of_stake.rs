@@ -4,8 +4,7 @@ pub use namada::ledger::pos::*;
 use namada::ledger::pos::{
     bond_key, namada_proof_of_stake, params_key, total_voting_power_key,
     unbond_key, validator_address_raw_hash_key, validator_consensus_key_key,
-    validator_set_key, validator_slashes_key,
-    validator_staking_reward_address_key, validator_state_key,
+    validator_set_key, validator_slashes_key, validator_state_key,
     validator_total_deltas_key, validator_voting_power_key,
 };
 use namada::types::address::Address;
@@ -74,19 +73,17 @@ impl Ctx {
     }
 
     /// Attempt to initialize a validator account. On success, returns the
-    /// initialized validator account's address and its staking reward address.
+    /// initialized validator account's address.
     pub fn init_validator(
         &mut self,
         InitValidator {
             account_key,
             consensus_key,
-            rewards_account_key,
             protocol_key,
             dkg_key,
             validator_vp_code,
-            rewards_vp_code,
         }: InitValidator,
-    ) -> EnvResult<(Address, Address)> {
+    ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
         // Init validator account
         let validator_address = self.init_account(&validator_vp_code)?;
@@ -97,19 +94,13 @@ impl Ctx {
         let dkg_pk_key = key::dkg_session_keys::dkg_pk_key(&validator_address);
         self.write(&dkg_pk_key, &dkg_key)?;
 
-        // Init staking reward account
-        let rewards_address = self.init_account(&rewards_vp_code)?;
-        let pk_key = key::pk_key(&rewards_address);
-        self.write(&pk_key, &rewards_account_key)?;
-
         self.become_validator(
             &validator_address,
-            &rewards_address,
             &consensus_key,
             current_epoch,
         )?;
 
-        Ok((validator_address, rewards_address))
+        Ok(validator_address)
     }
 }
 
@@ -138,14 +129,6 @@ impl namada_proof_of_stake::PosActions for Ctx {
     ) -> Result<(), Self::Error> {
         let raw_hash = key::tm_consensus_key_raw_hash(consensus_key);
         self.write(&validator_address_raw_hash_key(raw_hash), address)
-    }
-
-    fn write_validator_staking_reward_address(
-        &mut self,
-        key: &Self::Address,
-        value: Self::Address,
-    ) -> Result<(), Self::Error> {
-        self.write(&validator_staking_reward_address_key(key), &value)
     }
 
     fn write_validator_consensus_key(
