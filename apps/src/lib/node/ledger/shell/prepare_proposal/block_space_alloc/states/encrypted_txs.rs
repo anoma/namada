@@ -36,8 +36,11 @@ impl State
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
 {
     #[inline]
-    fn try_alloc(&mut self, _tx: &[u8]) -> AllocStatus {
-        AllocStatus::Rejected
+    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+        AllocStatus::Rejected {
+            tx_len: tx.len() as u64,
+            space_left: 0,
+        }
     }
 
     #[inline]
@@ -45,7 +48,12 @@ impl State
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
     {
-        AllocStatus::Rejected
+        AllocStatus::Rejected {
+            // arbitrary `tx_len` value; doesn't really matter what we
+            // choose here, as long as it's greater than zero
+            tx_len: u64::MAX,
+            space_left: 0,
+        }
     }
 }
 

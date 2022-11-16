@@ -62,10 +62,10 @@ pub enum AllocStatus {
     /// The transaction is able to be included in the current block.
     Accepted,
     /// The transaction can only be included in an upcoming block.
-    Rejected,
+    Rejected { tx_len: u64, space_left: u64 },
     /// The transaction would overflow the allotted bin space,
     /// therefore it needs to be handled separately.
-    OverflowsBin,
+    OverflowsBin { tx_len: u64, bin_size: u64 },
 }
 
 /// Allotted space for a batch of transactions in some proposed block,
@@ -171,6 +171,12 @@ impl TxBin {
         }
     }
 
+    /// Return the amount of space left in this [`TxBin`].
+    #[inline]
+    fn space_left_in_bytes(&self) -> u64 {
+        self.allotted_space_in_bytes - self.current_space_in_bytes
+    }
+
     /// Construct a new [`TxBin`], with a capacity of `max_bytes`.
     #[inline]
     fn init(max_bytes: u64) -> Self {
@@ -194,14 +200,16 @@ impl TxBin {
     fn try_dump(&mut self, tx: &[u8]) -> AllocStatus {
         let tx_len = tx.len() as u64;
         if tx_len > self.allotted_space_in_bytes {
-            return AllocStatus::OverflowsBin;
+            let bin_size = self.allotted_space_in_bytes;
+            return AllocStatus::OverflowsBin { tx_len, bin_size };
         }
         let occupied = self.current_space_in_bytes + tx_len;
         if occupied <= self.allotted_space_in_bytes {
             self.current_space_in_bytes = occupied;
             AllocStatus::Accepted
         } else {
-            AllocStatus::Rejected
+            let space_left = self.space_left_in_bytes();
+            AllocStatus::Rejected { tx_len, space_left }
         }
     }
 
@@ -217,8 +225,8 @@ impl TxBin {
         for tx in txs {
             match self.try_dump(tx) {
                 AllocStatus::Accepted => space_diff += tx.len() as u64,
-                status
-                @ (AllocStatus::Rejected | AllocStatus::OverflowsBin) => {
+                status @ (AllocStatus::Rejected { .. }
+                | AllocStatus::OverflowsBin { .. }) => {
                     self.current_space_in_bytes -= space_diff;
                     return status;
                 }
