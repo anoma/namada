@@ -98,6 +98,10 @@ where
             let mut mempool_txs = self.build_mempool_txs(&mut alloc, req.txs);
             txs.append(&mut mempool_txs);
 
+            // TODO: fill up remaining space
+            // TODO: check if we can add encrypted txs or not
+            let _alloc = alloc.next_state();
+
             txs
         } else {
             vec![]
@@ -284,7 +288,7 @@ where
                             ?self.storage.get_current_decision_height(),
                         "Dropping large encrypted tx from the current proposal",
                     );
-                    false
+                    true
                 }
             })
             .collect()
@@ -340,7 +344,7 @@ where
                             ?self.storage.get_current_decision_height(),
                         "Dropping large decrypted tx from the current proposal",
                     );
-                    false
+                    true
                 }
             })
             .collect()
