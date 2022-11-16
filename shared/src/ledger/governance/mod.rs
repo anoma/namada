@@ -9,7 +9,6 @@ pub mod utils;
 
 use std::collections::BTreeSet;
 
-use borsh::BorshDeserialize;
 use thiserror::Error;
 
 use self::storage as gov_storage;
@@ -540,18 +539,8 @@ where
 
     /// Validate a governance parameter
     pub fn is_valid_parameter(&self, tx_data: &[u8]) -> Result<bool> {
-        let proposal_id = u64::try_from_slice(tx_data).ok();
-        match proposal_id {
-            Some(id) => {
-                let proposal_execution_key =
-                    gov_storage::get_proposal_execution_key(id);
-                Ok(self
-                    .ctx
-                    .has_key_pre(&proposal_execution_key)
-                    .unwrap_or(false))
-            }
-            _ => Ok(false),
-        }
+        utils::is_proposal_accepted(self.ctx.storage, tx_data)
+            .map_err(Error::NativeVpError)
     }
 
     /// Check if a vote is from a validator

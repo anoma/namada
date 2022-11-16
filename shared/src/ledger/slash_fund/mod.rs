@@ -5,11 +5,10 @@ use std::collections::BTreeSet;
 /// SlashFund storage
 pub mod storage;
 
-use borsh::BorshDeserialize;
 use thiserror::Error;
 
 use self::storage as slash_fund_storage;
-use super::governance::storage as gov_storage;
+use super::governance::{self};
 use super::storage_api::StorageRead;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
@@ -67,18 +66,11 @@ where
                     if addr.ne(&ADDRESS) {
                         return true;
                     }
-
-                    let proposal_id = u64::try_from_slice(tx_data).ok();
-                    match proposal_id {
-                        Some(id) => {
-                            let proposal_execution_key =
-                                gov_storage::get_proposal_execution_key(id);
-                            self.ctx
-                                .has_key_pre(&proposal_execution_key)
-                                .unwrap_or(false)
-                        }
-                        None => false,
-                    }
+                    governance::utils::is_proposal_accepted(
+                        self.ctx.storage,
+                        tx_data,
+                    )
+                    .unwrap_or(false)
                 }
                 KeyType::UNKNOWN_SLASH_FUND => false,
                 KeyType::UNKNOWN => true,
