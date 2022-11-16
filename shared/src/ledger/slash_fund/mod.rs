@@ -12,7 +12,6 @@ use super::governance::{self};
 use super::storage_api::StorageRead;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::ledger::vp_env::VpEnv;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token;

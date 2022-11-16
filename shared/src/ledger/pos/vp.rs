@@ -27,7 +27,7 @@ use super::{
     ValidatorSets, ValidatorTotalDeltas,
 };
 use crate::impl_pos_read_only;
-use crate::ledger::governance::storage as gov_storage;
+use crate::ledger::governance;
 use crate::ledger::native_vp::{
     self, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
 };
@@ -37,7 +37,6 @@ use crate::ledger::pos::{
 };
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::{self, StorageRead};
-use crate::ledger::vp_env::VpEnv;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::types::token;
@@ -127,18 +126,11 @@ where
 
         for key in keys_changed {
             if is_params_key(key) {
-                let proposal_id = u64::try_from_slice(tx_data).ok();
-                match proposal_id {
-                    Some(id) => {
-                        let proposal_execution_key =
-                            gov_storage::get_proposal_execution_key(id);
-                        return Ok(self
-                            .ctx
-                            .has_key_pre(&proposal_execution_key)
-                            .unwrap_or(false));
-                    }
-                    _ => return Ok(false),
-                }
+                return governance::utils::is_proposal_accepted(
+                    self.ctx.storage,
+                    tx_data,
+                )
+                .map_err(Error::NativeVpError);
             } else if is_validator_set_key(key) {
                 let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     ValidatorSets::try_from_slice(&bytes[..]).ok()
