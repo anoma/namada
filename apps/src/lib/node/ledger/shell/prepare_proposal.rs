@@ -192,7 +192,7 @@ where
 
         match alloc.try_alloc_batch(txs.iter().map(Vec::as_slice)) {
             AllocStatus::Accepted => txs,
-            AllocStatus::Rejected => {
+            AllocStatus::Rejected { tx_len, space_left } => {
                 // no space left for tx batch, so we
                 // do not include any protocol tx in
                 // this block
@@ -204,12 +204,25 @@ where
                 // could have, say, 2/3 of the bin space available
                 // for eth events, and 1/3 available for valset
                 // upds
+                tracing::debug!(
+                    tx_len,
+                    space_left,
+                    proposal_height =
+                        ?self.storage.get_current_decision_height(),
+                    "Dropping protocol tx from the current proposal",
+                );
                 vec![]
             }
-            AllocStatus::OverflowsBin => {
+            AllocStatus::OverflowsBin { tx_len, bin_size } => {
                 // TODO: handle tx whose size is greater
                 // than bin size
-                // TODO: tracing warn
+                tracing::warn!(
+                    tx_len,
+                    bin_size,
+                    proposal_height =
+                        ?self.storage.get_current_decision_height(),
+                    "Dropping large protocol tx from the current proposal",
+                );
                 vec![]
             }
         }
@@ -249,12 +262,28 @@ where
                     None
                 }
             })
-            // TODO: handle bin overflows
             .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
                 AllocStatus::Accepted => true,
-                AllocStatus::Rejected => false,
-                AllocStatus::OverflowsBin => {
-                    // TODO: tracing warn
+                AllocStatus::Rejected { tx_len, space_left } => {
+                    tracing::debug!(
+                        tx_len,
+                        space_left,
+                        proposal_height =
+                            ?self.storage.get_current_decision_height(),
+                        "Dropping encrypted tx from the current proposal",
+                    );
+                    false
+                }
+                AllocStatus::OverflowsBin { tx_len, bin_size } => {
+                    // TODO: handle tx whose size is greater
+                    // than bin size
+                    tracing::warn!(
+                        tx_len,
+                        bin_size,
+                        proposal_height =
+                            ?self.storage.get_current_decision_height(),
+                        "Dropping large encrypted tx from the current proposal",
+                    );
                     false
                 }
             })
@@ -287,13 +316,30 @@ where
                 })
                 .to_bytes()
             })
-            // TODO: handle bin overflows
-            // TODO: all txs should be accepted
+            // TODO: make sure all txs are accepted;
             .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
                 AllocStatus::Accepted => true,
-                AllocStatus::Rejected => false,
-                AllocStatus::OverflowsBin => {
-                    // TODO: tracing warn
+                AllocStatus::Rejected { tx_len, space_left } => {
+                    // TODO: handle rejected txs
+                    tracing::warn!(
+                        tx_len,
+                        space_left,
+                        proposal_height =
+                            ?self.storage.get_current_decision_height(),
+                        "Dropping decrypted tx from the current proposal",
+                    );
+                    false
+                }
+                AllocStatus::OverflowsBin { tx_len, bin_size } => {
+                    // TODO: handle tx whose size is greater
+                    // than bin size
+                    tracing::warn!(
+                        tx_len,
+                        bin_size,
+                        proposal_height =
+                            ?self.storage.get_current_decision_height(),
+                        "Dropping large decrypted tx from the current proposal",
+                    );
                     false
                 }
             })
