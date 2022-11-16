@@ -209,6 +209,7 @@ where
             AllocStatus::OverflowsBin => {
                 // TODO: handle tx whose size is greater
                 // than bin size
+                // TODO: tracing warn
                 vec![]
             }
         }
@@ -249,8 +250,13 @@ where
                 }
             })
             // TODO: handle bin overflows
-            .take_while(|tx_bytes| {
-                alloc.try_alloc(&*tx_bytes) == AllocStatus::Accepted
+            .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
+                AllocStatus::Accepted => true,
+                AllocStatus::Rejected => false,
+                AllocStatus::OverflowsBin => {
+                    // TODO: tracing warn
+                    false
+                }
             })
             .collect()
     }
@@ -283,8 +289,13 @@ where
             })
             // TODO: handle bin overflows
             // TODO: all txs should be accepted
-            .take_while(|tx_bytes| {
-                alloc.try_alloc(&*tx_bytes) == AllocStatus::Accepted
+            .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
+                AllocStatus::Accepted => true,
+                AllocStatus::Rejected => false,
+                AllocStatus::OverflowsBin => {
+                    // TODO: tracing warn
+                    false
+                }
             })
             .collect()
     }
@@ -711,6 +722,7 @@ mod test_prepare_proposal {
 
         let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
             local_last_commit: Some(ExtendedCommitInfo {
+                max_tx_bytes: i64::MAX,
                 votes: vec![vote],
                 ..Default::default()
             }),
@@ -791,6 +803,7 @@ mod test_prepare_proposal {
                 .sign(&protocol_key)
                 .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
+                max_tx_bytes: i64::MAX,
                 txs: vec![tx],
                 ..Default::default()
             });
@@ -912,6 +925,7 @@ mod test_prepare_proposal {
             };
             // this should panic
             shell.prepare_proposal(RequestPrepareProposal {
+                max_tx_bytes: i64::MAX,
                 local_last_commit: Some(ExtendedCommitInfo {
                     votes: vec![vote],
                     ..Default::default()
@@ -925,6 +939,7 @@ mod test_prepare_proposal {
                 .sign(&protocol_key)
                 .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
+                max_tx_bytes: i64::MAX,
                 txs: vec![vote],
                 ..Default::default()
             });
