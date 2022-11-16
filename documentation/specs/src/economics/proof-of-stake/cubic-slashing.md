@@ -11,7 +11,7 @@ At the end of each epoch, in order to process any slashes scheduled for processi
 1. Iterate over all slashes for infractions committed within a range of (-1, +1) epochs worth of block heights (this may need to be a protocol parameter) of the infraction in question.
 2. Calculate the slash rate according to the following formula:
 
-$$ \sum_{i \in \text{validators}} \max \{ 0.01, \big(\frac{i_{voting-power}}{\sum_{i \in \text{validators}}i_{voting-power}}\big)^2\} $$
+$$  \max \{ 0.01, 9*\big(\sum_{i \in \text{faulty-validators}}\frac{i_{voting-power}}{\sum_{j \in \text{all-validators}}j_{voting-power}}\big)^2\} $$
 
 Or, in pseudocode:
 <!-- I want to make these two code blocks toggleable as in  https://rdmd.readme.io/docs/code-blocks#tabbed-code-blocks but can't seem to get it to work-->
