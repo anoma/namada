@@ -1,1 +1,1 @@
-- Fix  to run again ([#765](https://github.com/anoma/namada/pull/765))
+- Fix build-and-test-bridge.yml GitHub workflow to run again ([#765](https://github.com/anoma/namada/pull/765))
