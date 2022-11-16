@@ -117,15 +117,6 @@ pub async fn join_network(
             )
         });
 
-    let wasm_dir = global_args.wasm_dir.as_ref().cloned().or_else(|| {
-        if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
-            let wasm_dir: PathBuf = wasm_dir.into();
-            Some(wasm_dir)
-        } else {
-            None
-        }
-    });
-
     let release_filename = format!("{}.tar.gz", chain_id);
     let release_url = format!(
         "{}/{}",
@@ -213,6 +204,15 @@ pub async fn join_network(
             .await
             .unwrap();
     }
+
+    let wasm_dir = global_args.wasm_dir.as_ref().cloned().or_else(|| {
+        if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
+            let wasm_dir: PathBuf = wasm_dir.into();
+            Some(wasm_dir)
+        } else {
+            None
+        }
+    });
 
     // Move wasm-dir and update config if it's non-default
     if let Some(wasm_dir) = wasm_dir.as_ref() {
