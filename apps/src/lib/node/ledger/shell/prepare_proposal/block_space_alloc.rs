@@ -259,6 +259,7 @@ mod tests {
 
     use proptest::prelude::*;
 
+    use super::states::{NextStateWithEncryptedTxs, State};
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -269,19 +270,6 @@ mod tests {
         protocol_txs: Vec<TxBytes>,
         encrypted_txs: Vec<TxBytes>,
         decrypted_txs: Vec<TxBytes>,
-    }
-
-    /// Check if the sum of all individual tx thresholds does
-    /// not exceed one.
-    ///
-    /// This is important, because we do not want to exceed
-    /// the maximum block size in Tendermint, and get randomly
-    /// rejected blocks.
-    #[test]
-    fn test_tx_thres_doesnt_exceed_one() {
-        let sum =
-            thres::PROTOCOL_TX + thres::ENCRYPTED_TX + thres::DECRYPTED_TX;
-        assert_eq!(sum.to_integer(), 1);
     }
 
     proptest! {
@@ -321,7 +309,7 @@ mod tests {
 
         // make sure we can't dump any new decrypted txs in the bin
         assert_eq!(
-            bins.try_alloc_decrypted_tx(b"arbitrary tx bytes"),
+            bins.try_alloc(b"arbitrary tx bytes"),
             AllocStatus::Rejected
         );
     }
@@ -343,49 +331,44 @@ mod tests {
             encrypted_txs,
             decrypted_txs,
         } = args;
+
+        // produce new txs until the moment we would have
+        // filled up the bins.
+        //
+        // iterate over the produced txs to make sure we can keep
+        // dumping new txs without filling up the bins
+
         let bins = RefCell::new(BlockSpaceAllocator::init(
             tendermint_max_block_space_in_bytes,
         ));
-
-        // produce new txs until we fill up the bins
-        //
-        // TODO: ideally the proptest strategy would already return
-        // txs whose total added size would be bounded
-        let protocol_txs = protocol_txs.into_iter().take_while(|tx| {
-            let bin = bins.borrow().protocol_txs;
-            let new_size = bin.current_space_in_bytes + tx.len() as u64;
-            new_size < bin.allotted_space_in_bytes
-        });
-        let encrypted_txs = encrypted_txs.into_iter().take_while(|tx| {
-            let bin = bins.borrow().encrypted_txs;
-            let new_size = bin.current_space_in_bytes + tx.len() as u64;
-            new_size < bin.allotted_space_in_bytes
-        });
         let decrypted_txs = decrypted_txs.into_iter().take_while(|tx| {
             let bin = bins.borrow().decrypted_txs;
             let new_size = bin.current_space_in_bytes + tx.len() as u64;
             new_size < bin.allotted_space_in_bytes
         });
-
-        // make sure we can keep dumping txs,
-        // without filling up the bins
-        for tx in protocol_txs {
-            assert_eq!(
-                bins.borrow_mut().try_alloc_protocol_tx(&tx),
-                AllocStatus::Accepted
-            );
-        }
-        for tx in encrypted_txs {
-            assert_eq!(
-                bins.borrow_mut().try_alloc_encrypted_tx(&tx),
-                AllocStatus::Accepted
-            );
-        }
         for tx in decrypted_txs {
-            assert_eq!(
-                bins.borrow_mut().try_alloc_decrypted_tx(&tx),
-                AllocStatus::Accepted
-            );
+            assert_eq!(bins.borrow_mut().try_alloc(&tx), AllocStatus::Accepted);
+        }
+
+        let bins = RefCell::new(bins.into_inner().next_state());
+        let protocol_txs = protocol_txs.into_iter().take_while(|tx| {
+            let bin = bins.borrow().protocol_txs;
+            let new_size = bin.current_space_in_bytes + tx.len() as u64;
+            new_size < bin.allotted_space_in_bytes
+        });
+        for tx in protocol_txs {
+            assert_eq!(bins.borrow_mut().try_alloc(&tx), AllocStatus::Accepted);
+        }
+
+        let bins =
+            RefCell::new(bins.into_inner().next_state_with_encrypted_txs());
+        let encrypted_txs = encrypted_txs.into_iter().take_while(|tx| {
+            let bin = bins.borrow().encrypted_txs;
+            let new_size = bin.current_space_in_bytes + tx.len() as u64;
+            new_size < bin.allotted_space_in_bytes
+        });
+        for tx in encrypted_txs {
+            assert_eq!(bins.borrow_mut().try_alloc(&tx), AllocStatus::Accepted);
         }
     }
 
@@ -422,11 +405,11 @@ mod tests {
             |tendermint_max_block_space_in_bytes| {
                 (
                     tendermint_max_block_space_in_bytes,
-                    (thres::PROTOCOL_TX * tendermint_max_block_space_in_bytes)
+                    (thres::ONE_THIRD * tendermint_max_block_space_in_bytes)
                         .to_integer() as usize,
-                    (thres::ENCRYPTED_TX * tendermint_max_block_space_in_bytes)
+                    (thres::ONE_THIRD * tendermint_max_block_space_in_bytes)
                         .to_integer() as usize,
-                    (thres::DECRYPTED_TX * tendermint_max_block_space_in_bytes)
+                    (thres::ONE_THIRD * tendermint_max_block_space_in_bytes)
                         .to_integer() as usize,
                 )
             },
