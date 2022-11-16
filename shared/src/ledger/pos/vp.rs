@@ -25,7 +25,7 @@ use super::{
     ValidatorSets, ValidatorTotalDeltas,
 };
 use crate::impl_pos_read_only;
-use crate::ledger::governance::vp::is_proposal_accepted;
+use crate::ledger::governance;
 use crate::ledger::native_vp::{
     self, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
 };
@@ -124,11 +124,11 @@ where
 
         for key in keys_changed {
             if is_params_key(key) {
-                let proposal_id = u64::try_from_slice(tx_data).ok();
-                match proposal_id {
-                    Some(id) => return Ok(is_proposal_accepted(&self.ctx, id)),
-                    _ => return Ok(false),
-                }
+                return governance::utils::is_proposal_accepted(
+                    self.ctx.storage,
+                    tx_data,
+                )
+                .map_err(Error::NativeVpError);
             } else if is_validator_set_key(key) {
                 let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
                     ValidatorSets::try_from_slice(&bytes[..]).ok()

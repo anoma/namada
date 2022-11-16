@@ -776,6 +776,17 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 println!("{:4}Status: pending", "");
             } else if start_epoch <= current_epoch && current_epoch <= end_epoch
             {
+                let votes = get_proposal_votes(client, start_epoch, id).await;
+                let partial_proposal_result =
+                    compute_tally(client, start_epoch, votes).await;
+                println!(
+                    "{:4}Yay votes: {}",
+                    "", partial_proposal_result.total_yay_power
+                );
+                println!(
+                    "{:4}Nay votes: {}",
+                    "", partial_proposal_result.total_nay_power
+                );
                 println!("{:4}Status: on-going", "");
             } else {
                 let votes = get_proposal_votes(client, start_epoch, id).await;
