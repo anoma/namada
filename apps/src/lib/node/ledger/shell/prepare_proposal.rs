@@ -14,7 +14,7 @@ use namada::types::vote_extensions::VoteExtensionDigest;
 
 use self::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
-    BuildingProtocolTxBatch, State,
+    BuildingProtocolTxBatch, NextState, NextStateWithEncryptedTxs, State,
 };
 use self::block_space_alloc::{AllocStatus, BlockSpaceAllocator};
 use super::super::*;
@@ -80,6 +80,7 @@ where
             let mut txs = decrypted_txs;
 
             // add ethereum events and validator set updates as protocol txs
+            let mut alloc = alloc.next_state();
             #[cfg(feature = "abcipp")]
             let protocol_txs = self
                 .build_vote_extensions_txs(&mut alloc, req.local_last_commit);
@@ -92,6 +93,8 @@ where
             txs.append(&mut protocol_txs);
 
             // add mempool txs
+            // TODO: check if we can add encrypted txs or not
+            let mut alloc = alloc.next_state_with_encrypted_txs();
             let mut mempool_txs = self.build_mempool_txs(&mut alloc, req.txs);
             txs.append(&mut mempool_txs);
 
@@ -217,7 +220,10 @@ where
         &mut self,
         _alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
         txs: Vec<Vec<u8>>,
-    ) -> Vec<TxRecord> {
+    ) -> Vec<TxRecord>
+    where
+        BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: State,
+    {
         // TODO(feature = "abcipp"): implement building batch of mempool txs
         todo!()
     }
@@ -228,7 +234,10 @@ where
         &mut self,
         alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
         txs: Vec<Vec<u8>>,
-    ) -> Vec<TxBytes> {
+    ) -> Vec<TxBytes>
+    where
+        BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: State,
+    {
         txs.into_iter()
             .filter_map(|tx_bytes| {
                 if let Ok(Ok(TxType::Wrapper(_))) =
