@@ -36,7 +36,7 @@ impl NextStateImpl<WithEncryptedTxs>
 
         // reserve space for encrypted txs
         let free_space = self.uninitialized_space_in_bytes();
-        self.protocol_txs = TxBin::init(free_space);
+        self.encrypted_txs = TxBin::init(free_space);
 
         // cast state
         let Self {
