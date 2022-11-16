@@ -254,7 +254,7 @@ mod tests {
 
     use proptest::prelude::*;
 
-    use super::states::{NextStateWithEncryptedTxs, State};
+    use super::states::{NextState, NextStateWithEncryptedTxs, State};
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
