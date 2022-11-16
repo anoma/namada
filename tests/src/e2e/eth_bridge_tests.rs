@@ -12,6 +12,8 @@ use crate::{run, run_as};
 
 const ETH_BRIDGE_ADDRESS: &str = "atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew";
 
+/// Test that a regular transaction cannot modify arbitrary keys of the Ethereum
+/// bridge VP.
 #[test]
 fn test_unauthorized_tx_cannot_write_storage() {
     const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 30;
