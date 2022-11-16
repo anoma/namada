@@ -235,6 +235,7 @@ mod threshold {
 mod tests {
     use std::cell::RefCell;
 
+    use assert_matches::assert_matches;
     use proptest::prelude::*;
 
     use super::states::{NextState, NextStateWithEncryptedTxs, State};
@@ -286,9 +287,9 @@ mod tests {
             bins.decrypted_txs.allotted_space_in_bytes;
 
         // make sure we can't dump any new decrypted txs in the bin
-        assert_eq!(
+        assert_matches!(
             bins.try_alloc(b"arbitrary tx bytes"),
-            AllocStatus::Rejected
+            AllocStatus::Rejected { .. }
         );
     }
 
@@ -325,7 +326,10 @@ mod tests {
             new_size < bin.allotted_space_in_bytes
         });
         for tx in decrypted_txs {
-            assert_eq!(bins.borrow_mut().try_alloc(&tx), AllocStatus::Accepted);
+            assert_matches!(
+                bins.borrow_mut().try_alloc(&tx),
+                AllocStatus::Accepted
+            );
         }
 
         let bins = RefCell::new(bins.into_inner().next_state());
@@ -335,7 +339,10 @@ mod tests {
             new_size < bin.allotted_space_in_bytes
         });
         for tx in protocol_txs {
-            assert_eq!(bins.borrow_mut().try_alloc(&tx), AllocStatus::Accepted);
+            assert_matches!(
+                bins.borrow_mut().try_alloc(&tx),
+                AllocStatus::Accepted
+            );
         }
 
         let bins =
@@ -346,7 +353,10 @@ mod tests {
             new_size < bin.allotted_space_in_bytes
         });
         for tx in encrypted_txs {
-            assert_eq!(bins.borrow_mut().try_alloc(&tx), AllocStatus::Accepted);
+            assert_matches!(
+                bins.borrow_mut().try_alloc(&tx),
+                AllocStatus::Accepted
+            );
         }
     }
 
