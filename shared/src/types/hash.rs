@@ -2,10 +2,12 @@
 
 use std::fmt::{self, Display};
 use std::ops::Deref;
+use std::str::FromStr;
 
 use arse_merkle_tree::traits::Value;
 use arse_merkle_tree::Hash as TreeHash;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use hex::FromHex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -13,7 +15,7 @@ use thiserror::Error;
 use crate::tendermint::abci::transaction;
 use crate::tendermint::Hash as TmHash;
 
-/// The length of the transaction hash string
+/// The length of the raw transaction hash.
 pub const HASH_LENGTH: usize = 32;
 
 #[allow(missing_docs)]
@@ -23,6 +25,8 @@ pub enum Error {
     Temporary { error: String },
     #[error("Failed trying to convert slice to a hash: {0}")]
     ConversionFailed(std::array::TryFromSliceError),
+    #[error("Failed to convert string into a hash: {0}")]
+    FromStringError(hex::FromHexError),
 }
 
 /// Result for functions that may fail
@@ -86,9 +90,36 @@ impl TryFrom<&[u8]> for Hash {
     }
 }
 
+impl TryFrom<String> for Hash {
+    type Error = self::Error;
+
+    fn try_from(string: String) -> HashResult<Self> {
+        string.as_str().try_into()
+    }
+}
+
+impl TryFrom<&str> for Hash {
+    type Error = self::Error;
+
+    fn try_from(string: &str) -> HashResult<Self> {
+        Ok(Self(
+            <[u8; HASH_LENGTH]>::from_hex(string)
+                .map_err(Error::FromStringError)?,
+        ))
+    }
+}
+
 impl From<Hash> for transaction::Hash {
     fn from(hash: Hash) -> Self {
         Self::new(hash.0)
+    }
+}
+
+impl FromStr for Hash {
+    type Err = self::Error;
+
+    fn from_str(str: &str) -> Result<Self, Self::Err> {
+        Self::try_from(str)
     }
 }
 
@@ -114,5 +145,25 @@ impl From<Hash> for TmHash {
 impl From<Hash> for TreeHash {
     fn from(hash: Hash) -> Self {
         Self::from(hash.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use proptest::string::{string_regex, RegexGeneratorStrategy};
+
+    use super::*;
+
+    /// Returns a proptest strategy that yields hex encoded hashes.
+    fn hex_encoded_hash_strat() -> RegexGeneratorStrategy<String> {
+        string_regex(r"[a-fA-F0-9]{64}").unwrap()
+    }
+
+    proptest! {
+        #[test]
+        fn test_hash_string(hex_hash in hex_encoded_hash_strat()) {
+            let _: Hash = hex_hash.try_into().unwrap();
+        }
     }
 }

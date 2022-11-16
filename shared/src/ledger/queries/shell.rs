@@ -4,11 +4,15 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use tendermint::merkle::proof::Proof;
 
+use crate::ledger::events::log::dumb_queries;
+use crate::ledger::events::Event;
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
-use crate::ledger::storage::{DBIter, StorageHasher, DB};
+use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::types::address::Address;
+use crate::types::hash::Hash;
 use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
 #[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
@@ -37,13 +41,20 @@ router! {SHELL,
 
     // Raw storage access - is given storage key present?
     ( "has_key" / [storage_key: storage::Key] )
-       -> bool = storage_has_key,
+        -> bool = storage_has_key,
+
+    // Block results access - read bit-vec
+    ( "results" ) -> Vec<BlockResults> = read_results,
 
     // Conversion state access - read conversion
     ( "conv" / [asset_type: AssetType] ) -> Conversion = read_conversion,
 
-    // Block results access - read bit-vec
-    ( "results" ) -> Vec<BlockResults> = read_results,
+    // was the transaction accepted?
+    ( "accepted" / [tx_hash: Hash] ) -> Option<Event> = accepted,
+
+    // was the transaction applied?
+    ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
+
 }
 
 // Handlers:
@@ -281,6 +292,40 @@ where
 {
     let data = StorageRead::has_key(ctx.storage, &storage_key)?;
     Ok(data)
+}
+
+fn accepted<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    tx_hash: Hash,
+) -> storage_api::Result<Option<Event>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
+    Ok(ctx
+        .event_log
+        .iter_with_matcher(matcher)
+        .by_ref()
+        .next()
+        .cloned())
+}
+
+fn applied<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    tx_hash: Hash,
+) -> storage_api::Result<Option<Event>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
+    Ok(ctx
+        .event_log
+        .iter_with_matcher(matcher)
+        .by_ref()
+        .next()
+        .cloned())
 }
 
 #[cfg(test)]

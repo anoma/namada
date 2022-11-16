@@ -1,7 +1,5 @@
 mod abortable;
 mod broadcaster;
-pub mod events;
-pub mod rpc;
 mod shell;
 mod shims;
 pub mod storage;
@@ -57,7 +55,6 @@ const ENV_VAR_RAYON_THREADS: &str = "ANOMA_RAYON_THREADS";
 //         Poll::Ready(Ok(()))
 //     }
 //```
-
 impl Shell {
     fn load_proposals(&mut self) {
         let proposals_key = gov_storage::get_commiting_proposals_prefix(
@@ -201,10 +198,15 @@ pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
     shell::reset(config)
 }
 
-/// Runs three concurrent tasks: A tendermint node, a shell which contains an
-/// ABCI server for talking to the tendermint node, and a broadcaster so that
-/// the ledger may submit txs to the chain. All must be alive for correct
-/// functioning.
+/// Runs and monitors a few concurrent tasks.
+///
+/// This includes:
+///   - A Tendermint node.
+///   - A shell which contains an ABCI server, for talking to the Tendermint
+///     node.
+///   - A [`Broadcaster`], for the ledger to submit txs to Tendermint's mempool.
+///
+/// All must be alive for correct functioning.
 async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let setup_data = run_aux_setup(&config, &wasm_dir).await;
 
@@ -411,8 +413,7 @@ fn start_abci_broadcaster_shell(
                 let _ = bc_abort_send.send(());
             })
     } else {
-        // dummy async task, which will resolve instantly
-        tokio::spawn(async { std::future::ready(()).await })
+        spawn_dummy_task(())
     };
 
     // Setup DB cache, it must outlive the DB instance that's in the shell
@@ -525,7 +526,7 @@ async fn run_abci(
 }
 
 /// Launches a new task managing a Tendermint process into the asynchronous
-/// runtime, and returns its `JoinHandle`.
+/// runtime, and returns its [`task::JoinHandle`].
 fn start_tendermint(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
@@ -584,4 +585,10 @@ fn start_tendermint(
                 }
             }
         })
+}
+
+/// Spawn a dummy asynchronous task into the runtime,
+/// which will resolve instantly.
+fn spawn_dummy_task<T: Send + 'static>(ready: T) -> task::JoinHandle<T> {
+    tokio::spawn(async { std::future::ready(ready).await })
 }
