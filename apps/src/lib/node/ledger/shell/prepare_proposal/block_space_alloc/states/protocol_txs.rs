@@ -2,15 +2,17 @@ use std::marker::PhantomData;
 
 use super::super::{AllocStatus, BlockSpaceAllocator, TxBin};
 use super::{
-    BuildingEncryptedTxBatch, BuildingProtocolTxBatch, State, WithEncryptedTxs,
-    WithoutEncryptedTxs,
+    BuildingEncryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl, State,
+    WithEncryptedTxs, WithoutEncryptedTxs,
 };
 
-impl State<WithEncryptedTxs> for BlockSpaceAllocator<BuildingProtocolTxBatch> {
-    type Next = BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>;
-
+impl State for BlockSpaceAllocator<BuildingProtocolTxBatch> {
     #[inline]
     fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+        // TODO: prioritize certain kinds of protocol txs;
+        // this can be done at the `CheckTx` level,
+        // we don't need the `TxBin`s to be aware
+        // of different prioriy hints for protocol txs
         self.protocol_txs.try_dump(tx)
     }
 
@@ -21,9 +23,15 @@ impl State<WithEncryptedTxs> for BlockSpaceAllocator<BuildingProtocolTxBatch> {
     {
         self.protocol_txs.try_dump_all(txs)
     }
+}
+
+impl NextStateImpl<WithEncryptedTxs>
+    for BlockSpaceAllocator<BuildingProtocolTxBatch>
+{
+    type Next = BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>;
 
     #[inline]
-    fn next_state(mut self) -> Self::Next {
+    fn next_state_impl(mut self) -> Self::Next {
         self.protocol_txs.shrink();
 
         // reserve space for encrypted txs
@@ -49,31 +57,14 @@ impl State<WithEncryptedTxs> for BlockSpaceAllocator<BuildingProtocolTxBatch> {
     }
 }
 
-impl State<WithoutEncryptedTxs>
+impl NextStateImpl<WithoutEncryptedTxs>
     for BlockSpaceAllocator<BuildingProtocolTxBatch>
 {
     type Next =
         BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>;
 
     #[inline]
-    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
-        // TODO: prioritize certain kinds of protocol txs;
-        // this can be done at the `CheckTx` level,
-        // we don't need the `TxBin`s to be aware
-        // of different prioriy hints for protocol txs
-        self.protocol_txs.try_dump(tx)
-    }
-
-    #[inline]
-    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
-    where
-        T: IntoIterator<Item = &'tx [u8]> + 'tx,
-    {
-        self.protocol_txs.try_dump_all(txs)
-    }
-
-    #[inline]
-    fn next_state(mut self) -> Self::Next {
+    fn next_state_impl(mut self) -> Self::Next {
         self.protocol_txs.shrink();
 
         // cast state

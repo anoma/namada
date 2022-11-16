@@ -83,10 +83,7 @@ pub enum WithoutEncryptedTxs {}
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-pub trait State<Transition = ()> {
-    /// The next state in the [`BlockSpaceAllocator`] state machine.
-    type Next;
-
+pub trait State {
     /// Try to allocate space for a new transaction.
     fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus;
 
@@ -94,15 +91,31 @@ pub trait State<Transition = ()> {
     fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx;
+}
+
+/// Represents a state transition in the [`BlockSpaceAllocator`] state machine.
+///
+/// This trait should not be used directly. Instead, consider using one of
+/// [`NextState`], [`NextStateWithEncryptedTxs`] or
+/// [`NextStateWithoutEncryptedTxs`].
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+pub trait NextStateImpl<Transition = ()> {
+    /// The next state in the [`BlockSpaceAllocator`] state machine.
+    type Next;
 
     /// Transition to the next state in the [`BlockSpaceAllocator`] state
     /// machine.
-    fn next_state(self) -> Self::Next;
+    fn next_state_impl(self) -> Self::Next;
 }
 
-/// Convenience extension of [`State`], to transition to a new
+/// Convenience extension of [`NextStateImpl`], to transition to a new
 /// state with encrypted txs in a block.
-pub trait StateWithEncryptedTxs: State<WithEncryptedTxs> {
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+pub trait NextStateWithEncryptedTxs: NextStateImpl<WithEncryptedTxs> {
     /// Transition to the next state in the [`BlockSpaceAllocator`] state,
     /// ensuring we include encrypted txs in a block.
     #[inline]
@@ -110,15 +123,20 @@ pub trait StateWithEncryptedTxs: State<WithEncryptedTxs> {
     where
         Self: Sized,
     {
-        self.next_state()
+        self.next_state_impl()
     }
 }
 
-impl<S> StateWithEncryptedTxs for S where S: State<WithEncryptedTxs> {}
+impl<S> NextStateWithEncryptedTxs for S where S: NextStateImpl<WithEncryptedTxs> {}
 
-/// Convenience extension of [`State`], to transition to a new
+/// Convenience extension of [`NextStateImpl`], to transition to a new
 /// state without encrypted txs in a block.
-pub trait StateWithoutEncryptedTxs: State<WithoutEncryptedTxs> {
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+pub trait NextStateWithoutEncryptedTxs:
+    NextStateImpl<WithoutEncryptedTxs>
+{
     /// Transition to the next state in the [`BlockSpaceAllocator`] state,
     /// ensuring we do not include encrypted txs in a block.
     #[inline]
@@ -126,8 +144,30 @@ pub trait StateWithoutEncryptedTxs: State<WithoutEncryptedTxs> {
     where
         Self: Sized,
     {
-        self.next_state()
+        self.next_state_impl()
     }
 }
 
-impl<S> StateWithoutEncryptedTxs for S where S: State<WithoutEncryptedTxs> {}
+impl<S> NextStateWithoutEncryptedTxs for S where
+    S: NextStateImpl<WithoutEncryptedTxs>
+{
+}
+
+/// Convenience extension of [`NextStateImpl`], to transition to a new
+/// state with a null transition function.
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+pub trait NextState: NextStateImpl {
+    /// Transition to the next state in the [`BlockSpaceAllocator`] state,
+    /// using a null transiiton function.
+    #[inline]
+    fn next_state(self) -> Self::Next
+    where
+        Self: Sized,
+    {
+        self.next_state_impl()
+    }
+}
+
+impl<S> NextState for S where S: NextStateImpl {}

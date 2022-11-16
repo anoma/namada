@@ -2,13 +2,11 @@ use std::marker::PhantomData;
 
 use super::super::{AllocStatus, BlockSpaceAllocator};
 use super::{
-    BuildingEncryptedTxBatch, FillingRemainingSpace, State, WithEncryptedTxs,
-    WithoutEncryptedTxs,
+    BuildingEncryptedTxBatch, FillingRemainingSpace, NextStateImpl, State,
+    WithEncryptedTxs, WithoutEncryptedTxs,
 };
 
 impl State for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>> {
-    type Next = BlockSpaceAllocator<FillingRemainingSpace<WithEncryptedTxs>>;
-
     #[inline]
     fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
         self.encrypted_txs.try_dump(tx)
@@ -21,9 +19,15 @@ impl State for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>> {
     {
         self.encrypted_txs.try_dump_all(txs)
     }
+}
+
+impl NextStateImpl
+    for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>
+{
+    type Next = BlockSpaceAllocator<FillingRemainingSpace<WithEncryptedTxs>>;
 
     #[inline]
-    fn next_state(self) -> Self::Next {
+    fn next_state_impl(self) -> Self::Next {
         next_state(self)
     }
 }
@@ -31,23 +35,27 @@ impl State for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>> {
 impl State
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
 {
-    type Next = BlockSpaceAllocator<FillingRemainingSpace<WithoutEncryptedTxs>>;
-
     #[inline]
-    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
-        self.encrypted_txs.try_dump(tx)
+    fn try_alloc(&mut self, _tx: &[u8]) -> AllocStatus {
+        AllocStatus::Rejected
     }
 
     #[inline]
-    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    fn try_alloc_batch<'tx, T>(&mut self, _txs: T) -> AllocStatus
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
     {
-        self.encrypted_txs.try_dump_all(txs)
+        AllocStatus::Rejected
     }
+}
+
+impl NextStateImpl
+    for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
+{
+    type Next = BlockSpaceAllocator<FillingRemainingSpace<WithoutEncryptedTxs>>;
 
     #[inline]
-    fn next_state(self) -> Self::Next {
+    fn next_state_impl(self) -> Self::Next {
         next_state(self)
     }
 }
