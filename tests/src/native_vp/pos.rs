@@ -399,6 +399,8 @@ mod tests {
                     ValidPosAction::InitValidator {
                         address,
                         consensus_key,
+                        commission_rate: _,
+                        max_commission_rate_change: _,
                     } => {
                         !state.is_validator(address)
                             && !state.is_used_key(consensus_key)
@@ -577,6 +579,7 @@ pub mod testing {
     use namada_tx_prelude::proof_of_stake::epoched::{
         DynEpochOffset, Epoched, EpochedDelta,
     };
+    use namada_tx_prelude::proof_of_stake::parameters::testing::arb_rate;
     use namada_tx_prelude::proof_of_stake::types::{
         Bond, Unbond, ValidatorState, VotingPower, VotingPowerDelta,
         WeightedValidator,
@@ -586,6 +589,7 @@ pub mod testing {
     };
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
+    use rust_decimal::Decimal;
 
     use crate::tx::{self, tx_host_env};
 
@@ -610,6 +614,8 @@ pub mod testing {
         InitValidator {
             address: Address,
             consensus_key: PublicKey,
+            commission_rate: Decimal,
+            max_commission_rate_change: Decimal,
         },
         Bond {
             amount: token::Amount,
@@ -699,6 +705,14 @@ pub mod testing {
             #[derivative(Debug = "ignore")]
             consensus_key: PublicKey,
         },
+        ValidatorCommissionRate {
+            address: Address,
+            rate: Decimal,
+        },
+        ValidatorMaxCommissionRateChange {
+            address: Address,
+            change: Decimal,
+        },
     }
 
     pub fn arb_valid_pos_action(
@@ -716,13 +730,24 @@ pub mod testing {
         let init_validator = (
             address::testing::arb_established_address(),
             key::testing::arb_common_keypair(),
+            arb_rate(),
+            arb_rate(),
         )
-            .prop_map(|(addr, consensus_key)| {
-                ValidPosAction::InitValidator {
-                    address: Address::Established(addr),
-                    consensus_key: consensus_key.ref_to(),
-                }
-            });
+            .prop_map(
+                |(
+                    addr,
+                    consensus_key,
+                    commission_rate,
+                    max_commission_rate_change,
+                )| {
+                    ValidPosAction::InitValidator {
+                        address: Address::Established(addr),
+                        consensus_key: consensus_key.ref_to(),
+                        commission_rate,
+                        max_commission_rate_change,
+                    }
+                },
+            );
 
         if validators.is_empty() {
             // When there is no validator, we can only initialize new ones
@@ -868,6 +893,8 @@ pub mod testing {
                 ValidPosAction::InitValidator {
                     address,
                     consensus_key,
+                    commission_rate,
+                    max_commission_rate_change,
                 } => {
                     let offset = DynEpochOffset::PipelineLen;
                     vec![
@@ -901,9 +928,17 @@ pub mod testing {
                             offset,
                         },
                         PosStorageChange::ValidatorVotingPower {
-                            validator: address,
+                            validator: address.clone(),
                             vp_delta: 0,
                             offset: Either::Left(offset),
+                        },
+                        PosStorageChange::ValidatorCommissionRate {
+                            address: address.clone(),
+                            rate: commission_rate,
+                        },
+                        PosStorageChange::ValidatorMaxCommissionRateChange {
+                            address,
+                            change: max_commission_rate_change,
                         },
                     ]
                 }
@@ -1485,6 +1520,35 @@ pub mod testing {
                     tx::ctx().read_unbond(&bond_id).unwrap().unwrap();
                 unbonds.delete_current(current_epoch, params);
                 tx::ctx().write_unbond(&bond_id, unbonds).unwrap();
+            }
+            PosStorageChange::ValidatorCommissionRate { address, rate } => {
+                let rates = tx::ctx()
+                    .read_validator_commission_rate(&address)
+                    .unwrap()
+                    .map(|mut rates| {
+                        rates.set(rate, current_epoch, params);
+                        rates
+                    })
+                    .unwrap_or_else(|| {
+                        Epoched::init_at_genesis(rate, current_epoch)
+                    });
+                tx::ctx()
+                    .write_validator_commission_rate(&address, rates)
+                    .unwrap();
+            }
+            PosStorageChange::ValidatorMaxCommissionRateChange {
+                address,
+                change,
+            } => {
+                let max_change = tx::ctx()
+                    .read_validator_max_commission_rate_change(&address)
+                    .unwrap()
+                    .unwrap_or(change);
+                tx::ctx()
+                    .write_validator_max_commission_rate_change(
+                        &address, max_change,
+                    )
+                    .unwrap();
             }
         }
     }

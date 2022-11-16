@@ -1,6 +1,7 @@
 //! Types used for PoS system transactions
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
@@ -52,4 +53,24 @@ pub struct Withdraw {
     /// Source address for withdrawing from delegations. For withdrawing
     /// from self-bonds, the validator is also the source
     pub source: Option<Address>,
+}
+
+/// A change to the validator commission rate.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Hash,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
+pub struct CommissionChange {
+    /// Validator address
+    pub validator: Address,
+    /// The new commission rate
+    pub new_rate: Decimal,
 }

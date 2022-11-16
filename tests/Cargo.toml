@@ -33,6 +33,7 @@ tokio = {version = "1.8.2", features = ["full"]}
 tracing = "0.1.30"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 derivative = "2.2.0"
+rust_decimal = "1.26.1"
 
 [dev-dependencies]
 namada_apps = {path = "../apps", default-features = false, features = ["testing"]}

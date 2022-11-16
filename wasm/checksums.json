@@ -1,1 +1,20 @@
-{}
+{
+    "tx_bond.wasm": "tx_bond.5918a5cb1b7d4f733c2426e1630b0d5483ade5a40e3efc36f6ac20a3e834d14c.wasm",
+    "tx_change_validator_commission.wasm": "tx_change_validator_commission.bf792a18e162007bade7a3f09a5fa4dbac96ed46a91db7862be64eb18b0c636b.wasm",
+    "tx_ibc.wasm": "tx_ibc.4d89c3adf6e7651dd4e48fa0c1d6cafa356e993f7647057633560e6ab5070a6d.wasm",
+    "tx_init_account.wasm": "tx_init_account.478de7e82cec04f21cf6d30ad6253f971094366f5b67ebf5b8d137c55f14e299.wasm",
+    "tx_init_proposal.wasm": "tx_init_proposal.112a845376ea19d30647ad337f38865a916eadb1cb15662c1d3a9c58d427d8ef.wasm",
+    "tx_init_validator.wasm": "tx_init_validator.7ec34fc2c0414136012264d896d02dbd14e7b1375a98bf1bf62ef60575cb4534.wasm",
+    "tx_reveal_pk.wasm": "tx_reveal_pk.61ca5d054db4ea2a4f4d66d7ca91b5b39b534df626431fc0a2b3c3cde5b66922.wasm",
+    "tx_transfer.wasm": "tx_transfer.d1cfb0dfb9399980a58c68449c63e08318329a9c4862d303b6caeb355507ee1e.wasm",
+    "tx_unbond.wasm": "tx_unbond.a70e9f5bc51476c66729cb41a2c867375986d1c12623463c352b958a723a2bd9.wasm",
+    "tx_update_vp.wasm": "tx_update_vp.ac7061accb2e95010275fa33de2fa51d56eb188463bc71ddfbd5079b6ea576a7.wasm",
+    "tx_vote_proposal.wasm": "tx_vote_proposal.4a4a724ff8358d89520f4e1ec3c2f9af3c855fc2d734dc0ef22a8db6ddcfbf26.wasm",
+    "tx_withdraw.wasm": "tx_withdraw.8a58dac625c7d10397154e974ebdab33dadfcc25a51835aab57daa8251521175.wasm",
+    "vp_implicit.wasm": "vp_implicit.944724ad21211323b3fad69d0c0e9e423cb6080a95209c23a99b026764774889.wasm",
+    "vp_masp.wasm": "vp_masp.491decdbf412768c461ec9ebf35848bab573f264c981232268b147423e26007d.wasm",
+    "vp_testnet_faucet.wasm": "vp_testnet_faucet.d9ccb652954bff8a5a465fadebd8155686e4796977668829ada6eecde52b997b.wasm",
+    "vp_token.wasm": "vp_token.2fe64aad078769d36847ab453d78efa4bab43a7732b7ea43092d25f76d8c3c6a.wasm",
+    "vp_user.wasm": "vp_user.417b18329f20dd3694e2b46e45061009f5e9d5258ac06d7273bc5dafe661dd94.wasm",
+    "vp_validator.wasm": "vp_validator.e57cb1e1c8a0ca72960d20b93a6b8eead0c5220eb80f44162e2e247001ea3b83.wasm"
+}
