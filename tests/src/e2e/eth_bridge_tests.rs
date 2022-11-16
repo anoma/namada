@@ -1,12 +1,8 @@
-<<<<<<< HEAD
 use borsh::BorshSerialize;
 use namada::ledger::eth_bridge;
 use namada_core::types::storage;
 use namada_core::types::storage::KeySeg;
 use namada_test_utils::tx_data::TxWriteData;
-=======
-use namada::ledger::eth_bridge;
->>>>>>> f9fd97652 (Don't use duplicate ETH_BRIDGE_ADDRESS)
 
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
@@ -14,19 +10,7 @@ use crate::e2e::setup::constants::{wasm_abs_path, ALBERT, TX_WRITE};
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
 
-<<<<<<< HEAD
 const ETH_BRIDGE_ADDRESS: &str = "atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew";
-=======
-/// # Examples
-///
-/// ```
-/// let storage_key = storage_key("queue");
-/// assert_eq!(storage_key, "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/queue");
-/// ```
-fn storage_key(path: &str) -> String {
-    format!("#{}/{}", eth_bridge::vp::ADDRESS, path)
-}
->>>>>>> f9fd97652 (Don't use duplicate ETH_BRIDGE_ADDRESS)
 
 #[test]
 fn test_unauthorized_tx_cannot_write_storage() {
@@ -78,32 +62,19 @@ fn test_unauthorized_tx_cannot_write_storage() {
         &ledger_addr,
     ];
 
-    for &dry_run in &[true, false] {
-        let tx_args = if dry_run {
-            vec![tx_args.clone(), vec!["--dry-run"]].concat()
-        } else {
-            tx_args.clone()
-        };
-        let mut client_tx = run!(
-            test,
-            Bin::Client,
-            tx_args,
-            Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
-        )
-        .unwrap();
+    let mut client_tx = run!(
+        test,
+        Bin::Client,
+        tx_args,
+        Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
+    )
+    .unwrap();
 
-        if !dry_run {
-            client_tx.exp_string("Transaction accepted").unwrap();
-            client_tx.exp_string("Transaction applied").unwrap();
-        }
-        // TODO: we should check here explicitly with the ledger via a
-        //  Tendermint RPC call that the path `value/#EthBridge/queue`
-        //  is unchanged rather than relying solely  on looking at namadac
-        //  stdout.
-        client_tx.exp_string("Transaction is invalid").unwrap();
-        client_tx
-            .exp_string(&format!("Rejected: {}", eth_bridge::vp::ADDRESS))
-            .unwrap();
-        client_tx.assert_success();
-    }
+    client_tx.exp_string("Transaction accepted").unwrap();
+    client_tx.exp_string("Transaction applied").unwrap();
+    client_tx.exp_string("Transaction is invalid").unwrap();
+    client_tx
+        .exp_string(&format!("Rejected: {}", eth_bridge::vp::ADDRESS))
+        .unwrap();
+    client_tx.assert_success();
 }
