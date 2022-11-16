@@ -50,6 +50,7 @@ pub async fn join_network(
     global_args: args::Global,
     args::JoinNetwork {
         chain_id,
+        release_archive,
         genesis_validator,
         pre_genesis_path,
         dont_prefetch_wasm,
@@ -113,40 +114,6 @@ pub async fn join_network(
             )
         });
 
-    // TODO: get chain ID from argument (if provided), *or* from unpacking the
-    // release archive
-    let chain_id = chain_id.unwrap();
-    // Check if the base-dir has already got this chain ID
-    if fs::canonicalize(base_dir.join(chain_id.as_str()))
-        .await
-        .is_ok()
-    {
-        eprintln!("The chain directory for {} already exists.", chain_id);
-        cli::safe_exit(1);
-    }
-    let chain_dir = base_dir_full.join(chain_id.as_str());
-
-    let release_filename = format!("{}.tar.gz", chain_id);
-    let release_url = format!(
-        "{}/{}",
-        network_configs_url_prefix(&chain_id),
-        release_filename
-    );
-
-    // Read or download the release archive
-    println!("Downloading config release from {} ...", release_url);
-    let release = match download_file(release_url).await {
-        Ok(contents) => contents,
-        Err(error) => {
-            eprintln!("Error downloading release: {}", error);
-            cli::safe_exit(1);
-        }
-    };
-
-    // Decode and unpack the archive
-    let decoder = GzDecoder::new(&release[..]);
-    let mut archive = tar::Archive::new(decoder);
-
     // If the base-dir is non-default, unpack the archive into a temp dir inside
     // first.
     let cwd = env::current_dir().unwrap();
@@ -156,7 +123,69 @@ pub async fn join_network(
         } else {
             (PathBuf::from_str(".").unwrap(), false)
         };
-    archive.unpack(&unpack_dir).unwrap();
+
+    let chain_id = match (chain_id, release_archive) {
+        (None, None) | (Some(_), Some(_)) => {
+            eprintln!(
+                "Exactly one of --chain-id or --release-archive should have \
+                 been provided"
+            );
+            cli::safe_exit(1)
+        }
+        (None, Some(release_archive)) => {
+            println!(
+                "Unpacking release from {} ...",
+                release_archive.to_string_lossy()
+            );
+            let release = match std::fs::read(&release_archive) {
+                Ok(release) => release,
+                Err(error) => {
+                    eprintln!(
+                        "Error unpacking release from {}: {}",
+                        release_archive.to_string_lossy(),
+                        error
+                    );
+                    cli::safe_exit(1);
+                }
+            };
+
+            unpack_release(&release[..], &unpack_dir);
+
+            let chain_id = extract_chain_id(&unpack_dir).unwrap();
+            println!(
+                "Chain ID for {} is {}",
+                release_archive.to_string_lossy(),
+                chain_id
+            );
+            exit_if_chain_dir_exists(&base_dir, &chain_id);
+            chain_id
+        }
+        (Some(chain_id), None) => {
+            exit_if_chain_dir_exists(&base_dir, &chain_id);
+
+            let release_filename = format!("{}.tar.gz", chain_id);
+            let release_url = format!(
+                "{}/{}",
+                network_configs_url_prefix(&chain_id),
+                release_filename
+            );
+
+            // Read or download the release archive
+            println!("Downloading config release from {} ...", release_url);
+            let release = match download_file(release_url).await {
+                Ok(contents) => contents,
+                Err(error) => {
+                    eprintln!("Error downloading release: {}", error);
+                    cli::safe_exit(1);
+                }
+            };
+
+            unpack_release(&release[..], &unpack_dir);
+
+            chain_id
+        }
+    };
+    let chain_dir = base_dir_full.join(chain_id.as_str());
 
     // Rename the base-dir from the default and rename wasm-dir, if non-default.
     if non_default_dir {
@@ -1066,4 +1095,60 @@ pub fn validator_pre_genesis_file(pre_genesis_path: &Path) -> PathBuf {
 /// The default validator pre-genesis directory
 pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
     base_dir.join(PRE_GENESIS_DIR).join(alias)
+}
+
+// Exits the process if a directory already exists for a given chain.
+fn exit_if_chain_dir_exists(base_dir: &Path, chain_id: &ChainId) {
+    if fs::canonicalize(base_dir.join(chain_id.as_str())).is_ok() {
+        eprintln!("The chain directory for {} already exists.", chain_id);
+        cli::safe_exit(1);
+    }
+}
+
+// Decode and unpack the bytes of a release archive (.tar.gz) into `unpack_dir`.
+// Panics if this is not possible.
+fn unpack_release<R: std::io::Read>(tgz: R, unpack_dir: &Path) {
+    let decoder = GzDecoder::new(tgz);
+    let mut archive = tar::Archive::new(decoder);
+    archive.unpack(&unpack_dir).unwrap()
+}
+
+/// Returns the [`ChainId`] of the chain for a release archive unpacked at
+/// `unpacked_dir`.
+fn extract_chain_id(release_dir: &Path) -> eyre::Result<ChainId> {
+    let global_config_path = release_dir
+        .join(config::DEFAULT_BASE_DIR)
+        .join(config::global::FILENAME);
+    let global_config_str = std::fs::read_to_string(global_config_path)?;
+    let global_config: GlobalConfig = toml::from_str(&global_config_str)?;
+    Ok(global_config.default_chain_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_chain_id() {
+        let expected_chain_id =
+            ChainId::from_str("local.8d5fac7ce84a1a7a8b8c48e2").unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let global_config = GlobalConfig {
+            default_chain_id: expected_chain_id.clone(),
+        };
+        let global_config_path = temp_dir
+            .path()
+            .join(config::DEFAULT_BASE_DIR)
+            .join(config::global::FILENAME);
+        std::fs::create_dir_all(global_config_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            global_config_path,
+            toml::to_vec(&global_config).unwrap(),
+        )
+        .unwrap();
+
+        let extracted = extract_chain_id(temp_dir.path()).expect("Test failed");
+
+        assert_eq!(extracted, expected_chain_id);
+    }
 }
