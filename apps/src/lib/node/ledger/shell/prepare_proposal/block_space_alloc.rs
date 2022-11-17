@@ -50,11 +50,66 @@ pub mod states;
 // the total gas of all chosen txs cannot exceed the configured max
 // gas per block, otherwise a proposal will be rejected!
 
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use num_rational::Ratio;
 
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+
+/// The storage unit for the bits in a [`LazyProposedTxSet`].
+#[allow(dead_code)]
+type LazyProposedTxSetStorage = u128;
+
+/// The width, in bytes, of the storage unit for a [`LazyProposedTxSet`].
+#[allow(dead_code)]
+const LAZY_PROPOSED_TX_SET_STORAGE_WIDTH: usize =
+    std::mem::size_of::<LazyProposedTxSetStorage>();
+
+/// A set of transaction indices that have been included in some block proposal.
+#[derive(Default, Debug, Clone)]
+#[allow(dead_code)]
+pub struct LazyProposedTxSet {
+    /// Map of transactions indices, in a `RequestPrepareProposal`, to
+    /// bit vectors, containing the actual boolean values to be asserted.
+    ///
+    /// If the bit `B` is set, at the bit vector with index `S`, then the
+    /// transaction `LAZY_PROPOSED_TX_SET_STORAGE_WIDTH * S + B` is
+    /// included in the proposal.
+    bit_sets: BTreeMap<usize, LazyProposedTxSetStorage>,
+}
+
+impl LazyProposedTxSet {
+    /// Add a new transaction index to this [`LazyProposedTxSet`].
+    #[allow(dead_code)]
+    pub fn include_tx_index(&mut self, index: usize) {
+        // theset let exprs will get optimized into a single op,
+        // since they're ordered in sequence, which is nice
+        let map_index = index / LAZY_PROPOSED_TX_SET_STORAGE_WIDTH;
+        let bit_set_index = index % LAZY_PROPOSED_TX_SET_STORAGE_WIDTH;
+
+        let set = self.bit_sets.entry(map_index).or_insert(0);
+        *set |= 1 << bit_set_index;
+    }
+
+    /// Return an iterator over the transaction indices in
+    /// this [`LazyProposedTxSet`], in ascending order.
+    #[allow(dead_code)]
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
+        self.bit_sets.iter().flat_map(|(&map_index, &set)| {
+            (0..LAZY_PROPOSED_TX_SET_STORAGE_WIDTH)
+                .into_iter()
+                .flat_map(move |bit_set_index| {
+                    let is_bit_set = (set & (1 << bit_set_index)) != 0;
+                    is_bit_set.then(|| {
+                        map_index as usize * LAZY_PROPOSED_TX_SET_STORAGE_WIDTH
+                            + bit_set_index as usize
+                    })
+                })
+        })
+    }
+}
 
 /// All status responses from trying to allocate block space for a tx.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -266,6 +321,32 @@ mod tests {
         protocol_txs: Vec<TxBytes>,
         encrypted_txs: Vec<TxBytes>,
         decrypted_txs: Vec<TxBytes>,
+    }
+
+    /// Test [`LazyProposedTxSet`] index insert ops.
+    #[test]
+    fn test_lazy_proposed_tx_set_insert() {
+        let mut set = LazyProposedTxSet::default();
+        let mut indices = vec![1, 4, 6, 3, 1, 100, 123, 12, 3];
+
+        // insert some elements into the set
+        for i in indices.iter().copied() {
+            set.include_tx_index(i);
+        }
+
+        // check if the set contains the same elements
+        // we inserted, in ascending order
+        indices.sort_unstable();
+        indices.dedup();
+
+        let set_indices: Vec<_> = set.iter().collect();
+        assert_eq!(indices, set_indices);
+
+        // check that the no. of storage elements used is lower
+        // than the max no. of bitsets we would otherwise need
+        let storage_elements_max =
+            indices[indices.len() - 1] / LAZY_PROPOSED_TX_SET_STORAGE_WIDTH;
+        assert!(set.bit_sets.len() <= storage_elements_max);
     }
 
     proptest! {
