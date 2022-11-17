@@ -14,7 +14,8 @@ use namada::types::vote_extensions::VoteExtensionDigest;
 
 use self::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
-    BuildingProtocolTxBatch, NextState, NextStateWithEncryptedTxs, State,
+    BuildingProtocolTxBatch, FillingRemainingSpace, NextState,
+    NextStateWithEncryptedTxs, State,
 };
 pub use self::block_space_alloc::LazyProposedTxSet;
 use self::block_space_alloc::{AllocStatus, BlockSpaceAllocator};
@@ -107,9 +108,11 @@ where
                 self.build_mempool_txs(&mut alloc, &mut tx_indices, &req.txs);
             txs.append(&mut mempool_txs);
 
-            // TODO: fill up remaining space
             // TODO: check if we can add encrypted txs or not
-            let _alloc = alloc.next_state();
+            let mut alloc = alloc.next_state();
+            let mut remaining_txs =
+                self.build_remaining_batch(&mut alloc, &tx_indices, req.txs);
+            txs.append(&mut remaining_txs);
 
             txs
         } else {
@@ -136,7 +139,7 @@ where
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
-    /// events and, optionally, a validator set update
+    /// events and, optionally, a validator set update.
     fn build_vote_extensions_txs(
         &mut self,
         alloc: &mut BlockSpaceAllocator<BuildingProtocolTxBatch>,
@@ -242,7 +245,7 @@ where
         }
     }
 
-    /// Builds a batch of mempool transactions
+    /// Builds a batch of mempool transactions.
     #[cfg(feature = "abcipp")]
     fn build_mempool_txs<Mode>(
         &mut self,
@@ -257,7 +260,7 @@ where
         todo!()
     }
 
-    /// Builds a batch of mempool transactions
+    /// Builds a batch of mempool transactions.
     #[cfg(not(feature = "abcipp"))]
     fn build_mempool_txs<Mode>(
         &mut self,
@@ -311,7 +314,7 @@ where
             .collect()
     }
 
-    /// Builds a batch of DKG decrypted transactions
+    /// Builds a batch of DKG decrypted transactions.
     // NOTE: we won't have frontrunning protection until V2 of the
     // Anoma protocol; Namada runs V1, therefore this method is
     // essentially a NOOP
@@ -365,6 +368,21 @@ where
                 }
             })
             .collect()
+    }
+
+    /// Builds a batch of transactions that can fit in the
+    /// remaining space of the [`BlockSpaceAllocator`].
+    fn build_remaining_batch<Mode>(
+        &mut self,
+        _alloc: &mut BlockSpaceAllocator<FillingRemainingSpace<Mode>>,
+        _tx_indices: &LazyProposedTxSet,
+        _txs: Vec<TxBytes>,
+    ) -> Vec<TxBytes>
+    where
+        BlockSpaceAllocator<FillingRemainingSpace<Mode>>: State,
+    {
+        // TODO
+        vec![]
     }
 }
 
