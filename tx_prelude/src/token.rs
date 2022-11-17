@@ -18,64 +18,68 @@ pub fn transfer(
     key: &Option<String>,
     shielded: &Option<Transaction>,
 ) -> TxResult {
-    let src_key = match &sub_prefix {
-        Some(sub_prefix) => {
-            let prefix = token::multitoken_balance_prefix(token, sub_prefix);
-            token::multitoken_balance_key(&prefix, src)
-        }
-        None => token::balance_key(token, src),
-    };
-    let dest_key = match &sub_prefix {
-        Some(sub_prefix) => {
-            let prefix = token::multitoken_balance_prefix(token, sub_prefix);
-            token::multitoken_balance_key(&prefix, dest)
-        }
-        None => token::balance_key(token, dest),
-    };
-    let src_bal: Option<Amount> = match src {
-        Address::Internal(InternalAddress::IbcMint) => Some(Amount::max()),
-        Address::Internal(InternalAddress::IbcBurn) => {
-            log_string("invalid transfer from the burn address");
-            unreachable!()
-        }
-        _ => ctx.read(&src_key)?,
-    };
-    let mut src_bal = src_bal.unwrap_or_else(|| {
-        log_string(format!("src {} has no balance", src_key));
-        unreachable!()
-    });
-    src_bal.spend(&amount);
-    let mut dest_bal: Amount = match dest {
-        Address::Internal(InternalAddress::IbcMint) => {
-            log_string("invalid transfer to the mint address");
-            unreachable!()
-        }
-        _ => ctx.read(&dest_key)?.unwrap_or_default(),
-    };
-    dest_bal.receive(&amount);
-    if src != dest {
-        match src {
-            Address::Internal(InternalAddress::IbcMint) => {
-                ctx.write_temp(&src_key, src_bal)?;
+    if amount != Amount::default() {
+        let src_key = match &sub_prefix {
+            Some(sub_prefix) => {
+                let prefix =
+                    token::multitoken_balance_prefix(token, sub_prefix);
+                token::multitoken_balance_key(&prefix, src)
             }
+            None => token::balance_key(token, src),
+        };
+        let dest_key = match &sub_prefix {
+            Some(sub_prefix) => {
+                let prefix =
+                    token::multitoken_balance_prefix(token, sub_prefix);
+                token::multitoken_balance_key(&prefix, dest)
+            }
+            None => token::balance_key(token, dest),
+        };
+        let src_bal: Option<Amount> = match src {
+            Address::Internal(InternalAddress::IbcMint) => Some(Amount::max()),
             Address::Internal(InternalAddress::IbcBurn) => {
                 log_string("invalid transfer from the burn address");
                 unreachable!()
             }
-            _ => {
-                ctx.write(&src_key, src_bal)?;
-            }
-        }
-        match dest {
+            _ => ctx.read(&src_key)?,
+        };
+        let mut src_bal = src_bal.unwrap_or_else(|| {
+            log_string(format!("src {} has no balance", src_key));
+            unreachable!()
+        });
+        src_bal.spend(&amount);
+        let mut dest_bal: Amount = match dest {
             Address::Internal(InternalAddress::IbcMint) => {
                 log_string("invalid transfer to the mint address");
                 unreachable!()
             }
-            Address::Internal(InternalAddress::IbcBurn) => {
-                ctx.write_temp(&dest_key, dest_bal)?;
+            _ => ctx.read(&dest_key)?.unwrap_or_default(),
+        };
+        dest_bal.receive(&amount);
+        if src != dest {
+            match src {
+                Address::Internal(InternalAddress::IbcMint) => {
+                    ctx.write_temp(&src_key, src_bal)?;
+                }
+                Address::Internal(InternalAddress::IbcBurn) => {
+                    log_string("invalid transfer from the burn address");
+                    unreachable!()
+                }
+                _ => {
+                    ctx.write(&src_key, src_bal)?;
+                }
             }
-            _ => {
-                ctx.write(&dest_key, dest_bal)?;
+            match dest {
+                Address::Internal(InternalAddress::IbcMint) => {
+                    log_string("invalid transfer to the mint address");
+                    unreachable!()
+                }
+                Address::Internal(InternalAddress::IbcBurn) => {
+                    ctx.write_temp(&dest_key, dest_bal)?;
+                }
+                _ => {
+                    ctx.write(&dest_key, dest_bal)?;
+                }
             }
         }
     }
