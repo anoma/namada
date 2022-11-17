@@ -7,11 +7,12 @@ When a slash is detected:
 2. Jail the validator in question (this will apply at the end of the current epoch). While the validator is jailed, it should be removed from the validator set (also being effective from the end of the current epoch). Note that this is the only instance in our proof-of-stake model when the validator set is updated without waiting for the pipeline offset.
 3. Prevent the delegators to this validator from altering their delegations in any way until the enqueued slash is processed.
 
-At the end of each epoch, in order to process any slashes scheduled for processing at the end of that epoch:
-1. Iterate over all slashes for infractions committed within a range of (-1, +1) epochs worth of block heights (this may need to be a protocol parameter) of the infraction in question.
-2. Calculate the slash rate according to the following formula:
+At the end of each epoch, for each slash enqueued to be processed for the end of the epoch:
+1. Collect the other known infractions committed within a range of (-1, +1) epochs around the infraction in question.
+2. Sum the fractional voting powers (relative to the total PoS voting power) of the misbehaving validator for each of the collected nearby infractions. 
+3. The final slash rate for the slash in question is then dependent on this sum. Using $r_\text{nom}$ as the nominal slash rate and $\text{vp}$ to indicate voting power, the slash rate is expressed as:
 
-$$  \max \{ 0.01, 9*\big(\sum_{i \in \text{faulty-validators}}\frac{i_{voting-power}}{\sum_{j \in \text{all-validators}}j_{voting-power}}\big)^2\} $$
+$$  \max \{~r_{\text{nom}}~, ~9*\big(\sum_{i \in \text{infractions}}\frac{\text{vp}_i}{\text{vp}_{\text{tot}}}\big)^2~\}. $$
 
 Or, in pseudocode:
 <!-- I want to make these two code blocks toggleable as in  https://rdmd.readme.io/docs/code-blocks#tabbed-code-blocks but can't seem to get it to work-->
