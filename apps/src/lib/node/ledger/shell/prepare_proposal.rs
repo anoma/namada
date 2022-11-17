@@ -295,9 +295,9 @@ where
     }
 
     /// Builds a batch of DKG decrypted transactions
-    // TODO: we won't have frontrunning protection until V2 of the Anoma
-    // protocol; Namada runs V1, therefore this method is
-    // essentially a NOOP, and ought to be removed
+    // NOTE: we won't have frontrunning protection until V2 of the
+    // Anoma protocol; Namada runs V1, therefore this method is
+    // essentially a NOOP
     //
     // sources:
     // - https://specs.anoma.net/main/releases/v2.html
