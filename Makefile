@@ -185,12 +185,14 @@ debug-wasm-scripts-docker: build-wasm-image-docker
 
 # Build the validity predicate and transactions wasm
 build-wasm-scripts:
+	rm wasm/*.wasm || true
 	make -C $(wasms)
 	make opt-wasm
 	make checksum-wasm
 
-# Debug build the validity predicate, transactions, matchmaker and matchmaker filter wasm
+# Debug build the validity predicate and transactions wasm
 debug-wasm-scripts:
+	rm wasm/*.wasm || true
 	make -C $(wasms) debug
 	make opt-wasm
 	make checksum-wasm
