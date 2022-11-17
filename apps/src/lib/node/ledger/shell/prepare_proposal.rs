@@ -248,7 +248,7 @@ where
         &mut self,
         _alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
         _tx_indices: &mut LazyProposedTxSet,
-        txs: Vec<Vec<u8>>,
+        txs: Vec<TxBytes>,
     ) -> Vec<TxRecord>
     where
         BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: State,
@@ -263,7 +263,7 @@ where
         &mut self,
         alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
         tx_indices: &mut LazyProposedTxSet,
-        txs: Vec<Vec<u8>>,
+        txs: Vec<TxBytes>,
     ) -> Vec<TxBytes>
     where
         BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: State,
@@ -1154,7 +1154,7 @@ mod test_prepare_proposal {
             .collect();
         #[cfg(feature = "abcipp")]
         {
-            let received: Vec<Vec<u8>> = shell
+            let received: Vec<TxBytes> = shell
                 .prepare_proposal(req)
                 .tx_records
                 .iter()
@@ -1183,7 +1183,7 @@ mod test_prepare_proposal {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            let received: Vec<Vec<u8>> = shell
+            let received: Vec<TxBytes> = shell
                 .prepare_proposal(req)
                 .txs
                 .into_iter()
