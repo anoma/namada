@@ -8,11 +8,11 @@ use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::Epoch;
 use namada::types::transaction::GasLimit;
 use namada::types::{key, token};
-use tendermint_config::net::Address as TendermintAddress;
 
 use super::rpc;
 use crate::cli::{args, Context};
 use crate::client::tx::Conversions;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
 #[derive(Clone, Debug)]
 pub struct ParsedTxArgs {
