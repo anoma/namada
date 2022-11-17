@@ -126,9 +126,10 @@ pub trait QueriesExt {
 
     /// Determines if it is possible to send a validator set update vote
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
-    ///
-    /// This is done by checking if we are at the second block of a new epoch.
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
+
+    /// Check if we are at the second block height offset within an [`Epoch`].
+    fn is_deciding_2nd_height_offset(&self) -> bool;
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
     fn get_epoch(&self, height: BlockHeight) -> Option<Epoch>;

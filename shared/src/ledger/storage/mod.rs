@@ -1063,13 +1063,18 @@ where
     }
 
     #[cfg(not(feature = "abcipp"))]
+    #[inline]
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
-        // when checking vote extensions in Prepare
-        // and ProcessProposal, we simply return true
         if matches!(can_send, SendValsetUpd::AtPrevHeight) {
-            return true;
+            // when checking vote extensions in Prepare
+            // and ProcessProposal, we simply return true
+            true
+        } else {
+            self.is_deciding_2nd_height_offset()
         }
+    }
 
+    fn is_deciding_2nd_height_offset(&self) -> bool {
         let current_decision_height = self.get_current_decision_height();
 
         // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
