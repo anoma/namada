@@ -1,10 +1,10 @@
 # Cubic slashing
 
-Namada implements cubic slashing, meaning that the amount of a slash is proportional to the cube of the voting power committing infractions within a particular interval. This is designed to make it riskier to operate larger or similarly configured validators, and thus encourage network resilience.
+Namada implements a slashing scheme that is called cubic slashing: the amount of a slash is proportional to the cube of the voting power committing infractions within a particular interval. This is designed to make it riskier to operate larger or similarly configured validators, and thus the scheme encourages network resilience.
 
 When a slash is detected:
-1. Using the height of the infraction, calculate the epoch just after which stake bonded at the time of infraction could have been fully unbonded. Enqueue the slash for processing at the end of that epoch (so that it will be processed before unbonding could have completed, and hopefully long enough for any other misbehaviour from around the same height as this misbehaviour to also be detected).
-2. Jail the validator in question (this will apply at the end of the current epoch). While the validator is jailed, it should be removed from the validator set (also being effective from the end of the current epoch). Note that this is the only instance in our proof-of-stake model when the validator set is updated without waiting for the pipeline offset.
+1. Using the height of the infraction, calculate the epoch at the unbonding length relative to the current epoch. This is the final epoch before the stake that was used to commit the infraction can be fully unbonded and withdrawn. The slash is enqueued to be processed in this final epoch to allow for sufficient time to detect any other validator misbehaviors while still processing the slash before the infraction stake could be unbonded and withdrawn. 
+2. Jail the misbehaving validator, effective at the beginning of the next epoch. While the validator is jailed, it is removed from the validator set. Note that this is the only instance in our proof-of-stake model wherein the validator set is updated without waiting for the pipeline offset.
 3. Prevent the delegators to this validator from altering their delegations in any way until the enqueued slash is processed.
 
 At the end of each epoch, for each slash enqueued to be processed for the end of the epoch:
@@ -52,7 +52,6 @@ class PoS:
         return slash_rate
 ``` -->
 
-As a function, it can be drawn as:
 ```rust
 // Infraction type, where inner field is the slash rate for the type
 enum Infraction {
@@ -100,15 +99,17 @@ fn calculate_slash_rates(
 }
 ```
 
+As a function, it can be drawn as:
 
-> Note: The voting power of a slash is the voting power of the validator **when they violated the protocol**, not the voting power now or at the time of any of the other infractions. This does mean that these voting powers may not sum to 1, but this method should still be close to the incentives we want, and can't really be changed without making the system easier to game.
 [<img src="../images/cubic_slash.png" width="500"/>](../images/cubic_slash.png)
 
 3. Set the slash rate on the now "finalised" slash in storage.
-4. Update the validators' stored voting power appropriately.
+4. Update the misbehaving validators' stored voting powers appropriately.
 5. Delegations to the validator can now be redelegated / start unbonding / etc.
 
-Validator can later submit a transaction to unjail themselves after a configurable period. When the transaction is applied and accepted, the validator updates its state to "candidate" and is added back to the validator set starting at the epoch at pipeline offset (into `consensus`, `below_capacity` or `below_threshold` set, depending on its voting power).
+> Note: The voting power associated with a slash is the voting power of the validator **when they violated the protocol**. This does mean that these voting powers may not sum to 1, but this method should still be close to the desired incentives and cannot really be changed without making the system easier to game.
+
+A jailed validator can later submit a transaction to unjail themselves after a configurable period. When the transaction is applied and accepted, the validator updates its state to "candidate" and is added back to the appropriate validator set (depending on its new voting power) starting at the pipeline offset relative to the epoch in which the unjailing transaction was submitted.
 
 At present, funds slashed are sent to the governance treasury. 
 
@@ -117,8 +118,6 @@ At present, funds slashed are sent to the governance treasury.
 Slashes should lead to punishment for delegators who were contributing voting power to the validator at the height of the infraction, _as if_ the delegations were iterated over and slashed individually.
 
 This can be implemented as a negative inflation rate for a particular block.
-
-Instant redelegation is not supported. Redelegations must wait the unbonding period.
 
 <!--## State management
 
