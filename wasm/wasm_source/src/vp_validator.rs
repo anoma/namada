@@ -242,7 +242,7 @@ mod tests {
 
         // Credit the tokens to the source before running the transaction to be
         // able to transfer from it
-        tx_env.credit_tokens(&source, &token, amount);
+        tx_env.credit_tokens(&source, &token, None, amount);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -288,7 +288,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, amount);
+        tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -336,7 +336,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, amount);
+        tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
         tx_env.write_public_key(&vp_owner, &public_key);
 
@@ -388,7 +388,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&source, &token, amount);
+        tx_env.credit_tokens(&source, &token, None, amount);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
