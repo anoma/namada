@@ -12,6 +12,7 @@ use namada::types::vote_extensions::{
     ethereum_events, validator_set_update, VoteExtension, VoteExtensionDigest,
 };
 
+use super::prepare_proposal::LazyProposedTxSet;
 use super::*;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedVoteInfo;
@@ -298,12 +299,13 @@ pub fn deserialize_vote_extensions(
 /// ones we could deserialize to [`VoteExtension`]
 /// instances.
 #[cfg(not(feature = "abcipp"))]
-pub fn deserialize_vote_extensions(
-    txs: &[TxBytes],
-) -> impl Iterator<Item = (TxBytes, VoteExtension)> + '_ {
+pub fn deserialize_vote_extensions<'prep_proposal>(
+    tx_indices: &'prep_proposal mut LazyProposedTxSet,
+    txs: &'prep_proposal [TxBytes],
+) -> impl Iterator<Item = (TxBytes, VoteExtension)> + 'prep_proposal {
     use namada::types::transaction::protocol::ProtocolTx;
 
-    txs.iter().filter_map(|tx_bytes| {
+    txs.iter().enumerate().filter_map(|(index, tx_bytes)| {
         let tx = match Tx::try_from(tx_bytes.as_slice()) {
             Ok(tx) => tx,
             Err(err) => {
@@ -318,7 +320,14 @@ pub fn deserialize_vote_extensions(
             TxType::Protocol(ProtocolTx {
                 tx: ProtocolTxType::VoteExtension(ext),
                 ..
-            }) => Some((tx_bytes.clone(), ext)),
+            }) => {
+                // mark every protocol tx for inclusion; we shouldn't include
+                // them in a block without the corresponding digests, so even
+                // if those get rejected due to space constraints, the
+                // behavior should be correct
+                tx_indices.include_tx_index(index);
+                Some((tx_bytes.clone(), ext))
+            }
             _ => None,
         }
     })
@@ -370,6 +379,7 @@ pub fn split_vote_extensions(
 /// them from Tendermint's mempool.
 #[cfg(not(feature = "abcipp"))]
 pub fn split_vote_extensions(
+    tx_indices: &mut LazyProposedTxSet,
     mempool_txs: &[TxBytes],
 ) -> (
     Vec<TxBytes>,
@@ -380,7 +390,7 @@ pub fn split_vote_extensions(
     let mut eth_evs = vec![];
     let mut valset_upds = vec![];
 
-    for (tx, ext) in deserialize_vote_extensions(mempool_txs) {
+    for (tx, ext) in deserialize_vote_extensions(tx_indices, mempool_txs) {
         if let Some(validator_set_update) = ext.validator_set_update {
             valset_upds.push(validator_set_update);
         }

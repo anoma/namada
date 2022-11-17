@@ -16,6 +16,7 @@ use self::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
     BuildingProtocolTxBatch, NextState, NextStateWithEncryptedTxs, State,
 };
+pub use self::block_space_alloc::LazyProposedTxSet;
 use self::block_space_alloc::{AllocStatus, BlockSpaceAllocator};
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -58,6 +59,7 @@ where
 
             // start counting allotted space for txs
             let mut alloc = BlockSpaceAllocator::from(&req);
+            let mut tx_indices = LazyProposedTxSet::default();
 
             // NOTE: AD-HOC SOLUTION
             // ======================
@@ -82,11 +84,17 @@ where
             // add ethereum events and validator set updates as protocol txs
             let mut alloc = alloc.next_state();
             #[cfg(feature = "abcipp")]
-            let protocol_txs = self
-                .build_vote_extensions_txs(&mut alloc, req.local_last_commit);
+            let protocol_txs = self.build_vote_extensions_txs(
+                &mut alloc,
+                &mut tx_indices,
+                req.local_last_commit,
+            );
             #[cfg(not(feature = "abcipp"))]
-            let mut protocol_txs =
-                self.build_vote_extensions_txs(&mut alloc, &req.txs);
+            let mut protocol_txs = self.build_vote_extensions_txs(
+                &mut alloc,
+                &mut tx_indices,
+                &req.txs,
+            );
             #[cfg(feature = "abcipp")]
             let mut protocol_txs: Vec<TxRecord> =
                 protocol_txs.into_iter().map(record::add).collect();
@@ -131,6 +139,7 @@ where
     fn build_vote_extensions_txs(
         &mut self,
         alloc: &mut BlockSpaceAllocator<BuildingProtocolTxBatch>,
+        tx_indices: &mut LazyProposedTxSet,
         #[cfg(feature = "abcipp")] local_last_commit: Option<
             ExtendedCommitInfo,
         >,
@@ -157,7 +166,7 @@ where
         );
         #[cfg(not(feature = "abcipp"))]
         let (protocol_txs, eth_events, valset_upds) =
-            split_vote_extensions(txs);
+            split_vote_extensions(tx_indices, txs);
 
         // TODO: remove this later, when we get rid of `abciplus`
         #[cfg(feature = "abcipp")]
