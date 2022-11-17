@@ -434,6 +434,9 @@ mod test_prepare_proposal {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
+    // https://github.com/tendermint/tendermint/blob/v0.37.x/spec/abci/abci%2B%2B_app_requirements.md#blockparamsmaxbytes
+    const MAX_TM_BLK_SIZE: i64 = 100 << 20;
+
     #[cfg(feature = "abcipp")]
     fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
         let evts = {
@@ -489,7 +492,7 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![non_wrapper_tx.to_bytes()],
-            max_tx_bytes: i64::MAX,
+            max_tx_bytes: MAX_TM_BLK_SIZE,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
@@ -772,7 +775,7 @@ mod test_prepare_proposal {
 
         let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
             local_last_commit: Some(ExtendedCommitInfo {
-                max_tx_bytes: i64::MAX,
+                max_tx_bytes: MAX_TM_BLK_SIZE,
                 votes: vec![vote],
                 ..Default::default()
             }),
@@ -853,7 +856,7 @@ mod test_prepare_proposal {
                 .sign(&protocol_key)
                 .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-                max_tx_bytes: i64::MAX,
+                max_tx_bytes: MAX_TM_BLK_SIZE,
                 txs: vec![tx],
                 ..Default::default()
             });
@@ -975,7 +978,7 @@ mod test_prepare_proposal {
             };
             // this should panic
             shell.prepare_proposal(RequestPrepareProposal {
-                max_tx_bytes: i64::MAX,
+                max_tx_bytes: MAX_TM_BLK_SIZE,
                 local_last_commit: Some(ExtendedCommitInfo {
                     votes: vec![vote],
                     ..Default::default()
@@ -989,7 +992,7 @@ mod test_prepare_proposal {
                 .sign(&protocol_key)
                 .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-                max_tx_bytes: i64::MAX,
+                max_tx_bytes: MAX_TM_BLK_SIZE,
                 txs: vec![vote],
                 ..Default::default()
             });
@@ -1058,7 +1061,7 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![wrapper.clone()],
-            max_tx_bytes: i64::MAX,
+            max_tx_bytes: MAX_TM_BLK_SIZE,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
@@ -1096,7 +1099,7 @@ mod test_prepare_proposal {
 
         let mut req = RequestPrepareProposal {
             txs: vec![],
-            max_tx_bytes: i64::MAX,
+            max_tx_bytes: MAX_TM_BLK_SIZE,
             ..Default::default()
         };
         // create a request with two new wrappers from mempool and
