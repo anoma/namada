@@ -1127,13 +1127,13 @@ mod test_prepare_proposal {
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());
         }
-        // we extract the inner data from the txs for testing
-        // equality since otherwise changes in timestamps would
-        // fail the test
-        expected_wrapper.append(&mut expected_decrypted);
-        let expected_txs: Vec<Vec<u8>> = expected_wrapper
-            .iter()
-            .map(|tx| tx.data.clone().expect("Test failed"))
+        let expected_txs: Vec<TxBytes> = expected_decrypted
+            .into_iter()
+            .chain(expected_wrapper.into_iter())
+            // we extract the inner data from the txs for testing
+            // equality since otherwise changes in timestamps would
+            // fail the test
+            .map(|tx| tx.data.expect("Test failed"))
             .collect();
         #[cfg(feature = "abcipp")]
         {
