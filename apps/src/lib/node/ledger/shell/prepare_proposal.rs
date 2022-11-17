@@ -104,7 +104,7 @@ where
             // TODO: check if we can add encrypted txs or not
             let mut alloc = alloc.next_state_with_encrypted_txs();
             let mut mempool_txs =
-                self.build_mempool_txs(&mut alloc, &mut tx_indices, req.txs);
+                self.build_mempool_txs(&mut alloc, &mut tx_indices, &req.txs);
             txs.append(&mut mempool_txs);
 
             // TODO: fill up remaining space
@@ -248,7 +248,7 @@ where
         &mut self,
         _alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
         _tx_indices: &mut LazyProposedTxSet,
-        txs: Vec<TxBytes>,
+        txs: &[TxBytes],
     ) -> Vec<TxRecord>
     where
         BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: State,
@@ -263,18 +263,18 @@ where
         &mut self,
         alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
         tx_indices: &mut LazyProposedTxSet,
-        txs: Vec<TxBytes>,
+        txs: &[TxBytes],
     ) -> Vec<TxBytes>
     where
         BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: State,
     {
-        txs.into_iter()
+        txs.iter()
             .enumerate()
             .filter_map(|(index, tx_bytes)| {
                 if let Ok(Ok(TxType::Wrapper(_))) =
                     Tx::try_from(tx_bytes.as_slice()).map(process_tx)
                 {
-                    Some((index, tx_bytes))
+                    Some((index, tx_bytes.clone()))
                 } else {
                     None
                 }
