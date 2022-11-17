@@ -52,9 +52,9 @@ class PoS:
 
 As a function, it can be drawn as:
 
-![cubic_slash](../images/cubic_slash.png)
 
 > Note: The voting power of a slash is the voting power of the validator **when they violated the protocol**, not the voting power now or at the time of any of the other infractions. This does mean that these voting powers may not sum to 1, but this method should still be close to the incentives we want, and can't really be changed without making the system easier to game.
+[<img src="../images/cubic_slash.png" width="500"/>](../images/cubic_slash.png)
 
 3. Set the slash rate on the now "finalised" slash in storage.
 4. Update the validators' stored voting power appropriately.
