@@ -1,5 +1,6 @@
 //! Contains types necessary for processing validator set updates
 //! in vote extensions.
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -157,12 +158,16 @@ pub struct EthAddrBook {
 /// Provides a mapping between [`EthAddress`] and [`VotingPower`] instances.
 pub type VotingPowersMap = HashMap<EthAddrBook, VotingPower>;
 
-/// This trait contains additional methods for a [`HashMap`], related
+/// This trait contains additional methods for a [`VotingPowersMap`], related
 /// with validator set update vote extensions logic.
 pub trait VotingPowersMapExt {
     /// Returns the list of Ethereum validator hot and cold addresses and their
-    /// respective voting power (in this order), with an Ethereum ABI
-    /// compatible encoding.
+    /// respective voting powers (in this order), with an Ethereum ABI
+    /// compatible encoding. Implementations of this method must be
+    /// deterministic based on `self`. In addition, the returned `Vec`s must be
+    /// sorted in descending order by voting power, as this is more efficient to
+    /// deal with on the Ethereum side when working out if there is enough
+    /// voting power for a given validator set update.
     fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>);
 
     /// Returns the keccak hashes of this [`VotingPowersMap`],
@@ -192,17 +197,29 @@ pub trait VotingPowersMapExt {
     }
 }
 
+/// Compare two items of [`VotingPowersMap`]. This comparison operation must
+/// match the equivalent comparison operation in Ethereum bridge code.
+fn compare_voting_powers_map_items(
+    first: &(&EthAddrBook, &VotingPower),
+    second: &(&EthAddrBook, &VotingPower),
+) -> Ordering {
+    let (first_power, second_power) = (first.1, second.1);
+    let (first_addr, second_addr) = (first.0, second.0);
+    match second_power.cmp(first_power) {
+        Ordering::Less => Ordering::Less,
+        Ordering::Equal => first_addr.cmp(second_addr),
+        Ordering::Greater => Ordering::Greater,
+    }
+}
+
 impl VotingPowersMapExt for VotingPowersMap {
     fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>) {
-        // get addresses and voting powers all into one vec
+        // get addresses and voting powers all into one vec so that they can be
+        // sorted appropriately
         let mut unsorted: Vec<_> = self.iter().collect();
-
-        // sort it by voting power, in descending order
-        unsorted.sort_by(|&(_, ref power_1), &(_, ref power_2)| {
-            power_2.cmp(power_1)
-        });
-
+        unsorted.sort_by(compare_voting_powers_map_items);
         let sorted = unsorted;
+
         let total_voting_power: u64 = sorted
             .iter()
             .map(|&(_, &voting_power)| u64::from(voting_power))
@@ -369,5 +386,65 @@ mod tests {
         );
 
         assert_eq!(&hex::encode(got), EXPECTED);
+    }
+
+    /// Checks that comparing two [`VotingPowersMap`] items which have the same
+    /// voting powers but different [`EthAddrBook`]s does not result in them
+    /// being regarded as equal.
+    #[test]
+    fn test_compare_voting_powers_map_items_identical_voting_powers() {
+        let same_voting_power = 200.into();
+
+        let validator_a = EthAddrBook {
+            hot_key_addr: EthAddress([0; 20]),
+            cold_key_addr: EthAddress([0; 20]),
+        };
+        let validator_b = EthAddrBook {
+            hot_key_addr: EthAddress([1; 20]),
+            cold_key_addr: EthAddress([1; 20]),
+        };
+
+        assert_eq!(
+            compare_voting_powers_map_items(
+                &(&validator_a, &same_voting_power),
+                &(&validator_b, &same_voting_power),
+            ),
+            Ordering::Less
+        );
+    }
+
+    /// Checks that [`VotingPowersMapExt::get_abi_encoded`] gives a
+    /// deterministic result in the case where there are multiple validators
+    /// with the same voting power.
+    ///
+    /// NB: this test may pass even if the implementation is not
+    /// deterministic unless the test is run with the `--release` profile, as it
+    /// is implicitly relying on how iterating over a [`HashMap`] seems to
+    /// return items in the order in which they were inserted, at least for this
+    /// very small 2-item example.
+    #[test]
+    fn test_voting_powers_map_get_abi_encoded_deterministic_with_identical_voting_powers()
+     {
+        let validator_a = EthAddrBook {
+            hot_key_addr: EthAddress([0; 20]),
+            cold_key_addr: EthAddress([0; 20]),
+        };
+        let validator_b = EthAddrBook {
+            hot_key_addr: EthAddress([1; 20]),
+            cold_key_addr: EthAddress([1; 20]),
+        };
+        let same_voting_power = 200.into();
+
+        let mut voting_powers_1 = VotingPowersMap::default();
+        voting_powers_1.insert(validator_a.clone(), same_voting_power);
+        voting_powers_1.insert(validator_b.clone(), same_voting_power);
+
+        let mut voting_powers_2 = VotingPowersMap::default();
+        voting_powers_2.insert(validator_b, same_voting_power);
+        voting_powers_2.insert(validator_a, same_voting_power);
+
+        let x = voting_powers_1.get_abi_encoded();
+        let y = voting_powers_2.get_abi_encoded();
+        assert_eq!(x, y);
     }
 }
