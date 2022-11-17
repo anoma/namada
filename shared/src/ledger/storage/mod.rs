@@ -15,10 +15,8 @@ use std::collections::BTreeMap;
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::convert::AllowedConversion;
-use masp_primitives::ff::PrimeField;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
 use masp_primitives::sapling::Node;
-use masp_primitives::transaction::components::Amount;
 #[cfg(feature = "wasm-runtime")]
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
@@ -28,8 +26,8 @@ use rayon::prelude::ParallelSlice;
 use thiserror::Error;
 
 use super::parameters::Parameters;
+use super::storage_api;
 use super::storage_api::{ResultExt, StorageRead, StorageWrite};
-use super::{parameters, storage_api};
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::EpochDuration;
 use crate::ledger::storage::merkle_tree::{
@@ -41,7 +39,7 @@ pub use crate::ledger::storage::merkle_tree::{
 pub use crate::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{
-    masp, masp_rewards, nam, Address, EstablishedAddressGen, InternalAddress,
+    masp, Address, EstablishedAddressGen, InternalAddress,
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 #[cfg(feature = "ferveo-tpke")]
@@ -643,7 +641,7 @@ where
         key: &Key,
         height: BlockHeight,
     ) -> Result<Proof> {
-        if height >= self.get_block_height().0 {
+        if height >= self.last_height {
             Ok(self.block.tree.get_non_existence_proof(key)?)
         } else {
             match self.db.read_merkle_tree_stores(height)? {
@@ -708,6 +706,8 @@ where
         height: BlockHeight,
         time: DateTimeUtc,
     ) -> Result<bool> {
+        use crate::ledger::parameters;
+
         let (parameters, _gas) =
             parameters::read(self).expect("Couldn't read protocol parameters");
 
@@ -742,6 +742,7 @@ where
     }
 
     // Construct MASP asset type with given timestamp for given token
+    #[cfg(feature = "wasm-runtime")]
     fn encode_asset_type(addr: Address, epoch: Epoch) -> AssetType {
         let new_asset_bytes = (addr, epoch.0)
             .try_to_vec()
@@ -753,6 +754,11 @@ where
     #[cfg(feature = "wasm-runtime")]
     /// Update the MASP's allowed conversions
     fn update_allowed_conversions(&mut self) -> Result<()> {
+        use masp_primitives::ff::PrimeField;
+        use masp_primitives::transaction::components::Amount as MaspAmount;
+
+        use crate::types::address::{masp_rewards, nam};
+
         // The derived conversions will be placed in MASP address space
         let masp_addr = masp();
         let key_prefix: Key = masp_addr.to_db_key().into();
@@ -794,15 +800,15 @@ where
                 Self::encode_asset_type(addr.clone(), self.block.epoch);
             current_convs.insert(
                 addr.clone(),
-                (Amount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
-                    + Amount::from_pair(new_asset, reward.1).unwrap()
-                    + Amount::from_pair(reward_asset, reward.0).unwrap())
+                (MaspAmount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
+                    + MaspAmount::from_pair(new_asset, reward.1).unwrap()
+                    + MaspAmount::from_pair(reward_asset, reward.0).unwrap())
                 .into(),
             );
             // Add a conversion from the previous asset type
             self.conversion_state.assets.insert(
                 old_asset,
-                (addr.clone(), self.last_epoch, Amount::zero().into(), 0),
+                (addr.clone(), self.last_epoch, MaspAmount::zero().into(), 0),
             );
         }
 
@@ -885,7 +891,7 @@ where
                 (
                     addr.clone(),
                     self.block.epoch,
-                    Amount::zero().into(),
+                    MaspAmount::zero().into(),
                     self.conversion_state.tree.size(),
                 ),
             );
