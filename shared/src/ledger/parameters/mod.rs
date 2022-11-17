@@ -271,7 +271,7 @@ where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: ledger_storage::StorageHasher,
 {
-    let key = storage::get_epoch_storage_key();
+    let key = storage::get_implicit_vp_key();
     // Not using `fn update` here, because implicit_vp doesn't need to be
     // encoded, it's bytes already.
     let (gas, _size_diff) = storage
