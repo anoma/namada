@@ -95,6 +95,9 @@ audit:
 
 test: test-unit test-e2e test-wasm
 
+test-unit-coverage:
+	$(cargo) llvm-cov --output-dir target --features namada/testing --html -- --skip e2e -Z unstable-options --report-time
+
 test-e2e:
 	RUST_BACKTRACE=1 $(cargo) test e2e \
 		-- \
