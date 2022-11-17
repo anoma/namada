@@ -30,9 +30,7 @@ mod tests {
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::token;
-    use namada_vp_prelude::proof_of_stake::types::{
-        Bond, Unbond, VotingPower, VotingPowerDelta,
-    };
+    use namada_vp_prelude::proof_of_stake::types::{Bond, Unbond};
     use namada_vp_prelude::proof_of_stake::{BondId, GenesisValidator, PosVP};
     use proptest::prelude::*;
 
@@ -100,9 +98,9 @@ mod tests {
             native_token
         });
 
+        // Initialize the delegation if it is the case - unlike genesis
+        // validator's self-bond, this happens at pipeline offset
         if is_delegation {
-            // Initialize the delegation - unlike genesis validator's self-bond,
-            // this happens at pipeline offset
             ctx().bond_tokens(
                 unbond.source.as_ref(),
                 &unbond.validator,
@@ -134,25 +132,29 @@ mod tests {
             .read(&pos_balance_key)?
             .expect("PoS must have balance");
         assert_eq!(pos_balance_pre, initial_stake);
-        let total_voting_powers_pre = ctx().read_total_voting_power()?;
+
+        let _total_deltas_pre = ctx().read_total_deltas()?;
         let validator_sets_pre = ctx().read_validator_set()?;
-        let validator_voting_powers_pre = ctx()
-            .read_validator_voting_power(&unbond.validator)?
-            .unwrap();
+        let _validator_deltas_pre =
+            ctx().read_validator_deltas(&unbond.validator)?.unwrap();
         let bonds_pre = ctx().read_bond(&unbond_id)?.unwrap();
         dbg!(&bonds_pre);
 
+        // Apply the unbond tx
         apply_tx(ctx(), tx_data)?;
 
-        // Read the data after the tx is executed
-
+        // Read the data after the tx is executed.
         // The following storage keys should be updated:
 
-        //     - `#{PoS}/validator/#{validator}/total_deltas`
-        let total_delta_post =
-            ctx().read_validator_total_deltas(&unbond.validator)?;
+        //     - `#{PoS}/validator/#{validator}/deltas`
+        //     - `#{PoS}/total_deltas`
+        //     - `#{PoS}/validator_set`
+        let total_deltas_post = ctx().read_total_deltas()?;
+        let validator_deltas_post =
+            ctx().read_validator_deltas(&unbond.validator)?;
+        let validator_sets_post = ctx().read_validator_set()?;
 
-        let expected_deltas_at_pipeline = if is_delegation {
+        let expected_amount_before_pipeline = if is_delegation {
             // When this is a delegation, there will be no bond until pipeline
             0.into()
         } else {
@@ -163,12 +165,26 @@ mod tests {
         // Before pipeline offset, there can only be self-bond for genesis
         // validator. In case of a delegation the state is setup so that there
         // is no bond until pipeline offset.
+        //
+        // TODO: check if this test is correct (0 -> unbonding?)
         for epoch in 0..pos_params.pipeline_len {
             assert_eq!(
-                total_delta_post.as_ref().unwrap().get(epoch),
-                Some(expected_deltas_at_pipeline.into()),
+                validator_deltas_post.as_ref().unwrap().get(epoch),
+                Some(expected_amount_before_pipeline.into()),
+                "The validator deltas before the pipeline offset must not \
+                 change - checking in epoch: {epoch}"
+            );
+            assert_eq!(
+                total_deltas_post.get(epoch),
+                Some(expected_amount_before_pipeline.into()),
                 "The total deltas before the pipeline offset must not change \
                  - checking in epoch: {epoch}"
+            );
+            assert_eq!(
+                validator_sets_pre.get(epoch),
+                validator_sets_post.get(epoch),
+                "Validator set before pipeline offset must not change - \
+                 checking epoch {epoch}"
             );
         }
 
@@ -176,10 +192,23 @@ mod tests {
         // self-bond, both of which are initialized to the same `initial_stake`
         for epoch in pos_params.pipeline_len..pos_params.unbonding_len {
             assert_eq!(
-                total_delta_post.as_ref().unwrap().get(epoch),
+                validator_deltas_post.as_ref().unwrap().get(epoch),
                 Some(initial_stake.into()),
-                "The total deltas before the unbonding offset must not change \
-                 - checking in epoch: {epoch}"
+                "The validator deltas at and after the unbonding offset must \
+                 have changed - checking in epoch: {epoch}"
+            );
+            assert_eq!(
+                total_deltas_post.get(epoch),
+                Some(initial_stake.into()),
+                "The total deltas at and after the unbonding offset must have \
+                 changed - checking in epoch: {epoch}"
+            );
+            assert_eq!(
+                validator_sets_pre.get(epoch),
+                validator_sets_post.get(epoch),
+                "Validator set at and after pipeline offset should be the \
+                 same since we are before the unbonding offset - checking \
+                 epoch {epoch}"
             );
         }
 
@@ -188,15 +217,23 @@ mod tests {
             let expected_stake =
                 i128::from(initial_stake) - i128::from(unbond.amount);
             assert_eq!(
-                total_delta_post.as_ref().unwrap().get(epoch),
+                validator_deltas_post.as_ref().unwrap().get(epoch),
                 Some(expected_stake),
-                "The total deltas after the unbonding offset epoch must be \
+                "The total deltas at after the unbonding offset epoch must be \
+                 decremented by the unbonded amount - checking in epoch: \
+                 {epoch}"
+            );
+            assert_eq!(
+                total_deltas_post.get(epoch),
+                Some(expected_stake),
+                "The total deltas at after the unbonding offset epoch must be \
                  decremented by the unbonded amount - checking in epoch: \
                  {epoch}"
             );
         }
 
         //     - `#{staking_token}/balance/#{PoS}`
+        // Check that PoS account balance is unchanged by unbond
         let pos_balance_post: token::Amount =
             ctx().read(&pos_balance_key)?.unwrap();
         assert_eq!(
@@ -205,6 +242,7 @@ mod tests {
         );
 
         //     - `#{PoS}/unbond/#{owner}/#{validator}`
+        // Check that the unbond doesn't exist until unbonding offset
         let unbonds_post = ctx().read_unbond(&unbond_id)?.unwrap();
         let bonds_post = ctx().read_bond(&unbond_id)?.unwrap();
         for epoch in 0..pos_params.unbonding_len {
@@ -216,6 +254,7 @@ mod tests {
                  epoch {epoch}"
             );
         }
+        // Check that the unbond is as expected
         let start_epoch = match &unbond.source {
             Some(_) => {
                 // This bond was a delegation
@@ -267,102 +306,6 @@ mod tests {
                 "At unbonding offset, the unbonded amount should have been \
                  deducted, checking epoch {epoch}"
             )
-        }
-        // If the voting power from validator's initial stake is different
-        // from the voting power after the bond is applied, we expect the
-        // following 3 fields to be updated:
-        //     - `#{PoS}/total_voting_power` (optional)
-        //     - `#{PoS}/validator_set` (optional)
-        //     - `#{PoS}/validator/#{validator}/voting_power` (optional)
-        let total_voting_powers_post = ctx().read_total_voting_power()?;
-        let validator_sets_post = ctx().read_validator_set()?;
-        let validator_voting_powers_post = ctx()
-            .read_validator_voting_power(&unbond.validator)?
-            .unwrap();
-
-        let voting_power_pre =
-            VotingPower::from_tokens(initial_stake, &pos_params);
-        let voting_power_post = VotingPower::from_tokens(
-            initial_stake - unbond.amount,
-            &pos_params,
-        );
-        if voting_power_pre == voting_power_post {
-            // None of the optional storage fields should have been updated
-            assert_eq!(total_voting_powers_pre, total_voting_powers_post);
-            assert_eq!(validator_sets_pre, validator_sets_post);
-            assert_eq!(
-                validator_voting_powers_pre,
-                validator_voting_powers_post
-            );
-        } else {
-            for epoch in 0..pos_params.unbonding_len {
-                let total_voting_power_pre = total_voting_powers_pre.get(epoch);
-                let total_voting_power_post =
-                    total_voting_powers_post.get(epoch);
-                assert_eq!(
-                    total_voting_power_pre, total_voting_power_post,
-                    "Total voting power before pipeline offset must not \
-                     change - checking epoch {epoch}"
-                );
-
-                let validator_set_pre = validator_sets_pre.get(epoch);
-                let validator_set_post = validator_sets_post.get(epoch);
-                assert_eq!(
-                    validator_set_pre, validator_set_post,
-                    "Validator set before pipeline offset must not change - \
-                     checking epoch {epoch}"
-                );
-
-                let validator_voting_power_pre =
-                    validator_voting_powers_pre.get(epoch);
-                let validator_voting_power_post =
-                    validator_voting_powers_post.get(epoch);
-                assert_eq!(
-                    validator_voting_power_pre, validator_voting_power_post,
-                    "Validator's voting power before pipeline offset must not \
-                     change - checking epoch {epoch}"
-                );
-            }
-            {
-                let epoch = pos_params.unbonding_len;
-                let total_voting_power_pre =
-                    total_voting_powers_pre.get(epoch).unwrap();
-                let total_voting_power_post =
-                    total_voting_powers_post.get(epoch).unwrap();
-                assert_ne!(
-                    total_voting_power_pre, total_voting_power_post,
-                    "Total voting power at and after pipeline offset must \
-                     have changed - checking epoch {epoch}"
-                );
-
-                let validator_set_pre = validator_sets_pre.get(epoch).unwrap();
-                let validator_set_post =
-                    validator_sets_post.get(epoch).unwrap();
-                assert_ne!(
-                    validator_set_pre, validator_set_post,
-                    "Validator set at and after pipeline offset must have \
-                     changed - checking epoch {epoch}"
-                );
-
-                let validator_voting_power_pre =
-                    validator_voting_powers_pre.get(epoch).unwrap();
-                let validator_voting_power_post =
-                    validator_voting_powers_post.get(epoch).unwrap();
-                assert_ne!(
-                    validator_voting_power_pre, validator_voting_power_post,
-                    "Validator's voting power at and after pipeline offset \
-                     must have changed - checking epoch {epoch}"
-                );
-
-                // Expected voting power from the model ...
-                let expected_validator_voting_power: VotingPowerDelta =
-                    voting_power_post.try_into().unwrap();
-                // ... must match the voting power read from storage
-                assert_eq!(
-                    validator_voting_power_post,
-                    expected_validator_voting_power
-                );
-            }
         }
 
         // Use the tx_env to run PoS VP

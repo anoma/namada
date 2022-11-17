@@ -30,7 +30,7 @@ use setup::constants::*;
 use super::helpers::{get_height, is_debug_mode, wait_for_block_height};
 use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
-    epoch_sleep, find_address, find_voting_power, get_actor_rpc, get_epoch,
+    epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
 };
 use crate::e2e::setup::{self, default_port_offset, sleep, Bin, Who};
 use crate::{run, run_as};
@@ -1927,7 +1927,7 @@ fn pos_bonds() -> Result<()> {
 /// 4. Transfer some NAM to the new validator
 /// 5. Submit a self-bond for the new validator
 /// 6. Wait for the pipeline epoch
-/// 7. Check the new validator's voting power
+/// 7. Check the new validator's bonded stake
 #[test]
 fn pos_init_validator() -> Result<()> {
     let pipeline_len = 1;
@@ -2079,12 +2079,12 @@ fn pos_init_validator() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 6. Wait for the pipeline epoch when the validator's voting power should
+    // 6. Wait for the pipeline epoch when the validator's bonded stake should
     // be non-zero
     let epoch = get_epoch(&test, &validator_one_rpc)?;
     let earliest_update_epoch = epoch + pipeline_len;
     println!(
-        "Current epoch: {}, earliest epoch with updated voting power: {}",
+        "Current epoch: {}, earliest epoch with updated bonded stake: {}",
         epoch, earliest_update_epoch
     );
     let start = Instant::now();
@@ -2099,10 +2099,10 @@ fn pos_init_validator() -> Result<()> {
         }
     }
 
-    // 7. Check the new validator's voting power
-    let voting_power =
-        find_voting_power(&test, new_validator, &validator_one_rpc)?;
-    assert_eq!(voting_power, 11_000_500_000);
+    // 7. Check the new validator's bonded stake
+    let bonded_stake =
+        find_bonded_stake(&test, new_validator, &validator_one_rpc)?;
+    assert_eq!(bonded_stake, 11_000_500_000);
 
     Ok(())
 }
