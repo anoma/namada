@@ -108,6 +108,9 @@ where
                 self.build_mempool_txs(&mut alloc, &mut tx_indices, &req.txs);
             txs.append(&mut mempool_txs);
 
+            // fill up the remaining block space with
+            // arbitrary transactions that can fit in
+            // the free space left
             // TODO: check if we can add encrypted txs or not
             let mut alloc = alloc.next_state();
             let mut remaining_txs =
