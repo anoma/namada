@@ -16,7 +16,7 @@ $$  \max \{~r_{\text{nom}}~, ~9*\big(\sum_{i \in \text{infractions}}\frac{\text{
 
 Or, in pseudocode:
 <!-- I want to make these two code blocks toggleable as in  https://rdmd.readme.io/docs/code-blocks#tabbed-code-blocks but can't seem to get it to work-->
-```haskell =
+<!-- ```haskell =
 calculateSlashRate :: [Slash] -> Float
 
 calculateSlashRate slashes = 
@@ -25,7 +25,8 @@ calculateSlashRate slashes =
   -- minimum slash rate is 1%
   -- then exponential between 0 & 1/3 voting power
   -- we can make this a more complex function later
-```
+``` -->
+
 <!-- ```python
 class PoS:
     def __init__(self, genesis_validators : list):
@@ -52,6 +53,52 @@ class PoS:
 ``` -->
 
 As a function, it can be drawn as:
+```rust
+// Infraction type, where inner field is the slash rate for the type
+enum Infraction {
+    DuplicateVote(f64),
+    LightClientAttack(f64)
+}
+
+// Generic validator with an address and voting power
+struct Validator {
+    address: Vec<u8>,
+    voting_power: u64,
+}
+
+// Generic slash object with the misbehaving validator, infraction type, and some unique identifier
+struct Slash {
+    validator: Validator,
+    infraction_type: Infraction,
+    id: u64,
+}
+
+// Calculate a vector of final slash rates for each slash in the current epoch
+fn calculate_slash_rates(
+    current_epoch: u64,
+    nominal_slash_rate: f64,
+    slashes: Map<u64, Vec<Slash>>,
+    total_voting_power: u64
+) -> Vec<f64> {
+    let slashes_this_epoch = slashes.get(current_epoch);
+    let slashes_prev_epoch = slashes.get(current_epoch - 1);
+    let slashes_next_epoch = slashes.get(current_epoch + 1);
+
+    let associated_slashes = slashes_prev_epoch.extend(slashes_this_epoch).extend(slashes_next_epoch);
+    let final_rates: Vec<f64>;
+
+    for slash in &slashes_this_epoch {
+        let vp_frac_sum: f64 = 0;
+        for assoc_slash in &associated_slashes {
+            if assoc_slash.id == slash.id { continue; }
+            vp_frac_sum += assoc_slash.validator.voting_power / total_voting_power;
+        }
+        let rate = max( slash.infraction_type.0 , 9 * vp_frac_sum * vp_frac_sum );
+        final_rates.push(rate)
+    }
+    final_rates
+}
+```
 
 
 > Note: The voting power of a slash is the voting power of the validator **when they violated the protocol**, not the voting power now or at the time of any of the other infractions. This does mean that these voting powers may not sum to 1, but this method should still be close to the incentives we want, and can't really be changed without making the system easier to game.
