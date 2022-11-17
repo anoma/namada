@@ -181,8 +181,7 @@ impl TestTxEnv {
             .unwrap();
     }
 
-    /// Apply the tx changes to the write log and return
-    /// the set of verifiers.
+    /// Apply the tx changes to the write log.
     pub fn execute_tx(&mut self) -> Result<(), Error> {
         let empty_data = vec![];
         wasm::run::tx(
