@@ -103,7 +103,8 @@ where
             // add mempool txs
             // TODO: check if we can add encrypted txs or not
             let mut alloc = alloc.next_state_with_encrypted_txs();
-            let mut mempool_txs = self.build_mempool_txs(&mut alloc, req.txs);
+            let mut mempool_txs =
+                self.build_mempool_txs(&mut alloc, &mut tx_indices, req.txs);
             txs.append(&mut mempool_txs);
 
             // TODO: fill up remaining space
@@ -246,6 +247,7 @@ where
     fn build_mempool_txs<Mode>(
         &mut self,
         _alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
+        _tx_indices: &mut LazyProposedTxSet,
         txs: Vec<Vec<u8>>,
     ) -> Vec<TxRecord>
     where
@@ -260,23 +262,28 @@ where
     fn build_mempool_txs<Mode>(
         &mut self,
         alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
+        tx_indices: &mut LazyProposedTxSet,
         txs: Vec<Vec<u8>>,
     ) -> Vec<TxBytes>
     where
         BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: State,
     {
         txs.into_iter()
-            .filter_map(|tx_bytes| {
+            .enumerate()
+            .filter_map(|(index, tx_bytes)| {
                 if let Ok(Ok(TxType::Wrapper(_))) =
                     Tx::try_from(tx_bytes.as_slice()).map(process_tx)
                 {
-                    Some(tx_bytes)
+                    Some((index, tx_bytes))
                 } else {
                     None
                 }
             })
-            .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
-                AllocStatus::Accepted => true,
+            .take_while(|(index, tx_bytes)| match alloc.try_alloc(&*tx_bytes) {
+                AllocStatus::Accepted => {
+                    tx_indices.include_tx_index(*index);
+                    true
+                }
                 AllocStatus::Rejected { tx_len, space_left } => {
                     tracing::debug!(
                         tx_len,
@@ -300,6 +307,7 @@ where
                     true
                 }
             })
+            .map(|(_, tx_bytes)| tx_bytes)
             .collect()
     }
 
