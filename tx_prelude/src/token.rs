@@ -21,14 +21,16 @@ pub fn transfer(
     if amount != Amount::default() {
         let src_key = match &sub_prefix {
             Some(sub_prefix) => {
-                let prefix = token::multitoken_balance_prefix(token, sub_prefix);
+                let prefix =
+                    token::multitoken_balance_prefix(token, sub_prefix);
                 token::multitoken_balance_key(&prefix, src)
             }
             None => token::balance_key(token, src),
         };
         let dest_key = match &sub_prefix {
             Some(sub_prefix) => {
-                let prefix = token::multitoken_balance_prefix(token, sub_prefix);
+                let prefix =
+                    token::multitoken_balance_prefix(token, sub_prefix);
                 token::multitoken_balance_key(&prefix, dest)
             }
             None => token::balance_key(token, dest),
