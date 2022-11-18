@@ -6,6 +6,14 @@ use super::{
     TryAllocBatch, WithEncryptedTxs, WithoutEncryptedTxs,
 };
 
+#[cfg(test)]
+impl super::TryAlloc for BlockSpaceAllocator<BuildingProtocolTxBatch> {
+    #[inline]
+    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+        self.protocol_txs.try_dump(tx)
+    }
+}
+
 impl TryAllocBatch for BlockSpaceAllocator<BuildingProtocolTxBatch> {
     #[inline]
     fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
