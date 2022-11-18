@@ -377,15 +377,40 @@ where
     /// remaining space of the [`BlockSpaceAllocator`].
     fn build_remaining_batch<Mode>(
         &mut self,
-        _alloc: &mut BlockSpaceAllocator<FillingRemainingSpace<Mode>>,
-        _tx_indices: &LazyProposedTxSet,
-        _txs: Vec<TxBytes>,
+        alloc: &mut BlockSpaceAllocator<FillingRemainingSpace<Mode>>,
+        tx_indices: &LazyProposedTxSet,
+        txs: Vec<TxBytes>,
     ) -> Vec<TxBytes>
     where
         BlockSpaceAllocator<FillingRemainingSpace<Mode>>: State,
     {
-        // TODO
-        vec![]
+        get_remaining_txs(tx_indices, txs)
+            .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
+                AllocStatus::Accepted => true,
+                AllocStatus::Rejected { tx_len, space_left } => {
+                    tracing::debug!(
+                        tx_len,
+                        space_left,
+                        proposal_height =
+                            ?self.storage.get_current_decision_height(),
+                        "Dropping tx from the current proposal",
+                    );
+                    false
+                }
+                AllocStatus::OverflowsBin { tx_len, bin_size } => {
+                    // TODO: handle tx whose size is greater
+                    // than bin size
+                    tracing::warn!(
+                        tx_len,
+                        bin_size,
+                        proposal_height =
+                            ?self.storage.get_current_decision_height(),
+                        "Dropping large tx from the current proposal",
+                    );
+                    true
+                }
+            })
+            .collect()
     }
 }
 
