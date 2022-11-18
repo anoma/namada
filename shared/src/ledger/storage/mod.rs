@@ -1070,11 +1070,13 @@ where
             // and ProcessProposal, we simply return true
             true
         } else {
-            self.is_deciding_2nd_height_offset()
+            // offset of 1 => are we at the 2nd
+            // block within the epoch?
+            self.is_deciding_offset_within_epoch(1)
         }
     }
 
-    fn is_deciding_2nd_height_offset(&self) -> bool {
+    fn is_deciding_offset_within_epoch(&self, height_off: u64) -> bool {
         let current_decision_height = self.get_current_decision_height();
 
         // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
@@ -1082,10 +1084,9 @@ where
         // handle that case
         //
         // we can remove this check once that's fixed
-        match current_decision_height {
-            BlockHeight(1) => return false,
-            BlockHeight(2) => return true,
-            _ => (),
+        if self.get_current_epoch().0 == Epoch(0) {
+            let height_offset_within_epoch = BlockHeight(1 + height_off);
+            return current_decision_height == height_offset_within_epoch;
         }
 
         let fst_heights_of_each_epoch =
@@ -1094,8 +1095,8 @@ where
         fst_heights_of_each_epoch
             .last()
             .map(|&h| {
-                let second_height_of_epoch = h + 1;
-                current_decision_height == second_height_of_epoch
+                let height_offset_within_epoch = h + height_off;
+                current_decision_height == height_offset_within_epoch
             })
             .unwrap_or(false)
     }
