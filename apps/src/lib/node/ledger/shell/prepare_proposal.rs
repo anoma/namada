@@ -15,7 +15,7 @@ use namada::types::vote_extensions::VoteExtensionDigest;
 use self::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
     BuildingProtocolTxBatch, FillingRemainingSpace, NextState,
-    NextStateWithEncryptedTxs, State,
+    NextStateWithEncryptedTxs, TryAlloc, TryAllocBatch,
 };
 pub use self::block_space_alloc::LazyProposedTxSet;
 use self::block_space_alloc::{AllocStatus, BlockSpaceAllocator};
@@ -212,7 +212,7 @@ where
 
         match alloc.try_alloc_batch(txs.iter().map(Vec::as_slice)) {
             AllocStatus::Accepted => txs,
-            AllocStatus::Rejected { tx_len, space_left } => {
+            AllocStatus::Rejected { tx, space_left } => {
                 // no space left for tx batch, so we
                 // do not include any protocol tx in
                 // this block
@@ -225,7 +225,7 @@ where
                 // for eth events, and 1/3 available for valset
                 // upds
                 tracing::debug!(
-                    tx_len,
+                    ?tx,
                     space_left,
                     proposal_height =
                         ?self.storage.get_current_decision_height(),
@@ -233,11 +233,11 @@ where
                 );
                 vec![]
             }
-            AllocStatus::OverflowsBin { tx_len, bin_size } => {
+            AllocStatus::OverflowsBin { tx, bin_size } => {
                 // TODO: handle tx whose size is greater
                 // than bin size
                 tracing::warn!(
-                    tx_len,
+                    ?tx,
                     bin_size,
                     proposal_height =
                         ?self.storage.get_current_decision_height(),
@@ -257,7 +257,7 @@ where
         txs: &[TxBytes],
     ) -> Vec<TxRecord>
     where
-        BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: State,
+        BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: TryAlloc,
     {
         // TODO(feature = "abcipp"): implement building batch of mempool txs
         todo!()
@@ -272,7 +272,7 @@ where
         txs: &[TxBytes],
     ) -> Vec<TxBytes>
     where
-        BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: State,
+        BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: TryAlloc,
     {
         txs.iter()
             .enumerate()
@@ -290,9 +290,9 @@ where
                     tx_indices.include_tx_index(*index);
                     true
                 }
-                AllocStatus::Rejected { tx_len, space_left } => {
+                AllocStatus::Rejected { tx, space_left } => {
                     tracing::debug!(
-                        tx_len,
+                        ?tx,
                         space_left,
                         proposal_height =
                             ?self.storage.get_current_decision_height(),
@@ -300,11 +300,11 @@ where
                     );
                     false
                 }
-                AllocStatus::OverflowsBin { tx_len, bin_size } => {
+                AllocStatus::OverflowsBin { tx, bin_size } => {
                     // TODO: handle tx whose size is greater
                     // than bin size
                     tracing::warn!(
-                        tx_len,
+                        ?tx,
                         bin_size,
                         proposal_height =
                             ?self.storage.get_current_decision_height(),
@@ -346,10 +346,10 @@ where
             // TODO: make sure all txs are accepted;
             .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
                 AllocStatus::Accepted => true,
-                AllocStatus::Rejected { tx_len, space_left } => {
+                AllocStatus::Rejected { tx, space_left } => {
                     // TODO: handle rejected txs
                     tracing::warn!(
-                        tx_len,
+                        ?tx,
                         space_left,
                         proposal_height =
                             ?self.storage.get_current_decision_height(),
@@ -357,11 +357,11 @@ where
                     );
                     false
                 }
-                AllocStatus::OverflowsBin { tx_len, bin_size } => {
+                AllocStatus::OverflowsBin { tx, bin_size } => {
                     // TODO: handle tx whose size is greater
                     // than bin size
                     tracing::warn!(
-                        tx_len,
+                        ?tx,
                         bin_size,
                         proposal_height =
                             ?self.storage.get_current_decision_height(),
@@ -382,14 +382,14 @@ where
         txs: Vec<TxBytes>,
     ) -> Vec<TxBytes>
     where
-        BlockSpaceAllocator<FillingRemainingSpace<Mode>>: State,
+        BlockSpaceAllocator<FillingRemainingSpace<Mode>>: TryAlloc,
     {
         get_remaining_txs(tx_indices, txs)
             .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
                 AllocStatus::Accepted => true,
-                AllocStatus::Rejected { tx_len, space_left } => {
+                AllocStatus::Rejected { tx, space_left } => {
                     tracing::debug!(
-                        tx_len,
+                        ?tx,
                         space_left,
                         proposal_height =
                             ?self.storage.get_current_decision_height(),
@@ -397,11 +397,11 @@ where
                     );
                     false
                 }
-                AllocStatus::OverflowsBin { tx_len, bin_size } => {
+                AllocStatus::OverflowsBin { tx, bin_size } => {
                     // TODO: handle tx whose size is greater
                     // than bin size
                     tracing::warn!(
-                        tx_len,
+                        ?tx,
                         bin_size,
                         proposal_height =
                             ?self.storage.get_current_decision_height(),
