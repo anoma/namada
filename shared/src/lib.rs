@@ -16,6 +16,7 @@ pub use {
 };
 
 pub mod bytes;
+pub mod hints;
 pub mod ledger;
 pub mod proto;
 pub mod types;
