@@ -8,12 +8,12 @@ use super::{
 
 impl State for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>> {
     #[inline]
-    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
         self.encrypted_txs.try_dump(tx)
     }
 
     #[inline]
-    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
     {
@@ -36,24 +36,20 @@ impl State
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
 {
     #[inline]
-    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
-        AllocStatus::Rejected {
-            tx_len: tx.len() as u64,
-            space_left: 0,
-        }
+    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+        AllocStatus::Rejected { tx, space_left: 0 }
     }
 
     #[inline]
-    fn try_alloc_batch<'tx, T>(&mut self, _txs: T) -> AllocStatus
+    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
     {
-        AllocStatus::Rejected {
-            // arbitrary `tx_len` value; doesn't really matter what we
-            // choose here, as long as it's greater than zero
-            tx_len: u64::MAX,
-            space_left: 0,
-        }
+        let tx = txs
+            .into_iter()
+            .next()
+            .expect("We should have had at least one tx in the batch");
+        AllocStatus::Rejected { tx, space_left: 0 }
     }
 }
 

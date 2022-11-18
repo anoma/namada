@@ -85,10 +85,10 @@ pub enum WithoutEncryptedTxs {}
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
 pub trait State {
     /// Try to allocate space for a new transaction.
-    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus;
+    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx>;
 
     /// Try to allocate space for a new batch of transactions.
-    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx;
 }

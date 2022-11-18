@@ -8,7 +8,7 @@ use super::{
 
 impl State for BlockSpaceAllocator<BuildingProtocolTxBatch> {
     #[inline]
-    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
         // TODO: prioritize certain kinds of protocol txs;
         // this can be done at the `CheckTx` level,
         // we don't need the `TxBin`s to be aware
@@ -17,7 +17,7 @@ impl State for BlockSpaceAllocator<BuildingProtocolTxBatch> {
     }
 
     #[inline]
-    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
     {

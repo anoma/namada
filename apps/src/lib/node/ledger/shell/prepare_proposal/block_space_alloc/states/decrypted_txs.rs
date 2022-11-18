@@ -7,12 +7,12 @@ use super::{
 
 impl State for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
     #[inline]
-    fn try_alloc(&mut self, tx: &[u8]) -> AllocStatus {
+    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
         self.decrypted_txs.try_dump(tx)
     }
 
     #[inline]
-    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus
+    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
     {

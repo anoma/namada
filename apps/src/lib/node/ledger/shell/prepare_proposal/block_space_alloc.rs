@@ -58,14 +58,14 @@ use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
 /// All status responses from trying to allocate block space for a tx.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum AllocStatus {
+pub enum AllocStatus<'tx> {
     /// The transaction is able to be included in the current block.
     Accepted,
     /// The transaction can only be included in an upcoming block.
-    Rejected { tx_len: u64, space_left: u64 },
+    Rejected { tx: &'tx [u8], space_left: u64 },
     /// The transaction would overflow the allotted bin space,
     /// therefore it needs to be handled separately.
-    OverflowsBin { tx_len: u64, bin_size: u64 },
+    OverflowsBin { tx: &'tx [u8], bin_size: u64 },
 }
 
 /// Allotted space for a batch of transactions in some proposed block,
@@ -199,11 +199,11 @@ impl TxBin {
     ///
     /// Signal the caller if the tx is larger than its max
     /// allotted bin space.
-    fn try_dump(&mut self, tx: &[u8]) -> AllocStatus {
+    fn try_dump<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
         let tx_len = tx.len() as u64;
         if tx_len > self.allotted_space_in_bytes {
             let bin_size = self.allotted_space_in_bytes;
-            return AllocStatus::OverflowsBin { tx_len, bin_size };
+            return AllocStatus::OverflowsBin { tx, bin_size };
         }
         let occupied = self.occupied_space_in_bytes + tx_len;
         if occupied <= self.allotted_space_in_bytes {
@@ -211,7 +211,7 @@ impl TxBin {
             AllocStatus::Accepted
         } else {
             let space_left = self.space_left_in_bytes();
-            AllocStatus::Rejected { tx_len, space_left }
+            AllocStatus::Rejected { tx, space_left }
         }
     }
 
@@ -219,7 +219,7 @@ impl TxBin {
     ///
     /// If an allocation fails, rollback the state of the [`TxBin`],
     /// and return the respective status of the failure.
-    fn try_dump_all<'tx, T>(&mut self, txs: T) -> AllocStatus
+    fn try_dump_all<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
     {
