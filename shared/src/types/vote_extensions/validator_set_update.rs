@@ -413,6 +413,31 @@ mod tests {
         );
     }
 
+    /// Checks that comparing two [`VotingPowersMap`] items with different
+    /// voting powers results in the item with the lesser voting power being
+    /// regarded as "greater".
+    #[test]
+    fn test_compare_voting_powers_map_items_different_voting_powers() {
+        let validator_a = EthAddrBook {
+            hot_key_addr: EthAddress([0; 20]),
+            cold_key_addr: EthAddress([0; 20]),
+        };
+        let validator_a_voting_power = 200.into();
+        let validator_b = EthAddrBook {
+            hot_key_addr: EthAddress([1; 20]),
+            cold_key_addr: EthAddress([1; 20]),
+        };
+        let validator_b_voting_power = 100.into();
+
+        assert_eq!(
+            compare_voting_powers_map_items(
+                &(&validator_a, &validator_a_voting_power),
+                &(&validator_b, &validator_b_voting_power),
+            ),
+            Ordering::Less
+        );
+    }
+
     /// Checks that [`VotingPowersMapExt::get_abi_encoded`] gives a
     /// deterministic result in the case where there are multiple validators
     /// with the same voting power.
