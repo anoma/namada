@@ -79,14 +79,21 @@ pub enum WithEncryptedTxs {}
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
 pub enum WithoutEncryptedTxs {}
 
-/// Represents a state in the [`BlockSpaceAllocator`] state machine.
+/// Try to allocate a new transaction on a [`BlockSpaceAllocator`] state.
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-pub trait State {
+pub trait TryAlloc {
     /// Try to allocate space for a new transaction.
     fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx>;
+}
 
+/// Try to allocate a new batch of transactions on a
+/// [`BlockSpaceAllocator`] state.
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+pub trait TryAllocBatch {
     /// Try to allocate space for a new batch of transactions.
     fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
     where

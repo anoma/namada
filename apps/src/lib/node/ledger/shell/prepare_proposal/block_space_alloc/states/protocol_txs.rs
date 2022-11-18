@@ -2,25 +2,20 @@ use std::marker::PhantomData;
 
 use super::super::{AllocStatus, BlockSpaceAllocator, TxBin};
 use super::{
-    BuildingEncryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl, State,
-    WithEncryptedTxs, WithoutEncryptedTxs,
+    BuildingEncryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl,
+    TryAllocBatch, WithEncryptedTxs, WithoutEncryptedTxs,
 };
 
-impl State for BlockSpaceAllocator<BuildingProtocolTxBatch> {
-    #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
-        // TODO: prioritize certain kinds of protocol txs;
-        // this can be done at the `CheckTx` level,
-        // we don't need the `TxBin`s to be aware
-        // of different prioriy hints for protocol txs
-        self.protocol_txs.try_dump(tx)
-    }
-
+impl TryAllocBatch for BlockSpaceAllocator<BuildingProtocolTxBatch> {
     #[inline]
     fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
     where
         T: IntoIterator<Item = &'tx [u8]> + 'tx,
     {
+        // TODO: prioritize certain kinds of protocol txs;
+        // this can be done at the `CheckTx` level,
+        // we don't need the `TxBin`s to be aware
+        // of different prioriy hints for protocol txs
         self.protocol_txs.try_dump_all(txs)
     }
 }

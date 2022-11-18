@@ -2,21 +2,13 @@ use std::marker::PhantomData;
 
 use super::super::{thres, AllocStatus, BlockSpaceAllocator, TxBin};
 use super::{
-    BuildingDecryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl, State,
+    BuildingDecryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl, TryAlloc,
 };
 
-impl State for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
+impl TryAlloc for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
     #[inline]
     fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
         self.decrypted_txs.try_dump(tx)
-    }
-
-    #[inline]
-    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
-    where
-        T: IntoIterator<Item = &'tx [u8]> + 'tx,
-    {
-        self.decrypted_txs.try_dump_all(txs)
     }
 }
 
