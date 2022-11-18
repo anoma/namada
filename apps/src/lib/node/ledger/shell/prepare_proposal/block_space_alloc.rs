@@ -121,10 +121,12 @@ impl BlockSpaceAllocator<states::BuildingDecryptedTxBatch> {
 }
 
 impl<State> BlockSpaceAllocator<State> {
-    /// Return uninitialized space in tx bins, resulting from ratio conversions.
+    /// Return the amount of space left to initialize in all
+    /// [`TxBin`] instances.
     ///
-    /// This method should not be used outside of [`BlockSpaceAllocator`]
-    /// instance construction or unit testing.
+    /// This is calculated based on the different between the
+    /// allotted Tendermint block space and the sum of the allotted
+    /// space to each [`TxBin`] instance in a [`BlockSpaceAllocator`].
     #[inline]
     fn uninitialized_space_in_bytes(&self) -> u64 {
         let total_bin_space = self.protocol_txs.allotted_space_in_bytes
