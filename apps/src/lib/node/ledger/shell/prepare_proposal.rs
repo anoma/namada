@@ -416,7 +416,6 @@ where
 
 /// Return a list of the transactions that haven't
 /// been marked for inclusion in the block, yet.
-#[allow(dead_code)]
 fn get_remaining_txs(
     tx_indices: &LazyProposedTxSet,
     txs: Vec<TxBytes>,
