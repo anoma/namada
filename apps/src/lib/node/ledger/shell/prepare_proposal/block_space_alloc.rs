@@ -255,7 +255,7 @@ mod tests {
     use assert_matches::assert_matches;
     use proptest::prelude::*;
 
-    use super::states::{NextState, NextStateWithEncryptedTxs, State};
+    use super::states::{NextState, NextStateWithEncryptedTxs, TryAlloc};
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -300,7 +300,7 @@ mod tests {
             BlockSpaceAllocator::init(tendermint_max_block_space_in_bytes);
 
         // fill the entire bin of decrypted txs
-        bins.decrypted_txs.current_space_in_bytes =
+        bins.decrypted_txs.occupied_space_in_bytes =
             bins.decrypted_txs.allotted_space_in_bytes;
 
         // make sure we can't dump any new decrypted txs in the bin
@@ -339,7 +339,7 @@ mod tests {
         ));
         let decrypted_txs = decrypted_txs.into_iter().take_while(|tx| {
             let bin = bins.borrow().decrypted_txs;
-            let new_size = bin.current_space_in_bytes + tx.len() as u64;
+            let new_size = bin.occupied_space_in_bytes + tx.len() as u64;
             new_size < bin.allotted_space_in_bytes
         });
         for tx in decrypted_txs {
@@ -352,7 +352,7 @@ mod tests {
         let bins = RefCell::new(bins.into_inner().next_state());
         let protocol_txs = protocol_txs.into_iter().take_while(|tx| {
             let bin = bins.borrow().protocol_txs;
-            let new_size = bin.current_space_in_bytes + tx.len() as u64;
+            let new_size = bin.occupied_space_in_bytes + tx.len() as u64;
             new_size < bin.allotted_space_in_bytes
         });
         for tx in protocol_txs {
@@ -366,7 +366,7 @@ mod tests {
             RefCell::new(bins.into_inner().next_state_with_encrypted_txs());
         let encrypted_txs = encrypted_txs.into_iter().take_while(|tx| {
             let bin = bins.borrow().encrypted_txs;
-            let new_size = bin.current_space_in_bytes + tx.len() as u64;
+            let new_size = bin.occupied_space_in_bytes + tx.len() as u64;
             new_size < bin.allotted_space_in_bytes
         });
         for tx in encrypted_txs {
