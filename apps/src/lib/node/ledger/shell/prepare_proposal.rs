@@ -2,6 +2,8 @@
 
 mod block_space_alloc;
 
+use itertools::Either::*;
+use namada::hints;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
@@ -13,9 +15,10 @@ use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
 
 use self::block_space_alloc::states::{
-    BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
-    BuildingProtocolTxBatch, FillingRemainingSpace, NextState,
-    NextStateWithEncryptedTxs, TryAlloc, TryAllocBatch,
+    BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
+    EncryptedTxBatchAllocator, NextState, NextStateWithEncryptedTxs,
+    NextStateWithoutEncryptedTxs, RemainingBatchAllocator, TryAlloc,
+    TryAllocBatch,
 };
 pub use self::block_space_alloc::LazyProposedTxSet;
 use self::block_space_alloc::{AllocStatus, BlockSpaceAllocator};
@@ -101,9 +104,29 @@ where
                 protocol_txs.into_iter().map(record::add).collect();
             txs.append(&mut protocol_txs);
 
+            // transition to the correct state; we may
+            // or may not need to add encrypted txs to
+            // the block, depending on the current
+            // block height
+            let is_2nd_height_off =
+                self.storage.is_deciding_offset_within_epoch(1);
+            let is_3rd_height_off =
+                self.storage.is_deciding_offset_within_epoch(2);
+
+            let mut alloc = if hints::unlikely(
+                is_2nd_height_off || is_3rd_height_off,
+            ) {
+                tracing::warn!(
+                    proposal_height =
+                        ?self.storage.get_current_decision_height(),
+                    "No mempool txs are being included in the current proposal"
+                );
+                Right(alloc.next_state_without_encrypted_txs())
+            } else {
+                Left(alloc.next_state_with_encrypted_txs())
+            };
+
             // add mempool txs
-            // TODO: check if we can add encrypted txs or not
-            let mut alloc = alloc.next_state_with_encrypted_txs();
             let mut mempool_txs =
                 self.build_mempool_txs(&mut alloc, &mut tx_indices, &req.txs);
             txs.append(&mut mempool_txs);
@@ -111,7 +134,6 @@ where
             // fill up the remaining block space with
             // arbitrary transactions that can fit in
             // the free space left
-            // TODO: check if we can add encrypted txs or not
             let mut alloc = alloc.next_state();
             let mut remaining_txs =
                 self.build_remaining_batch(&mut alloc, &tx_indices, req.txs);
@@ -250,30 +272,24 @@ where
 
     /// Builds a batch of mempool transactions.
     #[cfg(feature = "abcipp")]
-    fn build_mempool_txs<Mode>(
+    fn build_mempool_txs(
         &mut self,
-        _alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
+        _alloc: &mut EncryptedTxBatchAllocator,
         _tx_indices: &mut LazyProposedTxSet,
         txs: &[TxBytes],
-    ) -> Vec<TxRecord>
-    where
-        BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: TryAlloc,
-    {
+    ) -> Vec<TxRecord> {
         // TODO(feature = "abcipp"): implement building batch of mempool txs
         todo!()
     }
 
     /// Builds a batch of mempool transactions.
     #[cfg(not(feature = "abcipp"))]
-    fn build_mempool_txs<Mode>(
+    fn build_mempool_txs(
         &mut self,
-        alloc: &mut BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
+        alloc: &mut EncryptedTxBatchAllocator,
         tx_indices: &mut LazyProposedTxSet,
         txs: &[TxBytes],
-    ) -> Vec<TxBytes>
-    where
-        BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>: TryAlloc,
-    {
+    ) -> Vec<TxBytes> {
         txs.iter()
             .enumerate()
             .filter_map(|(index, tx_bytes)| {
@@ -375,15 +391,12 @@ where
 
     /// Builds a batch of transactions that can fit in the
     /// remaining space of the [`BlockSpaceAllocator`].
-    fn build_remaining_batch<Mode>(
+    fn build_remaining_batch(
         &mut self,
-        alloc: &mut BlockSpaceAllocator<FillingRemainingSpace<Mode>>,
+        alloc: &mut RemainingBatchAllocator,
         tx_indices: &LazyProposedTxSet,
         txs: Vec<TxBytes>,
-    ) -> Vec<TxBytes>
-    where
-        BlockSpaceAllocator<FillingRemainingSpace<Mode>>: TryAlloc,
-    {
+    ) -> Vec<TxBytes> {
         get_remaining_txs(tx_indices, txs)
             .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
                 AllocStatus::Accepted => true,
