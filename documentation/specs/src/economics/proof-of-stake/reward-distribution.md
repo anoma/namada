@@ -1,8 +1,8 @@
 # Reward distribution
 
-Namada uses the automatically-compounding variant of [F1 fee distribution](https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf).
+Namada uses the automatically-compounding variant of the [F1 fee distribution](https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf).
 
-Rewards are given to validators for proposing blocks, for voting on finalizing blocks, and for being in the [consensus validator set](bonding-mechanism.md#validator-sets): the funds for these rewards can come from **minting** (creating new tokens). The amount that is minted depends on how many staking tokens are locked (staked) and some maximum annual inflation rate. The rewards mechanism is implemented as a [PD controller](../inflation-system.md#detailed-inflation-calculation-model) that dynamically adjusts the inflation rate to achieve a target staking token ratio. When the total fraction of tokens staked is very low, the return rate per validator needs to increase, but as the total fraction of stake rises, validators will receive fewer rewards. Once the desired staking fraction is achieved, the amount minted will just be the desired annual inflation.
+Rewards are given to validators for proposing blocks, for voting on finalizing blocks, and for being in the [consensus validator set](bonding-mechanism.md#validator-sets). The funds for these rewards come from **minting** (creating new tokens). The amount that is minted depends on how many staking tokens are locked (staked) and some maximum annual inflation rate. The rewards mechanism is implemented as a [PD controller](../inflation-system.md#detailed-inflation-calculation-model) that dynamically adjusts the inflation rate to achieve a target staked token ratio. When the total fraction of tokens staked is very low, the return rate per validator needs to increase, but as the total fraction of stake rises, validators will receive fewer rewards. Once the desired staking fraction is achieved, the amount minted will just be the desired annual inflation.
 
 Each delegation to a validator is initiated at an agreed-upon commission rate charged by the validator. Validators pay out rewards to delegators based on this mutually-determined commission rate. The minted rewards are auto-bonded and only transferred when the funds are unbonded. Once the protocol determines the total amount of tokens to mint at the end of the epoch, the minted tokens are effectively divided among the relevant validators and delegators according to their proportional stake. In practice, the reward products, which are the fractional increases in staked tokens claimed, are stored for the validators and delegators, and the reward tokens are only transferred to the validator’s or delegator’s account upon withdrawal. This is described in the following sections. The general system is similar to what Cosmos does.
 
@@ -165,7 +165,7 @@ $$ R_p + R_s + R_b = 1, $$
 
 where $R_p$ is the proposer reward fraction, $R_s$ is the reward fraction for the set of signers, and $R_b$ is the reward fraction for the whole active validator set.
 
-The reward for proposing a block is dependent on the combined voting power of all validators whose signatures are included in the block. This is to incentivize the block proposer to maximize the inclusion of signatures, as blocks with more signatures are (JUSTIFY THIS POINT HERE).
+The reward for proposing a block is dependent on the combined voting power of all validators whose signatures are included in the block. This is to incentivize the block proposer to maximize the inclusion of signatures, as blocks with more signatures have better security guarantees and allow for more efficient light clients.
 
 The block proposer reward is parameterized as
 

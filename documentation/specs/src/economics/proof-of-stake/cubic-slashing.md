@@ -8,7 +8,7 @@ When a slash is detected:
 3. Prevent the delegators to this validator from altering their delegations in any way until the enqueued slash is processed.
 
 At the end of each epoch, for each slash enqueued to be processed for the end of the epoch:
-1. Collect the other known infractions committed within a range of (-1, +1) epochs around the infraction in question.
+1. Collect all known infractions committed within a range of (-1, +1) epochs around the infraction in question.
 2. Sum the fractional voting powers (relative to the total PoS voting power) of the misbehaving validator for each of the collected nearby infractions. 
 3. The final slash rate for the slash in question is then dependent on this sum. Using $r_\text{nom}$ as the nominal slash rate and $\text{vp}$ to indicate voting power, the slash rate is expressed as:
 
