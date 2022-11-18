@@ -6,14 +6,13 @@ use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
 use namada::types::address::Address;
-use namada::types::ethereum_events::EthereumEvent;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
-use tokio::sync::mpsc::{Receiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
 
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
@@ -24,7 +23,7 @@ use crate::config;
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::abci::RequestBeginBlock;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
-use crate::node::ledger::shell::Shell;
+use crate::node::ledger::shell::{EthereumOracleHandle, Shell};
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -50,7 +49,7 @@ impl AbcippShim {
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        eth_receiver: Option<Receiver<EthereumEvent>>,
+        eth_oracle: Option<EthereumOracleHandle>,
         db_cache: &rocksdb::Cache,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
@@ -65,7 +64,7 @@ impl AbcippShim {
                     config,
                     wasm_dir,
                     broadcast_sender,
-                    eth_receiver,
+                    eth_oracle,
                     Some(db_cache),
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,

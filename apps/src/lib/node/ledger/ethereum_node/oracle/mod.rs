@@ -93,7 +93,7 @@ async fn await_initial_configuration(
 ) -> Option<Config> {
     match receiver.recv().await {
         Some(cmd) => match cmd {
-            control::Command::SendConfig { config } => Some(config),
+            control::Command::Start { initial: config } => Some(config),
         },
         None => None,
     }
@@ -391,7 +391,7 @@ mod test_oracle {
             });
         });
         control_sender
-            .send(control::Command::SendConfig { config })
+            .send(control::Command::Start { initial: config })
             .await
             .unwrap();
         handle

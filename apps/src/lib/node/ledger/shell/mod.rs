@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::ledger::eth_bridge::EthereumBridgeConfig;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
@@ -51,6 +52,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
+use super::ethereum_node::oracle;
 use crate::config::{genesis, TendermintMode};
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
@@ -170,7 +172,9 @@ pub(super) enum ShellMode {
     Validator {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        ethereum_recv: EthereumReceiver,
+        ethereum_recv: Option<EthereumReceiver>,
+        ethereum_control: Option<oracle::control::Sender>,
+        ethereum_oracle_started: bool,
     },
     Full,
     Seed,
@@ -234,7 +238,11 @@ impl ShellMode {
 
     /// Remove an Ethereum event from the internal queue
     pub fn dequeue_eth_event(&mut self, event: &EthereumEvent) {
-        if let ShellMode::Validator { ethereum_recv, .. } = self {
+        if let ShellMode::Validator {
+            ethereum_recv: Some(ethereum_recv),
+            ..
+        } = self
+        {
             ethereum_recv.remove_event(event);
         }
     }
@@ -340,6 +348,25 @@ where
     event_log: EventLog,
 }
 
+/// Handle for communicating with an Ethereum oracle running in another
+/// thread.
+pub struct EthereumOracleHandle {
+    events_receiver: Receiver<EthereumEvent>,
+    control_sender: oracle::control::Sender,
+}
+
+impl EthereumOracleHandle {
+    pub fn new(
+        events_receiver: Receiver<EthereumEvent>,
+        control_sender: oracle::control::Sender,
+    ) -> Self {
+        Self {
+            events_receiver,
+            control_sender,
+        }
+    }
+}
+
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -352,7 +379,7 @@ where
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        eth_receiver: Option<Receiver<EthereumEvent>>,
+        eth_oracle: Option<EthereumOracleHandle>,
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
@@ -403,12 +430,27 @@ where
                     );
                     wallet
                         .take_validator_data()
-                        .map(|data| ShellMode::Validator {
-                            data,
-                            broadcast_sender,
-                            ethereum_recv: EthereumReceiver::new(
-                                eth_receiver.unwrap(),
-                            ),
+                        .map(|data| {
+                            let (ethereum_recv, ethereum_control) =
+                                match eth_oracle {
+                                    Some(EthereumOracleHandle {
+                                        events_receiver,
+                                        control_sender,
+                                    }) => (
+                                        Some(EthereumReceiver::new(
+                                            events_receiver,
+                                        )),
+                                        Some(control_sender),
+                                    ),
+                                    None => (None, None),
+                                };
+                            ShellMode::Validator {
+                                data,
+                                broadcast_sender,
+                                ethereum_recv,
+                                ethereum_control,
+                                ethereum_oracle_started: false,
+                            }
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -419,6 +461,17 @@ where
                 {
                     let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
                         wallet::defaults::validator_keys();
+
+                    let (ethereum_recv, ethereum_control) = match eth_oracle {
+                        Some(EthereumOracleHandle {
+                            events_receiver,
+                            control_sender,
+                        }) => (
+                            Some(EthereumReceiver::new(events_receiver)),
+                            Some(control_sender),
+                        ),
+                        None => (None, None),
+                    };
                     ShellMode::Validator {
                         data: wallet::ValidatorData {
                             address: wallet::defaults::validator_address(),
@@ -429,9 +482,9 @@ where
                             },
                         },
                         broadcast_sender,
-                        ethereum_recv: EthereumReceiver::new(
-                            eth_receiver.unwrap(),
-                        ),
+                        ethereum_recv,
+                        ethereum_control,
+                        ethereum_oracle_started: false,
                     }
                 }
             }
@@ -661,6 +714,9 @@ where
                 e
             )
         });
+        // TODO: we check the Ethereum oracle is started (if necessary) on every
+        // block commit, but this is hardly necessary
+        self.ensure_ethereum_oracle_started();
 
         let root = self.storage.merkle_root();
         tracing::info!(
@@ -691,8 +747,61 @@ where
                 }
             }
         }
-
         response
+    }
+
+    /// If a handle to an Ethereum oracle was provided to the [`Shell`], attempt
+    /// to signal it to start, using an initial configuration based on
+    /// Ethereum bridge parameters in blockchain storage.
+    // TODO: return Result
+    fn ensure_ethereum_oracle_started(&mut self) {
+        if let ShellMode::Validator {
+            ethereum_control: Some(ethereum_control),
+            ethereum_oracle_started,
+            ..
+        } = &mut self.mode
+        {
+            if *ethereum_oracle_started {
+                return;
+            }
+            let config = match EthereumBridgeConfig::read(&self.storage) {
+                Some(config) => config,
+                None => {
+                    tracing::warn!(
+                        "An Ethereum oracle task appears to be running, but \
+                         there are no Ethereum bridge parameters configured \
+                         in block storage, so this oracle will do nothing"
+                    );
+                    return;
+                }
+            };
+            let config = oracle::config::Config {
+                min_confirmations: config.min_confirmations.into(),
+                bridge_contract: config.contracts.bridge.address,
+                governance_contract: config.contracts.governance.address,
+            };
+            tracing::debug!(
+                ?config,
+                "Starting the Ethereum oracle using values from block storage"
+            );
+            if let Err(error) = ethereum_control
+                .try_send(oracle::control::Command::Start { initial: config })
+            {
+                match error {
+                    tokio::sync::mpsc::error::TrySendError::Full(_) => {
+                        // TODO: there is a possible race condition here where
+                        // the oracle may not have processed the previous
+                        // command yet, would it be better to hang here?
+                        panic!("This channel should never fill up!")
+                    }
+                    tokio::sync::mpsc::error::TrySendError::Closed(_) => {
+                        panic!("Stop everything")
+                    }
+                }
+            }
+            // TODO: listen to channel in Command::Send for response
+            *ethereum_oracle_started = true;
+        }
     }
 
     /// Validate a transaction request. On success, the transaction will
@@ -1016,6 +1125,11 @@ mod test_utils {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+            let (control_sender, _) = oracle::control::channel();
+            let eth_oracle = EthereumOracleHandle {
+                events_receiver: eth_receiver,
+                control_sender,
+            };
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
@@ -1027,7 +1141,7 @@ mod test_utils {
                 ),
                 top_level_directory().join("wasm"),
                 sender,
-                Some(eth_receiver),
+                Some(eth_oracle),
                 None,
                 vp_wasm_compilation_cache,
                 tx_wasm_compilation_cache,
@@ -1158,6 +1272,11 @@ mod test_utils {
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
         let (_, receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+        let (control_sender, _) = oracle::control::channel();
+        let eth_oracle = EthereumOracleHandle {
+            events_receiver: receiver,
+            control_sender,
+        };
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let native_token = address::nam();
@@ -1169,7 +1288,7 @@ mod test_utils {
             ),
             top_level_directory().join("wasm"),
             sender.clone(),
-            Some(receiver),
+            Some(eth_oracle),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
@@ -1222,6 +1341,11 @@ mod test_utils {
         std::mem::drop(shell);
         let (_, receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+        let (control_sender, _) = oracle::control::channel();
+        let eth_oracle = EthereumOracleHandle {
+            events_receiver: receiver,
+            control_sender,
+        };
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
@@ -1231,7 +1355,7 @@ mod test_utils {
             ),
             top_level_directory().join("wasm"),
             sender,
-            Some(receiver),
+            Some(eth_oracle),
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,

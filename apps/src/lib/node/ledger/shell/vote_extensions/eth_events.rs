@@ -145,7 +145,7 @@ where
     pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
         match &mut self.mode {
             ShellMode::Validator {
-                ref mut ethereum_recv,
+                ethereum_recv: Some(ethereum_recv),
                 ..
             } => {
                 ethereum_recv.fill_queue();
