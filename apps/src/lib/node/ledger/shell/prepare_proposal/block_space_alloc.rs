@@ -137,15 +137,15 @@ impl<State> BlockSpaceAllocator<State> {
     /// as block space.
     #[inline]
     fn claim_block_space(&mut self) {
-        let used_space = self.protocol_txs.current_space_in_bytes
-            + self.encrypted_txs.current_space_in_bytes
-            + self.decrypted_txs.current_space_in_bytes;
+        let used_space = self.protocol_txs.occupied_space_in_bytes
+            + self.encrypted_txs.occupied_space_in_bytes
+            + self.decrypted_txs.occupied_space_in_bytes;
 
-        self.block.current_space_in_bytes = used_space;
+        self.block.occupied_space_in_bytes = used_space;
 
-        self.decrypted_txs.current_space_in_bytes = 0;
-        self.protocol_txs.current_space_in_bytes = 0;
-        self.encrypted_txs.current_space_in_bytes = 0;
+        self.decrypted_txs.occupied_space_in_bytes = 0;
+        self.protocol_txs.occupied_space_in_bytes = 0;
+        self.encrypted_txs.occupied_space_in_bytes = 0;
     }
 }
 
@@ -154,7 +154,7 @@ impl<State> BlockSpaceAllocator<State> {
 #[derive(Debug, Copy, Clone, Default)]
 struct TxBin {
     /// The current space utilized by the batch of transactions.
-    current_space_in_bytes: u64,
+    occupied_space_in_bytes: u64,
     /// The maximum space the batch of transactions may occupy.
     allotted_space_in_bytes: u64,
 }
@@ -167,14 +167,14 @@ impl TxBin {
         let allotted_space_in_bytes = (frac * max_bytes).to_integer();
         Self {
             allotted_space_in_bytes,
-            current_space_in_bytes: 0,
+            occupied_space_in_bytes: 0,
         }
     }
 
     /// Return the amount of space left in this [`TxBin`].
     #[inline]
     fn space_left_in_bytes(&self) -> u64 {
-        self.allotted_space_in_bytes - self.current_space_in_bytes
+        self.allotted_space_in_bytes - self.occupied_space_in_bytes
     }
 
     /// Construct a new [`TxBin`], with a capacity of `max_bytes`.
@@ -182,7 +182,7 @@ impl TxBin {
     fn init(max_bytes: u64) -> Self {
         Self {
             allotted_space_in_bytes: max_bytes,
-            current_space_in_bytes: 0,
+            occupied_space_in_bytes: 0,
         }
     }
 
@@ -190,7 +190,7 @@ impl TxBin {
     /// space is currently being utilized.
     #[inline]
     fn shrink(&mut self) {
-        self.allotted_space_in_bytes = self.current_space_in_bytes;
+        self.allotted_space_in_bytes = self.occupied_space_in_bytes;
     }
 
     /// Try to dump a new transaction into this [`TxBin`].
@@ -203,9 +203,9 @@ impl TxBin {
             let bin_size = self.allotted_space_in_bytes;
             return AllocStatus::OverflowsBin { tx_len, bin_size };
         }
-        let occupied = self.current_space_in_bytes + tx_len;
+        let occupied = self.occupied_space_in_bytes + tx_len;
         if occupied <= self.allotted_space_in_bytes {
-            self.current_space_in_bytes = occupied;
+            self.occupied_space_in_bytes = occupied;
             AllocStatus::Accepted
         } else {
             let space_left = self.space_left_in_bytes();
@@ -227,7 +227,7 @@ impl TxBin {
                 AllocStatus::Accepted => space_diff += tx.len() as u64,
                 status @ (AllocStatus::Rejected { .. }
                 | AllocStatus::OverflowsBin { .. }) => {
-                    self.current_space_in_bytes -= space_diff;
+                    self.occupied_space_in_bytes -= space_diff;
                     return status;
                 }
             }
