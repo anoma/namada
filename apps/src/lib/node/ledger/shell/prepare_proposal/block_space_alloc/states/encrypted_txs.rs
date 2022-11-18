@@ -1,9 +1,12 @@
 use std::marker::PhantomData;
 
+use itertools::Either::*;
+
 use super::super::{AllocStatus, BlockSpaceAllocator};
 use super::{
-    BuildingEncryptedTxBatch, FillingRemainingSpace, NextStateImpl, TryAlloc,
-    WithEncryptedTxs, WithoutEncryptedTxs,
+    BuildingEncryptedTxBatch, EncryptedTxBatchAllocator, FillingRemainingSpace,
+    NextStateImpl, RemainingBatchAllocator, TryAlloc, WithEncryptedTxs,
+    WithoutEncryptedTxs,
 };
 
 impl TryAlloc
@@ -70,5 +73,27 @@ fn next_state<Mode>(
         protocol_txs,
         encrypted_txs,
         decrypted_txs,
+    }
+}
+
+impl TryAlloc for EncryptedTxBatchAllocator {
+    #[inline]
+    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+        match self {
+            Left(state) => state.try_alloc(tx),
+            Right(state) => state.try_alloc(tx),
+        }
+    }
+}
+
+impl NextStateImpl for EncryptedTxBatchAllocator {
+    type Next = RemainingBatchAllocator;
+
+    #[inline]
+    fn next_state_impl(self) -> Self::Next {
+        match self {
+            Left(state) => Left(state.next_state_impl()),
+            Right(state) => Right(state.next_state_impl()),
+        }
     }
 }
