@@ -389,6 +389,28 @@ where
     }
 }
 
+/// Return a list of the transactions that haven't
+/// been marked for inclusion in the block, yet.
+#[allow(dead_code)]
+fn get_remaining_txs(
+    tx_indices: &LazyProposedTxSet,
+    txs: Vec<TxBytes>,
+) -> impl Iterator<Item = TxBytes> + '_ {
+    let mut skip_list = tx_indices.iter();
+    let mut skip = skip_list.next();
+
+    txs.into_iter().enumerate().filter_map(move |(index, tx)| {
+        // this works bc/ tx indices are ordered
+        // in ascending order
+        if Some(index) == skip {
+            skip = skip_list.next();
+            Some(tx)
+        } else {
+            None
+        }
+    })
+}
+
 /// Returns a suitable message to be displayed when Tendermint
 /// somehow decides on a block containing vote extensions
 /// reflecting `<= 2/3` of the total stake.
