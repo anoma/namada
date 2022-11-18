@@ -521,6 +521,35 @@ mod test_prepare_proposal {
     // https://github.com/tendermint/tendermint/blob/v0.37.x/spec/abci/abci%2B%2B_app_requirements.md#blockparamsmaxbytes
     const MAX_TM_BLK_SIZE: i64 = 100 << 20;
 
+    /// Test if [`get_remaining_txs`] is working as expected.
+    #[test]
+    fn test_get_remaining_txs() {
+        let excluded_indices = [0, 1, 3, 5, 7];
+        let all_txs: Vec<_> = (0..10).map(|tx_bytes| vec![tx_bytes]).collect();
+        let expected_txs: Vec<_> = all_txs
+            .iter()
+            .filter(|tx_bytes| {
+                excluded_indices
+                    .iter()
+                    .copied()
+                    .find(|&other| tx_bytes[0] == other)
+                    .is_some()
+            })
+            .cloned()
+            .collect();
+
+        let set = {
+            let mut s = LazyProposedTxSet::default();
+            for idx in excluded_indices.iter().copied() {
+                s.include_tx_index(idx as usize);
+            }
+            s
+        };
+
+        let got_txs: Vec<_> = get_remaining_txs(&set, all_txs).collect();
+        assert_eq!(expected_txs, got_txs);
+    }
+
     #[cfg(feature = "abcipp")]
     fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
         let evts = {
