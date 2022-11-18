@@ -244,6 +244,6 @@ mod thres {
     use num_rational::Ratio;
 
     /// The threshold over Tendermint's allotted space for all three
-    /// (major) kinds of Namada transations.
+    /// (major) kinds of Namada transactions.
     pub const ONE_THIRD: Ratio<u64> = Ratio::new_raw(1, 3);
 }
