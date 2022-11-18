@@ -60,27 +60,26 @@ where
         self.gas_meter.reset();
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
-            let mut alloc = BlockSpaceAllocator::from(&req);
+            let alloc = BlockSpaceAllocator::from(&req);
             let mut tx_indices = LazyProposedTxSet::default();
 
             // decrypt the wrapper txs included in the previous block
-            let decrypted_txs = self.build_decrypted_txs(&mut alloc);
+            let (decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
             #[cfg(feature = "abcipp")]
             let decrypted_txs: Vec<TxRecord> =
                 decrypted_txs.into_iter().map(record::add).collect();
             let mut txs = decrypted_txs;
 
             // add vote extension protocol txs
-            let mut alloc = alloc.next_state();
             #[cfg(feature = "abcipp")]
-            let protocol_txs = self.build_vote_extensions_txs(
-                &mut alloc,
+            let (protocol_txs, alloc) = self.build_vote_extensions_txs(
+                alloc,
                 &mut tx_indices,
                 req.local_last_commit,
             );
             #[cfg(not(feature = "abcipp"))]
-            let mut protocol_txs = self.build_vote_extensions_txs(
-                &mut alloc,
+            let (mut protocol_txs, alloc) = self.build_vote_extensions_txs(
+                alloc,
                 &mut tx_indices,
                 &req.txs,
             );
@@ -90,34 +89,15 @@ where
             txs.append(&mut protocol_txs);
 
             // add mempool txs
-            let is_2nd_height_off =
-                self.storage.is_deciding_offset_within_epoch(1);
-            let is_3rd_height_off =
-                self.storage.is_deciding_offset_within_epoch(2);
-
-            let mut alloc = if hints::unlikely(
-                is_2nd_height_off || is_3rd_height_off,
-            ) {
-                tracing::warn!(
-                    proposal_height =
-                        ?self.storage.get_current_decision_height(),
-                    "No mempool txs are being included in the current proposal"
-                );
-                Right(alloc.next_state_without_encrypted_txs())
-            } else {
-                Left(alloc.next_state_with_encrypted_txs())
-            };
-
-            let mut mempool_txs =
-                self.build_mempool_txs(&mut alloc, &mut tx_indices, &req.txs);
+            let (mut mempool_txs, alloc) =
+                self.build_mempool_txs(alloc, &mut tx_indices, &req.txs);
             txs.append(&mut mempool_txs);
 
             // fill up the remaining block space with
             // arbitrary transactions that can fit in
             // the free space left
-            let mut alloc = alloc.next_state();
             let mut remaining_txs =
-                self.build_remaining_batch(&mut alloc, &tx_indices, req.txs);
+                self.build_remaining_batch(alloc, &tx_indices, req.txs);
             txs.append(&mut remaining_txs);
 
             txs
@@ -148,16 +128,16 @@ where
     /// events and, optionally, a validator set update.
     fn build_vote_extensions_txs(
         &mut self,
-        alloc: &mut BlockSpaceAllocator<BuildingProtocolTxBatch>,
+        mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         tx_indices: &mut LazyProposedTxSet,
         #[cfg(feature = "abcipp")] local_last_commit: Option<
             ExtendedCommitInfo,
         >,
         #[cfg(not(feature = "abcipp"))] txs: &[TxBytes],
-    ) -> Vec<TxBytes> {
+    ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
         // genesis block should not contain vote extensions
         if self.storage.last_height == BlockHeight(0) {
-            return vec![];
+            return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
         #[cfg(feature = "abcipp")]
@@ -213,7 +193,7 @@ where
         .chain(protocol_txs.into_iter())
         .collect();
 
-        match alloc.try_alloc_batch(txs.iter().map(Vec::as_slice)) {
+        let txs = match alloc.try_alloc_batch(txs.iter().map(Vec::as_slice)) {
             AllocStatus::Accepted => txs,
             AllocStatus::Rejected { tx, space_left } => {
                 // no space left for tx batch, so we
@@ -248,6 +228,29 @@ where
                 );
                 vec![]
             }
+        };
+
+        (txs, self.get_encrypted_txs_allocator(alloc))
+    }
+
+    /// Transition to an [`EncryptedTxBatchAllocator`].
+    #[inline]
+    fn get_encrypted_txs_allocator(
+        &self,
+        alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
+    ) -> EncryptedTxBatchAllocator {
+        let is_2nd_height_off = self.storage.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = self.storage.is_deciding_offset_within_epoch(2);
+
+        if hints::unlikely(is_2nd_height_off || is_3rd_height_off) {
+            tracing::warn!(
+                proposal_height =
+                    ?self.storage.get_current_decision_height(),
+                "No mempool txs are being included in the current proposal"
+            );
+            Right(alloc.next_state_without_encrypted_txs())
+        } else {
+            Left(alloc.next_state_with_encrypted_txs())
         }
     }
 
@@ -255,10 +258,10 @@ where
     #[cfg(feature = "abcipp")]
     fn build_mempool_txs(
         &mut self,
-        _alloc: &mut EncryptedTxBatchAllocator,
+        _alloc: EncryptedTxBatchAllocator,
         _tx_indices: &mut LazyProposedTxSet,
         txs: &[TxBytes],
-    ) -> Vec<TxRecord> {
+    ) -> (Vec<TxRecord>, RemainingBatchAllocator) {
         // TODO(feature = "abcipp"): implement building batch of mempool txs
         todo!()
     }
@@ -267,11 +270,12 @@ where
     #[cfg(not(feature = "abcipp"))]
     fn build_mempool_txs(
         &mut self,
-        alloc: &mut EncryptedTxBatchAllocator,
+        mut alloc: EncryptedTxBatchAllocator,
         tx_indices: &mut LazyProposedTxSet,
         txs: &[TxBytes],
-    ) -> Vec<TxBytes> {
-        txs.iter()
+    ) -> (Vec<TxBytes>, RemainingBatchAllocator) {
+        let txs = txs
+            .iter()
             .enumerate()
             .filter_map(|(index, tx_bytes)| {
                 if let Ok(Ok(TxType::Wrapper(_))) =
@@ -311,7 +315,10 @@ where
                 }
             })
             .map(|(_, tx_bytes)| tx_bytes)
-            .collect()
+            .collect();
+        let alloc = alloc.next_state();
+
+        (txs, alloc)
     }
 
     /// Builds a batch of DKG decrypted transactions.
@@ -324,13 +331,14 @@ where
     // - https://github.com/anoma/ferveo
     fn build_decrypted_txs(
         &mut self,
-        alloc: &mut BlockSpaceAllocator<BuildingDecryptedTxBatch>,
-    ) -> Vec<TxBytes> {
+        mut alloc: BlockSpaceAllocator<BuildingDecryptedTxBatch>,
+    ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingProtocolTxBatch>) {
         // TODO: This should not be hardcoded
         let privkey =
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        self.storage
+        let txs = self
+            .storage
             .tx_queue
             .iter()
             .map(|tx| {
@@ -367,14 +375,17 @@ where
                     true
                 }
             })
-            .collect()
+            .collect();
+        let alloc = alloc.next_state();
+
+        (txs, alloc)
     }
 
     /// Builds a batch of transactions that can fit in the
     /// remaining space of the [`BlockSpaceAllocator`].
     fn build_remaining_batch(
         &mut self,
-        alloc: &mut RemainingBatchAllocator,
+        mut alloc: RemainingBatchAllocator,
         tx_indices: &LazyProposedTxSet,
         txs: Vec<TxBytes>,
     ) -> Vec<TxBytes> {
