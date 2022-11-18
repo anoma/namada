@@ -706,9 +706,9 @@ impl SlashType {
     /// parameters.
     pub fn get_slash_rate(&self, params: &PosParams) -> Decimal {
         match self {
-            SlashType::DuplicateVote => params.duplicate_vote_slash_rate,
+            SlashType::DuplicateVote => params.duplicate_vote_min_slash_rate,
             SlashType::LightClientAttack => {
-                params.light_client_attack_slash_rate
+                params.light_client_attack_min_slash_rate
             }
         }
     }

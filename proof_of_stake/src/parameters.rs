@@ -35,18 +35,18 @@ pub struct PosParams {
     pub target_staked_ratio: Decimal,
     /// Portion of validator's stake that should be slashed on a duplicate
     /// vote.
-    pub duplicate_vote_slash_rate: Decimal,
+    pub duplicate_vote_min_slash_rate: Decimal,
     /// Portion of validator's stake that should be slashed on a light client
     /// attack.
-    pub light_client_attack_slash_rate: Decimal,
+    pub light_client_attack_min_slash_rate: Decimal,
 }
 
 impl Default for PosParams {
     fn default() -> Self {
         Self {
-            max_validator_slots: 128,
+            max_validator_slots: 100,
             pipeline_len: 2,
-            unbonding_len: 6,
+            unbonding_len: 21,
             // 1 voting power per 1 fundamental token (10^6 per NAM or 1 per
             // namnam)
             tm_votes_per_token: dec!(1.0),
@@ -56,10 +56,10 @@ impl Default for PosParams {
             max_inflation_rate: dec!(0.1),
             // target staked ratio of 2/3
             target_staked_ratio: dec!(0.6667),
-            // slash 5%
-            duplicate_vote_slash_rate: dec!(0.05),
-            // slash 5%
-            light_client_attack_slash_rate: dec!(0.05),
+            // slash 0.1%
+            duplicate_vote_min_slash_rate: dec!(0.001),
+            // slash 0.1%
+            light_client_attack_min_slash_rate: dec!(0.001),
         }
     }
 }

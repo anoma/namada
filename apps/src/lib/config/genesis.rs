@@ -265,11 +265,11 @@ pub mod genesis_config {
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote.
         // XXX: u64 doesn't work with toml-rs!
-        pub duplicate_vote_slash_rate: Decimal,
+        pub duplicate_vote_min_slash_rate: Decimal,
         // Portion of a validator's stake that should be slashed on a
         // light client attack.
         // XXX: u64 doesn't work with toml-rs!
-        pub light_client_attack_slash_rate: Decimal,
+        pub light_client_attack_min_slash_rate: Decimal,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -566,12 +566,12 @@ pub mod genesis_config {
             block_vote_reward: config.pos_params.block_vote_reward,
             max_inflation_rate: config.pos_params.max_inflation_rate,
             target_staked_ratio: config.pos_params.target_staked_ratio,
-            duplicate_vote_slash_rate: config
+            duplicate_vote_min_slash_rate: config
                 .pos_params
-                .duplicate_vote_slash_rate,
-            light_client_attack_slash_rate: config
+                .duplicate_vote_min_slash_rate,
+                light_client_attack_min_slash_rate: config
                 .pos_params
-                .light_client_attack_slash_rate,
+                .light_client_attack_min_slash_rate,
         };
 
         let mut genesis = Genesis {

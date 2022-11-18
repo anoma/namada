@@ -515,12 +515,12 @@ pub async fn query_protocol_parameters(
         "", pos_params.block_vote_reward
     );
     println!(
-        "{:4}Duplicate vote slash rate: {}",
-        "", pos_params.duplicate_vote_slash_rate
+        "{:4}Duplicate vote minimum slash rate: {}",
+        "", pos_params.duplicate_vote_min_slash_rate
     );
     println!(
-        "{:4}Light client attack slash rate: {}",
-        "", pos_params.light_client_attack_slash_rate
+        "{:4}Light client attack minimum slash rate: {}",
+        "", pos_params.light_client_attack_min_slash_rate
     );
     println!(
         "{:4}Max. validator slots: {}",
