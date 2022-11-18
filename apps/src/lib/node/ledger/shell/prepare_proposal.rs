@@ -70,7 +70,7 @@ where
                 decrypted_txs.into_iter().map(record::add).collect();
             let mut txs = decrypted_txs;
 
-            // add ethereum events and validator set updates as protocol txs
+            // add vote extension protocol txs
             let mut alloc = alloc.next_state();
             #[cfg(feature = "abcipp")]
             let protocol_txs = self.build_vote_extensions_txs(
@@ -89,10 +89,7 @@ where
                 protocol_txs.into_iter().map(record::add).collect();
             txs.append(&mut protocol_txs);
 
-            // transition to the correct state; we may
-            // or may not need to add encrypted txs to
-            // the block, depending on the current
-            // block height
+            // add mempool txs
             let is_2nd_height_off =
                 self.storage.is_deciding_offset_within_epoch(1);
             let is_3rd_height_off =
@@ -111,7 +108,6 @@ where
                 Left(alloc.next_state_with_encrypted_txs())
             };
 
-            // add mempool txs
             let mut mempool_txs =
                 self.build_mempool_txs(&mut alloc, &mut tx_indices, &req.txs);
             txs.append(&mut mempool_txs);
