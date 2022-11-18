@@ -532,8 +532,7 @@ mod test_prepare_proposal {
                 excluded_indices
                     .iter()
                     .copied()
-                    .find(|&other| tx_bytes[0] == other)
-                    .is_some()
+                    .any(|other| tx_bytes[0] == other)
             })
             .cloned()
             .collect();
