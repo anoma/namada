@@ -143,9 +143,9 @@ impl<State> BlockSpaceAllocator<State> {
 
         self.block.occupied_space_in_bytes = used_space;
 
-        self.decrypted_txs.occupied_space_in_bytes = 0;
-        self.protocol_txs.occupied_space_in_bytes = 0;
-        self.encrypted_txs.occupied_space_in_bytes = 0;
+        self.decrypted_txs = TxBin::default();
+        self.protocol_txs = TxBin::default();
+        self.encrypted_txs = TxBin::default();
     }
 }
 
