@@ -124,7 +124,7 @@ impl<State> BlockSpaceAllocator<State> {
     /// Return the amount of space left to initialize in all
     /// [`TxBin`] instances.
     ///
-    /// This is calculated based on the different between the
+    /// This is calculated based on the difference between the
     /// allotted Tendermint block space and the sum of the allotted
     /// space to each [`TxBin`] instance in a [`BlockSpaceAllocator`].
     #[inline]
