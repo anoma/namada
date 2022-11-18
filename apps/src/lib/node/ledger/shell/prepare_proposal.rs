@@ -59,24 +59,9 @@ where
         // proposal is accepted
         self.gas_meter.reset();
         let txs = if let ShellMode::Validator { .. } = self.mode {
-            // TODO: add some info logging?
-
             // start counting allotted space for txs
             let mut alloc = BlockSpaceAllocator::from(&req);
             let mut tx_indices = LazyProposedTxSet::default();
-
-            // NOTE: AD-HOC SOLUTION
-            // ======================
-            // TODO: choose txs in this order:
-            // - decrypted txs (ALL OF THEM)
-            // - protocol txs (we should give priority to valset upds)
-            // - encrypted txs (it's fine if this bin is empty)
-            //
-            // at the beginning of an epoch, do not pick any
-            // encrypted txs :) inspired by solana
-            //
-            // `tracing::warn!()` log we are not accepting encrypted
-            // txs for a given block height
 
             // decrypt the wrapper txs included in the previous block
             let decrypted_txs = self.build_decrypted_txs(&mut alloc);
