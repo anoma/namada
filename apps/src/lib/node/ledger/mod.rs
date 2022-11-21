@@ -19,7 +19,7 @@ use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tokio::task;
 use tower::ServiceBuilder;
 
@@ -229,14 +229,12 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let tendermint_node = start_tendermint(&mut spawner, &config);
 
     // Start managed Ethereum node if necessary
-    let (eth_node, abort_sender) =
+    let (eth_node, _abort_sender) =
         maybe_start_geth(&mut spawner, &config).await;
 
     // Start oracle if necessary
     let (eth_receiver, oracle) =
-        match maybe_start_ethereum_oracle(&mut spawner, &config, abort_sender)
-            .await
-        {
+        match maybe_start_ethereum_oracle(&mut spawner, &config).await {
             EthereumOracleTask::NotEnabled {
                 handle,
                 eth_receiver,
@@ -650,7 +648,6 @@ enum EthereumOracleTask {
 async fn maybe_start_ethereum_oracle(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
-    abort_sender: oneshot::Sender<()>,
 ) -> EthereumOracleTask {
     let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
 
@@ -665,7 +662,6 @@ async fn maybe_start_ethereum_oracle(
                 ethereum_url,
                 eth_sender,
                 control_receiver,
-                abort_sender,
             );
 
             // TODO(namada#686): pass `oracle_control_sender` to the shell for
