@@ -238,7 +238,7 @@ impl TxBin {
     }
 }
 
-mod thres {
+mod threshold {
     //! Transaction allotment thresholds.
 
     use num_rational::Ratio;

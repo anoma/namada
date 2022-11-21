@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::super::{thres, AllocStatus, BlockSpaceAllocator, TxBin};
+use super::super::{threshold, AllocStatus, BlockSpaceAllocator, TxBin};
 use super::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl, TryAlloc,
 };
@@ -22,7 +22,7 @@ impl NextStateImpl for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
         // reserve space for protocol txs
         self.protocol_txs = TxBin::init_over_ratio(
             self.block.allotted_space_in_bytes,
-            thres::ONE_THIRD,
+            threshold::ONE_THIRD,
         );
 
         // cast state
