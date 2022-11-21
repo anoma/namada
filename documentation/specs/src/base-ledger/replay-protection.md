@@ -115,7 +115,7 @@ This new field will be signed just like the other ones and is therefore subject 
 
 In general, a transaction is valid at the moment of submission, but after that, a series of external factors (ledger state, etc.) might change the mind of the submitter who's now not interested in the execution of the transaction anymore. 
 
-We have to introduce the concept of a lifetime (or timeout) for the transactions: basically, the `Tx` struct will hold an extra field called `expiration` stating the maximum block height up until which the submitter is willing to see the transaction executed. After the specified block height, the transaction will be considered invalid and discarded regardless of all the other checks.
+We have to introduce the concept of a lifetime (or timeout) for the transactions: basically, the `Tx` struct will hold an extra field called `expiration` stating the maximum `DateTimeUtc` up until which the submitter is willing to see the transaction executed. After the specified time, the transaction will be considered invalid and discarded regardless of all the other checks.
 
 By introducing this new field we are setting a new constraint in the transaction's contract, where the ledger will make sure to prevent the execution of the transaction after the deadline and, on the other side, the submitter commits himself to the result of the execution at least until its expiration. If the expiration is reached and the transaction has not been executed the submitter can decide to submit a new transaction if he's still interested in the changes carried by it.
 
@@ -123,11 +123,11 @@ In our design, the `expiration` will hold until the transaction is executed: onc
 
 - Transaction is invalid regardless of the specific state
 - Transaction is executed (either with success or not) and the transaction hash is saved in the storage
-- Expiration block height has passed
+- Expiration time has passed
 
 The first condition satisfied will invalidate further executions of the same tx.
 
-In anticipation of DKG implementation, the current struct `WrapperTx` holds a field `epoch` stating the epoch in which the tx should be executed. This is because Ferveo will produce a new public key each epoch, effectively limiting the lifetime of the transaction (see section 2.2.2 of the [documentation](https://eprint.iacr.org/2022/898.pdf)). Unfortunately, for replay protection, a resolution of 1 epoch (~ 1 day) is too low for the possible needs of the submitters, therefore we need the `expiration` field to hold a maximum `BlockHeight` to increase resolution down to a single block (~ 10 seconds).
+In anticipation of DKG implementation, the current struct `WrapperTx` holds a field `epoch` stating the epoch in which the tx should be executed. This is because Ferveo will produce a new public key each epoch, effectively limiting the lifetime of the transaction (see section 2.2.2 of the [documentation](https://eprint.iacr.org/2022/898.pdf)). Unfortunately, for replay protection, a resolution of 1 epoch (~ 1 day) is too low for the possible needs of the submitters, therefore we need the `expiration` field to hold a maximum `DateTimeUtc` to increase resolution down to a single block (~ 10 seconds).
 
 ```rust
 pub struct Tx {
@@ -136,7 +136,7 @@ pub struct Tx {
     pub timestamp: DateTimeUtc,
     pub chain_id: ChainId,
     /// Lifetime of the transaction, also determines which decryption key will be used
-    pub expiration: BlockHeight,
+    pub expiration: DateTimeUtc,
 }
 
 pub struct WrapperTx {
@@ -156,7 +156,7 @@ pub struct WrapperTx {
 
 Since we now have more detailed information about the desired lifetime of the transaction, we can remove the `epoch` field and rely solely on `expiration`. Now, the producer of the inner transaction should make sure to set a sensible value for this field, in the sense that it should not span more than one epoch. If this happens, then the transaction will be correctly decrypted only in a subset of the desired lifetime (the one expecting the actual key used for the encryption), while, in the following epochs, the transaction will fail decryption and won't be executed. In essence, the `expiration` parameter can only restrict the implicit lifetime within the current epoch, it can not surpass it as that would make the transaction fail in the decryption phase.
 
-The subject encrypting the inner transaction will also be responsible for using the appropriate public key for encryption relative to the targeted block height.
+The subject encrypting the inner transaction will also be responsible for using the appropriate public key for encryption relative to the targeted time.
 
 The wrapper transaction will match the `expiration` of the inner for correct execution. Note that we need this field also for the wrapper to anticipate the check at mempool/proposal evaluation time, but also to prevent someone from inserting a wrapper transaction after the corresponding inner has expired forcing the wrapper signer to pay for the fees.
 
@@ -176,7 +176,7 @@ These checks can all be done before executing the transactions themselves (the c
 2. If the checks fail _only_ because of an insufficient balance, the wrapper should be kept in mempool for a future play in case the funds should become available
 3. If all the checks pass validation we will include the transaction in the block to store the hash and charge the fee
 
-The `expiration` parameter also justifies step 2 of the previous bullet points which states that if the validity checks fail only because of an insufficient balance to pay for fees then the transaction should be kept in mempool for future execution. Without it, the transaction could be potentially executed at any future moment, possibly going against the mutated interests of the submitter. With the expiration parameter, now, the submitter commits himself to accept the execution of the transaction up to the specified block height: it's going to be his responsibility to provide a sensible value for this parameter. Given this constraint the transaction will be kept in memepool up until the expiration (since it would become invalid after that in any case), to prevent the mempool from increasing too much in size. 
+The `expiration` parameter also justifies step 2 of the previous bullet points which states that if the validity checks fail only because of an insufficient balance to pay for fees then the transaction should be kept in mempool for future execution. Without it, the transaction could be potentially executed at any future moment, possibly going against the mutated interests of the submitter. With the expiration parameter, now, the submitter commits himself to accept the execution of the transaction up to the specified time: it's going to be his responsibility to provide a sensible value for this parameter. Given this constraint the transaction will be kept in memepool up until the expiration (since it would become invalid after that in any case), to prevent the mempool from increasing too much in size. 
 
 This mechanism can also be applied to another scenario. Suppose a transaction was not propagated to the network by a node (or a group of colluding nodes). Now, this tx might be valid, but it doesn't get inserted into a block. Without an expiration, this tx can be replayed (better, applied, since it was never executed in the first place) at a future moment in time when the submitter might not be willing to execute it anymore.
 
@@ -275,7 +275,7 @@ The ideal solution would be to interrupt the execution of the Wasm code after th
 
 Unfortunately, at the moment, Wasmer doesn't allow [yielding](https://github.com/wasmerio/wasmer/issues/1127) from the execution.
 
-In case the transaction went out of gas (given the `gas_limit` field of the wrapper), all the changes applied will be discarded from the WAL and will not affect the state of the storage. The inner transaction could then be rewrapped with a correct gas limit and replayed until the `expiration` block has been reached.
+In case the transaction went out of gas (given the `gas_limit` field of the wrapper), all the changes applied will be discarded from the WAL and will not affect the state of the storage. The inner transaction could then be rewrapped with a correct gas limit and replayed until the `expiration` time has been reached.
 
 ##### Batching and transaction ordering
 
@@ -396,7 +396,7 @@ pub struct WrapperTx {
     /// Max amount of gas that can be used when executing the inner tx
     pub gas_limit: GasLimit,
     /// Lifetime of the transaction, also determines which decryption key will be used
-    pub expiration: BlockHeight,
+    pub expiration: DateTimeUtc,
     /// Chain identifier for replay protection
     pub chain_id: ChainId,
     /// Transaction counter for replay protection
@@ -419,7 +419,7 @@ The Wrapper transaction no longer holds the inner transaction hash while the inn
 pub struct WrapperCommit {
     pub pk: common::PublicKey,
     pub tx_counter: u64,
-    pub expiration: BlockHeight,
+    pub expiration: DateTimeUtc,
     pub chain_id: ChainId,
 }
 ```
@@ -458,7 +458,7 @@ These checks can all be done before executing the transactions themselves. The c
 2. If the checks fail _only_ because of an insufficient balance, the wrapper should be kept in mempool for a future play in case the funds should become available
 3. If all the checks pass validation we will include the transaction in the block to increase the counter and charge the fee
 
-Note that, regarding point one, there's a distinction to be made about an invalid `tx_counter` which could be invalid because of being old or being in advance. To solve this last issue (counter greater than the expected one), we have to introduce the concept of a lifetime (or timeout) for the transactions: basically, the `WrapperTx` will hold an extra field called `expiration` stating the maximum block height up until which the submitter is willing to see the transaction executed. After the specified block height the transaction will be considered invalid and discarded regardless of all the other checks. This way, in case of a transaction with a counter greater than expected, it is sufficient to wait till after the expiration to submit more transactions, so that the counter in storage is not modified (kept invalid for the transaction under observation) and replaying that tx would result in a rejection.
+Note that, regarding point one, there's a distinction to be made about an invalid `tx_counter` which could be invalid because of being old or being in advance. To solve this last issue (counter greater than the expected one), we have to introduce the concept of a lifetime (or timeout) for the transactions: basically, the `WrapperTx` will hold an extra field called `expiration` stating the maximum time up until which the submitter is willing to see the transaction executed. After the specified time the transaction will be considered invalid and discarded regardless of all the other checks. This way, in case of a transaction with a counter greater than expected, it is sufficient to wait till after the expiration to submit more transactions, so that the counter in storage is not modified (kept invalid for the transaction under observation) and replaying that tx would result in a rejection.
 
 This actually generalizes to a more broad concept. In general, a transaction is valid at the moment of submission, but after that, a series of external factors (ledger state, etc.) might change the mind of the submitter who's now not interested in the execution of the transaction anymore. By introducing this new field we are introducing a new constraint in the transaction's contract, where the ledger will make sure to prevent the execution of the transaction after the deadline and, on the other side, the submitter commits himself to the result of the execution at least until its expiration. If the expiration is reached and the transaction has not been executed the submitter can decide to submit a new, identical transaction if he's still interested in the changes carried by it.
 
@@ -466,15 +466,15 @@ In our design, the `expiration` will hold until the transaction is executed, onc
 
 - Transaction is invalid regardless of the specific state
 - Transaction is executed (either with success or not) and the transaction counter is increased
-- Expiration block height has passed
+- Expiration time has passed
 
 The first condition satisfied will invalidate further executions of the same tx.
 
-The `expiration` parameter also justifies step 2 of the previous bullet points which states that if the validity checks fail only because of an insufficient balance to pay for fees than the transaction should be kept in mempool for a future execution. Without it, the transaction could be potentially executed at any future moment (provided that the counter is still valid), possibily going against the mutated interests of the submitter. With the expiration parameter, now, the submitter commits himself to accepting the execution of the transaction up to the specified block height: it's going to be his responsibility to provide a sensible value for this parameter. Given this constraint the transaction will be kept in memepool up until the expiration (since it would become invalid after that in any case), to prevent the mempool from increasing too much in size. 
+The `expiration` parameter also justifies step 2 of the previous bullet points which states that if the validity checks fail only because of an insufficient balance to pay for fees than the transaction should be kept in mempool for a future execution. Without it, the transaction could be potentially executed at any future moment (provided that the counter is still valid), possibily going against the mutated interests of the submitter. With the expiration parameter, now, the submitter commits himself to accepting the execution of the transaction up to the specified time: it's going to be his responsibility to provide a sensible value for this parameter. Given this constraint the transaction will be kept in memepool up until the expiration (since it would become invalid after that in any case), to prevent the mempool from increasing too much in size. 
 
 This mechanism can also be applied to another scenario. Suppose a transaction was not propagated to the network by a node (or a group of colluding nodes). Now, this tx might be valid, but it doesn't get inserted into a block. Without an expiration, if the submitter doesn't submit any other transaction (which gets included in a block to increase the transaction counter), this tx can be replayed (better, applied, since it was never executed in the first place) at a future moment in time when the submitter might not be willing to execute it any more.
 
-Since the signer of the wrapper may be different from the one of the inner we also need to include this `expiration` field in the `WrapperCommit` struct, to prevent the signer of the wrapper from setting a lifetime which is in conflict with the interests of the inner signer. Note that adding a separate lifetime for the wrapper alone (which would require two separate checks) doesn't carry any benefit: a wrapper with a lifetime greater than the inner would have no sense since the inner would fail. Restricting the lifetime would work but it also means that the wrapper could prevent a valid inner transaction from being executed. We will then keep a single `expiration` field specifying the wrapper tx max block height (the inner one will actually be executed one block later because of the execution mechanism of Namada).
+Since the signer of the wrapper may be different from the one of the inner we also need to include this `expiration` field in the `WrapperCommit` struct, to prevent the signer of the wrapper from setting a lifetime which is in conflict with the interests of the inner signer. Note that adding a separate lifetime for the wrapper alone (which would require two separate checks) doesn't carry any benefit: a wrapper with a lifetime greater than the inner would have no sense since the inner would fail. Restricting the lifetime would work but it also means that the wrapper could prevent a valid inner transaction from being executed. We will then keep a single `expiration` field specifying the wrapper tx max time (the inner one will actually be executed one block later because of the execution mechanism of Namada).
 
 To prevent the signer of the wrapper from submitting the transaction to a different chain, the `ChainId` field should also be included in the commit.
 
