@@ -20,9 +20,10 @@ impl NextStateImpl for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
         self.decrypted_txs.shrink();
 
         // reserve space for protocol txs
-        let remaining_free_space = self.uninitialized_space_in_bytes();
-        self.protocol_txs =
-            TxBin::init_over_ratio(remaining_free_space, thres::ONE_THIRD);
+        self.protocol_txs = TxBin::init_over_ratio(
+            self.block.allotted_space_in_bytes,
+            thres::ONE_THIRD,
+        );
 
         // cast state
         let Self {
