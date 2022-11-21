@@ -5,10 +5,13 @@ use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::ops::{Add, AddAssign, Sub};
+use std::ops::Add;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-pub use namada_core::types::storage::Epoch;
+use namada_core::types::address::Address;
+use namada_core::types::key::common;
+use namada_core::types::storage::Epoch;
+use namada_core::types::token;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 
 use crate::epoched::{
@@ -17,26 +20,20 @@ use crate::epoched::{
 use crate::parameters::PosParams;
 
 /// Epoched validator's consensus key.
-pub type ValidatorConsensusKeys<PublicKey> =
-    Epoched<PublicKey, OffsetPipelineLen>;
+pub type ValidatorConsensusKeys = Epoched<common::PublicKey, OffsetPipelineLen>;
 /// Epoched validator's state.
 pub type ValidatorStates = Epoched<ValidatorState, OffsetPipelineLen>;
 /// Epoched validator's total deltas.
-pub type ValidatorDeltas<TokenChange> =
-    EpochedDelta<TokenChange, OffsetUnbondingLen>;
+pub type ValidatorDeltas = EpochedDelta<token::Change, OffsetUnbondingLen>;
 
 /// Epoched bond.
-pub type Bonds<TokenAmount> =
-    EpochedDelta<Bond<TokenAmount>, OffsetUnbondingLen>;
+pub type Bonds = EpochedDelta<Bond, OffsetUnbondingLen>;
 /// Epoched unbond.
-pub type Unbonds<TokenAmount> =
-    EpochedDelta<Unbond<TokenAmount>, OffsetUnbondingLen>;
+pub type Unbonds = EpochedDelta<Unbond, OffsetUnbondingLen>;
 /// Epoched validator set.
-pub type ValidatorSets<Address> =
-    Epoched<ValidatorSet<Address>, OffsetUnbondingLen>;
+pub type ValidatorSets = Epoched<ValidatorSet, OffsetUnbondingLen>;
 /// Epoched total deltas.
-pub type TotalDeltas<TokenChange> =
-    EpochedDelta<TokenChange, OffsetUnbondingLen>;
+pub type TotalDeltas = EpochedDelta<token::Change, OffsetUnbondingLen>;
 /// Epoched validator commission rate
 pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
 
@@ -52,13 +49,13 @@ pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
     PartialOrd,
     Ord,
 )]
-pub struct GenesisValidator<Address, Token, PK> {
+pub struct GenesisValidator {
     /// Validator's address
     pub address: Address,
     /// Staked tokens are put into a self-bond
-    pub tokens: Token,
+    pub tokens: token::Amount,
     /// A public key used for signing validator's consensus actions
-    pub consensus_key: PK,
+    pub consensus_key: common::PublicKey,
     /// Commission rate charged on rewards for delegators (bounded inside 0-1)
     pub commission_rate: Decimal,
     /// Maximum change in commission rate permitted per epoch
@@ -67,18 +64,18 @@ pub struct GenesisValidator<Address, Token, PK> {
 
 /// An update of the active and inactive validator set.
 #[derive(Debug, Clone)]
-pub enum ValidatorSetUpdate<PK> {
+pub enum ValidatorSetUpdate {
     /// A validator is active
-    Active(ActiveValidator<PK>),
+    Active(ActiveValidator),
     /// A validator who was active in the last update and is now inactive
-    Deactivated(PK),
+    Deactivated(common::PublicKey),
 }
 
 /// Active validator's consensus key and its bonded stake.
 #[derive(Debug, Clone)]
-pub struct ActiveValidator<PK> {
+pub struct ActiveValidator {
     /// A public key used for signing validator's consensus actions
-    pub consensus_key: PK,
+    pub consensus_key: common::PublicKey,
     /// Total bonded stake of the validator
     pub bonded_stake: u64,
 }
@@ -96,20 +93,7 @@ pub struct ActiveValidator<PK> {
     BorshSerialize,
     BorshSchema,
 )]
-pub struct BondId<Address>
-where
-    Address: Display
-        + Debug
-        + Clone
-        + PartialEq
-        + Eq
-        + PartialOrd
-        + Ord
-        + Hash
-        + BorshSerialize
-        + BorshSchema
-        + BorshDeserialize,
-{
+pub struct BondId {
     /// (Un)bond's source address is the owner of the bonded tokens.
     pub source: Address,
     /// (Un)bond's validator address.
@@ -128,19 +112,7 @@ where
     BorshSerialize,
     BorshSchema,
 )]
-pub struct WeightedValidator<Address>
-where
-    Address: Debug
-        + Clone
-        + PartialEq
-        + Eq
-        + PartialOrd
-        + Ord
-        + Hash
-        + BorshDeserialize
-        + BorshSchema
-        + BorshSerialize,
-{
+pub struct WeightedValidator {
     /// The `total_stake` field must be on top, because lexicographic ordering
     /// is based on the top-to-bottom declaration order and in the
     /// `ValidatorSet` the `WeightedValidator`s these need to be sorted by
@@ -150,20 +122,7 @@ where
     pub address: Address,
 }
 
-impl<Address> Display for WeightedValidator<Address>
-where
-    Address: Display
-        + Debug
-        + Clone
-        + PartialEq
-        + Eq
-        + PartialOrd
-        + Ord
-        + Hash
-        + BorshDeserialize
-        + BorshSchema
-        + BorshSerialize,
-{
+impl Display for WeightedValidator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -185,24 +144,12 @@ where
     BorshSerialize,
     BorshSchema,
 )]
-pub struct ValidatorSet<Address>
-where
-    Address: Debug
-        + Clone
-        + PartialEq
-        + Eq
-        + PartialOrd
-        + Ord
-        + Hash
-        + BorshDeserialize
-        + BorshSchema
-        + BorshSerialize,
-{
+pub struct ValidatorSet {
     /// Active validator set with maximum size equal to `max_validator_slots`
     /// in [`PosParams`].
-    pub active: BTreeSet<WeightedValidator<Address>>,
+    pub active: BTreeSet<WeightedValidator>,
     /// All the other validators that are not active
-    pub inactive: BTreeSet<WeightedValidator<Address>>,
+    pub inactive: BTreeSet<WeightedValidator>,
 }
 
 /// Validator's state.
@@ -232,7 +179,7 @@ pub enum ValidatorState {
 #[derive(
     Debug, Clone, Default, BorshDeserialize, BorshSerialize, BorshSchema,
 )]
-pub struct Bond<Token: Default> {
+pub struct Bond {
     /// Bonded positive deltas. A key is the epoch set for the bond. This is
     /// used in unbonding, where it's needed for slash epoch range check.
     ///
@@ -240,11 +187,11 @@ pub struct Bond<Token: Default> {
     /// We only need to keep the start `Epoch` for the Epoched head element
     /// (i.e. the current epoch data), the rest of the array can be calculated
     /// from the offset from the head
-    pub pos_deltas: HashMap<Epoch, Token>,
+    pub pos_deltas: HashMap<Epoch, token::Amount>,
     /// Unbonded negative deltas. The values are recorded as positive, but
     /// should be subtracted when we're finding the total for some given
     /// epoch.
-    pub neg_deltas: Token,
+    pub neg_deltas: token::Amount,
 }
 
 /// An unbond contains unbonded tokens from a validator's self-bond or a
@@ -252,11 +199,11 @@ pub struct Bond<Token: Default> {
 #[derive(
     Debug, Clone, Default, BorshDeserialize, BorshSerialize, BorshSchema,
 )]
-pub struct Unbond<Token: Default> {
+pub struct Unbond {
     /// A key is a pair of the epoch of the bond from which a unbond was
     /// created the epoch of unbonding. This is needed for slash epoch range
     /// check.
-    pub deltas: HashMap<(Epoch, Epoch), Token>,
+    pub deltas: HashMap<(Epoch, Epoch), token::Amount>,
 }
 
 /// A slash applied to validator, to punish byzantine behavior by removing
@@ -286,20 +233,7 @@ pub enum SlashType {
     LightClientAttack,
 }
 
-impl<Address> Display for BondId<Address>
-where
-    Address: Display
-        + Debug
-        + Clone
-        + PartialEq
-        + Eq
-        + PartialOrd
-        + Ord
-        + Hash
-        + BorshSerialize
-        + BorshDeserialize
-        + BorshSchema,
-{
+impl Display for BondId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -309,13 +243,10 @@ where
     }
 }
 
-impl<Token> Bond<Token>
-where
-    Token: Clone + Copy + Add<Output = Token> + Sub<Output = Token> + Default,
-{
+impl Bond {
     /// Find the sum of all the bonds amounts.
-    pub fn sum(&self) -> Token {
-        let pos_deltas_sum: Token = self
+    pub fn sum(&self) -> token::Amount {
+        let pos_deltas_sum: token::Amount = self
             .pos_deltas
             .iter()
             .fold(Default::default(), |acc, (_epoch, amount)| acc + *amount);
@@ -323,10 +254,7 @@ where
     }
 }
 
-impl<Token> Add for Bond<Token>
-where
-    Token: Clone + AddAssign + Default,
-{
+impl Add for Bond {
     type Output = Self;
 
     fn add(mut self, rhs: Self) -> Self::Output {
@@ -354,22 +282,16 @@ where
     }
 }
 
-impl<Token> Unbond<Token>
-where
-    Token: Clone + Copy + Add<Output = Token> + Default,
-{
+impl Unbond {
     /// Find the sum of all the unbonds amounts.
-    pub fn sum(&self) -> Token {
+    pub fn sum(&self) -> token::Amount {
         self.deltas
             .iter()
             .fold(Default::default(), |acc, (_epoch, amount)| acc + *amount)
     }
 }
 
-impl<Token> Add for Unbond<Token>
-where
-    Token: Clone + AddAssign + Default,
-{
+impl Add for Unbond {
     type Output = Self;
 
     fn add(mut self, rhs: Self) -> Self::Output {
