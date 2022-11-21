@@ -12,7 +12,7 @@ use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils::{self};
 use crate::ledger::protocol::transactions::votes::{
-    calculate_new, calculate_updated, write, VoteInfo,
+    self, calculate_new, calculate_updated, VoteInfo,
 };
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -151,7 +151,12 @@ where
         (vote_tracking, changed, confirmed)
     };
 
-    write(storage, &eth_msg_keys, &update.body, &vote_tracking)?;
+    votes::storage::write(
+        storage,
+        &eth_msg_keys,
+        &update.body,
+        &vote_tracking,
+    )?;
 
     Ok((changed, confirmed))
 }

@@ -86,10 +86,8 @@ impl VoteInfo {
         votes.into_iter().for_each(|(address, block_height)| {
             let fract_voting_power =
                 voting_powers.get(&(address.clone(), block_height)).unwrap();
-            _ = inner.insert(
-                address.clone(),
-                (block_height, fract_voting_power.to_owned()),
-            );
+            _ = inner
+                .insert(address, (block_height, fract_voting_power.to_owned()));
         });
         Self { inner }
     }
@@ -127,7 +125,7 @@ where
         validators = ?vote_info.voters(),
         "Recording validators as having voted for this event"
     );
-    let tally_pre = read(store, keys)?;
+    let tally_pre = storage::read(store, keys)?;
     let tally_post = calculate_tally_post(&tally_pre, vote_info)?;
     let changed_keys = validate_update(keys, &tally_pre, &tally_post)?;
 
