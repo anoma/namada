@@ -1074,8 +1074,6 @@ pub enum BondError<Address: Display + Debug> {
     InactiveValidator(Address),
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
-    #[error("Given zero amount to bond")]
-    ZeroAmount,
 }
 
 #[allow(missing_docs)]
@@ -1093,8 +1091,6 @@ pub enum UnbondError<Address: Display + Debug, TokenAmount: Display + Debug> {
     ValidatorHasNoVotingPower(Address),
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
-    #[error("Given zero amount to unbond")]
-    ZeroAmount,
 }
 
 #[allow(missing_docs)]
@@ -1646,9 +1642,6 @@ where
         + BorshSerialize
         + BorshSchema,
 {
-    if amount == TokenAmount::default() {
-        return Err(BondError::ZeroAmount);
-    }
     // Check the validator state
     match validator_state {
         None => {
@@ -1826,9 +1819,6 @@ where
         + BorshSerialize
         + BorshSchema,
 {
-    if amount == TokenAmount::default() {
-        return Err(UnbondError::ZeroAmount);
-    }
     // We can unbond tokens that are bonded for a future epoch (not yet
     // active), hence we check the total at the pipeline offset
     let unbondable_amount = bond
