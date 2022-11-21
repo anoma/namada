@@ -19,11 +19,12 @@ impl NextStateImpl for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
     fn next_state_impl(mut self) -> Self::Next {
         self.decrypted_txs.shrink_to_fit();
 
-        // reserve space for protocol txs
-        self.protocol_txs = TxBin::init_over_ratio(
-            self.block.allotted_space_in_bytes,
-            threshold::ONE_THIRD,
-        );
+        // reserve half of the remaining block space for protocol txs.
+        // using this strategy, we will eventually converge to 1/3 of
+        // the allotted block space for protocol txs
+        let remaining_free_space = self.uninitialized_space_in_bytes();
+        self.protocol_txs =
+            TxBin::init_over_ratio(remaining_free_space, threshold::ONE_HALF);
 
         // cast state
         let Self {
