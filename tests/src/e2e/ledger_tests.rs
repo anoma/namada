@@ -25,7 +25,7 @@ use serde_json::json;
 use setup::constants::*;
 
 use super::helpers::{get_height, wait_for_block_height};
-use super::setup::{disable_eth_fullnode, get_all_wasms_hashes};
+use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode};
 use crate::e2e::helpers::{
     find_address, find_voting_power, get_actor_rpc, get_epoch,
 };
@@ -39,7 +39,12 @@ use crate::{run, run_as};
 fn run_ledger() -> Result<()> {
     let test = setup::single_node_net()?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
@@ -72,8 +77,18 @@ fn test_node_connectivity() -> Result<()> {
     let test =
         setup::network(|genesis| setup::add_validators(1, genesis), None)?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(1));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run 2 genesis validator ledger nodes and 1 non-validator node
     let args = ["ledger"];
@@ -175,7 +190,12 @@ fn test_node_connectivity() -> Result<()> {
 fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
     let test = setup::single_node_net()?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -214,7 +234,12 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 fn run_ledger_load_state_and_reset() -> Result<()> {
     let test = setup::single_node_net()?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -283,7 +308,12 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 fn ledger_txs_and_queries() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -457,7 +487,12 @@ fn ledger_txs_and_queries() -> Result<()> {
 fn invalid_transactions() -> Result<()> {
     let test = setup::single_node_net()?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -609,7 +644,12 @@ fn pos_bonds() -> Result<()> {
         None,
     )?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -810,7 +850,12 @@ fn pos_init_validator() -> Result<()> {
         None,
     )?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -979,7 +1024,12 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         Some("10s"),
     )?);
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -1089,7 +1139,12 @@ fn proposal_submission() -> Result<()> {
         None,
     )?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     let anomac_help = vec!["--help"];
 
@@ -1451,7 +1506,12 @@ fn proposal_submission() -> Result<()> {
 fn proposal_offline() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -2002,8 +2062,18 @@ fn double_signing_gets_slashed() -> Result<()> {
     let test =
         setup::network(|genesis| setup::add_validators(1, genesis), None)?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(1));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run 2 genesis validator ledger nodes
     let args = ["ledger"];
