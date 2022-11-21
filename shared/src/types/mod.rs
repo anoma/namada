@@ -9,6 +9,7 @@ pub mod ethereum_events;
 pub mod governance;
 pub mod hash;
 pub mod ibc;
+pub mod index_set;
 pub mod internal;
 pub mod keccak;
 pub mod key;
