@@ -126,11 +126,7 @@ pub fn init_pos(
         // Initialize PoS storage
         tx_env
             .storage
-            .init_genesis(
-                params,
-                genesis_validators.iter(),
-                u64::from(start_epoch),
-            )
+            .init_genesis(params, genesis_validators.iter(), start_epoch)
             .unwrap();
     });
 }

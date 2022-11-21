@@ -250,7 +250,7 @@ mod tests {
         let unbonds_post = ctx().read_unbond(&unbond_id)?.unwrap();
         let bonds_post = ctx().read_bond(&unbond_id)?.unwrap();
         for epoch in 0..pos_params.unbonding_len {
-            let unbond: Option<Unbond<token::Amount>> = unbonds_post.get(epoch);
+            let unbond: Option<Unbond> = unbonds_post.get(epoch);
 
             assert!(
                 unbond.is_none(),
@@ -262,22 +262,18 @@ mod tests {
         let start_epoch = match &unbond.source {
             Some(_) => {
                 // This bond was a delegation
-                namada_tx_prelude::proof_of_stake::types::Epoch::from(
-                    pos_params.pipeline_len,
-                )
+                Epoch::from(pos_params.pipeline_len)
             }
             None => {
                 // This bond was a genesis validator self-bond
-                namada_tx_prelude::proof_of_stake::types::Epoch::default()
+                Epoch::default()
             }
         };
-        let end_epoch = namada_tx_prelude::proof_of_stake::types::Epoch::from(
-            pos_params.unbonding_len - 1,
-        );
+        let end_epoch = Epoch::from(pos_params.unbonding_len - 1);
 
         let expected_unbond =
             HashMap::from_iter([((start_epoch, end_epoch), unbond.amount)]);
-        let actual_unbond: Unbond<token::Amount> =
+        let actual_unbond: Unbond =
             unbonds_post.get(pos_params.unbonding_len).unwrap();
         assert_eq!(
             actual_unbond.deltas, expected_unbond,
@@ -286,7 +282,7 @@ mod tests {
         );
 
         for epoch in pos_params.pipeline_len..pos_params.unbonding_len {
-            let bond: Bond<token::Amount> = bonds_post.get(epoch).unwrap();
+            let bond: Bond = bonds_post.get(epoch).unwrap();
             let expected_bond =
                 HashMap::from_iter([(start_epoch, initial_stake)]);
             assert_eq!(
@@ -297,7 +293,7 @@ mod tests {
         }
         {
             let epoch = pos_params.unbonding_len + 1;
-            let bond: Bond<token::Amount> = bonds_post.get(epoch).unwrap();
+            let bond: Bond = bonds_post.get(epoch).unwrap();
             let expected_bond =
                 HashMap::from_iter([(start_epoch, initial_stake)]);
             assert_eq!(
