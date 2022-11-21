@@ -7,12 +7,12 @@ pub mod val_set_update;
 use borsh::BorshDeserialize;
 use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
 use namada::proto::Signed;
+use namada::types::index_set::IndexSet;
 use namada::types::transaction::protocol::ProtocolTxType;
 use namada::types::vote_extensions::{
     ethereum_events, validator_set_update, VoteExtension, VoteExtensionDigest,
 };
 
-use super::prepare_proposal::LazyProposedTxSet;
 use super::*;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedVoteInfo;
@@ -300,7 +300,7 @@ pub fn deserialize_vote_extensions(
 /// instances.
 #[cfg(not(feature = "abcipp"))]
 pub fn deserialize_vote_extensions<'prep_proposal>(
-    tx_indices: &'prep_proposal mut LazyProposedTxSet,
+    tx_indices: &'prep_proposal mut IndexSet,
     txs: &'prep_proposal [TxBytes],
 ) -> impl Iterator<Item = (TxBytes, VoteExtension)> + 'prep_proposal {
     use namada::types::transaction::protocol::ProtocolTx;
@@ -325,7 +325,7 @@ pub fn deserialize_vote_extensions<'prep_proposal>(
                 // them in a block without the corresponding digests, so even
                 // if those get rejected due to space constraints, the
                 // behavior should be correct
-                tx_indices.include_tx_index(index);
+                tx_indices.insert(index);
                 Some((tx_bytes.clone(), ext))
             }
             _ => None,
@@ -379,7 +379,7 @@ pub fn split_vote_extensions(
 /// them from Tendermint's mempool.
 #[cfg(not(feature = "abcipp"))]
 pub fn split_vote_extensions(
-    tx_indices: &mut LazyProposedTxSet,
+    tx_indices: &mut IndexSet,
     mempool_txs: &[TxBytes],
 ) -> (
     Vec<TxBytes>,

@@ -8,6 +8,7 @@ use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
 use namada::proto::Tx;
+use namada::types::index_set::IndexSet;
 use namada::types::storage::BlockHeight;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
@@ -20,7 +21,6 @@ use self::block_space_alloc::states::{
     NextStateWithoutEncryptedTxs, RemainingBatchAllocator, TryAlloc,
     TryAllocBatch,
 };
-pub use self::block_space_alloc::LazyProposedTxSet;
 use self::block_space_alloc::{AllocStatus, BlockSpaceAllocator};
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -61,7 +61,7 @@ where
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
             let alloc = BlockSpaceAllocator::from(&req);
-            let mut tx_indices = LazyProposedTxSet::default();
+            let mut tx_indices = IndexSet::default();
 
             // decrypt the wrapper txs included in the previous block
             let (decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
@@ -129,7 +129,7 @@ where
     fn build_vote_extensions_txs(
         &mut self,
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
-        tx_indices: &mut LazyProposedTxSet,
+        tx_indices: &mut IndexSet,
         #[cfg(feature = "abcipp")] local_last_commit: Option<
             ExtendedCommitInfo,
         >,
@@ -259,7 +259,7 @@ where
     fn build_mempool_txs(
         &mut self,
         _alloc: EncryptedTxBatchAllocator,
-        _tx_indices: &mut LazyProposedTxSet,
+        _tx_indices: &mut IndexSet,
         txs: &[TxBytes],
     ) -> (Vec<TxRecord>, RemainingBatchAllocator) {
         // TODO(feature = "abcipp"): implement building batch of mempool txs
@@ -271,7 +271,7 @@ where
     fn build_mempool_txs(
         &mut self,
         mut alloc: EncryptedTxBatchAllocator,
-        tx_indices: &mut LazyProposedTxSet,
+        tx_indices: &mut IndexSet,
         txs: &[TxBytes],
     ) -> (Vec<TxBytes>, RemainingBatchAllocator) {
         let txs = txs
@@ -288,7 +288,7 @@ where
             })
             .take_while(|(index, tx_bytes)| match alloc.try_alloc(&*tx_bytes) {
                 AllocStatus::Accepted => {
-                    tx_indices.include_tx_index(*index);
+                    tx_indices.insert(*index);
                     true
                 }
                 AllocStatus::Rejected { tx, space_left } => {
@@ -386,7 +386,7 @@ where
     fn build_remaining_batch(
         &mut self,
         mut alloc: RemainingBatchAllocator,
-        tx_indices: &LazyProposedTxSet,
+        tx_indices: &IndexSet,
         txs: Vec<TxBytes>,
     ) -> Vec<TxBytes> {
         get_remaining_txs(tx_indices, txs)
@@ -422,7 +422,7 @@ where
 /// Return a list of the transactions that haven't
 /// been marked for inclusion in the block, yet.
 fn get_remaining_txs(
-    tx_indices: &LazyProposedTxSet,
+    tx_indices: &IndexSet,
     txs: Vec<TxBytes>,
 ) -> impl Iterator<Item = TxBytes> + '_ {
     let mut skip_list = tx_indices.iter();
@@ -537,9 +537,9 @@ mod test_prepare_proposal {
             .collect();
 
         let set = {
-            let mut s = LazyProposedTxSet::default();
+            let mut s = IndexSet::default();
             for idx in excluded_indices.iter().copied() {
-                s.include_tx_index(idx as usize);
+                s.insert(idx as usize);
             }
             s
         };
