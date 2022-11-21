@@ -4,6 +4,11 @@
 
 Namada 0.10.1 is a point release with fixes to shielded transactions.
 
+### BUG FIXES
+
+- Avoid reading from nonexistent storage keys in shielded-to-shielded transfers.
+  ([#797](https://github.com/anoma/namada/pull/797))
+
 ## v0.10.0
 
 Namada 0.10.0 is a scheduled minor release, focused on IBC and MASP
