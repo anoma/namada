@@ -206,9 +206,8 @@ fn compare_voting_powers_map_items(
     let (first_power, second_power) = (first.1, second.1);
     let (first_addr, second_addr) = (first.0, second.0);
     match second_power.cmp(first_power) {
-        Ordering::Less => Ordering::Less,
         Ordering::Equal => first_addr.cmp(second_addr),
-        Ordering::Greater => Ordering::Greater,
+        ordering => ordering,
     }
 }
 
