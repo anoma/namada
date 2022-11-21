@@ -50,7 +50,7 @@ impl NextStateImpl
 fn next_state<Mode>(
     mut alloc: BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
 ) -> BlockSpaceAllocator<FillingRemainingSpace<Mode>> {
-    alloc.encrypted_txs.shrink();
+    alloc.encrypted_txs.shrink_to_fit();
 
     // reserve space for any remaining txs
     alloc.claim_block_space();

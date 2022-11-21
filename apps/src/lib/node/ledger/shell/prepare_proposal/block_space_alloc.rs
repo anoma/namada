@@ -191,7 +191,7 @@ impl TxBin {
     /// Shrink the allotted space of this [`TxBin`] to whatever
     /// space is currently being utilized.
     #[inline]
-    fn shrink(&mut self) {
+    fn shrink_to_fit(&mut self) {
         self.allotted_space_in_bytes = self.occupied_space_in_bytes;
     }
 

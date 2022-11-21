@@ -17,7 +17,7 @@ impl NextStateImpl for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
 
     #[inline]
     fn next_state_impl(mut self) -> Self::Next {
-        self.decrypted_txs.shrink();
+        self.decrypted_txs.shrink_to_fit();
 
         // reserve space for protocol txs
         self.protocol_txs = TxBin::init_over_ratio(
