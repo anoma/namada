@@ -415,11 +415,11 @@ mod tests {
             |tendermint_max_block_space_in_bytes| {
                 (
                     tendermint_max_block_space_in_bytes,
-                    (thres::ONE_THIRD * tendermint_max_block_space_in_bytes)
+                    (threshold::ONE_THIRD * tendermint_max_block_space_in_bytes)
                         .to_integer() as usize,
-                    (thres::ONE_THIRD * tendermint_max_block_space_in_bytes)
+                    (threshold::ONE_THIRD * tendermint_max_block_space_in_bytes)
                         .to_integer() as usize,
-                    (thres::ONE_THIRD * tendermint_max_block_space_in_bytes)
+                    (threshold::ONE_THIRD * tendermint_max_block_space_in_bytes)
                         .to_integer() as usize,
                 )
             },
