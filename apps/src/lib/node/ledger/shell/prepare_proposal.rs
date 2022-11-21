@@ -274,6 +274,7 @@ where
         tx_indices: &mut IndexSet,
         txs: &[TxBytes],
     ) -> (Vec<TxBytes>, RemainingBatchAllocator) {
+        let mut invalid_txs = IndexSet::default();
         let txs = txs
             .iter()
             .enumerate()
@@ -283,6 +284,9 @@ where
                 {
                     Some((index, tx_bytes.clone()))
                 } else {
+                    // found invalid tx. mark it, so we do not include
+                    // it in a block during `build_remaining_batch()`
+                    invalid_txs.insert(index);
                     None
                 }
             })
@@ -317,6 +321,8 @@ where
             .map(|(_, tx_bytes)| tx_bytes)
             .collect();
         let alloc = alloc.next_state();
+
+        tx_indices.merge(&invalid_txs);
 
         (txs, alloc)
     }
