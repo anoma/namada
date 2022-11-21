@@ -220,24 +220,24 @@ mod tests {
                  epoch {epoch}"
             );
         }
-        let start_epoch = match &unbond.source {
-            Some(_) => {
-                // This bond was a delegation
-                namada_tx_prelude::proof_of_stake::types::Epoch::from(
-                    pos_params.pipeline_len,
-                )
-            }
-            None => {
-                // This bond was a genesis validator self-bond
-                namada_tx_prelude::proof_of_stake::types::Epoch::default()
-            }
+        let start_epoch = if is_delegation {
+            // This bond was a delegation
+            namada_tx_prelude::proof_of_stake::types::Epoch::from(
+                pos_params.pipeline_len,
+            )
+        } else {
+            // This bond was a genesis validator self-bond
+            namada_tx_prelude::proof_of_stake::types::Epoch::default()
         };
         let end_epoch = namada_tx_prelude::proof_of_stake::types::Epoch::from(
             pos_params.unbonding_len - 1,
         );
 
-        let expected_unbond =
-            HashMap::from_iter([((start_epoch, end_epoch), unbond.amount)]);
+        let expected_unbond = if unbond.amount == token::Amount::default() {
+            HashMap::new()
+        } else {
+            HashMap::from_iter([((start_epoch, end_epoch), unbond.amount)])
+        };
         let actual_unbond: Unbond<token::Amount> =
             unbonds_post.get(pos_params.unbonding_len).unwrap();
         assert_eq!(
@@ -403,7 +403,7 @@ mod tests {
         (
             address::testing::arb_established_address(),
             prop::option::of(address::testing::arb_non_internal_address()),
-            token::testing::arb_amount_ceiled(max_amount),
+            token::testing::arb_amount_non_zero_ceiled(max_amount),
         )
             .prop_map(|(validator, source, amount)| {
                 let validator = Address::Established(validator);
