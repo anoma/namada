@@ -162,8 +162,8 @@ struct TxBin {
 }
 
 impl TxBin {
-    /// Construct a new [`TxBin`], with an upper bound on the max number
-    /// of storable txs defined by a ratio over `max_bytes`.
+    /// Return a new [`TxBin`] with a total allotted space equal to the
+    /// floor of the fraction `frac` of the available block space `max_bytes`.
     #[inline]
     fn init_over_ratio(max_bytes: u64, frac: Ratio<u64>) -> Self {
         let allotted_space_in_bytes = (frac * max_bytes).to_integer();
