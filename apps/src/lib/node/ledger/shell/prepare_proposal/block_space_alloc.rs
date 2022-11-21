@@ -224,7 +224,6 @@ mod threshold {
     /// The threshold over Tendermint's allotted space for all three
     /// (major) kinds of Namada transactions.
     #[cfg(test)]
-    #[allow(dead_code)]
     pub const ONE_THIRD: Ratio<u64> = Ratio::new_raw(1, 3);
 
     /// Divide the allotted space in two.
