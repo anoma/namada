@@ -8,7 +8,7 @@ When a slash is detected:
 3. Prevent the delegators to this validator from altering their delegations in any way until the enqueued slash is processed.
 
 At the end of each epoch, for each slash enqueued to be processed for the end of the epoch:
-1. Collect all known infractions committed within a range of (-1, +1) epochs around the infraction in question.
+1. Collect all known infractions committed within a range of [-`window_width`, +`window_width`] epochs around the infraction in question. By default, `window_width` = 1.
 2. Sum the fractional voting powers (relative to the total PoS voting power) of the misbehaving validator for each of the collected nearby infractions. 
 3. The final slash rate for the slash in question is then dependent on this sum. Using $r_\text{nom}$ as the nominal slash rate and $\text{vp}$ to indicate voting power, the slash rate is expressed as:
 
@@ -55,8 +55,8 @@ class PoS:
 ```rust
 // Infraction type, where inner field is the slash rate for the type
 enum Infraction {
-    DuplicateVote(f64),
-    LightClientAttack(f64)
+    DuplicateVote(Decimal),
+    LightClientAttack(Decimal)
 }
 
 // Generic validator with an address and voting power
@@ -65,41 +65,44 @@ struct Validator {
     voting_power: u64,
 }
 
-// Generic slash object with the misbehaving validator, infraction type, and some unique identifier
+// Generic slash object with the misbehaving validator and infraction type
 struct Slash {
     validator: Validator,
     infraction_type: Infraction,
-    id: u64,
 }
 
-// Calculate a vector of final slash rates for each slash in the current epoch
-fn calculate_slash_rates(
+// Calculate the cubic slash rate for a slash in the current epoch
+fn calculate_cubic_slash_rate(
     current_epoch: u64,
-    nominal_slash_rate: f64,
+    nominal_slash_rate: Decimal,
+    cubic_window_width: u64,
     slashes: Map<u64, Vec<Slash>>,
     total_voting_power: u64
-) -> Vec<f64> {
-    let slashes_this_epoch = slashes.get(current_epoch);
-    let slashes_prev_epoch = slashes.get(current_epoch - 1);
-    let slashes_next_epoch = slashes.get(current_epoch + 1);
+) -> Decimal {
+    let mut vp_frac_sum = Decimal::ZERO;
 
-    let associated_slashes = slashes_prev_epoch.extend(slashes_this_epoch).extend(slashes_next_epoch);
-    let final_rates: Vec<f64>;
+    let start_epoch = current_epoch - cubic_window_width;
+    let end_epoch = current_epoch + cubic_window_width;
 
-    for slash in &slashes_this_epoch {
-        let vp_frac_sum: f64 = 0;
-        for assoc_slash in &associated_slashes {
-            if assoc_slash.id == slash.id { continue; }
-            vp_frac_sum += assoc_slash.validator.voting_power / total_voting_power;
-        }
-        let rate = max( slash.infraction_type.0 , 9 * vp_frac_sum * vp_frac_sum );
-        final_rates.push(rate)
+    for epoch in start_epoch..=end_epoch {
+        let cur_slashes = slashes.get(epoch);
+        let vp_frac_this_epoch = cur_slashes.iter.fold(0, |sum, Slash{validator, _}|
+            { sum + validator.voting_power / total_voting_power}
+        );
+        vp_frac_sum += vp_frac_this_epoch;
     }
-    final_rates
+    let rate = cmp::min(
+        Decimal::ONE,
+        cmp::max(
+            slash.infraction_type.0,
+            9 * vp_frac_sum * vp_frac_sum,
+        ),
+    );
+    rate
 }
 ```
 
-As a function, it can be drawn as:
+As a function, it can be drawn as (assuming $r_{\text{min}} = 1\%$):
 
 [<img src="../images/cubic_slash.png" width="500"/>](../images/cubic_slash.png)
 
