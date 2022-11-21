@@ -27,9 +27,7 @@ use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::native_vp::governance::utils::Votes;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pos::types::{
-    decimal_mult_u64, Epoch as PosEpoch, WeightedValidator,
-};
+use namada::ledger::pos::types::{decimal_mult_u64, WeightedValidator};
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
@@ -2012,8 +2010,8 @@ pub async fn known_address(
 fn apply_slashes(
     slashes: &[Slash],
     mut delta: token::Amount,
-    epoch_start: PosEpoch,
-    withdraw_epoch: Option<PosEpoch>,
+    epoch_start: Epoch,
+    withdraw_epoch: Option<Epoch>,
     mut w: Option<&mut std::io::StdoutLock>,
 ) -> token::Amount {
     let mut slashed = token::Amount::default();
@@ -2638,11 +2636,8 @@ pub async fn get_proposal_offline_votes(
                     .await
                     .unwrap_or_default();
                     let mut delegated_amount: token::Amount = 0.into();
-                    let epoch = namada::ledger::pos::types::Epoch::from(
-                        proposal.tally_epoch.0,
-                    );
                     let bond = epoched_bonds
-                        .get(epoch)
+                        .get(proposal.tally_epoch)
                         .expect("Delegation bond should be defined.");
                     let mut to_deduct = bond.neg_deltas;
                     for (start_epoch, &(mut delta)) in

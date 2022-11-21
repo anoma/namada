@@ -5,8 +5,8 @@ use core::marker::PhantomData;
 use core::{cmp, fmt, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::types::storage::Epoch;
 
-use crate::types::Epoch;
 use crate::PosParams;
 
 /// Data that may have values set for future epochs, up to an epoch at offset as

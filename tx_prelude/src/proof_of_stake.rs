@@ -1,5 +1,6 @@
 //! Proof of Stake system integration with functions for transactions
 
+use namada_core::types::key::common;
 use namada_core::types::transaction::InitValidator;
 use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
@@ -127,70 +128,63 @@ impl Ctx {
 }
 
 namada_proof_of_stake::impl_pos_read_only! {
-    type Error = crate::Error;
     impl namada_proof_of_stake::PosReadOnly for Ctx
 }
 
 impl namada_proof_of_stake::PosActions for Ctx {
-    type BecomeValidatorError = crate::Error;
-    type BondError = crate::Error;
-    type CommissionRateChangeError = crate::Error;
-    type UnbondError = crate::Error;
-    type WithdrawError = crate::Error;
-
     fn write_pos_params(
         &mut self,
         params: &PosParams,
-    ) -> Result<(), Self::Error> {
+    ) -> storage_api::Result<()> {
         self.write(&params_key(), params)
     }
 
     fn write_validator_address_raw_hash(
         &mut self,
-        address: &Self::Address,
-        consensus_key: &Self::PublicKey,
-    ) -> Result<(), Self::Error> {
+        address: &Address,
+        consensus_key: &common::PublicKey,
+    ) -> storage_api::Result<()> {
         let raw_hash = key::tm_consensus_key_raw_hash(consensus_key);
         self.write(&validator_address_raw_hash_key(raw_hash), address)
     }
 
     fn write_validator_consensus_key(
         &mut self,
-        key: &Self::Address,
+        key: &Address,
         value: ValidatorConsensusKeys,
-    ) -> Result<(), Self::Error> {
+    ) -> storage_api::Result<()> {
         self.write(&validator_consensus_key_key(key), &value)
     }
 
     fn write_validator_state(
         &mut self,
-        key: &Self::Address,
+        key: &Address,
         value: ValidatorStates,
-    ) -> Result<(), Self::Error> {
+    ) -> storage_api::Result<()> {
         self.write(&validator_state_key(key), &value)
     }
 
     fn write_validator_commission_rate(
         &mut self,
-        key: &Self::Address,
+        key: &Address,
         value: CommissionRates,
-    ) -> Result<(), Self::Error> {
+    ) -> storage_api::Result<()> {
         self.write(&validator_commission_rate_key(key), &value)
     }
 
     fn write_validator_max_commission_rate_change(
         &mut self,
-        key: &Self::Address,
+        key: &Address,
         value: Decimal,
-    ) -> Result<(), Self::Error> {
+    ) -> storage_api::Result<()> {
         self.write(&validator_max_commission_rate_change_key(key), value)
     }
 
     fn write_validator_deltas(
         &mut self,
-        key: &Self::Address,
+        key: &Address,
         value: ValidatorDeltas,
-    ) -> Result<(), Self::Error> {
+    ) -> storage_api::Result<()> {
         self.write(&validator_deltas_key(key), &value)
     }
 
@@ -198,7 +192,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         &mut self,
         key: &BondId,
         value: Bonds,
-    ) -> Result<(), Self::Error> {
+    ) -> storage_api::Result<()> {
         self.write(&bond_key(key), &value)
     }
 
@@ -206,39 +200,39 @@ impl namada_proof_of_stake::PosActions for Ctx {
         &mut self,
         key: &BondId,
         value: Unbonds,
-    ) -> Result<(), Self::Error> {
+    ) -> storage_api::Result<()> {
         self.write(&unbond_key(key), &value)
     }
 
     fn write_validator_set(
         &mut self,
         value: ValidatorSets,
-    ) -> Result<(), Self::Error> {
+    ) -> storage_api::Result<()> {
         self.write(&validator_set_key(), &value)
     }
 
     fn write_total_deltas(
         &mut self,
         value: TotalDeltas,
-    ) -> Result<(), Self::Error> {
+    ) -> storage_api::Result<()> {
         self.write(&total_deltas_key(), &value)
     }
 
-    fn delete_bond(&mut self, key: &BondId) -> Result<(), Self::Error> {
+    fn delete_bond(&mut self, key: &BondId) -> storage_api::Result<()> {
         self.delete(&bond_key(key))
     }
 
-    fn delete_unbond(&mut self, key: &BondId) -> Result<(), Self::Error> {
+    fn delete_unbond(&mut self, key: &BondId) -> storage_api::Result<()> {
         self.delete(&unbond_key(key))
     }
 
     fn transfer(
         &mut self,
-        token: &Self::Address,
-        amount: Self::TokenAmount,
-        src: &Self::Address,
-        dest: &Self::Address,
-    ) -> Result<(), Self::Error> {
+        token: &Address,
+        amount: token::Amount,
+        src: &Address,
+        dest: &Address,
+    ) -> storage_api::Result<()> {
         crate::token::transfer(
             self, src, dest, token, None, amount, &None, &None,
         )
