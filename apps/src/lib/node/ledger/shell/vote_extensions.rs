@@ -321,7 +321,7 @@ pub fn deserialize_vote_extensions<'prep_proposal>(
                 tx: ProtocolTxType::VoteExtension(ext),
                 ..
             }) => {
-                // mark every protocol tx for inclusion; we shouldn't include
+                // mark every vote extension for inclusion; we shouldn't include
                 // them in a block without the corresponding digests, so even
                 // if those get rejected due to space constraints, the
                 // behavior should be correct
