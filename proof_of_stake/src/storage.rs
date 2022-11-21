@@ -2,7 +2,6 @@
 
 use namada_core::ledger::storage::types::{decode, encode};
 use namada_core::ledger::storage::{self, Storage, StorageHasher};
-use namada_core::ledger::storage_api;
 use namada_core::types::address::Address;
 use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::types::{key, token};
@@ -10,40 +9,8 @@ use rust_decimal::Decimal;
 
 use super::ADDRESS;
 use crate::parameters::PosParams;
-pub use crate::types::{CommissionRates, ValidatorStates};
+pub use crate::types::*;
 use crate::{types, PosBase, PosReadOnly};
-
-// TODO: these are not needed anymore, remove together with all the generics in
-// this crate
-
-/// Alias for a PoS type with the same name with concrete type parameters
-pub type ValidatorConsensusKeys =
-    crate::types::ValidatorConsensusKeys<key::common::PublicKey>;
-
-/// Alias for a PoS type with the same name with concrete type parameters
-pub type ValidatorDeltas = crate::types::ValidatorDeltas<token::Change>;
-
-/// Alias for a PoS type with the same name with concrete type parameters
-pub type Bonds = crate::types::Bonds<token::Amount>;
-
-/// Alias for a PoS type with the same name with concrete type parameters
-pub type Unbonds = crate::types::Unbonds<token::Amount>;
-
-/// Alias for a PoS type with the same name with concrete type parameters
-pub type ValidatorSets = crate::types::ValidatorSets<Address>;
-
-/// Alias for a PoS type with the same name with concrete type parameters
-pub type BondId = crate::types::BondId<Address>;
-
-/// Alias for a PoS type with the same name with concrete type parameters
-pub type GenesisValidator = crate::types::GenesisValidator<
-    Address,
-    token::Amount,
-    key::common::PublicKey,
->;
-
-/// Alias for a PoS type with the same name with concrete type parameters
-pub type TotalDeltas = crate::types::TotalDeltas<token::Change>;
 
 const PARAMS_STORAGE_KEY: &str = "params";
 const VALIDATOR_STORAGE_PREFIX: &str = "validator";
@@ -383,15 +350,11 @@ where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    type Address = Address;
-    type PublicKey = key::common::PublicKey;
-    type TokenAmount = token::Amount;
-    type TokenChange = token::Change;
+    const POS_ADDRESS: namada_core::types::address::Address = super::ADDRESS;
+    const POS_SLASH_POOL_ADDRESS: namada_core::types::address::Address =
+        super::SLASH_POOL_ADDRESS;
 
-    const POS_ADDRESS: Self::Address = super::ADDRESS;
-    const POS_SLASH_POOL_ADDRESS: Self::Address = super::SLASH_POOL_ADDRESS;
-
-    fn staking_token_address(&self) -> Self::Address {
+    fn staking_token_address(&self) -> namada_core::types::address::Address {
         self.native_token.clone()
     }
 
@@ -403,7 +366,7 @@ where
     fn read_validator_address_raw_hash(
         &self,
         raw_hash: impl AsRef<str>,
-    ) -> Option<Self::Address> {
+    ) -> Option<namada_core::types::address::Address> {
         let (value, _gas) = self
             .read(&validator_address_raw_hash_key(raw_hash))
             .unwrap();
@@ -412,7 +375,7 @@ where
 
     fn read_validator_consensus_key(
         &self,
-        key: &Self::Address,
+        key: &namada_core::types::address::Address,
     ) -> Option<ValidatorConsensusKeys> {
         let (value, _gas) =
             self.read(&validator_consensus_key_key(key)).unwrap();
@@ -421,7 +384,7 @@ where
 
     fn read_validator_state(
         &self,
-        key: &Self::Address,
+        key: &namada_core::types::address::Address,
     ) -> Option<ValidatorStates> {
         let (value, _gas) = self.read(&validator_state_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
@@ -429,13 +392,16 @@ where
 
     fn read_validator_deltas(
         &self,
-        key: &Self::Address,
-    ) -> Option<types::ValidatorDeltas<Self::TokenChange>> {
+        key: &namada_core::types::address::Address,
+    ) -> Option<types::ValidatorDeltas> {
         let (value, _gas) = self.read(&validator_deltas_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
-    fn read_validator_slashes(&self, key: &Self::Address) -> types::Slashes {
+    fn read_validator_slashes(
+        &self,
+        key: &namada_core::types::address::Address,
+    ) -> types::Slashes {
         let (value, _gas) = self.read(&validator_slashes_key(key)).unwrap();
         value
             .map(|value| decode(value).unwrap())
@@ -444,7 +410,7 @@ where
 
     fn read_validator_commission_rate(
         &self,
-        key: &Self::Address,
+        key: &namada_core::types::address::Address,
     ) -> CommissionRates {
         let (value, _gas) =
             self.read(&validator_commission_rate_key(key)).unwrap();
@@ -453,7 +419,7 @@ where
 
     fn read_validator_max_commission_rate_change(
         &self,
-        key: &Self::Address,
+        key: &namada_core::types::address::Address,
     ) -> Decimal {
         let (value, _gas) = self
             .read(&validator_max_commission_rate_change_key(key))
@@ -477,8 +443,8 @@ where
 
     fn write_validator_address_raw_hash(
         &mut self,
-        address: &Self::Address,
-        consensus_key: &Self::PublicKey,
+        address: &namada_core::types::address::Address,
+        consensus_key: &namada_core::types::key::common::PublicKey,
     ) {
         let raw_hash = key::tm_consensus_key_raw_hash(consensus_key);
         self.write(&validator_address_raw_hash_key(raw_hash), encode(address))
@@ -487,7 +453,7 @@ where
 
     fn write_validator_commission_rate(
         &mut self,
-        key: &Self::Address,
+        key: &namada_core::types::address::Address,
         value: &CommissionRates,
     ) {
         self.write(&validator_commission_rate_key(key), encode(value))
@@ -496,7 +462,7 @@ where
 
     fn write_validator_max_commission_rate_change(
         &mut self,
-        key: &Self::Address,
+        key: &namada_core::types::address::Address,
         value: &rust_decimal::Decimal,
     ) {
         self.write(
@@ -508,7 +474,7 @@ where
 
     fn write_validator_consensus_key(
         &mut self,
-        key: &Self::Address,
+        key: &namada_core::types::address::Address,
         value: &ValidatorConsensusKeys,
     ) {
         self.write(&validator_consensus_key_key(key), encode(value))
@@ -517,7 +483,7 @@ where
 
     fn write_validator_state(
         &mut self,
-        key: &Self::Address,
+        key: &namada_core::types::address::Address,
         value: &ValidatorStates,
     ) {
         self.write(&validator_state_key(key), encode(value))
@@ -526,7 +492,7 @@ where
 
     fn write_validator_deltas(
         &mut self,
-        key: &Self::Address,
+        key: &namada_core::types::address::Address,
         value: &ValidatorDeltas,
     ) {
         self.write(&validator_deltas_key(key), encode(value))
@@ -535,7 +501,7 @@ where
 
     fn write_validator_slash(
         &mut self,
-        validator: &Self::Address,
+        validator: &namada_core::types::address::Address,
         value: types::Slash,
     ) {
         let mut slashes = PosBase::read_validator_slashes(self, validator);
@@ -558,9 +524,9 @@ where
 
     fn credit_tokens(
         &mut self,
-        token: &Self::Address,
-        target: &Self::Address,
-        amount: Self::TokenAmount,
+        token: &namada_core::types::address::Address,
+        target: &namada_core::types::address::Address,
+        amount: namada_core::types::token::Amount,
     ) {
         let key = token::balance_key(token, target);
         let new_balance = match self
@@ -568,7 +534,7 @@ where
             .expect("Unable to read token balance for PoS system")
         {
             (Some(balance), _gas) => {
-                let balance: Self::TokenAmount =
+                let balance: namada_core::types::token::Amount =
                     decode(balance).unwrap_or_default();
                 balance + amount
             }
@@ -580,10 +546,10 @@ where
 
     fn transfer(
         &mut self,
-        token: &Self::Address,
-        amount: Self::TokenAmount,
-        src: &Self::Address,
-        dest: &Self::Address,
+        token: &namada_core::types::address::Address,
+        amount: namada_core::types::token::Amount,
+        src: &namada_core::types::address::Address,
+        dest: &namada_core::types::address::Address,
     ) {
         let src_key = token::balance_key(token, src);
         let dest_key = token::balance_key(token, dest);
@@ -591,7 +557,7 @@ where
             .read(&src_key)
             .expect("Unable to read token balance for PoS system")
         {
-            let mut src_balance: Self::TokenAmount =
+            let mut src_balance: namada_core::types::token::Amount =
                 decode(src_balance).unwrap_or_default();
             if src_balance < amount {
                 tracing::error!(
@@ -604,9 +570,10 @@ where
             }
             src_balance.spend(&amount);
             let (dest_balance, _gas) = self.read(&dest_key).unwrap_or_default();
-            let mut dest_balance: Self::TokenAmount = dest_balance
-                .and_then(|b| decode(b).ok())
-                .unwrap_or_default();
+            let mut dest_balance: namada_core::types::token::Amount =
+                dest_balance
+                    .and_then(|b| decode(b).ok())
+                    .unwrap_or_default();
             dest_balance.receive(&amount);
             self.write(&src_key, encode(&src_balance))
                 .expect("Unable to write token balance for PoS system");
@@ -635,37 +602,28 @@ where
 #[macro_export]
 macro_rules! impl_pos_read_only {
     (
-        // Type error type has to be declared before the impl.
-        // This error type must `impl From<storage_api::Error> for $error`.
-        type $error:tt = $err_ty:ty ;
         // Matches anything, so that we can use lifetimes and generic types.
         // This expects `impl(<.*>)? PoSReadOnly for $ty(<.*>)?`.
         $( $any:tt )* )
     => {
         $( $any )*
         {
-            type Address = namada_core::types::address::Address;
-            type $error = $err_ty;
-            type PublicKey = namada_core::types::key::common::PublicKey;
-            type TokenAmount = namada_core::types::token::Amount;
-            type TokenChange = namada_core::types::token::Change;
+            const POS_ADDRESS: namada_core::types::address::Address = $crate::ADDRESS;
 
-            const POS_ADDRESS: Self::Address = $crate::ADDRESS;
-
-            fn staking_token_address(&self) -> Self::Address {
+            fn staking_token_address(&self) -> namada_core::types::address::Address {
                 namada_core::ledger::storage_api::StorageRead::get_native_token(self)
                     .expect("Native token must be available")
             }
 
-            fn read_pos_params(&self) -> std::result::Result<PosParams, Self::Error> {
+            fn read_pos_params(&self) -> namada_core::ledger::storage_api::Result<PosParams> {
                 let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &params_key())?.unwrap();
                 Ok(namada_core::ledger::storage::types::decode(value).unwrap())
             }
 
             fn read_validator_consensus_key(
                 &self,
-                key: &Self::Address,
-            ) -> std::result::Result<Option<ValidatorConsensusKeys>, Self::Error> {
+                key: &namada_core::types::address::Address,
+            ) -> namada_core::ledger::storage_api::Result<Option<ValidatorConsensusKeys>> {
                 let value =
                     namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_consensus_key_key(key))?;
                 Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
@@ -673,8 +631,8 @@ macro_rules! impl_pos_read_only {
 
             fn read_validator_commission_rate(
                 &self,
-                key: &Self::Address,
-            ) -> std::result::Result<Option<CommissionRates>, Self::Error> {
+                key: &namada_core::types::address::Address,
+            ) -> namada_core::ledger::storage_api::Result<Option<CommissionRates>> {
                 let value =
                     namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_commission_rate_key(key))?;
                 Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
@@ -682,8 +640,8 @@ macro_rules! impl_pos_read_only {
 
             fn read_validator_max_commission_rate_change(
                 &self,
-                key: &Self::Address,
-            ) -> std::result::Result<Option<Decimal>, Self::Error> {
+                key: &namada_core::types::address::Address,
+            ) -> namada_core::ledger::storage_api::Result<Option<Decimal>> {
                 let value =
                     namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_max_commission_rate_change_key(key))?;
                 Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
@@ -691,16 +649,16 @@ macro_rules! impl_pos_read_only {
 
             fn read_validator_state(
                 &self,
-                key: &Self::Address,
-            ) -> std::result::Result<Option<ValidatorStates>, Self::Error> {
+                key: &namada_core::types::address::Address,
+            ) -> namada_core::ledger::storage_api::Result<Option<ValidatorStates>> {
                 let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_state_key(key))?;
                 Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
             }
 
             fn read_validator_deltas(
                 &self,
-                key: &Self::Address,
-            ) -> std::result::Result<Option<ValidatorDeltas>, Self::Error> {
+                key: &namada_core::types::address::Address,
+            ) -> namada_core::ledger::storage_api::Result<Option<ValidatorDeltas>> {
                 let value =
                     namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_deltas_key(key))?;
                 Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
@@ -708,8 +666,8 @@ macro_rules! impl_pos_read_only {
 
             fn read_validator_slashes(
                 &self,
-                key: &Self::Address,
-            ) -> std::result::Result<Vec<types::Slash>, Self::Error> {
+                key: &namada_core::types::address::Address,
+            ) -> namada_core::ledger::storage_api::Result<Vec<types::Slash>> {
                 let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_slashes_key(key))?;
                 Ok(value
                     .map(|value| namada_core::ledger::storage::types::decode(value).unwrap())
@@ -719,7 +677,7 @@ macro_rules! impl_pos_read_only {
             fn read_bond(
                 &self,
                 key: &BondId,
-            ) -> std::result::Result<Option<Bonds>, Self::Error> {
+            ) -> namada_core::ledger::storage_api::Result<Option<Bonds>> {
                 let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &bond_key(key))?;
                 Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
             }
@@ -727,14 +685,14 @@ macro_rules! impl_pos_read_only {
             fn read_unbond(
                 &self,
                 key: &BondId,
-            ) -> std::result::Result<Option<Unbonds>, Self::Error> {
+            ) -> namada_core::ledger::storage_api::Result<Option<Unbonds>> {
                 let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &unbond_key(key))?;
                 Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
             }
 
             fn read_validator_set(
                 &self,
-            ) -> std::result::Result<ValidatorSets, Self::Error> {
+            ) -> namada_core::ledger::storage_api::Result<ValidatorSets> {
                 let value =
                     namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_set_key())?.unwrap();
                 Ok(namada_core::ledger::storage::types::decode(value).unwrap())
@@ -742,7 +700,7 @@ macro_rules! impl_pos_read_only {
 
             fn read_total_deltas(
                 &self,
-            ) -> std::result::Result<TotalDeltas, Self::Error> {
+            ) -> namada_core::ledger::storage_api::Result<TotalDeltas> {
                 let value =
                     namada_core::ledger::storage_api::StorageRead::read_bytes(self, &total_deltas_key())?.unwrap();
                 Ok(namada_core::ledger::storage::types::decode(value).unwrap())
@@ -752,7 +710,6 @@ macro_rules! impl_pos_read_only {
 }
 
 impl_pos_read_only! {
-    type Error = storage_api::Error;
     impl<DB, H> PosReadOnly for Storage<DB, H>
         where
             DB: storage::DB + for<'iter> storage::DBIter<'iter> +'static,
