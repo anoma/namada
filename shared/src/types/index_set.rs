@@ -59,7 +59,7 @@ impl IndexSet {
     /// between `self` and `other`.
     #[allow(dead_code)]
     #[inline]
-    pub fn merge(&mut self, other: IndexSet) {
+    pub fn merge(&mut self, other: &IndexSet) {
         for (&map_index, &other_set) in other.bit_sets.iter() {
             let set = self.bit_sets.entry(map_index).or_insert(0);
             *set |= other_set;
