@@ -431,11 +431,11 @@ fn get_remaining_txs(
     txs.into_iter().enumerate().filter_map(move |(index, tx)| {
         // this works bc/ tx indices are ordered
         // in ascending order
-        if Some(index) == skip {
+        if hints::likely(Some(index) == skip) {
             skip = skip_list.next();
-            Some(tx)
-        } else {
             None
+        } else {
+            Some(tx)
         }
     })
 }
@@ -531,15 +531,9 @@ mod test_prepare_proposal {
     fn test_get_remaining_txs() {
         let excluded_indices = [0, 1, 3, 5, 7];
         let all_txs: Vec<_> = (0..10).map(|tx_bytes| vec![tx_bytes]).collect();
-        let expected_txs: Vec<_> = all_txs
-            .iter()
-            .filter(|tx_bytes| {
-                excluded_indices
-                    .iter()
-                    .copied()
-                    .any(|other| tx_bytes[0] == other)
-            })
-            .cloned()
+        let expected_txs: Vec<_> = [2, 4, 6, 8, 9]
+            .into_iter()
+            .map(|tx_bytes| vec![tx_bytes])
             .collect();
 
         let set = {
