@@ -8,8 +8,10 @@ use borsh::BorshDeserialize;
 use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
 use namada::proto::Signed;
 use namada::types::transaction::protocol::ProtocolTxType;
+#[cfg(feature = "abcipp")]
+use namada::types::vote_extensions::VoteExtensionDigest;
 use namada::types::vote_extensions::{
-    ethereum_events, validator_set_update, VoteExtension, VoteExtensionDigest,
+    ethereum_events, validator_set_update, VoteExtension,
 };
 
 use super::*;
@@ -326,6 +328,7 @@ pub fn deserialize_vote_extensions(
 
 /// Yields an iterator over the [`ProtocolTxType`] transactions
 /// in a [`VoteExtensionDigest`].
+#[cfg(feature = "abcipp")]
 pub fn iter_protocol_txs(
     digest: VoteExtensionDigest,
 ) -> impl Iterator<Item = ProtocolTxType> {
