@@ -1,6 +1,7 @@
 //! Node and client configuration
 
 pub mod genesis;
+pub mod genesis_new;
 pub mod global;
 pub mod utils;
 
