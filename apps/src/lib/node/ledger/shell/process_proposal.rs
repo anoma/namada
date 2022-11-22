@@ -12,10 +12,12 @@ use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
+use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
 /// Contains stateful data about the number of vote extension
 /// digests found as protocol transactions in a proposed block.
 #[derive(Default)]
+#[cfg(feature = "abcipp")]
 pub struct DigestCounters {
     /// The number of Ethereum events vote extensions found thus far.
     eth_ev_digest_num: usize,
@@ -40,6 +42,7 @@ where
     /// but we only reject the entire block if the order of the
     /// included txs violates the order decided upon in the previous
     /// block.
+    #[cfg(feature = "abcipp")]
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,
@@ -116,14 +119,67 @@ where
         }
     }
 
-    /// Checks what the [`TxResult`]s would be for the transactions in a
-    /// proposed block, as well as counting the number of digest transactions
-    /// present. `ProcessProposal` should be able to make a decision on whether
-    /// a proposed block is acceptable or not based solely on what this function
-    /// returns.
+    /// Check all the txs in a block. Some txs may be incorrect,
+    /// but we only reject the entire block if the order of the
+    /// included txs violates the order decided upon in the previous
+    /// block.
+    #[cfg(not(feature = "abcipp"))]
+    pub fn process_proposal(
+        &self,
+        req: RequestProcessProposal,
+    ) -> ProcessProposal {
+        tracing::info!(
+            proposer = ?HEXUPPER.encode(&req.proposer_address),
+            height = req.height,
+            hash = ?HEXUPPER.encode(&req.hash),
+            n_txs = req.txs.len(),
+            "Received block proposal",
+        );
+        let tx_results = self.check_proposal(&req.txs);
+
+        // Erroneous transactions were detected when processing
+        // the leader's proposal. We allow txs that do not
+        // deserialize properly, that have invalid signatures
+        // and that have invalid wasm code to reach FinalizeBlock.
+        let invalid_txs = tx_results.iter().any(|res| {
+            let error = ErrorCodes::from_u32(res.code).expect(
+                "All error codes returned from process_single_tx are valid",
+            );
+            !error.is_recoverable()
+        });
+        if invalid_txs {
+            tracing::warn!(
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
+                height = req.height,
+                hash = ?HEXUPPER.encode(&req.hash),
+                "Found invalid transactions, proposed block will be rejected"
+            );
+        }
+
+        let will_reject_proposal = invalid_txs;
+
+        let status = if will_reject_proposal {
+            ProposalStatus::Reject
+        } else {
+            ProposalStatus::Accept
+        };
+
+        ProcessProposal {
+            status: status as i32,
+            tx_results,
+        }
+    }
+
+    /// Evaluates the corresponding [`TxResult`] for each tx in a
+    /// proposed block, and counts the number of digest transactions.
+    ///
+    /// `ProcessProposal` should be able to make a decision on whether a
+    /// proposed block is acceptable or not based solely on what this
+    /// function returns.
+    #[cfg(feature = "abcipp")]
     pub fn check_proposal(
         &self,
-        txs: &[Vec<u8>],
+        txs: &[TxBytes],
     ) -> (Vec<TxResult>, DigestCounters) {
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         // the number of vote extension digests included in the block proposal
@@ -141,11 +197,30 @@ where
         (tx_results, counters)
     }
 
+    /// Evaluates the corresponding [`TxResult`] for each tx in a
+    /// proposed block.
+    ///
+    /// `ProcessProposal` should be able to make a decision on whether a
+    /// proposed block is acceptable or not based solely on what this
+    /// function returns.
+    #[cfg(not(feature = "abcipp"))]
+    pub fn check_proposal(&self, txs: &[TxBytes]) -> Vec<TxResult> {
+        let mut tx_queue_iter = self.storage.tx_queue.iter();
+        let tx_results: Vec<_> = txs
+            .iter()
+            .map(|tx_bytes| {
+                self.check_proposal_tx(tx_bytes, &mut tx_queue_iter)
+            })
+            .collect();
+        tx_results
+    }
+
     /// Validates a list of vote extensions, included in PrepareProposal.
     ///
     /// If a vote extension is [`Some`], then it was validated properly,
     /// and the voting power of the validator who signed it is considered
     /// in the sum of the total voting power of all received vote extensions.
+    #[cfg(feature = "abcipp")]
     fn validate_vexts_in_proposal<I>(&self, mut vote_extensions: I) -> TxResult
     where
         I: Iterator<Item = Option<VotingPower>>,
@@ -232,7 +307,7 @@ where
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
-        counters: &mut DigestCounters,
+        #[cfg(feature = "abcipp")] counters: &mut DigestCounters,
     ) -> TxResult {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
             |err| {
@@ -275,6 +350,15 @@ where
                     .into(),
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                #[cfg(not(feature = "abcipp"))]
+                ProtocolTxType::EthEventsVext(_ext) => {
+                    // TODO
+                }
+                #[cfg(not(feature = "abcipp"))]
+                ProtocolTxType::ValSetUpdateVext(_ext) => {
+                    // TODO
+                }
+                #[cfg(feature = "abcipp")]
                 ProtocolTxType::EthereumEvents(digest) => {
                     counters.eth_ev_digest_num += 1;
                     let extensions =
@@ -286,6 +370,7 @@ where
 
                     self.validate_vexts_in_proposal(valid_extensions)
                 }
+                #[cfg(feature = "abcipp")]
                 ProtocolTxType::ValidatorSetUpdate(digest) => {
                     if !self.storage.can_send_validator_set_update(
                         SendValsetUpd::AtPrevHeight,
@@ -389,6 +474,7 @@ where
 
     /// Checks if we have found the correct number of Ethereum events
     /// vote extensions in [`DigestCounters`].
+    #[cfg(feature = "abcipp")]
     fn has_proper_eth_events_num(&self, c: &DigestCounters) -> bool {
         #[cfg(feature = "abcipp")]
         {
@@ -402,6 +488,7 @@ where
 
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
+    #[cfg(feature = "abcipp")]
     fn has_proper_valset_upd_num(&self, c: &DigestCounters) -> bool {
         #[cfg(feature = "abcipp")]
         if self
