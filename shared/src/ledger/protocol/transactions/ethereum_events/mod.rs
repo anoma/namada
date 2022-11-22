@@ -11,9 +11,10 @@ use eyre::Result;
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils::{self};
-use crate::ledger::protocol::transactions::votes::{
-    self, calculate_new, calculate_updated, VoteInfo,
+use crate::ledger::protocol::transactions::votes::update::{
+    calculate_updated, VoteInfo,
 };
+use crate::ledger::protocol::transactions::votes::{self, calculate_new};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::types::address::Address;
