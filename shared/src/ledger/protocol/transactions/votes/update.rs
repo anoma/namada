@@ -11,23 +11,37 @@ use crate::types::address::Address;
 use crate::types::storage::BlockHeight;
 use crate::types::voting_power::FractionalVotingPower;
 
+/// Wraps all the information about votes needed for updating some existing
+/// tally in storage.
 pub(in super::super) struct VoteInfo {
     inner: HashMap<Address, (BlockHeight, FractionalVotingPower)>,
 }
 
 impl VoteInfo {
+    /// Constructs a new [`VoteInfo`]. For all `votes` provided, a corresponding
+    /// [`FractionalVotingPower`] must be provided in `voting_powers` also,
+    /// otherwise an error will be returned.
     pub fn new(
         votes: Votes,
         voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-    ) -> Self {
+    ) -> Result<Self> {
         let mut inner = HashMap::default();
-        votes.into_iter().for_each(|(address, block_height)| {
-            let fract_voting_power =
-                voting_powers.get(&(address.clone(), block_height)).unwrap();
+        for (address, block_height) in votes {
+            let fract_voting_power = match voting_powers
+                .get(&(address.clone(), block_height))
+            {
+                Some(fract_voting_power) => fract_voting_power,
+                None => {
+                    return Err(eyre!(
+                        "No fractional voting power provided for vote by \
+                         validator {address} at block height {block_height}"
+                    ));
+                }
+            };
             _ = inner
                 .insert(address, (block_height, fract_voting_power.to_owned()));
-        });
-        Self { inner }
+        }
+        Ok(Self { inner })
     }
 
     pub fn voters(&self) -> BTreeSet<Address> {
