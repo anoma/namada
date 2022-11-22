@@ -552,6 +552,7 @@ mod test_process_proposal {
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError, TestShell,
     };
+    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::wallet;
 
     #[cfg(feature = "abcipp")]
@@ -1369,6 +1370,48 @@ mod test_process_proposal {
                 "Transaction rejected: Non-encrypted transactions are not \
                  supported"
             ),
+        );
+    }
+}
+
+#[cfg(all(test, feature = "abcipp"))]
+mod test_process_proposal_abcipp {
+    //! We test the failure cases of [`Shell::process_proposal`]. The happy
+    //! flows are covered by the e2e tests.
+    //!
+    //! These tests are specific to `abcipp` builds of the ledger.
+}
+
+#[cfg(all(test, not(feature = "abcipp")))]
+mod test_process_proposal_abciplus {
+    //! We test the failure cases of [`Shell::process_proposal`]. The happy
+    //! flows are covered by the e2e tests.
+    //!
+    //! These tests are specific to `abciplus` builds of the ledger.
+
+    fn check_rejected_eth_events(
+        shell: &mut TestShell,
+        vote_extension: ethereum_events::Vext,
+        protocol_key: common::SecretKey,
+    ) {
+        let tx = ProtocolTxType::EthEventsVext(vote_extension)
+            .sign(&protocol_key)
+            .to_bytes();
+        let request = ProcessProposal { txs: vec![tx] };
+        let response = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
+        assert_eq!(
+            response.result.code,
+            u32::from(ErrorCodes::InvalidVoteExtension)
         );
     }
 }
