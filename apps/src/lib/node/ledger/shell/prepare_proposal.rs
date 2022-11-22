@@ -2,6 +2,7 @@
 
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
+#[cfg(feature = "abcipp")]
 use namada::ledger::storage_api::queries::QueriesExt;
 #[cfg(feature = "abcipp")]
 use namada::ledger::storage_api::queries::SendValsetUpd;

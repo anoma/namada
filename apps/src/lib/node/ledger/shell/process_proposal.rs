@@ -2,6 +2,7 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
+#[cfg(feature = "abcipp")]
 use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage_api::queries::QueriesExt;
 #[cfg(feature = "abcipp")]
@@ -356,7 +357,7 @@ where
                 ProtocolTxType::EthEventsVext(ext) => self
                     .validate_eth_events_vext_and_get_it_back(
                         ext,
-                        shell.storage.last_height,
+                        self.storage.last_height,
                     )
                     .ok()
                     .map(|_| TxResult {
@@ -375,7 +376,7 @@ where
                 ProtocolTxType::ValSetUpdateVext(ext) => self
                     .validate_valset_upd_vext_and_get_it_back(
                         ext,
-                        shell.storage.last_height,
+                        self.storage.last_height,
                     )
                     .ok()
                     .map(|_| TxResult {
