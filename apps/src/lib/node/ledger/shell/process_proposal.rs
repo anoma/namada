@@ -552,7 +552,6 @@ mod test_process_proposal {
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError, TestShell,
     };
-    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::wallet;
 
     #[cfg(feature = "abcipp")]
