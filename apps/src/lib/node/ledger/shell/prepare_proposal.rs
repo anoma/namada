@@ -17,7 +17,7 @@ use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::{
-    tx_record::TxAction, ExtendedCommitInfo, TxRecord,
+    tx_record::TxAction, ExtendedCommitInfo,
 };
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
@@ -55,20 +55,13 @@ where
             let txs = self.build_vote_extension_txs(req.local_last_commit);
             #[cfg(not(feature = "abcipp"))]
             let mut txs = self.build_vote_extension_txs(&req.txs);
-            #[cfg(feature = "abcipp")]
-            let mut txs: Vec<TxRecord> =
-                txs.into_iter().map(record::add).collect();
 
             // add mempool txs
             let mut mempool_txs = self.build_mempool_txs(req.txs);
             txs.append(&mut mempool_txs);
 
             // decrypt the wrapper txs included in the previous block
-            let decrypted_txs = self.build_decrypted_txs();
-            #[cfg(feature = "abcipp")]
-            let decrypted_txs: Vec<TxRecord> =
-                decrypted_txs.into_iter().map(record::add).collect();
-            let mut decrypted_txs = decrypted_txs;
+            let mut decrypted_txs = self.build_decrypted_txs();
             txs.append(&mut decrypted_txs);
 
             txs
@@ -163,27 +156,6 @@ where
     }
 
     /// Builds a batch of mempool transactions
-    #[cfg(feature = "abcipp")]
-    fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxRecord> {
-        // filter in half of the new txs from Tendermint, only keeping
-        // wrappers
-        let number_of_new_txs = 1 + txs.len() / 2;
-        txs.into_iter()
-            .take(number_of_new_txs)
-            .map(|tx_bytes| {
-                if let Ok(Ok(TxType::Wrapper(_))) =
-                    Tx::try_from(tx_bytes.as_slice()).map(process_tx)
-                {
-                    record::keep(tx_bytes)
-                } else {
-                    record::remove(tx_bytes)
-                }
-            })
-            .collect()
-    }
-
-    /// Builds a batch of mempool transactions
-    #[cfg(not(feature = "abcipp"))]
     fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxBytes> {
         // filter in half of the new txs from Tendermint, only keeping
         // wrappers
@@ -235,39 +207,6 @@ where
 const fn not_enough_voting_power_msg() -> &'static str {
     "A Tendermint quorum should never decide on a block including vote \
      extensions reflecting less than or equal to 2/3 of the total stake."
-}
-
-/// Functions for creating the appropriate TxRecord given the
-/// numeric code
-#[cfg(feature = "abcipp")]
-pub(super) mod record {
-    use super::*;
-
-    /// Keep this transaction in the proposal
-    pub fn keep(tx: TxBytes) -> TxRecord {
-        TxRecord {
-            action: TxAction::Unmodified as i32,
-            tx,
-        }
-    }
-
-    /// A transaction added to the proposal not provided by
-    /// Tendermint from the mempool
-    pub fn add(tx: TxBytes) -> TxRecord {
-        TxRecord {
-            action: TxAction::Added as i32,
-            tx,
-        }
-    }
-
-    /// Remove this transaction from the set provided
-    /// by Tendermint from the mempool
-    pub fn remove(tx: TxBytes) -> TxRecord {
-        TxRecord {
-            action: TxAction::Removed as i32,
-            tx,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -557,8 +496,7 @@ mod test_prepare_proposal {
         }
     }
 
-    /// Creates an Ethereum events digest manually, and encodes it as a
-    /// [`TxRecord`].
+    /// Creates an Ethereum events digest manually.
     fn manually_assemble_digest(
         _protocol_key: &common::SecretKey,
         ext: Signed<ethereum_events::Vext>,
@@ -596,11 +534,6 @@ mod test_prepare_proposal {
         );
 
         vote_extension_digest
-
-        // let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-        //    .sign(&protocol_key)
-        //    .to_bytes();
-        // super::record::add(tx)
     }
 
     /// Test if Ethereum events validation and inclusion in a block
@@ -679,9 +612,6 @@ mod test_prepare_proposal {
         );
 
         assert_eq!(rsp_digest, digest);
-
-        // NOTE: this comparison will not work because of timestamps
-        // assert_eq!(rsp.tx_records, vec![digest]);
     }
 
     /// Test if Ethereum events validation and inclusion in a block
