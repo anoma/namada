@@ -97,40 +97,36 @@ where
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
     /// events and, optionally, a validator set update
+    #[cfg(feature = "abcipp")]
     fn build_vote_extensions_txs(
         &mut self,
-        #[cfg(feature = "abcipp")] local_last_commit: Option<
-            ExtendedCommitInfo,
-        >,
-        #[cfg(not(feature = "abcipp"))] txs: &[TxBytes],
+        local_last_commit: Option<ExtendedCommitInfo>,
     ) -> Vec<TxBytes> {
         // genesis should not contain vote extensions
         if self.storage.last_height == BlockHeight(0) {
             return vec![];
         }
 
-        #[cfg(feature = "abcipp")]
-        {
-            let (eth_events, valset_upds) = split_vote_extensions(
-                local_last_commit
-                    .expect(
-                        "Honest Namada validators will always sign \
-                         ethereum_events::Vext instances, even if no Ethereum \
-                         events were observed at a given block height. In \
-                         fact, a quorum of signed empty ethereum_events::Vext \
-                         instances commits the fact no events were observed \
-                         by a majority of validators. Therefore, for block \
-                         heights greater than zero, we should always have \
-                         vote extensions.",
-                    )
-                    .votes,
-            );
+        let (eth_events, valset_upds) = split_vote_extensions(
+            local_last_commit
+                .expect(
+                    "Honest Namada validators will always sign \
+                     ethereum_events::Vext instances, even if no Ethereum \
+                     events were observed at a given block height. In fact, a \
+                     quorum of signed empty ethereum_events::Vext instances \
+                     commits the fact no events were observed by a majority \
+                     of validators. Therefore, for block heights greater than \
+                     zero, we should always have vote extensions.",
+                )
+                .votes,
+        );
 
-            let ethereum_events = self
-                .compress_ethereum_events(eth_events)
-                .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
+        let ethereum_events = self
+            .compress_ethereum_events(eth_events)
+            .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
 
-            let validator_set_update = if self
+        let validator_set_update =
+            if self
                 .storage
                 .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
             {
@@ -141,22 +137,28 @@ where
                 None
             };
 
-            let protocol_key = self
-                .mode
-                .get_protocol_key()
-                .expect("Validators should always have a protocol key");
+        let protocol_key = self
+            .mode
+            .get_protocol_key()
+            .expect("Validators should always have a protocol key");
 
-            iter_protocol_txs(VoteExtensionDigest {
-                ethereum_events,
-                validator_set_update,
-            })
-            .map(|tx| tx.sign(protocol_key).to_bytes())
-            .collect()
-        }
+        iter_protocol_txs(VoteExtensionDigest {
+            ethereum_events,
+            validator_set_update,
+        })
+        .map(|tx| tx.sign(protocol_key).to_bytes())
+        .collect()
+    }
 
-        #[cfg(not(feature = "abcipp"))]
-        {
+    /// Builds a batch of vote extension transactions, comprised of Ethereum
+    /// events and, optionally, a validator set update
+    #[cfg(not(feature = "abcipp"))]
+    fn build_vote_extensions_txs(&mut self, txs: &[TxBytes]) -> Vec<TxBytes> {
+        if self.storage.last_height != BlockHeight(0) {
             split_vote_extensions(txs)
+        } else {
+            // genesis should not contain vote extensions
+            vec![]
         }
     }
 
