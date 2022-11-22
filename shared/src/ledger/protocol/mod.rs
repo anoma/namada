@@ -202,6 +202,24 @@ where
     use crate::types::vote_extensions::ethereum_events;
 
     match tx {
+        #[cfg(not(feature = "abcipp"))]
+        ProtocolTxType::EthEventsVext(ext) => {
+            let ethereum_events::VextDigest { events, .. } =
+                ethereum_events::VextDigest::singleton(ext);
+            self::transactions::ethereum_events::apply_derived_tx(
+                storage, events,
+            )
+            .map_err(Error::ProtocolTxError)
+        }
+        #[cfg(not(feature = "abcipp"))]
+        ProtocolTxType::ValSetUpdateVext(ext) => {
+            self::transactions::validator_set_update::aggregate_votes(
+                storage,
+                validator_set_update::VextDigest::singleton(ext),
+            )
+            .map_err(Error::ProtocolTxError)
+        }
+        #[cfg(feature = "abcipp")]
         ProtocolTxType::EthereumEvents(ext) => {
             let ethereum_events::VextDigest { events, .. } = ext;
             self::transactions::ethereum_events::apply_derived_tx(
@@ -209,6 +227,7 @@ where
             )
             .map_err(Error::ProtocolTxError)
         }
+        #[cfg(feature = "abcipp")]
         ProtocolTxType::ValidatorSetUpdate(ext) => {
             // NOTE(feature = "abcipp"): we will not need to apply any
             // storage changes when we rollback to ABCI++; this is because
