@@ -199,7 +199,9 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    use crate::types::vote_extensions::ethereum_events;
+    use crate::types::vote_extensions::{
+        ethereum_events, validator_set_update,
+    };
 
     match tx {
         #[cfg(not(feature = "abcipp"))]
