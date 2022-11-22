@@ -40,7 +40,11 @@ pub async fn monitor(
         exit_status = node.wait() => {
             match exit_status {
                 Ok(exit_status) => {
-                    tracing::info!(%exit_status, "Ethereum fullnode exited");
+                    if exit_status.success() {
+                        tracing::info!(%exit_status, "Ethereum fullnode exited");
+                    } else {
+                        tracing::warn!(%exit_status, "Ethereum fullnode exited with nonzero exit code");
+                    }
                 },
                 Err(err) => {
                     tracing::warn!("Error while waiting for the Ethereum fullnode to exit: {}", err);
