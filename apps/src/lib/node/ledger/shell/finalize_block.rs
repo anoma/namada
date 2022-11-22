@@ -149,6 +149,18 @@ where
                     continue;
                 }
                 TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                    #[cfg(not(feature = "abcipp"))]
+                    ProtocolTxType::EthEventsVext(ref ext) => {
+                        for event in ext.data.ethereum_events.iter() {
+                            self.mode.deque_eth_event(event);
+                        }
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    #[cfg(not(feature = "abcipp"))]
+                    ProtocolTxType::ValSetUpdateVext(_) => {
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    #[cfg(feature = "abcipp")]
                     ProtocolTxType::EthereumEvents(ref digest) => {
                         for event in
                             digest.events.iter().map(|signed| &signed.event)
@@ -157,6 +169,7 @@ where
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
+                    #[cfg(feature = "abcipp")]
                     ProtocolTxType::ValidatorSetUpdate(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }

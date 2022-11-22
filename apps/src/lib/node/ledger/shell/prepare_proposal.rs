@@ -152,7 +152,7 @@ where
     #[cfg(not(feature = "abcipp"))]
     fn build_vote_extension_txs(&mut self, txs: &[TxBytes]) -> Vec<TxBytes> {
         if self.storage.last_height != BlockHeight(0) {
-            deserialize_vote_extensions(txs)
+            deserialize_vote_extensions(txs).collect()
         } else {
             // genesis should not contain vote extensions
             vec![]
