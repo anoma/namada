@@ -2,12 +2,15 @@
 
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
+use namada::ledger::storage_api::queries::QueriesExt;
+#[cfg(feature = "abcipp")]
+use namada::ledger::storage_api::queries::SendValsetUpd;
 use namada::proto::Tx;
 use namada::types::storage::BlockHeight;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
+#[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
 
 use super::super::*;
@@ -16,9 +19,9 @@ use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 use crate::facade::tendermint_proto::abci::{
     tx_record::TxAction, ExtendedCommitInfo, TxRecord,
 };
-use crate::node::ledger::shell::vote_extensions::{
-    iter_protocol_txs, split_vote_extensions,
-};
+#[cfg(feature = "abcipp")]
+use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
+use crate::node::ledger::shell::vote_extensions::split_vote_extensions;
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -101,39 +104,33 @@ where
         >,
         #[cfg(not(feature = "abcipp"))] txs: &[TxBytes],
     ) -> Vec<TxBytes> {
-        // genesis block should not contain vote extensions
+        // genesis should not contain vote extensions
         if self.storage.last_height == BlockHeight(0) {
             return vec![];
         }
 
         #[cfg(feature = "abcipp")]
-        let (eth_events, valset_upds) = split_vote_extensions(
-            local_last_commit
-                .expect(
-                    "Honest Namada validators will always sign \
-                     ethereum_events::Vext instances, even if no Ethereum \
-                     events were observed at a given block height. In fact, a \
-                     quorum of signed empty ethereum_events::Vext instances \
-                     commits the fact no events were observed by a majority \
-                     of validators. Therefore, for block heights greater than \
-                     zero, we should always have vote extensions.",
-                )
-                .votes,
-        );
-        #[cfg(not(feature = "abcipp"))]
-        let (protocol_txs, eth_events, valset_upds) =
-            split_vote_extensions(txs);
+        {
+            let (eth_events, valset_upds) = split_vote_extensions(
+                local_last_commit
+                    .expect(
+                        "Honest Namada validators will always sign \
+                         ethereum_events::Vext instances, even if no Ethereum \
+                         events were observed at a given block height. In \
+                         fact, a quorum of signed empty ethereum_events::Vext \
+                         instances commits the fact no events were observed \
+                         by a majority of validators. Therefore, for block \
+                         heights greater than zero, we should always have \
+                         vote extensions.",
+                    )
+                    .votes,
+            );
 
-        // TODO: remove this later, when we get rid of `abciplus`
-        #[cfg(feature = "abcipp")]
-        let protocol_txs = vec![];
+            let ethereum_events = self
+                .compress_ethereum_events(eth_events)
+                .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
 
-        let ethereum_events = self
-            .compress_ethereum_events(eth_events)
-            .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
-
-        let validator_set_update =
-            if self
+            let validator_set_update = if self
                 .storage
                 .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
             {
@@ -144,19 +141,23 @@ where
                 None
             };
 
-        let protocol_key = self
-            .mode
-            .get_protocol_key()
-            .expect("Validators should always have a protocol key");
+            let protocol_key = self
+                .mode
+                .get_protocol_key()
+                .expect("Validators should always have a protocol key");
 
-        iter_protocol_txs(VoteExtensionDigest {
-            ethereum_events,
-            validator_set_update,
-        })
-        .map(|tx| tx.sign(protocol_key).to_bytes())
-        // TODO: remove this later, when we get rid of `abciplus`
-        .chain(protocol_txs.into_iter())
-        .collect()
+            iter_protocol_txs(VoteExtensionDigest {
+                ethereum_events,
+                validator_set_update,
+            })
+            .map(|tx| tx.sign(protocol_key).to_bytes())
+            .collect()
+        }
+
+        #[cfg(not(feature = "abcipp"))]
+        {
+            split_vote_extensions(txs)
+        }
     }
 
     /// Builds a batch of mempool transactions
@@ -228,16 +229,10 @@ where
 /// Returns a suitable message to be displayed when Tendermint
 /// somehow decides on a block containing vote extensions
 /// reflecting `<= 2/3` of the total stake.
+#[cfg(feature = "abcipp")]
 const fn not_enough_voting_power_msg() -> &'static str {
-    #[cfg(feature = "abcipp")]
-    {
-        "A Tendermint quorum should never decide on a block including vote \
-         extensions reflecting less than or equal to 2/3 of the total stake."
-    }
-    #[cfg(not(feature = "abcipp"))]
-    {
-        "CONSENSUS FAILURE!!!!!11one!"
-    }
+    "A Tendermint quorum should never decide on a block including vote \
+     extensions reflecting less than or equal to 2/3 of the total stake."
 }
 
 /// Functions for creating the appropriate TxRecord given the
