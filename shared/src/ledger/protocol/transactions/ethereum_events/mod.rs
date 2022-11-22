@@ -146,7 +146,7 @@ where
         );
         let vote_info = VoteInfo::new(update.seen_by.clone(), voting_powers)?;
         let (vote_tracking, changed) =
-            calculate_updated(storage, &eth_msg_keys, &vote_info)?;
+            calculate_updated(storage, &eth_msg_keys, vote_info)?;
         let confirmed =
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
         (vote_tracking, changed, confirmed)

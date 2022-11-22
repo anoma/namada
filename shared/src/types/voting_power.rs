@@ -8,7 +8,7 @@ use num_rational::Ratio;
 
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
-#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct FractionalVotingPower(Ratio<u64>);
 
 impl FractionalVotingPower {

@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
@@ -47,16 +47,21 @@ impl VoteInfo {
     pub fn voters(&self) -> BTreeSet<Address> {
         self.inner.keys().cloned().collect()
     }
+}
 
-    pub fn iterate(
-        &self,
-    ) -> impl Iterator<Item = (Address, BlockHeight, FractionalVotingPower)> + '_
-    {
-        self.inner.iter().map(
-            |(address, (block_height, fract_voting_power))| {
-                (address.clone(), *block_height, fract_voting_power.clone())
-            },
-        )
+impl IntoIterator for VoteInfo {
+    type IntoIter = std::collections::hash_set::IntoIter<Self::Item>;
+    type Item = (Address, BlockHeight, FractionalVotingPower);
+
+    fn into_iter(self) -> Self::IntoIter {
+        let items: HashSet<_> = self
+            .inner
+            .into_iter()
+            .map(|(address, (block_height, fract_voting_power))| {
+                (address, block_height, fract_voting_power)
+            })
+            .collect();
+        items.into_iter()
     }
 }
 
@@ -65,7 +70,7 @@ impl VoteInfo {
 pub(in super::super) fn calculate_updated<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
-    vote_info: &VoteInfo,
+    vote_info: VoteInfo,
 ) -> Result<(Tally, ChangedKeys)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -104,7 +109,7 @@ where
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
 /// voters from `vote_info`. Returns an error if any new voters have already
 /// voted previously.
-fn calculate_tally_post(pre: &Tally, vote_info: &VoteInfo) -> Result<Tally> {
+fn calculate_tally_post(pre: &Tally, vote_info: VoteInfo) -> Result<Tally> {
     let previous_voters: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
     let new_voters = vote_info.voters();
     let duplicate_voters: BTreeSet<_> =
@@ -116,7 +121,7 @@ fn calculate_tally_post(pre: &Tally, vote_info: &VoteInfo) -> Result<Tally> {
 
     let mut voting_power_post = pre.voting_power.clone();
     let mut seen_by_post = pre.seen_by.clone();
-    for (validator, vote_height, voting_power) in vote_info.iterate() {
+    for (validator, vote_height, voting_power) in vote_info {
         _ = seen_by_post.insert(validator, vote_height);
         voting_power_post += voting_power;
     }
