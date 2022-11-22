@@ -14,6 +14,10 @@ use crate::types::storage::BlockHeight;
 /// Type alias for an [`EthereumEventsVext`].
 pub type Vext = EthereumEventsVext;
 
+/// Represents a [`Vext`] signed by some validator, with
+/// a Namada protocol key.
+pub type SignedVext = Signed<Vext>;
+
 /// Represents a set of [`EthereumEvent`] instances
 /// seen by some validator.
 ///

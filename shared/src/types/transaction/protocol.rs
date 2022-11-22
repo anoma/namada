@@ -88,10 +88,10 @@ mod protocol_txs {
         ValidatorSetUpdate(validator_set_update::VextDigest),
         /// Ethereum events seen by some validator
         #[cfg(not(feature = "abcipp"))]
-        EthEventsVext(ethereum_events::Vext),
+        EthEventsVext(ethereum_events::SignedVext),
         /// Validator set update signed by some validator
         #[cfg(not(feature = "abcipp"))]
-        ValSetUpdateVext(validator_set_update::Vext),
+        ValSetUpdateVext(validator_set_update::SignedVext),
     }
 
     impl ProtocolTxType {
