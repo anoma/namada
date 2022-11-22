@@ -3,7 +3,9 @@
 
 use data_encoding::HEXUPPER;
 use namada::ledger::pos::types::VotingPower;
-use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
+use namada::ledger::storage_api::queries::QueriesExt;
+#[cfg(feature = "abcipp")]
+use namada::ledger::storage_api::queries::SendValsetUpd;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
@@ -476,21 +478,13 @@ where
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_eth_events_num(&self, c: &DigestCounters) -> bool {
-        #[cfg(feature = "abcipp")]
-        {
-            self.storage.last_height.0 == 0 || c.eth_ev_digest_num == 1
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            c.eth_ev_digest_num <= 1
-        }
+        self.storage.last_height.0 == 0 || c.eth_ev_digest_num == 1
     }
 
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_valset_upd_num(&self, c: &DigestCounters) -> bool {
-        #[cfg(feature = "abcipp")]
         if self
             .storage
             .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
@@ -498,10 +492,6 @@ where
             self.storage.last_height.0 == 0 || c.valset_upd_digest_num == 1
         } else {
             true
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            c.valset_upd_digest_num <= 1
         }
     }
 }
