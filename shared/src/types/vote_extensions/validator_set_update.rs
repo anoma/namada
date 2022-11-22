@@ -49,7 +49,7 @@ impl VextDigest {
     /// Build a singleton [`VextDigest`], from the provided [`Vext`].
     #[inline]
     #[cfg(not(feature = "abcipp"))]
-    pub fn singleton(ext: Signed<Vext>) -> VextDigest {
+    pub fn singleton(ext: SignedVext) -> VextDigest {
         VextDigest {
             signatures: {
                 let mut m = HashMap::new();
