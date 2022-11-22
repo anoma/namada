@@ -48,15 +48,15 @@ impl VoteInfo {
         self.inner.keys().cloned().collect()
     }
 
-    pub fn iter(
+    pub fn iterate(
         &self,
-    ) -> BTreeSet<(Address, BlockHeight, FractionalVotingPower)> {
-        self.inner
-            .iter()
-            .map(|(address, (block_height, fract_voting_power))| {
+    ) -> impl Iterator<Item = (Address, BlockHeight, FractionalVotingPower)> + '_
+    {
+        self.inner.iter().map(
+            |(address, (block_height, fract_voting_power))| {
                 (address.clone(), *block_height, fract_voting_power.clone())
-            })
-            .collect()
+            },
+        )
     }
 }
 
@@ -116,7 +116,7 @@ fn calculate_tally_post(pre: &Tally, vote_info: &VoteInfo) -> Result<Tally> {
 
     let mut voting_power_post = pre.voting_power.clone();
     let mut seen_by_post = pre.seen_by.clone();
-    for (validator, vote_height, voting_power) in vote_info.iter() {
+    for (validator, vote_height, voting_power) in vote_info.iterate() {
         _ = seen_by_post.insert(validator, vote_height);
         voting_power_post += voting_power;
     }
