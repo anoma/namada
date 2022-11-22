@@ -20,8 +20,11 @@ use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 use crate::facade::tendermint_proto::abci::{
     tx_record::TxAction, ExtendedCommitInfo,
 };
+#[cfg(not(feature = "abcipp"))]
+use crate::node::ledger::shell::vote_extensions::deserialize_vote_extensions;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
+#[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::split_vote_extensions;
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -149,7 +152,7 @@ where
     #[cfg(not(feature = "abcipp"))]
     fn build_vote_extension_txs(&mut self, txs: &[TxBytes]) -> Vec<TxBytes> {
         if self.storage.last_height != BlockHeight(0) {
-            split_vote_extensions(txs)
+            deserialize_vote_extensions(txs)
         } else {
             // genesis should not contain vote extensions
             vec![]

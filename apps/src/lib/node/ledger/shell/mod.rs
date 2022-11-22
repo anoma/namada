@@ -673,18 +673,22 @@ where
         {
             use namada::types::transaction::protocol::ProtocolTxType;
 
+            use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
+
             if let ShellMode::Validator { .. } = &self.mode {
-                let ext = self.craft_extension();
-                let ext = self
+                let protocol_key = self
                     .mode
                     .get_protocol_key()
-                    .map(|protocol_key| {
-                        ProtocolTxType::VoteExtension(ext)
-                            .sign(protocol_key)
-                            .to_bytes()
-                    })
                     .expect("Validators should have protocol keys");
-                self.mode.broadcast(ext);
+
+                let protocol_txs = iter_protocol_txs(self.craft_extension())
+                    .map(|protocol_tx| {
+                        protocol_tx.sign(protocol_key).to_bytes()
+                    });
+
+                for tx in protocol_txs {
+                    self.mode.broadcast(tx);
+                }
             }
         }
 
