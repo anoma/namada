@@ -110,7 +110,7 @@ impl VextDigest {
             events: ext
                 .data
                 .ethereum_events
-                .into_inter()
+                .into_iter()
                 .map(|event| MultiSignedEthEvent {
                     event,
                     signers: {
