@@ -353,13 +353,43 @@ where
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 #[cfg(not(feature = "abcipp"))]
-                ProtocolTxType::EthEventsVext(_ext) => {
-                    // TODO
-                }
+                ProtocolTxType::EthEventsVext(ext) => self
+                    .validate_eth_events_vext_and_get_it_back(
+                        ext,
+                        shell.storage.last_height,
+                    )
+                    .ok()
+                    .map(|_| TxResult {
+                        code: ErrorCodes::Ok.into(),
+                        info: "Process Proposal accepted this transaction"
+                            .into(),
+                    })
+                    .unwrap_or_else(|| TxResult {
+                        code: ErrorCodes::InvalidVoteExtension.into(),
+                        info: "Process proposal rejected this proposal \
+                               because one of the included Ethereum events \
+                               vote extensions was invalid."
+                            .into(),
+                    }),
                 #[cfg(not(feature = "abcipp"))]
-                ProtocolTxType::ValSetUpdateVext(_ext) => {
-                    // TODO
-                }
+                ProtocolTxType::ValSetUpdateVext(ext) => self
+                    .validate_valset_upd_vext_and_get_it_back(
+                        ext,
+                        shell.storage.last_height,
+                    )
+                    .ok()
+                    .map(|_| TxResult {
+                        code: ErrorCodes::Ok.into(),
+                        info: "Process Proposal accepted this transaction"
+                            .into(),
+                    })
+                    .unwrap_or_else(|| TxResult {
+                        code: ErrorCodes::InvalidVoteExtension.into(),
+                        info: "Process proposal rejected this proposal \
+                               because one of the included validator set \
+                               update vote extensions was invalid."
+                            .into(),
+                    }),
                 #[cfg(feature = "abcipp")]
                 ProtocolTxType::EthereumEvents(digest) => {
                     counters.eth_ev_digest_num += 1;
