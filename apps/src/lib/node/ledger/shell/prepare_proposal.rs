@@ -52,9 +52,9 @@ where
 
             // add ethereum events and validator set updates as protocol txs
             #[cfg(feature = "abcipp")]
-            let txs = self.build_vote_extensions_txs(req.local_last_commit);
+            let txs = self.build_vote_extension_txs(req.local_last_commit);
             #[cfg(not(feature = "abcipp"))]
-            let mut txs = self.build_vote_extensions_txs(&req.txs);
+            let mut txs = self.build_vote_extension_txs(&req.txs);
             #[cfg(feature = "abcipp")]
             let mut txs: Vec<TxRecord> =
                 txs.into_iter().map(record::add).collect();
@@ -98,7 +98,7 @@ where
     /// Builds a batch of vote extension transactions, comprised of Ethereum
     /// events and, optionally, a validator set update
     #[cfg(feature = "abcipp")]
-    fn build_vote_extensions_txs(
+    fn build_vote_extension_txs(
         &mut self,
         local_last_commit: Option<ExtendedCommitInfo>,
     ) -> Vec<TxBytes> {
@@ -153,7 +153,7 @@ where
     /// Builds a batch of vote extension transactions, comprised of Ethereum
     /// events and, optionally, a validator set update
     #[cfg(not(feature = "abcipp"))]
-    fn build_vote_extensions_txs(&mut self, txs: &[TxBytes]) -> Vec<TxBytes> {
+    fn build_vote_extension_txs(&mut self, txs: &[TxBytes]) -> Vec<TxBytes> {
         if self.storage.last_height != BlockHeight(0) {
             split_vote_extensions(txs)
         } else {
