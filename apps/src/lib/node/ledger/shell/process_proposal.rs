@@ -555,6 +555,7 @@ mod test_process_proposal {
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::wallet;
 
+    #[cfg(feature = "abcipp")]
     fn get_empty_eth_ev_digest(shell: &TestShell) -> TxBytes {
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell
@@ -870,7 +871,11 @@ mod test_process_proposal {
         .to_bytes();
         #[allow(clippy::redundant_clone)]
         let request = ProcessProposal {
-            txs: vec![tx.clone(), get_empty_eth_ev_digest(&shell)],
+            txs: vec![
+                tx.clone(),
+                #[cfg(feature = "abcipp")]
+                get_empty_eth_ev_digest(&shell),
+            ],
         };
 
         let response = if let [resp, _] = shell
@@ -950,7 +955,11 @@ mod test_process_proposal {
             panic!("Test failed");
         };
         let request = ProcessProposal {
-            txs: vec![new_tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            txs: vec![
+                new_tx.to_bytes(),
+                #[cfg(feature = "abcipp")]
+                get_empty_eth_ev_digest(&shell),
+            ],
         };
         let response = if let [response, _] = shell
             .process_proposal(request)
@@ -995,7 +1004,11 @@ mod test_process_proposal {
         .sign(&keypair)
         .expect("Test failed");
         let request = ProcessProposal {
-            txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            txs: vec![
+                wrapper.to_bytes(),
+                #[cfg(feature = "abcipp")]
+                get_empty_eth_ev_digest(&shell),
+            ],
         };
         let response = if let [resp, _] = shell
             .process_proposal(request)
@@ -1041,7 +1054,11 @@ mod test_process_proposal {
         .expect("Test failed");
 
         let request = ProcessProposal {
-            txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            txs: vec![
+                wrapper.to_bytes(),
+                #[cfg(feature = "abcipp")]
+                get_empty_eth_ev_digest(&shell),
+            ],
         };
 
         let response = if let [resp, _] = shell
@@ -1089,7 +1106,11 @@ mod test_process_proposal {
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
         }
         let req_1 = ProcessProposal {
-            txs: vec![txs[0].to_bytes(), get_empty_eth_ev_digest(&shell)],
+            txs: vec![
+                txs[0].to_bytes(),
+                #[cfg(feature = "abcipp")]
+                get_empty_eth_ev_digest(&shell),
+            ],
         };
         let response_1 = if let [resp, _] = shell
             .process_proposal(req_1)
@@ -1103,7 +1124,11 @@ mod test_process_proposal {
         assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
 
         let req_2 = ProcessProposal {
-            txs: vec![txs[2].to_bytes(), get_empty_eth_ev_digest(&shell)],
+            txs: vec![
+                txs[2].to_bytes(),
+                #[cfg(feature = "abcipp")]
+                get_empty_eth_ev_digest(&shell),
+            ],
         };
 
         let response_2 = if let Err(TestError::RejectProposal(resp)) =
@@ -1155,7 +1180,11 @@ mod test_process_proposal {
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
 
         let request = ProcessProposal {
-            txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            txs: vec![
+                tx.to_bytes(),
+                #[cfg(feature = "abcipp")]
+                get_empty_eth_ev_digest(&shell),
+            ],
         };
 
         let response = if let [resp, _] = shell
@@ -1209,7 +1238,11 @@ mod test_process_proposal {
         )));
 
         let request = ProcessProposal {
-            txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            txs: vec![
+                tx.to_bytes(),
+                #[cfg(feature = "abcipp")]
+                get_empty_eth_ev_digest(&shell),
+            ],
         };
         let response = if let [resp, _] = shell
             .process_proposal(request)
@@ -1252,7 +1285,11 @@ mod test_process_proposal {
             wrapper.clone(),
         )));
         let request = ProcessProposal {
-            txs: vec![signed.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            txs: vec![
+                signed.to_bytes(),
+                #[cfg(feature = "abcipp")]
+                get_empty_eth_ev_digest(&shell),
+            ],
         };
         let response = if let [resp, _] = shell
             .process_proposal(request)
@@ -1311,7 +1348,11 @@ mod test_process_proposal {
         );
         let tx = Tx::from(TxType::Raw(tx));
         let request = ProcessProposal {
-            txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            txs: vec![
+                tx.to_bytes(),
+                #[cfg(feature = "abcipp")]
+                get_empty_eth_ev_digest(&shell),
+            ],
         };
         let response = if let [resp, _] = shell
             .process_proposal(request)
