@@ -90,6 +90,38 @@ pub struct EthereumEventsVextDigest {
 }
 
 impl VextDigest {
+    /// Build a singleton [`VextDigest`], from the provided [`Vext`].
+    #[inline]
+    #[cfg(not(feature = "abcipp"))]
+    pub fn singleton(ext: Signed<Vext>) -> VextDigest {
+        VextDigest {
+            signatures: {
+                let mut m = HashMap::new();
+                m.insert(
+                    (ext.data.validator_addr.clone(), ext.data.block_height),
+                    ext.sig,
+                );
+                m
+            },
+            events: ext
+                .data
+                .ethereum_events
+                .into_inter()
+                .map(|event| MultiSignedEthEvent {
+                    event,
+                    signers: {
+                        let mut s = BTreeSet::new();
+                        s.insert((
+                            ext.data.validator_addr.clone(),
+                            ext.data.block_height,
+                        ));
+                        s
+                    },
+                })
+                .collect(),
+        }
+    }
+
     /// Decompresses a set of signed [`Vext`] instances.
     pub fn decompress(self, last_height: BlockHeight) -> Vec<Signed<Vext>> {
         #[cfg(not(feature = "abcipp"))]

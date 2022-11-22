@@ -46,6 +46,23 @@ pub struct ValidatorSetUpdateVextDigest {
 }
 
 impl VextDigest {
+    /// Build a singleton [`VextDigest`], from the provided [`Vext`].
+    #[inline]
+    #[cfg(not(feature = "abcipp"))]
+    pub fn singleton(ext: Signed<Vext>) -> VextDigest {
+        VextDigest {
+            signatures: {
+                let mut m = HashMap::new();
+                m.insert(
+                    (ext.data.validator_addr.clone(), ext.data.block_height),
+                    ext.sig,
+                );
+                m
+            },
+            voting_powers: ext.data.voting_powers,
+        }
+    }
+
     /// Decompresses a set of signed [`Vext`] instances.
     pub fn decompress(self, block_height: BlockHeight) -> Vec<SignedVext> {
         #[cfg(not(feature = "abcipp"))]
