@@ -9,7 +9,7 @@ Namada transactions get signed before being delivered to the network. This signa
 ```rust
 pub enum Signature {
     Sig(common::Signature),
-    MultiSig(Vec<common::Signature>)
+    MultiSig(Vec<(u8, common::Signature))
 }
 
 pub struct SignedTxData {
@@ -21,37 +21,76 @@ pub struct SignedTxData {
 }
 ```
 
-This struct will now hold either a signature or multiple signatures over the data carried by the transaction. The different enum variants allow for a quick check of the correct signature type at validation time.
+The `MultiSig` variant holds a vector of tuples where the first element is an 8-bit integer and a the second one is a signature. The integer serves as an index to match a specific signature to one of the public keys in the list of accepted ones. This way, we can improve the verification algorithm and check each signature only against the public key at the provided index (linear in time complexity), without the need to cycle on all of them which would be $\mathcal{O}(n^2)$.
 
 ## VPs
 
-To support multisig we provide a new `vp_multisig` wasm validity predicate that can be used instead of the usual `vp_user` for `implicit addresses` (see [spec](./default-account.md)). This new vp will be generic, it will allow for arbitrary actions on the account as long as the signatures are valid.
+To support multisig we provide a new generic `vp_multisig` wasm validity predicate that will allow for arbitrary actions on the account as long as the signatures are valid. Note that these modifications can affect the multisig account parameters themselves.
 
-Moreover, `established` and `internal` addresses may want a multi-signature scheme on top of their validation process. Among the internal ones, `PGF` will require multisignature for its council (see the [relative](../economics/public-goods-funding.md) spec).
-
-To support the validity checks, the VP will need to access two types of information:
+To perform the validity checks, the VP will need to access two types of information:
 
 1. The multisig threshold
 2. A list of valid signers' public keys
 
-This data defines the requirements of a valid transaction operating on the multisignature address and it will be written in storage when the account is first created:
+This data defines the requirements of a valid transaction operating on the multisignature address and it will be written in storage when the account is created: 
 
 ```
 /\$Address/multisig/threshold/: u8
-/\$Address/multisig/pubkeys/: Vec<PublicKey>
+/\$Address/multisig/pubkeys/: LazyVec<PublicKey>
 ```
 
-To verify the correctness of the signatures, these VPs will proceed with a four-steps verification process:
+The `LazyVec` struct will split all of its element on different subkeys in storage so that we won't need to load the entire vector of public keys in memory for validation but just the ones pointed by the indexes in the `SignedTxData` struct.
+
+To verify the correctness of the signatures, these VPs will proceed with a three-steps verification process:
 
 1. Check that the type of the signature is `MultiSig`
 2. Check to have enough **unique** signatures for the given threshold
-3. Validate the signatures
-4. Check to have enough **valid** signatures for the given threshold
+3. Check to have enough **valid** signatures for the given threshold
 
-Steps 1 and 2 allow to short-circuit the validation process and avoid unnecessary processing and storage access. The signatures will be validated against the list of predefined public keys: a signature will be rejected if it's not valid for any of these public keys. Step 4 will halt as soon as it retrieves enough valid signatures to match the threshold, meaning that the remaining signatures will not be verified.
+Steps 1 and 2 allow to short-circuit the validation process and avoid unnecessary processing and storage access. Each signature will be validated **only** against the public key found in list at the specified index. Step 3 will halt as soon as it retrieves enough valid signatures to match the threshold, meaning that the remaining signatures will not be verified.
+
+In the transaction initiating the established address, the submitter will be able to provide a custom VP if the provided one doesn't fully satisfy the desired requirements.
+
+## Addresses
+
+The multisig vp introduced in the previous section is available for `established` addresses. To generate a multisig account we provide a new `tx_init_multisig_account` wasm transaction to be used instead of the already available `tx_init_account`. A multisig account can be created by anyone and the creator is responsible for providing the correct data, represented by the following struct:
+
+```rust
+pub struct InitMultiSigAccount {
+    /// The VP code
+    pub vp_code: Vec<u8>,
+    /// Multisig threshold for k-of-n
+    pub threshold: u8,
+    /// Multisig signers' pubkeys
+    pub pubkeys: Vec<common::PublicKey>
+}
+```
+
+Finally, the tx performs the following writes to storage: 
+
+- The multisig vp
+- The threshold
+- The list of public keys of the signers
+
+No checks will be run on these parameters, meaning that the creator could provide wrong data: to perform validation on this data we would need an internal VP managing the creation of every multisig account. This VP, though, is not required since in case of an error the creator can simply submit a new transaction to generate the correct account. On the other side, the participants of a multisig account can refuse to sign transactions if they don't agree on the parameters defining the account itself.
+
+`Internal` addresses may want a multi-signature scheme on top of their validation process as well. Among the internal ones, `PGF` will require multisignature for its council (see the [relative](../economics/public-goods-funding.md) spec). The storage data necessary for the correct working of the multisig for an internal address are written in the genesis file: these keys can be later modified through governance.
+
+`Implicit` addresses are not generated by a transaction and therefore are not suitable for a multisignature scheme since there would be no way to properly construct them. More specifically, an implicit address doesn't allow for:
+
+- A custom, modifiable VP
+- An initial transaction to be used as an initializer for the relevant data
 
 ## Transaction construction
 
-To craft a multisigned transaction, the involved parties will need to coordinate. More specifically, the transaction will be constructed by one entity which will then distribute it to the signers and collect their signatures: note that the constructing party doesn't necessarily need to be one of the signers. Finally, these signatures will be inserted in the `SignedTxData` struct so that they can be encrypted, wrapped and submitted to the network.
+To craft a multisigned transaction, the involved parties will need to coordinate. More specifically, the transaction will be constructed by one entity which will then distribute it to the signers and collect their signatures: note that the constructing party doesn't necessarily need to be one of the signers. Finally, these signatures will be inserted in the `SignedTxData` struct so that it can be encrypted, wrapped and submitted to the network.
 
 Namada does not provide a layer to support this process, so the involved parties will need to rely on an external communication mechanism.
+
+## Replay protection
+
+The [replay protection](./replay-protection.md) mechanism of Namada will prevent third-party malicious users from replaying a transaction having a multisig account as the source. This mechanism, though, is not enough to completely protect multisigned transactions: in this case, in fact, the threat could come from the members of the account themselves.
+
+With the current hash-based replay protection mechanism, once the transaction has been executed, its hash gets stored to prevent a replay. The issue, with a multisig transaction, is that the same transaction with a different set or amount of signatures would have a different hash, meaning that it can be replayed.
+
+There's no way to mitigate this scenario with the current implementation, so the members of a multisignature account will be responsible for behaving honestly towards each other and, possibly, punish malicious users by excluding them from the account.
