@@ -285,7 +285,7 @@ mod tests {
             &keys,
             HashSet::from([(
                 address::testing::established_address_1(),
-                BlockHeight(100),
+                BlockHeight(10),
                 FractionalVotingPower::new(1, 3).unwrap(),
             )]),
         )?;
@@ -311,7 +311,7 @@ mod tests {
             &keys,
             HashSet::from([(
                 address::testing::established_address_1(),
-                BlockHeight(100),
+                BlockHeight(10),
                 FractionalVotingPower::new(1, 3).unwrap(),
             )]),
         )?;
