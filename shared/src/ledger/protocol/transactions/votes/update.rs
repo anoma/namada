@@ -266,4 +266,51 @@ mod tests {
         assert!(changed_keys.is_empty());
         Ok(())
     }
+
+    #[test]
+    fn test_calculate_updated_one_vote_not_seen() -> Result<()> {
+        let mut storage = TestStorage::default();
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 0.into(),
+            transfers: vec![],
+        };
+        let keys = vote_tallies::Keys::from(&event);
+        let tally_pre = Tally {
+            voting_power: FractionalVotingPower::new(1, 3).unwrap(),
+            seen_by: BTreeMap::from([(
+                address::testing::established_address_1(),
+                10.into(),
+            )]),
+            seen: false,
+        };
+        votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
+
+        let validator = address::testing::established_address_2;
+        let vote_height = || BlockHeight(100);
+        let voting_power = || FractionalVotingPower::new(1, 3).unwrap();
+        let vote = || (validator(), vote_height());
+        let votes = Votes::from([vote()]);
+        let voting_powers = HashMap::from([(vote(), voting_power())]);
+        let vote_info = VoteInfo::new(votes, &voting_powers)?;
+
+        let (tally_post, changed_keys) =
+            calculate_updated(&mut storage, &keys, vote_info)?;
+
+        assert_eq!(
+            tally_post,
+            Tally {
+                voting_power: FractionalVotingPower::new(2, 3).unwrap(),
+                seen_by: BTreeMap::from([
+                    (address::testing::established_address_1(), 10.into()),
+                    vote(),
+                ]),
+                seen: false,
+            }
+        );
+        assert_eq!(
+            changed_keys,
+            BTreeSet::from([keys.voting_power(), keys.seen_by()])
+        );
+        Ok(())
+    }
 }
