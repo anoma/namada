@@ -305,7 +305,6 @@ mod tests {
         let mut storage = TestStorage::default();
 
         let (event, keys) = arbitrary_event();
-        let (event, keys) = arbitrary_event();
         let tally_pre = setup_tally(
             &mut storage,
             &event,
