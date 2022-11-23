@@ -173,7 +173,7 @@ fn validate<T>(
 ) -> Result<ChangedKeys> {
     let mut keys_changed = ChangedKeys::default();
 
-    let mut seen = false;
+    let mut newly_seen = false;
     if pre.seen != post.seen {
         // the only valid transition for `seen` is from `false` to `true`
         if pre.seen || !post.seen {
@@ -184,7 +184,7 @@ fn validate<T>(
             ));
         }
         keys_changed.insert(keys.seen());
-        seen = true;
+        newly_seen = true;
     }
     let pre_seen_by: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
     let post_seen_by: BTreeSet<_> = post.seen_by.keys().cloned().collect();
@@ -215,7 +215,7 @@ fn validate<T>(
     }
 
     if post.voting_power > FractionalVotingPower::TWO_THIRDS
-        && !seen
+        && !newly_seen
         && pre.voting_power >= post.voting_power
     {
         return Err(eyre!(
