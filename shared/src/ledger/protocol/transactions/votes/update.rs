@@ -345,4 +345,50 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn test_calculate_updated_one_vote_seen() {
+        let mut storage = TestStorage::default();
+
+        let (event, keys) = arbitrary_event();
+        let tally_pre = setup_tally(
+            &mut storage,
+            &event,
+            &keys,
+            HashSet::from([(
+                address::testing::established_address_1(),
+                BlockHeight(10),
+                FractionalVotingPower::new(1, 3).unwrap(),
+            )]),
+        )
+        .unwrap();
+        votes::storage::write(&mut storage, &keys, &event, &tally_pre).unwrap();
+
+        let validator = address::testing::established_address_2;
+        let vote_height = || BlockHeight(100);
+        let voting_power = || FractionalVotingPower::new(2, 3).unwrap();
+        let vote = || (validator(), vote_height());
+        let votes = Votes::from([vote()]);
+        let voting_powers = HashMap::from([(vote(), voting_power())]);
+        let vote_info = VoteInfo::new(votes, &voting_powers).unwrap();
+
+        let (tally_post, changed_keys) =
+            calculate_updated(&mut storage, &keys, vote_info).unwrap();
+
+        assert_eq!(
+            tally_post,
+            Tally {
+                voting_power: FractionalVotingPower::new(1, 1).unwrap(),
+                seen_by: BTreeMap::from([
+                    (address::testing::established_address_1(), 10.into()),
+                    vote(),
+                ]),
+                seen: true,
+            }
+        );
+        assert_eq!(
+            changed_keys,
+            BTreeSet::from([keys.voting_power(), keys.seen_by(), keys.seen()])
+        );
+    }
 }
