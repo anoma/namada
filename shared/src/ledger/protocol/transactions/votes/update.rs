@@ -294,6 +294,41 @@ mod tests {
         Ok(())
     }
 
+    /// Tests that an unchanged tally is returned if the tally as in storage is
+    /// already recorded as having been seen.
+    #[test]
+    fn test_calculate_already_seen() -> Result<()> {
+        let mut storage = TestStorage::default();
+        let event = arbitrary_event();
+        let keys = vote_tallies::Keys::from(&event);
+        let tally_pre = setup_tally(
+            &mut storage,
+            &event,
+            &keys,
+            HashSet::from([(
+                address::testing::established_address_1(),
+                BlockHeight(10),
+                FractionalVotingPower::new(3, 4).unwrap(), // this is > 2/3
+            )]),
+        )?;
+
+        let validator = address::testing::established_address_2;
+        let vote_height = || BlockHeight(100);
+        let voting_power = || FractionalVotingPower::new(1, 3).unwrap();
+        let vote = || (validator(), vote_height());
+        let votes = Votes::from([vote()]);
+        let voting_powers = HashMap::from([(vote(), voting_power())]);
+        let vote_info = VoteInfo::new(votes, &voting_powers)?;
+
+        let (tally_post, changed_keys) =
+            calculate(&mut storage, &keys, vote_info)?;
+
+        assert_eq!(tally_post, tally_pre);
+        assert!(changed_keys.is_empty());
+        Ok(())
+    }
+
+    /// Tests that an unchanged tally is returned if no votes are passed.
     #[test]
     fn test_calculate_empty() -> Result<()> {
         let mut storage = TestStorage::default();
@@ -320,6 +355,8 @@ mod tests {
         Ok(())
     }
 
+    /// Tests the case where a single vote is applied, and the tally is still
+    /// not yet seen.
     #[test]
     fn test_calculate_one_vote_not_seen() -> Result<()> {
         let mut storage = TestStorage::default();
@@ -367,6 +404,8 @@ mod tests {
         Ok(())
     }
 
+    /// Tests the case where a single vote is applied, and the tally is now
+    /// seen.
     #[test]
     fn test_calculate_one_vote_seen() {
         let mut storage = TestStorage::default();
