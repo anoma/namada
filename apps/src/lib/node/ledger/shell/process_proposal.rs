@@ -531,8 +531,10 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
+    #[cfg(feature = "abcipp")]
     use std::collections::HashMap;
 
+    #[cfg(feature = "abcipp")]
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
@@ -661,7 +663,7 @@ mod test_process_proposal {
     #[cfg(not(feature = "abcipp"))]
     fn check_rejected_eth_events(
         shell: &mut TestShell,
-        vote_extension: ethereum_events::Vext,
+        vote_extension: ethereum_events::SignedVext,
         protocol_key: common::SecretKey,
     ) {
         let tx = ProtocolTxType::EthEventsVext(vote_extension)
