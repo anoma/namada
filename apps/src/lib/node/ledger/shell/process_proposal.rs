@@ -767,29 +767,29 @@ mod test_process_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        let vote_extension_digest = ethereum_events::VextDigest {
-            signatures: {
-                let mut s = HashMap::new();
-                #[cfg(feature = "abcipp")]
-                s.insert(addr.clone(), ext.sig);
-                #[cfg(not(feature = "abcipp"))]
-                s.insert((addr.clone(), PRED_LAST_HEIGHT), ext.sig);
-                s
-            },
-            events: vec![MultiSignedEthEvent {
-                event,
-                signers: {
-                    let mut s = BTreeSet::new();
-                    #[cfg(feature = "abcipp")]
-                    s.insert(addr);
-                    #[cfg(not(feature = "abcipp"))]
-                    s.insert((addr, PRED_LAST_HEIGHT));
-                    s
-                },
-            }],
-        };
         #[cfg(feature = "abcipp")]
         {
+            let vote_extension_digest = ethereum_events::VextDigest {
+                signatures: {
+                    let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
+                    s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), PRED_LAST_HEIGHT), ext.sig);
+                    s
+                },
+                events: vec![MultiSignedEthEvent {
+                    event,
+                    signers: {
+                        let mut s = BTreeSet::new();
+                        #[cfg(feature = "abcipp")]
+                        s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, PRED_LAST_HEIGHT));
+                        s
+                    },
+                }],
+            };
             check_rejected_eth_events_digest(
                 &mut shell,
                 vote_extension_digest,
@@ -829,29 +829,29 @@ mod test_process_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        let vote_extension_digest = ethereum_events::VextDigest {
-            signatures: {
-                let mut s = HashMap::new();
-                #[cfg(feature = "abcipp")]
-                s.insert(addr.clone(), ext.sig);
-                #[cfg(not(feature = "abcipp"))]
-                s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
-                s
-            },
-            events: vec![MultiSignedEthEvent {
-                event,
-                signers: {
-                    let mut s = BTreeSet::new();
-                    #[cfg(feature = "abcipp")]
-                    s.insert(addr);
-                    #[cfg(not(feature = "abcipp"))]
-                    s.insert((addr, LAST_HEIGHT));
-                    s
-                },
-            }],
-        };
         #[cfg(feature = "abcipp")]
         {
+            let vote_extension_digest = ethereum_events::VextDigest {
+                signatures: {
+                    let mut s = HashMap::new();
+                    #[cfg(feature = "abcipp")]
+                    s.insert(addr.clone(), ext.sig);
+                    #[cfg(not(feature = "abcipp"))]
+                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
+                    s
+                },
+                events: vec![MultiSignedEthEvent {
+                    event,
+                    signers: {
+                        let mut s = BTreeSet::new();
+                        #[cfg(feature = "abcipp")]
+                        s.insert(addr);
+                        #[cfg(not(feature = "abcipp"))]
+                        s.insert((addr, LAST_HEIGHT));
+                        s
+                    },
+                }],
+            };
             check_rejected_eth_events_digest(
                 &mut shell,
                 vote_extension_digest,
