@@ -205,7 +205,7 @@ mod tests {
 
     use super::*;
     use crate::ledger::protocol::transactions::votes;
-    use crate::ledger::protocol::transactions::votes::update::tests::helpers::arbitrary_event;
+    use crate::ledger::protocol::transactions::votes::update::tests::helpers::{arbitrary_event, setup_tally};
     use crate::ledger::storage::testing::TestStorage;
     use crate::types::address;
     use crate::types::ethereum_events::EthereumEvent;
@@ -223,6 +223,24 @@ mod tests {
             };
             let keys = vote_tallies::Keys::from(&event);
             (event, keys)
+        }
+
+        /// Writes an initial [`Tally`] to storage, based on the passed `votes`.
+        pub(super) fn setup_tally(
+            storage: &mut TestStorage,
+            event: &EthereumEvent,
+            keys: &vote_tallies::Keys<EthereumEvent>,
+            votes: HashSet<(Address, BlockHeight, FractionalVotingPower)>,
+        ) -> Result<Tally> {
+            let voting_power: FractionalVotingPower =
+                votes.iter().cloned().map(|(_, _, v)| v).sum();
+            let tally = Tally {
+                voting_power: voting_power.to_owned(),
+                seen_by: votes.into_iter().map(|(a, h, _)| (a, h)).collect(),
+                seen: voting_power > FractionalVotingPower::TWO_THIRDS,
+            };
+            votes::storage::write(storage, keys, event, &tally)?;
+            Ok(tally)
         }
     }
 
@@ -261,14 +279,16 @@ mod tests {
     fn test_calculate_updated_empty() -> Result<()> {
         let mut storage = TestStorage::default();
         let (event, keys) = arbitrary_event();
-        let tally_pre = Tally {
-            voting_power: FractionalVotingPower::new(1, 3).unwrap(),
-            seen_by: BTreeMap::from([(
+        let tally_pre = setup_tally(
+            &mut storage,
+            &event,
+            &keys,
+            HashSet::from([(
                 address::testing::established_address_1(),
-                10.into(),
+                BlockHeight(100),
+                FractionalVotingPower::new(1, 3).unwrap(),
             )]),
-            seen: false,
-        };
+        )?;
         votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
         let vote_info = VoteInfo::new(Votes::default(), &HashMap::default())?;
 
@@ -285,14 +305,17 @@ mod tests {
         let mut storage = TestStorage::default();
 
         let (event, keys) = arbitrary_event();
-        let tally_pre = Tally {
-            voting_power: FractionalVotingPower::new(1, 3).unwrap(),
-            seen_by: BTreeMap::from([(
+        let (event, keys) = arbitrary_event();
+        let tally_pre = setup_tally(
+            &mut storage,
+            &event,
+            &keys,
+            HashSet::from([(
                 address::testing::established_address_1(),
-                10.into(),
+                BlockHeight(100),
+                FractionalVotingPower::new(1, 3).unwrap(),
             )]),
-            seen: false,
-        };
+        )?;
         votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
 
         let validator = address::testing::established_address_2;
