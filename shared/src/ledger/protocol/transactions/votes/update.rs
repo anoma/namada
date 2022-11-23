@@ -47,6 +47,23 @@ impl VoteInfo {
     pub fn voters(&self) -> BTreeSet<Address> {
         self.inner.keys().cloned().collect()
     }
+
+    /// Consumes `self` and returns a `VoteInfo` with any addresses from
+    /// `voters` removed, as well as the set of addresses that were actually
+    /// removed. Useful for removing voters who have already voted for
+    /// something.
+    pub fn without_voters(
+        self,
+        voters: impl IntoIterator<Item = Address>,
+    ) -> (Self, HashSet<Address>) {
+        let mut inner = self.inner;
+        let mut removed = HashSet::default();
+        for voter in voters {
+            inner.remove(&voter);
+            removed.insert(voter);
+        }
+        (Self { inner }, removed)
+    }
 }
 
 impl IntoIterator for VoteInfo {
@@ -107,20 +124,19 @@ where
 }
 
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
-/// voters from `vote_info`.
+/// voters from `vote_info`. Voters in `vote_info` who voted previously are
+/// ignored.
 fn calculate_tally_post(pre: &Tally, vote_info: VoteInfo) -> Result<Tally> {
     let previous_voters: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
-    let new_voters = vote_info.voters();
-    let duplicate_voters: BTreeSet<_> =
-        previous_voters.intersection(&new_voters).collect();
-    if !duplicate_voters.is_empty() {
-        // TODO: this is a programmer error and should never happen
-        return Err(eyre!("Duplicate voters found - {:?}", duplicate_voters));
+    let (new_voters, duplicate_voters) =
+        vote_info.without_voters(previous_voters);
+    for voter in duplicate_voters {
+        tracing::info!(?voter, "Ignoring duplicate voter");
     }
 
     let mut voting_power_post = pre.voting_power.clone();
     let mut seen_by_post = pre.seen_by.clone();
-    for (validator, vote_height, voting_power) in vote_info {
+    for (validator, vote_height, voting_power) in new_voters {
         _ = seen_by_post.insert(validator, vote_height);
         voting_power_post += voting_power;
     }
@@ -286,6 +302,24 @@ mod tests {
         let result = VoteInfo::new(votes, &voting_powers);
 
         assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_vote_info_without_voters() -> Result<()> {
+        let validator = address::testing::established_address_1;
+        let vote_height = || BlockHeight(100);
+        let voting_power = || FractionalVotingPower::new(1, 3).unwrap();
+        let vote = || (validator(), vote_height());
+        let votes = Votes::from([vote()]);
+        let voting_powers = HashMap::from([(vote(), voting_power())]);
+
+        let vote_info = VoteInfo::new(votes, &voting_powers)?;
+
+        let (vote_info, removed) = vote_info.without_voters(vec![validator()]);
+
+        assert!(vote_info.voters().is_empty());
+        assert_eq!(removed, HashSet::from([validator()]));
         Ok(())
     }
 
