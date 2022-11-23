@@ -84,7 +84,7 @@ where
     );
     let tally_pre = super::storage::read(store, keys)?;
     let tally_post = calculate_tally_post(&tally_pre, vote_info)?;
-    let changed_keys = validate_update(keys, &tally_pre, &tally_post)?;
+    let changed_keys = validate(keys, &tally_pre, &tally_post)?;
 
     if tally_post.seen {
         tracing::info!(
@@ -137,7 +137,7 @@ fn calculate_tally_post(pre: &Tally, vote_info: VoteInfo) -> Result<Tally> {
 /// Validates that `post` is an updated version of `pre`, and returns keys which
 /// changed. This function serves as a sort of validity predicate for this
 /// native transaction, which is otherwise not checked by anything else.
-fn validate_update<T>(
+fn validate<T>(
     keys: &vote_tallies::Keys<T>,
     pre: &Tally,
     post: &Tally,
