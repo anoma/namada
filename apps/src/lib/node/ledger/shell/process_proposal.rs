@@ -544,9 +544,9 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
-    use namada::types::vote_extensions::ethereum_events::{
-        self, MultiSignedEthEvent,
-    };
+    use namada::types::vote_extensions::ethereum_events;
+    #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -693,53 +693,53 @@ mod test_process_proposal {
         let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
-        let vote_extension_digest = {
-            let addr = wallet::defaults::validator_address();
-            let event = EthereumEvent::TransfersToNamada {
-                nonce: 1u64.into(),
-                transfers: vec![],
-            };
-            let ext = {
-                // generate a valid signature
-                let mut ext = ethereum_events::Vext {
-                    validator_addr: addr.clone(),
-                    block_height: LAST_HEIGHT,
-                    ethereum_events: vec![event.clone()],
-                }
-                .sign(&protocol_key);
-                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+        let addr = wallet::defaults::validator_address();
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let ext = {
+            // generate a valid signature
+            #[allow(clippy::redundant_clone)]
+            let mut ext = ethereum_events::Vext {
+                validator_addr: addr.clone(),
+                block_height: LAST_HEIGHT,
+                ethereum_events: vec![event.clone()],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
 
-                // modify this signature such that it becomes invalid
-                ext.sig = test_utils::invalidate_signature(ext.sig);
-                ext
-            };
-            ethereum_events::VextDigest {
+            // modify this signature such that it becomes invalid
+            ext.sig = test_utils::invalidate_signature(ext.sig);
+            ext
+        };
+        #[cfg(feature = "abcipp")]
+        {
+            let vote_extension_digest = ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
-                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
-                    #[cfg(not(feature = "abcipp"))]
-                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = BTreeSet::new();
-                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
-                        #[cfg(not(feature = "abcipp"))]
-                        s.insert((addr, LAST_HEIGHT));
                         s
                     },
                 }],
-            }
-        };
-        check_rejected_eth_events_digest(
-            &mut shell,
-            vote_extension_digest,
-            protocol_key,
-        );
+            };
+            check_rejected_eth_events_digest(
+                &mut shell,
+                vote_extension_digest,
+                protocol_key,
+            );
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            check_rejected_eth_events(&mut shell, ext, protocol_key);
+        }
     }
 
     /// Test that if a proposal contains Ethereum events with
