@@ -201,8 +201,13 @@ fn validate_update<T>(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
+    use crate::ledger::protocol::transactions::votes;
+    use crate::ledger::storage::testing::TestStorage;
     use crate::types::address;
+    use crate::types::ethereum_events::EthereumEvent;
 
     #[test]
     fn test_vote_info_new_empty() -> Result<()> {
@@ -232,6 +237,33 @@ mod tests {
             votes,
             BTreeSet::from([(validator(), vote_height(), voting_power())]),
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_updated_empty() -> Result<()> {
+        let mut storage = TestStorage::default();
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 0.into(),
+            transfers: vec![],
+        };
+        let keys = vote_tallies::Keys::from(&event);
+        let tally_pre = Tally {
+            voting_power: FractionalVotingPower::new(1, 3).unwrap(),
+            seen_by: BTreeMap::from([(
+                address::testing::established_address_1(),
+                10.into(),
+            )]),
+            seen: false,
+        };
+        votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
+        let vote_info = VoteInfo::new(Votes::default(), &HashMap::default())?;
+
+        let (tally_post, changed_keys) =
+            calculate_updated(&mut storage, &keys, vote_info)?;
+
+        assert_eq!(tally_post, tally_pre);
+        assert!(changed_keys.is_empty());
         Ok(())
     }
 }
