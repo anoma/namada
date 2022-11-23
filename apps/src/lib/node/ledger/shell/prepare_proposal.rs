@@ -501,6 +501,7 @@ mod test_prepare_proposal {
     }
 
     /// Creates an Ethereum events digest manually.
+    #[cfg(feature = "abcipp")]
     fn manually_assemble_digest(
         _protocol_key: &common::SecretKey,
         ext: Signed<ethereum_events::Vext>,
@@ -637,7 +638,7 @@ mod test_prepare_proposal {
             nonce: 1u64.into(),
             transfers: vec![],
         };
-        let signed_vote_extension = {
+        let ext = {
             let ext = ethereum_events::Vext {
                 validator_addr,
                 block_height: LAST_HEIGHT,
@@ -648,23 +649,16 @@ mod test_prepare_proposal {
             ext
         };
 
-        let rsp_digest = {
-            let vote_extension = VoteExtension {
-                ethereum_events: signed_vote_extension.clone(),
-                validator_set_update: None,
-            };
-            let tx = ProtocolTxType::VoteExtension(vote_extension)
+        let rsp_ext = {
+            let tx = ProtocolTxType::EthEventsVext(ext.clone())
                 .sign(&protocol_key)
                 .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
                 txs: vec![tx],
                 ..Default::default()
             });
-            assert_eq!(rsp.txs.len(), 3);
+            assert_eq!(rsp.txs.len(), 1);
 
-            // NOTE: we remove the first pos, bc the ethereum events
-            // vote extension protocol tx will always precede the
-            // valset upd vext protocol tx
             let tx_bytes = rsp.txs.remove(0);
             let got = Tx::try_from(&tx_bytes[..]).unwrap();
             let got_signed_tx =
@@ -678,21 +672,12 @@ mod test_prepare_proposal {
             };
 
             match protocol_tx {
-                ProtocolTxType::EthereumEvents(digest) => digest,
+                ProtocolTxType::EthEventsVext(ext) => ext,
                 _ => panic!("Test failed"),
             }
         };
 
-        let digest = manually_assemble_digest(
-            &protocol_key,
-            signed_vote_extension,
-            LAST_HEIGHT,
-        );
-
-        assert_eq!(rsp_digest, digest);
-
-        // NOTE: this comparison will not work because of timestamps
-        // assert_eq!(rsp.tx_records, vec![digest]);
+        assert_eq!(rsp_ext, ext);
     }
 
     /// Test if Ethereum events validation and inclusion in a block
