@@ -145,6 +145,9 @@ where
         let vote_info = VoteInfo::new(update.seen_by.clone(), voting_powers)?;
         let (vote_tracking, changed) =
             votes::update::calculate(storage, &eth_msg_keys, vote_info)?;
+        if changed.is_empty() {
+            return Ok((changed, false));
+        }
         let confirmed =
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
         (vote_tracking, changed, confirmed)

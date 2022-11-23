@@ -83,7 +83,10 @@ impl IntoIterator for VoteInfo {
 }
 
 /// Calculate an updated [`Tally`] based on one that is in storage under `keys`,
-/// with some new `voters`.
+/// with new votes from `vote_info` applied, as well as the storage keys that
+/// would change. If [`Tally`] is already `seen = true` in storage, then no
+/// votes from `vote_info` should be applied, and the returned changed keys will
+/// be empty.
 pub(in super::super) fn calculate<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
@@ -100,6 +103,9 @@ where
         "Recording validators as having voted for this event"
     );
     let tally_pre = super::storage::read(store, keys)?;
+    if tally_pre.seen {
+        return Ok((tally_pre, ChangedKeys::default()));
+    }
 
     let (vote_info, duplicate_voters) =
         vote_info.without_voters(tally_pre.seen_by.keys());

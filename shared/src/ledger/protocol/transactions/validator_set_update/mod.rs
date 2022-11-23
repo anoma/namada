@@ -114,6 +114,9 @@ where
         let vote_info = VoteInfo::new(seen_by.clone(), &voting_powers)?;
         let (tally, changed) =
             votes::update::calculate(storage, &valset_upd_keys, vote_info)?;
+        if changed.is_empty() {
+            return Ok(changed);
+        }
         let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
         (tally, changed, confirmed)
     };
