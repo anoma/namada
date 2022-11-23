@@ -294,6 +294,39 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn test_apply_duplicate_votes() -> Result<()> {
+        let mut storage = TestStorage::default();
+
+        let validator = address::testing::established_address_1();
+        let already_voted_height = BlockHeight(100);
+
+        let event = arbitrary_event();
+        let keys = vote_tallies::Keys::from(&event);
+        let tally_pre = setup_tally(
+            &mut storage,
+            &event,
+            &keys,
+            HashSet::from([(
+                validator.clone(),
+                already_voted_height,
+                FractionalVotingPower::new(1, 3).unwrap(),
+            )]),
+        )?;
+
+        let votes = Votes::from([(validator.clone(), BlockHeight(1000))]);
+        let voting_powers = HashMap::from([(
+            (validator, BlockHeight(1000)),
+            FractionalVotingPower::new(1, 3).unwrap(),
+        )]);
+        let vote_info = NewVotes::new(votes, &voting_powers)?;
+
+        let result = apply(&tally_pre, vote_info);
+
+        assert!(result.is_err());
+        Ok(())
+    }
+
     /// Tests that an unchanged tally is returned if the tally as in storage is
     /// already recorded as having been seen.
     #[test]
