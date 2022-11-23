@@ -32,7 +32,6 @@ where
     ///  * The validator signed over the correct height inside of the extension.
     ///  * There are no duplicate Ethereum events in this vote extension, and
     ///    the events are sorted in ascending order.
-    #[allow(dead_code)]
     #[inline]
     pub fn validate_eth_events_vext(
         &self,
