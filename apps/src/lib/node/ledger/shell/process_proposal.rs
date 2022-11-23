@@ -751,63 +751,54 @@ mod test_process_proposal {
         let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
-        let vote_extension_digest = {
-            let addr = wallet::defaults::validator_address();
-            let event = EthereumEvent::TransfersToNamada {
-                nonce: 1u64.into(),
-                transfers: vec![],
-            };
-            let ext = {
-                let ext = ethereum_events::Vext {
-                    validator_addr: addr.clone(),
-                    block_height: PRED_LAST_HEIGHT,
-                    ethereum_events: vec![event.clone()],
-                }
-                .sign(&protocol_key);
-                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
-                ext
-            };
-            ethereum_events::VextDigest {
-                signatures: {
-                    let mut s = HashMap::new();
+        let addr = wallet::defaults::validator_address();
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let ext = {
+            #[allow(clippy::redundant_clone)]
+            let ext = ethereum_events::Vext {
+                validator_addr: addr.clone(),
+                block_height: PRED_LAST_HEIGHT,
+                ethereum_events: vec![event.clone()],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+            ext
+        };
+        let vote_extension_digest = ethereum_events::VextDigest {
+            signatures: {
+                let mut s = HashMap::new();
+                #[cfg(feature = "abcipp")]
+                s.insert(addr.clone(), ext.sig);
+                #[cfg(not(feature = "abcipp"))]
+                s.insert((addr.clone(), PRED_LAST_HEIGHT), ext.sig);
+                s
+            },
+            events: vec![MultiSignedEthEvent {
+                event,
+                signers: {
+                    let mut s = BTreeSet::new();
                     #[cfg(feature = "abcipp")]
-                    s.insert(addr.clone(), ext.sig);
+                    s.insert(addr);
                     #[cfg(not(feature = "abcipp"))]
-                    s.insert((addr.clone(), PRED_LAST_HEIGHT), ext.sig);
+                    s.insert((addr, PRED_LAST_HEIGHT));
                     s
                 },
-                events: vec![MultiSignedEthEvent {
-                    event,
-                    signers: {
-                        let mut s = BTreeSet::new();
-                        #[cfg(feature = "abcipp")]
-                        s.insert(addr);
-                        #[cfg(not(feature = "abcipp"))]
-                        s.insert((addr, PRED_LAST_HEIGHT));
-                        s
-                    },
-                }],
-            }
+            }],
         };
         #[cfg(feature = "abcipp")]
-        check_rejected_eth_events_digest(
-            &mut shell,
-            vote_extension_digest,
-            protocol_key,
-        );
+        {
+            check_rejected_eth_events_digest(
+                &mut shell,
+                vote_extension_digest,
+                protocol_key,
+            );
+        }
         #[cfg(not(feature = "abcipp"))]
         {
-            let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-                .sign(&protocol_key)
-                .to_bytes();
-            let request = ProcessProposal { txs: vec![tx] };
-            if let Ok(mut resp) = shell.process_proposal(request) {
-                assert_eq!(resp.len(), 1);
-                let processed = resp.remove(0);
-                assert_eq!(processed.result.code, ErrorCodes::Ok as u32);
-            } else {
-                panic!("Test failed");
-            }
+            check_rejected_eth_events(&mut shell, ext, protocol_key);
         }
     }
 
@@ -823,48 +814,54 @@ mod test_process_proposal {
             let bertha_addr = wallet::defaults::bertha_address();
             (bertha_addr, bertha_key)
         };
-        let vote_extension_digest = {
-            let event = EthereumEvent::TransfersToNamada {
-                nonce: 1u64.into(),
-                transfers: vec![],
-            };
-            let ext = {
-                let ext = ethereum_events::Vext {
-                    validator_addr: addr.clone(),
-                    block_height: LAST_HEIGHT,
-                    ethereum_events: vec![event.clone()],
-                }
-                .sign(&protocol_key);
-                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
-                ext
-            };
-            ethereum_events::VextDigest {
-                signatures: {
-                    let mut s = HashMap::new();
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let ext = {
+            #[allow(clippy::redundant_clone)]
+            let ext = ethereum_events::Vext {
+                validator_addr: addr.clone(),
+                block_height: LAST_HEIGHT,
+                ethereum_events: vec![event.clone()],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+            ext
+        };
+        let vote_extension_digest = ethereum_events::VextDigest {
+            signatures: {
+                let mut s = HashMap::new();
+                #[cfg(feature = "abcipp")]
+                s.insert(addr.clone(), ext.sig);
+                #[cfg(not(feature = "abcipp"))]
+                s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
+                s
+            },
+            events: vec![MultiSignedEthEvent {
+                event,
+                signers: {
+                    let mut s = BTreeSet::new();
                     #[cfg(feature = "abcipp")]
-                    s.insert(addr.clone(), ext.sig);
+                    s.insert(addr);
                     #[cfg(not(feature = "abcipp"))]
-                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
+                    s.insert((addr, LAST_HEIGHT));
                     s
                 },
-                events: vec![MultiSignedEthEvent {
-                    event,
-                    signers: {
-                        let mut s = BTreeSet::new();
-                        #[cfg(feature = "abcipp")]
-                        s.insert(addr);
-                        #[cfg(not(feature = "abcipp"))]
-                        s.insert((addr, LAST_HEIGHT));
-                        s
-                    },
-                }],
-            }
+            }],
         };
-        check_rejected_eth_events_digest(
-            &mut shell,
-            vote_extension_digest,
-            protocol_key,
-        );
+        #[cfg(feature = "abcipp")]
+        {
+            check_rejected_eth_events_digest(
+                &mut shell,
+                vote_extension_digest,
+                protocol_key,
+            );
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            check_rejected_eth_events(&mut shell, ext, protocol_key);
+        }
     }
 
     /// Test that if a wrapper tx is not signed, it is rejected
