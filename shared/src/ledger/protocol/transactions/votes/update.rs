@@ -204,14 +204,11 @@ mod tests {
 
         /// Returns an arbitrary piece of data that can be tallied, and the keys
         /// for it.
-        pub(super) fn arbitrary_event()
-        -> (EthereumEvent, vote_tallies::Keys<EthereumEvent>) {
-            let event = EthereumEvent::TransfersToNamada {
+        pub(super) fn arbitrary_event() -> EthereumEvent {
+            EthereumEvent::TransfersToNamada {
                 nonce: 0.into(),
                 transfers: vec![],
-            };
-            let keys = vote_tallies::Keys::from(&event);
-            (event, keys)
+            }
         }
 
         /// Writes an initial [`Tally`] to storage, based on the passed `votes`.
@@ -300,7 +297,8 @@ mod tests {
     #[test]
     fn test_calculate_updated_empty() -> Result<()> {
         let mut storage = TestStorage::default();
-        let (event, keys) = arbitrary_event();
+        let event = arbitrary_event();
+        let keys = vote_tallies::Keys::from(&event);
         let tally_pre = setup_tally(
             &mut storage,
             &event,
@@ -326,7 +324,8 @@ mod tests {
     fn test_calculate_updated_one_vote_not_seen() -> Result<()> {
         let mut storage = TestStorage::default();
 
-        let (event, keys) = arbitrary_event();
+        let event = arbitrary_event();
+        let keys = vote_tallies::Keys::from(&event);
         let tally_pre = setup_tally(
             &mut storage,
             &event,
@@ -372,7 +371,8 @@ mod tests {
     fn test_calculate_updated_one_vote_seen() {
         let mut storage = TestStorage::default();
 
-        let (event, keys) = arbitrary_event();
+        let event = arbitrary_event();
+        let keys = vote_tallies::Keys::from(&event);
         let tally_pre = setup_tally(
             &mut storage,
             &event,
@@ -411,6 +411,43 @@ mod tests {
         assert_eq!(
             changed_keys,
             BTreeSet::from([keys.voting_power(), keys.seen_by(), keys.seen()])
+        );
+    }
+
+    #[test]
+    fn test_keys_changed_all() {
+        let voting_power_a = FractionalVotingPower::new(1, 3).unwrap();
+        let voting_power_b = FractionalVotingPower::new(2, 3).unwrap();
+
+        let seen_a = false;
+        let seen_b = true;
+
+        let seen_by_a = BTreeMap::from([(
+            address::testing::established_address_1(),
+            BlockHeight(10),
+        )]);
+        let seen_by_b = BTreeMap::from([(
+            address::testing::established_address_2(),
+            BlockHeight(20),
+        )]);
+
+        let event = arbitrary_event();
+        let keys = vote_tallies::Keys::from(&event);
+        let pre = Tally {
+            voting_power: voting_power_a,
+            seen: seen_a,
+            seen_by: seen_by_a,
+        };
+        let post = Tally {
+            voting_power: voting_power_b,
+            seen: seen_b,
+            seen_by: seen_by_b,
+        };
+        let changed_keys = keys_changed(&keys, &pre, &post);
+
+        assert_eq!(
+            changed_keys,
+            BTreeSet::from([keys.seen(), keys.seen_by(), keys.voting_power()])
         );
     }
 }
