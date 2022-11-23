@@ -47,7 +47,7 @@ pub async fn monitor(
                     }
                 },
                 Err(err) => {
-                    tracing::warn!("Error while waiting for the Ethereum fullnode to exit: {}", err);
+                    tracing::warn!("Error while waiting for the Ethereum fullnode to exit: {err}");
                     tracing::info!("Ensuring Ethereum fullnode is shut down...");
                     node.kill().await;
                 },
