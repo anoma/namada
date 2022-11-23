@@ -11,13 +11,13 @@ use crate::types::address::Address;
 use crate::types::storage::BlockHeight;
 use crate::types::voting_power::FractionalVotingPower;
 
-/// Wraps all the information about votes needed for updating some existing
+/// Wraps all the information about new votes to be applied to some existing
 /// tally in storage.
-pub(in super::super) struct VoteInfo {
+pub(in super::super) struct NewVotes {
     inner: HashMap<Address, (BlockHeight, FractionalVotingPower)>,
 }
 
-impl VoteInfo {
+impl NewVotes {
     /// Constructs a new [`VoteInfo`]. For all `votes` provided, a corresponding
     /// [`FractionalVotingPower`] must be provided in `voting_powers` also,
     /// otherwise an error will be returned.
@@ -66,7 +66,7 @@ impl VoteInfo {
     }
 }
 
-impl IntoIterator for VoteInfo {
+impl IntoIterator for NewVotes {
     type IntoIter = std::collections::hash_set::IntoIter<Self::Item>;
     type Item = (Address, BlockHeight, FractionalVotingPower);
 
@@ -90,7 +90,7 @@ impl IntoIterator for VoteInfo {
 pub(in super::super) fn calculate<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
-    vote_info: VoteInfo,
+    vote_info: NewVotes,
 ) -> Result<(Tally, ChangedKeys)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -144,7 +144,7 @@ where
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
 /// voters from `vote_info`. An error is returned if any validator which
 /// previously voted is present in `vote_info`.
-fn apply(tally: &Tally, vote_info: VoteInfo) -> Result<Tally> {
+fn apply(tally: &Tally, vote_info: NewVotes) -> Result<Tally> {
     let mut voting_power_post = tally.voting_power.clone();
     let mut seen_by_post = tally.seen_by.clone();
     for (validator, vote_height, voting_power) in vote_info {
@@ -234,7 +234,7 @@ mod tests {
     fn test_vote_info_new_empty() -> Result<()> {
         let voting_powers = HashMap::default();
 
-        let vote_info = VoteInfo::new(Votes::default(), &voting_powers)?;
+        let vote_info = NewVotes::new(Votes::default(), &voting_powers)?;
 
         assert!(vote_info.voters().is_empty());
         assert_eq!(vote_info.into_iter().count(), 0);
@@ -250,7 +250,7 @@ mod tests {
         let votes = Votes::from([vote()]);
         let voting_powers = HashMap::from([(vote(), voting_power())]);
 
-        let vote_info = VoteInfo::new(votes, &voting_powers)?;
+        let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         assert_eq!(vote_info.voters(), BTreeSet::from([validator()]));
         let votes: BTreeSet<_> = vote_info.into_iter().collect();
@@ -270,7 +270,7 @@ mod tests {
         // voting powers map is missing vote
         let voting_powers = HashMap::default();
 
-        let result = VoteInfo::new(votes, &voting_powers);
+        let result = NewVotes::new(votes, &voting_powers);
 
         assert!(result.is_err());
         Ok(())
@@ -285,7 +285,7 @@ mod tests {
         let votes = Votes::from([vote()]);
         let voting_powers = HashMap::from([(vote(), voting_power())]);
         let validator = validator();
-        let vote_info = VoteInfo::new(votes, &voting_powers)?;
+        let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (vote_info, removed) = vote_info.without_voters(vec![&validator]);
 
@@ -318,7 +318,7 @@ mod tests {
         let vote = || (validator(), vote_height());
         let votes = Votes::from([vote()]);
         let voting_powers = HashMap::from([(vote(), voting_power())]);
-        let vote_info = VoteInfo::new(votes, &voting_powers)?;
+        let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
             calculate(&mut storage, &keys, vote_info)?;
@@ -345,7 +345,7 @@ mod tests {
             )]),
         )?;
         votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
-        let vote_info = VoteInfo::new(Votes::default(), &HashMap::default())?;
+        let vote_info = NewVotes::new(Votes::default(), &HashMap::default())?;
 
         let (tally_post, changed_keys) =
             calculate(&mut storage, &keys, vote_info)?;
@@ -381,7 +381,7 @@ mod tests {
         let vote = || (validator(), vote_height());
         let votes = Votes::from([vote()]);
         let voting_powers = HashMap::from([(vote(), voting_power())]);
-        let vote_info = VoteInfo::new(votes, &voting_powers)?;
+        let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
             calculate(&mut storage, &keys, vote_info)?;
@@ -431,7 +431,7 @@ mod tests {
         let vote = || (validator(), vote_height());
         let votes = Votes::from([vote()]);
         let voting_powers = HashMap::from([(vote(), voting_power())]);
-        let vote_info = VoteInfo::new(votes, &voting_powers).unwrap();
+        let vote_info = NewVotes::new(votes, &voting_powers).unwrap();
 
         let (tally_post, changed_keys) =
             calculate(&mut storage, &keys, vote_info).unwrap();

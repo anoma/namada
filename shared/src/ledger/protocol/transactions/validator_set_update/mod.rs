@@ -7,7 +7,7 @@ use eyre::Result;
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils;
-use crate::ledger::protocol::transactions::votes::update::VoteInfo;
+use crate::ledger::protocol::transactions::votes::update::NewVotes;
 use crate::ledger::protocol::transactions::votes::{self, Votes};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -111,9 +111,9 @@ where
             %valset_upd_keys.prefix,
             "Validator set update votes already in storage",
         );
-        let vote_info = VoteInfo::new(seen_by.clone(), &voting_powers)?;
+        let new_votes = NewVotes::new(seen_by.clone(), &voting_powers)?;
         let (tally, changed) =
-            votes::update::calculate(storage, &valset_upd_keys, vote_info)?;
+            votes::update::calculate(storage, &valset_upd_keys, new_votes)?;
         if changed.is_empty() {
             return Ok(changed);
         }
