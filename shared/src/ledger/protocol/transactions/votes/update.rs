@@ -450,4 +450,26 @@ mod tests {
             BTreeSet::from([keys.seen(), keys.seen_by(), keys.voting_power()])
         );
     }
+
+    #[test]
+    fn test_keys_changed_none() {
+        let voting_power = FractionalVotingPower::new(1, 3).unwrap();
+        let seen = false;
+        let seen_by = BTreeMap::from([(
+            address::testing::established_address_1(),
+            BlockHeight(10),
+        )]);
+
+        let event = arbitrary_event();
+        let keys = vote_tallies::Keys::from(&event);
+        let pre = Tally {
+            voting_power,
+            seen,
+            seen_by,
+        };
+        let post = pre.clone();
+        let changed_keys = keys_changed(&keys, &pre, &post);
+
+        assert!(changed_keys.is_empty());
+    }
 }
