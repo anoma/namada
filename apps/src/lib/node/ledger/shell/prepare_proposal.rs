@@ -217,6 +217,7 @@ const fn not_enough_voting_power_msg() -> &'static str {
 // TODO: write tests for validator set update vote extensions in
 // prepare proposals
 mod test_prepare_proposal {
+    #[cfg(feature = "abcipp")]
     use std::collections::{BTreeSet, HashMap};
 
     use borsh::{BorshDeserialize, BorshSerialize};
@@ -228,13 +229,14 @@ mod test_prepare_proposal {
     use namada::proto::{Signed, SignedTxData};
     use namada::types::address::nam;
     use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::{common, RefTo};
+    #[cfg(feature = "abcipp")]
+    use namada::types::key::common;
+    use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, Epoch};
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
-    use namada::types::vote_extensions::ethereum_events::{
-        self, MultiSignedEthEvent,
-    };
+    use namada::types::vote_extensions::ethereum_events;
+    #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
 
     use super::*;
@@ -507,26 +509,19 @@ mod test_prepare_proposal {
         ext: Signed<ethereum_events::Vext>,
         last_height: BlockHeight,
     ) -> ethereum_events::VextDigest {
+        use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
+
         let events = vec![MultiSignedEthEvent {
             event: ext.data.ethereum_events[0].clone(),
             signers: {
                 let mut s = BTreeSet::new();
-                #[cfg(feature = "abcipp")]
                 s.insert(ext.data.validator_addr.clone());
-                #[cfg(not(feature = "abcipp"))]
-                s.insert((ext.data.validator_addr.clone(), last_height));
                 s
             },
         }];
         let signatures = {
             let mut s = HashMap::new();
-            #[cfg(feature = "abcipp")]
-            s.insert(ext.data.validator_addr.clone(), ext.sig.clone());
-            #[cfg(not(feature = "abcipp"))]
-            s.insert(
-                (ext.data.validator_addr.clone(), last_height),
-                ext.sig.clone(),
-            );
+            s.insert(ext.data.validator_addr, ext.sig.clone());
             s
         };
 
@@ -750,13 +745,12 @@ mod test_prepare_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        #[allow(clippy::redundant_clone)]
-        let vote_extension = VoteExtension {
-            ethereum_events: signed_eth_ev_vote_extension.clone(),
-            validator_set_update: None,
-        };
         #[cfg(feature = "abcipp")]
         {
+            let vote_extension = VoteExtension {
+                ethereum_events: signed_eth_ev_vote_extension.clone(),
+                validator_set_update: None,
+            };
             let vote = ExtendedVoteInfo {
                 vote_extension: vote_extension.try_to_vec().unwrap(),
                 ..Default::default()
@@ -772,14 +766,16 @@ mod test_prepare_proposal {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            let vote = ProtocolTxType::VoteExtension(vote_extension)
-                .sign(&protocol_key)
-                .to_bytes();
+            let vote = ProtocolTxType::EthEventsVext(
+                signed_eth_ev_vote_extension.clone(),
+            )
+            .sign(&protocol_key)
+            .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
                 txs: vec![vote],
                 ..Default::default()
             });
-            assert_eq!(rsp.txs.len(), 3);
+            assert_eq!(rsp.txs.len(), 1);
 
             let tx_bytes = rsp.txs.remove(0);
             let got = Tx::try_from(&tx_bytes[..]).unwrap();
@@ -793,18 +789,12 @@ mod test_prepare_proposal {
                 _ => panic!("Test failed"),
             };
 
-            let digest = match protocol_tx {
-                ProtocolTxType::EthereumEvents(digest) => digest,
+            let rsp_ext = match protocol_tx {
+                ProtocolTxType::EthEventsVext(ext) => ext,
                 _ => panic!("Test failed"),
             };
 
-            let expected = manually_assemble_digest(
-                &protocol_key,
-                signed_eth_ev_vote_extension,
-                LAST_HEIGHT,
-            );
-
-            assert_eq!(expected, digest);
+            assert_eq!(signed_eth_ev_vote_extension, rsp_ext);
         }
     }
 
