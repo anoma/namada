@@ -552,6 +552,7 @@ mod test_process_proposal {
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError, TestShell,
     };
+    #[cfg(feature = "abcipp")]
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::wallet;
 
@@ -590,6 +591,7 @@ mod test_process_proposal {
     /// Test that if a proposal contains more than one
     /// `ethereum_events::VextDigest`, we reject it.
     #[test]
+    #[cfg(feature = "abcipp")]
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _recv, _) = test_utils::setup();
@@ -610,13 +612,7 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
-                    #[cfg(feature = "abcipp")]
                     s.insert(validator_addr, signed_vote_extension.sig);
-                    #[cfg(not(feature = "abcipp"))]
-                    s.insert(
-                        (validator_addr, LAST_HEIGHT),
-                        signed_vote_extension.sig,
-                    );
                     s
                 },
                 events: vec![],
@@ -625,7 +621,7 @@ mod test_process_proposal {
         let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
             .sign(&protocol_key)
             .to_bytes();
-        #[allow(clippy::redundant_clone)]
+        //#[allow(clippy::redundant_clone)]
         let request = ProcessProposal {
             txs: vec![tx.clone(), tx],
         };
@@ -635,6 +631,7 @@ mod test_process_proposal {
         );
     }
 
+    #[cfg(feature = "abcipp")]
     fn check_rejected_eth_events_digest(
         shell: &mut TestShell,
         vote_extension_digest: ethereum_events::VextDigest,
@@ -661,10 +658,37 @@ mod test_process_proposal {
         );
     }
 
+    #[cfg(not(feature = "abcipp"))]
+    fn check_rejected_eth_events(
+        shell: &mut TestShell,
+        vote_extension: ethereum_events::Vext,
+        protocol_key: common::SecretKey,
+    ) {
+        let tx = ProtocolTxType::EthEventsVext(vote_extension)
+            .sign(&protocol_key)
+            .to_bytes();
+        let request = ProcessProposal { txs: vec![tx] };
+        let response = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
+        assert_eq!(
+            response.result.code,
+            u32::from(ErrorCodes::InvalidVoteExtension)
+        );
+    }
+
     /// Test that if a proposal contains Ethereum events with
     /// invalid validator signatures, we reject it.
     #[test]
-    fn test_drop_vext_digest_with_invalid_sigs() {
+    fn test_drop_vext_with_invalid_sigs() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
@@ -721,7 +745,7 @@ mod test_process_proposal {
     /// Test that if a proposal contains Ethereum events with
     /// invalid block heights, we reject it.
     #[test]
-    fn test_drop_vext_digest_with_invalid_bheights() {
+    fn test_drop_vext_with_invalid_bheights() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
         const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
         let (mut shell, _recv, _) = test_utils::setup();
@@ -790,7 +814,7 @@ mod test_process_proposal {
     /// Test that if a proposal contains Ethereum events with
     /// invalid validators, we reject it.
     #[test]
-    fn test_drop_vext_digest_with_invalid_validators() {
+    fn test_drop_vext_with_invalid_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
@@ -1370,48 +1394,6 @@ mod test_process_proposal {
                 "Transaction rejected: Non-encrypted transactions are not \
                  supported"
             ),
-        );
-    }
-}
-
-#[cfg(all(test, feature = "abcipp"))]
-mod test_process_proposal_abcipp {
-    //! We test the failure cases of [`Shell::process_proposal`]. The happy
-    //! flows are covered by the e2e tests.
-    //!
-    //! These tests are specific to `abcipp` builds of the ledger.
-}
-
-#[cfg(all(test, not(feature = "abcipp")))]
-mod test_process_proposal_abciplus {
-    //! We test the failure cases of [`Shell::process_proposal`]. The happy
-    //! flows are covered by the e2e tests.
-    //!
-    //! These tests are specific to `abciplus` builds of the ledger.
-
-    fn check_rejected_eth_events(
-        shell: &mut TestShell,
-        vote_extension: ethereum_events::Vext,
-        protocol_key: common::SecretKey,
-    ) {
-        let tx = ProtocolTxType::EthEventsVext(vote_extension)
-            .sign(&protocol_key)
-            .to_bytes();
-        let request = ProcessProposal { txs: vec![tx] };
-        let response = if let Err(TestError::RejectProposal(resp)) =
-            shell.process_proposal(request)
-        {
-            if let [resp] = resp.as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            }
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(
-            response.result.code,
-            u32::from(ErrorCodes::InvalidVoteExtension)
         );
     }
 }
