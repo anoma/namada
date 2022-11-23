@@ -276,6 +276,21 @@ mod tests {
     }
 
     #[test]
+    fn test_vote_info_new_error() -> Result<()> {
+        let validator = address::testing::established_address_1;
+        let vote_height = || BlockHeight(100);
+        let vote = || (validator(), vote_height());
+        let votes = Votes::from([vote()]);
+        // voting powers map is missing vote
+        let voting_powers = HashMap::default();
+
+        let result = VoteInfo::new(votes, &voting_powers);
+
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
     fn test_calculate_updated_empty() -> Result<()> {
         let mut storage = TestStorage::default();
         let (event, keys) = arbitrary_event();
