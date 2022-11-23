@@ -11,9 +11,7 @@ use eyre::Result;
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils::{self};
-use crate::ledger::protocol::transactions::votes::update::{
-    calculate_updated, VoteInfo,
-};
+use crate::ledger::protocol::transactions::votes::update::VoteInfo;
 use crate::ledger::protocol::transactions::votes::{self, calculate_new};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -146,7 +144,7 @@ where
         );
         let vote_info = VoteInfo::new(update.seen_by.clone(), voting_powers)?;
         let (vote_tracking, changed) =
-            calculate_updated(storage, &eth_msg_keys, vote_info)?;
+            votes::update::calculate(storage, &eth_msg_keys, vote_info)?;
         let confirmed =
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
         (vote_tracking, changed, confirmed)

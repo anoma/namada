@@ -67,7 +67,7 @@ impl IntoIterator for VoteInfo {
 
 /// Calculate an updated [`Tally`] based on one that is in storage under `keys`,
 /// with some new `voters`.
-pub(in super::super) fn calculate_updated<D, H, T>(
+pub(in super::super) fn calculate<D, H, T>(
     store: &mut Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
     vote_info: VoteInfo,
@@ -107,8 +107,7 @@ where
 }
 
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
-/// voters from `vote_info`. Returns an error if any new voters have already
-/// voted previously.
+/// voters from `vote_info`.
 fn calculate_tally_post(pre: &Tally, vote_info: VoteInfo) -> Result<Tally> {
     let previous_voters: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
     let new_voters = vote_info.voters();
@@ -308,7 +307,7 @@ mod tests {
         let vote_info = VoteInfo::new(Votes::default(), &HashMap::default())?;
 
         let (tally_post, changed_keys) =
-            calculate_updated(&mut storage, &keys, vote_info)?;
+            calculate(&mut storage, &keys, vote_info)?;
 
         assert_eq!(tally_post, tally_pre);
         assert!(changed_keys.is_empty());
@@ -341,7 +340,7 @@ mod tests {
         let vote_info = VoteInfo::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate_updated(&mut storage, &keys, vote_info)?;
+            calculate(&mut storage, &keys, vote_info)?;
 
         assert_eq!(
             tally_post,
@@ -388,7 +387,7 @@ mod tests {
         let vote_info = VoteInfo::new(votes, &voting_powers).unwrap();
 
         let (tally_post, changed_keys) =
-            calculate_updated(&mut storage, &keys, vote_info).unwrap();
+            calculate(&mut storage, &keys, vote_info).unwrap();
 
         assert_eq!(
             tally_post,
