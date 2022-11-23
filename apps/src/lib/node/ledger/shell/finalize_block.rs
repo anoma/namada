@@ -746,6 +746,7 @@ mod test_finalize_block {
         assert_eq!(queued_event, event);
 
         // ---- The protocol tx that includes this event on-chain
+        #[allow(clippy::redundant_clone)]
         let ext = ethereum_events::Vext {
             block_height: shell.storage.last_height,
             ethereum_events: vec![event.clone()],
