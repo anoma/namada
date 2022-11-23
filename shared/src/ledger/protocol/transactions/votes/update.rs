@@ -113,7 +113,7 @@ where
     let tally_post = calculate_tally_post(&tally_pre, vote_info)
         .expect("We deduplicated voters already, so this should never error");
 
-    let changed_keys = validate(keys, &tally_pre, &tally_post)?;
+    let changed_keys = keys_changed(keys, &tally_pre, &tally_post);
 
     if tally_post.seen {
         tracing::info!(
@@ -163,68 +163,23 @@ fn calculate_tally_post(pre: &Tally, vote_info: VoteInfo) -> Result<Tally> {
     })
 }
 
-/// Validates that `post` is an updated version of `pre`, and returns keys which
-/// changed. This function serves as a sort of validity predicate for this
-/// native transaction, which is otherwise not checked by anything else.
-fn validate<T>(
+/// Straightforwardly calculates the keys that changed between `pre` and `post`.
+fn keys_changed<T>(
     keys: &vote_tallies::Keys<T>,
     pre: &Tally,
     post: &Tally,
-) -> Result<ChangedKeys> {
-    let mut keys_changed = ChangedKeys::default();
-
-    let mut newly_seen = false;
+) -> ChangedKeys {
+    let mut changed_keys = ChangedKeys::default();
     if pre.seen != post.seen {
-        // the only valid transition for `seen` is from `false` to `true`
-        if pre.seen || !post.seen {
-            return Err(eyre!(
-                "Tally seen changed from {:#?} to {:#?}",
-                &pre.seen,
-                &post.seen,
-            ));
-        }
-        keys_changed.insert(keys.seen());
-        newly_seen = true;
-    }
-    let pre_seen_by: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
-    let post_seen_by: BTreeSet<_> = post.seen_by.keys().cloned().collect();
-
-    if pre_seen_by != post_seen_by {
-        // if seen_by changes, it must be a strict superset of the previous
-        // seen_by
-        if !post_seen_by.is_superset(&pre_seen_by) {
-            return Err(eyre!(
-                "Tally seen changed from {:#?} to {:#?}",
-                &pre_seen_by,
-                &post_seen_by,
-            ));
-        }
-        keys_changed.insert(keys.seen_by());
-    }
-
+        changed_keys.insert(keys.seen());
+    };
     if pre.voting_power != post.voting_power {
-        // if voting_power changes, it must have increased
-        if pre.voting_power >= post.voting_power {
-            return Err(eyre!(
-                "Tally voting_power changed from {:#?} to {:#?}",
-                &pre.voting_power,
-                &post.voting_power,
-            ));
-        }
-        keys_changed.insert(keys.voting_power());
-    }
-
-    if post.voting_power > FractionalVotingPower::TWO_THIRDS
-        && !newly_seen
-        && pre.voting_power >= post.voting_power
-    {
-        return Err(eyre!(
-            "Tally is not seen even though new voting_power is enough: {:#?}",
-            &post.voting_power,
-        ));
-    }
-
-    Ok(keys_changed)
+        changed_keys.insert(keys.voting_power());
+    };
+    if pre.seen_by != post.seen_by {
+        changed_keys.insert(keys.seen_by());
+    };
+    changed_keys
 }
 
 #[cfg(test)]
