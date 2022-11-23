@@ -892,24 +892,36 @@ mod test_process_proposal {
             Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
         )
         .to_bytes();
-        #[allow(clippy::redundant_clone)]
-        let request = ProcessProposal {
-            txs: vec![
-                tx.clone(),
-                #[cfg(feature = "abcipp")]
-                get_empty_eth_ev_digest(&shell),
-            ],
+
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx, get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        };
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal { txs: vec![tx] };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
 
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert_eq!(
             response.result.info,
@@ -1026,21 +1038,35 @@ mod test_process_proposal {
         )
         .sign(&keypair)
         .expect("Test failed");
-        let request = ProcessProposal {
-            txs: vec![
-                wrapper.to_bytes(),
-                #[cfg(feature = "abcipp")]
-                get_empty_eth_ev_digest(&shell),
-            ],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![wrapper.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
@@ -1076,22 +1102,35 @@ mod test_process_proposal {
         .sign(&keypair)
         .expect("Test failed");
 
-        let request = ProcessProposal {
-            txs: vec![
-                wrapper.to_bytes(),
-                #[cfg(feature = "abcipp")]
-                get_empty_eth_ev_digest(&shell),
-            ],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![wrapper.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
@@ -1128,42 +1167,67 @@ mod test_process_proposal {
             shell.enqueue_tx(wrapper);
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
         }
-        let req_1 = ProcessProposal {
-            txs: vec![
-                txs[0].to_bytes(),
-                #[cfg(feature = "abcipp")]
-                get_empty_eth_ev_digest(&shell),
-            ],
-        };
-        let response_1 = if let [resp, _] = shell
-            .process_proposal(req_1)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
-
-        let req_2 = ProcessProposal {
-            txs: vec![
-                txs[2].to_bytes(),
-                #[cfg(feature = "abcipp")]
-                get_empty_eth_ev_digest(&shell),
-            ],
-        };
-
-        let response_2 = if let Err(TestError::RejectProposal(resp)) =
-            shell.process_proposal(req_2)
-        {
-            if let [resp, _] = resp.as_slice() {
+        #[cfg(feature = "abcipp")]
+        let response_1 = {
+            let request = ProcessProposal {
+                txs: vec![txs[0].to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
                 resp.clone()
             } else {
                 panic!("Test failed")
             }
-        } else {
-            panic!("Test failed")
+        };
+        #[cfg(not(feature = "abcipp"))]
+        let response_1 = {
+            let request = ProcessProposal {
+                txs: vec![txs[0].to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        };
+        assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
+
+        #[cfg(feature = "abcipp")]
+        let response_2 = {
+            let request = ProcessProposal {
+                txs: vec![txs[2].to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        };
+        #[cfg(not(feature = "abcipp"))]
+        let response_2 = {
+            let request = ProcessProposal {
+                txs: vec![txs[2].to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response_2.result.code, u32::from(ErrorCodes::InvalidOrder));
         assert_eq!(
@@ -1202,22 +1266,35 @@ mod test_process_proposal {
         let tx =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
 
-        let request = ProcessProposal {
-            txs: vec![
-                tx.to_bytes(),
-                #[cfg(feature = "abcipp")]
-                get_empty_eth_ev_digest(&shell),
-            ],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
@@ -1260,21 +1337,35 @@ mod test_process_proposal {
             wrapper.clone(),
         )));
 
-        let request = ProcessProposal {
-            txs: vec![
-                tx.to_bytes(),
-                #[cfg(feature = "abcipp")]
-                get_empty_eth_ev_digest(&shell),
-            ],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
     }
@@ -1307,21 +1398,35 @@ mod test_process_proposal {
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
         )));
-        let request = ProcessProposal {
-            txs: vec![
-                signed.to_bytes(),
-                #[cfg(feature = "abcipp")]
-                get_empty_eth_ev_digest(&shell),
-            ],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![signed.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![signed.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
     }
@@ -1370,21 +1475,35 @@ mod test_process_proposal {
             Some("transaction data".as_bytes().to_owned()),
         );
         let tx = Tx::from(TxType::Raw(tx));
-        let request = ProcessProposal {
-            txs: vec![
-                tx.to_bytes(),
-                #[cfg(feature = "abcipp")]
-                get_empty_eth_ev_digest(&shell),
-            ],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
