@@ -116,7 +116,7 @@ where
             "Ignoring duplicate voter"
         );
     }
-    let tally_post = calculate_tally_post(&tally_pre, vote_info)
+    let tally_post = apply(&tally_pre, vote_info)
         .expect("We deduplicated voters already, so this should never error");
 
     let changed_keys = keys_changed(keys, &tally_pre, &tally_post);
@@ -144,9 +144,9 @@ where
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
 /// voters from `vote_info`. An error is returned if any validator which
 /// previously voted is present in `vote_info`.
-fn calculate_tally_post(pre: &Tally, vote_info: VoteInfo) -> Result<Tally> {
-    let mut voting_power_post = pre.voting_power.clone();
-    let mut seen_by_post = pre.seen_by.clone();
+fn apply(tally: &Tally, vote_info: VoteInfo) -> Result<Tally> {
+    let mut voting_power_post = tally.voting_power.clone();
+    let mut seen_by_post = tally.seen_by.clone();
     for (validator, vote_height, voting_power) in vote_info {
         if let Some(already_voted_height) =
             seen_by_post.insert(validator.clone(), vote_height)
