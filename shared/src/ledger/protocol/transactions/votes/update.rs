@@ -52,14 +52,14 @@ impl VoteInfo {
     /// `voters` removed, as well as the set of addresses that were actually
     /// removed. Useful for removing voters who have already voted for
     /// something.
-    pub fn without_voters(
+    pub fn without_voters<'a>(
         self,
-        voters: impl IntoIterator<Item = Address>,
-    ) -> (Self, HashSet<Address>) {
+        voters: impl IntoIterator<Item = &'a Address>,
+    ) -> (Self, HashSet<&'a Address>) {
         let mut inner = self.inner;
         let mut removed = HashSet::default();
         for voter in voters {
-            inner.remove(&voter);
+            inner.remove(voter);
             removed.insert(voter);
         }
         (Self { inner }, removed)
@@ -100,7 +100,19 @@ where
         "Recording validators as having voted for this event"
     );
     let tally_pre = super::storage::read(store, keys)?;
-    let tally_post = calculate_tally_post(&tally_pre, vote_info)?;
+
+    let (vote_info, duplicate_voters) =
+        vote_info.without_voters(tally_pre.seen_by.keys());
+    for voter in duplicate_voters {
+        tracing::info!(
+            ?keys.prefix,
+            ?voter,
+            "Ignoring duplicate voter"
+        );
+    }
+    let tally_post = calculate_tally_post(&tally_pre, vote_info)
+        .expect("We deduplicated voters already, so this should never error");
+
     let changed_keys = validate(keys, &tally_pre, &tally_post)?;
 
     if tally_post.seen {
@@ -124,20 +136,21 @@ where
 }
 
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
-/// voters from `vote_info`. Voters in `vote_info` who voted previously are
-/// ignored.
+/// voters from `vote_info`. An error is returned if any validator which
+/// previously voted is present in `vote_info`.
 fn calculate_tally_post(pre: &Tally, vote_info: VoteInfo) -> Result<Tally> {
-    let previous_voters: BTreeSet<_> = pre.seen_by.keys().cloned().collect();
-    let (new_voters, duplicate_voters) =
-        vote_info.without_voters(previous_voters);
-    for voter in duplicate_voters {
-        tracing::info!(?voter, "Ignoring duplicate voter");
-    }
-
     let mut voting_power_post = pre.voting_power.clone();
     let mut seen_by_post = pre.seen_by.clone();
-    for (validator, vote_height, voting_power) in new_voters {
-        _ = seen_by_post.insert(validator, vote_height);
+    for (validator, vote_height, voting_power) in vote_info {
+        if let Some(already_voted_height) =
+            seen_by_post.insert(validator.clone(), vote_height)
+        {
+            return Err(eyre!(
+                "Validator {} had already voted at height {}",
+                validator,
+                already_voted_height,
+            ));
+        };
         voting_power_post += voting_power;
     }
 
@@ -313,13 +326,13 @@ mod tests {
         let vote = || (validator(), vote_height());
         let votes = Votes::from([vote()]);
         let voting_powers = HashMap::from([(vote(), voting_power())]);
-
+        let validator = validator();
         let vote_info = VoteInfo::new(votes, &voting_powers)?;
 
-        let (vote_info, removed) = vote_info.without_voters(vec![validator()]);
+        let (vote_info, removed) = vote_info.without_voters(vec![&validator]);
 
         assert!(vote_info.voters().is_empty());
-        assert_eq!(removed, HashSet::from([validator()]));
+        assert_eq!(removed, HashSet::from([&validator]));
         Ok(())
     }
 
