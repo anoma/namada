@@ -198,3 +198,40 @@ fn validate_update<T>(
 
     Ok(keys_changed)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::address;
+
+    #[test]
+    fn test_vote_info_new_empty() -> Result<()> {
+        let voting_powers = HashMap::default();
+
+        let vote_info = VoteInfo::new(Votes::default(), &voting_powers)?;
+
+        assert!(vote_info.voters().is_empty());
+        assert_eq!(vote_info.into_iter().count(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_vote_info_new_single_voter() -> Result<()> {
+        let validator = address::testing::established_address_1;
+        let vote_height = || BlockHeight(100);
+        let voting_power = || FractionalVotingPower::new(1, 3).unwrap();
+        let vote = || (validator(), vote_height());
+        let votes = Votes::from([vote()]);
+        let voting_powers = HashMap::from([(vote(), voting_power())]);
+
+        let vote_info = VoteInfo::new(votes, &voting_powers)?;
+
+        assert_eq!(vote_info.voters(), BTreeSet::from([validator()]));
+        let votes: BTreeSet<_> = vote_info.into_iter().collect();
+        assert_eq!(
+            votes,
+            BTreeSet::from([(validator(), vote_height(), voting_power())]),
+        );
+        Ok(())
+    }
+}
