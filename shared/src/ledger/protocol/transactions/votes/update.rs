@@ -295,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_updated_empty() -> Result<()> {
+    fn test_calculate_empty() -> Result<()> {
         let mut storage = TestStorage::default();
         let event = arbitrary_event();
         let keys = vote_tallies::Keys::from(&event);
@@ -321,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_updated_one_vote_not_seen() -> Result<()> {
+    fn test_calculate_one_vote_not_seen() -> Result<()> {
         let mut storage = TestStorage::default();
 
         let event = arbitrary_event();
@@ -368,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_updated_one_vote_seen() {
+    fn test_calculate_one_vote_seen() {
         let mut storage = TestStorage::default();
 
         let event = arbitrary_event();
