@@ -205,9 +205,26 @@ mod tests {
 
     use super::*;
     use crate::ledger::protocol::transactions::votes;
+    use crate::ledger::protocol::transactions::votes::update::tests::helpers::arbitrary_event;
     use crate::ledger::storage::testing::TestStorage;
     use crate::types::address;
     use crate::types::ethereum_events::EthereumEvent;
+
+    mod helpers {
+        use super::*;
+
+        /// Returns an arbitrary piece of data that can be tallied, and the keys
+        /// for it.
+        pub(super) fn arbitrary_event()
+        -> (EthereumEvent, vote_tallies::Keys<EthereumEvent>) {
+            let event = EthereumEvent::TransfersToNamada {
+                nonce: 0.into(),
+                transfers: vec![],
+            };
+            let keys = vote_tallies::Keys::from(&event);
+            (event, keys)
+        }
+    }
 
     #[test]
     fn test_vote_info_new_empty() -> Result<()> {
@@ -243,11 +260,7 @@ mod tests {
     #[test]
     fn test_calculate_updated_empty() -> Result<()> {
         let mut storage = TestStorage::default();
-        let event = EthereumEvent::TransfersToNamada {
-            nonce: 0.into(),
-            transfers: vec![],
-        };
-        let keys = vote_tallies::Keys::from(&event);
+        let (event, keys) = arbitrary_event();
         let tally_pre = Tally {
             voting_power: FractionalVotingPower::new(1, 3).unwrap(),
             seen_by: BTreeMap::from([(
@@ -270,11 +283,8 @@ mod tests {
     #[test]
     fn test_calculate_updated_one_vote_not_seen() -> Result<()> {
         let mut storage = TestStorage::default();
-        let event = EthereumEvent::TransfersToNamada {
-            nonce: 0.into(),
-            transfers: vec![],
-        };
-        let keys = vote_tallies::Keys::from(&event);
+
+        let (event, keys) = arbitrary_event();
         let tally_pre = Tally {
             voting_power: FractionalVotingPower::new(1, 3).unwrap(),
             seen_by: BTreeMap::from([(
