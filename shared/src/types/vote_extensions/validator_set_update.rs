@@ -51,14 +51,10 @@ impl VextDigest {
     #[cfg(not(feature = "abcipp"))]
     pub fn singleton(ext: SignedVext) -> VextDigest {
         VextDigest {
-            signatures: {
-                let mut m = HashMap::new();
-                m.insert(
-                    (ext.data.validator_addr.clone(), ext.data.block_height),
-                    ext.sig,
-                );
-                m
-            },
+            signatures: HashMap::from([(
+                (ext.data.validator_addr.clone(), ext.data.block_height),
+                ext.sig,
+            )]),
             voting_powers: ext.data.voting_powers,
         }
     }
