@@ -152,9 +152,8 @@ fn apply(tally: &Tally, vote_info: NewVotes) -> Result<Tally> {
             seen_by_post.insert(validator.clone(), vote_height)
         {
             return Err(eyre!(
-                "Validator {} had already voted at height {}",
-                validator,
-                already_voted_height,
+                "Validator {validator} had already voted at height \
+                 {already_voted_height}",
             ));
         };
         voting_power_post += voting_power;
@@ -202,7 +201,8 @@ mod tests {
     mod helpers {
         use super::*;
 
-        /// Returns an arbitrary piece of data that can have votes tallied against it.
+        /// Returns an arbitrary piece of data that can have votes tallied
+        /// against it.
         pub(super) fn arbitrary_event() -> EthereumEvent {
             EthereumEvent::TransfersToNamada {
                 nonce: 0.into(),
