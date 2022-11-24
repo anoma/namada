@@ -99,28 +99,20 @@ impl VextDigest {
     #[cfg(not(feature = "abcipp"))]
     pub fn singleton(ext: Signed<Vext>) -> VextDigest {
         VextDigest {
-            signatures: {
-                let mut m = HashMap::new();
-                m.insert(
-                    (ext.data.validator_addr.clone(), ext.data.block_height),
-                    ext.sig,
-                );
-                m
-            },
+            signatures: HashMap::from([(
+                (ext.data.validator_addr.clone(), ext.data.block_height),
+                ext.sig,
+            )]),
             events: ext
                 .data
                 .ethereum_events
                 .into_iter()
                 .map(|event| MultiSignedEthEvent {
                     event,
-                    signers: {
-                        let mut s = BTreeSet::new();
-                        s.insert((
-                            ext.data.validator_addr.clone(),
-                            ext.data.block_height,
-                        ));
-                        s
-                    },
+                    signers: BTreeSet::from([(
+                        ext.data.validator_addr.clone(),
+                        ext.data.block_height,
+                    )]),
                 })
                 .collect(),
         }
