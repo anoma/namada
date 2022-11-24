@@ -1,4 +1,4 @@
-//! Code for handling [`ProtocolTxType::ValidatorSetUpdate`] protocol txs.
+//! Code for handling validator set update protocol txs.
 
 use std::collections::{HashMap, HashSet};
 

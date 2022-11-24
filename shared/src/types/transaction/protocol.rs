@@ -35,8 +35,6 @@ mod protocol_txs {
     use crate::proto::Tx;
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
-    #[cfg(not(feature = "abcipp"))]
-    use crate::types::vote_extensions::VoteExtension;
     use crate::types::vote_extensions::{
         ethereum_events, validator_set_update,
     };
@@ -83,14 +81,17 @@ mod protocol_txs {
         NewDkgKeypair(Tx),
         /// Ethereum events contained in vote extensions that
         /// are compressed before being included on chain
+        #[cfg(feature = "abcipp")]
         EthereumEvents(ethereum_events::VextDigest),
         /// Validator set updates contained in vote extensions
+        #[cfg(feature = "abcipp")]
         ValidatorSetUpdate(validator_set_update::VextDigest),
-        /// Protocol transaction type including Ethereum events
-        /// seen by validators and validator set updates signed
-        /// at the beginning of a new epoch
+        /// Ethereum events seen by some validator
         #[cfg(not(feature = "abcipp"))]
-        VoteExtension(VoteExtension),
+        EthEventsVext(ethereum_events::SignedVext),
+        /// Validator set update signed by some validator
+        #[cfg(not(feature = "abcipp"))]
+        ValSetUpdateVext(validator_set_update::SignedVext),
     }
 
     impl ProtocolTxType {

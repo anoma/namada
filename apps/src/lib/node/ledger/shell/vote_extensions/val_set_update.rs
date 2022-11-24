@@ -34,7 +34,6 @@ where
     ///  * The voting powers are normalized to `2^32`, and sorted in descending
     ///    order.
     #[inline]
-    #[allow(dead_code)]
     pub fn validate_valset_upd_vext(
         &self,
         ext: validator_set_update::SignedVext,

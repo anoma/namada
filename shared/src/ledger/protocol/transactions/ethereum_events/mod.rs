@@ -1,6 +1,5 @@
-//! Code for handling
-//! [`crate::types::transaction::protocol::ProtocolTxType::EthereumEvents`]
-//! transactions.
+//! Code for handling Ethereum events protocol txs.
+
 mod eth_msgs;
 mod events;
 
