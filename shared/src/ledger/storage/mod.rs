@@ -10,10 +10,10 @@ pub mod write_log;
 
 use core::fmt::Debug;
 use std::array;
-use std::collections::BTreeSet;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use ferveo_common::TendermintValidator;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
@@ -24,8 +24,6 @@ use rayon::iter::{
 };
 #[cfg(feature = "wasm-runtime")]
 use rayon::prelude::ParallelSlice;
-use borsh::{BorshDeserialize, BorshSerialize};
-use ferveo_common::TendermintValidator;
 use thiserror::Error;
 
 use super::parameters::Parameters;
@@ -49,13 +47,11 @@ use crate::ledger::storage_api::queries::{self, QueriesExt, SendValsetUpd};
 use crate::tendermint::merkle::proof::Proof;
 use crate::tendermint_proto::google::protobuf;
 use crate::tendermint_proto::types::EvidenceParams;
-use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::address::{
     masp, Address, EstablishedAddressGen, InternalAddress,
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use crate::types::ethereum_events::EthAddress;
-use crate::types::key;
 use crate::types::key::dkg_session_keys::DkgPublicKey;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::storage::TxQueue;
@@ -64,10 +60,10 @@ use crate::types::storage::{
     MembershipProof, MerkleValue, TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
-use crate::types::token;
-use crate::types::token::{self, Amount};
+use crate::types::token::Amount;
 use crate::types::transaction::EllipticCurve;
 use crate::types::vote_extensions::validator_set_update::EthAddrBook;
+use crate::types::{key, token};
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;

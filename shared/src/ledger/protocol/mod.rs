@@ -21,8 +21,8 @@ use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
-use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use crate::types::storage::TxIndex;
+use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
@@ -157,7 +157,7 @@ where
         .map_err(Error::GasError)?;
     let verifiers = execute_tx(
         &tx,
-        &tx_index,
+        tx_index,
         storage,
         block_gas_meter,
         write_log,
@@ -167,7 +167,7 @@ where
 
     let vps_result = check_vps(
         &tx,
-        &tx_index,
+        tx_index,
         storage,
         block_gas_meter,
         write_log,

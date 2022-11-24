@@ -1,6 +1,4 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use tendermint_proto::crypto::{ProofOp, ProofOps};
-use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
@@ -16,6 +14,7 @@ use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, MerkleTree, StoreRef, StoreType, DB};
 use crate::ledger::storage_api::{self, CustomError, ResultExt, StorageRead};
+use crate::types::address::Address;
 use crate::types::eth_abi::EncodeCell;
 use crate::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
@@ -23,13 +22,11 @@ use crate::types::eth_bridge_pool::{
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::MembershipProof::BridgePool;
-use crate::types::storage::{self, Epoch, MerkleValue, PrefixValue};
-use crate::ledger::storage::{DBIter, StorageHasher, DB};
-use crate::ledger::storage_api::{self, ResultExt, StorageRead};
-use crate::types::address::Address;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 use crate::types::storage::TxIndex;
-use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
+use crate::types::storage::{
+    self, BlockResults, Epoch, MerkleValue, PrefixValue,
+};
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 use crate::types::transaction::TxResult;
 
@@ -142,7 +139,7 @@ where
     let data = protocol::apply_wasm_tx(
         tx,
         request.data.len(),
-        TxIndex(0),
+        &TxIndex(0),
         ShellParams {
             block_gas_meter: &mut gas_meter,
             write_log: &mut write_log,

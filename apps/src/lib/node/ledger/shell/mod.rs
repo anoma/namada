@@ -40,8 +40,6 @@ use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
-use namada::types::time::{DateTimeUtc, TimeZone, Utc};
-use namada::types::storage::{BlockHeight, Key};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
@@ -770,45 +768,6 @@ where
         response
     }
 
-    #[allow(dead_code)]
-    /// Simulate validation and application of a transaction.
-    fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
-        let mut response = response::Query::default();
-        let mut gas_meter = BlockGasMeter::default();
-        let mut write_log = WriteLog::default();
-        let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
-        let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
-        match Tx::try_from(tx_bytes) {
-            Ok(tx) => {
-                let tx = TxType::Decrypted(DecryptedTx::Decrypted(tx));
-                match protocol::apply_tx(
-                    tx,
-                    tx_bytes.len(),
-                    TxIndex::default(),
-                    &mut gas_meter,
-                    &mut write_log,
-                    &self.storage,
-                    &mut vp_wasm_cache,
-                    &mut tx_wasm_cache,
-                )
-                .map_err(Error::TxApply)
-                {
-                    Ok(result) => response.info = result.to_string(),
-                    Err(error) => {
-                        response.code = 1;
-                        response.log = format!("{}", error);
-                    }
-                }
-                response
-            }
-            Err(err) => {
-                response.code = 1;
-                response.log = format!("{}", Error::TxDecoding(err));
-                response
-            }
-        }
-    }
-
     /// Lookup a validator's keypair for their established account from their
     /// wallet. If the node is not validator, this function returns None
     #[allow(dead_code)]
@@ -878,9 +837,8 @@ mod test_utils {
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHash, Epoch, Header};
-    use namada::types::time::DateTimeUtc;
     use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
+    use namada::types::time::DateTimeUtc;
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};

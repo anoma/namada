@@ -191,6 +191,7 @@ impl TestTxEnv {
             &self.storage,
             &mut self.write_log,
             &mut self.gas_meter,
+            &TxIndex::default(),
             &self.tx.code,
             self.tx.data.as_ref().unwrap_or(&empty_data),
             &mut self.vp_wasm_cache,

@@ -40,9 +40,9 @@ pub struct ValidatorWallet {
     /// Cryptographic keypair for consensus key
     pub consensus_key: common::SecretKey,
     /// Cryptographic keypair for eth cold key
-    pub eth_cold_key: Rc<common::SecretKey>,
+    pub eth_cold_key: common::SecretKey,
     /// Cryptographic keypair for eth hot key
-    pub eth_hot_key: Rc<common::SecretKey>,
+    pub eth_hot_key: common::SecretKey,
     /// Cryptographic keypair for rewards key
     pub rewards_key: common::SecretKey,
     /// Cryptographic keypair for Tendermint node key
@@ -58,7 +58,7 @@ pub struct ValidatorStore {
     /// Cryptographic keypair for consensus key
     pub consensus_key: wallet::StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for eth cold key
-    pub eth_cold_key: wallet::StoredKeypair,
+    pub eth_cold_key: wallet::StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for rewards key
     pub rewards_key: wallet::StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for Tendermint node key
@@ -127,7 +127,7 @@ impl ValidatorWallet {
                 let eth_cold_key =
                     store.eth_cold_key.get(true, password.clone())?;
                 let eth_hot_key =
-                    Rc::new(store.validator_keys.eth_bridge_keypair.clone());
+                    store.validator_keys.eth_bridge_keypair.clone();
 
                 let rewards_key =
                     store.rewards_key.get(true, password.clone())?;
@@ -172,7 +172,7 @@ impl ValidatorWallet {
         );
         let validator_keys =
             store::Store::gen_validator_keys(None, None, scheme);
-        let eth_hot_key = Rc::new(validator_keys.eth_bridge_keypair.clone());
+        let eth_hot_key = validator_keys.eth_bridge_keypair.clone();
         let store = ValidatorStore {
             account_key,
             consensus_key,

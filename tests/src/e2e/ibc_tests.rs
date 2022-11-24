@@ -67,7 +67,7 @@ use ibc_relayer::light_client::{LightClient, Verified};
 use namada::ledger::ibc::handler::{commitment_prefix, port_channel_id};
 use namada::ledger::ibc::storage::*;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
-use namada::ledger::storage::Sha256Hasher;
+use namada::ledger::storage::traits::Sha256Hasher;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key, RESERVED_ADDRESS_PREFIX};

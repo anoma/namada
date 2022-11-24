@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::convert::TryFrom;
 use std::env;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
@@ -47,11 +46,9 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
 use namada::types::key::{self, *};
-use namada::types::storage::{Epoch, Key};
-use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
 use namada::types::storage::{
-    BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
+    self, BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
 use namada::types::token::{
@@ -63,9 +60,9 @@ use namada::types::transaction::governance::{
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, token};
 use namada::{ledger, vm};
-use tokio::time::{Duration, Instant};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use sha2::Digest;
+use tokio::time::Instant;
 
 use super::rpc;
 use super::types::ShieldedTransferContext;
@@ -74,9 +71,6 @@ use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{query_conversion, query_storage_value};
 use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
-use crate::client::tendermint_websocket_client::{
-    Error as WsError, TendermintWebsocketClient, WebSocketAddress,
-};
 use crate::client::types::ParsedTxTransferArgs;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -261,7 +255,7 @@ pub async fn submit_init_validator(
 
     let eth_cold_key = ctx
         .get_opt_cached(&eth_cold_key)
-        .map(|key| match *key {
+        .map(|key| match key {
             common::SecretKey::Secp256k1(_) => key,
             common::SecretKey::Ed25519(_) => {
                 eprintln!("Eth cold key can only be secp256k1");
@@ -282,7 +276,7 @@ pub async fn submit_init_validator(
 
     let eth_hot_key = ctx
         .get_opt_cached(&eth_hot_key)
-        .map(|key| match *key {
+        .map(|key| match key {
             common::SecretKey::Secp256k1(_) => key,
             common::SecretKey::Ed25519(_) => {
                 eprintln!("Eth hot key can only be secp256k1");

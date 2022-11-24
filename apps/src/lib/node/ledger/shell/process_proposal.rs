@@ -432,64 +432,62 @@ where
                     code: ErrorCodes::InvalidTx.into(),
                     info: "Unsupported protocol transaction type".into(),
                 },
-                TxType::Decrypted(tx) => match tx_queue_iter.next() {
-                    Some(wrapper) => {
-                        if wrapper.tx_hash != tx.hash_commitment() {
-                            TxResult {
-                                code: ErrorCodes::InvalidOrder.into(),
-                                info: "Process proposal rejected a decrypted \
-                                       transaction that violated the tx order \
-                                       determined in the previous block"
-                                    .into(),
-                            }
-                        } else if verify_decrypted_correctly(&tx, privkey) {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process Proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            }
-                        } else {
-                            TxResult {
-                                code: ErrorCodes::InvalidTx.into(),
-                                info: "The encrypted payload of tx was \
-                                       incorrectly marked as un-decryptable"
-                                    .into(),
-                            }
-                        }
-                    }
-                    None => TxResult {
-                        code: ErrorCodes::ExtraTxs.into(),
-                        info: "Received more decrypted txs than expected"
-                            .into(),
-                    },
-                },
-                TxType::Wrapper(tx) => {
-                    // validate the ciphertext via Ferveo
-                    if !tx.validate_ciphertext() {
+            },
+            TxType::Decrypted(tx) => match tx_queue_iter.next() {
+                Some(wrapper) => {
+                    if wrapper.tx_hash != tx.hash_commitment() {
                         TxResult {
-                            code: ErrorCodes::InvalidTx.into(),
-                            info: format!(
-                                "The ciphertext of the wrapped tx {} is \
-                                 invalid",
-                                hash_tx(tx_bytes)
-                            ),
+                            code: ErrorCodes::InvalidOrder.into(),
+                            info: "Process proposal rejected a decrypted \
+                                   transaction that violated the tx order \
+                                   determined in the previous block"
+                                .into(),
+                        }
+                    } else if verify_decrypted_correctly(&tx, privkey) {
+                        TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process Proposal accepted this transaction"
+                                .into(),
                         }
                     } else {
-                        // If the public key corresponds to the MASP sentinel
-                        // transaction key, then the fee payer is effectively
-                        // the MASP, otherwise derive
-                        // they payer from public key.
-                        let fee_payer = if tx.pk != masp_tx_key().ref_to() {
-                            tx.fee_payer()
-                        } else {
-                            masp()
-                        };
-                        // check that the fee payer has sufficient balance
-                        let balance =
-                            self.get_balance(&tx.fee.token, &fee_payer);
+                        TxResult {
+                            code: ErrorCodes::InvalidTx.into(),
+                            info: "The encrypted payload of tx was \
+                                   incorrectly marked as un-decryptable"
+                                .into(),
+                        }
+                    }
+                }
+                None => TxResult {
+                    code: ErrorCodes::ExtraTxs.into(),
+                    info: "Received more decrypted txs than expected".into(),
+                },
+            },
+            TxType::Wrapper(tx) => {
+                // validate the ciphertext via Ferveo
+                if !tx.validate_ciphertext() {
+                    TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info: format!(
+                            "The ciphertext of the wrapped tx {} is invalid",
+                            hash_tx(tx_bytes)
+                        ),
+                    }
+                } else {
+                    // If the public key corresponds to the MASP sentinel
+                    // transaction key, then the fee payer is effectively
+                    // the MASP, otherwise derive
+                    // they payer from public key.
+                    let fee_payer = if tx.pk != masp_tx_key().ref_to() {
+                        tx.fee_payer()
+                    } else {
+                        masp()
+                    };
+                    // check that the fee payer has sufficient balance
+                    let balance =
+                        self.storage.get_balance(&tx.fee.token, &fee_payer);
 
-                    if wrapper.fee.amount <= balance {
+                    if tx.fee.amount <= balance {
                         TxResult {
                             code: ErrorCodes::Ok.into(),
                             info: "Process proposal accepted this transaction"

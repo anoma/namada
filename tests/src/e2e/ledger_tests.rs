@@ -20,8 +20,8 @@ use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
 use namada::types::address::{btc, eth, masp_rewards};
 use namada::types::token;
-use namada_apps::config::ethereum_bridge;
 use namada_apps::client::tx::ShieldedContext;
+use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
@@ -29,8 +29,6 @@ use serde_json::json;
 use setup::constants::*;
 
 use super::helpers::{get_height, is_debug_mode, wait_for_block_height};
-use super::setup::get_all_wasms_hashes;
-use super::helpers::{get_height, wait_for_block_height};
 use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode};
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_voting_power, get_actor_rpc, get_epoch,
