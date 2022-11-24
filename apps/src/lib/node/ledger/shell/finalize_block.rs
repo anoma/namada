@@ -152,7 +152,7 @@ where
                     #[cfg(not(feature = "abcipp"))]
                     ProtocolTxType::EthEventsVext(ref ext) => {
                         for event in ext.data.ethereum_events.iter() {
-                            self.mode.deque_eth_event(event);
+                            self.mode.dequeue_eth_event(event);
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
@@ -165,7 +165,7 @@ where
                         for event in
                             digest.events.iter().map(|signed| &signed.event)
                         {
-                            self.mode.deque_eth_event(event);
+                            self.mode.dequeue_eth_event(event);
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }

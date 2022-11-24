@@ -233,7 +233,7 @@ impl ShellMode {
     }
 
     /// Remove an Ethereum event from the internal queue
-    pub fn deque_eth_event(&mut self, event: &EthereumEvent) {
+    pub fn dequeue_eth_event(&mut self, event: &EthereumEvent) {
         if let ShellMode::Validator {
             ethereum_recv: EthereumReceiver { ref mut queue, .. },
             ..
