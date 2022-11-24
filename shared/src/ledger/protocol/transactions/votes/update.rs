@@ -18,7 +18,7 @@ pub(in super::super) struct NewVotes {
 }
 
 impl NewVotes {
-    /// Constructs a new [`VoteInfo`]. For all `votes` provided, a corresponding
+    /// Constructs a new [`NewVotes`]. For all `votes` provided, a corresponding
     /// [`FractionalVotingPower`] must be provided in `voting_powers` also,
     /// otherwise an error will be returned.
     pub fn new(
@@ -48,7 +48,7 @@ impl NewVotes {
         self.inner.keys().cloned().collect()
     }
 
-    /// Consumes `self` and returns a `VoteInfo` with any addresses from
+    /// Consumes `self` and returns a [`NewVotes`] with any addresses from
     /// `voters` removed, as well as the set of addresses that were actually
     /// removed. Useful for removing voters who have already voted for
     /// something.
