@@ -222,7 +222,6 @@ impl EthereumReceiver {
     }
 }
 
-#[allow(dead_code)]
 impl ShellMode {
     /// Get the validator address if ledger is in validator mode
     pub fn get_validator_address(&self) -> Option<&address::Address> {
@@ -258,6 +257,7 @@ impl ShellMode {
     }
 
     /// Get the Ethereum bridge keypair for this validator.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn get_eth_bridge_keypair(&self) -> Option<&common::SecretKey> {
         match self {
             ShellMode::Validator {
@@ -277,6 +277,7 @@ impl ShellMode {
 
     /// If this node is a validator, broadcast a tx
     /// to the mempool using the broadcaster subprocess
+    #[cfg_attr(feature = "abcipp", allow(dead_code))]
     pub fn broadcast(&self, data: Vec<u8>) {
         if let Self::Validator {
             broadcast_sender, ..
