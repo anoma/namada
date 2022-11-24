@@ -623,7 +623,6 @@ mod test_process_proposal {
         let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
             .sign(&protocol_key)
             .to_bytes();
-        //#[allow(clippy::redundant_clone)]
         let request = ProcessProposal {
             txs: vec![tx.clone(), tx],
         };
