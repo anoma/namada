@@ -398,8 +398,9 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
 
     fn has_key(&self, key: &storage::Key) -> Result<bool, Error> {
         let key = key.to_string();
-        let found =
-            unsafe { namada_vp_has_key_post(key.as_ptr() as _, key.len() as _) };
+        let found = unsafe {
+            namada_vp_has_key_post(key.as_ptr() as _, key.len() as _)
+        };
         Ok(HostEnvResult::is_success(found))
     }
 

@@ -84,7 +84,7 @@ use tendermint_rpc::{Client, HttpClient, Url};
 use tokio::runtime::Runtime;
 
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
-use crate::e2e::setup::{self, sleep, NamadaCmd, Bin, Test, Who};
+use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
 use crate::{run, run_as};
 
 #[test]

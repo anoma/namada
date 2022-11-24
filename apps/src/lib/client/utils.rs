@@ -36,7 +36,8 @@ use crate::wasm_loader;
 pub const NET_ACCOUNTS_DIR: &str = "setup";
 pub const NET_OTHER_ACCOUNTS_DIR: &str = "other";
 /// Github URL prefix of released Namada network configs
-pub const ENV_VAR_NETWORK_CONFIGS_SERVER: &str = "NAMADA_NETWORK_CONFIGS_SERVER";
+pub const ENV_VAR_NETWORK_CONFIGS_SERVER: &str =
+    "NAMADA_NETWORK_CONFIGS_SERVER";
 const DEFAULT_NETWORK_CONFIGS_SERVER: &str =
     "https://github.com/heliaxdev/namada-network-config/releases/download";
 
