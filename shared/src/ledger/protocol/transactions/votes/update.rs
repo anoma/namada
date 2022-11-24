@@ -18,9 +18,11 @@ pub(in super::super) struct NewVotes {
 }
 
 impl NewVotes {
-    /// Constructs a new [`NewVotes`]. For all `votes` provided, a corresponding
-    /// [`FractionalVotingPower`] must be provided in `voting_powers` also,
-    /// otherwise an error will be returned.
+    /// Constructs a new [`NewVotes`].
+    ///
+    /// For all `votes` provided, a corresponding [`FractionalVotingPower`] must
+    /// be provided in `voting_powers` also, otherwise an error will be
+    /// returned.
     pub fn new(
         votes: Votes,
         voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
