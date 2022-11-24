@@ -204,7 +204,6 @@ where
     };
 
     match tx {
-        #[cfg(not(feature = "abcipp"))]
         ProtocolTxType::EthEventsVext(ext) => {
             let ethereum_events::VextDigest { events, .. } =
                 ethereum_events::VextDigest::singleton(ext);
@@ -213,24 +212,7 @@ where
             )
             .map_err(Error::ProtocolTxError)
         }
-        #[cfg(not(feature = "abcipp"))]
         ProtocolTxType::ValSetUpdateVext(ext) => {
-            self::transactions::validator_set_update::aggregate_votes(
-                storage,
-                validator_set_update::VextDigest::singleton(ext),
-            )
-            .map_err(Error::ProtocolTxError)
-        }
-        #[cfg(feature = "abcipp")]
-        ProtocolTxType::EthereumEvents(ext) => {
-            let ethereum_events::VextDigest { events, .. } = ext;
-            self::transactions::ethereum_events::apply_derived_tx(
-                storage, events,
-            )
-            .map_err(Error::ProtocolTxError)
-        }
-        #[cfg(feature = "abcipp")]
-        ProtocolTxType::ValidatorSetUpdate(ext) => {
             // NOTE(feature = "abcipp"): we will not need to apply any
             // storage changes when we rollback to ABCI++; this is because
             // the decided vote extension digest should have >2/3 of the
@@ -244,7 +226,8 @@ where
             // for this, we need to receive a mutable reference to the
             // event log, in `apply_protocol_tx()`
             self::transactions::validator_set_update::aggregate_votes(
-                storage, ext,
+                storage,
+                validator_set_update::VextDigest::singleton(ext),
             )
             .map_err(Error::ProtocolTxError)
         }
