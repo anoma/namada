@@ -213,12 +213,12 @@ impl EthereumReceiver {
         self.queue.iter().cloned().collect()
     }
 
-    /// Given a list of events, remove them from the queue if present
-    /// Note that this method preserves the sorting and de-duplication
+    /// Remove the given [`EthereumEvent`] from the queue, if present.
+    ///
+    /// **INVARIANT:** This method preserves the sorting and de-duplication
     /// of events in the queue.
-    #[allow(dead_code)]
-    pub fn remove(&mut self, events: &[EthereumEvent]) {
-        self.queue.retain(|event| !events.contains(event));
+    pub fn remove_event(&mut self, event: &EthereumEvent) {
+        self.queue.remove(event);
     }
 }
 
@@ -234,12 +234,8 @@ impl ShellMode {
 
     /// Remove an Ethereum event from the internal queue
     pub fn dequeue_eth_event(&mut self, event: &EthereumEvent) {
-        if let ShellMode::Validator {
-            ethereum_recv: EthereumReceiver { ref mut queue, .. },
-            ..
-        } = self
-        {
-            queue.remove(event);
+        if let ShellMode::Validator { ethereum_recv, .. } = self {
+            ethereum_recv.remove_event(event);
         }
     }
 
