@@ -68,7 +68,9 @@ where
 }
 
 /// Apply votes to Ethereum events in storage and act on any events which are
-/// confirmed. The `voting_powers` map must contain a voting power for all
+/// confirmed.
+///
+/// The `voting_powers` map must contain a voting power for all
 /// `(Address, BlockHeight)`s that occur in any of the `updates`.
 pub(super) fn apply_updates<D, H>(
     storage: &mut Storage<D, H>,
@@ -113,8 +115,10 @@ where
 }
 
 /// Apply an [`EthMsgUpdate`] to storage. Returns any keys changed and whether
-/// the event was newly seen. The `voting_powers` map must contain a voting
-/// power for all `(Address, BlockHeight)`s that occur in `update`.
+/// the event was newly seen.
+///
+/// The `voting_powers` map must contain a voting power for all
+/// `(Address, BlockHeight)`s that occur in `update`.
 fn apply_update<D, H>(
     storage: &mut Storage<D, H>,
     update: EthMsgUpdate,
