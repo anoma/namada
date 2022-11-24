@@ -1204,12 +1204,11 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![txs[2].to_bytes(), get_empty_eth_ev_digest(&shell)],
             };
-            if let [resp, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(mut resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                assert_eq!(resp.len(), 2);
+                resp.remove(0)
             } else {
                 panic!("Test failed")
             }
@@ -1219,12 +1218,11 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![txs[2].to_bytes()],
             };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
+            if let Err(TestError::RejectProposal(mut resp)) =
+                shell.process_proposal(request)
             {
-                resp.clone()
+                assert_eq!(resp.len(), 1);
+                resp.remove(0)
             } else {
                 panic!("Test failed")
             }
