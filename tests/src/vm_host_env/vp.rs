@@ -237,7 +237,7 @@ mod native_vp_host_env {
     macro_rules! native_host_fn {
             // unit return type
             ( $fn:ident ( $($arg:ident : $type:ty),* $(,)?) ) => {
-                concat_idents!(extern_fn_name = anoma, _, $fn {
+                concat_idents!(extern_fn_name = namada, _, $fn {
                     #[no_mangle]
                     extern "C" fn extern_fn_name( $($arg: $type),* ) {
                         with(|TestVpEnv {
@@ -281,7 +281,7 @@ mod native_vp_host_env {
 
             // non-unit return type
             ( $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty ) => {
-                concat_idents!(extern_fn_name = anoma, _, $fn {
+                concat_idents!(extern_fn_name = namada, _, $fn {
                     #[no_mangle]
                     extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
                         with(|TestVpEnv {

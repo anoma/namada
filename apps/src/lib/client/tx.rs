@@ -95,7 +95,7 @@ const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
 const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
-    "ANOMA_EVENTS_MAX_WAIT_TIME_SECONDS";
+    "NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS";
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
@@ -1273,7 +1273,7 @@ fn make_asset_type(epoch: Epoch, token: &Address) -> AssetType {
     AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
 }
 
-/// Convert Anoma amount and token type to MASP equivalents
+/// Convert Namada amount and token type to MASP equivalents
 fn convert_amount(
     epoch: Epoch,
     token: &Address,

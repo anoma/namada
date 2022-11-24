@@ -53,7 +53,7 @@ use crate::config::utils::num_of_threads;
 
 /// Env. var to set a number of Rayon global worker threads
 const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
-    "ANOMA_ROCKSDB_COMPACTION_THREADS";
+    "NAMADA_ROCKSDB_COMPACTION_THREADS";
 
 /// RocksDB handle
 #[derive(Debug)]

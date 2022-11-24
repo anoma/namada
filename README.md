@@ -15,7 +15,7 @@ the form of native protocol tokens. A multi-asset shielded transfer
 wallet is provided in order to facilitate safe and private user
 interaction with the protocol.
 
-* Blogpost: [Introducing Namada: Shielded transfers with any assets](https://medium.com/anomanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
+* Blogpost: [Introducing Namada: Shielded transfers with any assets](https://medium.com/namadanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
 
 ## 📓 Docs
 
@@ -29,13 +29,13 @@ interaction with the protocol.
 
 ## 💾 Installing
 
-There is a single command to build and install Anoma executables from source (the node, the client and the wallet). This command will also verify that a compatible version of [Tendermint](#dependencies) is available and if not, attempt to install it. Note that currently at least 16GB RAM is needed to build from source.
+There is a single command to build and install Namada executables from source (the node, the client and the wallet). This command will also verify that a compatible version of [Tendermint](#dependencies) is available and if not, attempt to install it. Note that currently at least 16GB RAM is needed to build from source.
 
 ```shell
 make install
 ```
 
-After installation, the main `anoma` executable will be available on path.
+After installation, the main `namada` executable will be available on path.
 
 To find how to use it, check out the [User Guide section of the docs](https://docs.namada.net/user-guide/index.html).
 
@@ -49,9 +49,9 @@ Guide.
 # Build the provided validity predicate and transaction wasm modules
 make build-wasm-scripts-docker
 
-# Development (debug) build Anoma, which includes a validator and some default 
+# Development (debug) build Namada, which includes a validator and some default 
 # accounts, whose keys and addresses are available in the wallet
-ANOMA_DEV=true make
+NAMADA_DEV=true make
 ```
 
 ### Before submitting a PR, pls make sure to run the following
@@ -66,7 +66,7 @@ make clippy
 
 ## 🧾 Logging
 
-To change the log level, set `ANOMA_LOG` environment variable to one of:
+To change the log level, set `NAMADA_LOG` environment variable to one of:
 
 * `error`
 * `warn`

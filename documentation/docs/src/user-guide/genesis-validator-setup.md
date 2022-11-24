@@ -32,7 +32,7 @@ Note that the wallet containing your private keys will also be written into this
 
 ## After network config release
 
-Once the network is finalized, a new chain ID will be created and released on [anoma-network-config/releases](https://github.com/heliaxdev/anoma-network-config/releases) (a custom configs URL can be used instead with `ANOMA_NETWORK_CONFIGS_SERVER` env var). You can use it to setup your genesis validator node for the `--chain-id` argument in the command below.
+Once the network is finalized, a new chain ID will be created and released on [namada-network-config/releases](https://github.com/heliaxdev/namada-network-config/releases) (a custom configs URL can be used instead with `NAMADA_NETWORK_CONFIGS_SERVER` env var). You can use it to setup your genesis validator node for the `--chain-id` argument in the command below.
 
 ```shell
 namada client utils join-network \
@@ -47,7 +47,7 @@ If you run this command in the same directory that you ran `namada client utils 
 ```shell
 namada client utils join-network \
     --chain-id $CHAIN_ID \
-    --pre-genesis-path workspace/.anoma/pre-genesis/$ALIAS
+    --pre-genesis-path workspace/.namada/pre-genesis/$ALIAS
 ```
 
 Once setup, you can start the ledger as usual with e.g.:

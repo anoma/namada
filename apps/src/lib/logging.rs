@@ -7,10 +7,10 @@ use tracing_log::LogTracer;
 use tracing_subscriber::filter::{Directive, EnvFilter};
 use tracing_subscriber::fmt::Subscriber;
 
-pub const ENV_KEY: &str = "ANOMA_LOG";
+pub const ENV_KEY: &str = "NAMADA_LOG";
 
 // Env var to enable/disable color log
-const COLOR_ENV_KEY: &str = "ANOMA_LOG_COLOR";
+const COLOR_ENV_KEY: &str = "NAMADA_LOG_COLOR";
 
 pub fn init_from_env_or(default: impl Into<Directive>) -> Result<()> {
     let filter = filter_from_env_or(default);

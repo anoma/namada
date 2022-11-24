@@ -26,7 +26,7 @@ There are many other types of queries in addition to `abci_query` that can be is
 
 ### WebSocket Client
 
-The most interesting type of interaction with the ledger thus far is via WebSockets. The goal of the implementation in `anoma-wallet` is to allow us to provide listeners so that we can update the React app according to activity on the ledger. The core functionality of the implementation on the client is as follows:
+The most interesting type of interaction with the ledger thus far is via WebSockets. The goal of the implementation in `namada-wallet` is to allow us to provide listeners so that we can update the React app according to activity on the ledger. The core functionality of the implementation on the client is as follows:
 
 ```ts
 public async broadcastTx(
@@ -74,6 +74,6 @@ Following that, we subcribe to events on the ledger using a query containing `tm
 - `onError` - called in the event of an error
 - `onComplete` - called when the websocket closes
 
-The way this library in `anoma-wallet/src/lib/` is implemented, we can also determine when we want to disconnect the WebSocket. For instance, if for some reason we want to issue a series of transactions in succession, we could feasibly leave the connection open, then close after the final transaction is complete. Alternatively, and in most cases, we would simply close the connection when we are finished with a single transaction, which would then trigger the `onComplete` callback.
+The way this library in `namada-wallet/src/lib/` is implemented, we can also determine when we want to disconnect the WebSocket. For instance, if for some reason we want to issue a series of transactions in succession, we could feasibly leave the connection open, then close after the final transaction is complete. Alternatively, and in most cases, we would simply close the connection when we are finished with a single transaction, which would then trigger the `onComplete` callback.
 
 See [Transparent Transactions](./transparent-transactions.md) for more information on how the transactions are initially constructed.

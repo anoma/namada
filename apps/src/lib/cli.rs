@@ -1,9 +1,9 @@
-//! The CLI commands that are re-used between the executables `anoma`,
-//! `anoma-node` and `anoma-client`.
+//! The CLI commands that are re-used between the executables `namada`,
+//! `namada-node` and `namada-client`.
 //!
-//! The `anoma` executable groups together the most commonly used commands
+//! The `namada` executable groups together the most commonly used commands
 //! inlined from the node and the client. The other commands for the node or the
-//! client can be dispatched via `anoma node ...` or `anoma client ...`,
+//! client can be dispatched via `namada node ...` or `namada client ...`,
 //! respectively.
 
 pub mod context;
@@ -20,7 +20,7 @@ include!("../../version.rs");
 
 const APP_NAME: &str = "Namada";
 
-// Main Anoma sub-commands
+// Main Namada sub-commands
 const NODE_CMD: &str = "node";
 const CLIENT_CMD: &str = "client";
 const WALLET_CMD: &str = "wallet";
@@ -31,14 +31,14 @@ pub mod cmds {
     use super::utils::*;
     use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
 
-    /// Commands for `anoma` binary.
+    /// Commands for `namada` binary.
     #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
-    pub enum Anoma {
+    pub enum Namada {
         // Sub-binary-commands
-        Node(AnomaNode),
-        Client(AnomaClient),
-        Wallet(AnomaWallet),
+        Node(NamadaNode),
+        Client(NamadaClient),
+        Wallet(NamadaWallet),
 
         // Inlined commands from the node.
         Ledger(Ledger),
@@ -53,11 +53,11 @@ pub mod cmds {
         TxRevealPk(TxRevealPk),
     }
 
-    impl Cmd for Anoma {
+    impl Cmd for Namada {
         fn add_sub(app: App) -> App {
-            app.subcommand(AnomaNode::def())
-                .subcommand(AnomaClient::def())
-                .subcommand(AnomaWallet::def())
+            app.subcommand(NamadaNode::def())
+                .subcommand(NamadaClient::def())
+                .subcommand(NamadaWallet::def())
                 .subcommand(Ledger::def())
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
@@ -96,16 +96,16 @@ pub mod cmds {
         }
     }
 
-    /// Used as top-level commands (`Cmd` instance) in `anoman` binary.
-    /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
+    /// Used as top-level commands (`Cmd` instance) in `namadan` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
-    pub enum AnomaNode {
+    pub enum NamadaNode {
         Ledger(Ledger),
         Config(Config),
     }
 
-    impl Cmd for AnomaNode {
+    impl Cmd for NamadaNode {
         fn add_sub(app: App) -> App {
             app.subcommand(Ledger::def()).subcommand(Config::def())
         }
@@ -116,7 +116,7 @@ pub mod cmds {
             ledger.or(config)
         }
     }
-    impl SubCmd for AnomaNode {
+    impl SubCmd for NamadaNode {
         const CMD: &'static str = NODE_CMD;
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -134,20 +134,20 @@ pub mod cmds {
         }
     }
 
-    /// Used as top-level commands (`Cmd` instance) in `anomac` binary.
-    /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
+    /// Used as top-level commands (`Cmd` instance) in `namadac` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
-    pub enum AnomaClient {
+    pub enum NamadaClient {
         /// The [`super::Context`] provides access to the wallet and the
         /// config. It will generate a new wallet and config, if they
         /// don't exist.
-        WithContext(AnomaClientWithContext),
+        WithContext(NamadaClientWithContext),
         /// Utils don't have [`super::Context`], only the global arguments.
         WithoutContext(Utils),
     }
 
-    impl Cmd for AnomaClient {
+    impl Cmd for NamadaClient {
         fn add_sub(app: App) -> App {
             app
                 // Simple transactions
@@ -184,7 +184,7 @@ pub mod cmds {
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            use AnomaClientWithContext::*;
+            use NamadaClientWithContext::*;
             let tx_custom = Self::parse_with_ctx(matches, TxCustom);
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
@@ -247,18 +247,18 @@ pub mod cmds {
         }
     }
 
-    impl AnomaClient {
+    impl NamadaClient {
         /// A helper method to parse sub cmds with context
         fn parse_with_ctx<T: SubCmd>(
             matches: &ArgMatches,
-            sub_to_self: impl Fn(T) -> AnomaClientWithContext,
+            sub_to_self: impl Fn(T) -> NamadaClientWithContext,
         ) -> Option<Self> {
             SubCmd::parse(matches)
                 .map(|sub| Self::WithContext(sub_to_self(sub)))
         }
     }
 
-    impl SubCmd for AnomaClient {
+    impl SubCmd for NamadaClient {
         const CMD: &'static str = CLIENT_CMD;
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -277,7 +277,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub enum AnomaClientWithContext {
+    pub enum NamadaClientWithContext {
         // Ledger cmds
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
@@ -309,7 +309,7 @@ pub mod cmds {
 
     #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
-    pub enum AnomaWallet {
+    pub enum NamadaWallet {
         /// Key management commands
         Key(WalletKey),
         /// Address management commands
@@ -318,7 +318,7 @@ pub mod cmds {
         Masp(WalletMasp),
     }
 
-    impl Cmd for AnomaWallet {
+    impl Cmd for NamadaWallet {
         fn add_sub(app: App) -> App {
             app.subcommand(WalletKey::def())
                 .subcommand(WalletAddress::def())
@@ -333,7 +333,7 @@ pub mod cmds {
         }
     }
 
-    impl SubCmd for AnomaWallet {
+    impl SubCmd for NamadaWallet {
         const CMD: &'static str = WALLET_CMD;
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -792,7 +792,7 @@ pub mod cmds {
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about("Run Anoma ledger node.")
+            App::new(Self::CMD).about("Run Namada ledger node.")
         }
     }
 
@@ -808,7 +808,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD).about(
-                "Delete Anoma ledger node's and Tendermint node's storage \
+                "Delete Namada ledger node's and Tendermint node's storage \
                  data.",
             )
         }
@@ -1438,7 +1438,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Configure Anoma to join an existing network.")
+                .about("Configure Namada to join an existing network.")
                 .add_args::<args::JoinNetwork>()
         }
     }
@@ -1541,7 +1541,7 @@ pub mod args {
     const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
     const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
-        DefaultFn(|| match env::var("ANOMA_BASE_DIR") {
+        DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
             Ok(dir) => dir.into(),
             Err(_) => config::DEFAULT_BASE_DIR.into(),
         }),
@@ -1669,18 +1669,18 @@ pub mod args {
                 .arg(BASE_DIR.def().about(
                     "The base directory is where the nodes, client and wallet \
                      configuration and state is stored. This value can also \
-                     be set via `ANOMA_BASE_DIR` environment variable, but \
+                     be set via `NAMADA_BASE_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
-                     `.anoma`.",
+                     `.namada`.",
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
                      transactions. This value can also be set via \
-                     `ANOMA_WASM_DIR` environment variable, but the argument \
+                     `NAMADA_WASM_DIR` environment variable, but the argument \
                      takes precedence, if specified.",
                 ))
                 .arg(MODE.def().about(
-                    "The mode in which to run Anoma. Options are \n\t * \
+                    "The mode in which to run Namada. Options are \n\t * \
                      Validator (default)\n\t * Full\n\t * Seed",
                 ))
         }
@@ -3236,7 +3236,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
+            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/namada-network-config repository."))
                 .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
             .arg(DONT_PREFETCH_WASM.def().about(
@@ -3257,7 +3257,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository, in which case it should have pre-built wasms available for download."))
+            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/namada-network-config repository, in which case it should have pre-built wasms available for download."))
         }
     }
 
@@ -3375,7 +3375,7 @@ pub mod args {
             app.arg(ALIAS.def().about("The validator address alias."))
                 .arg(NET_ADDRESS.def().about(
                     "Static {host:port} of your validator node's P2P address. \
-                     Anoma uses port `26656` for P2P connections by default, \
+                     Namada uses port `26656` for P2P connections by default, \
                      but you can configure a different value.",
                 ))
                 .arg(COMMISSION_RATE.def().about(
@@ -3399,45 +3399,45 @@ pub mod args {
     }
 }
 
-pub fn anoma_cli() -> (cmds::Anoma, String) {
-    let app = anoma_app();
+pub fn namada_cli() -> (cmds::Namada, String) {
+    let app = namada_app();
     let matches = app.get_matches();
     let raw_sub_cmd =
         matches.subcommand().map(|(raw, _matches)| raw.to_string());
-    let result = cmds::Anoma::parse(&matches);
+    let result = cmds::Namada::parse(&matches);
     match (result, raw_sub_cmd) {
         (Some(cmd), Some(raw_sub)) => return (cmd, raw_sub),
         _ => {
-            anoma_app().print_help().unwrap();
+            namada_app().print_help().unwrap();
         }
     }
     safe_exit(2);
 }
 
-pub fn anoma_node_cli() -> Result<(cmds::AnomaNode, Context)> {
-    let app = anoma_node_app();
-    cmds::AnomaNode::parse_or_print_help(app)
+pub fn namada_node_cli() -> Result<(cmds::NamadaNode, Context)> {
+    let app = namada_node_app();
+    cmds::NamadaNode::parse_or_print_help(app)
 }
 
-pub enum AnomaClient {
+pub enum NamadaClient {
     WithoutContext(cmds::Utils, args::Global),
-    WithContext(Box<(cmds::AnomaClientWithContext, Context)>),
+    WithContext(Box<(cmds::NamadaClientWithContext, Context)>),
 }
 
-pub fn anoma_client_cli() -> Result<AnomaClient> {
-    let app = anoma_client_app();
-    let mut app = cmds::AnomaClient::add_sub(app);
+pub fn namada_client_cli() -> Result<NamadaClient> {
+    let app = namada_client_app();
+    let mut app = cmds::NamadaClient::add_sub(app);
     let matches = app.clone().get_matches();
     match Cmd::parse(&matches) {
         Some(cmd) => {
             let global_args = args::Global::parse(&matches);
             match cmd {
-                cmds::AnomaClient::WithContext(sub_cmd) => {
+                cmds::NamadaClient::WithContext(sub_cmd) => {
                     let context = Context::new(global_args)?;
-                    Ok(AnomaClient::WithContext(Box::new((sub_cmd, context))))
+                    Ok(NamadaClient::WithContext(Box::new((sub_cmd, context))))
                 }
-                cmds::AnomaClient::WithoutContext(sub_cmd) => {
-                    Ok(AnomaClient::WithoutContext(sub_cmd, global_args))
+                cmds::NamadaClient::WithoutContext(sub_cmd) => {
+                    Ok(NamadaClient::WithoutContext(sub_cmd, global_args))
                 }
             }
         }
@@ -3448,39 +3448,39 @@ pub fn anoma_client_cli() -> Result<AnomaClient> {
     }
 }
 
-pub fn anoma_wallet_cli() -> Result<(cmds::AnomaWallet, Context)> {
-    let app = anoma_wallet_app();
-    cmds::AnomaWallet::parse_or_print_help(app)
+pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context)> {
+    let app = namada_wallet_app();
+    cmds::NamadaWallet::parse_or_print_help(app)
 }
 
-fn anoma_app() -> App {
+fn namada_app() -> App {
     let app = App::new(APP_NAME)
-        .version(anoma_version())
-        .about("Anoma command line interface.")
+        .version(namada_version())
+        .about("Namada command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::Anoma::add_sub(args::Global::def(app))
+    cmds::Namada::add_sub(args::Global::def(app))
 }
 
-fn anoma_node_app() -> App {
+fn namada_node_app() -> App {
     let app = App::new(APP_NAME)
-        .version(anoma_version())
-        .about("Anoma node command line interface.")
+        .version(namada_version())
+        .about("Namada node command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::AnomaNode::add_sub(args::Global::def(app))
+    cmds::NamadaNode::add_sub(args::Global::def(app))
 }
 
-fn anoma_client_app() -> App {
+fn namada_client_app() -> App {
     let app = App::new(APP_NAME)
-        .version(anoma_version())
-        .about("Anoma client command line interface.")
+        .version(namada_version())
+        .about("Namada client command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::AnomaClient::add_sub(args::Global::def(app))
+    cmds::NamadaClient::add_sub(args::Global::def(app))
 }
 
-fn anoma_wallet_app() -> App {
+fn namada_wallet_app() -> App {
     let app = App::new(APP_NAME)
-        .version(anoma_version())
-        .about("Anoma wallet command line interface.")
+        .version(namada_version())
+        .about("Namada wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::AnomaWallet::add_sub(args::Global::def(app))
+    cmds::NamadaWallet::add_sub(args::Global::def(app))
 }

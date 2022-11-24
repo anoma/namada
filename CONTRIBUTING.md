@@ -1,6 +1,6 @@
-# Contributing to Anoma
+# Contributing to Namada
 
-Thank you for the interest in contributing to Anoma!
+Thank you for the interest in contributing to Namada!
 
 All contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
@@ -12,7 +12,7 @@ Every pull request should start with an issue. A pull request should be as atomi
 
 ### Changelog
 
-To track changes in Anoma and provide a nicely formatted change log with the releases, we utilize the [unclog CLI tool](https://github.com/informalsystems/unclog). Please do not modify the [change log](CHANGELOG.md) in your PRs, this file will be updated by the repository maintainers.
+To track changes in Namada and provide a nicely formatted change log with the releases, we utilize the [unclog CLI tool](https://github.com/informalsystems/unclog). Please do not modify the [change log](CHANGELOG.md) in your PRs, this file will be updated by the repository maintainers.
 
 With every PR, please make a separate commit that adds a record in the `.changelog` directory with a section that this PR belongs to together with a high-level description of the change.
 
@@ -37,7 +37,7 @@ unclog add \
   --message      <message>
 ```
 
-The message should be a high-level description of the changes that should explain the scope of the change and affected components to Anoma's users (while git commit messages should target developers).
+The message should be a high-level description of the changes that should explain the scope of the change and affected components to Namada's users (while git commit messages should target developers).
 
 If none of the sections fit, new sections may be added. To find the existing section names, you can use e.g.:
 

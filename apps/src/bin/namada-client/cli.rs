@@ -1,4 +1,4 @@
-//! Anoma client CLI.
+//! Namada client CLI.
 
 use color_eyre::eyre::Result;
 use namada_apps::cli;
@@ -6,10 +6,10 @@ use namada_apps::cli::cmds::*;
 use namada_apps::client::{rpc, tx, utils};
 
 pub async fn main() -> Result<()> {
-    match cli::anoma_client_cli()? {
-        cli::AnomaClient::WithContext(cmd_box) => {
+    match cli::namada_client_cli()? {
+        cli::NamadaClient::WithContext(cmd_box) => {
             let (cmd, ctx) = *cmd_box;
-            use AnomaClientWithContext as Sub;
+            use NamadaClientWithContext as Sub;
             match cmd {
                 // Ledger cmds
                 Sub::TxCustom(TxCustom(args)) => {
@@ -94,7 +94,7 @@ pub async fn main() -> Result<()> {
                 }
             }
         }
-        cli::AnomaClient::WithoutContext(cmd, global_args) => match cmd {
+        cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {
             // Utils cmds
             Utils::JoinNetwork(JoinNetwork(args)) => {
                 utils::join_network(global_args, args).await
