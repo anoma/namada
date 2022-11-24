@@ -1,1 +1,0 @@
-- Fix  to run again ([#765](https://github.com/anoma/namada/pull/765))

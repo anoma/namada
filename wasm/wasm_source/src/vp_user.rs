@@ -8,6 +8,7 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
+use namada_vp_prelude::address::masp;
 use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
@@ -16,6 +17,7 @@ enum KeyType<'a> {
     Token(&'a Address),
     PoS,
     Vp(&'a Address),
+    Masp,
     GovernanceVote(&'a Address),
     Unknown,
 }
@@ -39,6 +41,8 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             }
         } else if let Some(address) = key.is_validity_predicate() {
             Self::Vp(address)
+        } else if token::is_masp_key(key) {
+            Self::Masp
         } else {
             Self::Unknown
         }
@@ -94,7 +98,7 @@ fn validate_tx(
                         ctx.read_post(key)?.unwrap_or_default();
                     let change = post.change() - pre.change();
                     // debit has to signed, credit doesn't
-                    let valid = change >= 0 || *valid_sig;
+                    let valid = change >= 0 || addr == masp() || *valid_sig;
                     debug_log!(
                         "token key: {}, change: {}, valid_sig: {}, valid \
                          modification: {}",
@@ -159,6 +163,7 @@ fn validate_tx(
                     is_vp_whitelisted(ctx, &vp)?
                 }
             }
+            KeyType::Masp => true,
             KeyType::Unknown => {
                 if key.segments.get(0) == Some(&addr.to_db_key()) {
                     // Unknown changes to this address space require a valid
@@ -241,6 +246,8 @@ mod tests {
                 &token,
                 None,
                 amount,
+                &None,
+                &None,
             )
             .unwrap();
         });
@@ -285,6 +292,8 @@ mod tests {
                 &token,
                 None,
                 amount,
+                &None,
+                &None,
             )
             .unwrap();
         });
@@ -333,6 +342,8 @@ mod tests {
                 &token,
                 None,
                 amount,
+                &None,
+                &None,
             )
             .unwrap();
         });
@@ -382,6 +393,8 @@ mod tests {
                 &token,
                 None,
                 amount,
+                &None,
+                &None,
             )
             .unwrap();
         });

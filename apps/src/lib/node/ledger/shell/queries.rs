@@ -41,14 +41,10 @@ where
         // Invoke the root RPC handler - returns borsh-encoded data on success
         let result = namada::ledger::queries::handle_path(ctx, &request);
         match result {
-            Ok(ResponseQuery {
-                data,
-                info,
-                proof_ops,
-            }) => response::Query {
+            Ok(ResponseQuery { data, info, proof }) => response::Query {
                 value: data,
                 info,
-                proof_ops,
+                proof_ops: proof.map(Into::into),
                 ..Default::default()
             },
             Err(err) => response::Query {

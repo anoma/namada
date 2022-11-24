@@ -49,6 +49,7 @@ pub mod cmds {
         // Inlined commands from the client.
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
+        TxIbcTransfer(TxIbcTransfer),
         TxUpdateVp(TxUpdateVp),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
@@ -63,6 +64,7 @@ pub mod cmds {
                 .subcommand(Ledger::def())
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
+                .subcommand(TxIbcTransfer::def())
                 .subcommand(TxUpdateVp::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
@@ -75,6 +77,8 @@ pub mod cmds {
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
+            let tx_ibc_transfer =
+                SubCmd::parse(matches).map(Self::TxIbcTransfer);
             let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
             let tx_init_proposal =
                 SubCmd::parse(matches).map(Self::TxInitProposal);
@@ -85,6 +89,7 @@ pub mod cmds {
                 .or(ledger)
                 .or(tx_custom)
                 .or(tx_transfer)
+                .or(tx_ibc_transfer)
                 .or(tx_update_vp)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
@@ -148,6 +153,7 @@ pub mod cmds {
                 // Simple transactions
                 .subcommand(TxCustom::def().display_order(1))
                 .subcommand(TxTransfer::def().display_order(1))
+                .subcommand(TxIbcTransfer::def().display_order(1))
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxInitValidator::def().display_order(1))
@@ -162,6 +168,8 @@ pub mod cmds {
                 .subcommand(AddToEthBridgePool::def().display_order(3))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(3))
+                .subcommand(QueryTransfers::def().display_order(3))
+                .subcommand(QueryConversions::def().display_order(3))
                 .subcommand(QueryBlock::def().display_order(3))
                 .subcommand(QueryBalance::def().display_order(3))
                 .subcommand(QueryBonds::def().display_order(3))
@@ -180,6 +188,7 @@ pub mod cmds {
             use AnomaClientWithContext::*;
             let tx_custom = Self::parse_with_ctx(matches, TxCustom);
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
+            let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
             let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateVp);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
@@ -192,6 +201,9 @@ pub mod cmds {
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
+            let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
+            let query_conversions =
+                Self::parse_with_ctx(matches, QueryConversions);
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
@@ -210,6 +222,7 @@ pub mod cmds {
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
+                .or(tx_ibc_transfer)
                 .or(tx_update_vp)
                 .or(tx_init_account)
                 .or(tx_init_validator)
@@ -220,6 +233,8 @@ pub mod cmds {
                 .or(withdraw)
                 .or(add_to_eth_bridge_pool)
                 .or(query_epoch)
+                .or(query_transfers)
+                .or(query_conversions)
                 .or(query_block)
                 .or(query_balance)
                 .or(query_bonds)
@@ -268,6 +283,7 @@ pub mod cmds {
         // Ledger cmds
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
+        TxIbcTransfer(TxIbcTransfer),
         QueryResult(QueryResult),
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
@@ -279,6 +295,8 @@ pub mod cmds {
         Withdraw(Withdraw),
         AddToEthBridgePool(AddToEthBridgePool),
         QueryEpoch(QueryEpoch),
+        QueryTransfers(QueryTransfers),
+        QueryConversions(QueryConversions),
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
@@ -290,24 +308,29 @@ pub mod cmds {
         QueryProtocolParameters(QueryProtocolParameters),
     }
 
+    #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
     pub enum AnomaWallet {
         /// Key management commands
         Key(WalletKey),
         /// Address management commands
         Address(WalletAddress),
+        /// MASP key, address management commands
+        Masp(WalletMasp),
     }
 
     impl Cmd for AnomaWallet {
         fn add_sub(app: App) -> App {
             app.subcommand(WalletKey::def())
                 .subcommand(WalletAddress::def())
+                .subcommand(WalletMasp::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let key = SubCmd::parse(matches).map(Self::Key);
             let address = SubCmd::parse(matches).map(Self::Address);
-            key.or(address)
+            let masp = SubCmd::parse(matches).map(Self::Masp);
+            key.or(address).or(masp)
         }
     }
 
@@ -443,6 +466,170 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Exports a keypair to a file.")
                 .add_args::<args::KeyExport>()
+        }
+    }
+
+    #[allow(clippy::large_enum_variant)]
+    #[derive(Clone, Debug)]
+    pub enum WalletMasp {
+        GenPayAddr(MaspGenPayAddr),
+        GenSpendKey(MaspGenSpendKey),
+        AddAddrKey(MaspAddAddrKey),
+        ListPayAddrs(MaspListPayAddrs),
+        ListKeys(MaspListKeys),
+        FindAddrKey(MaspFindAddrKey),
+    }
+
+    impl SubCmd for WalletMasp {
+        const CMD: &'static str = "masp";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let genpa = SubCmd::parse(matches).map(Self::GenPayAddr);
+                let gensk = SubCmd::parse(matches).map(Self::GenSpendKey);
+                let addak = SubCmd::parse(matches).map(Self::AddAddrKey);
+                let listpa = SubCmd::parse(matches).map(Self::ListPayAddrs);
+                let listsk = SubCmd::parse(matches).map(Self::ListKeys);
+                let findak = SubCmd::parse(matches).map(Self::FindAddrKey);
+                gensk.or(genpa).or(addak).or(listpa).or(listsk).or(findak)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Multi-asset shielded pool address and keypair management \
+                     including methods to generate and look-up addresses and \
+                     keys.",
+                )
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(MaspGenSpendKey::def())
+                .subcommand(MaspGenPayAddr::def())
+                .subcommand(MaspAddAddrKey::def())
+                .subcommand(MaspListPayAddrs::def())
+                .subcommand(MaspListKeys::def())
+                .subcommand(MaspFindAddrKey::def())
+        }
+    }
+
+    /// Find the given shielded address or key
+    #[derive(Clone, Debug)]
+    pub struct MaspFindAddrKey(pub args::AddrKeyFind);
+
+    impl SubCmd for MaspFindAddrKey {
+        const CMD: &'static str = "find";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::AddrKeyFind::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Find the given shielded address or key in the wallet")
+                .add_args::<args::AddrKeyFind>()
+        }
+    }
+
+    /// List all known shielded keys
+    #[derive(Clone, Debug)]
+    pub struct MaspListKeys(pub args::MaspKeysList);
+
+    impl SubCmd for MaspListKeys {
+        const CMD: &'static str = "list-keys";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::MaspKeysList::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Lists all shielded keys in the wallet")
+                .add_args::<args::MaspKeysList>()
+        }
+    }
+
+    /// List all known payment addresses
+    #[derive(Clone, Debug)]
+    pub struct MaspListPayAddrs;
+
+    impl SubCmd for MaspListPayAddrs {
+        const CMD: &'static str = "list-addrs";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|_matches| MaspListPayAddrs)
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Lists all payment addresses in the wallet")
+        }
+    }
+
+    /// Add a key or an address
+    #[derive(Clone, Debug)]
+    pub struct MaspAddAddrKey(pub args::MaspAddrKeyAdd);
+
+    impl SubCmd for MaspAddAddrKey {
+        const CMD: &'static str = "add";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                MaspAddAddrKey(args::MaspAddrKeyAdd::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Adds the given payment address or key to the wallet")
+                .add_args::<args::MaspAddrKeyAdd>()
+        }
+    }
+
+    /// Generate a spending key
+    #[derive(Clone, Debug)]
+    pub struct MaspGenSpendKey(pub args::MaspSpendKeyGen);
+
+    impl SubCmd for MaspGenSpendKey {
+        const CMD: &'static str = "gen-key";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                MaspGenSpendKey(args::MaspSpendKeyGen::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Generates a random spending key")
+                .add_args::<args::MaspSpendKeyGen>()
+        }
+    }
+
+    /// Generate a payment address from a viewing key or payment address
+    #[derive(Clone, Debug)]
+    pub struct MaspGenPayAddr(pub args::MaspPayAddrGen);
+
+    impl SubCmd for MaspGenPayAddr {
+        const CMD: &'static str = "gen-addr";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                MaspGenPayAddr(args::MaspPayAddrGen::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Generates a payment address from the given spending key",
+                )
+                .add_args::<args::MaspPayAddrGen>()
         }
     }
 
@@ -792,6 +979,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxIbcTransfer(pub args::TxIbcTransfer);
+
+    impl SubCmd for TxIbcTransfer {
+        const CMD: &'static str = "ibc-transfer";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxIbcTransfer(args::TxIbcTransfer::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Send a signed IBC transfer transaction.")
+                .add_args::<args::TxIbcTransfer>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxUpdateVp(pub args::TxUpdateVp);
 
     impl SubCmd for TxUpdateVp {
@@ -934,6 +1140,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryConversions(pub args::QueryConversions);
+
+    impl SubCmd for QueryConversions {
+        const CMD: &'static str = "conversions";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryConversions(args::QueryConversions::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query currently applicable conversions.")
+                .add_args::<args::QueryConversions>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryBlock(pub args::Query);
 
     impl SubCmd for QueryBlock {
@@ -1006,6 +1231,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query PoS voting power.")
                 .add_args::<args::QueryVotingPower>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryTransfers(pub args::QueryTransfers);
+
+    impl SubCmd for QueryTransfers {
+        const CMD: &'static str = "show-transfers";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryTransfers(args::QueryTransfers::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the accepted transfers to date.")
+                .add_args::<args::QueryConversions>()
         }
     }
 
@@ -1326,20 +1570,23 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
+    use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::ethereum_events::EthAddress;
     use namada::types::governance::ProposalVote;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
+    use namada::types::masp::MaspValue;
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::GasLimit;
 
-    use super::context::{WalletAddress, WalletKeypair, WalletPublicKey};
+    use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
+    use crate::client::types::{ParsedTxArgs, ParsedTxTransferArgs};
     use crate::config;
     use crate::config::TendermintMode;
     use crate::facade::tendermint::Timeout;
@@ -1351,6 +1598,7 @@ pub mod args {
     const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     const AMOUNT: Arg<token::Amount> = arg("amount");
     const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
+    const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
     const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
         DefaultFn(|| match env::var("ANOMA_BASE_DIR") {
@@ -1362,6 +1610,7 @@ pub mod args {
     const CHAIN_ID: Arg<ChainId> = arg("chain-id");
     const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
     const CHAIN_ID_PREFIX: Arg<ChainIdPrefix> = arg("chain-prefix");
+    const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
     const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
@@ -1401,9 +1650,16 @@ pub mod args {
 
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
+    const MASP_VALUE: Arg<MaspValue> = arg("value");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
+    const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
+    const PIN: ArgFlag = flag("pin");
+    const PORT_ID: ArgDefault<PortId> = arg_default(
+        "port-id",
+        DefaultFn(|| PortId::from_str("transfer").unwrap()),
+    );
     const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
@@ -1414,6 +1670,7 @@ pub mod args {
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
+    const RECEIVER: Arg<String> = arg("receiver");
     const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
     const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
     const SCHEME: ArgDefault<SchemeType> =
@@ -1425,9 +1682,12 @@ pub mod args {
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
-    const TARGET: Arg<WalletAddress> = arg("target");
+    const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
+    const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     const TOKEN: Arg<WalletAddress> = arg("token");
+    const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
+    const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     const TX_HASH: Arg<String> = arg("tx-hash");
     const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
@@ -1442,6 +1702,7 @@ pub mod args {
     const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> = arg_opt("eth-hot-key");
     const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
     const VALUE: ArgOpt<String> = arg_opt("value");
+    const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
 
@@ -1668,9 +1929,9 @@ pub mod args {
         /// Common tx arguments
         pub tx: Tx,
         /// Transfer source address
-        pub source: WalletAddress,
+        pub source: WalletTransferSource,
         /// Transfer target address
-        pub target: WalletAddress,
+        pub target: WalletTransferTarget,
         /// Transferred token address
         pub token: WalletAddress,
         /// Transferred token address
@@ -1679,11 +1940,26 @@ pub mod args {
         pub amount: token::Amount,
     }
 
+    impl TxTransfer {
+        pub fn parse_from_context(
+            &self,
+            ctx: &mut Context,
+        ) -> ParsedTxTransferArgs {
+            ParsedTxTransferArgs {
+                tx: self.tx.parse_from_context(ctx),
+                source: ctx.get_cached(&self.source),
+                target: ctx.get(&self.target),
+                token: ctx.get(&self.token),
+                amount: self.amount,
+            }
+        }
+    }
+
     impl Args for TxTransfer {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let source = SOURCE.parse(matches);
-            let target = TARGET.parse(matches);
+            let source = TRANSFER_SOURCE.parse(matches);
+            let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
@@ -1699,14 +1975,91 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx>()
+                .arg(TRANSFER_SOURCE.def().about(
+                    "The source account address. The source's key may be used \
+                     to produce the signature.",
+                ))
+                .arg(TRANSFER_TARGET.def().about(
+                    "The target account address. The target's key may be used \
+                     to produce the signature.",
+                ))
+                .arg(TOKEN.def().about("The transfer token."))
+                .arg(SUB_PREFIX.def().about("The token's sub prefix."))
+                .arg(AMOUNT.def().about("The amount to transfer in decimal."))
+        }
+    }
+
+    /// IBC transfer transaction arguments
+    #[derive(Clone, Debug)]
+    pub struct TxIbcTransfer {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Transfer source address
+        pub source: WalletAddress,
+        /// Transfer target address
+        pub receiver: String,
+        /// Transferred token address
+        pub token: WalletAddress,
+        /// Transferred token address
+        pub sub_prefix: Option<String>,
+        /// Transferred token amount
+        pub amount: token::Amount,
+        /// Port ID
+        pub port_id: PortId,
+        /// Channel ID
+        pub channel_id: ChannelId,
+        /// Timeout height of the destination chain
+        pub timeout_height: Option<u64>,
+        /// Timeout timestamp offset
+        pub timeout_sec_offset: Option<u64>,
+    }
+
+    impl Args for TxIbcTransfer {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let source = SOURCE.parse(matches);
+            let receiver = RECEIVER.parse(matches);
+            let token = TOKEN.parse(matches);
+            let sub_prefix = SUB_PREFIX.parse(matches);
+            let amount = AMOUNT.parse(matches);
+            let port_id = PORT_ID.parse(matches);
+            let channel_id = CHANNEL_ID.parse(matches);
+            let timeout_height = TIMEOUT_HEIGHT.parse(matches);
+            let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
+            Self {
+                tx,
+                source,
+                receiver,
+                token,
+                sub_prefix,
+                amount,
+                port_id,
+                channel_id,
+                timeout_height,
+                timeout_sec_offset,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
                 .arg(SOURCE.def().about(
                     "The source account address. The source's key is used to \
                      produce the signature.",
                 ))
-                .arg(TARGET.def().about("The target account address."))
+                .arg(RECEIVER.def().about(
+                    "The receiver address on the destination chain as string.",
+                ))
                 .arg(TOKEN.def().about("The transfer token."))
                 .arg(SUB_PREFIX.def().about("The token's sub prefix."))
                 .arg(AMOUNT.def().about("The amount to transfer in decimal."))
+                .arg(PORT_ID.def().about("The port ID."))
+                .arg(CHANNEL_ID.def().about("The channel ID."))
+                .arg(
+                    TIMEOUT_HEIGHT
+                        .def()
+                        .about("The timeout height of the destination chain."),
+                )
+                .arg(TIMEOUT_SEC_OFFSET.def().about("The timeout as seconds."))
         }
     }
 
@@ -2201,15 +2554,55 @@ pub mod args {
         }
     }
 
+    /// Query asset conversions
+    #[derive(Clone, Debug)]
+    pub struct QueryConversions {
+        /// Common query args
+        pub query: Query,
+        /// Address of a token
+        pub token: Option<WalletAddress>,
+        /// Epoch of the asset
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for QueryConversions {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let token = TOKEN_OPT.parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self {
+                query,
+                epoch,
+                token,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(
+                    EPOCH
+                        .def()
+                        .about("The epoch for which to query conversions."),
+                )
+                .arg(
+                    TOKEN_OPT.def().about(
+                        "The token address for which to query conversions.",
+                    ),
+                )
+        }
+    }
+
     /// Query token balance(s)
     #[derive(Clone, Debug)]
     pub struct QueryBalance {
         /// Common query args
         pub query: Query,
         /// Address of an owner
-        pub owner: Option<WalletAddress>,
+        pub owner: Option<WalletBalanceOwner>,
         /// Address of a token
         pub token: Option<WalletAddress>,
+        /// Whether not to convert balances
+        pub no_conversions: bool,
         /// Sub prefix of an account
         pub sub_prefix: Option<String>,
     }
@@ -2217,13 +2610,15 @@ pub mod args {
     impl Args for QueryBalance {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
-            let owner = OWNER.parse(matches);
+            let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
+            let no_conversions = NO_CONVERSIONS.parse(matches);
             let sub_prefix = SUB_PREFIX.parse(matches);
             Self {
                 query,
                 owner,
                 token,
+                no_conversions,
                 sub_prefix,
             }
         }
@@ -2231,7 +2626,7 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query>()
                 .arg(
-                    OWNER
+                    BALANCE_OWNER
                         .def()
                         .about("The account address whose balance to query."),
                 )
@@ -2241,10 +2636,49 @@ pub mod args {
                         .about("The token's address whose balance to query."),
                 )
                 .arg(
+                    NO_CONVERSIONS.def().about(
+                        "Whether not to automatically perform conversions.",
+                    ),
+                )
+                .arg(
                     SUB_PREFIX.def().about(
                         "The token's sub prefix whose balance to query.",
                     ),
                 )
+        }
+    }
+
+    /// Query historical transfer(s)
+    #[derive(Clone, Debug)]
+    pub struct QueryTransfers {
+        /// Common query args
+        pub query: Query,
+        /// Address of an owner
+        pub owner: Option<WalletBalanceOwner>,
+        /// Address of a token
+        pub token: Option<WalletAddress>,
+    }
+
+    impl Args for QueryTransfers {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let owner = BALANCE_OWNER.parse(matches);
+            let token = TOKEN_OPT.parse(matches);
+            Self {
+                query,
+                owner,
+                token,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(BALANCE_OWNER.def().about(
+                    "The account address that queried transfers must involve.",
+                ))
+                .arg(TOKEN_OPT.def().about(
+                    "The token address that queried transfers must involve.",
+                ))
         }
     }
 
@@ -2392,6 +2826,28 @@ pub mod args {
         pub signer: Option<WalletAddress>,
     }
 
+    impl Tx {
+        pub fn parse_from_context(&self, ctx: &mut Context) -> ParsedTxArgs {
+            ParsedTxArgs {
+                dry_run: self.dry_run,
+                force: self.force,
+                broadcast_only: self.broadcast_only,
+                ledger_address: self.ledger_address.clone(),
+                initialized_account_alias: self
+                    .initialized_account_alias
+                    .clone(),
+                fee_amount: self.fee_amount,
+                fee_token: ctx.get(&self.fee_token),
+                gas_limit: self.gas_limit.clone(),
+                signing_key: self
+                    .signing_key
+                    .as_ref()
+                    .map(|sk| ctx.get_cached(sk)),
+                signer: self.signer.as_ref().map(|signer| ctx.get(signer)),
+            }
+        }
+    }
+
     impl Args for Tx {
         fn def(app: App) -> App {
             app.arg(
@@ -2488,6 +2944,116 @@ pub mod args {
         }
     }
 
+    /// MASP add key or address arguments
+    #[derive(Clone, Debug)]
+    pub struct MaspAddrKeyAdd {
+        /// Key alias
+        pub alias: String,
+        /// Any MASP value
+        pub value: MaspValue,
+        /// Don't encrypt the keypair
+        pub unsafe_dont_encrypt: bool,
+    }
+
+    impl Args for MaspAddrKeyAdd {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            let value = MASP_VALUE.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            Self {
+                alias,
+                value,
+                unsafe_dont_encrypt,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS
+                    .def()
+                    .about("An alias to be associated with the new entry."),
+            )
+            .arg(
+                MASP_VALUE
+                    .def()
+                    .about("A spending key, viewing key, or payment address."),
+            )
+            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
+                 used in a live network.",
+            ))
+        }
+    }
+
+    /// MASP generate spending key arguments
+    #[derive(Clone, Debug)]
+    pub struct MaspSpendKeyGen {
+        /// Key alias
+        pub alias: String,
+        /// Don't encrypt the keypair
+        pub unsafe_dont_encrypt: bool,
+    }
+
+    impl Args for MaspSpendKeyGen {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            Self {
+                alias,
+                unsafe_dont_encrypt,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS
+                    .def()
+                    .about("An alias to be associated with the spending key."),
+            )
+            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
+                 used in a live network.",
+            ))
+        }
+    }
+
+    /// MASP generate payment address arguments
+    #[derive(Clone, Debug)]
+    pub struct MaspPayAddrGen {
+        /// Key alias
+        pub alias: String,
+        /// Viewing key
+        pub viewing_key: WalletViewingKey,
+        /// Pin
+        pub pin: bool,
+    }
+
+    impl Args for MaspPayAddrGen {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            let viewing_key = VIEWING_KEY.parse(matches);
+            let pin = PIN.parse(matches);
+            Self {
+                alias,
+                viewing_key,
+                pin,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS.def().about(
+                    "An alias to be associated with the payment address.",
+                ),
+            )
+            .arg(VIEWING_KEY.def().about("The viewing key."))
+            .arg(PIN.def().about(
+                "Require that the single transaction to this address be \
+                 pinned.",
+            ))
+        }
+    }
+
     /// Wallet generate key and implicit address arguments
     #[derive(Clone, Debug)]
     pub struct KeyAndAddressGen {
@@ -2575,6 +3141,60 @@ pub mod args {
                     .def()
                     .about("UNSAFE: Print the secret key."),
             )
+        }
+    }
+
+    /// Wallet find shielded address or key arguments
+    #[derive(Clone, Debug)]
+    pub struct AddrKeyFind {
+        pub alias: String,
+        pub unsafe_show_secret: bool,
+    }
+
+    impl Args for AddrKeyFind {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
+            Self {
+                alias,
+                unsafe_show_secret,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(ALIAS.def().about("The alias that is to be found."))
+                .arg(
+                    UNSAFE_SHOW_SECRET
+                        .def()
+                        .about("UNSAFE: Print the spending key values."),
+                )
+        }
+    }
+
+    /// Wallet list shielded keys arguments
+    #[derive(Clone, Debug)]
+    pub struct MaspKeysList {
+        pub decrypt: bool,
+        pub unsafe_show_secret: bool,
+    }
+
+    impl Args for MaspKeysList {
+        fn parse(matches: &ArgMatches) -> Self {
+            let decrypt = DECRYPT.parse(matches);
+            let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
+            Self {
+                decrypt,
+                unsafe_show_secret,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(DECRYPT.def().about("Decrypt keys that are encrypted."))
+                .arg(
+                    UNSAFE_SHOW_SECRET
+                        .def()
+                        .about("UNSAFE: Print the spending key values."),
+                )
         }
     }
 

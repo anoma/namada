@@ -1,5 +1,7 @@
 mod abortable;
 mod broadcaster;
+pub mod events;
+pub mod rpc;
 mod ethereum_node;
 mod shell;
 mod shims;

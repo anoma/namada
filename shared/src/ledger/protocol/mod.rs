@@ -22,6 +22,7 @@ use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
 use crate::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+use crate::types::storage::TxIndex;
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
@@ -91,9 +92,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// If the given tx is a successfully decrypted payload apply the necessary
 /// vps. Otherwise, we include the tx on chain with the gas charge added
 /// but no further validations.
+#[allow(clippy::too_many_arguments)]
 pub fn dispatch_tx<'a, D, H, CA>(
     tx_type: TxType,
     tx_length: usize,
+    tx_index: TxIndex,
     block_gas_meter: &'a mut BlockGasMeter,
     write_log: &'a mut WriteLog,
     storage: &'a mut Storage<D, H>,
@@ -110,6 +113,7 @@ where
         TxType::Decrypted(DecryptedTx::Decrypted(tx)) => apply_wasm_tx(
             tx,
             tx_length,
+            &tx_index,
             ShellParams {
                 block_gas_meter,
                 write_log,
@@ -133,6 +137,7 @@ where
 pub(crate) fn apply_wasm_tx<'a, D, H, CA>(
     tx: Tx,
     tx_length: usize,
+    tx_index: &TxIndex,
     ShellParams {
         block_gas_meter,
         write_log,
@@ -152,6 +157,7 @@ where
         .map_err(Error::GasError)?;
     let verifiers = execute_tx(
         &tx,
+        &tx_index,
         storage,
         block_gas_meter,
         write_log,
@@ -161,6 +167,7 @@ where
 
     let vps_result = check_vps(
         &tx,
+        &tx_index,
         storage,
         block_gas_meter,
         write_log,
@@ -275,6 +282,7 @@ where
 /// Execute a transaction code. Returns verifiers requested by the transaction.
 fn execute_tx<D, H, CA>(
     tx: &Tx,
+    tx_index: &TxIndex,
     storage: &Storage<D, H>,
     gas_meter: &mut BlockGasMeter,
     write_log: &mut WriteLog,
@@ -295,6 +303,7 @@ where
         storage,
         write_log,
         gas_meter,
+        tx_index,
         &tx.code,
         tx_data,
         vp_wasm_cache,
@@ -306,6 +315,7 @@ where
 /// Check the acceptance of a transaction by validity predicates
 fn check_vps<D, H, CA>(
     tx: &Tx,
+    tx_index: &TxIndex,
     storage: &Storage<D, H>,
     gas_meter: &mut BlockGasMeter,
     write_log: &WriteLog,
@@ -326,6 +336,7 @@ where
         verifiers,
         keys_changed,
         tx,
+        tx_index,
         storage,
         write_log,
         initial_gas,
@@ -341,10 +352,12 @@ where
 }
 
 /// Execute verifiers' validity predicates
+#[allow(clippy::too_many_arguments)]
 fn execute_vps<D, H, CA>(
     verifiers: BTreeSet<Address>,
     keys_changed: BTreeSet<storage::Key>,
     tx: &Tx,
+    tx_index: &TxIndex,
     storage: &Storage<D, H>,
     write_log: &WriteLog,
     initial_gas: u64,
@@ -377,6 +390,7 @@ where
                     wasm::run::vp(
                         vp,
                         tx,
+                        tx_index,
                         addr,
                         storage,
                         write_log,
@@ -393,6 +407,7 @@ where
                         storage,
                         write_log,
                         tx,
+                        tx_index,
                         gas_meter,
                         &keys_changed,
                         &verifiers,
@@ -476,7 +491,8 @@ where
                             gas_meter = slash_fund.ctx.gas_meter.into_inner();
                             result
                         }
-                        InternalAddress::IbcEscrow(_)
+                        InternalAddress::IbcToken(_)
+                        | InternalAddress::IbcEscrow
                         | InternalAddress::IbcBurn
                         | InternalAddress::IbcMint => {
                             // validate the transfer

@@ -3,6 +3,7 @@
 mod channel;
 mod client;
 mod connection;
+mod denom;
 mod packet;
 mod port;
 mod sequence;
@@ -47,6 +48,8 @@ pub enum Error {
     PacketError(packet::Error),
     #[error("Sequence validation error: {0}")]
     SequenceError(sequence::Error),
+    #[error("Denom validation error: {0}")]
+    DenomError(denom::Error),
     #[error("IBC event error: {0}")]
     IbcEvent(String),
     #[error("Decoding transaction data error: {0}")]
@@ -142,6 +145,7 @@ where
                     }
                     IbcPrefix::Ack => self.validate_ack(key)?,
                     IbcPrefix::Event => {}
+                    IbcPrefix::Denom => self.validate_denom(tx_data)?,
                     IbcPrefix::Unknown => {
                         return Err(Error::KeyError(format!(
                             "Invalid IBC-related key: {}",
@@ -289,6 +293,12 @@ impl From<sequence::Error> for Error {
     }
 }
 
+impl From<denom::Error> for Error {
+    fn from(err: denom::Error) -> Self {
+        Self::DenomError(err)
+    }
+}
+
 /// A dummy header used for testing
 #[cfg(any(feature = "test", feature = "testing"))]
 pub fn get_dummy_header() -> crate::types::storage::Header {
@@ -373,6 +383,7 @@ mod tests {
     use crate::proto::Tx;
     use crate::types::ibc::data::{PacketAck, PacketReceipt};
     use crate::vm::wasm;
+    use crate::types::storage::TxIndex;
     use crate::types::storage::{BlockHash, BlockHeight};
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
@@ -553,6 +564,7 @@ mod tests {
         let event = make_create_client_event(&get_client_id(), &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -570,6 +582,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -592,6 +605,7 @@ mod tests {
     fn test_create_client_fail() {
         let storage = TestStorage::default();
         let write_log = WriteLog::default();
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
         let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
@@ -609,6 +623,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -670,6 +685,7 @@ mod tests {
             )
             .expect("write failed");
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -687,6 +703,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -727,6 +744,7 @@ mod tests {
         let event = make_open_init_connection_event(&conn_id, &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -744,6 +762,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -781,6 +800,7 @@ mod tests {
         let bytes = conn.encode_vec().expect("encoding failed");
         write_log.write(&conn_key, bytes).expect("write failed");
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -798,6 +818,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -861,6 +882,7 @@ mod tests {
         let event = make_open_try_connection_event(&conn_id, &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -878,6 +900,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -948,6 +971,7 @@ mod tests {
         let event = make_open_ack_connection_event(&msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
+        let tx_index = TxIndex::default();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
@@ -964,6 +988,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1021,6 +1046,7 @@ mod tests {
         let event = make_open_confirm_connection_event(&msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
+        let tx_index = TxIndex::default();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
@@ -1037,6 +1063,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1079,6 +1106,7 @@ mod tests {
         let event = make_open_init_channel_event(&get_channel_id(), &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -1096,6 +1124,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1157,6 +1186,7 @@ mod tests {
         let event = make_open_try_channel_event(&get_channel_id(), &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -1174,6 +1204,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1243,6 +1274,7 @@ mod tests {
             make_open_ack_channel_event(&msg, &channel).expect("no connection");
         write_log.set_ibc_event(event.try_into().unwrap());
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -1260,6 +1292,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1326,6 +1359,7 @@ mod tests {
             .expect("no connection");
         write_log.set_ibc_event(event.try_into().unwrap());
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -1343,6 +1377,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1366,6 +1401,7 @@ mod tests {
         set_port(&mut write_log, 0);
         write_log.commit_tx();
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
         let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
@@ -1382,6 +1418,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1406,6 +1443,7 @@ mod tests {
         set_port(&mut write_log, index);
         write_log.commit_tx();
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
         let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
@@ -1423,6 +1461,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1487,6 +1526,7 @@ mod tests {
             .write(&key, commitment.into_vec())
             .expect("write failed");
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -1504,6 +1544,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1571,9 +1612,10 @@ mod tests {
             .write(&key, PacketReceipt::default().as_bytes().to_vec())
             .expect("write failed");
         let key = ack_key(&get_port_id(), &get_channel_id(), sequence);
-        let ack = PacketAck::default().encode_to_vec();
+        let ack = PacketAck::result_success().encode_to_vec();
         write_log.write(&key, ack).expect("write failed");
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -1591,6 +1633,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1649,7 +1692,7 @@ mod tests {
         write_log.commit_block(&mut storage).expect("commit failed");
 
         // prepare data
-        let ack = PacketAck::default().encode_to_vec();
+        let ack = PacketAck::result_success().encode_to_vec();
         let proof_packet = CommitmentProofBytes::try_from(vec![0]).unwrap();
         let proofs =
             Proofs::new(proof_packet, None, None, None, Height::new(0, 1))
@@ -1666,6 +1709,7 @@ mod tests {
         // delete the commitment
         write_log.delete(&commitment_key).expect("delete failed");
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -1683,6 +1727,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1750,6 +1795,7 @@ mod tests {
         let event = make_send_packet_event(packet);
         write_log.set_ibc_event(event.try_into().unwrap());
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -1767,6 +1813,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1838,10 +1885,11 @@ mod tests {
             &msg.packet.destination_channel,
             msg.packet.sequence,
         );
-        let ack = PacketAck::default().encode_to_vec();
+        let ack = PacketAck::result_success().encode_to_vec();
         write_log.write(&ack_key, ack).expect("write failed");
         write_log.commit_tx();
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -1858,6 +1906,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
@@ -1887,10 +1936,11 @@ mod tests {
             .expect("write failed");
         let ack_key =
             ack_key(&get_port_id(), &get_channel_id(), Sequence::from(1));
-        let ack = PacketAck::default().encode_to_vec();
+        let ack = PacketAck::result_success().encode_to_vec();
         write_log.write(&ack_key, ack).expect("write failed");
         write_log.commit_tx();
 
+        let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
         let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
@@ -1906,6 +1956,7 @@ mod tests {
             &storage,
             &write_log,
             &tx,
+            &tx_index,
             gas_meter,
             &keys_changed,
             &verifiers,
