@@ -749,7 +749,10 @@ mod test_process_proposal {
     #[test]
     fn test_drop_vext_with_invalid_bheights() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
-        const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
+        #[cfg(feature = "abcipp")]
+        const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
+        #[cfg(not(feature = "abcipp"))]
+        const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 + 1);
         let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
@@ -762,7 +765,7 @@ mod test_process_proposal {
             #[allow(clippy::redundant_clone)]
             let ext = ethereum_events::Vext {
                 validator_addr: addr.clone(),
-                block_height: PRED_LAST_HEIGHT,
+                block_height: INVALID_HEIGHT,
                 ethereum_events: vec![event.clone()],
             }
             .sign(&protocol_key);
@@ -777,7 +780,7 @@ mod test_process_proposal {
                     #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
                     #[cfg(not(feature = "abcipp"))]
-                    s.insert((addr.clone(), PRED_LAST_HEIGHT), ext.sig);
+                    s.insert((addr.clone(), INVALID_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
@@ -787,7 +790,7 @@ mod test_process_proposal {
                         #[cfg(feature = "abcipp")]
                         s.insert(addr);
                         #[cfg(not(feature = "abcipp"))]
-                        s.insert((addr, PRED_LAST_HEIGHT));
+                        s.insert((addr, INVALID_HEIGHT));
                         s
                     },
                 }],
