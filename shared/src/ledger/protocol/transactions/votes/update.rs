@@ -243,31 +243,30 @@ mod tests {
 
     #[test]
     fn test_vote_info_new_single_voter() -> Result<()> {
-        let validator = address::testing::established_address_1;
-        let vote_height = || BlockHeight(100);
-        let voting_power = || FractionalVotingPower::new(1, 3).unwrap();
-        let vote = || (validator(), vote_height());
-        let votes = Votes::from([vote()]);
-        let voting_powers = HashMap::from([(vote(), voting_power())]);
+        let validator = address::testing::established_address_1();
+        let vote_height = BlockHeight(100);
+        let voting_power = FractionalVotingPower::new(1, 3)?;
+        let vote = (validator.clone(), vote_height);
+        let votes = Votes::from([vote.clone()]);
+        let voting_powers = HashMap::from([(vote, voting_power.clone())]);
 
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
-        assert_eq!(vote_info.voters(), BTreeSet::from([validator()]));
+        assert_eq!(vote_info.voters(), BTreeSet::from([validator.clone()]));
         let votes: BTreeSet<_> = vote_info.into_iter().collect();
         assert_eq!(
             votes,
-            BTreeSet::from([(validator(), vote_height(), voting_power())]),
+            BTreeSet::from([(validator, vote_height, voting_power,)]),
         );
         Ok(())
     }
 
     #[test]
     fn test_vote_info_new_error() -> Result<()> {
-        let validator = address::testing::established_address_1;
-        let vote_height = || BlockHeight(100);
-        let vote = || (validator(), vote_height());
-        let votes = Votes::from([vote()]);
-        // voting powers map is missing vote
+        let votes = Votes::from([(
+            address::testing::established_address_1(),
+            BlockHeight(100),
+        )]);
         let voting_powers = HashMap::default();
 
         let result = NewVotes::new(votes, &voting_powers);
@@ -278,13 +277,12 @@ mod tests {
 
     #[test]
     fn test_vote_info_without_voters() -> Result<()> {
-        let validator = address::testing::established_address_1;
-        let vote_height = || BlockHeight(100);
-        let voting_power = || FractionalVotingPower::new(1, 3).unwrap();
-        let vote = || (validator(), vote_height());
-        let votes = Votes::from([vote()]);
-        let voting_powers = HashMap::from([(vote(), voting_power())]);
-        let validator = validator();
+        let validator = address::testing::established_address_1();
+        let vote_height = BlockHeight(100);
+        let voting_power = FractionalVotingPower::new(1, 3)?;
+        let vote = (validator.clone(), vote_height);
+        let votes = Votes::from([vote.clone()]);
+        let voting_powers = HashMap::from([(vote, voting_power)]);
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (vote_info, removed) = vote_info.without_voters(vec![&validator]);
@@ -310,14 +308,14 @@ mod tests {
             HashSet::from([(
                 validator.clone(),
                 already_voted_height,
-                FractionalVotingPower::new(1, 3).unwrap(),
+                FractionalVotingPower::new(1, 3)?,
             )]),
         )?;
 
         let votes = Votes::from([(validator.clone(), BlockHeight(1000))]);
         let voting_powers = HashMap::from([(
             (validator, BlockHeight(1000)),
-            FractionalVotingPower::new(1, 3).unwrap(),
+            FractionalVotingPower::new(1, 3)?,
         )]);
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
@@ -341,16 +339,16 @@ mod tests {
             HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::new(3, 4).unwrap(), // this is > 2/3
+                FractionalVotingPower::new(3, 4)?, // this is > 2/3
             )]),
         )?;
 
-        let validator = address::testing::established_address_2;
-        let vote_height = || BlockHeight(100);
-        let voting_power = || FractionalVotingPower::new(1, 3).unwrap();
-        let vote = || (validator(), vote_height());
-        let votes = Votes::from([vote()]);
-        let voting_powers = HashMap::from([(vote(), voting_power())]);
+        let validator = address::testing::established_address_2();
+        let vote_height = BlockHeight(100);
+        let voting_power = FractionalVotingPower::new(1, 3)?;
+        let vote = (validator, vote_height);
+        let votes = Votes::from([vote.clone()]);
+        let voting_powers = HashMap::from([(vote, voting_power)]);
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
@@ -374,7 +372,7 @@ mod tests {
             HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::new(1, 3).unwrap(),
+                FractionalVotingPower::new(1, 3)?,
             )]),
         )?;
         votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
@@ -403,17 +401,17 @@ mod tests {
             HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::new(1, 3).unwrap(),
+                FractionalVotingPower::new(1, 3)?,
             )]),
         )?;
         votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
 
-        let validator = address::testing::established_address_2;
-        let vote_height = || BlockHeight(100);
-        let voting_power = || FractionalVotingPower::new(1, 3).unwrap();
-        let vote = || (validator(), vote_height());
-        let votes = Votes::from([vote()]);
-        let voting_powers = HashMap::from([(vote(), voting_power())]);
+        let validator = address::testing::established_address_2();
+        let vote_height = BlockHeight(100);
+        let voting_power = FractionalVotingPower::new(1, 3)?;
+        let vote = (validator, vote_height);
+        let votes = Votes::from([vote.clone()]);
+        let voting_powers = HashMap::from([(vote.clone(), voting_power)]);
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
@@ -422,10 +420,10 @@ mod tests {
         assert_eq!(
             tally_post,
             Tally {
-                voting_power: FractionalVotingPower::new(2, 3).unwrap(),
+                voting_power: FractionalVotingPower::new(2, 3)?,
                 seen_by: BTreeMap::from([
                     (address::testing::established_address_1(), 10.into()),
-                    vote(),
+                    vote,
                 ]),
                 seen: false,
             }
@@ -440,7 +438,7 @@ mod tests {
     /// Tests the case where a single vote is applied, and the tally is now
     /// seen.
     #[test]
-    fn test_calculate_one_vote_seen() {
+    fn test_calculate_one_vote_seen() -> Result<()> {
         let mut storage = TestStorage::default();
 
         let event = arbitrary_event();
@@ -452,30 +450,29 @@ mod tests {
             HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::new(1, 3).unwrap(),
+                FractionalVotingPower::new(1, 3)?,
             )]),
-        )
-        .unwrap();
-        votes::storage::write(&mut storage, &keys, &event, &tally_pre).unwrap();
+        )?;
+        votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
 
-        let validator = address::testing::established_address_2;
-        let vote_height = || BlockHeight(100);
-        let voting_power = || FractionalVotingPower::new(2, 3).unwrap();
-        let vote = || (validator(), vote_height());
-        let votes = Votes::from([vote()]);
-        let voting_powers = HashMap::from([(vote(), voting_power())]);
-        let vote_info = NewVotes::new(votes, &voting_powers).unwrap();
+        let validator = address::testing::established_address_2();
+        let vote_height = BlockHeight(100);
+        let voting_power = FractionalVotingPower::new(2, 3)?;
+        let vote = (validator, vote_height);
+        let votes = Votes::from([vote.clone()]);
+        let voting_powers = HashMap::from([(vote.clone(), voting_power)]);
+        let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut storage, &keys, vote_info).unwrap();
+            calculate(&mut storage, &keys, vote_info)?;
 
         assert_eq!(
             tally_post,
             Tally {
-                voting_power: FractionalVotingPower::new(1, 1).unwrap(),
+                voting_power: FractionalVotingPower::new(1, 1)?,
                 seen_by: BTreeMap::from([
                     (address::testing::established_address_1(), 10.into()),
-                    vote(),
+                    vote,
                 ]),
                 seen: true,
             }
@@ -484,12 +481,13 @@ mod tests {
             changed_keys,
             BTreeSet::from([keys.voting_power(), keys.seen_by(), keys.seen()])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_keys_changed_all() {
-        let voting_power_a = FractionalVotingPower::new(1, 3).unwrap();
-        let voting_power_b = FractionalVotingPower::new(2, 3).unwrap();
+    fn test_keys_changed_all() -> Result<()> {
+        let voting_power_a = FractionalVotingPower::new(1, 3)?;
+        let voting_power_b = FractionalVotingPower::new(2, 3)?;
 
         let seen_a = false;
         let seen_b = true;
@@ -521,11 +519,12 @@ mod tests {
             changed_keys,
             BTreeSet::from([keys.seen(), keys.seen_by(), keys.voting_power()])
         );
+        Ok(())
     }
 
     #[test]
-    fn test_keys_changed_none() {
-        let voting_power = FractionalVotingPower::new(1, 3).unwrap();
+    fn test_keys_changed_none() -> Result<()> {
+        let voting_power = FractionalVotingPower::new(1, 3)?;
         let seen = false;
         let seen_by = BTreeMap::from([(
             address::testing::established_address_1(),
@@ -543,5 +542,6 @@ mod tests {
         let changed_keys = keys_changed(&keys, &pre, &post);
 
         assert!(changed_keys.is_empty());
+        Ok(())
     }
 }
