@@ -992,21 +992,35 @@ mod test_process_proposal {
         } else {
             panic!("Test failed");
         };
-        let request = ProcessProposal {
-            txs: vec![
-                new_tx.to_bytes(),
-                #[cfg(feature = "abcipp")]
-                get_empty_eth_ev_digest(&shell),
-            ],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![new_tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-        let response = if let [response, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            response.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![new_tx.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         let expected_error = "Signature verification failed: Invalid signature";
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
