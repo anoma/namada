@@ -100,7 +100,7 @@ where
     tracing::info!(
         ?keys.prefix,
         validators = ?vote_info.voters(),
-        "Recording validators as having voted for this event"
+        "Calculating validators' votes applied to an existing tally"
     );
     let tally_pre = super::storage::read(store, keys)?;
     if tally_pre.seen {
@@ -124,12 +124,12 @@ where
     if tally_post.seen {
         tracing::info!(
             ?keys.prefix,
-            "Event has been seen by a quorum of validators",
+            "Tally has been seen by a quorum of validators",
         );
     } else {
         tracing::debug!(
             ?keys.prefix,
-            "Event is not yet seen by a quorum of validators",
+            "Tally is not yet seen by a quorum of validators",
         );
     };
 
@@ -202,8 +202,7 @@ mod tests {
     mod helpers {
         use super::*;
 
-        /// Returns an arbitrary piece of data that can be tallied, and the keys
-        /// for it.
+        /// Returns an arbitrary piece of data that can have votes tallied against it.
         pub(super) fn arbitrary_event() -> EthereumEvent {
             EthereumEvent::TransfersToNamada {
                 nonce: 0.into(),
