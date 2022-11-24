@@ -169,10 +169,10 @@ max_inflation_rate = 0.1
 target_staked_ratio = 0.6667
 # Portion of a validator's stake that should be slashed on a duplicate
 # vote.
-duplicate_vote_slash_rate = 0.001
+duplicate_vote_min_slash_rate = 0.001
 # Portion of a validator's stake that should be slashed on a light
 # client attack.
-light_client_attack_slash_rate = 0.001
+light_client_attack_min_slash_rate = 0.001
 
 # Governance parameters.
 [gov_params]
