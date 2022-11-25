@@ -522,6 +522,12 @@ fn masp_txs_and_queries() -> Result<()> {
         },
         None,
     )?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -788,6 +794,12 @@ fn masp_pinned_txs() -> Result<()> {
         },
         None,
     )?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -949,6 +961,12 @@ fn masp_incentives() -> Result<()> {
         },
         None,
     )?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
