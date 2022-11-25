@@ -25,7 +25,7 @@ use serde_json::json;
 use setup::constants::*;
 
 use super::helpers::{get_height, wait_for_block_height};
-use super::setup::{disable_eth_fullnode, get_all_wasms_hashes};
+use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode};
 use crate::e2e::helpers::{
     find_address, find_voting_power, get_actor_rpc, get_epoch,
 };
@@ -39,7 +39,12 @@ use crate::{run, run_as};
 fn run_ledger() -> Result<()> {
     let test = setup::single_node_net()?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
@@ -72,8 +77,18 @@ fn test_node_connectivity() -> Result<()> {
     let test =
         setup::network(|genesis| setup::add_validators(1, genesis), None)?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(1));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run 2 genesis validator ledger nodes and 1 non-validator node
     let args = ["ledger"];
@@ -109,11 +124,11 @@ fn test_node_connectivity() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -175,7 +190,12 @@ fn test_node_connectivity() -> Result<()> {
 fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
     let test = setup::single_node_net()?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -214,7 +234,12 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
 fn run_ledger_load_state_and_reset() -> Result<()> {
     let test = setup::single_node_net()?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -283,7 +308,12 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 fn ledger_txs_and_queries() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -311,11 +341,11 @@ fn ledger_txs_and_queries() -> Result<()> {
             NAM,
             "--amount",
             "10.1",
-            "--fee-amount",
+            "--gas-amount",
             "0",
             "--gas-limit",
             "0",
-            "--fee-token",
+            "--gas-token",
             NAM,
             "--ledger-address",
             &validator_one_rpc,
@@ -328,11 +358,11 @@ fn ledger_txs_and_queries() -> Result<()> {
              BERTHA,
              "--code-path",
              &vp_user,
-             "--fee-amount",
+             "--gas-amount",
              "0",
              "--gas-limit",
              "0",
-             "--fee-token",
+             "--gas-token",
              NAM,
             "--ledger-address",
             &validator_one_rpc,
@@ -346,11 +376,11 @@ fn ledger_txs_and_queries() -> Result<()> {
             &tx_no_op,
             "--data-path",
             "README.md",
-            "--fee-amount",
+            "--gas-amount",
             "0",
             "--gas-limit",
             "0",
-            "--fee-token",
+            "--gas-token",
             NAM,
             "--ledger-address",
             &validator_one_rpc
@@ -367,11 +397,11 @@ fn ledger_txs_and_queries() -> Result<()> {
             &vp_user,
             "--alias",
             "Test-Account",
-            "--fee-amount",
+            "--gas-amount",
             "0",
             "--gas-limit",
             "0",
-            "--fee-token",
+            "--gas-token",
             NAM,
             "--ledger-address",
             &validator_one_rpc,
@@ -457,7 +487,12 @@ fn ledger_txs_and_queries() -> Result<()> {
 fn invalid_transactions() -> Result<()> {
     let test = setup::single_node_net()?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -495,11 +530,11 @@ fn invalid_transactions() -> Result<()> {
         &tx_data_path,
         "--signing-key",
         DAEWON,
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -549,11 +584,11 @@ fn invalid_transactions() -> Result<()> {
         BERTHA,
         "--amount",
         "1_000_000.1",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         // Force to ignore client check that fails on the balance check of the
         // source address
@@ -609,7 +644,12 @@ fn pos_bonds() -> Result<()> {
         None,
     )?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -627,11 +667,11 @@ fn pos_bonds() -> Result<()> {
         "validator-0",
         "--amount",
         "10.1",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -651,11 +691,11 @@ fn pos_bonds() -> Result<()> {
         BERTHA,
         "--amount",
         "10.1",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -672,11 +712,11 @@ fn pos_bonds() -> Result<()> {
         "validator-0",
         "--amount",
         "5.1",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -696,11 +736,11 @@ fn pos_bonds() -> Result<()> {
         BERTHA,
         "--amount",
         "3.2",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -737,11 +777,11 @@ fn pos_bonds() -> Result<()> {
         "withdraw",
         "--validator",
         "validator-0",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -759,11 +799,11 @@ fn pos_bonds() -> Result<()> {
         "validator-0",
         "--source",
         BERTHA,
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -810,7 +850,12 @@ fn pos_init_validator() -> Result<()> {
         None,
     )?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -831,11 +876,11 @@ fn pos_init_validator() -> Result<()> {
         "--source",
         BERTHA,
         "--unsafe-dont-encrypt",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -857,11 +902,11 @@ fn pos_init_validator() -> Result<()> {
         NAM,
         "--amount",
         "0.5",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -879,11 +924,11 @@ fn pos_init_validator() -> Result<()> {
         BERTHA,
         "--amount",
         "1000.5",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -904,11 +949,11 @@ fn pos_init_validator() -> Result<()> {
         NAM,
         "--amount",
         "10999.5",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -925,11 +970,11 @@ fn pos_init_validator() -> Result<()> {
         new_validator,
         "--amount",
         "10000",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -979,7 +1024,12 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         Some("10s"),
     )?);
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -1004,11 +1054,11 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
     ]);
@@ -1089,7 +1139,12 @@ fn proposal_submission() -> Result<()> {
         None,
     )?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     let anomac_help = vec!["--help"];
 
@@ -1115,11 +1170,11 @@ fn proposal_submission() -> Result<()> {
         BERTHA,
         "--amount",
         "900",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -1451,7 +1506,12 @@ fn proposal_submission() -> Result<()> {
 fn proposal_offline() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -1471,11 +1531,11 @@ fn proposal_offline() -> Result<()> {
         ALBERT,
         "--amount",
         "900",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -1922,11 +1982,11 @@ fn test_genesis_validators() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,
@@ -2002,8 +2062,18 @@ fn double_signing_gets_slashed() -> Result<()> {
     let test =
         setup::network(|genesis| setup::add_validators(1, genesis), None)?;
 
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(0));
-    disable_eth_fullnode(&test, &test.net.chain_id, &Who::Validator(1));
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // 1. Run 2 genesis validator ledger nodes
     let args = ["ledger"];
@@ -2100,11 +2170,11 @@ fn double_signing_gets_slashed() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &validator_one_rpc,

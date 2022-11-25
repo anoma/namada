@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
+use crate::types::storage::{DbKeySeg, KeySeg};
 use crate::types::token::Amount;
 
 /// Anoma native type to replace the ethabi::Uint type
@@ -108,6 +109,21 @@ impl TryFrom<String> for EthAddress {
 impl From<EthAddress> for String {
     fn from(addr: EthAddress) -> Self {
         addr.to_string()
+    }
+}
+
+impl KeySeg for EthAddress {
+    fn parse(string: String) -> crate::types::storage::Result<Self> {
+        Self::from_str(string.as_str())
+            .map_err(|_| crate::types::storage::Error::ParseKeySeg(string))
+    }
+
+    fn raw(&self) -> String {
+        self.to_canonical()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
     }
 }
 

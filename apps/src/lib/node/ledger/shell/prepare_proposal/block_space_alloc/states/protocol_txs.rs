@@ -35,7 +35,7 @@ impl NextStateImpl<WithEncryptedTxs>
 
     #[inline]
     fn next_state_impl(mut self) -> Self::Next {
-        self.protocol_txs.shrink();
+        self.protocol_txs.shrink_to_fit();
 
         // reserve space for encrypted txs
         let remaining_free_space = self.uninitialized_space_in_bytes();
@@ -68,7 +68,7 @@ impl NextStateImpl<WithoutEncryptedTxs>
 
     #[inline]
     fn next_state_impl(mut self) -> Self::Next {
-        self.protocol_txs.shrink();
+        self.protocol_txs.shrink_to_fit();
 
         // cast state
         let Self {

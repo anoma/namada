@@ -162,8 +162,8 @@ struct TxBin {
 }
 
 impl TxBin {
-    /// Construct a new [`TxBin`], with an upper bound on the max number
-    /// of storable txs defined by a ratio over `max_bytes`.
+    /// Return a new [`TxBin`] with a total allotted space equal to the
+    /// floor of the fraction `frac` of the available block space `max_bytes`.
     #[inline]
     fn init_over_ratio(max_bytes: u64, frac: Ratio<u64>) -> Self {
         let allotted_space_in_bytes = (frac * max_bytes).to_integer();
@@ -191,7 +191,7 @@ impl TxBin {
     /// Shrink the allotted space of this [`TxBin`] to whatever
     /// space is currently being utilized.
     #[inline]
-    fn shrink(&mut self) {
+    fn shrink_to_fit(&mut self) {
         self.allotted_space_in_bytes = self.occupied_space_in_bytes;
     }
 
@@ -238,14 +238,199 @@ impl TxBin {
     }
 }
 
-mod thres {
+mod threshold {
     //! Transaction allotment thresholds.
 
     use num_rational::Ratio;
 
     /// The threshold over Tendermint's allotted space for all three
     /// (major) kinds of Namada transactions.
+    #[cfg(test)]
     pub const ONE_THIRD: Ratio<u64> = Ratio::new_raw(1, 3);
+
+    /// Divide the allotted space in two.
+    pub const ONE_HALF: Ratio<u64> = Ratio::new_raw(1, 2);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use assert_matches::assert_matches;
+    use proptest::prelude::*;
+
+    use super::states::{NextState, NextStateWithEncryptedTxs, TryAlloc};
+    use super::*;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+
+    /// Proptest generated txs.
+    #[derive(Debug)]
+    struct PropTx {
+        tendermint_max_block_space_in_bytes: u64,
+        protocol_txs: Vec<TxBytes>,
+        encrypted_txs: Vec<TxBytes>,
+        decrypted_txs: Vec<TxBytes>,
+    }
+
+    proptest! {
+        /// Check if we reject a tx when its respective bin
+        /// capacity has been reached on a [`BlockSpaceAllocator`].
+        #[test]
+        fn test_reject_tx_on_bin_cap_reached(max in prop::num::u64::ANY) {
+            proptest_reject_tx_on_bin_cap_reached(max)
+        }
+
+        /// Check if the sum of all individual bin allotments for a
+        /// [`BlockSpaceAllocator`] corresponds to the total space ceded
+        /// by Tendermint.
+        #[test]
+        fn test_bin_capacity_eq_provided_space(max in prop::num::u64::ANY) {
+            proptest_bin_capacity_eq_provided_space(max)
+        }
+
+        /// Test that dumping txs whose total combined size
+        /// is less than the bin cap does not fill up the bin.
+        #[test]
+        fn test_tx_dump_doesnt_fill_up_bin(args in arb_transactions()) {
+            proptest_tx_dump_doesnt_fill_up_bin(args)
+        }
+    }
+
+    /// Implementation of [`test_reject_tx_on_bin_cap_reached`].
+    fn proptest_reject_tx_on_bin_cap_reached(
+        tendermint_max_block_space_in_bytes: u64,
+    ) {
+        let mut bins =
+            BlockSpaceAllocator::init(tendermint_max_block_space_in_bytes);
+
+        // fill the entire bin of decrypted txs
+        bins.decrypted_txs.occupied_space_in_bytes =
+            bins.decrypted_txs.allotted_space_in_bytes;
+
+        // make sure we can't dump any new decrypted txs in the bin
+        assert_matches!(
+            bins.try_alloc(b"arbitrary tx bytes"),
+            AllocStatus::Rejected { .. }
+        );
+    }
+
+    /// Implementation of [`test_bin_capacity_eq_provided_space`].
+    fn proptest_bin_capacity_eq_provided_space(
+        tendermint_max_block_space_in_bytes: u64,
+    ) {
+        let bins =
+            BlockSpaceAllocator::init(tendermint_max_block_space_in_bytes);
+        assert_eq!(0, bins.uninitialized_space_in_bytes());
+    }
+
+    /// Implementation of [`test_tx_dump_doesnt_fill_up_bin`].
+    fn proptest_tx_dump_doesnt_fill_up_bin(args: PropTx) {
+        let PropTx {
+            tendermint_max_block_space_in_bytes,
+            protocol_txs,
+            encrypted_txs,
+            decrypted_txs,
+        } = args;
+
+        // produce new txs until the moment we would have
+        // filled up the bins.
+        //
+        // iterate over the produced txs to make sure we can keep
+        // dumping new txs without filling up the bins
+
+        let bins = RefCell::new(BlockSpaceAllocator::init(
+            tendermint_max_block_space_in_bytes,
+        ));
+        let decrypted_txs = decrypted_txs.into_iter().take_while(|tx| {
+            let bin = bins.borrow().decrypted_txs;
+            let new_size = bin.occupied_space_in_bytes + tx.len() as u64;
+            new_size < bin.allotted_space_in_bytes
+        });
+        for tx in decrypted_txs {
+            assert_matches!(
+                bins.borrow_mut().try_alloc(&tx),
+                AllocStatus::Accepted
+            );
+        }
+
+        let bins = RefCell::new(bins.into_inner().next_state());
+        let protocol_txs = protocol_txs.into_iter().take_while(|tx| {
+            let bin = bins.borrow().protocol_txs;
+            let new_size = bin.occupied_space_in_bytes + tx.len() as u64;
+            new_size < bin.allotted_space_in_bytes
+        });
+        for tx in protocol_txs {
+            assert_matches!(
+                bins.borrow_mut().try_alloc(&tx),
+                AllocStatus::Accepted
+            );
+        }
+
+        let bins =
+            RefCell::new(bins.into_inner().next_state_with_encrypted_txs());
+        let encrypted_txs = encrypted_txs.into_iter().take_while(|tx| {
+            let bin = bins.borrow().encrypted_txs;
+            let new_size = bin.occupied_space_in_bytes + tx.len() as u64;
+            new_size < bin.allotted_space_in_bytes
+        });
+        for tx in encrypted_txs {
+            assert_matches!(
+                bins.borrow_mut().try_alloc(&tx),
+                AllocStatus::Accepted
+            );
+        }
+    }
+
+    prop_compose! {
+        /// Generate arbitrarily sized txs of different kinds.
+        fn arb_transactions()
+            // create base strategies
+            (
+                (tendermint_max_block_space_in_bytes, protocol_tx_max_bin_size, encrypted_tx_max_bin_size,
+                 decrypted_tx_max_bin_size) in arb_max_bin_sizes(),
+            )
+            // compose strategies
+            (
+                tendermint_max_block_space_in_bytes in Just(tendermint_max_block_space_in_bytes),
+                protocol_txs in arb_tx_list(protocol_tx_max_bin_size),
+                encrypted_txs in arb_tx_list(encrypted_tx_max_bin_size),
+                decrypted_txs in arb_tx_list(decrypted_tx_max_bin_size),
+            )
+            -> PropTx {
+                PropTx {
+                    tendermint_max_block_space_in_bytes,
+                    protocol_txs,
+                    encrypted_txs,
+                    decrypted_txs,
+                }
+            }
+    }
+
+    /// Return random bin sizes for a [`BlockSpaceAllocator`].
+    fn arb_max_bin_sizes() -> impl Strategy<Value = (u64, usize, usize, usize)>
+    {
+        const MAX_BLOCK_SIZE_BYTES: u64 = 1000;
+        (1..=MAX_BLOCK_SIZE_BYTES).prop_map(
+            |tendermint_max_block_space_in_bytes| {
+                (
+                    tendermint_max_block_space_in_bytes,
+                    (threshold::ONE_THIRD * tendermint_max_block_space_in_bytes)
+                        .to_integer() as usize,
+                    (threshold::ONE_THIRD * tendermint_max_block_space_in_bytes)
+                        .to_integer() as usize,
+                    (threshold::ONE_THIRD * tendermint_max_block_space_in_bytes)
+                        .to_integer() as usize,
+                )
+            },
+        )
+    }
+
+    /// Return a list of txs.
+    fn arb_tx_list(max_bin_size: usize) -> impl Strategy<Value = Vec<Vec<u8>>> {
+        const MAX_TX_NUM: usize = 64;
+        let tx = prop::collection::vec(prop::num::u8::ANY, 0..=max_bin_size);
+        prop::collection::vec(tx, 0..=MAX_TX_NUM)
+    }
 }
 
 #[cfg(test)]

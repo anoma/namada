@@ -7,10 +7,11 @@ pub mod val_set_update;
 use borsh::BorshDeserialize;
 use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
 use namada::proto::Signed;
-use namada::types::index_set::IndexSet;
 use namada::types::transaction::protocol::ProtocolTxType;
+#[cfg(feature = "abcipp")]
+use namada::types::vote_extensions::VoteExtensionDigest;
 use namada::types::vote_extensions::{
-    ethereum_events, validator_set_update, VoteExtension, VoteExtensionDigest,
+    ethereum_events, validator_set_update, VoteExtension,
 };
 
 use super::*;
@@ -296,16 +297,15 @@ pub fn deserialize_vote_extensions(
 }
 
 /// Given a slice of [`TxBytes`], return an iterator over the
-/// ones we could deserialize to [`VoteExtension`]
+/// ones we could deserialize to vote extension [`ProtocolTx`]
 /// instances.
 #[cfg(not(feature = "abcipp"))]
-pub fn deserialize_vote_extensions<'prep_proposal>(
-    tx_indices: &'prep_proposal mut IndexSet,
-    txs: &'prep_proposal [TxBytes],
-) -> impl Iterator<Item = (TxBytes, VoteExtension)> + 'prep_proposal {
+pub fn deserialize_vote_extensions(
+    txs: &[TxBytes],
+) -> impl Iterator<Item = TxBytes> + '_ {
     use namada::types::transaction::protocol::ProtocolTx;
 
-    txs.iter().enumerate().filter_map(|(index, tx_bytes)| {
+    txs.iter().filter_map(|tx_bytes| {
         let tx = match Tx::try_from(tx_bytes.as_slice()) {
             Ok(tx) => tx,
             Err(err) => {
@@ -318,16 +318,11 @@ pub fn deserialize_vote_extensions<'prep_proposal>(
         };
         match process_tx(tx).ok()? {
             TxType::Protocol(ProtocolTx {
-                tx: ProtocolTxType::VoteExtension(ext),
+                tx:
+                    ProtocolTxType::EthEventsVext(_)
+                    | ProtocolTxType::ValSetUpdateVext(_),
                 ..
-            }) => {
-                // mark every vote extension for inclusion; we shouldn't include
-                // them in a block without the corresponding digests, so even
-                // if those get rejected due to space constraints, the
-                // behavior should be correct
-                tx_indices.insert(index);
-                Some((tx_bytes.clone(), ext))
-            }
+            }) => Some(tx_bytes.clone()),
             _ => None,
         }
     })
@@ -335,6 +330,7 @@ pub fn deserialize_vote_extensions<'prep_proposal>(
 
 /// Yields an iterator over the [`ProtocolTxType`] transactions
 /// in a [`VoteExtensionDigest`].
+#[cfg(feature = "abcipp")]
 pub fn iter_protocol_txs(
     digest: VoteExtensionDigest,
 ) -> impl Iterator<Item = ProtocolTxType> {
@@ -343,6 +339,21 @@ pub fn iter_protocol_txs(
         digest
             .validator_set_update
             .map(ProtocolTxType::ValidatorSetUpdate),
+    ]
+    .into_iter()
+    .flatten()
+}
+
+/// Yields an iterator over the [`ProtocolTxType`] transactions
+/// in a [`VoteExtension`].
+#[cfg(not(feature = "abcipp"))]
+pub fn iter_protocol_txs(
+    ext: VoteExtension,
+) -> impl Iterator<Item = ProtocolTxType> {
+    [
+        Some(ProtocolTxType::EthEventsVext(ext.ethereum_events)),
+        ext.validator_set_update
+            .map(ProtocolTxType::ValSetUpdateVext),
     ]
     .into_iter()
     .flatten()
@@ -369,34 +380,4 @@ pub fn split_vote_extensions(
     }
 
     (eth_evs, valset_upds)
-}
-
-/// Deserializes [`VoteExtension`] instances from mempool protocol txs,
-/// filtering out non-protocol txs, and splits these into
-/// [`ethereum_events::Vext`] and [`validator_set_update::Vext`] instances.
-///
-/// The original [`TxBytes`] are also returned, such that we can remove
-/// them from Tendermint's mempool.
-#[cfg(not(feature = "abcipp"))]
-pub fn split_vote_extensions(
-    tx_indices: &mut IndexSet,
-    mempool_txs: &[TxBytes],
-) -> (
-    Vec<TxBytes>,
-    Vec<Signed<ethereum_events::Vext>>,
-    Vec<validator_set_update::SignedVext>,
-) {
-    let mut txs = vec![];
-    let mut eth_evs = vec![];
-    let mut valset_upds = vec![];
-
-    for (tx, ext) in deserialize_vote_extensions(tx_indices, mempool_txs) {
-        if let Some(validator_set_update) = ext.validator_set_update {
-            valset_upds.push(validator_set_update);
-        }
-        eth_evs.push(ext.ethereum_events);
-        txs.push(tx);
-    }
-
-    (txs, eth_evs, valset_upds)
 }
