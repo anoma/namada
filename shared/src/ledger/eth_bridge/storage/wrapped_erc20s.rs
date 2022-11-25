@@ -5,7 +5,7 @@ use eyre::eyre;
 
 use crate::types::address::Address;
 use crate::types::ethereum_events::EthAddress;
-use crate::types::storage::{self, DbKeySeg};
+use crate::types::storage::{self, DbKeySeg, KeySeg};
 
 #[allow(missing_docs)]
 pub const MULTITOKEN_KEY_SEGMENT: &str = "ERC20";
@@ -35,7 +35,7 @@ impl Keys {
         self.prefix
             .push(&BALANCE_KEY_SEGMENT.to_owned())
             .expect("should always be able to construct this key")
-            .push(&format!("#{}", owner.encode()))
+            .push(&owner.to_db_key())
             .expect("should always be able to construct this key")
     }
 
@@ -56,6 +56,13 @@ impl From<&EthAddress> for Keys {
                 .expect("should always be able to construct this key"),
         }
     }
+}
+
+/// Construct a sub-prefix from an ERC20 address.
+pub fn sub_prefix(address: &EthAddress) -> storage::Key {
+    storage::Key::from(MULTITOKEN_KEY_SEGMENT.to_owned().to_db_key())
+        .push(&address.to_db_key())
+        .expect("should always be able to construct this key")
 }
 
 /// Represents the type of a key relating to a wrapped ERC20

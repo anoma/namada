@@ -15,6 +15,7 @@ use core::slice;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
+pub use namada::ledger::eth_bridge;
 pub use namada::ledger::governance::storage as gov_storage;
 pub use namada::ledger::parameters::storage as parameters_storage;
 pub use namada::ledger::slash_fund::storage as slash_fund_storage;
@@ -28,6 +29,7 @@ pub use namada::ledger::tx_env::TxEnv;
 pub use namada::proto::{Signed, SignedTxData};
 pub use namada::types::address::Address;
 use namada::types::chain::CHAIN_ID_LENGTH;
+pub use namada::types::ethereum_events::EthAddress;
 use namada::types::internal::HostEnvResult;
 use namada::types::storage::{
     BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
