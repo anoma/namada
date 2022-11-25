@@ -52,8 +52,6 @@ pub mod states;
 
 use std::marker::PhantomData;
 
-use num_rational::Ratio;
-
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
 /// All status responses from trying to allocate block space for a tx.
@@ -165,8 +163,8 @@ impl TxBin {
     /// Return a new [`TxBin`] with a total allotted space equal to the
     /// floor of the fraction `frac` of the available block space `max_bytes`.
     #[inline]
-    fn init_over_ratio(max_bytes: u64, frac: Ratio<u64>) -> Self {
-        let allotted_space_in_bytes = (frac * max_bytes).to_integer();
+    fn init_over_ratio(max_bytes: u64, frac: threshold::Threshold) -> Self {
+        let allotted_space_in_bytes = frac.over(max_bytes);
         Self {
             allotted_space_in_bytes,
             occupied_space_in_bytes: 0,
@@ -221,12 +219,27 @@ mod threshold {
 
     use num_rational::Ratio;
 
-    /// The threshold over Tendermint's allotted space for all three
-    /// (major) kinds of Namada transactions.
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub const ONE_THIRD: Ratio<u64> = Ratio::new_raw(1, 3);
+    /// Threshold over a portion of block space.
+    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    pub struct Threshold(Ratio<u64>);
 
-    /// Divide the allotted space in two.
-    pub const ONE_HALF: Ratio<u64> = Ratio::new_raw(1, 2);
+    impl Threshold {
+        /// Return a new [`Threshold`].
+        const fn new(numer: u64, denom: u64) -> Self {
+            // constrain ratio to a max of 1
+            let numer = if numer > denom { denom } else { numer };
+            Self(Ratio::new_raw(numer, denom))
+        }
+
+        /// Return a [`Threshold`] over some free space.
+        pub fn over(self, free_space_in_bytes: u64) -> u64 {
+            (self.0 * free_space_in_bytes).to_integer()
+        }
+    }
+
+    /// Divide free space in three.
+    pub const ONE_THIRD: Threshold = Threshold::new(1, 3);
+
+    /// Divide free space in two.
+    pub const ONE_HALF: Threshold = Threshold::new(1, 2);
 }
