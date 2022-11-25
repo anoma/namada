@@ -1,7 +1,7 @@
 use borsh::BorshDeserialize;
 use namada::types::ethereum_events::EthereumEvent;
-use tokio::macros::support::poll_fn;
 use tokio::sync::mpsc::Sender as BoundedSender;
+use tokio::sync::oneshot::{Receiver, Sender};
 use warp::reply::WithStatus;
 use warp::Filter;
 
@@ -13,34 +13,46 @@ const DEFAULT_LISTEN_ADDR: ([u8; 4], u16) = ([0, 0, 0, 0], 3030);
 const EVENTS_POST_ENDPOINT: &str = "eth_events";
 
 /// Starts a [`warp::Server`] that listens for Borsh-serialized Ethereum events
-/// and then forwards them to `sender`. It shuts down if `abort_sender` is
-/// closed.
-pub fn serve(
+/// and then forwards them to `sender`. It shuts down if a signal is sent on the
+/// `abort_recv` channel.
+pub async fn serve(
     sender: BoundedSender<EthereumEvent>,
-    mut abort_sender: tokio::sync::oneshot::Sender<()>,
-) -> tokio::task::JoinHandle<()> {
+    abort_recv: Receiver<Sender<()>>,
+) {
     tracing::info!(?DEFAULT_LISTEN_ADDR, "Ethereum event endpoint is starting");
     let eth_events = warp::post()
         .and(warp::path(EVENTS_POST_ENDPOINT))
         .and(warp::body::bytes())
         .then(move |bytes: bytes::Bytes| send(bytes, sender.clone()));
 
-    let (_, server) = warp::serve(eth_events).bind_with_graceful_shutdown(
+    let (_, future) = warp::serve(eth_events).bind_with_graceful_shutdown(
         DEFAULT_LISTEN_ADDR,
         async move {
             tracing::info!(
                 ?DEFAULT_LISTEN_ADDR,
                 "Starting to listen for Borsh-serialized Ethereum events"
             );
-            poll_fn(|cx| abort_sender.poll_closed(cx)).await;
+            match abort_recv.await {
+                Ok(abort_resp_send) => {
+                    if abort_resp_send.send(()).is_err() {
+                        tracing::warn!(
+                            "Received signal to abort but failed to respond, \
+                             will abort now"
+                        )
+                    }
+                }
+                Err(_) => tracing::warn!(
+                    "Channel for receiving signal to abort was closed \
+                     abruptly, will abort now"
+                ),
+            };
             tracing::info!(
                 ?DEFAULT_LISTEN_ADDR,
                 "Stopping listening for Borsh-serialized Ethereum events"
             );
         },
     );
-
-    tokio::task::spawn(server)
+    future.await
 }
 
 /// Callback to send out events from the oracle

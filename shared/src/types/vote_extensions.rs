@@ -29,6 +29,7 @@ pub struct VoteExtension {
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
+#[cfg(feature = "abcipp")]
 pub struct VoteExtensionDigest {
     /// The digest of Ethereum events vote extension signatures.
     pub ethereum_events: ethereum_events::VextDigest,

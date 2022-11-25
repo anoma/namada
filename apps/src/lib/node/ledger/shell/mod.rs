@@ -671,20 +671,23 @@ where
 
         #[cfg(not(feature = "abcipp"))]
         {
-            use namada::types::transaction::protocol::ProtocolTxType;
+            use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 
             if let ShellMode::Validator { .. } = &self.mode {
                 let ext = self.craft_extension();
-                let ext = self
+
+                let protocol_key = self
                     .mode
                     .get_protocol_key()
-                    .map(|protocol_key| {
-                        ProtocolTxType::VoteExtension(ext)
-                            .sign(protocol_key)
-                            .to_bytes()
-                    })
                     .expect("Validators should have protocol keys");
-                self.mode.broadcast(ext);
+
+                let protocol_txs = iter_protocol_txs(ext).map(|protocol_tx| {
+                    protocol_tx.sign(protocol_key).to_bytes()
+                });
+
+                for tx in protocol_txs {
+                    self.mode.broadcast(tx);
+                }
             }
         }
 
@@ -699,14 +702,68 @@ where
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
+        use namada::types::transaction::protocol::{
+            ProtocolTx, ProtocolTxType,
+        };
+
         let mut response = response::CheckTx::default();
+        const VALID_MSG: &str = "Mempool validation passed";
+
         match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
-            Ok(_) => response.log = String::from("Mempool validation passed"),
+            Ok(tx) => {
+                match process_tx(tx) {
+                    #[cfg(not(feature = "abcipp"))]
+                    Ok(TxType::Protocol(ProtocolTx {
+                        tx: ProtocolTxType::EthEventsVext(ext),
+                        ..
+                    })) => {
+                        if self.validate_eth_events_vext(
+                            ext,
+                            self.storage.last_height,
+                        ) {
+                            response.log = String::from(VALID_MSG);
+                        } else {
+                            response.code = 1;
+                            response.log = String::from(
+                                "Invalid Ethereum events vote extension",
+                            );
+                        }
+                    }
+                    #[cfg(not(feature = "abcipp"))]
+                    Ok(TxType::Protocol(ProtocolTx {
+                        tx: ProtocolTxType::ValSetUpdateVext(ext),
+                        ..
+                    })) => {
+                        if self.validate_valset_upd_vext(
+                            ext,
+                            self.storage.last_height,
+                        ) {
+                            response.log = String::from(VALID_MSG);
+                        } else {
+                            response.code = 1;
+                            response.log = String::from(
+                                "Invalid validator set update vote extension",
+                            );
+                        }
+                    }
+                    Ok(TxType::Protocol(ProtocolTx { tx, .. })) => {
+                        response.code = 1;
+                        response.log = format!(
+                            "The following protocol tx cannot be added to the \
+                             mempool: {tx:?}"
+                        );
+                    }
+                    // `process_tx` errors are handled by
+                    // `Shell::finalize_block`
+                    _ => response.log = String::from(VALID_MSG),
+                }
+            }
             Err(msg) => {
                 response.code = 1;
                 response.log = msg.to_string();
             }
         }
+
         response
     }
 

@@ -93,7 +93,12 @@ mod tests {
 
             // Ensure that the bond's source has enough tokens for the bond
             let target = bond.source.as_ref().unwrap_or(&bond.validator);
-            tx_env.credit_tokens(target, &staking_token_address(), bond.amount);
+            tx_env.credit_tokens(
+                target,
+                &staking_token_address(),
+                None,
+                bond.amount,
+            );
         });
 
         let tx_code = vec![];
