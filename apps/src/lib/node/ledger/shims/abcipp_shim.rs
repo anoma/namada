@@ -137,7 +137,7 @@ impl AbcippShim {
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
-                    let (processing_results, _) =
+                    let processing_results =
                         self.service.check_proposal(&self.delivered_txs);
                     let mut txs = Vec::with_capacity(self.delivered_txs.len());
                     let mut delivered = vec![];

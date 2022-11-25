@@ -76,10 +76,16 @@ pub fn update_actor_config<F>(
         .unwrap();
 }
 
-/// Disable the Ethereum fullnode of `who`.
-pub fn disable_eth_fullnode(test: &Test, chain_id: &ChainId, who: &Who) {
+/// Configures the Ethereum bridge mode of `who`. This should be done before
+/// `who` starts running.
+pub fn set_ethereum_bridge_mode(
+    test: &Test,
+    chain_id: &ChainId,
+    who: &Who,
+    mode: ethereum_bridge::ledger::Mode,
+) {
     update_actor_config(test, chain_id, who, |config| {
-        config.ledger.ethereum_bridge.mode = ethereum_bridge::ledger::Mode::Off;
+        config.ledger.ethereum_bridge.mode = mode;
     });
 }
 
