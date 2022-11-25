@@ -32,7 +32,6 @@ where
     ///  * The validator signed over the correct height inside of the extension.
     ///  * There are no duplicate Ethereum events in this vote extension, and
     ///    the events are sorted in ascending order.
-    #[allow(dead_code)]
     #[inline]
     pub fn validate_eth_events_vext(
         &self,
@@ -129,6 +128,8 @@ where
             .map_err(|err| {
                 tracing::error!(
                     ?err,
+                    ?ext.sig,
+                    ?pk,
                     %validator,
                     "Failed to verify the signature of an Ethereum events vote \
                      extension issued by some validator"
@@ -261,13 +262,22 @@ where
                 );
             }
 
+            let key = (addr, block_height);
+            tracing::debug!(
+                ?key,
+                ?sig,
+                ?validator_addr,
+                "Inserting signature into ethereum_events::VextDigest"
+            );
             #[cfg(not(feature = "abcipp"))]
-            if let Some(sig) = signatures.insert((addr, block_height), sig) {
+            if let Some(existing_sig) = signatures.insert(key, sig.clone()) {
                 tracing::warn!(
                     ?sig,
+                    ?existing_sig,
                     ?validator_addr,
                     "Overwrote old signature from validator while \
-                     constructing ethereum_events::VextDigest"
+                     constructing ethereum_events::VextDigest - maybe private \
+                     key of validator is being used by multiple nodes?"
                 );
             }
         }

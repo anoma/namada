@@ -14,6 +14,10 @@ use crate::types::storage::BlockHeight;
 /// Type alias for an [`EthereumEventsVext`].
 pub type Vext = EthereumEventsVext;
 
+/// Represents a [`Vext`] signed by some validator, with
+/// a Namada protocol key.
+pub type SignedVext = Signed<Vext>;
+
 /// Represents a set of [`EthereumEvent`] instances
 /// seen by some validator.
 ///
@@ -90,6 +94,30 @@ pub struct EthereumEventsVextDigest {
 }
 
 impl VextDigest {
+    /// Build a singleton [`VextDigest`], from the provided [`Vext`].
+    #[inline]
+    #[cfg(not(feature = "abcipp"))]
+    pub fn singleton(ext: Signed<Vext>) -> VextDigest {
+        VextDigest {
+            signatures: HashMap::from([(
+                (ext.data.validator_addr.clone(), ext.data.block_height),
+                ext.sig,
+            )]),
+            events: ext
+                .data
+                .ethereum_events
+                .into_iter()
+                .map(|event| MultiSignedEthEvent {
+                    event,
+                    signers: BTreeSet::from([(
+                        ext.data.validator_addr.clone(),
+                        ext.data.block_height,
+                    )]),
+                })
+                .collect(),
+        }
+    }
+
     /// Decompresses a set of signed [`Vext`] instances.
     pub fn decompress(self, last_height: BlockHeight) -> Vec<Signed<Vext>> {
         #[cfg(not(feature = "abcipp"))]

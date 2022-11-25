@@ -2,8 +2,11 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
+#[cfg(feature = "abcipp")]
 use namada::ledger::pos::types::VotingPower;
-use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
+use namada::ledger::storage_api::queries::QueriesExt;
+#[cfg(feature = "abcipp")]
+use namada::ledger::storage_api::queries::SendValsetUpd;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
@@ -12,10 +15,12 @@ use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
+use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
 /// Contains stateful data about the number of vote extension
 /// digests found as protocol transactions in a proposed block.
 #[derive(Default)]
+#[cfg(feature = "abcipp")]
 pub struct DigestCounters {
     /// The number of Ethereum events vote extensions found thus far.
     eth_ev_digest_num: usize,
@@ -40,6 +45,7 @@ where
     /// but we only reject the entire block if the order of the
     /// included txs violates the order decided upon in the previous
     /// block.
+    #[cfg(feature = "abcipp")]
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,
@@ -116,14 +122,67 @@ where
         }
     }
 
-    /// Checks what the [`TxResult`]s would be for the transactions in a
-    /// proposed block, as well as counting the number of digest transactions
-    /// present. `ProcessProposal` should be able to make a decision on whether
-    /// a proposed block is acceptable or not based solely on what this function
-    /// returns.
+    /// Check all the txs in a block. Some txs may be incorrect,
+    /// but we only reject the entire block if the order of the
+    /// included txs violates the order decided upon in the previous
+    /// block.
+    #[cfg(not(feature = "abcipp"))]
+    pub fn process_proposal(
+        &self,
+        req: RequestProcessProposal,
+    ) -> ProcessProposal {
+        tracing::info!(
+            proposer = ?HEXUPPER.encode(&req.proposer_address),
+            height = req.height,
+            hash = ?HEXUPPER.encode(&req.hash),
+            n_txs = req.txs.len(),
+            "Received block proposal",
+        );
+        let tx_results = self.check_proposal(&req.txs);
+
+        // Erroneous transactions were detected when processing
+        // the leader's proposal. We allow txs that do not
+        // deserialize properly, that have invalid signatures
+        // and that have invalid wasm code to reach FinalizeBlock.
+        let invalid_txs = tx_results.iter().any(|res| {
+            let error = ErrorCodes::from_u32(res.code).expect(
+                "All error codes returned from process_single_tx are valid",
+            );
+            !error.is_recoverable()
+        });
+        if invalid_txs {
+            tracing::warn!(
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
+                height = req.height,
+                hash = ?HEXUPPER.encode(&req.hash),
+                "Found invalid transactions, proposed block will be rejected"
+            );
+        }
+
+        let will_reject_proposal = invalid_txs;
+
+        let status = if will_reject_proposal {
+            ProposalStatus::Reject
+        } else {
+            ProposalStatus::Accept
+        };
+
+        ProcessProposal {
+            status: status as i32,
+            tx_results,
+        }
+    }
+
+    /// Evaluates the corresponding [`TxResult`] for each tx in a
+    /// proposed block, and counts the number of digest transactions.
+    ///
+    /// `ProcessProposal` should be able to make a decision on whether a
+    /// proposed block is acceptable or not based solely on what this
+    /// function returns.
+    #[cfg(feature = "abcipp")]
     pub fn check_proposal(
         &self,
-        txs: &[Vec<u8>],
+        txs: &[TxBytes],
     ) -> (Vec<TxResult>, DigestCounters) {
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         // the number of vote extension digests included in the block proposal
@@ -141,11 +200,30 @@ where
         (tx_results, counters)
     }
 
+    /// Evaluates the corresponding [`TxResult`] for each tx in a
+    /// proposed block.
+    ///
+    /// `ProcessProposal` should be able to make a decision on whether a
+    /// proposed block is acceptable or not based solely on what this
+    /// function returns.
+    #[cfg(not(feature = "abcipp"))]
+    pub fn check_proposal(&self, txs: &[TxBytes]) -> Vec<TxResult> {
+        let mut tx_queue_iter = self.storage.tx_queue.iter();
+        let tx_results: Vec<_> = txs
+            .iter()
+            .map(|tx_bytes| {
+                self.check_proposal_tx(tx_bytes, &mut tx_queue_iter)
+            })
+            .collect();
+        tx_results
+    }
+
     /// Validates a list of vote extensions, included in PrepareProposal.
     ///
     /// If a vote extension is [`Some`], then it was validated properly,
     /// and the voting power of the validator who signed it is considered
     /// in the sum of the total voting power of all received vote extensions.
+    #[cfg(feature = "abcipp")]
     fn validate_vexts_in_proposal<I>(&self, mut vote_extensions: I) -> TxResult
     where
         I: Iterator<Item = Option<VotingPower>>,
@@ -232,7 +310,7 @@ where
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
-        counters: &mut DigestCounters,
+        #[cfg(feature = "abcipp")] counters: &mut DigestCounters,
     ) -> TxResult {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
             |err| {
@@ -275,6 +353,45 @@ where
                     .into(),
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                #[cfg(not(feature = "abcipp"))]
+                ProtocolTxType::EthEventsVext(ext) => self
+                    .validate_eth_events_vext_and_get_it_back(
+                        ext,
+                        self.storage.last_height,
+                    )
+                    .ok()
+                    .map(|_| TxResult {
+                        code: ErrorCodes::Ok.into(),
+                        info: "Process Proposal accepted this transaction"
+                            .into(),
+                    })
+                    .unwrap_or_else(|| TxResult {
+                        code: ErrorCodes::InvalidVoteExtension.into(),
+                        info: "Process proposal rejected this proposal \
+                               because one of the included Ethereum events \
+                               vote extensions was invalid."
+                            .into(),
+                    }),
+                #[cfg(not(feature = "abcipp"))]
+                ProtocolTxType::ValSetUpdateVext(ext) => self
+                    .validate_valset_upd_vext_and_get_it_back(
+                        ext,
+                        self.storage.last_height,
+                    )
+                    .ok()
+                    .map(|_| TxResult {
+                        code: ErrorCodes::Ok.into(),
+                        info: "Process Proposal accepted this transaction"
+                            .into(),
+                    })
+                    .unwrap_or_else(|| TxResult {
+                        code: ErrorCodes::InvalidVoteExtension.into(),
+                        info: "Process proposal rejected this proposal \
+                               because one of the included validator set \
+                               update vote extensions was invalid."
+                            .into(),
+                    }),
+                #[cfg(feature = "abcipp")]
                 ProtocolTxType::EthereumEvents(digest) => {
                     counters.eth_ev_digest_num += 1;
                     let extensions =
@@ -286,6 +403,7 @@ where
 
                     self.validate_vexts_in_proposal(valid_extensions)
                 }
+                #[cfg(feature = "abcipp")]
                 ProtocolTxType::ValidatorSetUpdate(digest) => {
                     if !self.storage.can_send_validator_set_update(
                         SendValsetUpd::AtPrevHeight,
@@ -389,21 +507,15 @@ where
 
     /// Checks if we have found the correct number of Ethereum events
     /// vote extensions in [`DigestCounters`].
+    #[cfg(feature = "abcipp")]
     fn has_proper_eth_events_num(&self, c: &DigestCounters) -> bool {
-        #[cfg(feature = "abcipp")]
-        {
-            self.storage.last_height.0 == 0 || c.eth_ev_digest_num == 1
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            c.eth_ev_digest_num <= 1
-        }
+        self.storage.last_height.0 == 0 || c.eth_ev_digest_num == 1
     }
 
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
+    #[cfg(feature = "abcipp")]
     fn has_proper_valset_upd_num(&self, c: &DigestCounters) -> bool {
-        #[cfg(feature = "abcipp")]
         if self
             .storage
             .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
@@ -412,10 +524,6 @@ where
         } else {
             true
         }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            c.valset_upd_digest_num <= 1
-        }
     }
 }
 
@@ -423,8 +531,10 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
+    #[cfg(feature = "abcipp")]
     use std::collections::HashMap;
 
+    #[cfg(feature = "abcipp")]
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
@@ -436,17 +546,19 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
-    use namada::types::vote_extensions::ethereum_events::{
-        self, MultiSignedEthEvent,
-    };
+    use namada::types::vote_extensions::ethereum_events;
+    #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError, TestShell,
     };
+    #[cfg(feature = "abcipp")]
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::wallet;
 
+    #[cfg(feature = "abcipp")]
     fn get_empty_eth_ev_digest(shell: &TestShell) -> TxBytes {
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell
@@ -481,6 +593,7 @@ mod test_process_proposal {
     /// Test that if a proposal contains more than one
     /// `ethereum_events::VextDigest`, we reject it.
     #[test]
+    #[cfg(feature = "abcipp")]
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _recv, _) = test_utils::setup();
@@ -501,13 +614,7 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
-                    #[cfg(feature = "abcipp")]
                     s.insert(validator_addr, signed_vote_extension.sig);
-                    #[cfg(not(feature = "abcipp"))]
-                    s.insert(
-                        (validator_addr, LAST_HEIGHT),
-                        signed_vote_extension.sig,
-                    );
                     s
                 },
                 events: vec![],
@@ -516,7 +623,6 @@ mod test_process_proposal {
         let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
             .sign(&protocol_key)
             .to_bytes();
-        #[allow(clippy::redundant_clone)]
         let request = ProcessProposal {
             txs: vec![tx.clone(), tx],
         };
@@ -526,6 +632,7 @@ mod test_process_proposal {
         );
     }
 
+    #[cfg(feature = "abcipp")]
     fn check_rejected_eth_events_digest(
         shell: &mut TestShell,
         vote_extension_digest: ethereum_events::VextDigest,
@@ -552,95 +659,127 @@ mod test_process_proposal {
         );
     }
 
+    #[cfg(not(feature = "abcipp"))]
+    fn check_rejected_eth_events(
+        shell: &mut TestShell,
+        vote_extension: ethereum_events::SignedVext,
+        protocol_key: common::SecretKey,
+    ) {
+        let tx = ProtocolTxType::EthEventsVext(vote_extension)
+            .sign(&protocol_key)
+            .to_bytes();
+        let request = ProcessProposal { txs: vec![tx] };
+        let response = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
+        assert_eq!(
+            response.result.code,
+            u32::from(ErrorCodes::InvalidVoteExtension)
+        );
+    }
+
     /// Test that if a proposal contains Ethereum events with
     /// invalid validator signatures, we reject it.
     #[test]
-    fn test_drop_vext_digest_with_invalid_sigs() {
+    fn test_drop_vext_with_invalid_sigs() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
-        let vote_extension_digest = {
-            let addr = wallet::defaults::validator_address();
-            let event = EthereumEvent::TransfersToNamada {
-                nonce: 1u64.into(),
-                transfers: vec![],
-            };
-            let ext = {
-                // generate a valid signature
-                let mut ext = ethereum_events::Vext {
-                    validator_addr: addr.clone(),
-                    block_height: LAST_HEIGHT,
-                    ethereum_events: vec![event.clone()],
-                }
-                .sign(&protocol_key);
-                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+        let addr = wallet::defaults::validator_address();
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let ext = {
+            // generate a valid signature
+            #[allow(clippy::redundant_clone)]
+            let mut ext = ethereum_events::Vext {
+                validator_addr: addr.clone(),
+                block_height: LAST_HEIGHT,
+                ethereum_events: vec![event.clone()],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
 
-                // modify this signature such that it becomes invalid
-                ext.sig = test_utils::invalidate_signature(ext.sig);
-                ext
-            };
-            ethereum_events::VextDigest {
+            // modify this signature such that it becomes invalid
+            ext.sig = test_utils::invalidate_signature(ext.sig);
+            ext
+        };
+        #[cfg(feature = "abcipp")]
+        {
+            let vote_extension_digest = ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
-                    #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
-                    #[cfg(not(feature = "abcipp"))]
-                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = BTreeSet::new();
-                        #[cfg(feature = "abcipp")]
                         s.insert(addr);
-                        #[cfg(not(feature = "abcipp"))]
-                        s.insert((addr, LAST_HEIGHT));
                         s
                     },
                 }],
-            }
-        };
-        check_rejected_eth_events_digest(
-            &mut shell,
-            vote_extension_digest,
-            protocol_key,
-        );
+            };
+            check_rejected_eth_events_digest(
+                &mut shell,
+                vote_extension_digest,
+                protocol_key,
+            );
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            check_rejected_eth_events(&mut shell, ext, protocol_key);
+        }
     }
 
     /// Test that if a proposal contains Ethereum events with
     /// invalid block heights, we reject it.
     #[test]
-    fn test_drop_vext_digest_with_invalid_bheights() {
+    fn test_drop_vext_with_invalid_bheights() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
-        const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
+        #[cfg(feature = "abcipp")]
+        const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
+        #[cfg(not(feature = "abcipp"))]
+        const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 + 1);
         let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
-        let vote_extension_digest = {
-            let addr = wallet::defaults::validator_address();
-            let event = EthereumEvent::TransfersToNamada {
-                nonce: 1u64.into(),
-                transfers: vec![],
-            };
-            let ext = {
-                let ext = ethereum_events::Vext {
-                    validator_addr: addr.clone(),
-                    block_height: PRED_LAST_HEIGHT,
-                    ethereum_events: vec![event.clone()],
-                }
-                .sign(&protocol_key);
-                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
-                ext
-            };
-            ethereum_events::VextDigest {
+        let addr = wallet::defaults::validator_address();
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let ext = {
+            #[allow(clippy::redundant_clone)]
+            let ext = ethereum_events::Vext {
+                validator_addr: addr.clone(),
+                block_height: INVALID_HEIGHT,
+                ethereum_events: vec![event.clone()],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+            ext
+        };
+        #[cfg(feature = "abcipp")]
+        {
+            let vote_extension_digest = ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     #[cfg(feature = "abcipp")]
                     s.insert(addr.clone(), ext.sig);
                     #[cfg(not(feature = "abcipp"))]
-                    s.insert((addr.clone(), PRED_LAST_HEIGHT), ext.sig);
+                    s.insert((addr.clone(), INVALID_HEIGHT), ext.sig);
                     s
                 },
                 events: vec![MultiSignedEthEvent {
@@ -650,38 +789,27 @@ mod test_process_proposal {
                         #[cfg(feature = "abcipp")]
                         s.insert(addr);
                         #[cfg(not(feature = "abcipp"))]
-                        s.insert((addr, PRED_LAST_HEIGHT));
+                        s.insert((addr, INVALID_HEIGHT));
                         s
                     },
                 }],
-            }
-        };
-        #[cfg(feature = "abcipp")]
-        check_rejected_eth_events_digest(
-            &mut shell,
-            vote_extension_digest,
-            protocol_key,
-        );
+            };
+            check_rejected_eth_events_digest(
+                &mut shell,
+                vote_extension_digest,
+                protocol_key,
+            );
+        }
         #[cfg(not(feature = "abcipp"))]
         {
-            let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-                .sign(&protocol_key)
-                .to_bytes();
-            let request = ProcessProposal { txs: vec![tx] };
-            if let Ok(mut resp) = shell.process_proposal(request) {
-                assert_eq!(resp.len(), 1);
-                let processed = resp.remove(0);
-                assert_eq!(processed.result.code, ErrorCodes::Ok as u32);
-            } else {
-                panic!("Test failed");
-            }
+            check_rejected_eth_events(&mut shell, ext, protocol_key);
         }
     }
 
     /// Test that if a proposal contains Ethereum events with
     /// invalid validators, we reject it.
     #[test]
-    fn test_drop_vext_digest_with_invalid_validators() {
+    fn test_drop_vext_with_invalid_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _recv, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
@@ -690,22 +818,24 @@ mod test_process_proposal {
             let bertha_addr = wallet::defaults::bertha_address();
             (bertha_addr, bertha_key)
         };
-        let vote_extension_digest = {
-            let event = EthereumEvent::TransfersToNamada {
-                nonce: 1u64.into(),
-                transfers: vec![],
-            };
-            let ext = {
-                let ext = ethereum_events::Vext {
-                    validator_addr: addr.clone(),
-                    block_height: LAST_HEIGHT,
-                    ethereum_events: vec![event.clone()],
-                }
-                .sign(&protocol_key);
-                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
-                ext
-            };
-            ethereum_events::VextDigest {
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let ext = {
+            #[allow(clippy::redundant_clone)]
+            let ext = ethereum_events::Vext {
+                validator_addr: addr.clone(),
+                block_height: LAST_HEIGHT,
+                ethereum_events: vec![event.clone()],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+            ext
+        };
+        #[cfg(feature = "abcipp")]
+        {
+            let vote_extension_digest = ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
                     #[cfg(feature = "abcipp")]
@@ -725,13 +855,17 @@ mod test_process_proposal {
                         s
                     },
                 }],
-            }
-        };
-        check_rejected_eth_events_digest(
-            &mut shell,
-            vote_extension_digest,
-            protocol_key,
-        );
+            };
+            check_rejected_eth_events_digest(
+                &mut shell,
+                vote_extension_digest,
+                protocol_key,
+            );
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            check_rejected_eth_events(&mut shell, ext, protocol_key);
+        }
     }
 
     /// Test that if a wrapper tx is not signed, it is rejected
@@ -760,20 +894,36 @@ mod test_process_proposal {
             Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
         )
         .to_bytes();
-        #[allow(clippy::redundant_clone)]
-        let request = ProcessProposal {
-            txs: vec![tx.clone(), get_empty_eth_ev_digest(&shell)],
+
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx, get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        };
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal { txs: vec![tx] };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
 
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert_eq!(
             response.result.info,
@@ -841,17 +991,35 @@ mod test_process_proposal {
         } else {
             panic!("Test failed");
         };
-        let request = ProcessProposal {
-            txs: vec![new_tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![new_tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-        let response = if let [response, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            response.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![new_tx.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         let expected_error = "Signature verification failed: Invalid signature";
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
@@ -886,17 +1054,35 @@ mod test_process_proposal {
         )
         .sign(&keypair)
         .expect("Test failed");
-        let request = ProcessProposal {
-            txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![wrapper.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
@@ -932,18 +1118,35 @@ mod test_process_proposal {
         .sign(&keypair)
         .expect("Test failed");
 
-        let request = ProcessProposal {
-            txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![wrapper.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
@@ -980,34 +1183,65 @@ mod test_process_proposal {
             shell.enqueue_tx(wrapper);
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
         }
-        let req_1 = ProcessProposal {
-            txs: vec![txs[0].to_bytes(), get_empty_eth_ev_digest(&shell)],
-        };
-        let response_1 = if let [resp, _] = shell
-            .process_proposal(req_1)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
-
-        let req_2 = ProcessProposal {
-            txs: vec![txs[2].to_bytes(), get_empty_eth_ev_digest(&shell)],
-        };
-
-        let response_2 = if let Err(TestError::RejectProposal(resp)) =
-            shell.process_proposal(req_2)
-        {
-            if let [resp, _] = resp.as_slice() {
+        #[cfg(feature = "abcipp")]
+        let response_1 = {
+            let request = ProcessProposal {
+                txs: vec![txs[0].to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
                 resp.clone()
             } else {
                 panic!("Test failed")
             }
-        } else {
-            panic!("Test failed")
+        };
+        #[cfg(not(feature = "abcipp"))]
+        let response_1 = {
+            let request = ProcessProposal {
+                txs: vec![txs[0].to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        };
+        assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
+
+        #[cfg(feature = "abcipp")]
+        let response_2 = {
+            let request = ProcessProposal {
+                txs: vec![txs[2].to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let Err(TestError::RejectProposal(mut resp)) =
+                shell.process_proposal(request)
+            {
+                assert_eq!(resp.len(), 2);
+                resp.remove(0)
+            } else {
+                panic!("Test failed")
+            }
+        };
+        #[cfg(not(feature = "abcipp"))]
+        let response_2 = {
+            let request = ProcessProposal {
+                txs: vec![txs[2].to_bytes()],
+            };
+            if let Err(TestError::RejectProposal(mut resp)) =
+                shell.process_proposal(request)
+            {
+                assert_eq!(resp.len(), 1);
+                resp.remove(0)
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response_2.result.code, u32::from(ErrorCodes::InvalidOrder));
         assert_eq!(
@@ -1046,18 +1280,35 @@ mod test_process_proposal {
         let tx =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
 
-        let request = ProcessProposal {
-            txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
@@ -1100,17 +1351,35 @@ mod test_process_proposal {
             wrapper.clone(),
         )));
 
-        let request = ProcessProposal {
-            txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
     }
@@ -1143,17 +1412,35 @@ mod test_process_proposal {
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
         )));
-        let request = ProcessProposal {
-            txs: vec![signed.to_bytes(), get_empty_eth_ev_digest(&shell)],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![signed.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![signed.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
     }
@@ -1202,17 +1489,35 @@ mod test_process_proposal {
             Some("transaction data".as_bytes().to_owned()),
         );
         let tx = Tx::from(TxType::Raw(tx));
-        let request = ProcessProposal {
-            txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+        #[cfg(feature = "abcipp")]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+            };
+            if let [resp, _] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
-        let response = if let [resp, _] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        #[cfg(not(feature = "abcipp"))]
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(

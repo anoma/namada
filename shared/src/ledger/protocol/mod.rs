@@ -199,17 +199,20 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    use crate::types::vote_extensions::ethereum_events;
+    use crate::types::vote_extensions::{
+        ethereum_events, validator_set_update,
+    };
 
     match tx {
-        ProtocolTxType::EthereumEvents(ext) => {
-            let ethereum_events::VextDigest { events, .. } = ext;
+        ProtocolTxType::EthEventsVext(ext) => {
+            let ethereum_events::VextDigest { events, .. } =
+                ethereum_events::VextDigest::singleton(ext);
             self::transactions::ethereum_events::apply_derived_tx(
                 storage, events,
             )
             .map_err(Error::ProtocolTxError)
         }
-        ProtocolTxType::ValidatorSetUpdate(ext) => {
+        ProtocolTxType::ValSetUpdateVext(ext) => {
             // NOTE(feature = "abcipp"): we will not need to apply any
             // storage changes when we rollback to ABCI++; this is because
             // the decided vote extension digest should have >2/3 of the
@@ -223,7 +226,8 @@ where
             // for this, we need to receive a mutable reference to the
             // event log, in `apply_protocol_tx()`
             self::transactions::validator_set_update::aggregate_votes(
-                storage, ext,
+                storage,
+                validator_set_update::VextDigest::singleton(ext),
             )
             .map_err(Error::ProtocolTxError)
         }

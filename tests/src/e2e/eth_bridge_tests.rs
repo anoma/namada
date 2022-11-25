@@ -1,3 +1,7 @@
+use color_eyre::eyre::Result;
+use namada_apps::config::ethereum_bridge;
+
+use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
 use crate::e2e::setup::constants::{
@@ -91,4 +95,33 @@ fn everything() {
             .unwrap();
         anomac_tx.assert_success();
     }
+}
+
+/// Tests that we can start the ledger with an endpoint for submitting Ethereum
+/// events. This mode can be used in further end-to-end tests.
+#[test]
+fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
+    let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::EventsEndpoint,
+    );
+
+    // Start the ledger as a validator
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
+    ledger.exp_string(
+        "Starting to listen for Borsh-serialized Ethereum events",
+    )?;
+    ledger.exp_string("Anoma ledger node started")?;
+
+    ledger.send_control('c')?;
+    ledger.exp_string(
+        "Stopping listening for Borsh-serialized Ethereum events",
+    )?;
+
+    Ok(())
 }

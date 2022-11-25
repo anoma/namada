@@ -34,7 +34,6 @@ where
     ///  * The voting powers are normalized to `2^32`, and sorted in descending
     ///    order.
     #[inline]
-    #[allow(dead_code)]
     pub fn validate_valset_upd_vext(
         &self,
         ext: validator_set_update::SignedVext,
@@ -150,6 +149,8 @@ where
             .map_err(|err| {
                 tracing::error!(
                     ?err,
+                    ?ext.sig,
+                    ?pk,
                     %validator,
                     "Failed to verify the signature of a valset upd vote \
                      extension issued by some validator"
@@ -263,14 +264,22 @@ where
                      constructing validator_set_update::VextDigest"
                 );
             }
-
+            let key = (addr, block_height);
+            tracing::debug!(
+                ?key,
+                ?sig,
+                ?validator_addr,
+                "Inserting signature into validator_set_update::VextDigest"
+            );
             #[cfg(not(feature = "abcipp"))]
-            if let Some(sig) = signatures.insert((addr, block_height), sig) {
+            if let Some(existing_sig) = signatures.insert(key, sig.clone()) {
                 tracing::warn!(
                     ?sig,
+                    ?existing_sig,
                     ?validator_addr,
                     "Overwrote old signature from validator while \
-                     constructing validator_set_update::VextDigest"
+                     constructing validator_set_update::VextDigest - maybe \
+                     private key of validator is being used by multiple nodes?"
                 );
             }
         }

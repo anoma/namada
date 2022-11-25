@@ -52,8 +52,12 @@ pub trait SignedSerialize<T> {
     /// A byte vector containing the serialized data.
     type Output: AsRef<[u8]>;
 
-    /// Encodes `data` as a byte vector,
-    /// with some arbitrary serialization method.
+    /// Encodes `data` as a byte vector, with some arbitrary serialization
+    /// method.
+    ///
+    /// The returned output *must* be deterministic based on
+    /// `data`, so that two callers signing the same `data` will be
+    /// signing the same `Self::Output`.
     fn serialize(data: &T) -> Self::Output;
 }
 
