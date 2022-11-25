@@ -4,7 +4,7 @@ Starting from a release branch, we configure the network that will run on this r
 
 ## Step 1: Prepare a genesis configuration file
 
-Prepare a genesis configuration file. You can start from one of the source files in the [namada-network-config repo](https://github.com/heliaxdev/namada-network-config/tree/master/src) or the source files inside the `genesis` directory in this repository, or start from scratch. Note that in this file, for any account for which you don't specify address and/or keys, they will be automatically generated in the next step and saved in wallet(s) in the network "setup" directory.
+Prepare a genesis configuration file. You can start from one of the source files in the [anoma-network-config repo](https://github.com/heliaxdev/anoma-network-config/tree/master/src) or the source files inside the `genesis` directory in this repository, or start from scratch. Note that in this file, for any account for which you don't specify address and/or keys, they will be automatically generated in the next step and saved in wallet(s) in the network "setup" directory.
 
 Additionally, for validator accounts you should also specify their `net_address`. Note that for each validator node we're using up to 5 ports (3 for the ledger and 2 for the intent gossip), so if multiple validators are running behind the same public IP, their ports should be increments of 5 (e.g. `26656`, `26661`, ...). A port supplied in the `net_address` will be used for the node's P2P address. The ledger's RPC address address is its `{port + 1}` and the Namada ledger's port is `{port + 2}`. The intent gossip will run on `{port + 3}` and its RPC server at `{post + 4}`.
 

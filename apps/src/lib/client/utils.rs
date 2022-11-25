@@ -39,13 +39,13 @@ pub const NET_OTHER_ACCOUNTS_DIR: &str = "other";
 pub const ENV_VAR_NETWORK_CONFIGS_SERVER: &str =
     "NAMADA_NETWORK_CONFIGS_SERVER";
 const DEFAULT_NETWORK_CONFIGS_SERVER: &str =
-    "https://github.com/heliaxdev/namada-network-config/releases/download";
+    "https://github.com/heliaxdev/anoma-network-config/releases/download";
 
 /// We do pre-genesis validator set up in this directory
 pub const PRE_GENESIS_DIR: &str = "pre-genesis";
 
 /// Configure Namada to join an existing network. The chain must be released in
-/// the <https://github.com/heliaxdev/namada-network-config> repository.
+/// the <https://github.com/heliaxdev/anoma-network-config> repository.
 pub async fn join_network(
     global_args: args::Global,
     args::JoinNetwork {
@@ -793,7 +793,7 @@ pub fn init_network(
         genesis_path.to_string_lossy()
     );
 
-    // Create a release tarball for namada-network-config
+    // Create a release tarball for anoma-network-config
     if !dont_archive {
         let mut release = tar::Builder::new(Vec::new());
         let release_genesis_path = PathBuf::from(config::DEFAULT_BASE_DIR)

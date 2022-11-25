@@ -29,7 +29,7 @@ namadac utils join-network --chain-id $NAMADA_TESTNET_CHAIN_ID
 It should output something like this where the chain id might differ:
 
 ```shell
-Downloading config release from https://github.com/heliaxdev/namada-network-config/releases/download/namada-masp-0.3.51d2f83a8412b95/namada-masp-0.3.51d2f83a8412b95.tar.gz ...
+Downloading config release from https://github.com/heliaxdev/anoma-network-config/releases/download/namada-masp-0.3.51d2f83a8412b95/namada-masp-0.3.51d2f83a8412b95.tar.gz ...
 Successfully configured for chain ID namada-masp-0.3.51d2f83a8412b9`
 ```
 
