@@ -2784,12 +2784,12 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.14.0"
-source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2#f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"
+source = "git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c#f7e59c81298c1e44dfabe1155a36ac4efdad478c"
 dependencies = [
  "bytes 1.2.1",
  "derive_more",
  "flex-error",
- "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c)",
  "ics23",
  "num-traits 0.2.15",
  "prost",
@@ -2824,7 +2824,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.17.1"
-source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2#f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"
+source = "git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c#f7e59c81298c1e44dfabe1155a36ac4efdad478c"
 dependencies = [
  "base64 0.13.1",
  "bytes 1.2.1",
@@ -2838,7 +2838,7 @@ dependencies = [
 [[package]]
 name = "ibc-relayer"
 version = "0.14.0"
-source = "git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2#f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"
+source = "git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c#f7e59c81298c1e44dfabe1155a36ac4efdad478c"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2854,8 +2854,8 @@ dependencies = [
  "http",
  "humantime",
  "humantime-serde",
- "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
- "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
+ "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c)",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c)",
  "itertools",
  "k256",
  "moka",
@@ -3648,9 +3648,9 @@ dependencies = [
  "data-encoding",
  "derivative",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
- "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
+ "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c)",
  "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
- "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c)",
  "itertools",
  "libsecp256k1",
  "loupe",
@@ -3767,8 +3767,8 @@ dependencies = [
  "toml",
  "tonic",
  "tower",
+ "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci?rev=659d799f2a94238cd45725738624b7f51b96287f)",
  "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci?rev=f6463388fc319b6e210503b43b3aecf6faf6b200)",
- "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci.git?rev=fcc0014d0bda707109901abfa1b2f782d242f082)",
  "tracing 0.1.37",
  "tracing-log",
  "tracing-subscriber 0.3.16",
@@ -3795,9 +3795,9 @@ dependencies = [
  "ferveo-common",
  "group-threshold-cryptography",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
- "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
+ "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c)",
  "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
- "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c)",
  "ics23",
  "index-set",
  "itertools",
@@ -3877,8 +3877,8 @@ dependencies = [
  "eyre",
  "file-serve",
  "fs_extra",
- "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
- "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
+ "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c)",
+ "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=f7e59c81298c1e44dfabe1155a36ac4efdad478c)",
  "ibc-relayer",
  "itertools",
  "namada",
@@ -6131,7 +6131,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs?rev=f8f019217130f36eecafac2ad11e35f5bda2ecab#f8f019217130f36eecafac2ad11e35f5bda2ecab"
 dependencies = [
  "async-trait",
  "bytes 1.2.1",
@@ -6174,7 +6174,7 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs?rev=f8f019217130f36eecafac2ad11e35f5bda2ecab#f8f019217130f36eecafac2ad11e35f5bda2ecab"
 dependencies = [
  "flex-error",
  "serde 1.0.147",
@@ -6187,7 +6187,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs?rev=f8f019217130f36eecafac2ad11e35f5bda2ecab#f8f019217130f36eecafac2ad11e35f5bda2ecab"
 dependencies = [
  "contracts",
  "crossbeam-channel 0.4.4",
@@ -6221,7 +6221,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs?rev=f8f019217130f36eecafac2ad11e35f5bda2ecab#f8f019217130f36eecafac2ad11e35f5bda2ecab"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -6250,7 +6250,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs?rev=f8f019217130f36eecafac2ad11e35f5bda2ecab#f8f019217130f36eecafac2ad11e35f5bda2ecab"
 dependencies = [
  "bytes 1.2.1",
  "flex-error",
@@ -6300,7 +6300,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs?rev=f8f019217130f36eecafac2ad11e35f5bda2ecab#f8f019217130f36eecafac2ad11e35f5bda2ecab"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -6348,7 +6348,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs?rev=f8f019217130f36eecafac2ad11e35f5bda2ecab#f8f019217130f36eecafac2ad11e35f5bda2ecab"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",
@@ -6806,13 +6806,13 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci?rev=f6463388fc319b6e210503b43b3aecf6faf6b200#f6463388fc319b6e210503b43b3aecf6faf6b200"
+source = "git+https://github.com/heliaxdev/tower-abci?rev=659d799f2a94238cd45725738624b7f51b96287f#659d799f2a94238cd45725738624b7f51b96287f"
 dependencies = [
  "bytes 1.2.1",
  "futures 0.3.25",
  "pin-project",
  "prost",
- "tendermint-proto 0.23.5",
+ "tendermint-proto 0.23.6",
  "tokio",
  "tokio-stream",
  "tokio-util 0.6.10",
@@ -6824,13 +6824,13 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci.git?rev=fcc0014d0bda707109901abfa1b2f782d242f082#fcc0014d0bda707109901abfa1b2f782d242f082"
+source = "git+https://github.com/heliaxdev/tower-abci?rev=f6463388fc319b6e210503b43b3aecf6faf6b200#f6463388fc319b6e210503b43b3aecf6faf6b200"
 dependencies = [
  "bytes 1.2.1",
  "futures 0.3.25",
  "pin-project",
  "prost",
- "tendermint-proto 0.23.6",
+ "tendermint-proto 0.23.5",
  "tokio",
  "tokio-stream",
  "tokio-util 0.6.10",
