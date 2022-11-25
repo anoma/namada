@@ -534,6 +534,7 @@ fn masp_txs_and_queries() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server")?;
 
     let _bg_ledger = ledger.background();
 
@@ -806,6 +807,7 @@ fn masp_pinned_txs() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server")?;
 
     let _bg_ledger = ledger.background();
 
@@ -973,6 +975,7 @@ fn masp_incentives() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
     ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Starting RPC HTTP server")?;
 
     let _bg_ledger = ledger.background();
 
