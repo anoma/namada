@@ -88,18 +88,6 @@ pub trait TryAlloc {
     fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx>;
 }
 
-/// Try to allocate a new batch of transactions on a
-/// [`BlockSpaceAllocator`] state.
-///
-/// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-pub trait TryAllocBatch {
-    /// Try to allocate space for a new batch of transactions.
-    fn try_alloc_batch<'tx, T>(&mut self, txs: T) -> AllocStatus<'tx>
-    where
-        T: IntoIterator<Item = &'tx [u8]> + 'tx;
-}
-
 /// Represents a state transition in the [`BlockSpaceAllocator`] state machine.
 ///
 /// This trait should not be used directly. Instead, consider using one of
