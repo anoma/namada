@@ -22,7 +22,6 @@ use self::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
     EncryptedTxBatchAllocator, NextState, NextStateWithEncryptedTxs,
     NextStateWithoutEncryptedTxs, RemainingBatchAllocator, TryAlloc,
-    TryAllocBatch,
 };
 use self::block_space_alloc::{AllocStatus, BlockSpaceAllocator};
 use super::super::*;
@@ -129,7 +128,7 @@ where
         &mut self,
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         local_last_commit: Option<ExtendedCommitInfo>,
-    ) -> Vec<TxBytes> {
+    ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
         // genesis should not contain vote extensions
         if self.storage.last_height == BlockHeight(0) {
             return (vec![], self.get_encrypted_txs_allocator(alloc));
@@ -193,7 +192,7 @@ where
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         tx_indices: &mut IndexSet,
         txs: &[TxBytes],
-    ) -> Vec<TxBytes> {
+    ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
         if self.storage.last_height == BlockHeight(0) {
             // genesis should not contain vote extensions
             return (vec![], self.get_encrypted_txs_allocator(alloc));
@@ -202,7 +201,7 @@ where
         let txs = deserialize_vote_extensions(txs).enumerate().take_while(|(index, tx_bytes)| {
             match alloc.try_alloc(&*tx_bytes) {
                 AllocStatus::Accepted => {
-                    tx_indices.insert(index);
+                    tx_indices.insert(*index);
                     true
                 },
                 AllocStatus::Rejected { tx, space_left } => {
@@ -331,7 +330,7 @@ where
             .collect();
         let alloc = alloc.next_state();
 
-        tx_indices.merge(&invalid_txs);
+        tx_indices.union(&invalid_txs);
 
         (txs, alloc)
     }
@@ -363,7 +362,7 @@ where
                 })
                 .to_bytes()
             })
-            // TODO: make sure all txs are accepted;
+            // TODO: make sure all txs are accepted
             .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
                 AllocStatus::Accepted => true,
                 AllocStatus::Rejected { tx, space_left } => {
