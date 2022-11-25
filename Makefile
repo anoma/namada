@@ -41,6 +41,9 @@ check:
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
+check-abcipp:
+	$(cargo) check --all-targets --no-default-features --features "abcipp namada/ibc-mocks-abcipp"
+
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
