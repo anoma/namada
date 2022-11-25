@@ -74,6 +74,7 @@ use namada::types::storage::{BlockHeight, Key, RESERVED_ADDRESS_PREFIX};
 use namada::types::token::Amount;
 use namada_apps::client::rpc::query_storage_value_bytes;
 use namada_apps::client::utils::id_from_pk;
+use namada_apps::config::ethereum_bridge;
 use setup::constants::*;
 use tendermint::block::Header as TmHeader;
 use tendermint::merkle::proof::Proof as TmProof;
@@ -83,6 +84,7 @@ use tendermint_proto::Protobuf;
 use tendermint_rpc::{Client, HttpClient, Url};
 use tokio::runtime::Runtime;
 
+use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
 use crate::e2e::setup::{self, sleep, AnomaCmd, Bin, Test, Who};
 use crate::{run, run_as};
@@ -90,6 +92,18 @@ use crate::{run, run_as};
 #[test]
 fn run_ledger_ibc() -> Result<()> {
     let (test_a, test_b) = setup::two_single_node_nets()?;
+    set_ethereum_bridge_mode(
+        &test_a,
+        &test_a.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
+    set_ethereum_bridge_mode(
+        &test_b,
+        &test_b.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+    );
 
     // Run Chain A
     let mut ledger_a =
@@ -768,11 +782,11 @@ fn transfer_received_token(
         &sub_prefix,
         "--amount",
         "50000",
-        "--fee-amount",
+        "--gas-amount",
         "0",
         "--gas-limit",
         "0",
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--ledger-address",
         &rpc,
@@ -1059,11 +1073,11 @@ fn submit_ibc_tx(
             &data_path,
             "--signer",
             signer,
-            "--fee-amount",
+            "--gas-amount",
             "0",
             "--gas-limit",
             "0",
-            "--fee-token",
+            "--gas-token",
             NAM,
             "--ledger-address",
             &rpc
