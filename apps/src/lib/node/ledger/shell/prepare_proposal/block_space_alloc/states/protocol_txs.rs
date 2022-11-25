@@ -6,8 +6,7 @@ use super::{
     WithEncryptedTxs, WithoutEncryptedTxs,
 };
 
-#[cfg(test)]
-impl super::TryAlloc for BlockSpaceAllocator<BuildingProtocolTxBatch> {
+impl TryAlloc for BlockSpaceAllocator<BuildingProtocolTxBatch> {
     #[inline]
     fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
         self.protocol_txs.try_dump(tx)
