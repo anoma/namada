@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::super::{AllocStatus, BlockSpaceAllocator, TxBin};
+use super::super::{threshold, AllocStatus, BlockSpaceAllocator, TxBin};
 use super::{
     BuildingEncryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl, TryAlloc,
     WithEncryptedTxs, WithoutEncryptedTxs,
@@ -22,9 +22,16 @@ impl NextStateImpl<WithEncryptedTxs>
     fn next_state_impl(mut self) -> Self::Next {
         self.protocol_txs.shrink_to_fit();
 
-        // reserve space for encrypted txs
+        // reserve space for encrypted txs; encrypted txs can use up to
+        // 1/3 of the max block space; the rest goes to protocol txs, once
+        // more
+        let one_third_of_block_space =
+            threshold::ONE_THIRD.over(self.block.allotted_space_in_bytes);
         let remaining_free_space = self.uninitialized_space_in_bytes();
-        self.encrypted_txs = TxBin::init(remaining_free_space);
+        self.encrypted_txs = TxBin::init(std::cmp::min(
+            one_third_of_block_space,
+            remaining_free_space,
+        ));
 
         // cast state
         let Self {
