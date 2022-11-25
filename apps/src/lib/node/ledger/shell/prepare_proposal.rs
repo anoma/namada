@@ -176,7 +176,7 @@ where
         .map(|tx| tx.sign(protocol_key).to_bytes())
         .collect();
 
-        // TODO:
+        // TODO(feature = "abcipp"):
         // - alloc space for each protocol tx
         // - handle space allocation errors
         // - transition to new allocator state
