@@ -29,6 +29,10 @@ jobs:
         os: [ubuntu-latest]
         nightly_version: [nightly-2022-11-03]
         make:
+          - name: Check ABCI++
+            command: check-abcipp
+            cache_subkey: abcipp
+            cache_version: v1
           - name: Clippy
             command: clippy
             cache_subkey: clippy
