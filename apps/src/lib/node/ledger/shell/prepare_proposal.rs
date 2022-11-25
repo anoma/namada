@@ -3,7 +3,6 @@
 mod block_space_alloc;
 
 use index_set::IndexSet;
-use itertools::Either::*;
 use namada::hints;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
@@ -256,9 +255,13 @@ where
                     ?self.storage.get_current_decision_height(),
                 "No mempool txs are being included in the current proposal"
             );
-            Right(alloc.next_state_without_encrypted_txs())
+            EncryptedTxBatchAllocator::WithoutEncryptedTxs(
+                alloc.next_state_without_encrypted_txs(),
+            )
         } else {
-            Left(alloc.next_state_with_encrypted_txs())
+            EncryptedTxBatchAllocator::WithEncryptedTxs(
+                alloc.next_state_with_encrypted_txs(),
+            )
         }
     }
 

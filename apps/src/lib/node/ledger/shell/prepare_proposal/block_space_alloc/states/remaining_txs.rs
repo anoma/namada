@@ -1,4 +1,6 @@
-use itertools::Either::*;
+use namada::proto::Tx;
+use namada::types::transaction::process_tx;
+use namada::types::transaction::tx_types::TxType;
 
 use super::super::{AllocStatus, BlockSpaceAllocator};
 use super::{
@@ -27,10 +29,22 @@ impl TryAlloc
 
 impl TryAlloc for RemainingBatchAllocator {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_alloc<'tx>(&mut self, tx_bytes: &'tx [u8]) -> AllocStatus<'tx> {
         match self {
-            Left(state) => state.try_alloc(tx),
-            Right(state) => state.try_alloc(tx),
+            RemainingBatchAllocator::WithEncryptedTxs(state) => {
+                state.try_alloc(tx_bytes)
+            }
+            RemainingBatchAllocator::WithoutEncryptedTxs(state) => {
+                let tx = Tx::try_from(tx_bytes)
+                    .expect("Tx passed mempool validation");
+                if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
+                    // do not allocate anything if we
+                    // find an encrypted tx
+                    AllocStatus::Accepted
+                } else {
+                    state.try_alloc(tx_bytes)
+                }
+            }
         }
     }
 }

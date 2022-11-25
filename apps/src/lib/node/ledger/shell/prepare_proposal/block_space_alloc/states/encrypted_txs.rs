@@ -1,7 +1,5 @@
 use std::marker::PhantomData;
 
-use itertools::Either::*;
-
 use super::super::{AllocStatus, BlockSpaceAllocator};
 use super::{
     BuildingEncryptedTxBatch, EncryptedTxBatchAllocator, FillingRemainingSpace,
@@ -80,8 +78,14 @@ impl TryAlloc for EncryptedTxBatchAllocator {
     #[inline]
     fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
         match self {
-            Left(state) => state.try_alloc(tx),
-            Right(state) => state.try_alloc(tx),
+            EncryptedTxBatchAllocator::WithEncryptedTxs(state) => {
+                state.try_alloc(tx)
+            }
+            EncryptedTxBatchAllocator::WithoutEncryptedTxs(state) => {
+                // NOTE: this operation will cause the allocator to
+                // run out of memory immediately
+                state.try_alloc(tx)
+            }
         }
     }
 }
@@ -92,8 +96,16 @@ impl NextStateImpl for EncryptedTxBatchAllocator {
     #[inline]
     fn next_state_impl(self) -> Self::Next {
         match self {
-            Left(state) => Left(state.next_state_impl()),
-            Right(state) => Right(state.next_state_impl()),
+            EncryptedTxBatchAllocator::WithEncryptedTxs(state) => {
+                RemainingBatchAllocator::WithEncryptedTxs(
+                    state.next_state_impl(),
+                )
+            }
+            EncryptedTxBatchAllocator::WithoutEncryptedTxs(state) => {
+                RemainingBatchAllocator::WithoutEncryptedTxs(
+                    state.next_state_impl(),
+                )
+            }
         }
     }
 }

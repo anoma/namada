@@ -28,23 +28,29 @@ mod encrypted_txs;
 mod protocol_txs;
 mod remaining_txs;
 
-use itertools::Either;
-
 use super::{AllocStatus, BlockSpaceAllocator};
 
 /// Convenience wrapper for a [`BlockSpaceAllocator`] state that allocates
 /// encrypted transactions.
-pub type EncryptedTxBatchAllocator = Either<
-    BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>,
-    BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>,
->;
+pub enum EncryptedTxBatchAllocator {
+    WithEncryptedTxs(
+        BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>,
+    ),
+    WithoutEncryptedTxs(
+        BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>,
+    ),
+}
 
 /// Convenience wrapper for a [`BlockSpaceAllocator`] state that fills up the
 /// remaining block space.
-pub type RemainingBatchAllocator = Either<
-    BlockSpaceAllocator<FillingRemainingSpace<WithEncryptedTxs>>,
-    BlockSpaceAllocator<FillingRemainingSpace<WithoutEncryptedTxs>>,
->;
+pub enum RemainingBatchAllocator {
+    WithEncryptedTxs(
+        BlockSpaceAllocator<FillingRemainingSpace<WithEncryptedTxs>>,
+    ),
+    WithoutEncryptedTxs(
+        BlockSpaceAllocator<FillingRemainingSpace<WithoutEncryptedTxs>>,
+    ),
+}
 
 /// The leader of the current Tendermint round is building
 /// a new batch of DKG decrypted transactions.
