@@ -6,7 +6,11 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-#[cfg(not(feature = "abcipp"))]
+#[cfg(feature = "tendermint-rpc")]
+pub use tendermint_rpc;
+#[cfg(feature = "tendermint-rpc-abcipp")]
+pub use tendermint_rpc_abcipp as tendermint_rpc;
+#[cfg(feature = "abciplus")]
 pub use {ibc, ibc_proto, tendermint, tendermint_proto};
 #[cfg(feature = "abcipp")]
 pub use {
@@ -14,10 +18,9 @@ pub use {
     tendermint_abcipp as tendermint,
     tendermint_proto_abcipp as tendermint_proto,
 };
-
-pub mod bytes;
+pub use {namada_core as core, namada_proof_of_stake as proof_of_stake};
 pub mod ledger;
-pub mod proto;
+pub use namada_core::proto;
 pub mod types;
 pub mod vm;
 

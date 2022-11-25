@@ -1,12 +1,12 @@
 //! IBC lower-level functions for transactions.
 
-pub use namada::ledger::ibc::handler::{Error, IbcActions, Result};
-use namada::ledger::storage_api::{StorageRead, StorageWrite};
-use namada::ledger::tx_env::TxEnv;
-pub use namada::types::ibc::IbcEvent;
-use namada::types::storage::{BlockHeight, Key};
-use namada::types::time::Rfc3339String;
-use namada::types::token::Amount;
+pub use namada_core::ledger::ibc::actions::{Error, IbcActions, Result};
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+use namada_core::ledger::tx_env::TxEnv;
+pub use namada_core::types::ibc::IbcEvent;
+use namada_core::types::storage::{BlockHeight, Key};
+use namada_core::types::time::Rfc3339String;
+use namada_core::types::token::Amount;
 
 use crate::token::transfer_with_keys;
 use crate::Ctx;

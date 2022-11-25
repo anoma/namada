@@ -14,12 +14,14 @@ default = []
 testing = ["proptest"]
 
 [dependencies]
+namada_core = {path = "../core"}
 borsh = "0.9.1"
-thiserror = "1.0.30"
+derivative = "2.2.0"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
-derivative = "2.2.0"
 rust_decimal = { version = "1.26.1", features = ["borsh"] }
 rust_decimal_macros = "1.26.1"
+thiserror = "1.0.30"
+tracing = "0.1.30"
 
 [dev-dependencies]

@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
   "apps",
+  "core",
   "proof_of_stake",
   "shared",
   "tests",

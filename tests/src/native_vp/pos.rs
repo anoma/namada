@@ -99,8 +99,9 @@
 //! - add slashes
 
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
+use namada::proof_of_stake::storage::GenesisValidator;
+use namada::proof_of_stake::PosParams;
 use namada::types::storage::Epoch;
-use namada_tx_prelude::proof_of_stake::{GenesisValidator, PosParams};
 
 use crate::tx::tx_host_env;
 
@@ -125,11 +126,7 @@ pub fn init_pos(
         // Initialize PoS storage
         tx_env
             .storage
-            .init_genesis(
-                params,
-                genesis_validators.iter(),
-                u64::from(start_epoch),
-            )
+            .init_genesis(params, genesis_validators.iter(), start_epoch)
             .unwrap();
     });
 }
@@ -137,12 +134,11 @@ pub fn init_pos(
 #[cfg(test)]
 mod tests {
 
-    use namada::ledger::pos::PosParams;
+    use namada::ledger::pos::{PosParams, PosVP};
     use namada::types::key::common::PublicKey;
     use namada::types::storage::Epoch;
     use namada::types::{address, token};
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
-    use namada_tx_prelude::proof_of_stake::PosVP;
     use namada_tx_prelude::Address;
     use proptest::prelude::*;
     use proptest::prop_state_machine;
@@ -572,20 +568,19 @@ pub mod testing {
     use derivative::Derivative;
     use itertools::Either;
     use namada::ledger::pos::namada_proof_of_stake::btree_set::BTreeSetShims;
+    use namada::proof_of_stake::epoched::{
+        DynEpochOffset, Epoched, EpochedDelta,
+    };
+    use namada::proof_of_stake::parameters::testing::arb_rate;
+    use namada::proof_of_stake::storage::{BondId, Bonds, Unbonds};
+    use namada::proof_of_stake::types::{
+        Bond, Unbond, ValidatorState, WeightedValidator,
+    };
+    use namada::proof_of_stake::PosParams;
     use namada::types::key::common::PublicKey;
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;
     use namada::types::{address, key, token};
-    use namada_tx_prelude::proof_of_stake::epoched::{
-        DynEpochOffset, Epoched, EpochedDelta,
-    };
-    use namada_tx_prelude::proof_of_stake::parameters::testing::arb_rate;
-    use namada_tx_prelude::proof_of_stake::types::{
-        Bond, Unbond, ValidatorState, WeightedValidator,
-    };
-    use namada_tx_prelude::proof_of_stake::{
-        BondId, Bonds, PosParams, Unbonds,
-    };
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
     use rust_decimal::Decimal;
@@ -1081,10 +1076,9 @@ pub mod testing {
                         pos_deltas: HashMap::default(),
                         neg_deltas: Default::default(),
                     };
-                    value.pos_deltas.insert(
-                        (current_epoch + offset.value(params)).into(),
-                        amount,
-                    );
+                    value
+                        .pos_deltas
+                        .insert(current_epoch + offset.value(params), amount);
                     match bonds {
                         Some(mut bonds) => {
                             // Resize the data if needed (the offset may be
@@ -1163,8 +1157,7 @@ pub mod testing {
                                 value.deltas.insert(
                                     (
                                         *start_epoch,
-                                        (current_epoch + offset.value(params))
-                                            .into(),
+                                        (current_epoch + offset.value(params)),
                                     ),
                                     to_unbond,
                                 );
@@ -1175,8 +1168,7 @@ pub mod testing {
                                 value.deltas.insert(
                                     (
                                         *start_epoch,
-                                        (current_epoch + offset.value(params))
-                                            .into(),
+                                        (current_epoch + offset.value(params)),
                                     ),
                                     *delta,
                                 );
