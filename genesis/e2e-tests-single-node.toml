@@ -36,7 +36,7 @@ Bertha = 1000000
 Christel = 1000000
 "Christel.public_key" = 100
 Daewon = 1000000
-faucet = 9223372036854
+faucet = 9223372036
 "faucet.public_key" = 100
 "validator-0.public_key" = 100
 

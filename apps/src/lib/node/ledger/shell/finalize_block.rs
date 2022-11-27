@@ -54,6 +54,8 @@ where
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
+        println!("FINALIZE BLOCK - NUM TXS = {}", req.txs.len());
+
         // Reset the gas meter before we start
         self.gas_meter.reset();
 
@@ -63,6 +65,11 @@ where
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
         let (current_epoch, _gas) = self.storage.get_current_epoch();
+
+        println!(
+            "BLOCK HEIGHT {} AND EPOCH {}, NEW EPOCH = {}",
+            height, current_epoch, new_epoch
+        );
 
         if new_epoch {
             let _proposals_result =
@@ -364,6 +371,7 @@ where
         // (n-1 if we are in the process of finalizing n right now).
         match self.storage.read_last_block_proposer_address() {
             Some(proposer_address) => {
+                println!("FOUND LAST BLOCK PROPOSER");
                 if new_epoch {
                     println!("APPLYING INFLATION");
                     self.apply_inflation(
@@ -374,6 +382,7 @@ where
                 } else {
                     // TODO: watch out because this is likely not using the
                     // proper block proposer address
+                    println!("LOGGING BLOCK REWARDS (NOT NEW EPOCH)");
                     self.storage
                         .log_block_rewards(
                             current_epoch,
@@ -409,6 +418,7 @@ where
                 }
             }
             None => {
+                println!("NO BLOCK PROPOSER FOUND SET IN STORAGE");
                 #[cfg(feature = "abcipp")]
                 if req.votes.is_empty() && !req.proposer_address.is_empty() {
                     // Get proposer address from storage based on the consensus
@@ -446,6 +456,7 @@ where
             .map_err(|_| Error::GasOverflow)?;
 
         self.event_log_mut().log_events(response.events.clone());
+        println!("END OF NAMADA FINALIZEBLOCK");
 
         Ok(response)
     }

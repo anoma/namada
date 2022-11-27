@@ -950,6 +950,16 @@ pub trait PosBase {
         let validators = validator_set.get(epoch).unwrap();
         let pos_params = self.read_pos_params();
 
+        println!(
+            "VALIDATOR SET OF EPOCH {} LAST UPDATE = {}, LEN = {}:",
+            epoch,
+            validator_set.last_update(),
+            validator_set.data.len()
+        );
+        for val in &validators.active {
+            println!("STAKE: {}, ADDRESS: {}", val.bonded_stake, val.address);
+        }
+
         // Get total stake of the consensus validator set
         // TODO: does this need to account for rewards prodcuts?
         let total_active_stake = validators.active.iter().fold(
@@ -1005,6 +1015,11 @@ pub trait PosBase {
             Err(_) => return Err(InflationError::Error),
         };
 
+        println!(
+            "TOTAL SIGNING STAKE (LOGGING BLOCK REWARDS) = {}",
+            signing_stake
+        );
+
         // Calculate the fraction block rewards for each consensus validator and
         // update the reward accumulators
         let mut validator_accumulators = self
@@ -1013,6 +1028,10 @@ pub trait PosBase {
         for validator in validators.active.iter() {
             let mut rewards_frac = Decimal::default();
             let stake: Decimal = validator.bonded_stake.into();
+            println!(
+                "VALIDATOR STAKE (LOGGING BLOCK REWARDS) OF EPOCH {} = {}",
+                epoch, stake
+            );
 
             // Proposer reward
             if validator.address == *proposer_address {

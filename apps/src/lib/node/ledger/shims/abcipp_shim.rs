@@ -107,12 +107,16 @@ impl AbcippShim {
                             .expect(
                                 "Unable to find native validator address of \
                                  block proposer from tendermint raw hash",
+                    {
+                        println!("\nRECEIVED REQUEST PROCESSPROPOSAL");
                             );
-                        println!("BLOCK PROPOSER: {}", native_proposer_address);
                         self.service
                             .storage
                             .write_current_block_proposer_address(
                                 &native_proposer_address,
+                            println!(
+                                "BLOCK PROPOSER (PROCESSPROPOSAL): {}",
+                                native_proposer_address
                             );
                     }
                     self.service
@@ -127,6 +131,7 @@ impl AbcippShim {
                 }
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
+                    println!("RECEIVED REQUEST FINALIZEBLOCK");
                     let unprocessed_txs = block.txs.clone();
                     let processing_results =
                         self.service.process_txs(&block.txs);
@@ -151,17 +156,20 @@ impl AbcippShim {
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::BeginBlock(block) => {
+                    println!("RECEIVED REQUEST BEGINBLOCK");
                     // we save this data to be forwarded to finalize later
                     self.begin_block_request = Some(block);
                     Ok(Resp::BeginBlock(Default::default()))
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::DeliverTx(tx) => {
+                    println!("RECEIVED REQUEST DELIVERTX");
                     self.delivered_txs.push(tx.tx);
                     Ok(Resp::DeliverTx(Default::default()))
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
+                    println!("RECEIVED REQUEST ENDBLOCK");
                     let processing_results =
                         self.service.process_txs(&self.delivered_txs);
                     let mut txs = Vec::with_capacity(self.delivered_txs.len());
