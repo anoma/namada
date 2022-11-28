@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.10.1
+
+Namada 0.10.1 is a point release with fixes to shielded transactions.
+
 ## v0.10.0
 
 Namada 0.10.0 is a scheduled minor release, focused on IBC and MASP

@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_proof_of_stake"
 readme = "../README.md"
 resolver = "2"
-version = "0.10.0"
+version = "0.10.1"
 
 [features]
 default = []

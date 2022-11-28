@@ -14,7 +14,10 @@ use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::storage::{self, Epoch, PrefixValue};
+use crate::types::address::Address;
+#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+use crate::types::storage::TxIndex;
+use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
 #[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 
