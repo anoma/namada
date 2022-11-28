@@ -2690,8 +2690,8 @@ checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
 
 [[package]]
 name = "index-set"
-version = "0.4.0"
-source = "git+https://github.com/heliaxdev/index-set?tag=v0.4.0#45bb669be1c0babd9e2a2ebcf1b91720642193d8"
+version = "0.4.1"
+source = "git+https://github.com/heliaxdev/index-set?tag=v0.4.1#32e81b025cfb2be32be861e7f488f628e5ce9ffb"
 
 [[package]]
 name = "indexmap"
