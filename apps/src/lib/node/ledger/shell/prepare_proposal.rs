@@ -45,15 +45,15 @@ where
 {
     /// Begin a new block.
     ///
-    /// We include half of the new wrapper txs given to us from the mempool
-    /// by tendermint. The rest of the block is filled with decryptions
-    /// of the wrapper txs from the previously committed block.
+    /// Block space is roughly divided into three equal parts, which we call
+    /// allotments. In the following order, each allotted area is home to:
+    /// decrypted, protocol and encrypted transactions, respectively. During
+    /// some protocol phases, we might omit encrypted and decrypted transactions
+    /// entirely, such as when we negotiate DKG parameters.
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
     /// them in the next block).
-    // TODO: change second paragraph of the docstr, to reflect new
-    // allotted space per block design
     pub fn prepare_proposal(
         &mut self,
         req: RequestPrepareProposal,
