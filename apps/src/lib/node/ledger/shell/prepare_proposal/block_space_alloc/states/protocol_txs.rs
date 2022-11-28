@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::super::{threshold, AllocStatus, BlockSpaceAllocator, TxBin};
+use super::super::{threshold, AllocFailure, BlockSpaceAllocator, TxBin};
 use super::{
     BuildingEncryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl, TryAlloc,
     WithEncryptedTxs, WithoutEncryptedTxs,
@@ -8,7 +8,7 @@ use super::{
 
 impl TryAlloc for BlockSpaceAllocator<BuildingProtocolTxBatch> {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
         self.protocol_txs.try_dump(tx)
     }
 }

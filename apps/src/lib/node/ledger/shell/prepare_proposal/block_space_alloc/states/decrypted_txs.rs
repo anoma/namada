@@ -1,13 +1,13 @@
 use std::marker::PhantomData;
 
-use super::super::{threshold, AllocStatus, BlockSpaceAllocator, TxBin};
+use super::super::{threshold, AllocFailure, BlockSpaceAllocator, TxBin};
 use super::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl, TryAlloc,
 };
 
 impl TryAlloc for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
         self.decrypted_txs.try_dump(tx)
     }
 }

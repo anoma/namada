@@ -56,16 +56,18 @@ use std::marker::PhantomData;
 
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
-/// All status responses from trying to allocate block space for a tx.
+/// Block space allocation failure status responses.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum AllocStatus<'tx> {
-    /// The transaction is able to be included in the current block.
-    Accepted,
+pub enum AllocFailure {
     /// The transaction can only be included in an upcoming block.
-    Rejected { tx: &'tx [u8], space_left: u64 },
+    ///
+    /// We return the space left in the tx bin for logging purposes.
+    Rejected { bin_space_left: u64 },
     /// The transaction would overflow the allotted bin space,
     /// therefore it needs to be handled separately.
-    OverflowsBin { tx: &'tx [u8], bin_size: u64 },
+    ///
+    /// We return the size of the tx bin for logging purposes.
+    OverflowsBin { bin_size: u64 },
 }
 
 /// Allotted space for a batch of transactions in some proposed block,
@@ -199,19 +201,19 @@ impl TxBin {
     ///
     /// Signal the caller if the tx is larger than its max
     /// allotted bin space.
-    fn try_dump<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_dump(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
         let tx_len = tx.len() as u64;
         if tx_len > self.allotted_space_in_bytes {
             let bin_size = self.allotted_space_in_bytes;
-            return AllocStatus::OverflowsBin { tx, bin_size };
+            return Err(AllocFailure::OverflowsBin { bin_size });
         }
         let occupied = self.occupied_space_in_bytes + tx_len;
         if occupied <= self.allotted_space_in_bytes {
             self.occupied_space_in_bytes = occupied;
-            AllocStatus::Accepted
+            Ok(())
         } else {
-            let space_left = self.space_left_in_bytes();
-            AllocStatus::Rejected { tx, space_left }
+            let bin_space_left = self.space_left_in_bytes();
+            Err(AllocFailure::Rejected { bin_space_left })
         }
     }
 }
