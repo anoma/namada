@@ -213,16 +213,15 @@ impl EthereumReceiver {
         self.queue.iter().cloned().collect()
     }
 
-    /// Given a list of events, remove them from the queue if present
-    /// Note that this method preserves the sorting and de-duplication
+    /// Remove the given [`EthereumEvent`] from the queue, if present.
+    ///
+    /// **INVARIANT:** This method preserves the sorting and de-duplication
     /// of events in the queue.
-    #[allow(dead_code)]
-    pub fn remove(&mut self, events: &[EthereumEvent]) {
-        self.queue.retain(|event| !events.contains(event));
+    pub fn remove_event(&mut self, event: &EthereumEvent) {
+        self.queue.remove(event);
     }
 }
 
-#[allow(dead_code)]
 impl ShellMode {
     /// Get the validator address if ledger is in validator mode
     pub fn get_validator_address(&self) -> Option<&address::Address> {
@@ -233,13 +232,9 @@ impl ShellMode {
     }
 
     /// Remove an Ethereum event from the internal queue
-    pub fn deque_eth_event(&mut self, event: &EthereumEvent) {
-        if let ShellMode::Validator {
-            ethereum_recv: EthereumReceiver { ref mut queue, .. },
-            ..
-        } = self
-        {
-            queue.remove(event);
+    pub fn dequeue_eth_event(&mut self, event: &EthereumEvent) {
+        if let ShellMode::Validator { ethereum_recv, .. } = self {
+            ethereum_recv.remove_event(event);
         }
     }
 
@@ -262,6 +257,7 @@ impl ShellMode {
     }
 
     /// Get the Ethereum bridge keypair for this validator.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn get_eth_bridge_keypair(&self) -> Option<&common::SecretKey> {
         match self {
             ShellMode::Validator {
@@ -281,6 +277,7 @@ impl ShellMode {
 
     /// If this node is a validator, broadcast a tx
     /// to the mempool using the broadcaster subprocess
+    #[cfg_attr(feature = "abcipp", allow(dead_code))]
     pub fn broadcast(&self, data: Vec<u8>) {
         if let Self::Validator {
             broadcast_sender, ..
