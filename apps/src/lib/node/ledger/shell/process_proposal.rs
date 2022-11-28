@@ -477,7 +477,7 @@ where
                     // If the public key corresponds to the MASP sentinel
                     // transaction key, then the fee payer is effectively
                     // the MASP, otherwise derive
-                    // they payer from public key.
+                    // the payer from public key.
                     let fee_payer = if tx.pk != masp_tx_key().ref_to() {
                         tx.fee_payer()
                     } else {
