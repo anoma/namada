@@ -197,12 +197,9 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let txs = deserialize_vote_extensions(txs).enumerate().take_while(|(index, tx_bytes)| {
+        let txs = deserialize_vote_extensions(txs, tx_indices).take_while(|tx_bytes| {
             match alloc.try_alloc(&*tx_bytes) {
-                AllocStatus::Accepted => {
-                    tx_indices.insert(*index);
-                    true
-                },
+                AllocStatus::Accepted => true,
                 AllocStatus::Rejected { tx, space_left } => {
                     // TODO: maybe we should find a way to include
                     // validator set updates all the time. for instance,
@@ -234,7 +231,6 @@ where
                 }
             }
         })
-        .map(|(_, tx_bytes)| tx_bytes)
         .collect();
 
         (txs, self.get_encrypted_txs_allocator(alloc))
