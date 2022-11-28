@@ -6,9 +6,9 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-#[cfg(all(not(feature = "abcipp"), feature = "ferveo-tpke"))]
+#[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
-#[cfg(all(feature = "abcipp", feature = "ferveo-tpke"))]
+#[cfg(feature = "tendermint-rpc-abcipp")]
 pub use tendermint_rpc_abcipp as tendermint_rpc;
 #[cfg(not(feature = "abcipp"))]
 pub use {ibc, ibc_proto, tendermint, tendermint_proto};

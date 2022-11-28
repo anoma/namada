@@ -5,7 +5,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_tests"
 resolver = "2"
-version = "0.10.1"
+version = "0.10.0"
 
 [features]
 default = ["wasm-runtime"]

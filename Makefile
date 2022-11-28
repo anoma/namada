@@ -68,7 +68,7 @@ clippy-abcipp:
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" && \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" && \
 	$(cargo) +$(nightly) clippy \
 		--all-targets \
 		--manifest-path ./vm_env/Cargo.toml \
