@@ -55,7 +55,7 @@ Should a validator exhibit punishable behavior, the delegations towards this val
 namada client slashes
 ```
 
-### Unbounding
+### Unbonding
 
 While your tokens are being delegated, they are locked-in the PoS system and hence are not liquid until you withdraw them. To do that, you first need to send a transaction to “unbond” your tokens. You can unbond any amount, up to the sum of all your delegations to the given validator, even before they become active.
 
@@ -151,7 +151,7 @@ The same rules apply to delegations. When you self-bond tokens, the bonded amoun
 
 While your tokens are being self-bonded, they are locked-in the PoS system and hence are not liquid until you withdraw them. To do that, you first need to send a transaction to “unbond” your tokens. You can unbond any amount, up to the sum of all your self-bonds, even before they become active.
 
-### Self-unbounding
+### Self-unbonding
 
 To submit an unbonding of self-bonded tokens from your validator:
 

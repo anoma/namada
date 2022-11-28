@@ -1,7 +1,7 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
 use namada::ledger::protocol;
-use namada::types::storage::{BlockHash, Header};
+use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::transaction::protocol::ProtocolTxType;
 
 use super::governance::execute_governance_proposals;
@@ -51,7 +51,9 @@ where
                 execute_governance_proposals(self, &mut response)?;
         }
 
-        for processed_tx in &req.txs {
+        // Tracks the accepted transactions
+        self.storage.block.results = BlockResults::with_len(req.txs.len());
+        for (tx_index, processed_tx) in req.txs.iter().enumerate() {
             let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
                 tx
             } else {
@@ -206,6 +208,11 @@ where
             match protocol::dispatch_tx(
                 tx_type,
                 tx_length,
+                TxIndex(
+                    tx_index
+                        .try_into()
+                        .expect("transaction index out of bounds"),
+                ),
                 &mut self.gas_meter,
                 &mut self.write_log,
                 &mut self.storage,
@@ -225,6 +232,7 @@ where
                         self.write_log.commit_tx();
                         if !tx_event.contains_key("code") {
                             tx_event["code"] = ErrorCodes::Ok.into();
+                            self.storage.block.results.accept(tx_index);
                         }
                         if let Some(ibc_event) = &result.ibc_event {
                             // Add the IBC event besides the tx_event

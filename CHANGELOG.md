@@ -1,5 +1,37 @@
 # CHANGELOG
 
+## v0.10.1
+
+Namada 0.10.1 is a point release with fixes to shielded transactions.
+
+## v0.10.0
+
+Namada 0.10.0 is a scheduled minor release, focused on IBC and MASP
+integrations.
+
+### BUG FIXES
+
+- Fix compatiblity of IBC Acknowledgement message and FungibleTokenData with
+  ibc-go ([#261](https://github.com/anoma/namada/pull/261))
+- Fix the block header merkle root hash for response to finalizing block.
+  ([#298](https://github.com/anoma/namada/pull/298))
+- Fix IBC token transfer to comply with ICS20.
+  ([#625](https://github.com/anoma/namada/pull/625))
+- Fixed storage read from arbitrary height and added an optional config value
+  `shell.storage_read_past_height_limit` to limit how far back storage queries
+  can read from. ([#706](https://github.com/anoma/namada/pull/706))
+- Fix `make debug-wasm-scripts`, which attempted an incorrect rename.
+  ([#720](https://github.com/anoma/namada/pull/720))
+- require_latest_height should skip requests with height 0
+  ([#752](https://github.com/anoma/namada/pull/752))
+
+### FEATURES
+
+- Add client command 'ibc-transfer'.
+  ([#626](https://github.com/anoma/namada/pull/626))
+- Added MASP client and wallet functionality. Added new command to view transfer
+  history. ([#1234](https://github.com/anoma/anoma/pull/1234))
+
 ## v0.9.0
 
 Namada 0.9.0 is a scheduled minor release.

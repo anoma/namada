@@ -3,13 +3,12 @@
 pub use namada::ledger::ibc::handler::{Error, IbcActions, Result};
 use namada::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::ledger::tx_env::TxEnv;
-use namada::types::address::Address;
 pub use namada::types::ibc::IbcEvent;
 use namada::types::storage::{BlockHeight, Key};
 use namada::types::time::Rfc3339String;
 use namada::types::token::Amount;
 
-use crate::token::transfer;
+use crate::token::transfer_with_keys;
 use crate::Ctx;
 
 impl IbcActions for Ctx {
@@ -50,12 +49,11 @@ impl IbcActions for Ctx {
 
     fn transfer_token(
         &mut self,
-        src: &Address,
-        dest: &Address,
-        token: &Address,
+        src: &Key,
+        dest: &Key,
         amount: Amount,
     ) -> std::result::Result<(), Self::Error> {
-        transfer(self, src, dest, token, None, amount)?;
+        transfer_with_keys(self, src, dest, amount)?;
         Ok(())
     }
 

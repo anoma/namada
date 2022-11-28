@@ -18,6 +18,10 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         token,
         sub_prefix,
         amount,
+        key,
+        shielded,
     } = transfer;
-    token::transfer(ctx, &source, &target, &token, sub_prefix, amount)
+    token::transfer(
+        ctx, &source, &target, &token, sub_prefix, amount, &key, &shielded,
+    )
 }

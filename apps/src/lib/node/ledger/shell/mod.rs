@@ -35,10 +35,11 @@ use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::ledger::{pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::address;
+use namada::types::address::{masp, masp_tx_key};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
-use namada::types::storage::{BlockHeight, Key};
+use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
@@ -767,7 +768,7 @@ where
     /// Lookup a validator's keypair for their established account from their
     /// wallet. If the node is not validator, this function returns None
     #[allow(dead_code)]
-    fn get_account_keypair(&self) -> Option<Rc<common::SecretKey>> {
+    fn get_account_keypair(&self) -> Option<common::SecretKey> {
         let wallet_path = &self.base_dir.join(self.chain_id.as_str());
         let genesis_path = &self
             .base_dir
@@ -833,7 +834,7 @@ mod test_utils {
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHash, Epoch, Header};
+    use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
     use namada::types::time::DateTimeUtc;
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
@@ -1158,6 +1159,7 @@ mod test_utils {
                 next_epoch_min_start_height: BlockHeight(3),
                 next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: &address_gen,
+                results: &BlockResults::default(),
                 tx_queue: &shell.storage.tx_queue,
             })
             .expect("Test failed");

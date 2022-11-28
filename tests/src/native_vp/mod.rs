@@ -53,6 +53,7 @@ impl TestNativeVpEnv {
             storage: &self.tx_env.storage,
             write_log: &self.tx_env.write_log,
             tx: &self.tx_env.tx,
+            tx_index: &self.tx_env.tx_index,
             vp_wasm_cache: self.tx_env.vp_wasm_cache.clone(),
             address: &self.address,
             keys_changed: &self.keys_changed,

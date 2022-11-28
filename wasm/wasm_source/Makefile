@@ -16,6 +16,7 @@ wasms += tx_transfer
 wasms += tx_unbond
 wasms += tx_update_vp
 wasms += tx_withdraw
+wasms += vp_masp
 wasms += vp_testnet_faucet
 wasms += vp_token
 wasms += vp_user
@@ -57,7 +58,7 @@ $(wasms): %:
 # Build a selected wasm in debug mode
 $(patsubst %,debug_%,$(wasms)): debug_%:
 	RUSTFLAGS='-C link-arg=-s' $(cargo) build --target wasm32-unknown-unknown --target-dir 'target' --features $* && \
-	cp "../target/wasm32-unknown-unknown/debug/anoma_wasm.wasm" ../$*.wasm
+	cp "./target/wasm32-unknown-unknown/debug/namada_wasm.wasm" ../$*.wasm
 
 # `cargo check` one of the wasms, e.g. `make check_tx_transfer`
 $(patsubst %,check_%,$(wasms)): check_%:

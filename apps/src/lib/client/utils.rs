@@ -279,7 +279,7 @@ pub async fn join_network(
         // Write consensus key to tendermint home
         tendermint_node::write_validator_key(
             &tm_home_dir,
-            &*pre_genesis_wallet.consensus_key,
+            &pre_genesis_wallet.consensus_key,
         );
 
         // Derive the node ID from the node key
@@ -362,7 +362,7 @@ pub async fn fetch_wasms_aux(base_dir: &Path, chain_id: &ChainId) {
 const TENDERMINT_NODE_ID_LENGTH: usize = 20;
 
 /// Derive Tendermint node ID from public key
-fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
+pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
     let mut bytes = [0u8; TENDERMINT_NODE_ID_LENGTH];
 
     match pk {
@@ -732,8 +732,6 @@ pub fn init_network(
         let temp_validator_chain_dir =
             validator_dir.join(temp_chain_id.as_str());
         let validator_chain_dir = validator_dir.join(&chain_id.as_str());
-        fs::create_dir_all(&validator_chain_dir)
-            .expect("Couldn't create validator directory");
         // Rename the generated directories for validators from `temp_chain_id`
         // to `chain_id`
         std::fs::rename(&temp_validator_chain_dir, &validator_chain_dir)

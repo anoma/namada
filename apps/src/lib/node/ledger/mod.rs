@@ -1,6 +1,7 @@
 mod abortable;
 mod broadcaster;
 mod ethereum_node;
+pub mod rpc;
 mod shell;
 mod shims;
 pub mod storage;
