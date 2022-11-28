@@ -2,13 +2,12 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
-use tendermint::merkle::proof::Proof;
-use tendermint_proto::crypto::{ProofOp, ProofOps};
 
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
+use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::Address;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 use crate::types::storage::TxIndex;

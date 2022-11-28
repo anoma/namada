@@ -1,8 +1,6 @@
-use tendermint::merkle::proof::Proof;
-
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api;
-use crate::tendermint_proto::crypto::ProofOps;
+use crate::tendermint::merkle::proof::Proof;
 use crate::types::storage::BlockHeight;
 #[cfg(feature = "wasm-runtime")]
 use crate::vm::wasm::{TxCache, VpCache};
