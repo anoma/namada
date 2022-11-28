@@ -5,6 +5,7 @@ use masp_primitives::sapling::Node;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::BlockResults;
+use namada_core::types::transaction::TxResult;
 
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -14,12 +15,7 @@ use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::address::Address;
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
-use crate::types::storage::TxIndex;
-use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
-#[cfg(any(test, feature = "async-client"))]
-use crate::types::transaction::TxResult;
+use crate::types::storage::{self, Epoch, PrefixValue};
 
 type Conversion = (
     Address,

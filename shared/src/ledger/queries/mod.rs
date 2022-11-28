@@ -137,14 +137,12 @@ pub mod tm {
             .await?;
             use crate::tendermint::abci::Code;
             match response.code {
-                crate::tendermint::abci::Code::Ok => Ok(EncodedResponseQuery {
+                Code::Ok => Ok(EncodedResponseQuery {
                     data: response.value,
                     info: response.info,
                     proof: response.proof,
                 }),
-                crate::tendermint::abci::Code::Err(code) => {
-                    Err(Error::Query(response.info, code))
-                }
+                Code::Err(code) => Err(Error::Query(response.info, code)),
             }
         }
     }
