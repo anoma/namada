@@ -85,6 +85,7 @@ where
                             0, /*  this is used to compute the fee
                                 * based on the code size. We dont
                                 * need it here. */
+                            TxIndex::default(),
                             &mut BlockGasMeter::default(),
                             &mut shell.write_log,
                             &mut shell.storage,

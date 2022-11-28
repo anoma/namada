@@ -16,7 +16,7 @@ use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::storage::TxQueue;
 use crate::types::storage::{
-    BlockHeight, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
 };
 use crate::types::time::DateTimeUtc;
 
@@ -57,6 +57,15 @@ impl DB for MockDB {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
             None => return Ok(None),
         };
+        // Block results
+        let results_path = format!("results/{}", height.raw());
+        let results: BlockResults =
+            match self.0.borrow().get(results_path.as_str()) {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
 
         // Epoch start height and time
         let next_epoch_min_start_height: BlockHeight =
@@ -151,6 +160,7 @@ impl DB for MockDB {
                     next_epoch_min_start_height,
                     next_epoch_min_start_time,
                     address_gen,
+                    results,
                     #[cfg(feature = "ferveo-tpke")]
                     tx_queue,
                 }))
@@ -173,6 +183,7 @@ impl DB for MockDB {
             next_epoch_min_start_height,
             next_epoch_min_start_time,
             address_gen,
+            results,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue,
         }: BlockStateWrite = state;
@@ -271,6 +282,13 @@ impl DB for MockDB {
         self.0
             .borrow_mut()
             .insert("height".to_owned(), types::encode(&height));
+        // Block results
+        {
+            let results_path = format!("results/{}", height.raw());
+            self.0
+                .borrow_mut()
+                .insert(results_path, types::encode(&results));
+        }
         Ok(())
     }
 
@@ -450,6 +468,20 @@ impl<'iter> DBIter<'iter> for MockDB {
                 prefix,
                 iter,
                 reverse_order: true,
+            },
+            db_prefix,
+        )
+    }
+
+    fn iter_results(&'iter self) -> MockPrefixIterator {
+        let db_prefix = "results/".to_owned();
+        let prefix = "results".to_owned();
+        let iter = self.0.borrow().clone().into_iter();
+        MockPrefixIterator::new(
+            MockIterator {
+                prefix,
+                iter,
+                reverse_order: false,
             },
             db_prefix,
         )

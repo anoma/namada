@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_apps"
 readme = "../README.md"
 resolver = "2"
-version = "0.9.0"
+version = "0.10.1"
 default-run = "namada"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -153,6 +153,9 @@ tracing-subscriber = {version = "0.3.7", features = ["env-filter"]}
 web30 = "0.19.1"
 websocket = "0.26.2"
 winapi = "0.3.9"
+#libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["transparent-inputs"] }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["bundled-prover", "download-params"] }
 bimap = {version = "0.6.2", features = ["serde"]}
 
 warp = "0.3.2"

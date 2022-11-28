@@ -1,11 +1,11 @@
-use super::super::{AllocStatus, BlockSpaceAllocator};
+use super::super::{AllocFailure, BlockSpaceAllocator};
 use super::{
     FillingRemainingSpace, TryAlloc, WithEncryptedTxs, WithoutEncryptedTxs,
 };
 
 impl TryAlloc for BlockSpaceAllocator<FillingRemainingSpace<WithEncryptedTxs>> {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
         self.block.try_dump(tx)
     }
 }
@@ -17,7 +17,7 @@ impl TryAlloc
     for BlockSpaceAllocator<FillingRemainingSpace<WithoutEncryptedTxs>>
 {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
         self.block.try_dump(tx)
     }
 }

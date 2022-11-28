@@ -427,6 +427,7 @@ mod tests {
     use crate::types::chain::ChainId;
     use crate::types::ethereum_events;
     use crate::types::ethereum_events::EthAddress;
+    use crate::types::storage::TxIndex;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 
@@ -501,6 +502,7 @@ mod tests {
             storage,
             write_log,
             tx,
+            &TxIndex(0),
             VpGasMeter::new(0u64),
             keys_changed,
             verifiers,

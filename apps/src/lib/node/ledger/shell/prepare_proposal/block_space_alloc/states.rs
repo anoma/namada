@@ -28,7 +28,7 @@ mod encrypted_txs;
 mod protocol_txs;
 mod remaining_txs;
 
-use super::AllocStatus;
+use super::AllocFailure;
 #[allow(unused_imports)]
 use super::BlockSpaceAllocator;
 
@@ -85,7 +85,7 @@ pub enum WithoutEncryptedTxs {}
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
 pub trait TryAlloc {
     /// Try to allocate space for a new transaction.
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx>;
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure>;
 }
 
 /// Represents a state transition in the [`BlockSpaceAllocator`] state machine.

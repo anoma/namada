@@ -8,7 +8,6 @@ on:
   pull_request_target:
     branches:
       - eth-bridge-integration
-      - '**/ethbridge/**'
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
@@ -35,7 +34,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        wasm_cache_version: ["v1"]
+        wasm_cache_version: ["v2"]
+        mold_version: [1.7.0]
 
     steps:
       - name: Checkout repo
@@ -54,26 +54,59 @@ jobs:
         # to disallow that.
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Duplicate checksums file
-        run: cp wasm/checksums.json wasm/original-checksums.json
       - name: Build WASM
         run: |
           make build-wasm-scripts
       - name: Upload wasm artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: wasm-${{ github.sha }}
+          name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             wasm/tx_*.wasm
             wasm/vp_*.wasm
             wasm/checksums.json
+
+  test-wasm:
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    needs: [build-wasm]
+    container: 
+      image: ghcr.io/anoma/namada:wasm-0.8.0
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        wasm_cache_version: ["v2"]
+        mold_version: [1.7.0]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Duplicate checksums file
+        run: cp wasm/checksums.json wasm/original-checksums.json
+      - name: Install mold linker
+        run: |
+          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
+      - name: Download wasm artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+          path: ./wasm
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Test Wasm
         run: make test-wasm
       - name: Check wasm up-to-date
-        run: cmp -- wasm/checksums.json wasm/original-checksums.json
+        run: cmp -- wasm/checksums.json wasm/original-checksums.json || true
       - name: Print diff
-        if: failure()
-        run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
+        run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines || true
 
   update-wasm:
     runs-on: ${{ matrix.os }}
@@ -94,7 +127,7 @@ jobs:
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
-          name: wasm-${{ github.sha }}
+          name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
           path: ./wasm
       - name: Update WASM
         run: aws s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
@@ -105,18 +138,18 @@ jobs:
   anoma-eth:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 80
+    needs: [build-wasm]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
         nightly_version: [nightly-2022-05-20]
-        mold_version: [1.6.0]
+        mold_version: [1.7.0]
         make:
           - name: ABCI
             suffix: ''
             cache_key: anoma
-            cache_version: v1
-            wait_for: anoma-release-eth (ubuntu-latest, 1.6.0, ABCI Release build, anoma-e2e-release, v1)
+            cache_version: v2
             tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
 
     env:
@@ -183,76 +216,21 @@ jobs:
         run: |
           wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
           mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
-      - name: Build
-        run: make build${{ matrix.make.suffix }}
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Build test
-        run: make build-test${{ matrix.make.suffix }}
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
-          name: wasm-${{ github.sha }}
+          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
           path: ./wasm
+      - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Run unit test
-        run: make test-unit${{ matrix.make.suffix }}
+        run: make test-unit-coverage${{ matrix.make.suffix }}
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Wait for release binaries
-        uses: lewagon/wait-on-check-action@v1.2.0
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
-          check-name: ${{ matrix.make.wait_for }}
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 30
-          allowed-conclusions: success
-      - name: Download tendermint binaries
-        uses: dawidd6/action-download-artifact@v2
-        with:
-          github_token: ${{secrets.GITHUB_TOKEN}}
-          workflow: build-tendermint.yml
-          workflow_conclusion: success
-          name: ${{ matrix.make.tendermint_artifact }}
-          path: /usr/local/bin
-      - name: Download anoma binaries
-        uses: actions/download-artifact@v3
-        with:
-          name: binaries${{ matrix.make.suffix }}-${{ github.sha }}
-          path: ./target/release/
-      - name: Change permissions
-        run: |
-          chmod +x target/release/namada
-          chmod +x target/release/namadaw
-          chmod +x target/release/namadan
-          chmod +x target/release/namadac
-          chmod +x /usr/local/bin/tendermint
-      - name: Download masp parameters
-        run: |
-          mkdir /home/runner/work/masp
-          curl -o /home/runner/work/masp/masp-spend.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-spend.params?raw=true
-          curl -o /home/runner/work/masp/masp-output.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-output.params?raw=true
-          curl -o /home/runner/work/masp/masp-convert.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-convert.params?raw=true
-      - name: Run e2e test
-        run: make test-e2e${{ matrix.make.suffix }}
-        env:
-          ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: 20
-          ANOMA_E2E_USE_PREBUILT_BINARIES: "true"
-          ANOMA_E2E_KEEP_TEMP: "true"
-          ANOMA_TM_STDOUT: "false"
-          ANOMA_LOG_COLOR: "false"
-          ANOMA_MASP_PARAMS_DIR: "/home/runner/work/masp"
-          ANOMA_LOG: "info"
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Upload e2e logs
-        if: success() || failure()
+      - name: Upload coverage
         uses: actions/upload-artifact@v3
         with:
-          name: logs-e2e${{ matrix.make.suffix }}-${{ github.sha }}
-          path: |
-            /tmp/.*/logs/
-            /tmp/.*/e2e-test.*/setup/validator-*/.anoma/logs/*.log
+          name: coverage${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: target/html
           retention-days: 3
       - name: Print sccache stats
         if: always()
@@ -263,17 +241,17 @@ jobs:
 
   anoma-release-eth:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        mold_version: [1.6.0]
+        mold_version: [1.7.0]
         make:
           - name: ABCI Release build
             suffix: ''
             cache_key: anoma-e2e-release
-            cache_version: "v1"
+            cache_version: "v2"
 
     env:
       CARGO_INCREMENTAL: 0
@@ -341,12 +319,185 @@ jobs:
       - name: Upload target binaries
         uses: actions/upload-artifact@v3
         with:
-          name: binaries${{ matrix.make.suffix }}-${{ github.sha }}
+          name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             target/release/namada
             target/release/namadac
             target/release/namadaw
             target/release/namadan
+      - name: Upload build timing report
+        if: success() || failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-timings-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/cargo-timings/cargo-timing.html
+          retention-days: 5
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true
+
+
+  anoma-e2e-eth:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        nightly_version: [nightly-2022-05-20]
+        mold_version: [1.7.0]
+        make:
+          - name: e2e
+            suffix: ''
+            index: 0
+            cache_key: anoma
+            cache_version: v2
+            tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
+            wait_for: anoma-release-eth (ubuntu-latest, 1.7.0, ABCI Release build, anoma-e2e-release, v2)
+          - name: e2e
+            suffix: ''
+            index: 1
+            cache_key: anoma
+            cache_version: v2
+            tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
+            wait_for: anoma-release-eth (ubuntu-latest, 1.7.0, ABCI Release build, anoma-e2e-release, v2)
+
+    env:
+      CARGO_INCREMENTAL: 0
+      RUST_BACKTRACE: full
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: 100G
+      SCCACHE_BUCKET: namada-sccache-master
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
+          aws-region: eu-west-1
+      - name: Install sccache (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          LINK: https://github.com/mozilla/sccache/releases/download
+          SCCACHE_VERSION: v0.3.0
+        run: |
+          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+          mkdir -p $HOME/.local/bin
+          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+          chmod +x $HOME/.local/bin/sccache
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install sccache (macos-latest)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install sccache
+      - name: Setup rust toolchain
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          profile: default
+          override: true
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: default
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Install mold linker
+        run: |
+          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
+      - name: Download tendermint binaries
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          github_token: ${{secrets.GITHUB_TOKEN}}
+          workflow: build-tendermint.yml
+          workflow_conclusion: success
+          name: ${{ matrix.make.tendermint_artifact }}
+          path: /usr/local/bin
+      - name: Download masp parameters
+        run: |
+          mkdir /home/runner/work/masp
+          curl -o /home/runner/work/masp/masp-spend.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-spend.params?raw=true
+          curl -o /home/runner/work/masp/masp-output.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-output.params?raw=true
+          curl -o /home/runner/work/masp/masp-convert.params -sLO https://github.com/anoma/masp/blob/ef0ef75e81696ff4428db775c654fbec1b39c21f/masp-convert.params?raw=true
+      - name: Build 
+        run: make build
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Build test
+        run: make build-test
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Wait for release binaries
+        uses: lewagon/wait-on-check-action@v1.2.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          check-name: ${{ matrix.make.wait_for }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 30
+          allowed-conclusions: success
+      - name: Download wasm artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+          path: ./wasm
+      - name: Download anoma binaries
+        uses: actions/download-artifact@v3
+        with:
+          name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ./target/release/
+      - name: Change permissions
+        run: |
+          chmod +x target/release/namada
+          chmod +x target/release/namadaw
+          chmod +x target/release/namadan
+          chmod +x target/release/namadac
+          chmod +x /usr/local/bin/tendermint
+      - name: Run e2e test
+        run: python3 .github/workflows/scripts/schedule-e2e.py
+        env:
+          ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: 20
+          ANOMA_E2E_USE_PREBUILT_BINARIES: "true"
+          ANOMA_E2E_KEEP_TEMP: "true"
+          ANOMA_TM_STDOUT: "false"
+          ANOMA_LOG_COLOR: "false"
+          ANOMA_MASP_PARAMS_DIR: "/home/runner/work/masp"
+          ANOMA_LOG: "info"
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+          INDEX: ${{ matrix.make.index }}
+      - name: Upload e2e logs
+        if: success() || failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: logs-e2e-${{ matrix.make.index }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            /tmp/.*/logs/
+            /tmp/.*/e2e-test.*/setup/validator-*/.anoma/logs/*.log
+          retention-days: 5
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats

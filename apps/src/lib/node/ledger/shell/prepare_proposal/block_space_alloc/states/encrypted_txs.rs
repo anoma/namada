@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::super::{AllocStatus, BlockSpaceAllocator};
+use super::super::{AllocFailure, BlockSpaceAllocator};
 use super::{
     BuildingEncryptedTxBatch, FillingRemainingSpace, NextStateImpl, TryAlloc,
     WithEncryptedTxs, WithoutEncryptedTxs,
@@ -10,7 +10,7 @@ impl TryAlloc
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>
 {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
         self.encrypted_txs.try_dump(tx)
     }
 }
@@ -30,8 +30,8 @@ impl TryAlloc
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
 {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
-        AllocStatus::Rejected { tx, space_left: 0 }
+    fn try_alloc(&mut self, _tx: &[u8]) -> Result<(), AllocFailure> {
+        Err(AllocFailure::Rejected { bin_space_left: 0 })
     }
 }
 
