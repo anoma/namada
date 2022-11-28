@@ -16,17 +16,19 @@
 //! In the current implementation, we allocate space for transactions
 //! in the following order of preference:
 //!
-//! - First, we allocate space for DKG decrypted txs.
-//! - Next, we allocate space for protocol txs. Protocol txs get 1/3 of the
-//!   block space allotted to them.
-//! - Finally, we allocate space for DKG encrypted txs.
+//! - First, we allot space for DKG decrypted txs. Decrypted txs take up as much
+//!   space as needed. We will see, shortly, why in practice this is fine.
+//! - Next, we allot space for protocol txs. Protocol txs get half of the
+//!   remaining block space allotted to them.
+//! - Finally, we allot space for DKG encrypted txs. We allow DKG encrypted txs
+//!   to take up at most 1/3 of the total block space.
 //! - If any space remains, we try to fit other smaller txs in the block.
 //!
-//! Since decrypted txs will utilize at most as much space as
-//! encrypted txs will utilize, and we allocate 1/3 of space
-//! that has already been taken up by decrypted txs to protocol
-//! txs, we roughly divide the block space in 3 for each kind
-//! of major tx type.
+//! Since at some fixed height `H` decrypted txs only take up as
+//! much space as the encrypted txs from height `H - 1`, and we
+//! restrict the space of encrypted txs to at most 1/3 of the
+//! total block space, we roughly divide the Tendermint block
+//! space in 3, for each major type of tx.
 
 pub mod states;
 
