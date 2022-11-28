@@ -6,7 +6,7 @@ At the moment, Namada only supports Linux and macOS.
 
 ## Hardware Requirements
 
-This section covers the minimum and recommended hardware requirements for engaging with the Namada as a validator node.
+This section covers the minimum and recommended hardware requirements for engaging with Namada as a validator node.
 
 ### Minimal Hardware Requirements
 

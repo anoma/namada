@@ -83,7 +83,7 @@ jobs:
         if: ${{ matrix.make.logs == 'true' && steps.check.outputs.triggered == 'true' }}
         uses: actions/upload-artifact@v3
         with:
-          name: logs-load-tester-${{ github.sha }}
+          name: logs-load-tester-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ matrix.make.logs_path }}
           retention-days: 5
       - name: Comment not found

@@ -9,7 +9,7 @@ use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::proto::Tx;
 use namada::types::address::Address;
-use namada::types::storage::Key;
+use namada::types::storage::{Key, TxIndex};
 use namada::types::time::DurationSecs;
 use namada::types::{key, token};
 use namada::vm::prefix_iter::PrefixIterators;
@@ -50,6 +50,7 @@ pub struct TestTxEnv {
     pub iterators: PrefixIterators<'static, MockDB>,
     pub verifiers: BTreeSet<Address>,
     pub gas_meter: BlockGasMeter,
+    pub tx_index: TxIndex,
     pub result_buffer: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     pub vp_cache_dir: TempDir,
@@ -69,6 +70,7 @@ impl Default for TestTxEnv {
             write_log: WriteLog::default(),
             iterators: PrefixIterators::default(),
             gas_meter: BlockGasMeter::default(),
+            tx_index: TxIndex::default(),
             verifiers: BTreeSet::default(),
             result_buffer: None,
             vp_wasm_cache,
@@ -189,6 +191,7 @@ impl TestTxEnv {
             &self.storage,
             &mut self.write_log,
             &mut self.gas_meter,
+            &TxIndex::default(),
             &self.tx.code,
             self.tx.data.as_ref().unwrap_or(&empty_data),
             &mut self.vp_wasm_cache,
@@ -309,7 +312,8 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
-                                result_buffer,
+                            result_buffer,
+                            tx_index,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
                                 tx_wasm_cache,
@@ -323,6 +327,7 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
+                                tx_index,
                                 result_buffer,
                                 vp_wasm_cache,
                                 tx_wasm_cache,
@@ -342,6 +347,7 @@ mod native_tx_host_env {
                     #[no_mangle]
                     extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
                         with(|TestTxEnv {
+                            tx_index,
                                 storage,
                                 write_log,
                                 iterators,
@@ -361,6 +367,7 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
+                                tx_index,
                                 result_buffer,
                                 vp_wasm_cache,
                                 tx_wasm_cache,
@@ -411,6 +418,7 @@ mod native_tx_host_env {
     native_host_fn!(tx_emit_ibc_event(event_ptr: u64, event_len: u64));
     native_host_fn!(tx_get_chain_id(result_ptr: u64));
     native_host_fn!(tx_get_block_height() -> u64);
+    native_host_fn!(tx_get_tx_index() -> u32);
     native_host_fn!(tx_get_block_time() -> i64);
     native_host_fn!(tx_get_block_hash(result_ptr: u64));
     native_host_fn!(tx_get_block_epoch() -> u64);

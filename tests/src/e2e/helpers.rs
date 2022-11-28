@@ -13,6 +13,7 @@ use eyre::eyre;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
+use namada_apps::config::genesis::genesis_config;
 use namada_apps::config::{Config, TendermintMode};
 
 use super::setup::{sleep, Test, ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES};
@@ -53,6 +54,25 @@ pub fn get_actor_rpc(test: &Test, who: &Who) -> String {
     let config =
         Config::load(&base_dir, &test.net.chain_id, Some(tendermint_mode));
     config.ledger.tendermint.rpc_address.to_string()
+}
+
+/// Get the public key of the validator
+pub fn get_validator_pk(test: &Test, who: &Who) -> Option<common::PublicKey> {
+    let index = match who {
+        Who::NonValidator => return None,
+        Who::Validator(i) => i,
+    };
+    let file = format!("{}.toml", test.net.chain_id.as_str());
+    let path = test.test_dir.path().join(file);
+    let config = genesis_config::open_genesis_config(path).unwrap();
+    let pk = config
+        .validator
+        .get(&format!("validator-{}", index))
+        .unwrap()
+        .account_public_key
+        .as_ref()
+        .unwrap();
+    Some(pk.to_public_key().unwrap())
 }
 
 /// Find the address of an account by its alias from the wallet
@@ -206,6 +226,14 @@ pub fn wait_for_block_height(
     }
 }
 
+/// Are the E2E tests be running in debug mode?
+pub fn is_debug_mode() -> bool {
+    match env::var(ENV_VAR_DEBUG) {
+        Ok(val) => val.to_ascii_lowercase() != "false",
+        _ => false,
+    }
+}
+
 pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
     let use_prebuilt_binaries = match env::var(ENV_VAR_USE_PREBUILT_BINARIES) {
         Ok(var) => var.to_ascii_lowercase() != "false",
@@ -213,10 +241,7 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
     };
 
     // Allow to run in debug
-    let run_debug = match env::var(ENV_VAR_DEBUG) {
-        Ok(val) => val.to_ascii_lowercase() != "false",
-        _ => false,
-    };
+    let run_debug = is_debug_mode();
 
     if !use_prebuilt_binaries {
         let build_cmd = CargoBuild::new()
@@ -271,4 +296,26 @@ fn strip_trailing_newline(input: &str) -> &str {
         .strip_suffix("\r\n")
         .or_else(|| input.strip_suffix('\n'))
         .unwrap_or(input)
+}
+
+/// Sleep until the next epoch starts
+pub fn epoch_sleep(
+    test: &Test,
+    ledger_address: &str,
+    timeout_secs: u64,
+) -> Result<Epoch> {
+    let old_epoch = get_epoch(test, ledger_address)?;
+    let start = Instant::now();
+    let loop_timeout = Duration::new(timeout_secs, 0);
+    loop {
+        if Instant::now().duration_since(start) > loop_timeout {
+            panic!("Timed out waiting for the next epoch");
+        }
+        let epoch = get_epoch(test, ledger_address)?;
+        if epoch > old_epoch {
+            break Ok(epoch);
+        } else {
+            sleep(10);
+        }
+    }
 }

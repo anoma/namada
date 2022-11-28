@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada"
 resolver = "2"
-version = "0.9.0"
+version = "0.10.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -85,6 +85,9 @@ ark-serialize = "0.3"
 arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "04ad1eeb28901b57a7599bbe433b3822965dabe8", default-features = false, features = ["std", "borsh"]}
 async-trait = {version = "0.1.51", optional = true}
 bech32 = "0.8.0"
+bellman = "0.11.2"
+bit-vec = "0.6.3"
+bls12_381 = "0.6.1"
 borsh = "0.9.0"
 circular-queue = "0.2.6"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
@@ -143,6 +146,9 @@ wasmer-engine-dylib = {version = "=2.2.0", optional = true}
 wasmer-engine-universal = {version = "=2.2.0", optional = true}
 wasmer-vm = {version = "2.2.0", optional = true}
 wasmparser = "0.83.0"
+#libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
 zeroize = "1.5.5"
 
 [dev-dependencies]
