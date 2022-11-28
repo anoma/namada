@@ -306,7 +306,7 @@ mod tests {
         // make sure we can't dump any new decrypted txs in the bin
         assert_matches!(
             bins.try_alloc(b"arbitrary tx bytes"),
-            AllocStatus::Rejected { .. }
+            Err(AllocFailure::Rejected { .. })
         );
     }
 
@@ -343,10 +343,7 @@ mod tests {
             new_size < bin.allotted_space_in_bytes
         });
         for tx in decrypted_txs {
-            assert_matches!(
-                bins.borrow_mut().try_alloc(&tx),
-                AllocStatus::Accepted
-            );
+            assert!(bins.borrow_mut().try_alloc(&tx).is_ok());
         }
 
         let bins = RefCell::new(bins.into_inner().next_state());
@@ -356,10 +353,7 @@ mod tests {
             new_size < bin.allotted_space_in_bytes
         });
         for tx in protocol_txs {
-            assert_matches!(
-                bins.borrow_mut().try_alloc(&tx),
-                AllocStatus::Accepted
-            );
+            assert!(bins.borrow_mut().try_alloc(&tx).is_ok());
         }
 
         let bins =
@@ -370,10 +364,7 @@ mod tests {
             new_size < bin.allotted_space_in_bytes
         });
         for tx in encrypted_txs {
-            assert_matches!(
-                bins.borrow_mut().try_alloc(&tx),
-                AllocStatus::Accepted
-            );
+            assert!(bins.borrow_mut().try_alloc(&tx).is_ok());
         }
     }
 
