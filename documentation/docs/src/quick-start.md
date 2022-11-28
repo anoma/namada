@@ -1,8 +1,8 @@
-# Quickstart - How to run a validator on Namada?
+# Quickstart - How to run a validator on Namada
 
 ## About this guide
 
-This guide is for the ones interested in operating a Namada validator node and assumes basic knowledge of the terminal and how commands are used.
+This guide is for those interested in operating a Namada validator node and assumes basic knowledge of the terminal and how commands are used.
 
 * Comments start with `#`:
 
@@ -14,7 +14,14 @@ This guide is for the ones interested in operating a Namada validator node and a
 
 ## Installing Namada
 
-See [the installation guide](user-guide/install.md) for details on installing the Namada binaries. Commands in this guide will assume you have the Namada binaries (`namada`, `namadan`, `namadaw`, `namadac`) on your path.
+See [the installation guide](user-guide/install.md) for details on installing the Namada binaries. Commands in this guide will assume you have the Namada binaries (`namada`, `namadan`, `namadaw`, `namadac`) on your $PATH.
+
+A simple way to add these binaries to one's path is to run
+```shell
+cp namada/target/release/namada* /usr/local/bin/
+```
+
+
 
 ## Joining a network
 
@@ -22,7 +29,7 @@ See [the testnets page](testnets) for details of how to join a testnet. The rest
 
 ## Run a ledger node
 
-We recommend this step with tmux, as you can keep the node running without needing the terminal open permanently. If not, skip to the subsequent step.
+We recommend this step with [tmux](https://www.hamvocke.com/blog/a-quick-and-easy-guide-to-tmux/), which allows the node to keep running without needing the terminal to be open indefinitely. If not, skip to the subsequent step.
 
 ```shell
 tmux
@@ -34,26 +41,37 @@ namada ledger
 # can detach the tmux (Ctrl-B then D)
 ```
 
+For a more verbose output, one can run 
+```shell
+export ANOMA_TM_STDOUT='true'
+namada ledger
+```
+
 This should sync your node to the ledger and will take a while (depending on your computer). Subsequent commands (generating an account, etc.)  are unlikely to work until it is fully synced. Enquire the current block height with other participants to make sure you are synced in order to proceed.
 
 ## Account
 
-Generate a local key on disk
+Accounts on Namada are divided into two subcategories:
+* Implicit accounts (all use the same Validity Predicate)
+* Established accounts (can use a chosen Validity Predicate)
+
+In order to make transactions on Namada, an account is required, and an implicit account can be created easily.
+
+An implicit account can be generated from the commands described below
 
 ```shell
-# first, we make a keypair and the implicit account associated with it
-# namadaw address gen instead of key gen. Preferred because they both make a keypair but the former stores the implicit address for it too 
-
 namadaw address gen \
   --alias example-implicit
 
 ➜ Enter encryption password: 
 Successfully added a key and an address with alias: "example-implicit"
 
-# use it to make an established account
 ```
+An implicit account with alias "example-implicit" has now been successfully generated and stored locally in the wallet.
 
-To initialize an account operator on chain under the alias "example-established":
+It is possible to derive an Established Account through submitting a transaction, signing it with the key for the implicit account. Note that this transaction, as with any transaction on Namada, will consume "gas", and will require a positive balance of NAM tokens.
+
+To initialize an account operator on-chain under the alias "example-established":
 
 ```shell
 namadac init-account \
@@ -79,7 +97,7 @@ The transaction initialized 1 new account
 ➜ Added alias example-established for address atest1v4ehgw36ggmyzwp5g9prgsekgsu5y32z8ycnsvpeggcnys35gv65yvzxg3zrjwphgcu5gde4lvmstw
 ```
 
-Let's transfer ourselves 1000 NAM from the faucet with the same alias using:
+The "faucet" is a native established account on Namada that is willing to give a maximum of 1000 tokens to any user at request. Let's transfer ourselves `1000 NAM` from the faucet with the same alias using:
 
 ```shell
 namadac transfer \
@@ -104,7 +122,7 @@ Transaction applied with result: {
 }
 ```
 
-To get the balance of your account "example-established":
+To query the balance of your account "example-established":
 
 ```shell
 namadac balance \
@@ -165,7 +183,9 @@ namadac transfer \
   --target example-validator \
   --token NAM \
   --amount 1000
+```
 
+```shell
 ➜  Jan 06 22:28:17.624  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
 Looking-up public key of atest1v4ehgw36ggmyzwp5g9prgsekgsu5y32z8ycnsvpeggcnys35gv65yvzxg3zrjwphgcu5gde4lvmstw from the ledger...
 Enter decryption password: 
@@ -187,7 +207,11 @@ Bond the 1000 NAM to "example-validator" using:
 namadac bond \
   --validator example-validator \
   --amount 1000
+```
 
+
+
+```shell
 ➜ Jan 06 22:29:08.903  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
 Looking-up public key of atest1v4ehgw36g3prx3pjxapyvve3xvury3fkxg6nqsesxccnzw2rxdryg335xcmnysjzxdzyvd2pamfmwd from the ledger...
 Enter decryption password: 

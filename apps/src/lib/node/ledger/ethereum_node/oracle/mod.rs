@@ -9,7 +9,6 @@ use eyre::{eyre, Result};
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
 use tokio::sync::mpsc::Sender as BoundedSender;
-use tokio::sync::oneshot::Sender;
 use tokio::task::LocalSet;
 #[cfg(not(test))]
 use web30::client::Web3;
@@ -31,9 +30,6 @@ pub struct Oracle {
     /// A channel for sending processed and confirmed
     /// events to the ledger process
     sender: BoundedSender<EthereumEvent>,
-    /// A channel to signal that the ledger should shut down
-    /// because the Oracle has stopped
-    abort: Option<Sender<()>>,
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
     /// A channel for controlling and configuring the oracle.
@@ -48,38 +44,18 @@ impl Deref for Oracle {
     }
 }
 
-impl Drop for Oracle {
-    fn drop(&mut self) {
-        // send an abort signal to shut down the
-        // rest of the ledger gracefully
-        match self.abort.take().unwrap().send(()) {
-            Ok(()) => tracing::info!("Oracle sent abort signal"),
-            Err(()) => {
-                // this isn't necessarily an issue as the ledger may have shut
-                // down first
-                tracing::debug!(
-                    "Oracle was unable to send an abort signal as the abort \
-                     channel was already closed"
-                )
-            }
-        };
-    }
-}
-
 impl Oracle {
     /// Construct a new [`Oracle`]. Note that it can not do anything until it
     /// has been sent a configuration via the passed in `control` channel.
     pub fn new(
         url: &str,
         sender: BoundedSender<EthereumEvent>,
-        abort: Sender<()>,
         backoff: Duration,
         control: control::Receiver,
     ) -> Self {
         Self {
             client: Web3::new(url, std::time::Duration::from_secs(30)),
             sender,
-            abort: Some(abort),
             backoff,
             control,
         }
@@ -129,7 +105,6 @@ pub fn run_oracle(
     url: impl AsRef<str>,
     sender: BoundedSender<EthereumEvent>,
     control: control::Receiver,
-    abort_sender: Sender<()>,
 ) -> tokio::task::JoinHandle<()> {
     let url = url.as_ref().to_owned();
     // we have to run the oracle in a [`LocalSet`] due to the web30
@@ -141,13 +116,8 @@ pub fn run_oracle(
                 .run_until(async move {
                     tracing::info!(?url, "Ethereum event oracle is starting");
 
-                    let oracle = Oracle::new(
-                        &url,
-                        sender,
-                        abort_sender,
-                        DEFAULT_BACKOFF,
-                        control,
-                    );
+                    let oracle =
+                        Oracle::new(&url, sender, DEFAULT_BACKOFF, control);
                     run_oracle_aux(oracle).await;
 
                     tracing::info!(
@@ -382,7 +352,7 @@ mod test_oracle {
     use std::num::NonZeroU64;
 
     use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
-    use tokio::sync::oneshot::{channel, Receiver};
+    use tokio::sync::oneshot::channel;
     use tokio::time::timeout;
 
     use super::*;
@@ -400,7 +370,6 @@ mod test_oracle {
         eth_recv: tokio::sync::mpsc::Receiver<EthereumEvent>,
         control_sender: control::Sender,
         blocks_processed_recv: tokio::sync::mpsc::UnboundedReceiver<Uint256>,
-        abort_recv: Receiver<()>,
     }
 
     /// Helper function that starts running the oracle in a new thread, and
@@ -433,12 +402,10 @@ mod test_oracle {
         let (admin_channel, blocks_processed_recv, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
         let (control_sender, control_receiver) = control::channel();
-        let (abort, abort_recv) = channel();
         TestPackage {
             oracle: Oracle {
                 client,
                 sender: eth_sender,
-                abort: Some(abort),
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
                 control: control_receiver,
@@ -447,21 +414,7 @@ mod test_oracle {
             eth_recv: eth_receiver,
             control_sender,
             blocks_processed_recv,
-            abort_recv,
         }
-    }
-
-    /// Test that if the oracle shuts down, it
-    /// sends a message to the fullnode to stop
-    #[test]
-    fn test_abort_send() {
-        let TestPackage {
-            oracle,
-            mut abort_recv,
-            ..
-        } = setup();
-        drop(oracle);
-        assert!(abort_recv.try_recv().is_ok())
     }
 
     /// Test that if the fullnode stops, the oracle

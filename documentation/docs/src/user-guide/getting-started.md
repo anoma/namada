@@ -15,9 +15,15 @@ The main binary `namada` has sub-commands for all of the other binaries:
 
 To explore the command-line interface, add `--help` argument at any sub-command level to find out any possible sub-commands and/or arguments.
 
+```admonish tip title="Adding binaries to path" collapsible=true
+The binaries should be added to `$PATH` from the `make install` command. However, if this for some reason did not work, a solution may be to copy the binaries from `namada/target/release` to `home/$USER/.local/bin/` for example:
+
+`sudo cp namada/target/release/namada* /home/alice/.local/bin/`
+```
+
 ## Join a network
 
-After you installed Namada, you will need to join a live network (e.g. testnet) to be able to interact with a chain and execute most available commands. You can join a network with the following command:
+After you install Namada, you will need to join a live network (e.g. testnet) to be able to interact with a chain and execute most available commands. You can join a network with the following command:
 
 ```
 namada client utils join-network --chain-id=<network-chain-id>

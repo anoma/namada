@@ -31,7 +31,7 @@ use namada::types::hash::{Hash, HASH_LENGTH};
 use namada::types::internal::HostEnvResult;
 use namada::types::key::*;
 use namada::types::storage::{
-    BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeight, Epoch, TxIndex, BLOCK_HASH_LENGTH,
 };
 pub use namada::types::*;
 pub use namada_macros::validity_predicate;
@@ -240,6 +240,10 @@ impl<'view> VpEnv<'view> for Ctx {
         get_block_epoch()
     }
 
+    fn get_tx_index(&'view self) -> Result<TxIndex, Error> {
+        get_tx_index()
+    }
+
     fn iter_prefix(
         &self,
         prefix: &storage::Key,
@@ -298,6 +302,12 @@ impl<'view> VpEnv<'view> for Ctx {
         let slice =
             unsafe { slice::from_raw_parts(result.as_ptr(), HASH_LENGTH) };
         Ok(Hash::try_from(slice).expect("Cannot convert the hash"))
+    }
+
+    fn verify_masp(&self, tx: Vec<u8>) -> Result<bool, self::Error> {
+        let valid =
+            unsafe { anoma_vp_verify_masp(tx.as_ptr() as _, tx.len() as _) };
+        Ok(HostEnvResult::is_success(valid))
     }
 }
 
@@ -360,6 +370,10 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
     fn get_block_epoch(&self) -> Result<Epoch, Error> {
         get_block_epoch()
     }
+
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+        get_tx_index()
+    }
 }
 
 impl StorageRead<'_> for CtxPostStorageRead<'_> {
@@ -421,6 +435,10 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
     fn get_block_epoch(&self) -> Result<Epoch, Error> {
         get_block_epoch()
     }
+
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+        get_tx_index()
+    }
 }
 
 fn iter_prefix_impl(
@@ -472,4 +490,8 @@ fn get_block_hash() -> Result<BlockHash, Error> {
 
 fn get_block_epoch() -> Result<Epoch, Error> {
     Ok(Epoch(unsafe { anoma_vp_get_block_epoch() }))
+}
+
+fn get_tx_index() -> Result<TxIndex, storage_api::Error> {
+    Ok(TxIndex(unsafe { anoma_vp_get_tx_index() }))
 }

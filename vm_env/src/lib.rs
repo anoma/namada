@@ -101,6 +101,9 @@ pub mod tx {
         // Get the current block epoch
         pub fn anoma_tx_get_block_epoch() -> u64;
 
+        // Get the current tx id
+        pub fn anoma_tx_get_tx_index() -> u32;
+
         // Requires a node running with "Info" log level
         pub fn anoma_tx_log_string(str_ptr: u64, str_len: u64);
     }
@@ -181,6 +184,9 @@ pub mod vp {
         // Get the current block epoch
         pub fn anoma_vp_get_block_epoch() -> u64;
 
+        // Get the current tx index
+        pub fn anoma_vp_get_tx_index() -> u32;
+
         // Verify a transaction signature
         pub fn anoma_vp_verify_tx_signature(
             pk_ptr: u64,
@@ -198,6 +204,8 @@ pub mod vp {
             input_data_ptr: u64,
             input_data_len: u64,
         ) -> i64;
+
+        pub fn anoma_vp_verify_masp(tx_ptr: u64, tx_len: u64) -> i64;
     }
 }
 
