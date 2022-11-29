@@ -20,7 +20,6 @@ use crate::bytes::ByteBuf;
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::ledger::storage::IBC_KEY_LIMIT;
 use crate::types::address::{self, Address};
-use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::hash::Hash;
 use crate::types::keccak::{KeccakHash, TryFromError};
 use crate::types::time::DateTimeUtc;
@@ -345,48 +344,6 @@ impl FromStr for Key {
 
     fn from_str(s: &str) -> Result<Self> {
         Key::parse(s)
-    }
-}
-
-/// An enum representing the different types of values
-/// that can be passed into Anoma's storage.
-///
-/// This is a multi-store organized as
-/// several Merkle trees, each of which is
-/// responsible for understanding how to parse
-/// this value.
-#[derive(Debug, Clone)]
-pub enum MerkleValue {
-    /// raw bytes
-    Bytes(Vec<u8>),
-    /// A transfer to be put in the Ethereum bridge pool.
-    BridgePoolTransfer(PendingTransfer),
-}
-
-impl<T> From<T> for MerkleValue
-where
-    T: AsRef<[u8]>,
-{
-    fn from(bytes: T) -> Self {
-        Self::Bytes(bytes.as_ref().to_owned())
-    }
-}
-
-impl From<PendingTransfer> for MerkleValue {
-    fn from(transfer: PendingTransfer) -> Self {
-        Self::BridgePoolTransfer(transfer)
-    }
-}
-
-impl MerkleValue {
-    /// Get the natural byte representation of the value
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Bytes(bytes) => bytes,
-            Self::BridgePoolTransfer(transfer) => {
-                transfer.try_to_vec().unwrap()
-            }
-        }
     }
 }
 

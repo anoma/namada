@@ -24,9 +24,7 @@ use crate::types::keccak::KeccakHash;
 use crate::types::storage::MembershipProof::BridgePool;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 use crate::types::storage::TxIndex;
-use crate::types::storage::{
-    self, BlockResults, Epoch, MerkleValue, PrefixValue,
-};
+use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 use crate::types::transaction::TxResult;
 
@@ -254,7 +252,7 @@ where
                     .storage
                     .get_existence_proof(
                         &storage_key,
-                        value.clone().into(),
+                        value.clone(),
                         request.height,
                     )
                     .into_storage_result()?;
@@ -311,7 +309,7 @@ where
         for PrefixValue { key, value } in &data {
             let mut proof = ctx
                 .storage
-                .get_existence_proof(key, value.clone().into(), request.height)
+                .get_existence_proof(key, value.clone(), request.height)
                 .into_storage_result()?;
             ops.append(&mut proof.ops);
         }
@@ -455,16 +453,12 @@ where
         );
         // from the hashes of the transfers, get the actual values.
         let mut missing_hashes = vec![];
-        let (keys, values): (Vec<_>, Vec<PendingTransfer>) = transfer_hashes
+        let (keys, values): (Vec<_>, Vec<_>) = transfer_hashes
             .iter()
             .filter_map(|hash| {
                 let key = get_key_from_hash(hash);
                 match ctx.storage.read(&key) {
-                    Ok((Some(bytes), _)) => {
-                        PendingTransfer::try_from_slice(&bytes[..])
-                            .ok()
-                            .map(|transfer| (key, transfer))
-                    }
+                    Ok((Some(bytes), _)) => Some((key, bytes)),
                     _ => {
                         missing_hashes.push(hash);
                         None
@@ -483,10 +477,7 @@ where
             )));
         }
         // get the membership proof
-        match tree.get_sub_tree_existence_proof(
-            &keys,
-            values.into_iter().map(MerkleValue::from).collect(),
-        ) {
+        match tree.get_sub_tree_existence_proof(&keys, values) {
             Ok(BridgePool(proof)) => {
                 let data = EncodeCell::new(&RelayProof {
                     // TODO: use actual validators
@@ -671,7 +662,10 @@ mod test {
         // write a transfer into the bridge pool
         client
             .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -709,7 +703,10 @@ mod test {
         // write a transfer into the bridge pool
         client
             .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -725,7 +722,10 @@ mod test {
         transfer2.transfer.amount = 1.into();
         client
             .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
+            .write(
+                &get_pending_key(&transfer2),
+                transfer2.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -763,7 +763,10 @@ mod test {
         // write a transfer into the bridge pool
         client
             .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // create a signed Merkle root for this pool
@@ -782,7 +785,10 @@ mod test {
         transfer2.transfer.amount = 1.into();
         client
             .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
+            .write(
+                &get_pending_key(&transfer2),
+                transfer2.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
@@ -853,7 +859,10 @@ mod test {
         // write a transfer into the bridge pool
         client
             .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // create a signed Merkle root for this pool
@@ -872,7 +881,10 @@ mod test {
         transfer2.transfer.amount = 1.into();
         client
             .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
+            .write(
+                &get_pending_key(&transfer2),
+                transfer2.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
