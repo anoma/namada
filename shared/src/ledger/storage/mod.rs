@@ -80,13 +80,17 @@ where
     /// The address of the native token - this is not stored in DB, but read
     /// from genesis
     pub native_token: Address,
-    /// The storage for the current (yet to be committed) block
+    /// Block storage data
     pub block: BlockStorage<H>,
-    /// The latest block header
+    /// During `FinalizeBlock`, this is the header of the block that is
+    /// going to be committed. After a block is committed, this is reset to
+    /// `None` until the next `FinalizeBlock` phase is reached.
     pub header: Option<Header>,
-    /// The height of the committed block
+    /// The height of the most recently committed block, or `BlockHeight(0)` if
+    /// no block has been committed for this chain yet.
     pub last_height: BlockHeight,
-    /// The epoch of the committed block
+    /// The epoch of the most recently committed block. If it is `Epoch(0)`,
+    /// then no block may have been committed for this chain yet.
     pub last_epoch: Epoch,
     /// Minimum block height at which the next epoch may start
     pub next_epoch_min_start_height: BlockHeight,
@@ -108,11 +112,19 @@ where
 pub struct BlockStorage<H: StorageHasher> {
     /// Merkle tree of all the other data in block storage
     pub tree: MerkleTree<H>,
-    /// Hash of the block
+    /// During `FinalizeBlock`, this is updated to be the hash of the block
+    /// that is going to be committed. If it is `BlockHash::default()`,
+    /// then no `FinalizeBlock` stage has been reached yet.
     pub hash: BlockHash,
-    /// Height of the block (i.e. the level)
+    /// From the start of `FinalizeBlock` until the end of `Commit`, this is
+    /// height of the block that is going to be committed. Otherwise, it is the
+    /// height of the most recently committed block, or `BlockHeight(0)` if no
+    /// block has been committed yet.
     pub height: BlockHeight,
-    /// Epoch of the block
+    /// From the start of `FinalizeBlock` until the end of `Commit`, this is
+    /// height of the block that is going to be committed. Otherwise it is the
+    /// epoch of the most recently committed block, or `Epoch(0)` if no block
+    /// has been committed yet.
     pub epoch: Epoch,
     /// Results of applying transactions
     pub results: BlockResults,
@@ -599,12 +611,12 @@ where
         (self.chain_id.to_string(), CHAIN_ID_LENGTH as _)
     }
 
-    /// Get the current (yet to be committed) block height
+    /// Get the block height
     pub fn get_block_height(&self) -> (BlockHeight, u64) {
         (self.block.height, MIN_STORAGE_GAS)
     }
 
-    /// Get the current (yet to be committed) block hash
+    /// Get the block hash
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
     }
