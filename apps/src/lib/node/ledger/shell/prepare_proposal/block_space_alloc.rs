@@ -22,7 +22,8 @@
 //!   remaining block space allotted to them.
 //! - Finally, we allot space for DKG encrypted txs. We allow DKG encrypted txs
 //!   to take up at most 1/3 of the total block space.
-//! - If any space remains, we try to fit other smaller txs in the block.
+//! - If any space remains, we try to fit any leftover protocol txs in the
+//!   block.
 //!
 //! Since at some fixed height `H` decrypted txs only take up as
 //! much space as the encrypted txs from height `H - 1`, and we
