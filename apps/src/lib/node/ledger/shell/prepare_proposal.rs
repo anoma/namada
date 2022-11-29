@@ -451,12 +451,12 @@ fn get_remaining_txs(
             skip = skip_list.next();
             return None;
         }
-        if let Ok(Ok(TxType::Wrapper(_))) =
+        if let Ok(Ok(TxType::Protocol(_))) =
             Tx::try_from(&tx[..]).map(process_tx)
         {
-            return None;
+            return Some(tx);
         }
-        Some(tx)
+        None
     })
 }
 
@@ -509,14 +509,47 @@ mod test_prepare_proposal {
     // https://github.com/tendermint/tendermint/blob/v0.37.x/spec/abci/abci%2B%2B_app_requirements.md#blockparamsmaxbytes
     const MAX_TM_BLK_SIZE: i64 = 100 << 20;
 
+    /// Extract an [`ethereum_events::SignedVext`], from a set of
+    /// serialized [`TxBytes`].
+    #[cfg(not(feature = "abcipp"))]
+    fn extract_eth_events_vext(
+        tx_bytes: TxBytes,
+    ) -> ethereum_events::SignedVext {
+        let got = Tx::try_from(&tx_bytes[..]).unwrap();
+        let got_signed_tx =
+            SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
+        let protocol_tx =
+            TxType::try_from_slice(&got_signed_tx.data.unwrap()[..]).unwrap();
+        let protocol_tx = match protocol_tx {
+            TxType::Protocol(protocol_tx) => protocol_tx.tx,
+            _ => panic!("Test failed"),
+        };
+        match protocol_tx {
+            ProtocolTxType::EthEventsVext(ext) => ext,
+            _ => panic!("Test failed"),
+        }
+    }
+
     /// Test if [`get_remaining_txs`] is working as expected.
     #[test]
     fn test_get_remaining_txs() {
+        // TODO(feature = "abcipp"): use a different tx type here
+        fn bertha_ext(at_height: u64) -> TxBytes {
+            let key = wallet::defaults::bertha_keypair();
+            let ext = ethereum_events::Vext::empty(
+                at_height.into(),
+                wallet::defaults::bertha_address(),
+            )
+            .sign(&key);
+            ProtocolTxType::EthEventsVext(ext).sign(&key).to_bytes()
+        }
+
         let excluded_indices = [0, 1, 3, 5, 7];
-        let all_txs: Vec<_> = (0..10).map(|tx_bytes| vec![tx_bytes]).collect();
+        let all_txs: Vec<_> = (0..10).map(bertha_ext).collect();
         let expected_txs: Vec<_> = [2, 4, 6, 8, 9]
             .into_iter()
-            .map(|tx_bytes| vec![tx_bytes])
+            .map(bertha_ext)
+            .map(extract_eth_events_vext)
             .collect();
 
         let set = {
@@ -527,7 +560,9 @@ mod test_prepare_proposal {
             s
         };
 
-        let got_txs: Vec<_> = get_remaining_txs(&set, all_txs).collect();
+        let got_txs: Vec<_> = get_remaining_txs(&set, all_txs)
+            .map(extract_eth_events_vext)
+            .collect();
         assert_eq!(expected_txs, got_txs);
     }
 
@@ -575,6 +610,15 @@ mod test_prepare_proposal {
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
     /// proposed block.
+    // TODO: remove this test after CheckTx implements
+    // filtering of invalid txs; otherwise, we would have
+    // needed to return invalid txs from PrepareProposal,
+    // for these to get removed from a node's mempool.
+    // not returning invalid txs from PrepareProposal is
+    // a DoS vector, because the mempool will slowly fill
+    // up with garbage. luckily, Tendermint implements a
+    // mempool eviction policy, but honest client's txs
+    // may get lost in the process
     #[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
         let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
@@ -927,21 +971,7 @@ mod test_prepare_proposal {
             assert_eq!(rsp.txs.len(), 1);
 
             let tx_bytes = rsp.txs.remove(0);
-            let got = Tx::try_from(&tx_bytes[..]).unwrap();
-            let got_signed_tx =
-                SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
-            let protocol_tx =
-                TxType::try_from_slice(&got_signed_tx.data.unwrap()[..])
-                    .unwrap();
-            let protocol_tx = match protocol_tx {
-                TxType::Protocol(protocol_tx) => protocol_tx.tx,
-                _ => panic!("Test failed"),
-            };
-
-            match protocol_tx {
-                ProtocolTxType::EthEventsVext(ext) => ext,
-                _ => panic!("Test failed"),
-            }
+            extract_eth_events_vext(tx_bytes)
         };
 
         assert_eq!(rsp_ext, ext);
@@ -1075,6 +1105,7 @@ mod test_prepare_proposal {
     /// Test that if an error is encountered while
     /// trying to process a tx from the mempool,
     /// we simply exclude it from the proposal
+    // TODO: see note on `test_prepare_proposal_rejects_non_wrapper_tx`
     #[test]
     fn test_error_in_processing_tx() {
         let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
