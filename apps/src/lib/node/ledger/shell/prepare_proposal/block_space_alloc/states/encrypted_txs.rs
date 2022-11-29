@@ -3,8 +3,7 @@ use std::marker::PhantomData;
 use super::super::{AllocFailure, BlockSpaceAllocator};
 use super::{
     BuildingEncryptedTxBatch, EncryptedTxBatchAllocator, FillingRemainingSpace,
-    NextStateImpl, RemainingBatchAllocator, TryAlloc, WithEncryptedTxs,
-    WithoutEncryptedTxs,
+    NextStateImpl, TryAlloc, WithEncryptedTxs, WithoutEncryptedTxs,
 };
 
 impl TryAlloc
@@ -76,7 +75,7 @@ fn next_state<Mode>(
 
 impl TryAlloc for EncryptedTxBatchAllocator {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
         match self {
             EncryptedTxBatchAllocator::WithEncryptedTxs(state) => {
                 state.try_alloc(tx)
@@ -91,20 +90,16 @@ impl TryAlloc for EncryptedTxBatchAllocator {
 }
 
 impl NextStateImpl for EncryptedTxBatchAllocator {
-    type Next = RemainingBatchAllocator;
+    type Next = BlockSpaceAllocator<FillingRemainingSpace>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {
         match self {
             EncryptedTxBatchAllocator::WithEncryptedTxs(state) => {
-                RemainingBatchAllocator::WithEncryptedTxs(
-                    state.next_state_impl(),
-                )
+                state.next_state_impl()
             }
             EncryptedTxBatchAllocator::WithoutEncryptedTxs(state) => {
-                RemainingBatchAllocator::WithoutEncryptedTxs(
-                    state.next_state_impl(),
-                )
+                state.next_state_impl()
             }
         }
     }

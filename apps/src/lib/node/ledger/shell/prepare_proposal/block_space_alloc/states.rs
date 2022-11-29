@@ -27,7 +27,7 @@ mod encrypted_txs;
 mod protocol_txs;
 mod remaining_txs;
 
-use super::{AllocStatus, BlockSpaceAllocator};
+use super::{AllocFailure, BlockSpaceAllocator};
 
 /// Convenience wrapper for a [`BlockSpaceAllocator`] state that allocates
 /// encrypted transactions.
@@ -37,17 +37,6 @@ pub enum EncryptedTxBatchAllocator {
     ),
     WithoutEncryptedTxs(
         BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>,
-    ),
-}
-
-/// Convenience wrapper for a [`BlockSpaceAllocator`] state that fills up the
-/// remaining block space.
-pub enum RemainingBatchAllocator {
-    WithEncryptedTxs(
-        BlockSpaceAllocator<FillingRemainingSpace<WithEncryptedTxs>>,
-    ),
-    WithoutEncryptedTxs(
-        BlockSpaceAllocator<FillingRemainingSpace<WithoutEncryptedTxs>>,
     ),
 }
 

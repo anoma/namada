@@ -19,10 +19,10 @@ use namada::types::vote_extensions::VoteExtensionDigest;
 
 use self::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
-    EncryptedTxBatchAllocator, NextState, NextStateWithEncryptedTxs,
-    NextStateWithoutEncryptedTxs, RemainingBatchAllocator, TryAlloc,
+    EncryptedTxBatchAllocator, FillingRemainingSpace, NextState,
+    NextStateWithEncryptedTxs, NextStateWithoutEncryptedTxs, TryAlloc,
 };
-use self::block_space_alloc::{AllocStatus, BlockSpaceAllocator};
+use self::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
@@ -85,7 +85,7 @@ where
 
             // add mempool txs
             let (mut mempool_txs, alloc) =
-                self.build_mempool_txs(alloc, &mut tx_indices, &req.txs);
+                self.build_mempool_txs(alloc, &req.txs);
             txs.append(&mut mempool_txs);
 
             // fill up the remaining block space with
@@ -197,40 +197,43 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let txs = deserialize_vote_extensions(txs, tx_indices).take_while(|tx_bytes| {
-            match alloc.try_alloc(&*tx_bytes) {
-                AllocStatus::Accepted => true,
-                AllocStatus::Rejected { tx, space_left } => {
-                    // TODO: maybe we should find a way to include
-                    // validator set updates all the time. for instance,
-                    // we could have recursive bins -> bin space within
-                    // a bin is partitioned into yet more bins. so, we
-                    // could have, say, 2/3 of the bin space available
-                    // for eth events, and 1/3 available for valset
-                    // upds
-                    tracing::debug!(
-                        ?tx,
-                        space_left,
-                        proposal_height =
-                            ?self.storage.get_current_decision_height(),
-                        "Dropping protocol tx from the current proposal",
-                    );
-                    false
-                }
-                AllocStatus::OverflowsBin { tx, bin_size } => {
-                    // TODO: handle tx whose size is greater
-                    // than bin size
-                    tracing::warn!(
-                        ?tx,
-                        bin_size,
-                        proposal_height =
-                            ?self.storage.get_current_decision_height(),
-                        "Dropping large protocol tx from the current proposal",
-                    );
-                    true
-                }
-            }
-        })
+        let txs = deserialize_vote_extensions(txs, tx_indices).take_while(|tx_bytes|
+            alloc.try_alloc(&*tx_bytes)
+                .map_or_else(
+                    |status| match status {
+                        AllocFailure::Rejected { bin_space_left } => {
+                            // TODO: maybe we should find a way to include
+                            // validator set updates all the time. for instance,
+                            // we could have recursive bins -> bin space within
+                            // a bin is partitioned into yet more bins. so, we
+                            // could have, say, 2/3 of the bin space available
+                            // for eth events, and 1/3 available for valset
+                            // upds
+                            tracing::debug!(
+                                ?tx_bytes,
+                                bin_space_left,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping protocol tx from the current proposal",
+                            );
+                            false
+                        }
+                        AllocFailure::OverflowsBin { bin_size } => {
+                            // TODO: handle tx whose size is greater
+                            // than bin size
+                            tracing::warn!(
+                                ?tx_bytes,
+                                bin_size,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping large protocol tx from the current proposal",
+                            );
+                            true
+                        }
+                    },
+                    |()| true,
+                )
+        )
         .collect();
 
         (txs, self.get_encrypted_txs_allocator(alloc))
@@ -266,9 +269,8 @@ where
     fn build_mempool_txs(
         &mut self,
         _alloc: EncryptedTxBatchAllocator,
-        _tx_indices: &mut IndexSet,
         txs: &[TxBytes],
-    ) -> (Vec<TxRecord>, RemainingBatchAllocator) {
+    ) -> (Vec<TxRecord>, BlockSpaceAllocator<FillingRemainingSpace>) {
         // TODO(feature = "abcipp"): implement building batch of mempool txs
         todo!()
     }
@@ -278,58 +280,51 @@ where
     fn build_mempool_txs(
         &mut self,
         mut alloc: EncryptedTxBatchAllocator,
-        tx_indices: &mut IndexSet,
         txs: &[TxBytes],
-    ) -> (Vec<TxBytes>, RemainingBatchAllocator) {
-        let mut invalid_txs = IndexSet::default();
+    ) -> (Vec<TxBytes>, BlockSpaceAllocator<FillingRemainingSpace>) {
         let txs = txs
             .iter()
-            .enumerate()
-            .filter_map(|(index, tx_bytes)| {
+            .filter_map(|tx_bytes| {
                 if let Ok(Ok(TxType::Wrapper(_))) =
                     Tx::try_from(tx_bytes.as_slice()).map(process_tx)
                 {
-                    Some((index, tx_bytes.clone()))
+                    Some(tx_bytes.clone())
                 } else {
-                    // found invalid tx. mark it, so we do not include
-                    // it in a block during `build_remaining_batch()`
-                    invalid_txs.insert(index);
                     None
                 }
             })
-            .take_while(|(index, tx_bytes)| match alloc.try_alloc(&*tx_bytes) {
-                AllocStatus::Accepted => {
-                    tx_indices.insert(*index);
-                    true
-                }
-                AllocStatus::Rejected { tx, space_left } => {
-                    tracing::debug!(
-                        ?tx,
-                        space_left,
-                        proposal_height =
-                            ?self.storage.get_current_decision_height(),
-                        "Dropping encrypted tx from the current proposal",
-                    );
-                    false
-                }
-                AllocStatus::OverflowsBin { tx, bin_size } => {
-                    // TODO: handle tx whose size is greater
-                    // than bin size
-                    tracing::warn!(
-                        ?tx,
-                        bin_size,
-                        proposal_height =
-                            ?self.storage.get_current_decision_height(),
-                        "Dropping large encrypted tx from the current proposal",
-                    );
-                    true
-                }
+            .take_while(|tx_bytes| {
+                alloc.try_alloc(&*tx_bytes)
+                    .map_or_else(
+                        |status| match status {
+                            AllocFailure::Rejected { bin_space_left } => {
+                                tracing::debug!(
+                                    ?tx_bytes,
+                                    bin_space_left,
+                                    proposal_height =
+                                        ?self.storage.get_current_decision_height(),
+                                    "Dropping encrypted tx from the current proposal",
+                                );
+                                false
+                            }
+                            AllocFailure::OverflowsBin { bin_size } => {
+                                // TODO: handle tx whose size is greater
+                                // than bin size
+                                tracing::warn!(
+                                    ?tx_bytes,
+                                    bin_size,
+                                    proposal_height =
+                                        ?self.storage.get_current_decision_height(),
+                                    "Dropping large encrypted tx from the current proposal",
+                                );
+                                true
+                            }
+                        },
+                        |()| true,
+                    )
             })
-            .map(|(_, tx_bytes)| tx_bytes)
             .collect();
         let alloc = alloc.next_state();
-
-        tx_indices.union(&invalid_txs);
 
         (txs, alloc)
     }
@@ -362,31 +357,35 @@ where
                 .to_bytes()
             })
             // TODO: make sure all txs are accepted
-            .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
-                AllocStatus::Accepted => true,
-                AllocStatus::Rejected { tx, space_left } => {
-                    // TODO: handle rejected txs
-                    tracing::warn!(
-                        ?tx,
-                        space_left,
-                        proposal_height =
-                            ?self.storage.get_current_decision_height(),
-                        "Dropping decrypted tx from the current proposal",
-                    );
-                    false
-                }
-                AllocStatus::OverflowsBin { tx, bin_size } => {
-                    // TODO: handle tx whose size is greater
-                    // than bin size
-                    tracing::warn!(
-                        ?tx,
-                        bin_size,
-                        proposal_height =
-                            ?self.storage.get_current_decision_height(),
-                        "Dropping large decrypted tx from the current proposal",
-                    );
-                    true
-                }
+            .take_while(|tx_bytes| {
+                alloc.try_alloc(&*tx_bytes).map_or_else(
+                    |status| match status {
+                        AllocFailure::Rejected { bin_space_left } => {
+                            // TODO: handle rejected txs
+                            tracing::warn!(
+                                ?tx_bytes,
+                                bin_space_left,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping decrypted tx from the current proposal",
+                            );
+                            false
+                        }
+                        AllocFailure::OverflowsBin { bin_size } => {
+                            // TODO: handle tx whose size is greater
+                            // than bin size
+                            tracing::warn!(
+                                ?tx_bytes,
+                                bin_size,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping large decrypted tx from the current proposal",
+                            );
+                            true
+                        }
+                    },
+                    |()| true,
+                )
             })
             .collect();
         let alloc = alloc.next_state();
@@ -398,43 +397,45 @@ where
     /// remaining space of the [`BlockSpaceAllocator`].
     fn build_remaining_batch(
         &mut self,
-        mut alloc: RemainingBatchAllocator,
+        mut alloc: BlockSpaceAllocator<FillingRemainingSpace>,
         tx_indices: &IndexSet,
         txs: Vec<TxBytes>,
     ) -> Vec<TxBytes> {
-        // TODO: do not allocate encrypted txs if the allocator
-        // state does not allow it
         get_remaining_txs(tx_indices, txs)
-            .take_while(|tx_bytes| match alloc.try_alloc(&*tx_bytes) {
-                AllocStatus::Accepted => true,
-                AllocStatus::Rejected { tx, space_left } => {
-                    tracing::debug!(
-                        ?tx,
-                        space_left,
-                        proposal_height =
-                            ?self.storage.get_current_decision_height(),
-                        "Dropping tx from the current proposal",
-                    );
-                    false
-                }
-                AllocStatus::OverflowsBin { tx, bin_size } => {
-                    // TODO: handle tx whose size is greater
-                    // than bin size
-                    tracing::warn!(
-                        ?tx,
-                        bin_size,
-                        proposal_height =
-                            ?self.storage.get_current_decision_height(),
-                        "Dropping large tx from the current proposal",
-                    );
-                    true
-                }
+            .take_while(|tx_bytes| {
+                alloc.try_alloc(&*tx_bytes).map_or_else(
+                    |status| match status {
+                        AllocFailure::Rejected { bin_space_left } => {
+                            tracing::debug!(
+                                ?tx_bytes,
+                                bin_space_left,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping tx from the current proposal",
+                            );
+                            false
+                        }
+                        AllocFailure::OverflowsBin { bin_size } => {
+                            // TODO: handle tx whose size is greater
+                            // than bin size
+                            tracing::warn!(
+                                ?tx_bytes,
+                                bin_size,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping large tx from the current proposal",
+                            );
+                            true
+                        }
+                    },
+                    |()| true,
+                )
             })
             .collect()
     }
 }
 
-/// Return a list of the transactions that haven't
+/// Return a list of the protocol transactions that haven't
 /// been marked for inclusion in the block, yet.
 fn get_remaining_txs(
     tx_indices: &IndexSet,
@@ -448,10 +449,14 @@ fn get_remaining_txs(
         // in ascending order
         if hints::likely(Some(index) == skip) {
             skip = skip_list.next();
-            None
-        } else {
-            Some(tx)
+            return None;
         }
+        if let Ok(Ok(TxType::Wrapper(_))) =
+            Tx::try_from(&tx[..]).map(process_tx)
+        {
+            return None;
+        }
+        Some(tx)
     })
 }
 
