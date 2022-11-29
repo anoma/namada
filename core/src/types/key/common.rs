@@ -18,6 +18,7 @@ use super::{
 };
 use crate::types::ethereum_events::EthAddress;
 use crate::types::key::{SignableBytes, StorageHasher};
+use crate::types::string_encoding;
 
 /// Public key
 #[derive(
