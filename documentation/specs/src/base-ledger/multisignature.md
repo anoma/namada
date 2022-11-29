@@ -1,31 +1,28 @@
 # k-of-n multisignature
 
-The k-of-n multisignature validity predicate authorizes transactions on the basis of k out of n parties approving them. This document targets the encrypted wasm transactions: at the moment there's no support for multisignature on wrapper or protocol transactions.
+The k-of-n multisignature validity predicate authorizes transactions on the basis of k out of n parties approving them. This document targets the encrypted wasm transactions: there won't be support for multisignature on wrapper or protocol transactions.
 
 ## Protocol
 
-Namada transactions get signed before being delivered to the network. This signature is then checked by the VPs to determine the validity of the transaction. To support multisignature we need to extend the current `SignedTxData` struct to the following:
+Namada transactions get signed before being delivered to the network. This signature is then checked by the VPs to determine the validity of the transaction. To support multisignature we need to modify the current `SignedTxData` struct to the following:
 
 ```rust
-pub enum Signature {
-    Sig(common::Signature),
-    MultiSig(Vec<(u8, common::Signature))
-}
-
 pub struct SignedTxData {
     /// The original tx data bytes, if any
     pub data: Option<Vec<u8>>,
     /// The signature is produced on the tx data concatenated with the tx code
     /// and the timestamp.
-    pub sig: Signature,
+    pub sig: Vec<(u8, common::Signature)>,
 }
 ```
 
-The `MultiSig` variant holds a vector of tuples where the first element is an 8-bit integer and the second one is a signature. The integer serves as an index to match a specific signature to one of the public keys in the list of accepted ones. This way, we can improve the verification algorithm and check each signature only against the public key at the provided index (linear in time complexity), without the need to cycle on all of them which would be $\mathcal{O}(n^2)$.
+The `sig` field now holds a vector of tuples where the first element is an 8-bit integer and the second one is a signature. The integer serves as an index to match a specific signature to one of the public keys in the list of accepted ones. This way, we can improve the verification algorithm and check each signature only against the public key at the provided index (linear in time complexity), without the need to cycle on all of them which would be $\mathcal{O}(n^2)$.
+
+This means that non-multisig addresses will now be seen as 1-of-1 multisig accounts.
 
 ## VPs
 
-To support multisig we provide a new generic `vp_multisig` wasm validity predicate that will allow for arbitrary actions on the account as long as the signatures are valid. Note that these modifications can affect the multisig account parameters themselves.
+Since all the addresses will be multisig ones, we will keep using the already available `vp_user` as the default validity predicate. The only modification required is the signature check which must happen on a set of signatures instead of a single one.
 
 To perform the validity checks, the VP will need to access two types of information:
 
@@ -35,33 +32,32 @@ To perform the validity checks, the VP will need to access two types of informat
 This data defines the requirements of a valid transaction operating on the multisignature address and it will be written in storage when the account is created: 
 
 ```
-/\$Address/multisig/threshold/: u8
-/\$Address/multisig/pubkeys/: LazyVec<PublicKey>
+/\$Address/threshold/: u8
+/\$Address/pubkeys/: LazyVec<PublicKey>
 ```
 
 The `LazyVec` struct will split all of its elements on different subkeys in storage so that we won't need to load the entire vector of public keys in memory for validation but just the ones pointed by the indexes in the `SignedTxData` struct.
 
-To verify the correctness of the signatures, these VPs will proceed with a three-step verification process:
+To verify the correctness of the signatures, this VP will proceed with a two-step verification process:
 
-1. Check that the type of the signature is `MultiSig`
-2. Check to have enough **unique** signatures for the given threshold
-3. Check to have enough **valid** signatures for the given threshold
+1. Check to have enough **unique** signatures for the given threshold
+2. Check to have enough **valid** signatures for the given threshold
 
-Steps 1 and 2 allow us to short-circuit the validation process and avoid unnecessary processing and storage access. Each signature will be validated **only** against the public key found in the list at the specified index. Step 3 will halt as soon as it retrieves enough valid signatures to match the threshold, meaning that the remaining signatures will not be verified.
-
-In the transaction initiating the established address, the submitter will be able to provide a custom VP if the provided one doesn't impose the desired constraints.
+Step 1 allows us to short-circuit the validation process and avoid unnecessary processing and storage access. Each signature will be validated **only** against the public key found in the list at the specified index. Step 2 will halt as soon as it retrieves enough valid signatures to match the threshold, meaning that the remaining signatures will not be verified.
 
 ## Addresses
 
-The multisig vp introduced in the previous section is available for `established` addresses. To generate a multisig account we provide a new `tx_init_multisig_account` wasm transaction to be used instead of the already available `tx_init_account`. A multisig account can be created by anyone and the creator is responsible for providing the correct data, represented by the following struct:
+The vp introduced in the previous section is available for `established` addresses. To generate a multisig account we need to modify the `InitAccount` struct to support multiple public keys and a threshold, as follows:
 
 ```rust
-pub struct InitMultiSigAccount {
+pub struct InitAccount {
     /// The VP code
     pub vp_code: Vec<u8>,
     /// Multisig threshold for k-of-n
     pub threshold: u8,
-    /// Multisig signers' pubkeys
+    /// Multisig signers' pubkeys to be written into the account's storage. This can be used
+    /// for signature verification of transactions for the newly created
+    /// account.
     pub pubkeys: Vec<common::PublicKey>
 }
 ```
@@ -104,11 +100,3 @@ In the end, we don't implement any of these checks and will leave the responsibi
 To craft a multisigned transaction, the involved parties will need to coordinate. More specifically, the transaction will be constructed by one entity which will then distribute it to the signers and collect their signatures: note that the constructing party doesn't necessarily need to be one of the signers. Finally, these signatures will be inserted in the `SignedTxData` struct so that it can be encrypted, wrapped and submitted to the network.
 
 Namada does not provide a layer to support this process, so the involved parties will need to rely on an external communication mechanism.
-
-## Replay protection
-
-The [replay protection](./replay-protection.md) mechanism of Namada will prevent third-party malicious users from replaying a transaction having a multisig account as the source. This mechanism, though, is not enough to completely protect multisigned transactions: in this case, in fact, the threat could come from the members of the account themselves.
-
-With the current hash-based replay protection mechanism, once the transaction has been executed, its hash gets stored to prevent a replay. The issue, with a multisig transaction, is that the same transaction with a different set or amount of signatures would have a different hash, meaning that it can be replayed.
-
-There's no way to mitigate this scenario with the current implementation, so the members of a multisignature account will be responsible for behaving honestly towards each other and, possibly, punish malicious users by excluding them from the account.
