@@ -1,43 +1,53 @@
+//! Logic to do with events emitted by the ledger.
+pub mod log;
+
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 
-use borsh::BorshSerialize;
-use namada::ledger::governance::utils::ProposalEvent;
-use namada::types::ibc::IbcEvent;
-use namada::types::transaction::{hash_tx, TxType};
+use borsh::{BorshDeserialize, BorshSerialize};
+use tendermint_proto::abci::EventAttribute;
 use thiserror::Error;
 
-use crate::facade::tendermint_proto::abci::EventAttribute;
+use crate::ledger::governance::utils::ProposalEvent;
+use crate::types::ibc::IbcEvent;
+#[cfg(feature = "ferveo-tpke")]
+use crate::types::transaction::{hash_tx, TxType};
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 pub enum EventLevel {
+    /// Indicates an event is to do with a finalized block.
     Block,
+    /// Indicates an event is to do with an individual transaction.
     Tx,
 }
 
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct Event {
+    /// The type of event.
     pub event_type: EventType,
+    /// The level of the event - whether it relates to a block or an individual
+    /// transaction.
     pub level: EventLevel,
+    /// Key-value attributes of the event.
     pub attributes: HashMap<String, String>,
 }
 
 /// The two types of custom events we currently use
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 pub enum EventType {
-    // The transaction was accepted to be included in a block
+    /// The transaction was accepted to be included in a block
     Accepted,
-    // The transaction was applied during block finalization
+    /// The transaction was applied during block finalization
     Applied,
-    // The IBC transaction was applied during block finalization
+    /// The IBC transaction was applied during block finalization
     Ibc(String),
-    // The proposal that has been executed
+    /// The proposal that has been executed
     Proposal,
 }
 
@@ -56,6 +66,7 @@ impl Display for EventType {
 impl Event {
     /// Creates a new event with the hash and height of the transaction
     /// already filled in
+    #[cfg(feature = "ferveo-tpke")]
     pub fn new_tx_event(tx: &TxType, height: u64) -> Self {
         let mut event = match tx {
             TxType::Wrapper(wrapper) => {
@@ -151,7 +162,7 @@ impl From<ProposalEvent> for Event {
 }
 
 /// Convert our custom event into the necessary tendermint proto type
-impl From<Event> for crate::facade::tendermint_proto::abci::Event {
+impl From<Event> for tendermint_proto::abci::Event {
     fn from(event: Event) -> Self {
         Self {
             r#type: event.event_type.to_string(),
@@ -185,12 +196,16 @@ impl Attributes {
     }
 }
 
+/// Errors to do with emitting events.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// Error when parsing attributes from an event JSON.
     #[error("Json missing `attributes` field")]
     MissingAttributes,
+    /// Missing key in attributes.
     #[error("Attributes missing key: {0}")]
     MissingKey(String),
+    /// Missing value in attributes.
     #[error("Attributes missing value: {0}")]
     MissingValue(String),
 }

@@ -1,10 +1,11 @@
-use jsonpath_lib as jsonpath;
+use std::convert::TryFrom;
+
+use namada::ledger::events::Event;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use serde::Serialize;
 
 use crate::cli::safe_exit;
-use crate::node::ledger::events::EventType as NamadaEventType;
 
 /// Data needed for broadcasting a tx and
 /// monitoring its progress on chain
@@ -12,7 +13,7 @@ use crate::node::ledger::events::EventType as NamadaEventType;
 /// Txs may be either a dry run or else
 /// they should be encrypted and included
 /// in a wrapper.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum TxBroadcastData {
     DryRun(Tx),
     Wrapper {
@@ -34,83 +35,66 @@ pub struct TxResponse {
     pub initialized_accounts: Vec<Address>,
 }
 
-impl TxResponse {
-    /// Parse the JSON payload received from a subscription
-    ///
-    /// Searches for custom events emitted from the ledger and converts
-    /// them back to thin wrapper around a hashmap for further parsing.
-    pub fn parse(
-        json: serde_json::Value,
-        event_type: NamadaEventType,
-        tx_hash: &str,
-    ) -> Self {
-        let tx_hash_json = serde_json::Value::String(tx_hash.to_string());
-        let mut selector = jsonpath::selector(&json);
-        let mut index = 0;
-        let evt_key = event_type.to_string();
-        // Find the tx with a matching hash
-        let hash = loop {
-            if let Ok(hash) =
-                selector(&format!("$.events.['{}.hash'][{}]", evt_key, index))
-            {
-                let hash = hash[0].clone();
-                if hash == tx_hash_json {
-                    break hash;
-                } else {
-                    index += 1;
-                }
-            } else {
-                eprintln!(
-                    "Couldn't find tx with hash {} in the event string {}",
-                    tx_hash, json
-                );
-                safe_exit(1)
-            }
-        };
-        let info =
-            selector(&format!("$.events.['{}.info'][{}]", evt_key, index))
-                .unwrap();
-        let log = selector(&format!("$.events.['{}.log'][{}]", evt_key, index))
-            .unwrap();
-        let height =
-            selector(&format!("$.events.['{}.height'][{}]", evt_key, index))
-                .unwrap();
-        let code =
-            selector(&format!("$.events.['{}.code'][{}]", evt_key, index))
-                .unwrap();
-        let gas_used =
-            selector(&format!("$.events.['{}.gas_used'][{}]", evt_key, index))
-                .unwrap();
-        let initialized_accounts = selector(&format!(
-            "$.events.['{}.initialized_accounts'][{}]",
-            evt_key, index
-        ));
-        let initialized_accounts = match initialized_accounts {
-            Ok(values) if !values.is_empty() => {
-                // In a response, the initialized accounts are encoded as e.g.:
-                // ```
-                // "applied.initialized_accounts": Array([
-                //   String(
-                //     "[\"atest1...\"]",
-                //   ),
-                // ]),
-                // ...
-                // So we need to decode the inner string first ...
-                let raw: String =
-                    serde_json::from_value(values[0].clone()).unwrap();
-                // ... and then decode the vec from the array inside the string
-                serde_json::from_str(&raw).unwrap()
-            }
-            _ => vec![],
-        };
-        TxResponse {
-            info: serde_json::from_value(info[0].clone()).unwrap(),
-            log: serde_json::from_value(log[0].clone()).unwrap(),
-            height: serde_json::from_value(height[0].clone()).unwrap(),
-            hash: serde_json::from_value(hash).unwrap(),
-            code: serde_json::from_value(code[0].clone()).unwrap(),
-            gas_used: serde_json::from_value(gas_used[0].clone()).unwrap(),
-            initialized_accounts,
+impl TryFrom<Event> for TxResponse {
+    type Error = String;
+
+    fn try_from(event: Event) -> Result<Self, Self::Error> {
+        fn missing_field_err(field: &str) -> String {
+            format!("Field \"{field}\" not present in event")
         }
+
+        let hash = event
+            .get("hash")
+            .ok_or_else(|| missing_field_err("hash"))?
+            .clone();
+        let info = event
+            .get("info")
+            .ok_or_else(|| missing_field_err("info"))?
+            .clone();
+        let log = event
+            .get("log")
+            .ok_or_else(|| missing_field_err("log"))?
+            .clone();
+        let height = event
+            .get("height")
+            .ok_or_else(|| missing_field_err("height"))?
+            .clone();
+        let code = event
+            .get("code")
+            .ok_or_else(|| missing_field_err("code"))?
+            .clone();
+        let gas_used = event
+            .get("gas_used")
+            .ok_or_else(|| missing_field_err("gas_used"))?
+            .clone();
+        let initialized_accounts = event
+            .get("initialized_accounts")
+            .map(String::as_str)
+            // TODO: fix finalize block, to return initialized accounts,
+            // even when we reject a tx?
+            .map_or(Ok(vec![]), |initialized_accounts| {
+                serde_json::from_str(initialized_accounts)
+                    .map_err(|err| format!("JSON decode error: {err}"))
+            })?;
+
+        Ok(TxResponse {
+            hash,
+            info,
+            log,
+            height,
+            code,
+            gas_used,
+            initialized_accounts,
+        })
+    }
+}
+
+impl TxResponse {
+    /// Convert an [`Event`] to a [`TxResponse`], or error out.
+    pub fn from_event(event: Event) -> Self {
+        event.try_into().unwrap_or_else(|err| {
+            eprintln!("Error fetching TxResponse: {err}");
+            safe_exit(1);
+        })
     }
 }
