@@ -71,11 +71,14 @@ pub enum ValidationError {
     UnbondingLenTooShort(u64, u64),
 }
 
+/// The number of fundamental units per whole token of the native staking token
+pub const TOKENS_PER_NAM: u64 = 1_000_000;
+
 /// From Tendermint: <https://github.com/tendermint/tendermint/blob/master/spec/abci/apps.md#updating-the-validator-set>
 const MAX_TOTAL_VOTING_POWER: i64 = i64::MAX / 8;
 
 /// Assuming token amount is `u64` in micro units.
-const TOKEN_MAX_AMOUNT: u64 = u64::MAX / 1_000_000;
+const TOKEN_MAX_AMOUNT: u64 = u64::MAX / TOKENS_PER_NAM;
 
 impl PosParams {
     /// Validate PoS parameters values. Returns an empty list if the values are
