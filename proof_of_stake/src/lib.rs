@@ -34,11 +34,11 @@ use parameters::PosParams;
 use rust_decimal::Decimal;
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
-    SlashType, Slashes, TotalVotingPowers, Unbond, Unbonds,
-    ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
-    ValidatorState, ValidatorStates, ValidatorTotalDeltas,
-    ValidatorVotingPowers, VotingPower, VotingPowerDelta,
+    decimal_mult_i128, decimal_mult_u64, ActiveValidator, Bonds,
+    CommissionRates, Epoch, GenesisValidator, Slash, SlashType, Slashes,
+    TotalVotingPowers, Unbond, Unbonds, ValidatorConsensusKeys, ValidatorSet,
+    ValidatorSetUpdate, ValidatorSets, ValidatorState, ValidatorStates,
+    ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -161,7 +161,7 @@ pub trait PosReadOnly {
     ) -> Result<ValidatorSets<Self::Address>, Self::Error>;
     /// Read PoS total voting power of all validators (active and inactive).
     fn read_total_voting_power(&self)
-    -> Result<TotalVotingPowers, Self::Error>;
+        -> Result<TotalVotingPowers, Self::Error>;
 
     /// Check if the given address is a validator by checking that it has some
     /// state.
@@ -194,7 +194,8 @@ pub trait PosReadOnly {
                         // Apply slashes if any
                         for slash in slashes.iter() {
                             if slash.epoch <= start_epoch {
-                                let current_slashed = slash.rate * delta;
+                                let current_slashed =
+                                    decimal_mult_u64(slash.rate, delta);
                                 total -= current_slashed;
                             }
                         }
@@ -890,13 +891,13 @@ pub trait PosBase {
         &mut self,
         params: &'a PosParams,
         validators: impl Iterator<
-            Item = &'a GenesisValidator<
-                Self::Address,
-                Self::TokenAmount,
-                Self::PublicKey,
-            >,
-        > + Clone
-        + 'a,
+                Item = &'a GenesisValidator<
+                    Self::Address,
+                    Self::TokenAmount,
+                    Self::PublicKey,
+                >,
+            > + Clone
+            + 'a,
         current_epoch: impl Into<Epoch>,
     ) -> Result<(), GenesisError> {
         let current_epoch = current_epoch.into();
@@ -1324,17 +1325,17 @@ where
 fn init_genesis<'a, Address, TokenAmount, TokenChange, PK>(
     params: &'a PosParams,
     validators: impl Iterator<Item = &'a GenesisValidator<Address, TokenAmount, PK>>
-    + Clone
-    + 'a,
+        + Clone
+        + 'a,
     current_epoch: Epoch,
 ) -> Result<
     GenesisData<
         impl Iterator<
-            Item = Result<
-                GenesisValidatorData<Address, TokenAmount, TokenChange, PK>,
-                GenesisError,
-            >,
-        > + 'a,
+                Item = Result<
+                    GenesisValidatorData<Address, TokenAmount, TokenChange, PK>,
+                    GenesisError,
+                >,
+            > + 'a,
         Address,
         TokenAmount,
         TokenChange,
@@ -1511,7 +1512,8 @@ where
         ));
     }
     let raw_current_stake: i128 = current_stake.into();
-    let slashed_amount: TokenChange = (slash.rate * raw_current_stake).into();
+    let slashed_amount: TokenChange =
+        decimal_mult_i128(slash.rate, raw_current_stake).into();
     let token_change = -slashed_amount;
 
     // Apply slash at pipeline offset
@@ -1959,7 +1961,8 @@ where
                 for slash in &slashes {
                     if slash.epoch >= *epoch_start {
                         let raw_delta: u64 = slashed_bond_delta.into();
-                        let raw_slashed_delta = slash.rate * raw_delta;
+                        let raw_slashed_delta =
+                            decimal_mult_u64(slash.rate, raw_delta);
                         let slashed_delta =
                             TokenAmount::from(raw_slashed_delta);
                         slashed_bond_delta -= slashed_delta;
@@ -2098,9 +2101,9 @@ fn update_validator_set<Address, TokenChange>(
                         validator_set.inactive.insert(validator_post);
                     }
                 } else {
-                    debug_assert!(
-                        validator_set.active.contains(&validator_pre)
-                    );
+                    debug_assert!(validator_set
+                        .active
+                        .contains(&validator_pre));
                     let max_inactive_validator =
                         validator_set.inactive.last_shim();
                     let max_voting_power = max_inactive_validator
@@ -2256,8 +2259,9 @@ where
             for slash in &slashes {
                 if slash.epoch >= *epoch_start && slash.epoch <= *epoch_end {
                     let raw_delta: u64 = delta.into();
-                    let current_slashed =
-                        TokenAmount::from(slash.rate * raw_delta);
+                    let current_slashed = TokenAmount::from(decimal_mult_u64(
+                        slash.rate, raw_delta,
+                    ));
                     slashed += current_slashed;
                     delta -= current_slashed;
                 }

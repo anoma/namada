@@ -16,6 +16,7 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::{storage, token};
+use rust_decimal::Decimal;
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -29,7 +30,6 @@ pub mod genesis_config {
     use eyre::Context;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::EpochDuration;
-    use namada::ledger::pos::types::BasisPoints;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::address::Address;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
@@ -225,9 +225,6 @@ pub mod genesis_config {
         // Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
-        // Minimum duration of an epoch (in seconds).
-        // TODO: this is i64 because datetime wants it
-        pub min_duration: i64,
         // Maximum duration per block (in seconds).
         // TODO: this is i64 because datetime wants it
         pub max_expected_time_per_block: i64,
@@ -239,6 +236,12 @@ pub mod genesis_config {
         pub tx_whitelist: Option<Vec<String>>,
         /// Filename of implicit accounts validity predicate WASM code
         pub implicit_vp: String,
+        /// Expected number of epochs per year
+        pub epochs_per_year: u64,
+        /// PoS gain p
+        pub pos_gain_p: Decimal,
+        /// PoS gain d
+        pub pos_gain_d: Decimal,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -252,23 +255,28 @@ pub mod genesis_config {
         // Unbonding length (in epochs).
         // XXX: u64 doesn't work with toml-rs!
         pub unbonding_len: u64,
-        // Votes per token (in basis points).
+        // Votes per token.
         // XXX: u64 doesn't work with toml-rs!
-        pub votes_per_token: u64,
+        pub tm_votes_per_token: Decimal,
         // Reward for proposing a block.
         // XXX: u64 doesn't work with toml-rs!
-        pub block_proposer_reward: u64,
+        pub block_proposer_reward: Decimal,
         // Reward for voting on a block.
         // XXX: u64 doesn't work with toml-rs!
-        pub block_vote_reward: u64,
-        // Portion of a validator's stake that should be slashed on a
-        // duplicate vote (in basis points).
+        pub block_vote_reward: Decimal,
+        // Maximum staking APY
         // XXX: u64 doesn't work with toml-rs!
-        pub duplicate_vote_slash_rate: u64,
+        pub max_inflation_rate: Decimal,
+        // Target ratio of staked NAM tokens to total NAM tokens
+        pub target_staked_ratio: Decimal,
         // Portion of a validator's stake that should be slashed on a
-        // light client attack (in basis points).
+        // duplicate vote.
         // XXX: u64 doesn't work with toml-rs!
-        pub light_client_attack_slash_rate: u64,
+        pub duplicate_vote_min_slash_rate: Decimal,
+        // Portion of a validator's stake that should be slashed on a
+        // light client attack.
+        // XXX: u64 doesn't work with toml-rs!
+        pub light_client_attack_min_slash_rate: Decimal,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -551,11 +559,14 @@ pub mod genesis_config {
             })
             .to_sha256_bytes()
             .unwrap();
+
+        let min_duration: i64 =
+            60 * 60 * 24 * 365 / (parameters.epochs_per_year as i64);
         let parameters = Parameters {
             epoch_duration: EpochDuration {
                 min_num_of_blocks: parameters.min_num_of_blocks,
                 min_duration: namada::types::time::Duration::seconds(
-                    parameters.min_duration,
+                    min_duration,
                 )
                 .into(),
             },
@@ -568,6 +579,11 @@ pub mod genesis_config {
             tx_whitelist: parameters.tx_whitelist.unwrap_or_default(),
             implicit_vp_code_path,
             implicit_vp_sha256,
+            epochs_per_year: parameters.epochs_per_year,
+            pos_gain_p: parameters.pos_gain_p,
+            pos_gain_d: parameters.pos_gain_d,
+            staked_ratio: Decimal::ZERO,
+            pos_inflation_amount: 0,
         };
 
         let GovernanceParamsConfig {
@@ -591,25 +607,25 @@ pub mod genesis_config {
             max_validator_slots,
             pipeline_len,
             unbonding_len,
-            votes_per_token,
+            tm_votes_per_token,
             block_proposer_reward,
             block_vote_reward,
-            duplicate_vote_slash_rate,
-            light_client_attack_slash_rate,
+            max_inflation_rate,
+            target_staked_ratio,
+            duplicate_vote_min_slash_rate,
+            light_client_attack_min_slash_rate,
         } = pos_params;
         let pos_params = PosParams {
             max_validator_slots,
             pipeline_len,
             unbonding_len,
-            votes_per_token: BasisPoints::new(votes_per_token),
+            tm_votes_per_token,
             block_proposer_reward,
             block_vote_reward,
-            duplicate_vote_slash_rate: BasisPoints::new(
-                duplicate_vote_slash_rate,
-            ),
-            light_client_attack_slash_rate: BasisPoints::new(
-                light_client_attack_slash_rate,
-            ),
+            max_inflation_rate,
+            target_staked_ratio,
+            duplicate_vote_min_slash_rate,
+            light_client_attack_min_slash_rate,
         };
 
         let mut genesis = Genesis {
@@ -793,6 +809,16 @@ pub struct Parameters {
     pub implicit_vp_code_path: String,
     /// Expected SHA-256 hash of the implicit VP
     pub implicit_vp_sha256: [u8; 32],
+    /// Expected number of epochs per year (read only)
+    pub epochs_per_year: u64,
+    /// PoS gain p (read only)
+    pub pos_gain_p: Decimal,
+    /// PoS gain d (read only)
+    pub pos_gain_d: Decimal,
+    /// PoS staked ratio (read + write for every epoch)
+    pub staked_ratio: Decimal,
+    /// PoS inflation amount from the last epoch (read + write for every epoch)
+    pub pos_inflation_amount: u64,
 }
 
 #[cfg(not(feature = "dev"))]
@@ -846,6 +872,12 @@ pub fn genesis() -> Genesis {
         tx_whitelist: vec![],
         implicit_vp_code_path: vp_implicit_path.into(),
         implicit_vp_sha256: Default::default(),
+        epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
+                                   * per epoch (60 = min_duration) */
+        pos_gain_p: dec!(0.1),
+        pos_gain_d: dec!(0.1),
+        staked_ratio: dec!(0.0),
+        pos_inflation_amount: 0,
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
