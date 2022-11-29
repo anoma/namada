@@ -28,7 +28,10 @@ use std::num::TryFromIntError;
 use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
-use namada_core::ledger::storage_api::{self, StorageRead, StorageWrite};
+use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
+use namada_core::ledger::storage_api::{
+    self, OptionExt, ResultExt, StorageRead, StorageWrite,
+};
 use namada_core::types::address::{self, Address, InternalAddress};
 use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
@@ -38,11 +41,12 @@ use rust_decimal::Decimal;
 use storage::{validator_max_commission_rate_change_key, validator_state_key};
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, Bonds_NEW, CommissionRates,
-    CommissionRates_NEW, GenesisValidator, Slash, SlashType, Slashes,
-    TotalDeltas, TotalDeltas_NEW, Unbond, Unbonds, ValidatorConsensusKeys,
+    ActiveValidator, Bonds, Bonds_NEW, CommissionRates, CommissionRates_NEW,
+    GenesisValidator, Position, Slash, SlashType, Slashes, TotalDeltas,
+    TotalDeltas_NEW, Unbond, Unbonds, ValidatorConsensusKeys,
     ValidatorConsensusKeys_NEW, ValidatorDeltas, ValidatorDeltas_NEW,
-    ValidatorSet, ValidatorSetUpdate, ValidatorSets, ValidatorSets_NEW,
+    ValidatorPositionAddresses_NEW, ValidatorSet, ValidatorSetPositions_NEW,
+    ValidatorSetUpdate, ValidatorSet_NEW, ValidatorSets, ValidatorSets_NEW,
     ValidatorState, ValidatorStates, ValidatorStates_NEW,
 };
 
@@ -1668,10 +1672,16 @@ impl From<CommissionRateChangeError> for storage_api::Error {
     }
 }
 
-/// Get the storage handle to the Validator sets
-pub fn validator_sets_handle() -> ValidatorSets_NEW {
-    let key = storage::validator_set_key();
-    crate::epoched_new::Epoched::open(key)
+/// Get the storage handle to the epoched active validator set
+pub fn active_validator_set_handle() -> ValidatorSets_NEW {
+    let key = storage::active_validator_set_key();
+    ValidatorSets_NEW::open(key)
+}
+
+/// Get the storage handle to the epoched inactive validator set
+pub fn inactive_validator_set_handle() -> ValidatorSets_NEW {
+    let key = storage::inactive_validator_set_key();
+    ValidatorSets_NEW::open(key)
 }
 
 /// Get the storage handle to a PoS validator's consensus key (used for
@@ -1680,25 +1690,25 @@ pub fn validator_consensus_key_handle(
     validator: &Address,
 ) -> ValidatorConsensusKeys_NEW {
     let key = storage::validator_consensus_key_key(validator);
-    crate::epoched_new::Epoched::open(key)
+    ValidatorConsensusKeys_NEW::open(key)
 }
 
 /// Get the storage handle to a PoS validator's state
 pub fn validator_state_handle(validator: &Address) -> ValidatorStates_NEW {
     let key = storage::validator_state_key(validator);
-    crate::epoched_new::Epoched::open(key)
+    ValidatorStates_NEW::open(key)
 }
 
 /// Get the storage handle to a PoS validator's deltas
 pub fn validator_deltas_handle(validator: &Address) -> ValidatorDeltas_NEW {
     let key = storage::validator_deltas_key(validator);
-    crate::epoched_new::EpochedDelta::open(key)
+    ValidatorDeltas_NEW::open(key)
 }
 
 /// Get the storage handle to the total deltas
 pub fn total_deltas_handle() -> TotalDeltas_NEW {
     let key = storage::total_deltas_key();
-    crate::epoched_new::EpochedDelta::open(key)
+    TotalDeltas_NEW::open(key)
 }
 
 /// Get the storage handle to a PoS validator's commission rate
@@ -1706,7 +1716,7 @@ pub fn validator_commission_rate_handle(
     validator: &Address,
 ) -> CommissionRates_NEW {
     let key = storage::validator_commission_rate_key(validator);
-    crate::epoched_new::Epoched::open(key)
+    CommissionRates_NEW::open(key)
 }
 
 /// Get the storage handle to a bonds
@@ -1724,11 +1734,17 @@ pub fn bond_handle(
     } else {
         storage::bond_amount_key(&bond_id)
     };
-    crate::epoched_new::EpochedDelta::open(key)
+    Bonds_NEW::open(key)
+}
+
+/// Get the storage handle to a PoS validator's deltas
+pub fn validator_set_positions_handle() -> ValidatorSetPositions_NEW {
+    let key = storage::validator_set_positions_key();
+    ValidatorSetPositions_NEW::open(key)
 }
 
 /// new init genesis
-pub fn init_genesis_NEW<S>(
+pub fn init_genesis_new<S>(
     storage: &mut S,
     params: &PosParams,
     validators: impl Iterator<Item = GenesisValidator> + Clone,
@@ -1737,17 +1753,79 @@ pub fn init_genesis_NEW<S>(
 where
     S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
 {
-    let mut active: BTreeSet<WeightedValidator> = BTreeSet::default();
     let mut total_bonded = token::Amount::default();
+    active_validator_set_handle().init(storage, current_epoch)?;
+    // Do I necessarily want to do this one here since we may not fill it?
+    inactive_validator_set_handle().init(storage, current_epoch)?;
 
-    for GenesisValidator {
-        address,
-        tokens,
-        consensus_key,
-        commission_rate,
-        max_commission_rate_change,
-    } in validators
+    for (
+        num_val,
+        GenesisValidator {
+            address,
+            tokens,
+            consensus_key,
+            commission_rate,
+            max_commission_rate_change,
+        },
+    ) in validators.enumerate()
     {
+        let active_val_handle =
+            active_validator_set_handle().at(&current_epoch).at(&tokens);
+        if (num_val as u64) < params.max_validator_slots {
+            insert_validator_into_set(
+                &active_val_handle,
+                storage,
+                &current_epoch,
+                &address,
+            )?;
+        } else {
+            // Check to see if the current genesis validator should replace one
+            // already in the active set
+            let min_active_amount = get_min_max_validator_amount(
+                &active_validator_set_handle().at(&current_epoch),
+                storage,
+                true,
+            )?;
+            if tokens > min_active_amount {
+                // Swap this genesis validator in and demote the last min active
+                // validator
+                let min_active_handle = active_validator_set_handle()
+                    .at(&current_epoch)
+                    .at(&min_active_amount);
+                // Remove last min active validator
+                let last_min_active_position =
+                    find_next_position(&min_active_handle, storage)?
+                        - Position::ONE;
+                let removed = min_active_handle
+                    .remove(storage, &last_min_active_position)?;
+                // Insert last min active validator into inactive set
+                insert_validator_into_set(
+                    &inactive_validator_set_handle()
+                        .at(&current_epoch)
+                        .at(&min_active_amount),
+                    storage,
+                    &current_epoch,
+                    &removed.unwrap(),
+                )?;
+                // Insert the current genesis validator into the active set
+                insert_validator_into_set(
+                    &active_val_handle,
+                    storage,
+                    &current_epoch,
+                    &address,
+                )?;
+            } else {
+                insert_validator_into_set(
+                    &inactive_validator_set_handle()
+                        .at(&current_epoch)
+                        .at(&tokens),
+                    storage,
+                    &current_epoch,
+                    &address,
+                )?;
+            }
+        }
+
         storage.write_validator_address_raw_hash(&address, &consensus_key);
         storage.write_validator_max_commission_rate_change(
             &address,
@@ -1787,28 +1865,7 @@ where
             commission_rate,
             current_epoch,
         )?;
-        active.insert(WeightedValidator {
-            bonded_stake: tokens.into(),
-            address: address.clone(),
-        });
     }
-    // Pop the smallest validators from the active set until its size is under
-    // the limit and insert them into the inactive set
-    let mut inactive: BTreeSet<WeightedValidator> = BTreeSet::default();
-    while active.len() > params.max_validator_slots as usize {
-        match active.pop_first_shim() {
-            Some(first) => {
-                inactive.insert(first);
-            }
-            None => break,
-        }
-    }
-    let validator_set = ValidatorSet { active, inactive };
-    validator_sets_handle().init_at_genesis(
-        storage,
-        validator_set,
-        current_epoch,
-    )?;
 
     total_deltas_handle().init_at_genesis(
         storage,
@@ -1874,12 +1931,16 @@ pub fn read_validator_stake<S>(
     params: &PosParams,
     validator: &Address,
     epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<Option<token::Change>>
+) -> storage_api::Result<token::Amount>
 where
     S: for<'iter> StorageRead<'iter>,
 {
     let handle = validator_deltas_handle(&validator);
-    handle.get_sum(storage, epoch, params)
+    let amount = handle.get_sum(storage, epoch, params)?.unwrap_or_default();
+    let amount: u64 = amount
+        .try_into()
+        .wrap_err("validator_deltas sum must not overflow u64")?;
+    Ok(amount.into())
 }
 
 /// Write PoS validator's consensus key (used for signing block votes).
@@ -1896,7 +1957,9 @@ where
 {
     let handle = validator_deltas_handle(&validator);
     let offset = OffsetPipelineLen::value(params);
-    let val = handle.get_delta_val(storage, current_epoch, params)?.unwrap_or_default();
+    let val = handle
+        .get_delta_val(storage, current_epoch, params)?
+        .unwrap_or_default();
     handle.set(storage, val + delta, current_epoch, offset)
 }
 
@@ -2040,7 +2103,7 @@ pub fn bond_tokens_new<S>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
-    amount: token::Amount,
+    amount: token::Change,
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
@@ -2048,7 +2111,9 @@ where
 {
     let params = storage.read_pos_params();
     if let Some(source) = source {
-        if source != validator && is_validator(storage, source, &params, current_epoch)? {
+        if source != validator
+            && is_validator(storage, source, &params, current_epoch)?
+        {
             return Err(
                 BondError::SourceMustNotBeAValidator(source.clone()).into()
             );
@@ -2077,7 +2142,10 @@ where
     }
 
     // Initialize or update the bond at the pipeline offset
-    let bond_id = BondId { source: source.clone(), validator: validator.clone() };
+    let bond_id = BondId {
+        source: source.clone(),
+        validator: validator.clone(),
+    };
     let offset = params.pipeline_len;
     if storage.has_key(&storage::bond_key(&bond_id))? {
         let cur_amount = bond_amount_handle
@@ -2088,131 +2156,261 @@ where
             .unwrap_or_default();
         bond_amount_handle.set(
             storage,
-            cur_amount + token::Change::from(amount),
+            cur_amount + amount,
             current_epoch,
             offset,
         )?;
         bond_remain_handle.set(
             storage,
-            cur_remain + token::Change::from(amount),
+            cur_remain + amount,
             current_epoch,
             offset,
         )?;
     } else {
-        bond_amount_handle.init(
-            storage,
-            token::Change::from(amount),
-            current_epoch,
-            offset,
-        )?;
-        bond_remain_handle.init(
-            storage,
-            token::Change::from(amount),
-            current_epoch,
-            offset,
-        )?;
+        bond_amount_handle.init(storage, amount, current_epoch, offset)?;
+        bond_remain_handle.init(storage, amount, current_epoch, offset)?;
     }
 
     // Update the validator set
-    update_validator_set(params, validator, token_change, change_offset, validator_set, validator_deltas, current_epoch)
+    update_validator_set_new(
+        storage,
+        &params,
+        validator,
+        amount,
+        &active_validator_set_handle(),
+        &inactive_validator_set_handle(),
+        current_epoch,
+    )?;
 
     // Update the validator and total deltas
-    update_validator_deltas(storage, &params, validator, token::Change::from(amount), current_epoch)?;
-    update_total_deltas(storage, &params, token::Change::from(amount), current_epoch)?;
+    update_validator_deltas(
+        storage,
+        &params,
+        validator,
+        amount,
+        current_epoch,
+    )?;
+    update_total_deltas(storage, &params, amount, current_epoch)?;
 
     // Transfer the bonded tokens from the source to PoS
     storage.transfer(
         &staking_token_address(),
-        amount,
+        token::Amount::from_change(amount),
         source,
         &<S as PosBase>::POS_ADDRESS,
     );
     Ok(())
 }
 
-/// NEW: Update validator set when a validator's receives a new bond and when its
-/// bond is unbonded (self-bond or delegation).
-fn update_validator_set_new(
+/// NEW: Update validator set when a validator receives a new bond and when
+/// its bond is unbonded (self-bond or delegation).
+fn update_validator_set_new<S>(
+    storage: &mut S,
     params: &PosParams,
     validator: &Address,
     token_change: token::Change,
-    change_offset: DynEpochOffset,
-    active_validator_set: &mut ValidatorSetNEW,
-    inactive_validator_set: &mut ValidatorSetNEW,
-    validator_deltas: &ValidatorDeltas_NEW,
+    active_validator_set: &ValidatorSets_NEW,
+    inactive_validator_set: &ValidatorSets_NEW,
     current_epoch: Epoch,
-) {
-    // validator_set.update_from_offset(
-    //     |validator_set, epoch| {
-    //         // Find the validator's bonded stake at the epoch that's being
-    //         // updated from its total deltas
-    //         let tokens_pre = validator_deltas
-    //             .and_then(|d| d.get(epoch))
-    //             .unwrap_or_default();
-    //         let tokens_post = tokens_pre + token_change;
-    //         let tokens_pre: i128 = tokens_pre;
-    //         let tokens_post: i128 = tokens_post;
-    //         let tokens_pre: u64 = TryFrom::try_from(tokens_pre).unwrap();
-    //         let tokens_post: u64 = TryFrom::try_from(tokens_post).unwrap();
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
+{
+    let epoch = current_epoch + params.pipeline_len;
+    let tokens_pre = read_validator_stake(storage, params, validator, epoch)?;
+    let tokens_post = tokens_pre + token::Amount::from_change(token_change);
 
-    //         if tokens_pre != tokens_post {
-    //             let validator_pre = WeightedValidator {
-    //                 bonded_stake: tokens_pre,
-    //                 address: validator.clone(),
-    //             };
-    //             let validator_post = WeightedValidator {
-    //                 bonded_stake: tokens_post,
-    //                 address: validator.clone(),
-    //             };
+    let position: Position = read_validator_set_position(
+        storage, validator, epoch,
+    )?
+    .ok_or_err_msg("Validator must have a stored validator set position")?;
 
-    //             if validator_set.inactive.contains(&validator_pre) {
-    //                 let min_active_validator =
-    //                     validator_set.active.first_shim();
-    //                 let min_bonded_stake = min_active_validator
-    //                     .map(|v| v.bonded_stake)
-    //                     .unwrap_or_default();
-    //                 if tokens_post > min_bonded_stake {
-    //                     let deactivate_min =
-    //                         validator_set.active.pop_first_shim();
-    //                     let popped =
-    //                         validator_set.inactive.remove(&validator_pre);
-    //                     debug_assert!(popped);
-    //                     validator_set.active.insert(validator_post);
-    //                     if let Some(deactivate_min) = deactivate_min {
-    //                         validator_set.inactive.insert(deactivate_min);
-    //                     }
-    //                 } else {
-    //                     validator_set.inactive.remove(&validator_pre);
-    //                     validator_set.inactive.insert(validator_post);
-    //                 }
-    //             } else {
-    //                 debug_assert!(
-    //                     validator_set.active.contains(&validator_pre)
-    //                 );
-    //                 let max_inactive_validator =
-    //                     validator_set.inactive.last_shim();
-    //                 let max_bonded_stake = max_inactive_validator
-    //                     .map(|v| v.bonded_stake)
-    //                     .unwrap_or_default();
-    //                 if tokens_post < max_bonded_stake {
-    //                     let activate_max =
-    //                         validator_set.inactive.pop_last_shim();
-    //                     let popped =
-    //                         validator_set.active.remove(&validator_pre);
-    //                     debug_assert!(popped);
-    //                     validator_set.inactive.insert(validator_post);
-    //                     if let Some(activate_max) = activate_max {
-    //                         validator_set.active.insert(activate_max);
-    //                     }
-    //                 } else {
-    //                     validator_set.active.remove(&validator_pre);
-    //                     validator_set.active.insert(validator_post);
-    //                 }
-    //             }
-    //         }
-    //     },
-    //     current_epoch,
-    //     change_offset,
-    //     params,
-    // )
+    if tokens_pre == tokens_post {
+        return Ok(());
+    }
+
+    let active_val_handle = active_validator_set.at(&epoch);
+    let inactive_val_handle = inactive_validator_set.at(&epoch);
+
+    let active_vals_pre = active_val_handle.at(&tokens_pre);
+    if active_vals_pre.contains(storage, &position)? {
+        // It's active
+        let removed = active_vals_pre.remove(storage, &position)?;
+        debug_assert!(removed.is_some());
+
+        let max_inactive_validator_amount =
+            get_min_max_validator_amount(&inactive_val_handle, storage, false)?;
+
+        if tokens_post < max_inactive_validator_amount {
+            // Place the validator into the inactive set and promote the
+            // position 0 max inactive validator.
+
+            // Remove the max inactive validator first
+            let inactive_vals_max =
+                inactive_val_handle.at(&max_inactive_validator_amount);
+            let removed_max_inactive =
+                inactive_vals_max.remove(storage, &Position::default())?;
+            debug_assert!(removed_max_inactive.is_some());
+
+            // Insert the previous max inactive validator into the active set
+            insert_validator_into_set(
+                &active_val_handle.at(&max_inactive_validator_amount),
+                storage,
+                &epoch,
+                &removed_max_inactive.unwrap(),
+            )?;
+
+            // Insert the current validator into the inactive set
+            insert_validator_into_set(
+                &inactive_val_handle.at(&tokens_post),
+                storage,
+                &epoch,
+                &validator,
+            )?;
+        } else {
+            // The current validator should remain in the active set - place it
+            // into a new position
+            insert_validator_into_set(
+                &active_val_handle.at(&tokens_post),
+                storage,
+                &epoch,
+                &validator,
+            )?;
+        }
+    } else {
+        // It's inactive
+        let inactive_vals_pre = inactive_val_handle.at(&tokens_pre);
+        let removed = inactive_vals_pre.remove(storage, &position)?;
+        debug_assert!(removed.is_some());
+
+        let min_active_validator_amount =
+            get_min_max_validator_amount(&active_val_handle, storage, true)?;
+
+        if tokens_post > min_active_validator_amount {
+            // Place the validator into the active set and demote the last
+            // position min active validator to the inactive set
+
+            // Remove the min active validator first
+            let active_vals_min =
+                active_val_handle.at(&min_active_validator_amount);
+            let last_position_of_min_active_vals =
+                find_next_position(&active_vals_min, storage)? - Position::ONE;
+            let removed_min_active = active_vals_min
+                .remove(storage, &last_position_of_min_active_vals)?;
+            debug_assert!(removed_min_active.is_some());
+
+            // Insert the min active validator into the inactive set
+            insert_validator_into_set(
+                &inactive_val_handle.at(&min_active_validator_amount),
+                storage,
+                &epoch,
+                &removed_min_active.unwrap(),
+            )?;
+
+            // Insert the current validator into the active set
+            insert_validator_into_set(
+                &active_val_handle.at(&tokens_post),
+                storage,
+                &epoch,
+                &validator,
+            )?;
+        } else {
+            // The current validator should remain in the inactive set
+            insert_validator_into_set(
+                &inactive_val_handle.at(&tokens_post),
+                storage,
+                &epoch,
+                &validator,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Read the position of the validator in the subset of validators that have the
+/// same bonded stake. This information is held in its own epoched structure in
+/// addition to being inside the validator sets.
+fn read_validator_set_position<S>(
+    storage: &S,
+    validator: &Address,
+    epoch: Epoch,
+) -> storage_api::Result<Option<Position>>
+where
+    S: for<'iter> StorageRead<'iter>,
+{
+    let handle = validator_set_positions_handle();
+    handle.at(&epoch).get(storage, validator)
+}
+
+/// Find next position in a validator set or 0 if empty
+fn find_next_position<S>(
+    handle: &ValidatorPositionAddresses_NEW,
+    storage: &S,
+) -> storage_api::Result<Position>
+where
+    S: for<'iter> StorageRead<'iter>,
+{
+    let next_position = handle
+        .rev_iter(storage)?
+        .next()
+        .transpose()?
+        .map(|(last_position, _addr)| Position::next(&last_position))
+        .unwrap_or_default();
+    Ok(next_position)
+}
+
+fn get_min_max_validator_amount<S>(
+    handle: &ValidatorSet_NEW,
+    storage: &S,
+    do_min: bool,
+) -> storage_api::Result<token::Amount>
+where
+    S: for<'iter> StorageRead<'iter>,
+{
+    let amount = if do_min {
+        handle
+            .rev_iter(storage)?
+            .next()
+            .transpose()?
+            .map(|(subkey, _address)| match subkey {
+                NestedSubKey::Data {
+                    key,
+                    nested_sub_key: _,
+                } => key,
+            })
+            .unwrap_or_default()
+    } else {
+        handle
+            .iter(storage)?
+            .next()
+            .transpose()?
+            .map(|(subkey, _address)| match subkey {
+                NestedSubKey::Data {
+                    key,
+                    nested_sub_key: _,
+                } => key,
+            })
+            .unwrap_or_default()
+    };
+
+    Ok(amount)
+}
+
+fn insert_validator_into_set<S>(
+    handle: &ValidatorPositionAddresses_NEW,
+    storage: &mut S,
+    epoch: &Epoch,
+    address: &Address,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
+{
+    let next_position = find_next_position(&handle, storage)?;
+    handle.insert(storage, next_position, address.clone())?;
+    validator_set_positions_handle().at(&epoch).insert(
+        storage,
+        address.clone(),
+        next_position,
+    )?;
+    Ok(())
 }

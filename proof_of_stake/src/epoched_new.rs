@@ -7,19 +7,31 @@ use std::ops;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api;
-use namada_core::ledger::storage_api::collections::lazy_map::LazyMap;
-use namada_core::ledger::storage_api::collections::LazyCollection;
+use namada_core::ledger::storage_api::collections::lazy_map::{
+    LazyMap, NestedMap,
+};
+use namada_core::ledger::storage_api::collections::{self, LazyCollection};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::storage::{self, Epoch};
 
 use crate::parameters::PosParams;
 
 /// Discrete epoched data handle
-pub struct Epoched<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64> {
+pub struct Epoched<
+    Data,
+    FutureEpochs,
+    const NUM_PAST_EPOCHS: u64 = 0,
+    SON = collections::Simple,
+> {
     storage_prefix: storage::Key,
     future_epochs: PhantomData<FutureEpochs>,
     data: PhantomData<Data>,
+    phantom_son: PhantomData<SON>,
 }
+
+// Discrete epoched data handle with nested lazy structure
+pub type NestedEpoched<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64 = 0> =
+    Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS, collections::Nested>;
 
 /// Delta epoched data handle
 pub struct EpochedDelta<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64> {
@@ -28,11 +40,10 @@ pub struct EpochedDelta<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64> {
     data: PhantomData<Data>,
 }
 
-impl<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64>
-    Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS>
+impl<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64, SON>
+    Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS, SON>
 where
     FutureEpochs: EpochOffset,
-    Data: BorshSerialize + BorshDeserialize + 'static + Debug,
 {
     /// Open the handle
     pub fn open(key: storage::Key) -> Self {
@@ -40,9 +51,17 @@ where
             storage_prefix: key,
             future_epochs: PhantomData,
             data: PhantomData,
+            phantom_son: PhantomData,
         }
     }
+}
 
+impl<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64>
+    Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS>
+where
+    FutureEpochs: EpochOffset,
+    Data: BorshSerialize + BorshDeserialize + 'static + Debug,
+{
     /// Initialize new epoched data. Sets the head to the given value.
     /// This should only be used at genesis.
     pub fn init_at_genesis<S>(
@@ -216,10 +235,50 @@ where
 }
 
 impl<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64>
+    Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS, collections::Nested>
+where
+    FutureEpochs: EpochOffset,
+    Data: LazyCollection + Debug,
+{
+    pub fn at(&self, key: &Epoch) -> Data {
+        Data::open(self.get_data_handler().get_data_key(key))
+    }
+
+    fn get_data_handler(&self) -> NestedMap<Epoch, Data> {
+        let key = self.storage_prefix.push(&"data".to_owned()).unwrap();
+        NestedMap::open(key)
+    }
+
+    /// Initialize new nested data at the given epoch offset.
+    pub fn init<S>(
+        &self,
+        storage: &mut S,
+        epoch: Epoch,
+    ) -> storage_api::Result<()>
+    where
+        S: StorageWrite + for<'iter> StorageRead<'iter>,
+    {
+        let key = self.get_last_update_storage_key();
+        storage.write(&key, epoch)
+    }
+
+    fn get_last_update_storage_key(&self) -> storage::Key {
+        self.storage_prefix.push(&"last_update".to_owned()).unwrap()
+    }
+
+    // TODO: we may need an update_data() method, figure out when it should be
+    // called (in at()?)
+}
+
+impl<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64>
     EpochedDelta<Data, FutureEpochs, NUM_PAST_EPOCHS>
 where
     FutureEpochs: EpochOffset,
-    Data: BorshSerialize + BorshDeserialize + ops::Add<Output = Data> + 'static + Debug,
+    Data: BorshSerialize
+        + BorshDeserialize
+        + ops::Add<Output = Data>
+        + 'static
+        + Debug,
 {
     /// Open the handle
     pub fn open(key: storage::Key) -> Self {
@@ -315,7 +374,8 @@ where
             None => return Ok(None),
             Some(last_update) => {
                 let data_handler = self.get_data_handler();
-                let future_most_epoch = last_update + FutureEpochs::value(params);
+                let future_most_epoch =
+                    last_update + FutureEpochs::value(params);
                 // Epoch can be a lot greater than the epoch where
                 // a value is recorded, we check the upper bound
                 // epoch of the LazyMap data
@@ -325,7 +385,7 @@ where
                     match (&mut sum, next) {
                         (Some(_), Ok((next_epoch, next_val))) => {
                             if next_epoch > epoch {
-                                return Ok(sum)
+                                return Ok(sum);
                             } else {
                                 sum = sum.map(|cur_sum| cur_sum + next_val)
                             }
@@ -337,9 +397,7 @@ where
                                 sum = Some(next_val)
                             }
                         }
-                        (Some(_), Err(_)) => {
-                            return Ok(sum)
-                        }
+                        (Some(_), Err(_)) => return Ok(sum),
                         // perhaps elaborate with an error
                         _ => return Ok(None),
                     };
@@ -383,9 +441,10 @@ where
 
     /// TODO: maybe better description
     /// Update the data associated with epochs, if needed. Any key-value with
-    /// epoch before the oldest stored epoch is added to the key-value with the oldest stored epoch that is kept. If the oldest
-    /// stored epoch is not already associated with some value, the latest
-    /// value from the dropped values, if any, is associated with it.
+    /// epoch before the oldest stored epoch is added to the key-value with the
+    /// oldest stored epoch that is kept. If the oldest stored epoch is not
+    /// already associated with some value, the latest value from the
+    /// dropped values, if any, is associated with it.
     fn update_data<S>(
         &self,
         storage: &mut S,
@@ -404,18 +463,25 @@ where
                 let data_handler = self.get_data_handler();
                 let mut new_oldest_value: Option<Data> = None;
                 for offset in 1..diff + 1 {
-                    let old = data_handler
-                        .remove(storage, &Epoch(expected_oldest_epoch.0 - offset))?;
+                    let old = data_handler.remove(
+                        storage,
+                        &Epoch(expected_oldest_epoch.0 - offset),
+                    )?;
                     if old.is_some() {
                         match new_oldest_value {
-                            Some(latest) => new_oldest_value = Some(latest + old.unwrap()),
+                            Some(latest) => {
+                                new_oldest_value = Some(latest + old.unwrap())
+                            }
                             None => new_oldest_value = old,
                         }
                     }
                 }
                 if let Some(new_oldest_value) = new_oldest_value {
                     // TODO we can add `contains_key` to LazyMap
-                    if data_handler.get(storage, &expected_oldest_epoch)?.is_none() {
+                    if data_handler
+                        .get(storage, &expected_oldest_epoch)?
+                        .is_none()
+                    {
                         data_handler.insert(
                             storage,
                             expected_oldest_epoch,

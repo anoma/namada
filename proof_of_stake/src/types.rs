@@ -5,13 +5,14 @@ use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::ops::Add;
+use std::ops::{Add, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
 use namada_core::ledger::storage_api::collections::LazyMap;
 use namada_core::types::address::Address;
 use namada_core::types::key::common;
-use namada_core::types::storage::Epoch;
+use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 
@@ -20,32 +21,35 @@ use crate::epoched::{
 };
 use crate::parameters::PosParams;
 
+// TODO: add this to the spec
+/// Stored positions of validators in active and inactive validator sets
+pub type ValidatorSetPositions_NEW = crate::epoched_new::NestedEpoched<
+    LazyMap<Address, Position>,
+    crate::epoched_new::OffsetPipelineLen,
+>;
+
 /// Epoched validator's consensus key.
 pub type ValidatorConsensusKeys_NEW = crate::epoched_new::Epoched<
     common::PublicKey,
     crate::epoched_new::OffsetPipelineLen,
-    0,
 >;
 
 /// Epoched validator's state.
 pub type ValidatorStates_NEW = crate::epoched_new::Epoched<
     ValidatorState,
     crate::epoched_new::OffsetPipelineLen,
-    0,
 >;
 
-/// Epoched active validator sets.
-pub type ActiveValidatorSets_NEW = crate::epoched_new::Epoched<
-    ValidatorSetNew,
-    crate::epoched_new::OffsetPipelineLen,
-    2,
->;
+pub type ValidatorPositionAddresses_NEW = LazyMap<Position, Address>;
 
-/// Epoched inactive validator sets.
-pub type InactiveValidatorSets_NEW = crate::epoched_new::Epoched<
-    ValidatorSetNew,
+/// New validator set construction, keyed by staked token amount
+pub type ValidatorSet_NEW =
+    NestedMap<token::Amount, ValidatorPositionAddresses_NEW>;
+
+/// Epoched validator sets.
+pub type ValidatorSets_NEW = crate::epoched_new::NestedEpoched<
+    ValidatorSet_NEW,
     crate::epoched_new::OffsetPipelineLen,
-    2,
 >;
 
 /// Epoched validator's deltas.
@@ -64,11 +68,13 @@ pub type TotalDeltas_NEW = crate::epoched_new::EpochedDelta<
     21,
 >;
 
+const u64_max: u64 = u64::MAX;
+
 /// Epoched validator commission rate
 pub type CommissionRates_NEW = crate::epoched_new::Epoched<
     Decimal,
     crate::epoched_new::OffsetPipelineLen,
-    2,
+    u64_max,
 >;
 
 /// Epoched validator's bonds
@@ -211,8 +217,55 @@ pub struct ValidatorSet {
     pub inactive: BTreeSet<WeightedValidator>,
 }
 
-// New Validator set construction
-pub type ValidatorSetNew = LazyMap<u64, Address>;
+#[derive(
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    Clone,
+    Copy,
+    BorshDeserialize,
+    BorshSchema,
+    BorshSerialize,
+)]
+pub struct Position(u64);
+
+impl KeySeg for Position {
+    fn parse(string: String) -> namada_core::types::storage::Result<Self>
+    where
+        Self: Sized,
+    {
+        let raw = u64::parse(string)?;
+        Ok(Self(raw))
+    }
+
+    fn raw(&self) -> String {
+        self.0.raw()
+    }
+
+    fn to_db_key(&self) -> namada_core::types::storage::DbKeySeg {
+        self.0.to_db_key()
+    }
+}
+
+impl Sub<Position> for Position {
+    type Output = Self;
+
+    fn sub(self, rhs: Position) -> Self::Output {
+        Position(self.0 - rhs.0)
+    }
+}
+
+impl Position {
+    pub const ONE: Position = Position(1_u64);
+
+    pub fn next(&self) -> Self {
+        Self(self.0.wrapping_add(1))
+    }
+}
 
 /// Validator's state.
 #[derive(

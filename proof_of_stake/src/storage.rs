@@ -27,7 +27,11 @@ const BOND_AMOUNT_STORAGE_KEY: &str = "bond_amount";
 const BOND_REMAINING_STORAGE_KEY: &str = "bond_remaining";
 const UNBOND_STORAGE_KEY: &str = "unbond_NEW";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set_NEW";
+const VALIDATOR_SETS_STORAGE_PREFIX: &str = "validator_set_NEW";
+const ACTIVE_VALIDATOR_SET_STORAGE_KEY: &str = "active";
+const INACTIVE_VALIDATOR_SET_STORAGE_KEY: &str = "inactive";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas_NEW";
+const VALIDATOR_SET_POSITIONS_KEY: &str = "validator_set_positions_NEW";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -333,6 +337,27 @@ pub fn validator_set_key() -> Key {
         .expect("Cannot obtain a storage key")
 }
 
+/// Storage prefix for validator sets.
+pub fn validator_sets_prefix() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&VALIDATOR_SETS_STORAGE_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for active validator set
+pub fn active_validator_set_key() -> Key {
+    validator_sets_prefix()
+        .push(&ACTIVE_VALIDATOR_SET_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for inactive validator set
+pub fn inactive_validator_set_key() -> Key {
+    validator_sets_prefix()
+        .push(&INACTIVE_VALIDATOR_SET_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Is storage key for a validator set?
 pub fn is_validator_set_key(key: &Key) -> bool {
     matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == VALIDATOR_SET_STORAGE_KEY)
@@ -361,6 +386,12 @@ pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
         },
         None => None,
     }
+}
+
+pub fn validator_set_positions_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&VALIDATOR_SET_POSITIONS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
 }
 
 impl<D, H> PosBase for Storage<D, H>

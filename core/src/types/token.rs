@@ -199,6 +199,24 @@ impl SubAssign for Amount {
     }
 }
 
+impl KeySeg for Amount {
+    fn parse(string: String) -> super::storage::Result<Self>
+    where
+        Self: Sized,
+    {
+        let micro = u64::parse(string)?;
+        Ok(Self { micro })
+    }
+
+    fn raw(&self) -> String {
+        self.micro.raw()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        self.micro.to_db_key()
+    }
+}
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum AmountParseError {

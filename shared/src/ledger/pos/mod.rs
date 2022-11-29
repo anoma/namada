@@ -59,7 +59,7 @@ pub fn init_genesis_storage_NEW<DB, H>(
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    namada_proof_of_stake::init_genesis_NEW(
+    namada_proof_of_stake::init_genesis_new(
         storage,
         params,
         validators,
