@@ -268,6 +268,70 @@ mod tests {
         decrypted_txs: Vec<TxBytes>,
     }
 
+    /// Check that at most 1/3 of the block space is
+    /// reserved for each kind of tx type, in the
+    /// allocator's common path.
+    #[test]
+    fn test_txs_are_evenly_split_across_block() {
+        const BLOCK_SIZE: u64 = 60;
+
+        // reserve block space for decrypted txs
+        let mut alloc = BlockSpaceAllocator::init(BLOCK_SIZE);
+
+        // assume we got ~1/3 encrypted txs at the prev block
+        assert!(alloc.try_alloc(&[0; 18]).is_ok());
+
+        // reserve block space for protocol txs
+        let mut alloc = alloc.next_state();
+
+        // the space we allotted to decrypted txs was shrunk to
+        // the total space we actually used up
+        assert_eq!(alloc.decrypted_txs.allotted_space_in_bytes, 18);
+
+        // check that the allotted space for protocol txs is correct
+        assert_eq!(21, (BLOCK_SIZE - 18) / 2);
+        assert_eq!(alloc.protocol_txs.allotted_space_in_bytes, 21);
+
+        // fill up the block space with protocol txs
+        assert!(alloc.try_alloc(&[0; 17]).is_ok());
+        assert_matches!(
+            alloc.try_alloc(&[0; (21 - 17) + 1]),
+            Err(AllocFailure::Rejected { .. })
+        );
+
+        // reserve block space for encrypted txs
+        let mut alloc = alloc.next_state_with_encrypted_txs();
+
+        // check that space was shrunk
+        assert_eq!(alloc.protocol_txs.allotted_space_in_bytes, 17);
+
+        // check that we reserve at most 1/3 of the block space to
+        // encrypted txs
+        assert_eq!(25, BLOCK_SIZE - 17 - 18);
+        assert_eq!(20, BLOCK_SIZE / 3);
+        assert_eq!(alloc.encrypted_txs.allotted_space_in_bytes, 20);
+
+        // fill up the block space with encrypted txs
+        assert!(alloc.try_alloc(&[0; 20]).is_ok());
+        assert_matches!(
+            alloc.try_alloc(&[0; 1]),
+            Err(AllocFailure::Rejected { .. })
+        );
+
+        // check that there is still remaining space left at the end
+        let mut alloc = alloc.next_state();
+        let remaining_space = alloc.block.allotted_space_in_bytes
+            - alloc.block.occupied_space_in_bytes;
+        assert_eq!(remaining_space, 5);
+
+        // fill up the remaining space
+        assert!(alloc.try_alloc(&[0; 5]).is_ok());
+        assert_matches!(
+            alloc.try_alloc(&[0; 1]),
+            Err(AllocFailure::Rejected { .. })
+        );
+    }
+
     proptest! {
         /// Check if we reject a tx when its respective bin
         /// capacity has been reached on a [`BlockSpaceAllocator`].
