@@ -9,6 +9,7 @@ pub mod internal;
 pub mod key;
 pub mod masp;
 pub mod storage;
+pub mod string_encoding;
 pub mod time;
 pub mod token;
 pub mod transaction;
