@@ -6,7 +6,7 @@ To start a local Namada ledger node, run:
 namada ledger
 ```
 
-Note that you need to have [joined a network](./getting-started.md) before you start the ledger. It throws an error if no network has been configured.
+> Note: You need to have [joined a network](./getting-started.md) before you start the ledger. It throws an error if no network has been configured.
 
 The node will attempt to connect to the persistent validator nodes and other peers in the network, and synchronize to the latest block.
 

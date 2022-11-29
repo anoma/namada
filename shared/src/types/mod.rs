@@ -13,6 +13,7 @@ pub mod index_set;
 pub mod internal;
 pub mod keccak;
 pub mod key;
+pub mod masp;
 pub mod storage;
 pub mod time;
 pub mod token;

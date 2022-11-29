@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::super::{AllocStatus, BlockSpaceAllocator};
+use super::super::{AllocFailure, BlockSpaceAllocator};
 use super::{
     BuildingEncryptedTxBatch, EncryptedTxBatchAllocator, FillingRemainingSpace,
     NextStateImpl, RemainingBatchAllocator, TryAlloc, WithEncryptedTxs,
@@ -11,7 +11,7 @@ impl TryAlloc
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>
 {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
         self.encrypted_txs.try_dump(tx)
     }
 }
@@ -19,7 +19,7 @@ impl TryAlloc
 impl NextStateImpl
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>
 {
-    type Next = BlockSpaceAllocator<FillingRemainingSpace<WithEncryptedTxs>>;
+    type Next = BlockSpaceAllocator<FillingRemainingSpace>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {
@@ -31,15 +31,15 @@ impl TryAlloc
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
 {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
-        AllocStatus::Rejected { tx, space_left: 0 }
+    fn try_alloc(&mut self, _tx: &[u8]) -> Result<(), AllocFailure> {
+        Err(AllocFailure::Rejected { bin_space_left: 0 })
     }
 }
 
 impl NextStateImpl
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
 {
-    type Next = BlockSpaceAllocator<FillingRemainingSpace<WithoutEncryptedTxs>>;
+    type Next = BlockSpaceAllocator<FillingRemainingSpace>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {
@@ -50,7 +50,7 @@ impl NextStateImpl
 #[inline]
 fn next_state<Mode>(
     mut alloc: BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
-) -> BlockSpaceAllocator<FillingRemainingSpace<Mode>> {
+) -> BlockSpaceAllocator<FillingRemainingSpace> {
     alloc.encrypted_txs.shrink_to_fit();
 
     // reserve space for any remaining txs

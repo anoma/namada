@@ -18,6 +18,9 @@ pub async fn main() -> Result<()> {
                 Sub::TxTransfer(TxTransfer(args)) => {
                     tx::submit_transfer(ctx, args).await;
                 }
+                Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
+                    tx::submit_ibc_transfer(ctx, args).await;
+                }
                 Sub::TxUpdateVp(TxUpdateVp(args)) => {
                     tx::submit_update_vp(ctx, args).await;
                 }
@@ -49,6 +52,12 @@ pub async fn main() -> Result<()> {
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
                     rpc::query_epoch(args).await;
+                }
+                Sub::QueryTransfers(QueryTransfers(args)) => {
+                    rpc::query_transfers(ctx, args).await;
+                }
+                Sub::QueryConversions(QueryConversions(args)) => {
+                    rpc::query_conversions(ctx, args).await;
                 }
                 Sub::QueryBlock(QueryBlock(args)) => {
                     rpc::query_block(args).await;

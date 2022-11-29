@@ -463,9 +463,9 @@ where
                     info: "Received more decrypted txs than expected".into(),
                 },
             },
-            TxType::Wrapper(wrapper) => {
+            TxType::Wrapper(tx) => {
                 // validate the ciphertext via Ferveo
-                if !wrapper.validate_ciphertext() {
+                if !tx.validate_ciphertext() {
                     TxResult {
                         code: ErrorCodes::InvalidTx.into(),
                         info: format!(
@@ -474,12 +474,20 @@ where
                         ),
                     }
                 } else {
+                    // If the public key corresponds to the MASP sentinel
+                    // transaction key, then the fee payer is effectively
+                    // the MASP, otherwise derive
+                    // the payer from public key.
+                    let fee_payer = if tx.pk != masp_tx_key().ref_to() {
+                        tx.fee_payer()
+                    } else {
+                        masp()
+                    };
                     // check that the fee payer has sufficient balance
-                    let balance = self
-                        .storage
-                        .get_balance(&wrapper.fee.token, &wrapper.fee_payer());
+                    let balance =
+                        self.storage.get_balance(&tx.fee.token, &fee_payer);
 
-                    if wrapper.fee.amount <= balance {
+                    if tx.fee.amount <= balance {
                         TxResult {
                             code: ErrorCodes::Ok.into(),
                             info: "Process proposal accepted this transaction"

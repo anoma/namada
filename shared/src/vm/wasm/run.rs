@@ -17,7 +17,7 @@ use crate::ledger::storage::{self, Storage};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::internal::HostEnvResult;
-use crate::types::storage::Key;
+use crate::types::storage::{Key, TxIndex};
 use crate::vm::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::types::VpInput;
@@ -71,10 +71,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Execute a transaction code. Returns the set verifiers addresses requested by
 /// the transaction.
+#[allow(clippy::too_many_arguments)]
 pub fn tx<DB, H, CA>(
     storage: &Storage<DB, H>,
     write_log: &mut WriteLog,
     gas_meter: &mut BlockGasMeter,
+    tx_index: &TxIndex,
     tx_code: impl AsRef<[u8]>,
     tx_data: impl AsRef<[u8]>,
     vp_wasm_cache: &mut VpCache<CA>,
@@ -101,6 +103,7 @@ where
         write_log,
         &mut iterators,
         gas_meter,
+        tx_index,
         &mut verifiers,
         &mut result_buffer,
         vp_wasm_cache,
@@ -156,6 +159,7 @@ where
 pub fn vp<DB, H, CA>(
     vp_code: impl AsRef<[u8]>,
     tx: &Tx,
+    tx_index: &TxIndex,
     address: &Address,
     storage: &Storage<DB, H>,
     write_log: &WriteLog,
@@ -197,6 +201,7 @@ where
         write_log,
         gas_meter,
         tx,
+        tx_index,
         &mut iterators,
         verifiers,
         &mut result_buffer,
@@ -466,6 +471,7 @@ mod tests {
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
+        let tx_index = TxIndex::default();
 
         // This code will allocate memory of the given size
         let tx_code =
@@ -485,6 +491,7 @@ mod tests {
             &storage,
             &mut write_log,
             &mut gas_meter,
+            &tx_index,
             tx_code.clone(),
             tx_data,
             &mut vp_cache,
@@ -499,6 +506,7 @@ mod tests {
             &storage,
             &mut write_log,
             &mut gas_meter,
+            &tx_index,
             tx_code,
             tx_data,
             &mut vp_cache,
@@ -520,6 +528,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
+        let tx_index = TxIndex::default();
 
         // This code will call `eval` with the other VP below
         let vp_eval = std::fs::read(VP_EVAL_WASM).expect("cannot load wasm");
@@ -545,6 +554,7 @@ mod tests {
         let passed = vp(
             vp_eval.clone(),
             &tx,
+            &tx_index,
             &addr,
             &storage,
             &write_log,
@@ -571,6 +581,7 @@ mod tests {
         let passed = vp(
             vp_eval,
             &tx,
+            &tx_index,
             &addr,
             &storage,
             &write_log,
@@ -594,6 +605,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
+        let tx_index = TxIndex::default();
 
         // This code will allocate memory of the given size
         let vp_code =
@@ -610,6 +622,7 @@ mod tests {
         let result = vp(
             vp_code.clone(),
             &tx,
+            &tx_index,
             &addr,
             &storage,
             &write_log,
@@ -627,6 +640,7 @@ mod tests {
         let error = vp(
             vp_code,
             &tx,
+            &tx_index,
             &addr,
             &storage,
             &write_log,
@@ -647,6 +661,7 @@ mod tests {
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
+        let tx_index = TxIndex::default();
 
         let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
 
@@ -665,6 +680,7 @@ mod tests {
             &storage,
             &mut write_log,
             &mut gas_meter,
+            &tx_index,
             tx_no_op,
             tx_data,
             &mut vp_cache,
@@ -699,6 +715,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
+        let tx_index = TxIndex::default();
 
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
@@ -715,6 +732,7 @@ mod tests {
         let result = vp(
             vp_code,
             &tx,
+            &tx_index,
             &addr,
             &storage,
             &write_log,
@@ -752,6 +770,7 @@ mod tests {
         let mut storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
+        let tx_index = TxIndex::default();
 
         let tx_read_key =
             std::fs::read(TX_READ_STORAGE_KEY_WASM).expect("cannot load wasm");
@@ -776,6 +795,7 @@ mod tests {
             &storage,
             &mut write_log,
             &mut gas_meter,
+            &tx_index,
             tx_read_key,
             tx_data,
             &mut vp_cache,
@@ -797,6 +817,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
+        let tx_index = TxIndex::default();
 
         let vp_read_key =
             std::fs::read(VP_READ_STORAGE_KEY_WASM).expect("cannot load wasm");
@@ -818,6 +839,7 @@ mod tests {
         let error = vp(
             vp_read_key,
             &tx,
+            &tx_index,
             &addr,
             &storage,
             &write_log,
@@ -843,6 +865,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new(0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
+        let tx_index = TxIndex::default();
 
         // This code will call `eval` with the other VP below
         let vp_eval = std::fs::read(VP_EVAL_WASM).expect("cannot load wasm");
@@ -872,6 +895,7 @@ mod tests {
         let passed = vp(
             vp_eval,
             &tx,
+            &tx_index,
             &addr,
             &storage,
             &write_log,
@@ -920,6 +944,7 @@ mod tests {
         .into_owned();
 
         let tx_data = vec![];
+        let tx_index = TxIndex::default();
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
         let mut gas_meter = BlockGasMeter::default();
@@ -931,6 +956,7 @@ mod tests {
             &storage,
             &mut write_log,
             &mut gas_meter,
+            &tx_index,
             tx_code,
             tx_data,
             &mut vp_cache,
@@ -968,6 +994,7 @@ mod tests {
         .expect("unexpected error converting wat2wasm").into_owned();
 
         let tx = Tx::new(vec![], None);
+        let tx_index = TxIndex::default();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
@@ -978,6 +1005,7 @@ mod tests {
         vp(
             vp_code,
             &tx,
+            &tx_index,
             &addr,
             &storage,
             &write_log,

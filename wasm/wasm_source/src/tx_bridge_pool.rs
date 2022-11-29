@@ -19,6 +19,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         &address::nam(),
         None,
         amount,
+        &None,
+        &None,
     )?;
     let TransferToEthereum {
         ref asset,
@@ -35,6 +37,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
             &address::nam(),
             None,
             amount,
+            &None,
+            &None,
         )?;
     } else {
         // Otherwise we escrow ERC20 tokens.
@@ -46,6 +50,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
             &eth_bridge::ADDRESS,
             Some(sub_prefix),
             amount,
+            &None,
+            &None,
         )?;
     }
     // add transfer into the pool

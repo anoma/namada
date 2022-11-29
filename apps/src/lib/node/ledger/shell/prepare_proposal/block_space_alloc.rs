@@ -16,17 +16,20 @@
 //! In the current implementation, we allocate space for transactions
 //! in the following order of preference:
 //!
-//! - First, we allocate space for DKG decrypted txs.
-//! - Next, we allocate space for protocol txs. Protocol txs get 1/3 of the
-//!   block space allotted to them.
-//! - Finally, we allocate space for DKG encrypted txs.
-//! - If any space remains, we try to fit other smaller txs in the block.
+//! - First, we allot space for DKG decrypted txs. Decrypted txs take up as much
+//!   space as needed. We will see, shortly, why in practice this is fine.
+//! - Next, we allot space for protocol txs. Protocol txs get half of the
+//!   remaining block space allotted to them.
+//! - Finally, we allot space for DKG encrypted txs. We allow DKG encrypted txs
+//!   to take up at most 1/3 of the total block space.
+//! - If any space remains, we try to fit any leftover protocol txs in the
+//!   block.
 //!
-//! Since decrypted txs will utilize at most as much space as
-//! encrypted txs will utilize, and we allocate 1/3 of space
-//! that has already been taken up by decrypted txs to protocol
-//! txs, we roughly divide the block space in 3 for each kind
-//! of major tx type.
+//! Since at some fixed height `H` decrypted txs only take up as
+//! much space as the encrypted txs from height `H - 1`, and we
+//! restrict the space of encrypted txs to at most 1/3 of the
+//! total block space, we roughly divide the Tendermint block
+//! space in 3, for each major type of tx.
 
 pub mod states;
 
@@ -54,16 +57,18 @@ use std::marker::PhantomData;
 
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 
-/// All status responses from trying to allocate block space for a tx.
+/// Block space allocation failure status responses.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum AllocStatus<'tx> {
-    /// The transaction is able to be included in the current block.
-    Accepted,
+pub enum AllocFailure {
     /// The transaction can only be included in an upcoming block.
-    Rejected { tx: &'tx [u8], space_left: u64 },
+    ///
+    /// We return the space left in the tx bin for logging purposes.
+    Rejected { bin_space_left: u64 },
     /// The transaction would overflow the allotted bin space,
     /// therefore it needs to be handled separately.
-    OverflowsBin { tx: &'tx [u8], bin_size: u64 },
+    ///
+    /// We return the size of the tx bin for logging purposes.
+    OverflowsBin { bin_size: u64 },
 }
 
 /// Allotted space for a batch of transactions in some proposed block,
@@ -197,19 +202,19 @@ impl TxBin {
     ///
     /// Signal the caller if the tx is larger than its max
     /// allotted bin space.
-    fn try_dump<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_dump(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
         let tx_len = tx.len() as u64;
         if tx_len > self.allotted_space_in_bytes {
             let bin_size = self.allotted_space_in_bytes;
-            return AllocStatus::OverflowsBin { tx, bin_size };
+            return Err(AllocFailure::OverflowsBin { bin_size });
         }
         let occupied = self.occupied_space_in_bytes + tx_len;
         if occupied <= self.allotted_space_in_bytes {
             self.occupied_space_in_bytes = occupied;
-            AllocStatus::Accepted
+            Ok(())
         } else {
-            let space_left = self.space_left_in_bytes();
-            AllocStatus::Rejected { tx, space_left }
+            let bin_space_left = self.space_left_in_bytes();
+            Err(AllocFailure::Rejected { bin_space_left })
         }
     }
 }
@@ -251,7 +256,10 @@ mod tests {
     use assert_matches::assert_matches;
     use proptest::prelude::*;
 
-    use super::states::{NextState, NextStateWithEncryptedTxs, TryAlloc};
+    use super::states::{
+        NextState, NextStateWithEncryptedTxs, NextStateWithoutEncryptedTxs,
+        TryAlloc,
+    };
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -262,6 +270,83 @@ mod tests {
         protocol_txs: Vec<TxBytes>,
         encrypted_txs: Vec<TxBytes>,
         decrypted_txs: Vec<TxBytes>,
+    }
+
+    /// Check that at most 1/3 of the block space is
+    /// reserved for each kind of tx type, in the
+    /// allocator's common path.
+    #[test]
+    fn test_txs_are_evenly_split_across_block() {
+        const BLOCK_SIZE: u64 = 60;
+
+        // reserve block space for decrypted txs
+        let mut alloc = BlockSpaceAllocator::init(BLOCK_SIZE);
+
+        // assume we got ~1/3 encrypted txs at the prev block
+        assert!(alloc.try_alloc(&[0; 18]).is_ok());
+
+        // reserve block space for protocol txs
+        let mut alloc = alloc.next_state();
+
+        // the space we allotted to decrypted txs was shrunk to
+        // the total space we actually used up
+        assert_eq!(alloc.decrypted_txs.allotted_space_in_bytes, 18);
+
+        // check that the allotted space for protocol txs is correct
+        assert_eq!(21, (BLOCK_SIZE - 18) / 2);
+        assert_eq!(alloc.protocol_txs.allotted_space_in_bytes, 21);
+
+        // fill up the block space with protocol txs
+        assert!(alloc.try_alloc(&[0; 17]).is_ok());
+        assert_matches!(
+            alloc.try_alloc(&[0; (21 - 17) + 1]),
+            Err(AllocFailure::Rejected { .. })
+        );
+
+        // reserve block space for encrypted txs
+        let mut alloc = alloc.next_state_with_encrypted_txs();
+
+        // check that space was shrunk
+        assert_eq!(alloc.protocol_txs.allotted_space_in_bytes, 17);
+
+        // check that we reserve at most 1/3 of the block space to
+        // encrypted txs
+        assert_eq!(25, BLOCK_SIZE - 17 - 18);
+        assert_eq!(20, BLOCK_SIZE / 3);
+        assert_eq!(alloc.encrypted_txs.allotted_space_in_bytes, 20);
+
+        // fill up the block space with encrypted txs
+        assert!(alloc.try_alloc(&[0; 20]).is_ok());
+        assert_matches!(
+            alloc.try_alloc(&[0; 1]),
+            Err(AllocFailure::Rejected { .. })
+        );
+
+        // check that there is still remaining space left at the end
+        let mut alloc = alloc.next_state();
+        let remaining_space = alloc.block.allotted_space_in_bytes
+            - alloc.block.occupied_space_in_bytes;
+        assert_eq!(remaining_space, 5);
+
+        // fill up the remaining space
+        assert!(alloc.try_alloc(&[0; 5]).is_ok());
+        assert_matches!(
+            alloc.try_alloc(&[0; 1]),
+            Err(AllocFailure::Rejected { .. })
+        );
+    }
+
+    // Test that we cannot include encrypted txs in a block
+    // when the state invariants banish them from inclusion.
+    #[test]
+    fn test_encrypted_txs_are_rejected() {
+        let alloc = BlockSpaceAllocator::init(1234);
+        let alloc = alloc.next_state();
+        let mut alloc = alloc.next_state_without_encrypted_txs();
+        assert_matches!(
+            alloc.try_alloc(&[0; 1]),
+            Err(AllocFailure::Rejected { .. })
+        );
     }
 
     proptest! {
@@ -302,7 +387,7 @@ mod tests {
         // make sure we can't dump any new decrypted txs in the bin
         assert_matches!(
             bins.try_alloc(b"arbitrary tx bytes"),
-            AllocStatus::Rejected { .. }
+            Err(AllocFailure::Rejected { .. })
         );
     }
 
@@ -339,10 +424,7 @@ mod tests {
             new_size < bin.allotted_space_in_bytes
         });
         for tx in decrypted_txs {
-            assert_matches!(
-                bins.borrow_mut().try_alloc(&tx),
-                AllocStatus::Accepted
-            );
+            assert!(bins.borrow_mut().try_alloc(&tx).is_ok());
         }
 
         let bins = RefCell::new(bins.into_inner().next_state());
@@ -352,10 +434,7 @@ mod tests {
             new_size < bin.allotted_space_in_bytes
         });
         for tx in protocol_txs {
-            assert_matches!(
-                bins.borrow_mut().try_alloc(&tx),
-                AllocStatus::Accepted
-            );
+            assert!(bins.borrow_mut().try_alloc(&tx).is_ok());
         }
 
         let bins =
@@ -366,10 +445,7 @@ mod tests {
             new_size < bin.allotted_space_in_bytes
         });
         for tx in encrypted_txs {
-            assert_matches!(
-                bins.borrow_mut().try_alloc(&tx),
-                AllocStatus::Accepted
-            );
+            assert!(bins.borrow_mut().try_alloc(&tx).is_ok());
         }
     }
 

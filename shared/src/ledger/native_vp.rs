@@ -16,7 +16,7 @@ use crate::ledger::{storage, vp_env};
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
-use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key};
+use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::WasmCacheAccess;
 
@@ -66,6 +66,9 @@ where
     pub write_log: &'a WriteLog,
     /// The transaction code is used for signature verification
     pub tx: &'a Tx,
+    /// The transaction index is used to obtain the shielded transaction's
+    /// parent
+    pub tx_index: &'a TxIndex,
     /// The storage keys that have been changed. Used for calls to `eval`.
     pub keys_changed: &'a BTreeSet<Key>,
     /// The verifiers whose validity predicates should be triggered. Used for
@@ -116,6 +119,7 @@ where
         storage: &'a Storage<DB, H>,
         write_log: &'a WriteLog,
         tx: &'a Tx,
+        tx_index: &'a TxIndex,
         gas_meter: VpGasMeter,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
@@ -129,6 +133,7 @@ where
             storage,
             write_log,
             tx,
+            tx_index,
             keys_changed,
             verifiers,
             #[cfg(feature = "wasm-runtime")]
@@ -232,6 +237,10 @@ where
     fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
         self.ctx.get_block_epoch()
     }
+
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+        self.ctx.get_tx_index().into_storage_result()
+    }
 }
 
 impl<'view, 'a, DB, H, CA> StorageRead<'view>
@@ -313,6 +322,10 @@ where
     fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
         self.ctx.get_block_epoch()
     }
+
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+        self.ctx.get_tx_index().into_storage_result()
+    }
 }
 
 impl<'view, 'a: 'view, DB, H, CA> VpEnv<'view> for Ctx<'a, DB, H, CA>
@@ -383,6 +396,11 @@ where
             .into_storage_result()
     }
 
+    fn get_tx_index(&'view self) -> Result<TxIndex, storage_api::Error> {
+        vp_env::get_tx_index(&mut *self.gas_meter.borrow_mut(), self.tx_index)
+            .into_storage_result()
+    }
+
     fn iter_prefix(
         &'view self,
         prefix: &Key,
@@ -435,6 +453,7 @@ where
                 self.write_log,
                 &mut *self.gas_meter.borrow_mut(),
                 self.tx,
+                self.tx_index,
                 &mut iterators,
                 self.verifiers,
                 &mut result_buffer,
@@ -473,9 +492,66 @@ where
         Ok(self.tx.verify_sig(pk, sig).is_ok())
     }
 
+    fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {
+        unimplemented!("no masp native vp")
+    }
+
     fn get_tx_code_hash(&self) -> Result<Hash, storage_api::Error> {
         vp_env::get_tx_code_hash(&mut *self.gas_meter.borrow_mut(), self.tx)
             .into_storage_result()
+    }
+
+    fn read_pre<T: borsh::BorshDeserialize>(
+        &'view self,
+        key: &Key,
+    ) -> Result<Option<T>, storage_api::Error> {
+        self.pre().read(key).map_err(Into::into)
+    }
+
+    fn read_bytes_pre(
+        &'view self,
+        key: &Key,
+    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
+        self.pre().read_bytes(key).map_err(Into::into)
+    }
+
+    fn read_post<T: borsh::BorshDeserialize>(
+        &'view self,
+        key: &Key,
+    ) -> Result<Option<T>, storage_api::Error> {
+        self.post().read(key).map_err(Into::into)
+    }
+
+    fn read_bytes_post(
+        &'view self,
+        key: &Key,
+    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
+        self.post().read_bytes(key).map_err(Into::into)
+    }
+
+    fn has_key_pre(&'view self, key: &Key) -> Result<bool, storage_api::Error> {
+        self.pre().has_key(key).map_err(Into::into)
+    }
+
+    fn has_key_post(
+        &'view self,
+        key: &Key,
+    ) -> Result<bool, storage_api::Error> {
+        self.post().has_key(key).map_err(Into::into)
+    }
+
+    fn iter_pre_next(
+        &'view self,
+        iter: &mut Self::PrefixIter,
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        self.pre().iter_next(iter).map_err(Into::into)
+    }
+
+    fn iter_post_next(
+        &'view self,
+        iter: &mut Self::PrefixIter,
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        self.post().iter_next(iter).map_err(Into::into)
     }
 }
 

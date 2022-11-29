@@ -140,6 +140,8 @@ pub mod main {
             token,
             sub_prefix: _,
             amount,
+            key: _,
+            shielded: _,
         } = transfer;
         let target_key = token::balance_key(&token, &target);
         let mut target_bal: token::Amount =

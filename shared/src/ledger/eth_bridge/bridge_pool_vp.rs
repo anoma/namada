@@ -411,6 +411,7 @@ mod test_bridge_pool_vp {
     use crate::types::ethereum_events::EthAddress;
     use crate::types::hash::Hash;
     use crate::types::key::{common, ed25519, SecretKey, SigScheme};
+    use crate::types::storage::TxIndex;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 
@@ -591,6 +592,7 @@ mod test_bridge_pool_vp {
             storage,
             write_log,
             tx,
+            &TxIndex(0),
             VpGasMeter::new(0u64),
             keys_changed,
             verifiers,

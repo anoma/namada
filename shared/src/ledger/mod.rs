@@ -5,6 +5,7 @@ pub mod events;
 pub mod gas;
 pub mod governance;
 pub mod ibc;
+pub mod masp;
 pub mod native_vp;
 pub mod parameters;
 pub mod pos;

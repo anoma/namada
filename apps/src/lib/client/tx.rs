@@ -1,33 +1,77 @@
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
-use std::fs::File;
+use std::fmt::Debug;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
+use std::ops::Deref;
+use std::path::PathBuf;
+use std::time::Duration;
 
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Either::*;
+use masp_primitives::asset_type::AssetType;
+use masp_primitives::consensus::{BranchId, TestNetwork};
+use masp_primitives::convert::AllowedConversion;
+use masp_primitives::ff::PrimeField;
+use masp_primitives::group::cofactor::CofactorGroup;
+use masp_primitives::keys::FullViewingKey;
+use masp_primitives::legacy::TransparentAddress;
+use masp_primitives::merkle_tree::{
+    CommitmentTree, IncrementalWitness, MerklePath,
+};
+use masp_primitives::note_encryption::*;
+use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
+use masp_primitives::sapling::Node;
+use masp_primitives::transaction::builder::{self, secp256k1, *};
+use masp_primitives::transaction::components::{Amount, OutPoint, TxOut};
+use masp_primitives::transaction::Transaction;
+use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
+use masp_proofs::prover::LocalTxProver;
+use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use namada::ibc::signer::Signer;
+use namada::ibc::timestamp::Timestamp as IbcTimestamp;
+use namada::ibc::tx_msg::Msg;
+use namada::ibc::Height as IbcHeight;
+use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::masp;
 use namada::ledger::pos::{BondId, Bonds, Unbonds};
 use namada::proto::Tx;
-use namada::types::address::{nam, Address};
+use namada::types::address::{masp, masp_tx_key, nam, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
 use namada::types::key::{self, *};
-use namada::types::storage::{Epoch, Key};
+use namada::types::masp::{PaymentAddress, TransferTarget};
+use namada::types::storage::{
+    self, BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
+};
+use namada::types::time::DateTimeUtc;
+use namada::types::token::{
+    Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
+};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{address, token};
 use namada::{ledger, vm};
-use tokio::time::{Duration, Instant};
+use rand_core::{CryptoRng, OsRng, RngCore};
+use sha2::Digest;
+use tokio::time::Instant;
 
 use super::rpc;
+use super::types::ShieldedTransferContext;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
-use crate::client::signing::{find_keypair, sign_tx};
+use crate::client::rpc::{query_conversion, query_storage_value};
+use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
+use crate::client::types::ParsedTxTransferArgs;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
@@ -40,6 +84,7 @@ const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+const TX_IBC_WASM: &str = "tx_ibc.wasm";
 const VP_USER_WASM: &str = "vp_user.wasm";
 const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
@@ -60,7 +105,8 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
     let tx = Tx::new(tx_code, data);
-    let (ctx, initialized_accounts) = process_tx(ctx, &args.tx, tx, None).await;
+    let (ctx, initialized_accounts) =
+        process_tx(ctx, &args.tx, tx, TxSigningKey::None).await;
     save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
@@ -115,7 +161,7 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, Some(&args.addr)).await;
+    process_tx(ctx, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
@@ -141,7 +187,8 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
 
     let tx = Tx::new(tx_code, Some(data));
     let (ctx, initialized_accounts) =
-        process_tx(ctx, &args.tx, tx, Some(&args.source)).await;
+        process_tx(ctx, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
+            .await;
     save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
@@ -187,7 +234,7 @@ pub async fn submit_init_validator(
 
     let consensus_key = ctx
         .get_opt_cached(&consensus_key)
-        .map(|key| match *key {
+        .map(|key| match key {
             common::SecretKey::Ed25519(_) => key,
             common::SecretKey::Secp256k1(_) => {
                 eprintln!("Consensus key can only be ed25519");
@@ -208,7 +255,7 @@ pub async fn submit_init_validator(
 
     let eth_cold_key = ctx
         .get_opt_cached(&eth_cold_key)
-        .map(|key| match *key {
+        .map(|key| match key {
             common::SecretKey::Secp256k1(_) => key,
             common::SecretKey::Ed25519(_) => {
                 eprintln!("Eth cold key can only be secp256k1");
@@ -229,7 +276,7 @@ pub async fn submit_init_validator(
 
     let eth_hot_key = ctx
         .get_opt_cached(&eth_hot_key)
-        .map(|key| match *key {
+        .map(|key| match key {
             common::SecretKey::Secp256k1(_) => key,
             common::SecretKey::Ed25519(_) => {
                 eprintln!("Eth hot key can only be secp256k1");
@@ -329,7 +376,8 @@ pub async fn submit_init_validator(
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
     let (mut ctx, initialized_accounts) =
-        process_tx(ctx, &tx_args, tx, Some(&source)).await;
+        process_tx(ctx, &tx_args, tx, TxSigningKey::WalletAddress(source))
+            .await;
     if !tx_args.dry_run {
         let (validator_address_alias, validator_address, rewards_address_alias) =
             match &initialized_accounts[..] {
@@ -430,7 +478,1266 @@ pub async fn submit_init_validator(
     }
 }
 
-pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
+/// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
+pub fn to_viewing_key(esk: &ExtendedSpendingKey) -> FullViewingKey {
+    ExtendedFullViewingKey::from(esk).fvk
+}
+
+/// Generate a valid diversifier, i.e. one that has a diversified base. Return
+/// also this diversified base.
+pub fn find_valid_diversifier<R: RngCore + CryptoRng>(
+    rng: &mut R,
+) -> (Diversifier, masp_primitives::jubjub::SubgroupPoint) {
+    let mut diversifier;
+    let g_d;
+    // Keep generating random diversifiers until one has a diversified base
+    loop {
+        let mut d = [0; 11];
+        rng.fill_bytes(&mut d);
+        diversifier = Diversifier(d);
+        if let Some(val) = diversifier.g_d() {
+            g_d = val;
+            break;
+        }
+    }
+    (diversifier, g_d)
+}
+
+/// Determine if using the current note would actually bring us closer to our
+/// target
+pub fn is_amount_required(src: Amount, dest: Amount, delta: Amount) -> bool {
+    if delta > Amount::zero() {
+        let gap = dest - src;
+        for (asset_type, value) in gap.components() {
+            if *value > 0 && delta[asset_type] > 0 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// An extension of Option's cloned method for pair types
+fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
+    (a.clone(), b.clone())
+}
+
+/// Errors that can occur when trying to retrieve pinned transaction
+#[derive(PartialEq, Eq)]
+pub enum PinnedBalanceError {
+    /// No transaction has yet been pinned to the given payment address
+    NoTransactionPinned,
+    /// The supplied viewing key does not recognize payments to given address
+    InvalidViewingKey,
+}
+
+/// Represents the amount used of different conversions
+pub type Conversions =
+    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, i64)>;
+
+/// Represents the changes that were made to a list of transparent accounts
+pub type TransferDelta = HashMap<Address, Amount<Address>>;
+
+/// Represents the changes that were made to a list of shielded accounts
+pub type TransactionDelta = HashMap<ViewingKey, Amount>;
+
+/// Represents the current state of the shielded pool from the perspective of
+/// the chosen viewing keys.
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+pub struct ShieldedContext {
+    /// Location where this shielded context is saved
+    #[borsh_skip]
+    context_dir: PathBuf,
+    /// The last transaction index to be processed in this context
+    last_txidx: u64,
+    /// The commitment tree produced by scanning all transactions up to tx_pos
+    tree: CommitmentTree<Node>,
+    /// Maps viewing keys to applicable note positions
+    pos_map: HashMap<ViewingKey, HashSet<usize>>,
+    /// Maps a nullifier to the note position to which it applies
+    nf_map: HashMap<[u8; 32], usize>,
+    /// Maps note positions to their corresponding notes
+    note_map: HashMap<usize, Note>,
+    /// Maps note positions to their corresponding memos
+    memo_map: HashMap<usize, Memo>,
+    /// Maps note positions to the diversifier of their payment address
+    div_map: HashMap<usize, Diversifier>,
+    /// Maps note positions to their witness (used to make merkle paths)
+    witness_map: HashMap<usize, IncrementalWitness<Node>>,
+    /// Tracks what each transaction does to various account balances
+    delta_map: BTreeMap<
+        (BlockHeight, TxIndex),
+        (Epoch, TransferDelta, TransactionDelta),
+    >,
+    /// The set of note positions that have been spent
+    spents: HashSet<usize>,
+    /// Maps asset types to their decodings
+    asset_types: HashMap<AssetType, (Address, Epoch)>,
+    /// Maps note positions to their corresponding viewing keys
+    vk_map: HashMap<usize, ViewingKey>,
+}
+
+/// Shielded context file name
+const FILE_NAME: &str = "shielded.dat";
+const TMP_FILE_NAME: &str = "shielded.tmp";
+
+/// Default implementation to ease construction of TxContexts. Derive cannot be
+/// used here due to CommitmentTree not implementing Default.
+impl Default for ShieldedContext {
+    fn default() -> ShieldedContext {
+        ShieldedContext {
+            context_dir: PathBuf::from(FILE_NAME),
+            last_txidx: u64::default(),
+            tree: CommitmentTree::empty(),
+            pos_map: HashMap::default(),
+            nf_map: HashMap::default(),
+            note_map: HashMap::default(),
+            memo_map: HashMap::default(),
+            div_map: HashMap::default(),
+            witness_map: HashMap::default(),
+            spents: HashSet::default(),
+            delta_map: BTreeMap::default(),
+            asset_types: HashMap::default(),
+            vk_map: HashMap::default(),
+        }
+    }
+}
+
+impl ShieldedContext {
+    /// Try to load the last saved shielded context from the given context
+    /// directory. If this fails, then leave the current context unchanged.
+    pub fn load(&mut self) -> std::io::Result<()> {
+        // Try to load shielded context from file
+        let mut ctx_file = File::open(self.context_dir.join(FILE_NAME))?;
+        let mut bytes = Vec::new();
+        ctx_file.read_to_end(&mut bytes)?;
+        let mut new_ctx = Self::deserialize(&mut &bytes[..])?;
+        // Associate the originating context directory with the
+        // shielded context under construction
+        new_ctx.context_dir = self.context_dir.clone();
+        *self = new_ctx;
+        Ok(())
+    }
+
+    /// Save this shielded context into its associated context directory
+    pub fn save(&self) -> std::io::Result<()> {
+        // TODO: use mktemp crate?
+        let tmp_path = self.context_dir.join(TMP_FILE_NAME);
+        {
+            // First serialize the shielded context into a temporary file.
+            // Inability to create this file implies a simultaneuous write is in
+            // progress. In this case, immediately fail. This is unproblematic
+            // because the data intended to be stored can always be re-fetched
+            // from the blockchain.
+            let mut ctx_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(tmp_path.clone())?;
+            let mut bytes = Vec::new();
+            self.serialize(&mut bytes)
+                .expect("cannot serialize shielded context");
+            ctx_file.write_all(&bytes[..])?;
+        }
+        // Atomically update the old shielded context file with new data.
+        // Atomicity is required to prevent other client instances from reading
+        // corrupt data.
+        std::fs::rename(tmp_path.clone(), self.context_dir.join(FILE_NAME))?;
+        // Finally, remove our temporary file to allow future saving of shielded
+        // contexts.
+        std::fs::remove_file(tmp_path)?;
+        Ok(())
+    }
+
+    /// Merge data from the given shielded context into the current shielded
+    /// context. It must be the case that the two shielded contexts share the
+    /// same last transaction ID and share identical commitment trees.
+    pub fn merge(&mut self, new_ctx: ShieldedContext) {
+        debug_assert_eq!(self.last_txidx, new_ctx.last_txidx);
+        // Merge by simply extending maps. Identical keys should contain
+        // identical values, so overwriting should not be problematic.
+        self.pos_map.extend(new_ctx.pos_map);
+        self.nf_map.extend(new_ctx.nf_map);
+        self.note_map.extend(new_ctx.note_map);
+        self.memo_map.extend(new_ctx.memo_map);
+        self.div_map.extend(new_ctx.div_map);
+        self.witness_map.extend(new_ctx.witness_map);
+        self.spents.extend(new_ctx.spents);
+        self.asset_types.extend(new_ctx.asset_types);
+        self.vk_map.extend(new_ctx.vk_map);
+        // The deltas are the exception because different keys can reveal
+        // different parts of the same transaction. Hence each delta needs to be
+        // merged separately.
+        for ((height, idx), (ep, ntfer_delta, ntx_delta)) in new_ctx.delta_map {
+            let (_ep, tfer_delta, tx_delta) = self
+                .delta_map
+                .entry((height, idx))
+                .or_insert((ep, TransferDelta::new(), TransactionDelta::new()));
+            tfer_delta.extend(ntfer_delta);
+            tx_delta.extend(ntx_delta);
+        }
+    }
+
+    /// Fetch the current state of the multi-asset shielded pool into a
+    /// ShieldedContext
+    pub async fn fetch(
+        &mut self,
+        ledger_address: &TendermintAddress,
+        sks: &[ExtendedSpendingKey],
+        fvks: &[ViewingKey],
+    ) {
+        // First determine which of the keys requested to be fetched are new.
+        // Necessary because old transactions will need to be scanned for new
+        // keys.
+        let mut unknown_keys = Vec::new();
+        for esk in sks {
+            let vk = to_viewing_key(esk).vk;
+            if !self.pos_map.contains_key(&vk) {
+                unknown_keys.push(vk);
+            }
+        }
+        for vk in fvks {
+            if !self.pos_map.contains_key(vk) {
+                unknown_keys.push(*vk);
+            }
+        }
+
+        // If unknown keys are being used, we need to scan older transactions
+        // for any unspent notes
+        let (txs, mut tx_iter);
+        if !unknown_keys.is_empty() {
+            // Load all transactions accepted until this point
+            txs = Self::fetch_shielded_transfers(ledger_address, 0).await;
+            tx_iter = txs.iter();
+            // Do this by constructing a shielding context only for unknown keys
+            let mut tx_ctx = ShieldedContext::new(self.context_dir.clone());
+            for vk in unknown_keys {
+                tx_ctx.pos_map.entry(vk).or_insert_with(HashSet::new);
+            }
+            // Update this unknown shielded context until it is level with self
+            while tx_ctx.last_txidx != self.last_txidx {
+                if let Some(((height, idx), (epoch, tx))) = tx_iter.next() {
+                    tx_ctx.scan_tx(*height, *idx, *epoch, tx);
+                } else {
+                    break;
+                }
+            }
+            // Merge the context data originating from the unknown keys into the
+            // current context
+            self.merge(tx_ctx);
+        } else {
+            // Load only transactions accepted from last_txid until this point
+            txs =
+                Self::fetch_shielded_transfers(ledger_address, self.last_txidx)
+                    .await;
+            tx_iter = txs.iter();
+        }
+        // Now that we possess the unspent notes corresponding to both old and
+        // new keys up until tx_pos, proceed to scan the new transactions.
+        for ((height, idx), (epoch, tx)) in &mut tx_iter {
+            self.scan_tx(*height, *idx, *epoch, tx);
+        }
+    }
+
+    /// Initialize a shielded transaction context that identifies notes
+    /// decryptable by any viewing key in the given set
+    pub fn new(context_dir: PathBuf) -> ShieldedContext {
+        // Make sure that MASP parameters are downloaded to enable MASP
+        // transaction building and verification later on
+        let params_dir = masp::get_params_dir();
+        let spend_path = params_dir.join(masp::SPEND_NAME);
+        let convert_path = params_dir.join(masp::CONVERT_NAME);
+        let output_path = params_dir.join(masp::OUTPUT_NAME);
+        if !(spend_path.exists()
+            && convert_path.exists()
+            && output_path.exists())
+        {
+            println!("MASP parameters not present, downloading...");
+            masp_proofs::download_parameters()
+                .expect("MASP parameters not present or downloadable");
+            println!("MASP parameter download complete, resuming execution...");
+        }
+        // Finally initialize a shielded context with the supplied directory
+        Self {
+            context_dir,
+            ..Default::default()
+        }
+    }
+
+    /// Obtain a chronologically-ordered list of all accepted shielded
+    /// transactions from the ledger. The ledger conceptually stores
+    /// transactions as a vector. More concretely, the HEAD_TX_KEY location
+    /// stores the index of the last accepted transaction and each transaction
+    /// is stored at a key derived from its index.
+    pub async fn fetch_shielded_transfers(
+        ledger_address: &TendermintAddress,
+        last_txidx: u64,
+    ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer)> {
+        let client = HttpClient::new(ledger_address.clone()).unwrap();
+        // The address of the MASP account
+        let masp_addr = masp();
+        // Construct the key where last transaction pointer is stored
+        let head_tx_key = Key::from(masp_addr.to_db_key())
+            .push(&HEAD_TX_KEY.to_owned())
+            .expect("Cannot obtain a storage key");
+        // Query for the index of the last accepted transaction
+        let head_txidx = query_storage_value::<u64>(&client, &head_tx_key)
+            .await
+            .unwrap_or(0);
+        let mut shielded_txs = BTreeMap::new();
+        // Fetch all the transactions we do not have yet
+        for i in last_txidx..head_txidx {
+            // Construct the key for where the current transaction is stored
+            let current_tx_key = Key::from(masp_addr.to_db_key())
+                .push(&(TX_KEY_PREFIX.to_owned() + &i.to_string()))
+                .expect("Cannot obtain a storage key");
+            // Obtain the current transaction
+            let (tx_epoch, tx_height, tx_index, current_tx) =
+                query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+                    &client,
+                    &current_tx_key,
+                )
+                .await
+                .unwrap();
+            // Collect the current transaction
+            shielded_txs.insert((tx_height, tx_index), (tx_epoch, current_tx));
+        }
+        shielded_txs
+    }
+
+    /// Applies the given transaction to the supplied context. More precisely,
+    /// the shielded transaction's outputs are added to the commitment tree.
+    /// Newly discovered notes are associated to the supplied viewing keys. Note
+    /// nullifiers are mapped to their originating notes. Note positions are
+    /// associated to notes, memos, and diversifiers. And the set of notes that
+    /// we have spent are updated. The witness map is maintained to make it
+    /// easier to construct note merkle paths in other code. See
+    /// https://zips.z.cash/protocol/protocol.pdf#scan
+    pub fn scan_tx(
+        &mut self,
+        height: BlockHeight,
+        index: TxIndex,
+        epoch: Epoch,
+        tx: &Transfer,
+    ) {
+        // Ignore purely transparent transactions
+        let shielded = if let Some(shielded) = &tx.shielded {
+            shielded
+        } else {
+            return;
+        };
+        // For tracking the account changes caused by this Transaction
+        let mut transaction_delta = TransactionDelta::new();
+        // Listen for notes sent to our viewing keys
+        for so in &shielded.shielded_outputs {
+            // Create merkle tree leaf node from note commitment
+            let node = Node::new(so.cmu.to_repr());
+            // Update each merkle tree in the witness map with the latest
+            // addition
+            for (_, witness) in self.witness_map.iter_mut() {
+                witness.append(node).expect("note commitment tree is full");
+            }
+            let note_pos = self.tree.size();
+            self.tree
+                .append(node)
+                .expect("note commitment tree is full");
+            // Finally, make it easier to construct merkle paths to this new
+            // note
+            let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
+            self.witness_map.insert(note_pos, witness);
+            // Let's try to see if any of our viewing keys can decrypt latest
+            // note
+            for (vk, notes) in self.pos_map.iter_mut() {
+                let decres = try_sapling_note_decryption::<TestNetwork>(
+                    0,
+                    &vk.ivk().0,
+                    &so.ephemeral_key.into_subgroup().unwrap(),
+                    &so.cmu,
+                    &so.enc_ciphertext,
+                );
+                // So this current viewing key does decrypt this current note...
+                if let Some((note, pa, memo)) = decres {
+                    // Add this note to list of notes decrypted by this viewing
+                    // key
+                    notes.insert(note_pos);
+                    // Compute the nullifier now to quickly recognize when spent
+                    let nf = note.nf(vk, note_pos.try_into().unwrap());
+                    self.note_map.insert(note_pos, note);
+                    self.memo_map.insert(note_pos, memo);
+                    // The payment address' diversifier is required to spend
+                    // note
+                    self.div_map.insert(note_pos, *pa.diversifier());
+                    self.nf_map.insert(nf.0, note_pos);
+                    // Note the account changes
+                    let balance = transaction_delta
+                        .entry(*vk)
+                        .or_insert_with(Amount::zero);
+                    *balance +=
+                        Amount::from_nonnegative(note.asset_type, note.value)
+                            .expect(
+                                "found note with invalid value or asset type",
+                            );
+                    self.vk_map.insert(note_pos, *vk);
+                    break;
+                }
+            }
+        }
+        // Cancel out those of our notes that have been spent
+        for ss in &shielded.shielded_spends {
+            // If the shielded spend's nullifier is in our map, then target note
+            // is rendered unusable
+            if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
+                self.spents.insert(*note_pos);
+                // Note the account changes
+                let balance = transaction_delta
+                    .entry(self.vk_map[note_pos])
+                    .or_insert_with(Amount::zero);
+                let note = self.note_map[note_pos];
+                *balance -=
+                    Amount::from_nonnegative(note.asset_type, note.value)
+                        .expect("found note with invalid value or asset type");
+            }
+        }
+        // Record the changes to the transparent accounts
+        let transparent_delta =
+            Amount::from_nonnegative(tx.token.clone(), u64::from(tx.amount))
+                .expect("invalid value for amount");
+        let mut transfer_delta = TransferDelta::new();
+        transfer_delta
+            .insert(tx.source.clone(), Amount::zero() - &transparent_delta);
+        transfer_delta.insert(tx.target.clone(), transparent_delta);
+        self.delta_map.insert(
+            (height, index),
+            (epoch, transfer_delta, transaction_delta),
+        );
+        self.last_txidx += 1;
+    }
+
+    /// Summarize the effects on shielded and transparent accounts of each
+    /// Transfer in this context
+    pub fn get_tx_deltas(
+        &self,
+    ) -> &BTreeMap<
+        (BlockHeight, TxIndex),
+        (Epoch, TransferDelta, TransactionDelta),
+    > {
+        &self.delta_map
+    }
+
+    /// Compute the total unspent notes associated with the viewing key in the
+    /// context. If the key is not in the context, then we do not know the
+    /// balance and hence we return None.
+    pub fn compute_shielded_balance(&self, vk: &ViewingKey) -> Option<Amount> {
+        // Cannot query the balance of a key that's not in the map
+        if !self.pos_map.contains_key(vk) {
+            return None;
+        }
+        let mut val_acc = Amount::zero();
+        // Retrieve the notes that can be spent by this key
+        if let Some(avail_notes) = self.pos_map.get(vk) {
+            for note_idx in avail_notes {
+                // Spent notes cannot contribute a new transaction's pool
+                if self.spents.contains(note_idx) {
+                    continue;
+                }
+                // Get note associated with this ID
+                let note = self.note_map.get(note_idx).unwrap();
+                // Finally add value to multi-asset accumulator
+                val_acc +=
+                    Amount::from_nonnegative(note.asset_type, note.value)
+                        .expect("found note with invalid value or asset type");
+            }
+        }
+        Some(val_acc)
+    }
+
+    /// Query the ledger for the decoding of the given asset type and cache it
+    /// if it is found.
+    pub async fn decode_asset_type(
+        &mut self,
+        client: HttpClient,
+        asset_type: AssetType,
+    ) -> Option<(Address, Epoch)> {
+        // Try to find the decoding in the cache
+        if let decoded @ Some(_) = self.asset_types.get(&asset_type) {
+            return decoded.cloned();
+        }
+        // Query for the ID of the last accepted transaction
+        let (addr, ep, _conv, _path): (Address, _, Amount, MerklePath<Node>) =
+            query_conversion(client, asset_type).await?;
+        self.asset_types.insert(asset_type, (addr.clone(), ep));
+        Some((addr, ep))
+    }
+
+    /// Query the ledger for the conversion that is allowed for the given asset
+    /// type and cache it.
+    async fn query_allowed_conversion<'a>(
+        &'a mut self,
+        client: HttpClient,
+        asset_type: AssetType,
+        conversions: &'a mut Conversions,
+    ) -> Option<&'a mut (AllowedConversion, MerklePath<Node>, i64)> {
+        match conversions.entry(asset_type) {
+            Entry::Occupied(conv_entry) => Some(conv_entry.into_mut()),
+            Entry::Vacant(conv_entry) => {
+                // Query for the ID of the last accepted transaction
+                let (addr, ep, conv, path): (Address, _, _, _) =
+                    query_conversion(client, asset_type).await?;
+                self.asset_types.insert(asset_type, (addr, ep));
+                // If the conversion is 0, then we just have a pure decoding
+                if conv == Amount::zero() {
+                    None
+                } else {
+                    Some(conv_entry.insert((Amount::into(conv), path, 0)))
+                }
+            }
+        }
+    }
+
+    /// Compute the total unspent notes associated with the viewing key in the
+    /// context and express that value in terms of the currently timestamped
+    /// asset types. If the key is not in the context, then we do not know the
+    /// balance and hence we return None.
+    pub async fn compute_exchanged_balance(
+        &mut self,
+        client: HttpClient,
+        vk: &ViewingKey,
+        target_epoch: Epoch,
+    ) -> Option<Amount> {
+        // First get the unexchanged balance
+        if let Some(balance) = self.compute_shielded_balance(vk) {
+            // And then exchange balance into current asset types
+            Some(
+                self.compute_exchanged_amount(
+                    client,
+                    balance,
+                    target_epoch,
+                    HashMap::new(),
+                )
+                .await
+                .0,
+            )
+        } else {
+            None
+        }
+    }
+
+    /// Try to convert as much of the given asset type-value pair using the
+    /// given allowed conversion. usage is incremented by the amount of the
+    /// conversion used, the conversions are applied to the given input, and
+    /// the trace amount that could not be converted is moved from input to
+    /// output.
+    fn apply_conversion(
+        conv: AllowedConversion,
+        asset_type: AssetType,
+        value: i64,
+        usage: &mut i64,
+        input: &mut Amount,
+        output: &mut Amount,
+    ) {
+        // If conversion if possible, accumulate the exchanged amount
+        let conv: Amount = conv.into();
+        // The amount required of current asset to qualify for conversion
+        let threshold = -conv[&asset_type];
+        if threshold == 0 {
+            eprintln!(
+                "Asset threshold of selected conversion for asset type {} is \
+                 0, this is a bug, please report it.",
+                asset_type
+            );
+        }
+        // We should use an amount of the AllowedConversion that almost
+        // cancels the original amount
+        let required = value / threshold;
+        // Forget about the trace amount left over because we cannot
+        // realize its value
+        let trace = Amount::from_pair(asset_type, value % threshold).unwrap();
+        // Record how much more of the given conversion has been used
+        *usage += required;
+        // Apply the conversions to input and move the trace amount to output
+        *input += conv * required - &trace;
+        *output += trace;
+    }
+
+    /// Convert the given amount into the latest asset types whilst making a
+    /// note of the conversions that were used. Note that this function does
+    /// not assume that allowed conversions from the ledger are expressed in
+    /// terms of the latest asset types.
+    pub async fn compute_exchanged_amount(
+        &mut self,
+        client: HttpClient,
+        mut input: Amount,
+        target_epoch: Epoch,
+        mut conversions: Conversions,
+    ) -> (Amount, Conversions) {
+        // Where we will store our exchanged value
+        let mut output = Amount::zero();
+        // Repeatedly exchange assets until it is no longer possible
+        while let Some((asset_type, value)) =
+            input.components().next().map(cloned_pair)
+        {
+            let target_asset_type = self
+                .decode_asset_type(client.clone(), asset_type)
+                .await
+                .map(|(addr, _epoch)| make_asset_type(target_epoch, &addr))
+                .unwrap_or(asset_type);
+            let at_target_asset_type = asset_type == target_asset_type;
+            if let (Some((conv, _wit, usage)), false) = (
+                self.query_allowed_conversion(
+                    client.clone(),
+                    asset_type,
+                    &mut conversions,
+                )
+                .await,
+                at_target_asset_type,
+            ) {
+                println!(
+                    "converting current asset type to latest asset type..."
+                );
+                // Not at the target asset type, not at the latest asset type.
+                // Apply conversion to get from current asset type to the latest
+                // asset type.
+                Self::apply_conversion(
+                    conv.clone(),
+                    asset_type,
+                    value,
+                    usage,
+                    &mut input,
+                    &mut output,
+                );
+            } else if let (Some((conv, _wit, usage)), false) = (
+                self.query_allowed_conversion(
+                    client.clone(),
+                    target_asset_type,
+                    &mut conversions,
+                )
+                .await,
+                at_target_asset_type,
+            ) {
+                println!(
+                    "converting latest asset type to target asset type..."
+                );
+                // Not at the target asset type, yes at the latest asset type.
+                // Apply inverse conversion to get from latest asset type to
+                // the target asset type.
+                Self::apply_conversion(
+                    conv.clone(),
+                    asset_type,
+                    value,
+                    usage,
+                    &mut input,
+                    &mut output,
+                );
+            } else {
+                // At the target asset type. Then move component over to output.
+                let comp = input.project(asset_type);
+                output += &comp;
+                // Strike from input to avoid repeating computation
+                input -= comp;
+            }
+        }
+        (output, conversions)
+    }
+
+    /// Collect enough unspent notes in this context to exceed the given amount
+    /// of the specified asset type. Return the total value accumulated plus
+    /// notes and the corresponding diversifiers/merkle paths that were used to
+    /// achieve the total value.
+    pub async fn collect_unspent_notes(
+        &mut self,
+        ledger_address: TendermintAddress,
+        vk: &ViewingKey,
+        target: Amount,
+        target_epoch: Epoch,
+    ) -> (
+        Amount,
+        Vec<(Diversifier, Note, MerklePath<Node>)>,
+        Conversions,
+    ) {
+        // Establish connection with which to do exchange rate queries
+        let client = HttpClient::new(ledger_address.clone()).unwrap();
+        let mut conversions = HashMap::new();
+        let mut val_acc = Amount::zero();
+        let mut notes = Vec::new();
+        // Retrieve the notes that can be spent by this key
+        if let Some(avail_notes) = self.pos_map.get(vk).cloned() {
+            for note_idx in &avail_notes {
+                // No more transaction inputs are required once we have met
+                // the target amount
+                if val_acc >= target {
+                    break;
+                }
+                // Spent notes cannot contribute a new transaction's pool
+                if self.spents.contains(note_idx) {
+                    continue;
+                }
+                // Get note, merkle path, diversifier associated with this ID
+                let note = *self.note_map.get(note_idx).unwrap();
+
+                // The amount contributed by this note before conversion
+                let pre_contr = Amount::from_pair(note.asset_type, note.value)
+                    .expect("received note has invalid value or asset type");
+                let (contr, proposed_convs) = self
+                    .compute_exchanged_amount(
+                        client.clone(),
+                        pre_contr,
+                        target_epoch,
+                        conversions.clone(),
+                    )
+                    .await;
+
+                // Use this note only if it brings us closer to our target
+                if is_amount_required(
+                    val_acc.clone(),
+                    target.clone(),
+                    contr.clone(),
+                ) {
+                    // Be sure to record the conversions used in computing
+                    // accumulated value
+                    val_acc += contr;
+                    // Commit the conversions that were used to exchange
+                    conversions = proposed_convs;
+                    let merkle_path =
+                        self.witness_map.get(note_idx).unwrap().path().unwrap();
+                    let diversifier = self.div_map.get(note_idx).unwrap();
+                    // Commit this note to our transaction
+                    notes.push((*diversifier, note, merkle_path));
+                }
+            }
+        }
+        (val_acc, notes, conversions)
+    }
+
+    /// Compute the combined value of the output notes of the transaction pinned
+    /// at the given payment address. This computation uses the supplied viewing
+    /// keys to try to decrypt the output notes. If no transaction is pinned at
+    /// the given payment address fails with
+    /// `PinnedBalanceError::NoTransactionPinned`.
+    pub async fn compute_pinned_balance(
+        ledger_address: &TendermintAddress,
+        owner: PaymentAddress,
+        viewing_key: &ViewingKey,
+    ) -> Result<(Amount, Epoch), PinnedBalanceError> {
+        // Check that the supplied viewing key corresponds to given payment
+        // address
+        let counter_owner = viewing_key.to_payment_address(
+            *masp_primitives::primitives::PaymentAddress::diversifier(
+                &owner.into(),
+            ),
+        );
+        match counter_owner {
+            Some(counter_owner) if counter_owner == owner.into() => {}
+            _ => return Err(PinnedBalanceError::InvalidViewingKey),
+        }
+        let client = HttpClient::new(ledger_address.clone()).unwrap();
+        // The address of the MASP account
+        let masp_addr = masp();
+        // Construct the key for where the transaction ID would be stored
+        let pin_key = Key::from(masp_addr.to_db_key())
+            .push(&(PIN_KEY_PREFIX.to_owned() + &owner.hash()))
+            .expect("Cannot obtain a storage key");
+        // Obtain the transaction pointer at the key
+        let txidx = query_storage_value::<u64>(&client, &pin_key)
+            .await
+            .ok_or(PinnedBalanceError::NoTransactionPinned)?;
+        // Construct the key for where the pinned transaction is stored
+        let tx_key = Key::from(masp_addr.to_db_key())
+            .push(&(TX_KEY_PREFIX.to_owned() + &txidx.to_string()))
+            .expect("Cannot obtain a storage key");
+        // Obtain the pointed to transaction
+        let (tx_epoch, _tx_height, _tx_index, tx) =
+            query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+                &client, &tx_key,
+            )
+            .await
+            .expect("Ill-formed epoch, transaction pair");
+        // Accumulate the combined output note value into this Amount
+        let mut val_acc = Amount::zero();
+        let tx = tx
+            .shielded
+            .expect("Pinned Transfers should have shielded part");
+        for so in &tx.shielded_outputs {
+            // Let's try to see if our viewing key can decrypt current note
+            let decres = try_sapling_note_decryption::<TestNetwork>(
+                0,
+                &viewing_key.ivk().0,
+                &so.ephemeral_key.into_subgroup().unwrap(),
+                &so.cmu,
+                &so.enc_ciphertext,
+            );
+            match decres {
+                // So the given viewing key does decrypt this current note...
+                Some((note, pa, _memo)) if pa == owner.into() => {
+                    val_acc +=
+                        Amount::from_nonnegative(note.asset_type, note.value)
+                            .expect(
+                                "found note with invalid value or asset type",
+                            );
+                    break;
+                }
+                _ => {}
+            }
+        }
+        Ok((val_acc, tx_epoch))
+    }
+
+    /// Compute the combined value of the output notes of the pinned transaction
+    /// at the given payment address if there's any. The asset types may be from
+    /// the epoch of the transaction or even before, so exchange all these
+    /// amounts to the epoch of the transaction in order to get the value that
+    /// would have been displayed in the epoch of the transaction.
+    pub async fn compute_exchanged_pinned_balance(
+        &mut self,
+        ledger_address: &TendermintAddress,
+        owner: PaymentAddress,
+        viewing_key: &ViewingKey,
+    ) -> Result<(Amount, Epoch), PinnedBalanceError> {
+        // Obtain the balance that will be exchanged
+        let (amt, ep) =
+            Self::compute_pinned_balance(ledger_address, owner, viewing_key)
+                .await?;
+        // Establish connection with which to do exchange rate queries
+        let client = HttpClient::new(ledger_address.clone()).unwrap();
+        // Finally, exchange the balance to the transaction's epoch
+        Ok((
+            self.compute_exchanged_amount(client, amt, ep, HashMap::new())
+                .await
+                .0,
+            ep,
+        ))
+    }
+
+    /// Convert an amount whose units are AssetTypes to one whose units are
+    /// Addresses that they decode to. All asset types not corresponding to
+    /// the given epoch are ignored.
+    pub async fn decode_amount(
+        &mut self,
+        client: HttpClient,
+        amt: Amount,
+        target_epoch: Epoch,
+    ) -> Amount<Address> {
+        let mut res = Amount::zero();
+        for (asset_type, val) in amt.components() {
+            // Decode the asset type
+            let decoded =
+                self.decode_asset_type(client.clone(), *asset_type).await;
+            // Only assets with the target timestamp count
+            match decoded {
+                Some((addr, epoch)) if epoch == target_epoch => {
+                    res += &Amount::from_pair(addr, *val).unwrap()
+                }
+                _ => {}
+            }
+        }
+        res
+    }
+
+    /// Convert an amount whose units are AssetTypes to one whose units are
+    /// Addresses that they decode to.
+    pub async fn decode_all_amounts(
+        &mut self,
+        client: HttpClient,
+        amt: Amount,
+    ) -> Amount<(Address, Epoch)> {
+        let mut res = Amount::zero();
+        for (asset_type, val) in amt.components() {
+            // Decode the asset type
+            let decoded =
+                self.decode_asset_type(client.clone(), *asset_type).await;
+            // Only assets with the target timestamp count
+            if let Some((addr, epoch)) = decoded {
+                res += &Amount::from_pair((addr, epoch), *val).unwrap()
+            }
+        }
+        res
+    }
+}
+
+/// Make asset type corresponding to given address and epoch
+fn make_asset_type(epoch: Epoch, token: &Address) -> AssetType {
+    // Typestamp the chosen token with the current epoch
+    let token_bytes = (token, epoch.0)
+        .try_to_vec()
+        .expect("token should serialize");
+    // Generate the unique asset identifier from the unique token address
+    AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
+}
+
+/// Convert Anoma amount and token type to MASP equivalents
+fn convert_amount(
+    epoch: Epoch,
+    token: &Address,
+    val: token::Amount,
+) -> (AssetType, Amount) {
+    let asset_type = make_asset_type(epoch, token);
+    // Combine the value and unit into one amount
+    let amount = Amount::from_nonnegative(asset_type, u64::from(val))
+        .expect("invalid value for amount");
+    (asset_type, amount)
+}
+
+/// Make shielded components to embed within a Transfer object. If no shielded
+/// payment address nor spending key is specified, then no shielded components
+/// are produced. Otherwise a transaction containing nullifiers and/or note
+/// commitments are produced. Dummy transparent UTXOs are sometimes used to make
+/// transactions balanced, but it is understood that transparent account changes
+/// are effected only by the amounts and signatures specified by the containing
+/// Transfer object.
+async fn gen_shielded_transfer<C>(
+    ctx: &mut C,
+    args: &ParsedTxTransferArgs,
+    shielded_gas: bool,
+) -> Result<Option<(Transaction, TransactionMetadata)>, builder::Error>
+where
+    C: ShieldedTransferContext,
+{
+    let spending_key = args.source.spending_key().map(|x| x.into());
+    let payment_address = args.target.payment_address();
+    // Determine epoch in which to submit potential shielded transaction
+    let epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
+    // Context required for storing which notes are in the source's possesion
+    let consensus_branch_id = BranchId::Sapling;
+    let amt: u64 = args.amount.into();
+    let memo: Option<Memo> = None;
+
+    // Now we build up the transaction within this object
+    let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
+    // Convert transaction amount into MASP types
+    let (asset_type, amount) = convert_amount(epoch, &args.token, args.amount);
+
+    // Transactions with transparent input and shielded output
+    // may be affected if constructed close to epoch boundary
+    let mut epoch_sensitive: bool = false;
+    // If there are shielded inputs
+    if let Some(sk) = spending_key {
+        // Transaction fees need to match the amount in the wrapper Transfer
+        // when MASP source is used
+        let (_, fee) =
+            convert_amount(epoch, &args.tx.fee_token, args.tx.fee_amount);
+        builder.set_fee(fee.clone())?;
+        // If the gas is coming from the shielded pool, then our shielded inputs
+        // must also cover the gas fee
+        let required_amt = if shielded_gas { amount + fee } else { amount };
+        // Locate unspent notes that can help us meet the transaction amount
+        let (_, unspent_notes, used_convs) = ctx
+            .collect_unspent_notes(
+                args.tx.ledger_address.clone(),
+                &to_viewing_key(&sk).vk,
+                required_amt,
+                epoch,
+            )
+            .await;
+        // Commit the notes found to our transaction
+        for (diversifier, note, merkle_path) in unspent_notes {
+            builder.add_sapling_spend(sk, diversifier, note, merkle_path)?;
+        }
+        // Commit the conversion notes used during summation
+        for (conv, wit, value) in used_convs.values() {
+            if *value > 0 {
+                builder.add_convert(
+                    conv.clone(),
+                    *value as u64,
+                    wit.clone(),
+                )?;
+            }
+        }
+    } else {
+        // No transfer fees come from the shielded transaction for non-MASP
+        // sources
+        builder.set_fee(Amount::zero())?;
+        // We add a dummy UTXO to our transaction, but only the source of the
+        // parent Transfer object is used to validate fund availability
+        let secp_sk =
+            secp256k1::SecretKey::from_slice(&[0xcd; 32]).expect("secret key");
+        let secp_ctx = secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
+        let secp_pk =
+            secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
+                .serialize();
+        let hash =
+            ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
+        let script = TransparentAddress::PublicKey(hash.into()).script();
+        epoch_sensitive = true;
+        builder.add_transparent_input(
+            secp_sk,
+            OutPoint::new([0u8; 32], 0),
+            TxOut {
+                asset_type,
+                value: amt,
+                script_pubkey: script,
+            },
+        )?;
+    }
+    // Now handle the outputs of this transaction
+    // If there is a shielded output
+    if let Some(pa) = payment_address {
+        let ovk_opt = spending_key.map(|x| x.expsk.ovk);
+        builder.add_sapling_output(
+            ovk_opt,
+            pa.into(),
+            asset_type,
+            amt,
+            memo.clone(),
+        )?;
+    } else {
+        epoch_sensitive = false;
+        // Embed the transparent target address into the shielded transaction so
+        // that it can be signed
+        let target_enc = args
+            .target
+            .address()
+            .expect("target address should be transparent")
+            .try_to_vec()
+            .expect("target address encoding");
+        let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
+            target_enc.as_ref(),
+        ));
+        builder.add_transparent_output(
+            &TransparentAddress::PublicKey(hash.into()),
+            asset_type,
+            amt,
+        )?;
+    }
+    let prover = if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
+    {
+        let params_dir = PathBuf::from(params_dir);
+        let spend_path = params_dir.join(masp::SPEND_NAME);
+        let convert_path = params_dir.join(masp::CONVERT_NAME);
+        let output_path = params_dir.join(masp::OUTPUT_NAME);
+        LocalTxProver::new(&spend_path, &output_path, &convert_path)
+    } else {
+        LocalTxProver::with_default_location()
+            .expect("unable to load MASP Parameters")
+    };
+    // Build and return the constructed transaction
+    let mut tx = builder.build(consensus_branch_id, &prover);
+
+    if epoch_sensitive {
+        let new_epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
+
+        // If epoch has changed, recalculate shielded outputs to match new epoch
+        if new_epoch != epoch {
+            // Hack: build new shielded transfer with updated outputs
+            let mut replay_builder = Builder::<TestNetwork, OsRng>::new(0u32);
+            replay_builder.set_fee(Amount::zero())?;
+            let ovk_opt = spending_key.map(|x| x.expsk.ovk);
+            let (new_asset_type, _) =
+                convert_amount(new_epoch, &args.token, args.amount);
+            replay_builder.add_sapling_output(
+                ovk_opt,
+                payment_address.unwrap().into(),
+                new_asset_type,
+                amt,
+                memo,
+            )?;
+
+            let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
+                .expect("secret key");
+            let secp_ctx =
+                secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
+            let secp_pk =
+                secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
+                    .serialize();
+            let hash =
+                ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
+            let script = TransparentAddress::PublicKey(hash.into()).script();
+            replay_builder.add_transparent_input(
+                secp_sk,
+                OutPoint::new([0u8; 32], 0),
+                TxOut {
+                    asset_type: new_asset_type,
+                    value: amt,
+                    script_pubkey: script,
+                },
+            )?;
+
+            let (replay_tx, _) =
+                replay_builder.build(consensus_branch_id, &prover)?;
+            tx = tx.map(|(t, tm)| {
+                let mut temp = t.deref().clone();
+                temp.shielded_outputs = replay_tx.shielded_outputs.clone();
+                temp.value_balance = temp.value_balance.reject(asset_type)
+                    - Amount::from_pair(new_asset_type, amt).unwrap();
+                (temp.freeze().unwrap(), tm)
+            });
+        }
+    }
+
+    tx.map(Some)
+}
+
+pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
+    let parsed_args = args.parse_from_context(&mut ctx);
+    let source = parsed_args.source.effective_address();
+    let target = parsed_args.target.effective_address();
+    // Check that the source address exists on chain
+    let source_exists =
+        rpc::known_address(&source, args.tx.ledger_address.clone()).await;
+    if !source_exists {
+        eprintln!("The source address {} doesn't exist on chain.", source);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+    // Check that the target address exists on chain
+    let target_exists =
+        rpc::known_address(&target, args.tx.ledger_address.clone()).await;
+    if !target_exists {
+        eprintln!("The target address {} doesn't exist on chain.", target);
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+    // Check that the token address exists on chain
+    let token_exists =
+        rpc::known_address(&parsed_args.token, args.tx.ledger_address.clone())
+            .await;
+    if !token_exists {
+        eprintln!(
+            "The token address {} doesn't exist on chain.",
+            parsed_args.token
+        );
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+    // Check source balance
+    let (sub_prefix, balance_key) = match args.sub_prefix {
+        Some(sub_prefix) => {
+            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
+            let prefix = token::multitoken_balance_prefix(
+                &parsed_args.token,
+                &sub_prefix,
+            );
+            (
+                Some(sub_prefix),
+                token::multitoken_balance_key(&prefix, &source),
+            )
+        }
+        None => (None, token::balance_key(&parsed_args.token, &source)),
+    };
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
+    {
+        Some(balance) => {
+            if balance < args.amount {
+                eprintln!(
+                    "The balance of the source {} of token {} is lower than \
+                     the amount to be transferred. Amount to transfer is {} \
+                     and the balance is {}.",
+                    source, parsed_args.token, args.amount, balance
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        None => {
+            eprintln!(
+                "No balance found for the source {} of token {}",
+                source, parsed_args.token
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+    };
+
+    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
+    let masp_addr = masp();
+    // For MASP sources, use a special sentinel key recognized by VPs as default
+    // signer. Also, if the transaction is shielded, redact the amount and token
+    // types by setting the transparent value to 0 and token type to a constant.
+    // This has no side-effect because transaction is to self.
+    let (default_signer, amount, token) =
+        if source == masp_addr && target == masp_addr {
+            // TODO Refactor me, we shouldn't rely on any specific token here.
+            (TxSigningKey::SecretKey(masp_tx_key()), 0.into(), nam())
+        } else if source == masp_addr {
+            (
+                TxSigningKey::SecretKey(masp_tx_key()),
+                args.amount,
+                parsed_args.token.clone(),
+            )
+        } else {
+            (
+                TxSigningKey::WalletAddress(args.source.to_address()),
+                args.amount,
+                parsed_args.token.clone(),
+            )
+        };
+    // If our chosen signer is the MASP sentinel key, then our shielded inputs
+    // will need to cover the gas fees.
+    let chosen_signer = tx_signer(&mut ctx, &args.tx, default_signer.clone())
+        .await
+        .ref_to();
+    let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
+    // Determine whether to pin this transaction to a storage key
+    let key = match ctx.get(&args.target) {
+        TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),
+        _ => None,
+    };
+
+    let transfer = token::Transfer {
+        source,
+        target,
+        token,
+        sub_prefix,
+        amount,
+        key,
+        shielded: {
+            let spending_key = parsed_args.source.spending_key();
+            let payment_address = parsed_args.target.payment_address();
+            // No shielded components are needed when neither source nor
+            // destination are shielded
+            if spending_key.is_none() && payment_address.is_none() {
+                None
+            } else {
+                // We want to fund our transaction solely from supplied spending
+                // key
+                let spending_key = spending_key.map(|x| x.into());
+                let spending_keys: Vec<_> = spending_key.into_iter().collect();
+                // Load the current shielded context given the spending key we
+                // possess
+                let _ = ctx.shielded.load();
+                ctx.shielded
+                    .fetch(&args.tx.ledger_address, &spending_keys, &[])
+                    .await;
+                // Save the update state so that future fetches can be
+                // short-circuited
+                let _ = ctx.shielded.save();
+                let stx_result =
+                    gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
+                        .await;
+                match stx_result {
+                    Ok(stx) => stx.map(|x| x.0),
+                    Err(builder::Error::ChangeIsNegative(_)) => {
+                        eprintln!(
+                            "The balance of the source {} is lower than the \
+                             amount to be transferred and fees. Amount to \
+                             transfer is {} {} and fees are {} {}.",
+                            parsed_args.source,
+                            args.amount,
+                            parsed_args.token,
+                            args.tx.fee_amount,
+                            parsed_args.tx.fee_token,
+                        );
+                        safe_exit(1)
+                    }
+                    Err(err) => panic!("{}", err),
+                }
+            }
+        },
+    };
+    tracing::debug!("Transfer data {:?}", transfer);
+    let data = transfer
+        .try_to_vec()
+        .expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
+    process_tx(ctx, &args.tx, tx, signing_address).await;
+}
+
+pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     let source = ctx.get(&args.source);
     // Check that the source address exists on chain
     let source_exists =
@@ -441,16 +1748,9 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
             safe_exit(1)
         }
     }
-    let target = ctx.get(&args.target);
-    // Check that the target address exists on chain
-    let target_exists =
-        rpc::known_address(&target, args.tx.ledger_address.clone()).await;
-    if !target_exists {
-        eprintln!("The target address {} doesn't exist on chain.", target);
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    }
+
+    // We cannot check the receiver
+
     let token = ctx.get(&args.token);
     // Check that the token address exists on chain
     let token_exists =
@@ -464,7 +1764,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     // Check source balance
     let (sub_prefix, balance_key) = match args.sub_prefix {
         Some(sub_prefix) => {
-            let sub_prefix = Key::parse(sub_prefix).unwrap();
+            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
             let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
             (
                 Some(sub_prefix),
@@ -499,21 +1799,53 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
             }
         }
     }
-    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
-    let transfer = token::Transfer {
-        source,
-        target,
-        token,
-        sub_prefix,
-        amount: args.amount,
+    let tx_code = ctx.read_wasm(TX_IBC_WASM);
+
+    let denom = match sub_prefix {
+        // To parse IbcToken address, remove the address prefix
+        Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
+        None => token.to_string(),
     };
-    tracing::debug!("Transfer data {:?}", transfer);
-    let data = transfer
-        .try_to_vec()
+    let token = Some(Coin {
+        denom,
+        amount: args.amount.to_string(),
+    });
+
+    // this height should be that of the destination chain, not this chain
+    let timeout_height = match args.timeout_height {
+        Some(h) => IbcHeight::new(0, h),
+        None => IbcHeight::zero(),
+    };
+
+    let now: namada::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
+    let now: IbcTimestamp = now.into();
+    let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
+        (now + Duration::new(offset, 0)).unwrap()
+    } else if timeout_height.is_zero() {
+        // we cannot set 0 to both the height and the timestamp
+        (now + Duration::new(3600, 0)).unwrap()
+    } else {
+        IbcTimestamp::none()
+    };
+
+    let msg = MsgTransfer {
+        source_port: args.port_id,
+        source_channel: args.channel_id,
+        token,
+        sender: Signer::new(source.to_string()),
+        receiver: Signer::new(args.receiver),
+        timeout_height,
+        timeout_timestamp,
+    };
+    tracing::debug!("IBC transfer message {:?}", msg);
+    let any_msg = msg.to_any();
+    let mut data = vec![];
+    prost::Message::encode(&any_msg, &mut data)
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, Some(&args.source)).await;
+    process_tx(ctx, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
+        .await;
 }
 
 pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
@@ -647,7 +1979,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
         let tx = Tx::new(tx_code, Some(data));
 
-        process_tx(ctx, &args.tx, tx, Some(&signer)).await;
+        process_tx(ctx, &args.tx, tx, TxSigningKey::WalletAddress(signer))
+            .await;
     }
 }
 
@@ -784,7 +2117,13 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 let tx_code = ctx.read_wasm(TX_VOTE_PROPOSAL);
                 let tx = Tx::new(tx_code, Some(data));
 
-                process_tx(ctx, &args.tx, tx, Some(signer)).await;
+                process_tx(
+                    ctx,
+                    &args.tx,
+                    tx,
+                    TxSigningKey::WalletAddress(signer.clone()),
+                )
+                .await;
             }
             None => {
                 eprintln!(
@@ -926,8 +2265,14 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let default_signer = args.source.as_ref().unwrap_or(&args.validator);
-    process_tx(ctx, &args.tx, tx, Some(default_signer)).await;
+    let default_signer = args.source.unwrap_or(args.validator);
+    process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+    )
+    .await;
 }
 
 pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
@@ -993,8 +2338,14 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let default_signer = args.source.as_ref().unwrap_or(&args.validator);
-    process_tx(ctx, &args.tx, tx, Some(default_signer)).await;
+    let default_signer = args.source.unwrap_or(args.validator);
+    process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+    )
+    .await;
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
@@ -1060,8 +2411,14 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let default_signer = args.source.as_ref().unwrap_or(&args.validator);
-    process_tx(ctx, &args.tx, tx, Some(default_signer)).await;
+    let default_signer = args.source.unwrap_or(args.validator);
+    process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+    )
+    .await;
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
@@ -1070,7 +2427,7 @@ pub async fn process_tx(
     ctx: Context,
     args: &args::Tx,
     tx: Tx,
-    default_signer: Option<&WalletAddress>,
+    default_signer: TxSigningKey,
 ) -> (Context, Vec<Address>) {
     let (ctx, to_broadcast) = sign_tx(ctx, tx, args, default_signer).await;
     // NOTE: use this to print the request JSON body:

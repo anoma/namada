@@ -1,47 +1,11 @@
-use namada::proto::Tx;
-use namada::types::transaction::process_tx;
-use namada::types::transaction::tx_types::TxType;
+use super::super::{AllocFailure, BlockSpaceAllocator};
+use super::{FillingRemainingSpace, TryAlloc};
 
-use super::super::{AllocStatus, BlockSpaceAllocator};
-use super::{
-    FillingRemainingSpace, RemainingBatchAllocator, TryAlloc, WithEncryptedTxs,
-    WithoutEncryptedTxs,
-};
-
-impl TryAlloc for BlockSpaceAllocator<FillingRemainingSpace<WithEncryptedTxs>> {
+impl TryAlloc for BlockSpaceAllocator<FillingRemainingSpace> {
     #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
+        // NOTE: tx dispatching is done at at higher level, to prevent
+        // allocating space for encrypted txs here
         self.block.try_dump(tx)
-    }
-}
-
-impl TryAlloc
-    for BlockSpaceAllocator<FillingRemainingSpace<WithoutEncryptedTxs>>
-{
-    #[inline]
-    fn try_alloc<'tx>(&mut self, tx: &'tx [u8]) -> AllocStatus<'tx> {
-        self.block.try_dump(tx)
-    }
-}
-
-impl TryAlloc for RemainingBatchAllocator {
-    #[inline]
-    fn try_alloc<'tx>(&mut self, tx_bytes: &'tx [u8]) -> AllocStatus<'tx> {
-        match self {
-            RemainingBatchAllocator::WithEncryptedTxs(state) => {
-                state.try_alloc(tx_bytes)
-            }
-            RemainingBatchAllocator::WithoutEncryptedTxs(state) => {
-                let tx = Tx::try_from(tx_bytes)
-                    .expect("Tx passed mempool validation");
-                if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
-                    // do not allocate anything if we
-                    // find an encrypted tx
-                    AllocStatus::Accepted
-                } else {
-                    state.try_alloc(tx_bytes)
-                }
-            }
-        }
     }
 }

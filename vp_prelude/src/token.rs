@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use namada::types::address::{Address, InternalAddress};
+use namada::types::address::{masp, Address, InternalAddress};
 use namada::types::storage::Key;
 /// Vp imports and functions.
 use namada::types::storage::KeySeg;
@@ -56,7 +56,9 @@ pub fn vp(
                 let this_change = post.change() - pre.change();
                 change += this_change;
                 // make sure that the spender approved the transaction
-                if this_change < 0 && !verifiers.contains(owner) {
+                if this_change < 0
+                    && !(verifiers.contains(owner) || *owner == masp())
+                {
                     return reject();
                 }
             }
