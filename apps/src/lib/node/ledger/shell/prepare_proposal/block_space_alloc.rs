@@ -255,7 +255,10 @@ mod tests {
     use assert_matches::assert_matches;
     use proptest::prelude::*;
 
-    use super::states::{NextState, NextStateWithEncryptedTxs, TryAlloc};
+    use super::states::{
+        NextState, NextStateWithEncryptedTxs, NextStateWithoutEncryptedTxs,
+        TryAlloc,
+    };
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -326,6 +329,19 @@ mod tests {
 
         // fill up the remaining space
         assert!(alloc.try_alloc(&[0; 5]).is_ok());
+        assert_matches!(
+            alloc.try_alloc(&[0; 1]),
+            Err(AllocFailure::Rejected { .. })
+        );
+    }
+
+    // Test that we cannot include encrypted txs in a block
+    // when the state invariants banish them from inclusion.
+    #[test]
+    fn test_encrypted_txs_are_rejected() {
+        let alloc = BlockSpaceAllocator::init(1234);
+        let alloc = alloc.next_state();
+        let mut alloc = alloc.next_state_without_encrypted_txs();
         assert_matches!(
             alloc.try_alloc(&[0; 1]),
             Err(AllocFailure::Rejected { .. })
