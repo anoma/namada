@@ -352,8 +352,8 @@ where
     const POS_ADDRESS: Self::Address = super::ADDRESS;
     const POS_SLASH_POOL_ADDRESS: Self::Address = super::SLASH_POOL_ADDRESS;
 
-    fn staking_token_address() -> Self::Address {
-        super::staking_token_address()
+    fn staking_token_address(&self) -> Self::Address {
+        self.native_token.clone()
     }
 
     fn read_pos_params(&self) -> PosParams {

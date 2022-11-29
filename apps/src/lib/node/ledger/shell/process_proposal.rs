@@ -197,7 +197,6 @@ where
 mod test_process_proposal {
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
-    use namada::types::address::nam;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
@@ -225,7 +224,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -272,7 +271,7 @@ mod test_process_proposal {
         let mut wrapper = WrapperTx::new(
             Fee {
                 amount: 100.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -354,7 +353,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 1.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -407,7 +406,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: Amount::whole(1_000_100),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -455,7 +454,7 @@ mod test_process_proposal {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -519,7 +518,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -578,7 +577,7 @@ mod test_process_proposal {
         let mut wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -631,7 +630,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),

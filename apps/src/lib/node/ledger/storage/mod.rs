@@ -51,6 +51,7 @@ fn new_blake2b() -> Blake2b {
 #[cfg(test)]
 mod tests {
     use namada::ledger::storage::types;
+    use namada::types::address;
     use namada::types::chain::ChainId;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use proptest::collection::vec;
@@ -64,8 +65,12 @@ mod tests {
     fn test_crud_value() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage =
-            PersistentStorage::open(db_path.path(), ChainId::default(), None);
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+        );
         let key = Key::parse("key").expect("cannot parse the key string");
         let value: u64 = 1;
         let value_bytes = types::encode(&value);
@@ -107,8 +112,12 @@ mod tests {
     fn test_commit_block() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage =
-            PersistentStorage::open(db_path.path(), ChainId::default(), None);
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+        );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -129,8 +138,12 @@ mod tests {
         drop(storage);
 
         // load the last state
-        let mut storage =
-            PersistentStorage::open(db_path.path(), ChainId::default(), None);
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+        );
         storage
             .load_last_state()
             .expect("loading the last state failed");
@@ -148,8 +161,12 @@ mod tests {
     fn test_iter() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage =
-            PersistentStorage::open(db_path.path(), ChainId::default(), None);
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+        );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -188,8 +205,12 @@ mod tests {
     fn test_validity_predicate() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage =
-            PersistentStorage::open(db_path.path(), ChainId::default(), None);
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+        );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
@@ -242,8 +263,12 @@ mod tests {
     ) -> namada::ledger::storage::Result<()> {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage =
-            PersistentStorage::open(db_path.path(), ChainId::default(), None);
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+        );
 
         // 1. For each `blocks_write_value`, write the current block height if
         // true or delete otherwise.

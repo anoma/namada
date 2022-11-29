@@ -261,6 +261,10 @@ mod tests {
             tx::ctx().get_block_epoch().unwrap(),
             tx_host_env::with(|env| env.storage.get_current_epoch().0)
         );
+        assert_eq!(
+            tx::ctx().get_native_token().unwrap(),
+            tx_host_env::with(|env| env.storage.native_token.clone())
+        );
     }
 
     /// An example how to write a VP host environment integration test
@@ -510,6 +514,10 @@ mod tests {
         assert_eq!(
             vp::CTX.get_block_epoch().unwrap(),
             vp_host_env::with(|env| env.storage.get_current_epoch().0)
+        );
+        assert_eq!(
+            vp::CTX.get_native_token().unwrap(),
+            vp_host_env::with(|env| env.storage.native_token.clone())
         );
     }
 

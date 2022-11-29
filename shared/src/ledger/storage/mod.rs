@@ -77,6 +77,9 @@ where
     pub db: D,
     /// The ID of the chain
     pub chain_id: ChainId,
+    /// The address of the native token - this is not stored in DB, but read
+    /// from genesis
+    pub native_token: Address,
     /// The storage for the current (yet to be committed) block
     pub block: BlockStorage<H>,
     /// The latest block header
@@ -321,6 +324,7 @@ where
     pub fn open(
         db_path: impl AsRef<std::path::Path>,
         chain_id: ChainId,
+        native_token: Address,
         cache: Option<&D::Cache>,
     ) -> Self {
         let block = BlockStorage {
@@ -347,6 +351,7 @@ where
             conversion_state: ConversionState::default(),
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
+            native_token,
         }
     }
 
@@ -1043,6 +1048,12 @@ where
     fn get_tx_index(&self) -> std::result::Result<TxIndex, storage_api::Error> {
         Ok(self.tx_index)
     }
+
+    fn get_native_token(
+        &self,
+    ) -> std::result::Result<Address, storage_api::Error> {
+        Ok(self.native_token.clone())
+    }
 }
 
 impl<D, H> StorageWrite for Storage<D, H>
@@ -1133,6 +1144,7 @@ pub mod testing {
     use super::mockdb::MockDB;
     use super::*;
     use crate::ledger::storage::traits::Sha256Hasher;
+    use crate::types::address;
     /// Storage with a mock DB for testing
     pub type TestStorage = Storage<MockDB, Sha256Hasher>;
 
@@ -1164,6 +1176,7 @@ pub mod testing {
                 conversion_state: ConversionState::default(),
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
+                native_token: address::nam(),
             }
         }
     }

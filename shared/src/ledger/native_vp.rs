@@ -237,6 +237,10 @@ where
     fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
         self.ctx.get_tx_index().into_storage_result()
     }
+
+    fn get_native_token(&self) -> Result<Address, storage_api::Error> {
+        self.ctx.get_native_token()
+    }
 }
 
 impl<'view, 'a, DB, H, CA> StorageRead<'view>
@@ -322,6 +326,10 @@ where
     fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
         self.ctx.get_tx_index().into_storage_result()
     }
+
+    fn get_native_token(&self) -> Result<Address, storage_api::Error> {
+        Ok(self.ctx.storage.native_token.clone())
+    }
 }
 
 impl<'view, 'a: 'view, DB, H, CA> VpEnv<'view> for Ctx<'a, DB, H, CA>
@@ -395,6 +403,14 @@ where
     fn get_tx_index(&'view self) -> Result<TxIndex, storage_api::Error> {
         vp_env::get_tx_index(&mut *self.gas_meter.borrow_mut(), self.tx_index)
             .into_storage_result()
+    }
+
+    fn get_native_token(&'view self) -> Result<Address, storage_api::Error> {
+        vp_env::get_native_token(
+            &mut *self.gas_meter.borrow_mut(),
+            self.storage,
+        )
+        .into_storage_result()
     }
 
     fn iter_prefix(

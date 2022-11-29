@@ -35,9 +35,7 @@ mod tests {
     use namada_vp_prelude::proof_of_stake::types::{
         Bond, VotingPower, VotingPowerDelta,
     };
-    use namada_vp_prelude::proof_of_stake::{
-        staking_token_address, BondId, GenesisValidator, PosVP,
-    };
+    use namada_vp_prelude::proof_of_stake::{BondId, GenesisValidator, PosVP};
     use proptest::prelude::*;
 
     use super::*;
@@ -78,14 +76,16 @@ mod tests {
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
-        tx_host_env::with(|tx_env| {
+        let native_token = tx_host_env::with(|tx_env| {
             if let Some(source) = &bond.source {
                 tx_env.spawn_accounts([source]);
             }
 
             // Ensure that the bond's source has enough tokens for the bond
             let target = bond.source.as_ref().unwrap_or(&bond.validator);
-            tx_env.credit_tokens(target, &staking_token_address(), bond.amount);
+            let native_token = tx_env.storage.native_token.clone();
+            tx_env.credit_tokens(target, &native_token, bond.amount);
+            native_token
         });
 
         let tx_code = vec![];
@@ -96,7 +96,7 @@ mod tests {
 
         // Read the data before the tx is executed
         let pos_balance_key = token::balance_key(
-            &staking_token_address(),
+            &native_token,
             &Address::Internal(InternalAddress::PoS),
         );
         let pos_balance_pre: token::Amount = ctx()

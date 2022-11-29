@@ -244,6 +244,11 @@ impl<'view> VpEnv<'view> for Ctx {
         get_tx_index()
     }
 
+    fn get_native_token(&'view self) -> Result<Address, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_native_token()
+    }
+
     fn iter_prefix(
         &self,
         prefix: &storage::Key,
@@ -374,6 +379,10 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
     fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
         get_tx_index()
     }
+
+    fn get_native_token(&self) -> Result<Address, Error> {
+        get_native_token()
+    }
 }
 
 impl StorageRead<'_> for CtxPostStorageRead<'_> {
@@ -439,6 +448,10 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
     fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
         get_tx_index()
     }
+
+    fn get_native_token(&self) -> Result<Address, Error> {
+        get_native_token()
+    }
 }
 
 fn iter_prefix_impl(
@@ -494,4 +507,16 @@ fn get_block_epoch() -> Result<Epoch, Error> {
 
 fn get_tx_index() -> Result<TxIndex, storage_api::Error> {
     Ok(TxIndex(unsafe { anoma_vp_get_tx_index() }))
+}
+
+fn get_native_token() -> Result<Address, Error> {
+    let result = Vec::with_capacity(address::ADDRESS_LEN);
+    unsafe {
+        anoma_vp_get_native_token(result.as_ptr() as _);
+    }
+    let slice =
+        unsafe { slice::from_raw_parts(result.as_ptr(), address::ADDRESS_LEN) };
+    let address_str =
+        std::str::from_utf8(slice).expect("Cannot decode native address");
+    Ok(Address::decode(address_str).expect("Cannot decode native address"))
 }
