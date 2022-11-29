@@ -79,7 +79,7 @@ The actual Wasm code and data for the transaction are encapsulated inside a stru
 
 `WrapperTx` is the only type of transaction currently accepted by the ledger. It must be protected from replay attacks because, if it wasn't, a malicious user could replay the transaction as is. Even if the inner transaction implemented replay protection or, for any reason, wasn't accepted, the signer of the wrapper would still pay for gas and fees, effectively suffering economic damage.
 
-To prevent the replay of both these transactions we will rely on a set of already processed transactions' digests that will be kept in storage. These digests will be computed on the **signed** transactions. To support this, we'll need a subspace in storage headed by a `ReplayProtection` internal address:
+To prevent the replay of both these transactions we will rely on a set of already processed transactions' digests that will be kept in storage. These digests will be computed on the **unsigned** transactions, to support replay protection even for [multisigned](multisignature.md) transactions: in this case, if hashes were taken from the signed transactions, a different set of signatures on the same tx would produce a different hash, effectively allowing for a replay. To support this, we'll need a subspace in storage headed by a `ReplayProtection` internal address:
 
 ```
 /$ReplayProtectionAddress/$tx0_hash: None
