@@ -2,7 +2,7 @@
 
 mod block_space_alloc;
 
-use index_set::IndexSet;
+use index_set::vec::VecIndexSet;
 use namada::hints;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
@@ -65,7 +65,7 @@ where
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
             let alloc = BlockSpaceAllocator::from(&req);
-            let mut tx_indices = IndexSet::default();
+            let mut tx_indices = VecIndexSet::default();
 
             // decrypt the wrapper txs included in the previous block
             let (decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
@@ -189,7 +189,7 @@ where
     fn build_vote_extension_txs(
         &mut self,
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
-        tx_indices: &mut IndexSet,
+        tx_indices: &mut VecIndexSet<u128>,
         txs: &[TxBytes],
     ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
         if self.storage.last_height == BlockHeight(0) {
@@ -398,7 +398,7 @@ where
     fn build_remaining_batch(
         &mut self,
         mut alloc: BlockSpaceAllocator<FillingRemainingSpace>,
-        tx_indices: &IndexSet,
+        tx_indices: &VecIndexSet<u128>,
         txs: Vec<TxBytes>,
     ) -> Vec<TxBytes> {
         get_remaining_txs(tx_indices, txs)
@@ -438,7 +438,7 @@ where
 /// Return a list of the protocol transactions that haven't
 /// been marked for inclusion in the block, yet.
 fn get_remaining_txs(
-    tx_indices: &IndexSet,
+    tx_indices: &VecIndexSet<u128>,
     txs: Vec<TxBytes>,
 ) -> impl Iterator<Item = TxBytes> + '_ {
     let mut skip_list = tx_indices.iter();
@@ -553,7 +553,7 @@ mod test_prepare_proposal {
             .collect();
 
         let set = {
-            let mut s = IndexSet::default();
+            let mut s = VecIndexSet::default();
             for idx in excluded_indices.iter().copied() {
                 s.insert(idx as usize);
             }

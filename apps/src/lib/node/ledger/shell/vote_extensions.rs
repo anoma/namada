@@ -5,7 +5,7 @@ pub mod val_set_update;
 
 #[cfg(feature = "abcipp")]
 use borsh::BorshDeserialize;
-use index_set::IndexSet;
+use index_set::vec::VecIndexSet;
 use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
 use namada::proto::Signed;
 use namada::types::transaction::protocol::ProtocolTxType;
@@ -303,7 +303,7 @@ pub fn deserialize_vote_extensions(
 #[cfg(not(feature = "abcipp"))]
 pub fn deserialize_vote_extensions<'shell>(
     txs: &'shell [TxBytes],
-    tx_indices: &'shell mut IndexSet,
+    tx_indices: &'shell mut VecIndexSet<u128>,
 ) -> impl Iterator<Item = TxBytes> + 'shell {
     use namada::types::transaction::protocol::ProtocolTx;
 
