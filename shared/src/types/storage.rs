@@ -264,29 +264,25 @@ pub enum MerkleValue {
     BridgePoolTransfer(PendingTransfer),
 }
 
-impl<T> From<T> for MerkleValue
-where
-    T: AsRef<[u8]>,
-{
-    fn from(bytes: T) -> Self {
-        Self::Bytes(bytes.as_ref().to_owned())
-    }
-}
-
-impl From<PendingTransfer> for MerkleValue {
-    fn from(transfer: PendingTransfer) -> Self {
-        Self::BridgePoolTransfer(transfer)
-    }
-}
-
 impl MerkleValue {
-    /// Get the natural byte representation of the value
+    /// Byte length of the value
+    pub fn len(&self) -> usize {
+        match self {
+            MerkleValue::Bytes(bytes) => bytes.len(),
+            MerkleValue::BridgePoolTransfer(transfer) => transfer
+                .try_to_vec()
+                .expect("Serializing a PendingTransfer should not fail.")
+                .len(),
+        }
+    }
+
+    /// Byte representation of a value in the Merkle tree
     pub fn to_bytes(self) -> Vec<u8> {
         match self {
-            Self::Bytes(bytes) => bytes,
-            Self::BridgePoolTransfer(transfer) => {
-                transfer.try_to_vec().unwrap()
-            }
+            MerkleValue::Bytes(bytes) => bytes,
+            MerkleValue::BridgePoolTransfer(transfer) => transfer
+                .try_to_vec()
+                .expect("Serializing a PendingTransfer should not fail."),
         }
     }
 }

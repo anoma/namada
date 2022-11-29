@@ -70,6 +70,7 @@ where
         genesis.gov_params.init_storage(&mut self.storage);
         // configure the Ethereum bridge if the configuration is set.
         if let Some(config) = genesis.ethereum_bridge_params {
+            tracing::debug!("Initializing Ethereum bridge storage.");
             config.init_storage(&mut self.storage);
         }
 

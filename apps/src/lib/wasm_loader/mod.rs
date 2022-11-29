@@ -109,7 +109,6 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
         let checksums_path = wasm_directory
             .as_ref()
             .join(crate::config::DEFAULT_WASM_CHECKSUMS_FILE);
-        tracing::info!("WASM PATH: {}", checksums_path.to_string_lossy());
         // If the checksums file doesn't exists ...
         if tokio::fs::canonicalize(&checksums_path).await.is_err() {
             tokio::fs::create_dir_all(&wasm_directory).await.unwrap();
