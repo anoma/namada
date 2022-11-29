@@ -51,7 +51,7 @@ pub enum Error {
     #[error("IBC Token native VP: {0}")]
     IbcTokenNativeVpError(crate::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(crate::ledger::governance::vp::Error),
+    GovernanceNativeVpError(crate::ledger::governance::Error),
     #[error("SlashFund native VP error: {0}")]
     SlashFundNativeVpError(crate::ledger::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]

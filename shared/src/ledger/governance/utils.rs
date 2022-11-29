@@ -200,3 +200,33 @@ where
         nay_delegators,
     })
 }
+
+/// Calculate the valid voting window for validator given a proposal epoch
+/// details
+pub fn is_valid_validator_voting_period(
+    current_epoch: Epoch,
+    voting_start_epoch: Epoch,
+    voting_end_epoch: Epoch,
+) -> bool {
+    voting_start_epoch < voting_end_epoch
+        && current_epoch * 3 <= voting_start_epoch + voting_end_epoch * 2
+}
+
+/// Check if an accepted proposal is being executed
+pub fn is_proposal_accepted<S>(
+    storage: &S,
+    tx_data: &[u8],
+) -> storage_api::Result<bool>
+where
+    S: for<'iter> storage_api::StorageRead<'iter>,
+{
+    let proposal_id = u64::try_from_slice(tx_data).ok();
+    match proposal_id {
+        Some(id) => {
+            let proposal_execution_key =
+                gov_storage::get_proposal_execution_key(id);
+            storage.has_key(&proposal_execution_key)
+        }
+        None => Ok(false),
+    }
+}

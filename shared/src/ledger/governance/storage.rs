@@ -1,4 +1,4 @@
-use super::vp::ADDRESS;
+use crate::ledger::governance::ADDRESS;
 use crate::types::address::Address;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
