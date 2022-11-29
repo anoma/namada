@@ -8,16 +8,13 @@ use bech32::{FromBase32, ToBase32};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sha2::{Digest, Sha256};
 
-use crate::types::address::{
-    masp, Address, DecodeError, BECH32M_VARIANT, HASH_HEX_LEN,
+use crate::impl_display_and_from_str_via_format;
+use crate::types::address::{masp, Address, DecodeError, HASH_HEX_LEN};
+use crate::types::string_encoding::{
+    self, BECH32M_VARIANT, MASP_EXT_FULL_VIEWING_KEY_HRP,
+    MASP_EXT_SPENDING_KEY_HRP, MASP_PAYMENT_ADDRESS_HRP,
+    MASP_PINNED_PAYMENT_ADDRESS_HRP,
 };
-
-/// human-readable part of Bech32m encoded address
-// TODO remove "test" suffix for live network
-const EXT_FULL_VIEWING_KEY_HRP: &str = "xfvktest";
-const PAYMENT_ADDRESS_HRP: &str = "patest";
-const PINNED_PAYMENT_ADDRESS_HRP: &str = "ppatest";
-const EXT_SPENDING_KEY_HRP: &str = "xsktest";
 
 /// Wrapper for masp_primitive's FullViewingKey
 #[derive(
@@ -34,50 +31,98 @@ const EXT_SPENDING_KEY_HRP: &str = "xsktest";
 )]
 pub struct ExtendedViewingKey(masp_primitives::zip32::ExtendedFullViewingKey);
 
-impl Display for ExtendedViewingKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ExtendedViewingKey {
+    /// Encode `Self` to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = [0; 169];
         self.0
             .write(&mut bytes[..])
             .expect("should be able to serialize an ExtendedFullViewingKey");
-        let encoded = bech32::encode(
-            EXT_FULL_VIEWING_KEY_HRP,
-            bytes.to_base32(),
-            BECH32M_VARIANT,
-        )
-        .unwrap_or_else(|_| {
-            panic!(
-                "The human-readable part {} should never cause a failure",
-                EXT_FULL_VIEWING_KEY_HRP
-            )
-        });
-        write!(f, "{encoded}")
+        bytes.to_vec()
+    }
+
+    /// Try to decode `Self` from bytes
+    pub fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+        masp_primitives::zip32::ExtendedFullViewingKey::read(&mut &bytes[..])
+            .map(Self)
     }
 }
 
-impl FromStr for ExtendedViewingKey {
-    type Err = DecodeError;
+impl string_encoding::Format for ExtendedViewingKey {
+    const HRP: &'static str = MASP_EXT_FULL_VIEWING_KEY_HRP;
 
-    fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let (prefix, base32, variant) =
-            bech32::decode(string).map_err(DecodeError::DecodeBech32)?;
-        if prefix != EXT_FULL_VIEWING_KEY_HRP {
-            return Err(DecodeError::UnexpectedBech32Prefix(
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_bytes()
+    }
+
+    fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+        Self::decode_bytes(bytes)
+    }
+}
+
+impl_display_and_from_str_via_format!(ExtendedViewingKey);
+
+impl string_encoding::Format for PaymentAddress {
+    const HRP: &'static str = MASP_PAYMENT_ADDRESS_HRP;
+
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_bytes()
+    }
+
+    fn decode_bytes(_bytes: &[u8]) -> Result<Self, std::io::Error> {
+        unimplemented!(
+            "Cannot determine if the PaymentAddress is pinned from bytes. Use \
+             `PaymentAddress::decode_bytes(bytes, is_pinned)` instead."
+        )
+    }
+
+    // We override `encode` because we need to determine whether the address
+    // is pinned from its HRP
+    fn encode(&self) -> String {
+        let hrp = if self.is_pinned() {
+            MASP_PINNED_PAYMENT_ADDRESS_HRP
+        } else {
+            MASP_PAYMENT_ADDRESS_HRP
+        };
+        let base32 = self.to_bytes().to_base32();
+        bech32::encode(hrp, base32, BECH32M_VARIANT).unwrap_or_else(|_| {
+            panic!(
+                "The human-readable part {} should never cause a failure",
+                hrp
+            )
+        })
+    }
+
+    // We override `decode` because we need to use different HRP for pinned and
+    // non-pinned address
+    fn decode(
+        string: impl AsRef<str>,
+    ) -> Result<Self, string_encoding::DecodeError> {
+        let (prefix, base32, variant) = bech32::decode(string.as_ref())
+            .map_err(DecodeError::DecodeBech32)?;
+        let is_pinned = if prefix == MASP_PAYMENT_ADDRESS_HRP {
+            false
+        } else if prefix == MASP_PINNED_PAYMENT_ADDRESS_HRP {
+            true
+        } else {
+            return Err(DecodeError::UnexpectedBech32Hrp(
                 prefix,
-                EXT_FULL_VIEWING_KEY_HRP.into(),
+                MASP_PAYMENT_ADDRESS_HRP.into(),
             ));
-        }
+        };
         match variant {
             BECH32M_VARIANT => {}
             _ => return Err(DecodeError::UnexpectedBech32Variant(variant)),
         }
         let bytes: Vec<u8> = FromBase32::from_base32(&base32)
             .map_err(DecodeError::DecodeBase32)?;
-        masp_primitives::zip32::ExtendedFullViewingKey::read(&mut &bytes[..])
-            .map_err(DecodeError::InvalidInnerEncoding)
-            .map(Self)
+
+        PaymentAddress::decode_bytes(&bytes, is_pinned)
+            .map_err(DecodeError::InvalidBytes)
     }
 }
+
+impl_display_and_from_str_via_format!(PaymentAddress);
 
 impl From<ExtendedViewingKey>
     for masp_primitives::zip32::ExtendedFullViewingKey
@@ -155,6 +200,34 @@ impl PaymentAddress {
         // hex of the first 40 chars of the hash
         format!("{:.width$X}", hasher.finalize(), width = HASH_HEX_LEN)
     }
+
+    /// Encode `Self` to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes().to_vec()
+    }
+
+    /// Try to decode `Self` from bytes
+    pub fn decode_bytes(
+        bytes: &[u8],
+        is_pinned: bool,
+    ) -> Result<Self, std::io::Error> {
+        let addr_len_err = |_| {
+            Error::new(
+                ErrorKind::InvalidData,
+                "expected 43 bytes for the payment address",
+            )
+        };
+        let addr_data_err = || {
+            Error::new(
+                ErrorKind::InvalidData,
+                "invalid payment address provided",
+            )
+        };
+        let bytes: &[u8; 43] = &bytes.try_into().map_err(addr_len_err)?;
+        masp_primitives::sapling::PaymentAddress::from_bytes(bytes)
+            .ok_or_else(addr_data_err)
+            .map(|addr| Self(addr, is_pinned))
+    }
 }
 
 impl From<PaymentAddress> for masp_primitives::sapling::PaymentAddress {
@@ -166,67 +239,6 @@ impl From<PaymentAddress> for masp_primitives::sapling::PaymentAddress {
 impl From<masp_primitives::sapling::PaymentAddress> for PaymentAddress {
     fn from(addr: masp_primitives::sapling::PaymentAddress) -> Self {
         Self(addr, false)
-    }
-}
-
-impl Display for PaymentAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let bytes = self.0.to_bytes();
-        let hrp = if self.1 {
-            PINNED_PAYMENT_ADDRESS_HRP
-        } else {
-            PAYMENT_ADDRESS_HRP
-        };
-        let encoded = bech32::encode(hrp, bytes.to_base32(), BECH32M_VARIANT)
-            .unwrap_or_else(|_| {
-                panic!(
-                    "The human-readable part {} should never cause a failure",
-                    PAYMENT_ADDRESS_HRP
-                )
-            });
-        write!(f, "{encoded}")
-    }
-}
-
-impl FromStr for PaymentAddress {
-    type Err = DecodeError;
-
-    fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let (prefix, base32, variant) =
-            bech32::decode(string).map_err(DecodeError::DecodeBech32)?;
-        let pinned = if prefix == PAYMENT_ADDRESS_HRP {
-            false
-        } else if prefix == PINNED_PAYMENT_ADDRESS_HRP {
-            true
-        } else {
-            return Err(DecodeError::UnexpectedBech32Prefix(
-                prefix,
-                PAYMENT_ADDRESS_HRP.into(),
-            ));
-        };
-        match variant {
-            BECH32M_VARIANT => {}
-            _ => return Err(DecodeError::UnexpectedBech32Variant(variant)),
-        }
-        let addr_len_err = |_| {
-            DecodeError::InvalidInnerEncoding(Error::new(
-                ErrorKind::InvalidData,
-                "expected 43 bytes for the payment address",
-            ))
-        };
-        let addr_data_err = || {
-            DecodeError::InvalidInnerEncoding(Error::new(
-                ErrorKind::InvalidData,
-                "invalid payment address provided",
-            ))
-        };
-        let bytes: Vec<u8> = FromBase32::from_base32(&base32)
-            .map_err(DecodeError::DecodeBase32)?;
-        masp_primitives::sapling::PaymentAddress::from_bytes(
-            &bytes.try_into().map_err(addr_len_err)?,
-        )
-        .ok_or_else(addr_data_err)
-        .map(|x| Self(x, pinned))
     }
 }
 
@@ -258,50 +270,24 @@ impl<'de> serde::Deserialize<'de> for PaymentAddress {
 #[derive(Clone, Debug, Copy, BorshSerialize, BorshDeserialize)]
 pub struct ExtendedSpendingKey(masp_primitives::zip32::ExtendedSpendingKey);
 
-impl Display for ExtendedSpendingKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl string_encoding::Format for ExtendedSpendingKey {
+    const HRP: &'static str = MASP_EXT_SPENDING_KEY_HRP;
+
+    fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = [0; 169];
         self.0
             .write(&mut &mut bytes[..])
             .expect("should be able to serialize an ExtendedSpendingKey");
-        let encoded = bech32::encode(
-            EXT_SPENDING_KEY_HRP,
-            bytes.to_base32(),
-            BECH32M_VARIANT,
-        )
-        .unwrap_or_else(|_| {
-            panic!(
-                "The human-readable part {} should never cause a failure",
-                EXT_SPENDING_KEY_HRP
-            )
-        });
-        write!(f, "{encoded}")
+        bytes.to_vec()
     }
-}
 
-impl FromStr for ExtendedSpendingKey {
-    type Err = DecodeError;
-
-    fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let (prefix, base32, variant) =
-            bech32::decode(string).map_err(DecodeError::DecodeBech32)?;
-        if prefix != EXT_SPENDING_KEY_HRP {
-            return Err(DecodeError::UnexpectedBech32Prefix(
-                prefix,
-                EXT_SPENDING_KEY_HRP.into(),
-            ));
-        }
-        match variant {
-            BECH32M_VARIANT => {}
-            _ => return Err(DecodeError::UnexpectedBech32Variant(variant)),
-        }
-        let bytes: Vec<u8> = FromBase32::from_base32(&base32)
-            .map_err(DecodeError::DecodeBase32)?;
+    fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
         masp_primitives::zip32::ExtendedSpendingKey::read(&mut &bytes[..])
-            .map_err(DecodeError::InvalidInnerEncoding)
             .map(Self)
     }
 }
+
+impl_display_and_from_str_via_format!(ExtendedSpendingKey);
 
 impl From<ExtendedSpendingKey> for masp_primitives::zip32::ExtendedSpendingKey {
     fn from(key: ExtendedSpendingKey) -> Self {

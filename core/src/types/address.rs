@@ -6,30 +6,23 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::str::FromStr;
 
-use bech32::{self, FromBase32, ToBase32, Variant};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use thiserror::Error;
 
 use crate::ibc::signer::Signer;
+use crate::impl_display_and_from_str_via_format;
 use crate::types::ethereum_events::EthAddress;
-use crate::types::key;
 use crate::types::key::PublicKeyHash;
+use crate::types::{key, string_encoding};
 use crate::types::token::Denomination;
 
 /// The length of an established [`Address`] encoded with Borsh.
 pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
 
 /// The length of [`Address`] encoded with Bech32m.
-pub const ADDRESS_LEN: usize = 79 + ADDRESS_HRP.len();
-
-/// human-readable part of Bech32m encoded address
-// TODO use "a" for live network
-const ADDRESS_HRP: &str = "atest";
-/// We're using "Bech32m" variant
-pub const BECH32M_VARIANT: bech32::Variant = Variant::Bech32m;
+pub const ADDRESS_LEN: usize = 79 + string_encoding::hrp_len::<Address>();
 
 /// Length of a hash of an address as a hexadecimal string
 pub(crate) const HASH_HEX_LEN: usize = 40;
@@ -89,6 +82,12 @@ mod internal {
         "ano::Multitoken                              ";
 }
 
+/// Error from decoding address from string
+pub type DecodeError = string_encoding::DecodeError;
+
+/// Result of decoding address from string
+pub type Result<T> = std::result::Result<T, DecodeError>;
+
 /// Fixed-length address strings prefix for established addresses.
 const PREFIX_ESTABLISHED: &str = "est";
 /// Fixed-length address strings prefix for implicit addresses.
@@ -99,24 +98,6 @@ const PREFIX_INTERNAL: &str = "ano";
 const PREFIX_IBC: &str = "ibc";
 /// Fixed-length address strings prefix for Ethereum addresses.
 const PREFIX_ETH: &str = "eth";
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum DecodeError {
-    #[error("Error decoding address from Bech32m: {0}")]
-    DecodeBech32(bech32::Error),
-    #[error("Error decoding address from base32: {0}")]
-    DecodeBase32(bech32::Error),
-    #[error("Unexpected Bech32m human-readable part {0}, expected {1}")]
-    UnexpectedBech32Prefix(String, String),
-    #[error("Unexpected Bech32m variant {0:?}, expected {BECH32M_VARIANT:?}")]
-    UnexpectedBech32Variant(bech32::Variant),
-    #[error("Invalid address encoding")]
-    InvalidInnerEncoding(std::io::Error),
-}
-
-/// Result of a function that may fail
-pub type Result<T> = std::result::Result<T, DecodeError>;
 
 /// An account's address
 #[derive(
@@ -149,34 +130,12 @@ impl Ord for Address {
 impl Address {
     /// Encode an address with Bech32m encoding
     pub fn encode(&self) -> String {
-        let bytes = self.to_fixed_len_string();
-        bech32::encode(ADDRESS_HRP, bytes.to_base32(), BECH32M_VARIANT)
-            .unwrap_or_else(|_| {
-                panic!(
-                    "The human-readable part {} should never cause a failure",
-                    ADDRESS_HRP
-                )
-            })
+        string_encoding::Format::encode(self)
     }
 
     /// Decode an address from Bech32m encoding
     pub fn decode(string: impl AsRef<str>) -> Result<Self> {
-        let (prefix, hash_base32, variant) = bech32::decode(string.as_ref())
-            .map_err(DecodeError::DecodeBech32)?;
-        if prefix != ADDRESS_HRP {
-            return Err(DecodeError::UnexpectedBech32Prefix(
-                prefix,
-                ADDRESS_HRP.into(),
-            ));
-        }
-        match variant {
-            BECH32M_VARIANT => {}
-            _ => return Err(DecodeError::UnexpectedBech32Variant(variant)),
-        }
-        let bytes: Vec<u8> = FromBase32::from_base32(&hash_base32)
-            .map_err(DecodeError::DecodeBase32)?;
-        Self::try_from_fixed_len_string(&mut &bytes[..])
-            .map_err(DecodeError::InvalidInnerEncoding)
+        string_encoding::Format::decode(string)
     }
 
     /// Try to get a raw hash of an address, only defined for established and
@@ -196,7 +155,7 @@ impl Address {
     }
 
     /// Convert an address to a fixed length 7-bit ascii string bytes
-    fn to_fixed_len_string(&self) -> Vec<u8> {
+    pub fn to_fixed_len_string(&self) -> Vec<u8> {
         let mut string = match self {
             Address::Established(EstablishedAddress { hash }) => {
                 // The bech32m's data is a hex of the first 40 chars of the hash
@@ -254,7 +213,7 @@ impl Address {
     }
 
     /// Try to parse an address from fixed-length utf-8 encoded address string.
-    fn try_from_fixed_len_string(buf: &mut &[u8]) -> std::io::Result<Self> {
+    pub fn try_from_fixed_len_string(buf: &mut &[u8]) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
         let string = std::str::from_utf8(buf)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
@@ -378,6 +337,20 @@ impl Address {
     }
 }
 
+impl string_encoding::Format for Address {
+    const HRP: &'static str = string_encoding::ADDRESS_HRP;
+
+    fn to_bytes(&self) -> Vec<u8> {
+        Self::to_fixed_len_string(self)
+    }
+
+    fn decode_bytes(bytes: &[u8]) -> std::result::Result<Self, std::io::Error> {
+        Self::try_from_fixed_len_string(&mut &bytes[..])
+    }
+}
+
+impl_display_and_from_str_via_format!(Address);
+
 impl serde::Serialize for Address {
     fn serialize<S>(
         &self,
@@ -402,23 +375,9 @@ impl<'de> serde::Deserialize<'de> for Address {
     }
 }
 
-impl Display for Address {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.encode())
-    }
-}
-
 impl Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.pretty_fmt(f)
-    }
-}
-
-impl FromStr for Address {
-    type Err = DecodeError;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Address::decode(s)
     }
 }
 
