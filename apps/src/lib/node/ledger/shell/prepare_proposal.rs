@@ -208,7 +208,8 @@ where
                             // a bin is partitioned into yet more bins. so, we
                             // could have, say, 2/3 of the bin space available
                             // for eth events, and 1/3 available for valset
-                            // upds
+                            // upds. to be determined, as we implement CheckTx
+                            // changes (issue #367)
                             tracing::debug!(
                                 ?tx_bytes,
                                 bin_space_left,
@@ -356,12 +357,11 @@ where
                 })
                 .to_bytes()
             })
-            // TODO: make sure all txs are accepted
+            // TODO: make sure all decrypted txs are accepted
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&*tx_bytes).map_or_else(
                     |status| match status {
                         AllocFailure::Rejected { bin_space_left } => {
-                            // TODO: handle rejected txs
                             tracing::warn!(
                                 ?tx_bytes,
                                 bin_space_left,
@@ -372,8 +372,6 @@ where
                             false
                         }
                         AllocFailure::OverflowsBin { bin_size } => {
-                            // TODO: handle tx whose size is greater
-                            // than bin size
                             tracing::warn!(
                                 ?tx_bytes,
                                 bin_size,
