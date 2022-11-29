@@ -13,16 +13,18 @@ pub use namada_proof_of_stake::types::{
 };
 use namada_proof_of_stake::validation::validate;
 use namada_proof_of_stake::{validation, PosReadOnly};
+use rust_decimal::Decimal;
 use thiserror::Error;
 
 use super::{
     bond_key, is_bond_key, is_params_key, is_total_voting_power_key,
     is_unbond_key, is_validator_set_key, is_validator_total_deltas_key,
     is_validator_voting_power_key, params_key, total_voting_power_key,
-    unbond_key, validator_consensus_key_key, validator_set_key,
+    unbond_key, validator_commission_rate_key, validator_consensus_key_key,
+    validator_max_commission_rate_change_key, validator_set_key,
     validator_slashes_key, validator_state_key, validator_total_deltas_key,
-    validator_voting_power_key, BondId, Bonds, Unbonds, ValidatorConsensusKeys,
-    ValidatorSets, ValidatorTotalDeltas,
+    validator_voting_power_key, BondId, Bonds, CommissionRates, Unbonds,
+    ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
 };
 use crate::impl_pos_read_only;
 use crate::ledger::governance;
@@ -30,8 +32,9 @@ use crate::ledger::native_vp::{
     self, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
 };
 use crate::ledger::pos::{
-    is_validator_address_raw_hash_key, is_validator_consensus_key_key,
-    is_validator_state_key,
+    is_validator_address_raw_hash_key, is_validator_commission_rate_key,
+    is_validator_consensus_key_key,
+    is_validator_max_commission_rate_change_key, is_validator_state_key,
 };
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::{self, StorageRead};
@@ -260,13 +263,46 @@ where
                     TotalVotingPowers::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(TotalVotingPower(Data { pre, post }));
+            } else if let Some(address) = is_validator_commission_rate_key(key)
+            {
+                let max_change = self
+                    .ctx
+                    .pre()
+                    .read_bytes(&validator_max_commission_rate_change_key(
+                        address,
+                    ))?
+                    .and_then(|bytes| Decimal::try_from_slice(&bytes[..]).ok());
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                    CommissionRates::try_from_slice(&bytes[..]).ok()
+                });
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                    CommissionRates::try_from_slice(&bytes[..]).ok()
+                });
+                changes.push(Validator {
+                    address: address.clone(),
+                    update: CommissionRate(Data { pre, post }, max_change),
+                });
+            } else if let Some(address) =
+                is_validator_max_commission_rate_change_key(key)
+            {
+                let pre =
+                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                        Decimal::try_from_slice(&bytes[..]).ok()
+                    });
+                let post =
+                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                        Decimal::try_from_slice(&bytes[..]).ok()
+                    });
+                changes.push(Validator {
+                    address: address.clone(),
+                    update: MaxCommissionRateChange(Data { pre, post }),
+                });
             } else if key.segments.get(0) == Some(&addr.to_db_key()) {
                 // Unknown changes to this address space are disallowed
                 tracing::info!("PoS unrecognized key change {} rejected", key);
                 return Ok(false);
             } else {
                 // Unknown changes anywhere else are permitted
-                return Ok(true);
             }
         }
 

@@ -36,6 +36,7 @@ pub mod genesis_config {
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
     use namada::types::{storage, token};
+    use rust_decimal::Decimal;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
@@ -176,6 +177,11 @@ pub mod genesis_config {
         // Unstaked balance at genesis.
         // XXX: u64 doesn't work with toml-rs!
         pub non_staked_balance: Option<u64>,
+        /// Commission rate charged on rewards for delegators (bounded inside
+        /// 0-1)
+        pub commission_rate: Option<Decimal>,
+        /// Maximum change in commission rate permitted per epoch
+        pub max_commission_rate_change: Option<Decimal>,
         // Filename of validator VP. (default: default validator VP)
         pub validator_vp: Option<String>,
         // IP:port of the validator. (used in generation only)
@@ -289,6 +295,29 @@ pub mod genesis_config {
                     .unwrap()
                     .to_public_key()
                     .unwrap(),
+                commission_rate: config
+                    .commission_rate
+                    .and_then(|rate| {
+                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
+                            Some(rate)
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("Commission rate must be between 0.0 and 1.0"),
+                max_commission_rate_change: config
+                    .max_commission_rate_change
+                    .and_then(|rate| {
+                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
+                            Some(rate)
+                        } else {
+                            None
+                        }
+                    })
+                    .expect(
+                        "Max commission rate change must be between 0.0 and \
+                         1.0",
+                    ),
             },
             account_key: config
                 .account_public_key
@@ -776,6 +805,7 @@ pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
 #[cfg(feature = "dev")]
 pub fn genesis() -> Genesis {
     use namada::types::address;
+    use rust_decimal_macros::dec;
 
     use crate::wallet;
 
@@ -795,6 +825,8 @@ pub fn genesis() -> Genesis {
             address,
             tokens: token::Amount::whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
+            commission_rate: dec!(0.05),
+            max_commission_rate_change: dec!(0.01),
         },
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),

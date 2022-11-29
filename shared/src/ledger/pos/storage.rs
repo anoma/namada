@@ -7,8 +7,8 @@ use namada_proof_of_stake::types::{
 use namada_proof_of_stake::{types, PosBase};
 
 use super::{
-    BondId, Bonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
-    ADDRESS,
+    BondId, Bonds, CommissionRates, ValidatorConsensusKeys, ValidatorSets,
+    ValidatorTotalDeltas, ADDRESS,
 };
 use crate::ledger::storage::types::{decode, encode};
 use crate::ledger::storage::{self, Storage, StorageHasher};
@@ -23,6 +23,9 @@ const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
 const VALIDATOR_TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const VALIDATOR_VOTING_POWER_STORAGE_KEY: &str = "voting_power";
+const VALIDATOR_COMMISSION_RATE_STORAGE_KEY: &str = "commission_rate";
+const VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY: &str =
+    "max_commission_rate_change";
 const SLASHES_PREFIX: &str = "slash";
 const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
@@ -115,7 +118,59 @@ pub fn is_validator_consensus_key_key(key: &Key) -> Option<&Address> {
     }
 }
 
-/// Storage key for validator's state.
+/// Storage key for validator's commission rate.
+pub fn validator_commission_rate_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_COMMISSION_RATE_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's commissionr ate?
+pub fn is_validator_commission_rate_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_COMMISSION_RATE_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Storage key for validator's maximum commission rate change per epoch.
+pub fn validator_max_commission_rate_change_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's maximum commission rate change per epoch?
+pub fn is_validator_max_commission_rate_change_key(
+    key: &Key,
+) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Storage key for validator's consensus key.
 pub fn validator_state_key(validator: &Address) -> Key {
     validator_prefix(validator)
         .push(&VALIDATOR_STATE_STORAGE_KEY.to_owned())
@@ -413,6 +468,25 @@ where
             .unwrap_or_default()
     }
 
+    fn read_validator_commission_rate(
+        &self,
+        key: &Self::Address,
+    ) -> CommissionRates {
+        let (value, _gas) =
+            self.read(&validator_commission_rate_key(key)).unwrap();
+        decode(value.unwrap()).unwrap()
+    }
+
+    fn read_validator_max_commission_rate_change(
+        &self,
+        key: &Self::Address,
+    ) -> rust_decimal::Decimal {
+        let (value, _gas) = self
+            .read(&validator_max_commission_rate_change_key(key))
+            .unwrap();
+        decode(value.unwrap()).unwrap()
+    }
+
     fn read_validator_set(&self) -> ValidatorSets {
         let (value, _gas) = self.read(&validator_set_key()).unwrap();
         decode(value.unwrap()).unwrap()
@@ -435,6 +509,27 @@ where
         let raw_hash = key::tm_consensus_key_raw_hash(consensus_key);
         self.write(&validator_address_raw_hash_key(raw_hash), encode(address))
             .unwrap();
+    }
+
+    fn write_validator_commission_rate(
+        &mut self,
+        key: &Self::Address,
+        value: &CommissionRates,
+    ) {
+        self.write(&validator_commission_rate_key(key), encode(value))
+            .unwrap();
+    }
+
+    fn write_validator_max_commission_rate_change(
+        &mut self,
+        key: &Self::Address,
+        value: &rust_decimal::Decimal,
+    ) {
+        self.write(
+            &validator_max_commission_rate_change_key(key),
+            encode(value),
+        )
+        .unwrap();
     }
 
     fn write_validator_consensus_key(

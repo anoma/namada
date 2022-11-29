@@ -128,6 +128,8 @@ pub enum DynEpochOffset {
     PipelineLen,
     /// Offset at unbonding length.
     UnbondingLen,
+    /// Offset at pipeline length - 1.
+    PipelineLenMinusOne,
 }
 impl DynEpochOffset {
     /// Find the value of a given offset from PoS parameters.
@@ -135,6 +137,7 @@ impl DynEpochOffset {
         match self {
             DynEpochOffset::PipelineLen => params.pipeline_len,
             DynEpochOffset::UnbondingLen => params.unbonding_len,
+            DynEpochOffset::PipelineLenMinusOne => params.pipeline_len - 1,
         }
     }
 }
@@ -1223,7 +1226,9 @@ mod tests {
             Some(DynEpochOffset::PipelineLen) => {
                 Just(DynEpochOffset::PipelineLen).boxed()
             }
-            Some(DynEpochOffset::UnbondingLen) | None => prop_oneof![
+            Some(DynEpochOffset::UnbondingLen)
+            | Some(DynEpochOffset::PipelineLenMinusOne)
+            | None => prop_oneof![
                 Just(DynEpochOffset::PipelineLen),
                 Just(DynEpochOffset::UnbondingLen),
             ]

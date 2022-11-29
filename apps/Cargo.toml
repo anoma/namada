@@ -144,6 +144,8 @@ winapi = "0.3.9"
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["transparent-inputs"] }
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["bundled-prover", "download-params"] }
 bimap = {version = "0.6.2", features = ["serde"]}
+rust_decimal = "1.26.1"
+rust_decimal_macros = "1.26.1"
 
 [dev-dependencies]
 namada = {path = "../shared", features = ["testing", "wasm-runtime"]}

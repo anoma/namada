@@ -153,6 +153,7 @@ mod tests {
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use proptest::prelude::*;
+    use rust_decimal::Decimal;
 
     use super::*;
 
@@ -176,5 +177,12 @@ pub mod testing {
                 ..Default::default()
             }
         }
+    }
+
+    /// Get an arbitrary rate - a Decimal value between 0 and 1 inclusive, with
+    /// some fixed precision
+    pub fn arb_rate() -> impl Strategy<Value = Decimal> {
+        (0..=100_000_u64)
+            .prop_map(|num| Decimal::from(num) / Decimal::from(100_000_u64))
     }
 }

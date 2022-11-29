@@ -31,12 +31,14 @@ use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
 use parameters::PosParams;
+use rust_decimal::Decimal;
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, Epoch, GenesisValidator, Slash, SlashType, Slashes,
-    TotalVotingPowers, Unbond, Unbonds, ValidatorConsensusKeys, ValidatorSet,
-    ValidatorSetUpdate, ValidatorSets, ValidatorState, ValidatorStates,
-    ValidatorTotalDeltas, ValidatorVotingPowers, VotingPower, VotingPowerDelta,
+    ActiveValidator, Bonds, CommissionRates, Epoch, GenesisValidator, Slash,
+    SlashType, Slashes, TotalVotingPowers, Unbond, Unbonds,
+    ValidatorConsensusKeys, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
+    ValidatorState, ValidatorStates, ValidatorTotalDeltas,
+    ValidatorVotingPowers, VotingPower, VotingPowerDelta,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -131,6 +133,17 @@ pub trait PosReadOnly {
         &self,
         key: &Self::Address,
     ) -> Result<Vec<Slash>, Self::Error>;
+    /// Read PoS validator's commission rate for delegation rewards
+    fn read_validator_commission_rate(
+        &self,
+        key: &Self::Address,
+    ) -> Result<Option<CommissionRates>, Self::Error>;
+    /// Read PoS validator's maximum change in the commission rate for
+    /// delegation rewards
+    fn read_validator_max_commission_rate_change(
+        &self,
+        key: &Self::Address,
+    ) -> Result<Option<Decimal>, Self::Error>;
     /// Read PoS bond (validator self-bond or a delegation).
     fn read_bond(
         &self,
@@ -261,6 +274,10 @@ pub trait PosActions: PosReadOnly {
     /// Error in `PosActions::withdraw_tokens`
     type WithdrawError: From<Self::Error> + From<WithdrawError<Self::Address>>;
 
+    /// Error in `PosActions::change_commission_rate`
+    type CommissionRateChangeError: From<Self::Error>
+        + From<CommissionRateChangeError<Self::Address>>;
+
     /// Write PoS parameters.
     fn write_pos_params(
         &mut self,
@@ -283,6 +300,18 @@ pub trait PosActions: PosReadOnly {
         &mut self,
         key: &Self::Address,
         value: ValidatorStates,
+    ) -> Result<(), Self::Error>;
+    /// Write PoS validator's commission rate for delegator rewards
+    fn write_validator_commission_rate(
+        &mut self,
+        key: &Self::Address,
+        value: CommissionRates,
+    ) -> Result<(), Self::Error>;
+    /// Write PoS validator's maximum change in the commission rate per epoch
+    fn write_validator_max_commission_rate_change(
+        &mut self,
+        key: &Self::Address,
+        value: Decimal,
     ) -> Result<(), Self::Error>;
     /// Write PoS validator's total deltas of their bonds (validator self-bonds
     /// and delegations).
@@ -348,6 +377,8 @@ pub trait PosActions: PosReadOnly {
         address: &Self::Address,
         consensus_key: &Self::PublicKey,
         current_epoch: impl Into<Epoch>,
+        commission_rate: Decimal,
+        max_commission_rate_change: Decimal,
     ) -> Result<(), Self::BecomeValidatorError> {
         let current_epoch = current_epoch.into();
         let params = self.read_pos_params()?;
@@ -361,12 +392,16 @@ pub trait PosActions: PosReadOnly {
             state,
             total_deltas,
             voting_power,
+            commission_rate,
+            max_commission_rate_change,
         } = become_validator(
             &params,
             address,
             consensus_key,
             &mut validator_set,
             current_epoch,
+            commission_rate,
+            max_commission_rate_change,
         );
         self.write_validator_consensus_key(address, consensus_key)?;
         self.write_validator_state(address, state)?;
@@ -374,6 +409,16 @@ pub trait PosActions: PosReadOnly {
         self.write_validator_address_raw_hash(address, &consensus_key_clone)?;
         self.write_validator_total_deltas(address, total_deltas)?;
         self.write_validator_voting_power(address, voting_power)?;
+        self.write_validator_max_commission_rate_change(
+            address,
+            max_commission_rate_change,
+        )?;
+
+        let commission_rates =
+            Epoched::init(commission_rate, current_epoch, &params);
+        self.write_validator_commission_rate(address, commission_rates)?;
+
+        // Do we need to write the total deltas of all validators?
         Ok(())
     }
 
@@ -459,7 +504,7 @@ pub trait PosActions: PosReadOnly {
         };
         let mut bond = match self.read_bond(&bond_id)? {
             Some(val) => val,
-            None => Err(UnbondError::NoBondFound)?,
+            None => return Err(UnbondError::NoBondFound.into()),
         };
         let unbond = self.read_unbond(&bond_id)?;
         let mut validator_total_deltas = self
@@ -570,6 +615,82 @@ pub trait PosActions: PosReadOnly {
 
         Ok(slashed)
     }
+
+    /// Change the commission rate of a validator
+    fn change_validator_commission_rate(
+        &mut self,
+        validator: &Self::Address,
+        new_rate: Decimal,
+        current_epoch: impl Into<Epoch>,
+    ) -> Result<(), Self::CommissionRateChangeError> {
+        if new_rate < Decimal::ZERO {
+            return Err(CommissionRateChangeError::NegativeRate(
+                new_rate,
+                validator.clone(),
+            )
+            .into());
+        }
+        let current_epoch = current_epoch.into();
+        let max_change = self
+            .read_validator_max_commission_rate_change(validator)
+            .map_err(|_| {
+                CommissionRateChangeError::NoMaxSetInStorage(validator.clone())
+            })?
+            .ok_or_else(|| {
+                CommissionRateChangeError::CannotRead(validator.clone())
+            })?;
+        let mut commission_rates =
+            match self.read_validator_commission_rate(validator) {
+                Ok(Some(rates)) => rates,
+                _ => {
+                    return Err(CommissionRateChangeError::CannotRead(
+                        validator.clone(),
+                    )
+                    .into());
+                }
+            };
+        let params = self.read_pos_params()?;
+
+        let rate_at_pipeline = *commission_rates
+            .get_at_offset(current_epoch, DynEpochOffset::PipelineLen, &params)
+            .expect("Could not find a rate in given epoch");
+        if new_rate == rate_at_pipeline {
+            return Err(CommissionRateChangeError::ChangeIsZero(
+                validator.clone(),
+            )
+            .into());
+        }
+
+        let rate_before_pipeline = *commission_rates
+            .get_at_offset(
+                current_epoch,
+                DynEpochOffset::PipelineLenMinusOne,
+                &params,
+            )
+            .expect("Could not find a rate in given epoch");
+        let change_from_prev = new_rate - rate_before_pipeline;
+        if change_from_prev.abs() > max_change {
+            return Err(CommissionRateChangeError::RateChangeTooLarge(
+                change_from_prev,
+                validator.clone(),
+            )
+            .into());
+        }
+        commission_rates.update_from_offset(
+            |val, _epoch| {
+                *val = new_rate;
+            },
+            current_epoch,
+            DynEpochOffset::PipelineLen,
+            &params,
+        );
+        self.write_validator_commission_rate(validator, commission_rates)
+            .map_err(|_| {
+                CommissionRateChangeError::CannotWrite(validator.clone())
+            })?;
+
+        Ok(())
+    }
 }
 
 /// PoS system base trait for system initialization on genesis block, updating
@@ -668,6 +789,16 @@ pub trait PosBase {
     ) -> Option<ValidatorVotingPowers>;
     /// Read PoS slashes applied to a validator.
     fn read_validator_slashes(&self, key: &Self::Address) -> Slashes;
+    /// Read PoS validator's commission rate
+    fn read_validator_commission_rate(
+        &self,
+        key: &Self::Address,
+    ) -> CommissionRates;
+    /// Read PoS validator's maximum commission rate change per epoch
+    fn read_validator_max_commission_rate_change(
+        &self,
+        key: &Self::Address,
+    ) -> Decimal;
     /// Read PoS validator set (active and inactive).
     fn read_validator_set(&self) -> ValidatorSets<Self::Address>;
     /// Read PoS total voting power of all validators (active and inactive).
@@ -705,6 +836,18 @@ pub trait PosBase {
         &mut self,
         key: &Self::Address,
         value: &ValidatorVotingPowers,
+    );
+    /// Write PoS validator's commission rate.
+    fn write_validator_commission_rate(
+        &mut self,
+        key: &Self::Address,
+        value: &CommissionRates,
+    );
+    /// Write PoS validator's maximum change in the commission rate.
+    fn write_validator_max_commission_rate_change(
+        &mut self,
+        key: &Self::Address,
+        value: &Decimal,
     );
     /// Write (append) PoS slash applied to a validator.
     fn write_validator_slash(
@@ -770,6 +913,8 @@ pub trait PosBase {
             let GenesisValidatorData {
                 ref address,
                 consensus_key,
+                commission_rate,
+                max_commission_rate_change,
                 state,
                 total_deltas,
                 voting_power,
@@ -786,6 +931,11 @@ pub trait PosBase {
             self.write_validator_total_deltas(address, &total_deltas);
             self.write_validator_voting_power(address, &voting_power);
             self.write_bond(&bond_id, &bond);
+            self.write_validator_commission_rate(address, &commission_rate);
+            self.write_validator_max_commission_rate_change(
+                address,
+                &max_commission_rate_change,
+            );
         }
         self.write_validator_set(&validator_set);
         self.write_total_voting_power(&total_voting_power);
@@ -1064,6 +1214,36 @@ where
     NegativeStake(i128, Address),
 }
 
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum CommissionRateChangeError<Address>
+where
+    Address: Display
+        + Debug
+        + Clone
+        + PartialOrd
+        + Ord
+        + Hash
+        + BorshDeserialize
+        + BorshSerialize
+        + BorshSchema,
+{
+    #[error("Unexpected negative commission rate {0} for validator {1}")]
+    NegativeRate(Decimal, Address),
+    #[error("Rate change of {0} is too large for validator {1}")]
+    RateChangeTooLarge(Decimal, Address),
+    #[error("The rate change is 0 for validator {0}")]
+    ChangeIsZero(Address),
+    #[error(
+        "There is no maximum rate change written in storage for validator {0}"
+    )]
+    NoMaxSetInStorage(Address),
+    #[error("Cannot write to storage for validator {0}")]
+    CannotWrite(Address),
+    #[error("Cannot read storage for validator {0}")]
+    CannotRead(Address),
+}
+
 struct GenesisData<Validators, Address, TokenAmount, TokenChange, PK>
 where
     Validators: Iterator<
@@ -1132,6 +1312,8 @@ where
 {
     address: Address,
     consensus_key: ValidatorConsensusKeys<PK>,
+    commission_rate: CommissionRates,
+    max_commission_rate_change: Decimal,
     state: ValidatorStates,
     total_deltas: ValidatorTotalDeltas<TokenChange>,
     voting_power: ValidatorVotingPowers,
@@ -1232,9 +1414,13 @@ where
                   address,
                   tokens,
                   consensus_key,
+                  commission_rate,
+                  max_commission_rate_change,
               }| {
             let consensus_key =
                 Epoched::init_at_genesis(consensus_key.clone(), current_epoch);
+            let commission_rate =
+                Epoched::init_at_genesis(*commission_rate, current_epoch);
             let state = Epoched::init_at_genesis(
                 ValidatorState::Candidate,
                 current_epoch,
@@ -1263,6 +1449,8 @@ where
             Ok(GenesisValidatorData {
                 address: address.clone(),
                 consensus_key,
+                commission_rate,
+                max_commission_rate_change: *max_commission_rate_change,
                 state,
                 total_deltas,
                 voting_power,
@@ -1380,6 +1568,8 @@ where
     state: ValidatorStates,
     total_deltas: ValidatorTotalDeltas<TokenChange>,
     voting_power: ValidatorVotingPowers,
+    commission_rate: Decimal,
+    max_commission_rate_change: Decimal,
 }
 
 /// A function that initialized data for a new validator.
@@ -1389,6 +1579,8 @@ fn become_validator<Address, PK, TokenChange>(
     consensus_key: &PK,
     validator_set: &mut ValidatorSets<Address>,
     current_epoch: Epoch,
+    commission_rate: Decimal,
+    max_commission_rate_change: Decimal,
 ) -> BecomeValidatorData<PK, TokenChange>
 where
     Address: Debug
@@ -1451,6 +1643,8 @@ where
         state,
         total_deltas,
         voting_power,
+        commission_rate,
+        max_commission_rate_change,
     }
 }
 

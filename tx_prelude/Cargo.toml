@@ -17,3 +17,4 @@ namada_macros = {path = "../macros"}
 borsh = "0.9.0"
 sha2 = "0.10.1"
 thiserror = "1.0.30"
+rust_decimal = "1.26.1"

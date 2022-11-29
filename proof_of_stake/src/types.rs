@@ -9,6 +9,7 @@ use std::num::TryFromIntError;
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use rust_decimal::Decimal;
 
 use crate::epoched::{
     Epoched, EpochedDelta, OffsetPipelineLen, OffsetUnbondingLen,
@@ -37,6 +38,8 @@ pub type ValidatorSets<Address> =
     Epoched<ValidatorSet<Address>, OffsetUnbondingLen>;
 /// Epoched total voting power.
 pub type TotalVotingPowers = EpochedDelta<VotingPowerDelta, OffsetUnbondingLen>;
+/// Epoched validator commission rate
+pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
 
 /// Epoch identifier. Epochs are identified by consecutive natural numbers.
 ///
@@ -112,6 +115,10 @@ pub struct GenesisValidator<Address, Token, PK> {
     pub tokens: Token,
     /// A public key used for signing validator's consensus actions
     pub consensus_key: PK,
+    /// Commission rate charged on rewards for delegators (bounded inside 0-1)
+    pub commission_rate: Decimal,
+    /// Maximum change in commission rate permitted per epoch
+    pub max_commission_rate_change: Decimal,
 }
 
 /// An update of the active and inactive validator set.

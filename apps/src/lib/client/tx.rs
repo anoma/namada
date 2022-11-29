@@ -38,7 +38,7 @@ use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
-use namada::ledger::pos::{BondId, Bonds, Unbonds};
+use namada::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
@@ -60,6 +60,7 @@ use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
 use namada::{ledger, vm};
 use rand_core::{CryptoRng, OsRng, RngCore};
+use rust_decimal::Decimal;
 use sha2::Digest;
 use tokio::time::{Duration, Instant};
 
@@ -89,6 +90,7 @@ const VP_USER_WASM: &str = "vp_user.wasm";
 const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
 
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
@@ -201,6 +203,8 @@ pub async fn submit_init_validator(
         account_key,
         consensus_key,
         protocol_key,
+        commission_rate,
+        max_commission_rate_change,
         validator_vp_code_path,
         unsafe_dont_encrypt,
     }: args::TxInitValidator,
@@ -266,6 +270,28 @@ pub async fn submit_init_validator(
     let validator_vp_code = validator_vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+
+    // Validate the commission rate data
+    if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
+        eprintln!(
+            "The validator commission rate must not exceed 1.0 or 100%, and \
+             it must be 0 or positive"
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+    if max_commission_rate_change > Decimal::ONE
+        || max_commission_rate_change < Decimal::ZERO
+    {
+        eprintln!(
+            "The validator maximum change in commission rate per epoch must \
+             not exceed 1.0 or 100%"
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
     // Validate the validator VP code
     if let Err(err) = vm::validate_untrusted_wasm(&validator_vp_code) {
         eprintln!(
@@ -283,6 +309,8 @@ pub async fn submit_init_validator(
         consensus_key: consensus_key.ref_to(),
         protocol_key,
         dkg_key,
+        commission_rate,
+        max_commission_rate_change,
         validator_vp_code,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
@@ -2410,6 +2438,88 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
+    process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+    )
+    .await;
+}
+
+pub async fn submit_validator_commission_change(
+    ctx: Context,
+    args: args::TxCommissionRateChange,
+) {
+    let epoch = rpc::query_epoch(args::Query {
+        ledger_address: args.tx.ledger_address.clone(),
+    })
+    .await;
+
+    let tx_code = ctx.read_wasm(TX_CHANGE_COMMISSION_WASM);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+
+    let validator = ctx.get(&args.validator);
+    if rpc::is_validator(&validator, args.tx.ledger_address.clone()).await {
+        if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
+            eprintln!("Invalid new commission rate, received {}", args.rate);
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+
+        let commission_rate_key =
+            ledger::pos::validator_commission_rate_key(&validator);
+        let max_commission_rate_change_key =
+            ledger::pos::validator_max_commission_rate_change_key(&validator);
+        let commission_rates = rpc::query_storage_value::<CommissionRates>(
+            &client,
+            &commission_rate_key,
+        )
+        .await;
+        let max_change = rpc::query_storage_value::<Decimal>(
+            &client,
+            &max_commission_rate_change_key,
+        )
+        .await;
+
+        match (commission_rates, max_change) {
+            (Some(rates), Some(max_change)) => {
+                // Assuming that pipeline length = 2
+                let rate_next_epoch = rates.get(epoch + 1).unwrap();
+                if (args.rate - rate_next_epoch).abs() > max_change {
+                    eprintln!(
+                        "New rate is too large of a change with respect to \
+                         the predecessor epoch in which the rate will take \
+                         effect."
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+            }
+            _ => {
+                eprintln!("Error retrieving from storage");
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+    } else {
+        eprintln!("The given address {validator} is not a validator.");
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
+    let data = pos::CommissionChange {
+        validator: ctx.get(&args.validator),
+        new_rate: args.rate,
+    };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    let default_signer = args.validator;
     process_tx(
         ctx,
         &args.tx,

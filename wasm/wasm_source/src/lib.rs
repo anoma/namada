@@ -1,5 +1,7 @@
 #[cfg(feature = "tx_bond")]
 pub mod tx_bond;
+#[cfg(feature = "tx_change_validator_commission")]
+pub mod tx_change_validator_commission;
 #[cfg(feature = "tx_ibc")]
 pub mod tx_ibc;
 #[cfg(feature = "tx_init_account")]
@@ -31,3 +33,6 @@ pub mod vp_testnet_faucet;
 pub mod vp_token;
 #[cfg(feature = "vp_user")]
 pub mod vp_user;
+
+#[cfg(feature = "vp_validator")]
+pub mod vp_validator;
