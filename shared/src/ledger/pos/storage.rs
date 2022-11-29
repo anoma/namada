@@ -1,14 +1,12 @@
 //! Proof-of-Stake storage keys and storage integration via [`PosBase`] trait.
 
 use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::types::{
-    TotalVotingPowers, ValidatorStates, ValidatorVotingPowers,
-};
+use namada_proof_of_stake::types::ValidatorStates;
 use namada_proof_of_stake::{types, PosBase};
 
 use super::{
-    BondId, Bonds, CommissionRates, ValidatorConsensusKeys, ValidatorSets,
-    ValidatorTotalDeltas, ADDRESS,
+    BondId, Bonds, CommissionRates, TotalDeltas, ValidatorConsensusKeys,
+    ValidatorDeltas, ValidatorSets, ADDRESS,
 };
 use crate::ledger::storage::types::{decode, encode};
 use crate::ledger::storage::{self, Storage, StorageHasher};
@@ -21,8 +19,7 @@ const VALIDATOR_STORAGE_PREFIX: &str = "validator";
 const VALIDATOR_ADDRESS_RAW_HASH: &str = "address_raw_hash";
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
-const VALIDATOR_TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
-const VALIDATOR_VOTING_POWER_STORAGE_KEY: &str = "voting_power";
+const VALIDATOR_DELTAS_STORAGE_KEY: &str = "validator_deltas";
 const VALIDATOR_COMMISSION_RATE_STORAGE_KEY: &str = "commission_rate";
 const VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY: &str =
     "max_commission_rate_change";
@@ -30,7 +27,7 @@ const SLASHES_PREFIX: &str = "slash";
 const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
-const TOTAL_VOTING_POWER_STORAGE_KEY: &str = "total_voting_power";
+const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -195,15 +192,15 @@ pub fn is_validator_state_key(key: &Key) -> Option<&Address> {
     }
 }
 
-/// Storage key for validator's total deltas.
-pub fn validator_total_deltas_key(validator: &Address) -> Key {
+/// Storage key for validator's deltas.
+pub fn validator_deltas_key(validator: &Address) -> Key {
     validator_prefix(validator)
-        .push(&VALIDATOR_TOTAL_DELTAS_STORAGE_KEY.to_owned())
+        .push(&VALIDATOR_DELTAS_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
 /// Is storage key for validator's total deltas?
-pub fn is_validator_total_deltas_key(key: &Key) -> Option<&Address> {
+pub fn is_validator_deltas_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
@@ -212,32 +209,7 @@ pub fn is_validator_total_deltas_key(key: &Key) -> Option<&Address> {
             DbKeySeg::StringSeg(key),
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_TOTAL_DELTAS_STORAGE_KEY =>
-        {
-            Some(validator)
-        }
-        _ => None,
-    }
-}
-
-/// Storage key for validator's voting power.
-pub fn validator_voting_power_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_VOTING_POWER_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for validator's voting power?
-pub fn is_validator_voting_power_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(validator),
-            DbKeySeg::StringSeg(key),
-        ] if addr == &ADDRESS
-            && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_VOTING_POWER_STORAGE_KEY =>
+            && key == VALIDATOR_DELTAS_STORAGE_KEY =>
         {
             Some(validator)
         }
@@ -364,18 +336,18 @@ pub fn is_validator_set_key(key: &Key) -> bool {
     }
 }
 
-/// Storage key for total voting power.
-pub fn total_voting_power_key() -> Key {
+/// Storage key for total deltas of all validators.
+pub fn total_deltas_key() -> Key {
     Key::from(ADDRESS.to_db_key())
-        .push(&TOTAL_VOTING_POWER_STORAGE_KEY.to_owned())
+        .push(&TOTAL_DELTAS_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for total voting power?
-pub fn is_total_voting_power_key(key: &Key) -> bool {
+/// Is storage key for total deltas of all validators?
+pub fn is_total_deltas_key(key: &Key) -> bool {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if addr == &ADDRESS && key == TOTAL_VOTING_POWER_STORAGE_KEY =>
+            if addr == &ADDRESS && key == TOTAL_DELTAS_STORAGE_KEY =>
         {
             true
         }
@@ -443,21 +415,11 @@ where
         value.map(|value| decode(value).unwrap())
     }
 
-    fn read_validator_total_deltas(
+    fn read_validator_deltas(
         &self,
         key: &Self::Address,
-    ) -> Option<types::ValidatorTotalDeltas<Self::TokenChange>> {
-        let (value, _gas) =
-            self.read(&validator_total_deltas_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap())
-    }
-
-    fn read_validator_voting_power(
-        &self,
-        key: &Self::Address,
-    ) -> Option<ValidatorVotingPowers> {
-        let (value, _gas) =
-            self.read(&validator_voting_power_key(key)).unwrap();
+    ) -> Option<types::ValidatorDeltas<Self::TokenChange>> {
+        let (value, _gas) = self.read(&validator_deltas_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
@@ -492,8 +454,8 @@ where
         decode(value.unwrap()).unwrap()
     }
 
-    fn read_total_voting_power(&self) -> TotalVotingPowers {
-        let (value, _gas) = self.read(&total_voting_power_key()).unwrap();
+    fn read_total_deltas(&self) -> TotalDeltas {
+        let (value, _gas) = self.read(&total_deltas_key()).unwrap();
         decode(value.unwrap()).unwrap()
     }
 
@@ -550,21 +512,12 @@ where
             .unwrap();
     }
 
-    fn write_validator_total_deltas(
+    fn write_validator_deltas(
         &mut self,
         key: &Self::Address,
-        value: &ValidatorTotalDeltas,
+        value: &ValidatorDeltas,
     ) {
-        self.write(&validator_total_deltas_key(key), encode(value))
-            .unwrap();
-    }
-
-    fn write_validator_voting_power(
-        &mut self,
-        key: &Self::Address,
-        value: &ValidatorVotingPowers,
-    ) {
-        self.write(&validator_voting_power_key(key), encode(value))
+        self.write(&validator_deltas_key(key), encode(value))
             .unwrap();
     }
 
@@ -587,9 +540,8 @@ where
         self.write(&validator_set_key(), encode(value)).unwrap();
     }
 
-    fn write_total_voting_power(&mut self, value: &TotalVotingPowers) {
-        self.write(&total_voting_power_key(), encode(value))
-            .unwrap();
+    fn write_total_deltas(&mut self, value: &TotalDeltas) {
+        self.write(&total_deltas_key(), encode(value)).unwrap();
     }
 
     fn credit_tokens(

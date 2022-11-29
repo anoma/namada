@@ -172,7 +172,7 @@ pub mod cmds {
                 .subcommand(QueryBlock::def().display_order(3))
                 .subcommand(QueryBalance::def().display_order(3))
                 .subcommand(QueryBonds::def().display_order(3))
-                .subcommand(QueryVotingPower::def().display_order(3))
+                .subcommand(QueryBondedStake::def().display_order(3))
                 .subcommand(QuerySlashes::def().display_order(3))
                 .subcommand(QueryResult::def().display_order(3))
                 .subcommand(QueryRawBytes::def().display_order(3))
@@ -207,8 +207,8 @@ pub mod cmds {
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
-            let query_voting_power =
-                Self::parse_with_ctx(matches, QueryVotingPower);
+            let query_bonded_stake =
+                Self::parse_with_ctx(matches, QueryBondedStake);
             let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
             let query_result = Self::parse_with_ctx(matches, QueryResult);
             let query_raw_bytes = Self::parse_with_ctx(matches, QueryRawBytes);
@@ -236,7 +236,7 @@ pub mod cmds {
                 .or(query_block)
                 .or(query_balance)
                 .or(query_bonds)
-                .or(query_voting_power)
+                .or(query_bonded_stake)
                 .or(query_slashes)
                 .or(query_result)
                 .or(query_raw_bytes)
@@ -298,7 +298,7 @@ pub mod cmds {
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
-        QueryVotingPower(QueryVotingPower),
+        QueryBondedStake(QueryBondedStake),
         QueryCommissionRate(QueryCommissionRate),
         QuerySlashes(QuerySlashes),
         QueryRawBytes(QueryRawBytes),
@@ -1215,21 +1215,21 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryVotingPower(pub args::QueryVotingPower);
+    pub struct QueryBondedStake(pub args::QueryBondedStake);
 
-    impl SubCmd for QueryVotingPower {
-        const CMD: &'static str = "voting-power";
+    impl SubCmd for QueryBondedStake {
+        const CMD: &'static str = "bonded-stake";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                QueryVotingPower(args::QueryVotingPower::parse(matches))
+                QueryBondedStake(args::QueryBondedStake::parse(matches))
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS voting power.")
-                .add_args::<args::QueryVotingPower>()
+                .about("Query PoS bonded stake.")
+                .add_args::<args::QueryBondedStake>()
         }
     }
 
@@ -2554,18 +2554,18 @@ pub mod args {
         }
     }
 
-    /// Query PoS voting power
+    /// Query PoS bonded stake
     #[derive(Clone, Debug)]
-    pub struct QueryVotingPower {
+    pub struct QueryBondedStake {
         /// Common query args
         pub query: Query,
         /// Address of a validator
         pub validator: Option<WalletAddress>,
-        /// Epoch in which to find voting power
+        /// Epoch in which to find bonded stake
         pub epoch: Option<Epoch>,
     }
 
-    impl Args for QueryVotingPower {
+    impl Args for QueryBondedStake {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let validator = VALIDATOR_OPT.parse(matches);
@@ -2580,7 +2580,7 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query>()
                 .arg(VALIDATOR_OPT.def().about(
-                    "The validator's address whose voting power to query.",
+                    "The validator's address whose bonded stake to query.",
                 ))
                 .arg(EPOCH.def().about(
                     "The epoch at which to query (last committed, if not \

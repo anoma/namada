@@ -114,8 +114,8 @@ pub fn find_keypair(
     })
 }
 
-/// Find the address of an account by its alias from the wallet
-pub fn find_voting_power(
+/// Find the bonded stake of an account by its alias from the wallet
+pub fn find_bonded_stake(
     test: &Test,
     alias: impl AsRef<str>,
     ledger_address: &str,
@@ -124,7 +124,7 @@ pub fn find_voting_power(
         test,
         Bin::Client,
         &[
-            "voting-power",
+            "bonded-stake",
             "--validator",
             alias.as_ref(),
             "--ledger-address",
@@ -132,16 +132,16 @@ pub fn find_voting_power(
         ],
         Some(10)
     )?;
-    let (unread, matched) = find.exp_regex("voting power: .*")?;
-    let voting_power_str = strip_trailing_newline(&matched)
+    let (unread, matched) = find.exp_regex("bonded stake: .*")?;
+    let bonded_stake_str = strip_trailing_newline(&matched)
         .trim()
         .rsplit_once(' ')
         .unwrap()
         .1;
-    u64::from_str(voting_power_str).map_err(|e| {
+    u64::from_str(bonded_stake_str).map_err(|e| {
         eyre!(format!(
-            "Voting power: {} parsed from {}, Error: {}\n\nOutput: {}",
-            voting_power_str, matched, e, unread
+            "Bonded stake: {} parsed from {}, Error: {}\n\nOutput: {}",
+            bonded_stake_str, matched, e, unread
         ))
     })
 }
