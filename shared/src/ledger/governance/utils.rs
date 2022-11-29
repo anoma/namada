@@ -2,14 +2,13 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use borsh::BorshDeserialize;
-use itertools::Itertools;
-use namada_proof_of_stake::types::{Slash, Slashes};
+use namada_proof_of_stake::PosReadOnly;
 use thiserror::Error;
 
 use crate::ledger::governance::storage as gov_storage;
-use crate::ledger::pos;
-use crate::ledger::pos::{BondId, Bonds, ValidatorSets, ValidatorTotalDeltas};
+use crate::ledger::pos::BondId;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::governance::{ProposalVote, TallyResult, VotePower};
 use crate::types::storage::{Epoch, Key};
@@ -73,19 +72,17 @@ impl ProposalEvent {
     }
 }
 
-/// Return a proposal result and his associated proposal code (if any)
+/// Return a proposal result - accepted only when the result is `Ok(true)`.
 pub fn compute_tally<D, H>(
     storage: &Storage<D, H>,
     epoch: Epoch,
     votes: Votes,
-) -> TallyResult
+) -> storage_api::Result<bool>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    let validators = get_all_validators(storage, epoch);
-    let total_stacked_tokens =
-        get_total_stacked_tokens(storage, epoch, &validators);
+    let total_stake: VotePower = storage.total_stake(epoch)?.into();
 
     let Votes {
         yay_validators,
@@ -93,16 +90,16 @@ where
         nay_delegators,
     } = votes;
 
-    let mut total_yay_stacked_tokens = VotePower::from(0_u64);
+    let mut total_yay_staked_tokens = VotePower::from(0_u64);
     for (_, amount) in yay_validators.clone().into_iter() {
-        total_yay_stacked_tokens += amount;
+        total_yay_staked_tokens += amount;
     }
 
     // YAY: Add delegator amount whose validator didn't vote / voted nay
     for (_, vote_map) in yay_delegators.iter() {
         for (validator_address, vote_power) in vote_map.iter() {
             if !yay_validators.contains_key(validator_address) {
-                total_yay_stacked_tokens += vote_power;
+                total_yay_staked_tokens += vote_power;
             }
         }
     }
@@ -111,98 +108,12 @@ where
     for (_, vote_map) in nay_delegators.iter() {
         for (validator_address, vote_power) in vote_map.iter() {
             if yay_validators.contains_key(validator_address) {
-                total_yay_stacked_tokens -= vote_power;
+                total_yay_staked_tokens -= vote_power;
             }
         }
     }
 
-    if total_yay_stacked_tokens >= (total_stacked_tokens / 3) * 2 {
-        TallyResult::Passed
-    } else {
-        TallyResult::Rejected
-    }
-}
-
-// Get bond token amount
-fn get_bond_amount_at<D, H>(
-    storage: &Storage<D, H>,
-    delegator: &Address,
-    validator: &Address,
-    epoch: Epoch,
-) -> Option<token::Amount>
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    let slashes_key = pos::validator_slashes_key(validator);
-    let bond_key = pos::bond_key(&BondId {
-        source: delegator.clone(),
-        validator: validator.clone(),
-    });
-
-    let (slashes_bytes, _) = storage
-        .read(&slashes_key)
-        .expect("Should be able to read key.");
-    let (epoched_bonds_bytes, _) = storage
-        .read(&bond_key)
-        .expect("Should be able to read key.");
-    match epoched_bonds_bytes {
-        Some(epoched_bonds_bytes) => {
-            let epoched_bonds =
-                Bonds::try_from_slice(&epoched_bonds_bytes[..]).ok();
-            let slashes = if let Some(slashes_bytes) = slashes_bytes {
-                Slashes::try_from_slice(&slashes_bytes[..]).ok()
-            } else {
-                Some(Slashes::default())
-            };
-            match (epoched_bonds, slashes) {
-                (Some(epoched_bonds), Some(slashes)) => {
-                    let mut delegated_amount: token::Amount = 0.into();
-                    for bond in epoched_bonds.iter() {
-                        let mut to_deduct = bond.neg_deltas;
-                        for (start_epoch, &(mut delta)) in
-                            bond.pos_deltas.iter().sorted()
-                        {
-                            // deduct bond's neg_deltas
-                            if to_deduct > delta {
-                                to_deduct -= delta;
-                                // If the whole bond was deducted, continue to
-                                // the next one
-                                continue;
-                            } else {
-                                delta -= to_deduct;
-                                to_deduct = token::Amount::default();
-                            }
-
-                            let start_epoch = Epoch::from(*start_epoch);
-                            delta = apply_slashes(&slashes, delta, start_epoch);
-                            if epoch >= start_epoch {
-                                delegated_amount += delta;
-                            }
-                        }
-                    }
-                    Some(delegated_amount)
-                }
-                _ => None,
-            }
-        }
-        _ => None,
-    }
-}
-
-fn apply_slashes(
-    slashes: &[Slash],
-    mut delta: token::Amount,
-    epoch_start: Epoch,
-) -> token::Amount {
-    for slash in slashes {
-        if Epoch::from(slash.epoch) >= epoch_start {
-            let raw_delta: u64 = delta.into();
-            let current_slashed = token::Amount::from(slash.rate * raw_delta);
-            delta -= current_slashed;
-        }
-    }
-    delta
+    Ok(3 * total_yay_staked_tokens >= 2 * total_stake)
 }
 
 /// Prepare Votes structure to compute proposal tally
@@ -210,12 +121,12 @@ pub fn get_proposal_votes<D, H>(
     storage: &Storage<D, H>,
     epoch: Epoch,
     proposal_id: u64,
-) -> Votes
+) -> storage_api::Result<Votes>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    let validators = get_all_validators(storage, epoch);
+    let validators = storage.validator_addresses(epoch)?;
 
     let vote_prefix_key =
         gov_storage::get_proposal_vote_prefix_key(proposal_id);
@@ -236,31 +147,29 @@ where
                 match voter_address {
                     Some(voter_address) => {
                         if vote.is_yay() && validators.contains(voter_address) {
-                            let amount = get_validator_stake(
-                                storage,
-                                epoch,
-                                voter_address,
-                            );
+                            let amount: VotePower = storage
+                                .validator_stake(voter_address, epoch)?
+                                .into();
                             yay_validators
                                 .insert(voter_address.clone(), amount);
                         } else if !validators.contains(voter_address) {
                             let validator_address =
                                 gov_storage::get_vote_delegation_address(&key);
                             match validator_address {
-                                Some(validator_address) => {
-                                    let amount = get_bond_amount_at(
-                                        storage,
-                                        voter_address,
-                                        validator_address,
-                                        epoch,
-                                    );
-                                    if let Some(amount) = amount {
+                                Some(validator) => {
+                                    let bond_id = BondId {
+                                        source: voter_address.clone(),
+                                        validator: validator.clone(),
+                                    };
+                                    let amount =
+                                        storage.bond_amount(&bond_id, epoch)?;
+                                    if amount != token::Amount::default() {
                                         if vote.is_yay() {
                                             let entry = yay_delegators
                                                 .entry(voter_address.to_owned())
                                                 .or_default();
                                             entry.insert(
-                                                validator_address.to_owned(),
+                                                validator.to_owned(),
                                                 VotePower::from(amount),
                                             );
                                         } else {
@@ -268,7 +177,7 @@ where
                                                 .entry(voter_address.to_owned())
                                                 .or_default();
                                             entry.insert(
-                                                validator_address.to_owned(),
+                                                validator.to_owned(),
                                                 VotePower::from(amount),
                                             );
                                         }
@@ -285,84 +194,9 @@ where
         }
     }
 
-    Votes {
+    Ok(Votes {
         yay_validators,
         yay_delegators,
         nay_delegators,
-    }
-}
-
-fn get_all_validators<D, H>(
-    storage: &Storage<D, H>,
-    epoch: Epoch,
-) -> Vec<Address>
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    let validator_set_key = pos::validator_set_key();
-    let (validator_set_bytes, _) = storage
-        .read(&validator_set_key)
-        .expect("Validator set should be defined.");
-    if let Some(validator_set_bytes) = validator_set_bytes {
-        let epoched_validator_set =
-            ValidatorSets::try_from_slice(&validator_set_bytes[..]).ok();
-        if let Some(epoched_validator_set) = epoched_validator_set {
-            let validator_set = epoched_validator_set.get(epoch);
-            if let Some(validator_set) = validator_set {
-                let all_validators =
-                    validator_set.active.union(&validator_set.inactive);
-                return all_validators
-                    .into_iter()
-                    .map(|validator| validator.address.clone())
-                    .collect::<Vec<Address>>();
-            }
-        }
-        Vec::new()
-    } else {
-        Vec::new()
-    }
-}
-
-fn get_total_stacked_tokens<D, H>(
-    storage: &Storage<D, H>,
-    epoch: Epoch,
-    validators: &[Address],
-) -> VotePower
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    return validators
-        .iter()
-        .fold(VotePower::from(0_u64), |acc, validator| {
-            acc + get_validator_stake(storage, epoch, validator)
-        });
-}
-
-fn get_validator_stake<D, H>(
-    storage: &Storage<D, H>,
-    epoch: Epoch,
-    validator: &Address,
-) -> VotePower
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    let total_delta_key = pos::validator_total_deltas_key(validator);
-    let (total_delta_bytes, _) = storage
-        .read(&total_delta_key)
-        .expect("Validator delta should be defined.");
-    if let Some(total_delta_bytes) = total_delta_bytes {
-        let total_delta =
-            ValidatorTotalDeltas::try_from_slice(&total_delta_bytes[..]).ok();
-        if let Some(total_delta) = total_delta {
-            let epoched_total_delta = total_delta.get(epoch);
-            if let Some(epoched_total_delta) = epoched_total_delta {
-                return VotePower::try_from(epoched_total_delta)
-                    .unwrap_or_default();
-            }
-        }
-    }
-    VotePower::from(0_u64)
+    })
 }

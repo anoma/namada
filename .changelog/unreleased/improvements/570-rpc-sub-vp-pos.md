@@ -1,0 +1,1 @@
+- Added PoS specific queries ([#570](https://github.com/anoma/namada/pull/570))
