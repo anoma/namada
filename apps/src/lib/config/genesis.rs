@@ -7,14 +7,14 @@ use std::path::Path;
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use namada::ledger::governance::parameters::GovParams;
-use namada::ledger::parameters::Parameters;
+use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{GenesisValidator, PosParams};
 use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
-use namada::types::time::DateTimeUtc;
+use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::{storage, token};
 
 /// Genesis configuration file format
@@ -28,7 +28,7 @@ pub mod genesis_config {
     use data_encoding::HEXLOWER;
     use eyre::Context;
     use namada::ledger::governance::parameters::GovParams;
-    use namada::ledger::parameters::{EpochDuration, Parameters};
+    use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::types::BasisPoints;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::address::Address;
@@ -40,7 +40,8 @@ pub mod genesis_config {
     use thiserror::Error;
 
     use super::{
-        EstablishedAccount, Genesis, ImplicitAccount, TokenAccount, Validator,
+        EstablishedAccount, Genesis, ImplicitAccount, Parameters, TokenAccount,
+        Validator,
     };
     use crate::cli;
 
@@ -230,6 +231,8 @@ pub mod genesis_config {
         // Hashes of whitelisted txs array. `None` value or an empty array
         // disables whitelisting.
         pub tx_whitelist: Option<Vec<String>>,
+        /// Filename of implicit accounts validity predicate WASM code
+        pub implicit_vp: String,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -508,6 +511,17 @@ pub mod genesis_config {
             })
             .collect();
 
+        let implicit_vp_config = wasm.get(&parameters.implicit_vp).unwrap();
+        let implicit_vp_code_path = implicit_vp_config.filename.to_owned();
+        let implicit_vp_sha256 = implicit_vp_config
+            .sha256
+            .clone()
+            .unwrap_or_else(|| {
+                eprintln!("Unknown implicit VP WASM sha256");
+                cli::safe_exit(1);
+            })
+            .to_sha256_bytes()
+            .unwrap();
         let parameters = Parameters {
             epoch_duration: EpochDuration {
                 min_num_of_blocks: parameters.min_num_of_blocks,
@@ -523,6 +537,8 @@ pub mod genesis_config {
                 .into(),
             vp_whitelist: parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: parameters.tx_whitelist.unwrap_or_default(),
+            implicit_vp_code_path,
+            implicit_vp_sha256,
         };
 
         let GovernanceParamsConfig {
@@ -720,6 +736,36 @@ pub struct ImplicitAccount {
     pub public_key: common::PublicKey,
 }
 
+/// Protocol parameters. This is almost the same as
+/// `ledger::parameters::Parameters`, but instead of having the `implicit_vp`
+/// WASM code bytes, it only has the name and sha as the actual code is loaded
+/// on `init_chain`
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+)]
+pub struct Parameters {
+    /// Epoch duration
+    pub epoch_duration: EpochDuration,
+    /// Maximum expected time per block
+    pub max_expected_time_per_block: DurationSecs,
+    /// Whitelisted validity predicate hashes
+    pub vp_whitelist: Vec<String>,
+    /// Whitelisted tx hashes
+    pub tx_whitelist: Vec<String>,
+    /// Implicit accounts validity predicate code WASM
+    pub implicit_vp_code_path: String,
+    /// Expected SHA-256 hash of the implicit VP
+    pub implicit_vp_sha256: [u8; 32],
+}
+
 #[cfg(not(feature = "dev"))]
 pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
     let path = base_dir
@@ -729,11 +775,11 @@ pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
 }
 #[cfg(feature = "dev")]
 pub fn genesis() -> Genesis {
-    use namada::ledger::parameters::EpochDuration;
     use namada::types::address;
 
     use crate::wallet;
 
+    let vp_implicit_path = "vp_implicit.wasm";
     let vp_token_path = "vp_token.wasm";
     let vp_user_path = "vp_user.wasm";
 
@@ -766,6 +812,8 @@ pub fn genesis() -> Genesis {
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         vp_whitelist: vec![],
         tx_whitelist: vec![],
+        implicit_vp_code_path: vp_implicit_path.into(),
+        implicit_vp_sha256: Default::default(),
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),

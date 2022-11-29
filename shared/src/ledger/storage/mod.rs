@@ -25,7 +25,7 @@ use rayon::iter::{
 use rayon::prelude::ParallelSlice;
 use thiserror::Error;
 
-use super::parameters::Parameters;
+use super::parameters::{self, Parameters};
 use super::storage_api;
 use super::storage_api::{ResultExt, StorageRead, StorageWrite};
 use crate::ledger::gas::MIN_STORAGE_GAS;
@@ -579,7 +579,11 @@ where
         &self,
         addr: &Address,
     ) -> Result<(Option<Vec<u8>>, u64)> {
-        let key = Key::validity_predicate(addr);
+        let key = if let Address::Implicit(_) = addr {
+            parameters::storage::get_implicit_vp_key()
+        } else {
+            Key::validity_predicate(addr)
+        };
         self.read(&key)
     }
 
@@ -711,8 +715,6 @@ where
         height: BlockHeight,
         time: DateTimeUtc,
     ) -> Result<bool> {
-        use crate::ledger::parameters;
-
         let (parameters, _gas) =
             parameters::read(self).expect("Couldn't read protocol parameters");
 
@@ -1256,7 +1258,8 @@ mod tests {
                 epoch_duration: epoch_duration.clone(),
                 max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_whitelist: vec![],
-                tx_whitelist: vec![]
+                tx_whitelist: vec![],
+                implicit_vp: vec![],
             };
             parameters.init_storage(&mut storage);
 

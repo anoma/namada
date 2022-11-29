@@ -122,6 +122,8 @@ pub struct Parameters {
     pub vp_whitelist: Vec<String>,
     /// Whitelisted tx hashes
     pub tx_whitelist: Vec<String>,
+    /// Implicit accounts validity predicate WASM code
+    pub implicit_vp: Vec<u8>,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -152,41 +154,55 @@ impl Parameters {
         DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
         H: ledger_storage::StorageHasher,
     {
+        let Self {
+            epoch_duration,
+            max_expected_time_per_block,
+            vp_whitelist,
+            tx_whitelist,
+            implicit_vp,
+        } = self;
+
         // write epoch parameters
         let epoch_key = storage::get_epoch_storage_key();
-        let epoch_value = encode(&self.epoch_duration);
-        storage.write(&epoch_key, epoch_value).expect(
-            "Epoch parameters must be initialized in the genesis block",
-        );
+        let epoch_value = encode(&epoch_duration);
+        storage
+            .write(&epoch_key, epoch_value)
+            .expect("Epoch parameter must be initialized in the genesis block");
 
         // write vp whitelist parameter
         let vp_whitelist_key = storage::get_vp_whitelist_storage_key();
-        let vp_whitelist_value = encode(&self.vp_whitelist);
+        let vp_whitelist_value = encode(&vp_whitelist);
         storage.write(&vp_whitelist_key, vp_whitelist_value).expect(
-            "Vp whitelist parameters must be initialized in the genesis block",
+            "Vp whitelist parameter must be initialized in the genesis block",
         );
 
         // write tx whitelist parameter
         let tx_whitelist_key = storage::get_tx_whitelist_storage_key();
-        let tx_whitelist_value = encode(&self.tx_whitelist);
+        let tx_whitelist_value = encode(&tx_whitelist);
         storage.write(&tx_whitelist_key, tx_whitelist_value).expect(
-            "Tx whitelist parameters must be initialized in the genesis block",
+            "Tx whitelist parameter must be initialized in the genesis block",
         );
 
         // write tx whitelist parameter
         let max_expected_time_per_block_key =
             storage::get_max_expected_time_per_block_key();
         let max_expected_time_per_block_value =
-            encode(&self.max_expected_time_per_block);
+            encode(&max_expected_time_per_block);
         storage
             .write(
                 &max_expected_time_per_block_key,
                 max_expected_time_per_block_value,
             )
             .expect(
-                "Max expected time per block parameters must be initialized \
-                 in the genesis block",
+                "Max expected time per block parameter must be initialized in \
+                 the genesis block",
             );
+
+        // write implicit vp parameter
+        let implicit_vp_key = storage::get_implicit_vp_key();
+        storage.write(&implicit_vp_key, implicit_vp).expect(
+            "Implicit VP parameter must be initialized in the genesis block",
+        );
     }
 }
 
@@ -244,6 +260,24 @@ where
 {
     let key = storage::get_epoch_storage_key();
     update(storage, value, key)
+}
+
+/// Update the implicit VP parameter in storage. Return the gas cost.
+pub fn update_implicit_vp<DB, H>(
+    storage: &mut Storage<DB, H>,
+    implicit_vp: &[u8],
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_implicit_vp_key();
+    // Not using `fn update` here, because implicit_vp doesn't need to be
+    // encoded, it's bytes already.
+    let (gas, _size_diff) = storage
+        .write(&key, implicit_vp)
+        .map_err(WriteError::StorageError)?;
+    Ok(gas)
 }
 
 /// Update the  parameters in storage. Returns the parameters and gas
@@ -326,14 +360,21 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
+    let implicit_vp_key = storage::get_implicit_vp_key();
+    let (value, gas_implicit_vp) = storage
+        .read(&implicit_vp_key)
+        .map_err(ReadError::StorageError)?;
+    let implicit_vp = value.ok_or(ReadError::ParametersMissing)?;
+
     Ok((
         Parameters {
             epoch_duration,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,
+            implicit_vp,
         },
-        gas_epoch + gas_tx + gas_vp + gas_time,
+        gas_epoch + gas_tx + gas_vp + gas_time + gas_implicit_vp,
     ))
 }
 

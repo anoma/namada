@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use namada::ledger::parameters::Parameters;
 use namada::types::key::*;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
@@ -60,16 +61,48 @@ where
         .expect("genesis time should be a valid timestamp")
         .into();
 
-        genesis.parameters.init_storage(&mut self.storage);
+        // Initialize protocol parameters
+        let genesis::Parameters {
+            epoch_duration,
+            max_expected_time_per_block,
+            vp_whitelist,
+            tx_whitelist,
+            implicit_vp_code_path,
+            implicit_vp_sha256,
+        } = genesis.parameters;
+        let implicit_vp =
+            wasm_loader::read_wasm(&self.wasm_dir, &implicit_vp_code_path)
+                .map_err(Error::ReadingWasm)?;
+        // In dev, we don't check the hash
+        #[cfg(feature = "dev")]
+        let _ = implicit_vp_sha256;
+        #[cfg(not(feature = "dev"))]
+        {
+            let mut hasher = Sha256::new();
+            hasher.update(&implicit_vp);
+            let vp_code_hash = hasher.finalize();
+            assert_eq!(
+                vp_code_hash.as_slice(),
+                &implicit_vp_sha256,
+                "Invalid implicit account's VP sha256 hash for {}",
+                implicit_vp_code_path
+            );
+        }
+        let parameters = Parameters {
+            epoch_duration,
+            max_expected_time_per_block,
+            vp_whitelist,
+            tx_whitelist,
+            implicit_vp,
+        };
+        parameters.init_storage(&mut self.storage);
+
+        // Initialize governance parameters
         genesis.gov_params.init_storage(&mut self.storage);
 
         // Depends on parameters being initialized
         self.storage
-            .init_genesis_epoch(
-                initial_height,
-                genesis_time,
-                &genesis.parameters,
-            )
+            .init_genesis_epoch(initial_height, genesis_time, &parameters)
             .expect("Initializing genesis epoch must not fail");
 
         // Loaded VP code cache to avoid loading the same files multiple times
