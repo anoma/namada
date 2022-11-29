@@ -4,7 +4,7 @@
 //!
 //! # States
 //!
-//! The state machine moves through the following state tree:
+//! The state machine moves through the following state DAG:
 //!
 //! 1. [`BuildingDecryptedTxBatch`] - the initial state. In
 //!    this state, we populate a block with DKG decrypted txs.
@@ -20,8 +20,7 @@
 //!     encrypted txs in a block proposal.
 //! 4. [`FillingRemainingSpace`] - the fourth and final state.
 //!    During this phase, we fill all remaining block space with arbitrary
-//!    transactions that haven't been included yet. This state supports the
-//!    same two modes of operation defined above.
+//!    protocol transactions that haven't been included in a block, yet.
 
 mod decrypted_txs;
 mod encrypted_txs;
@@ -58,14 +57,12 @@ pub struct BuildingEncryptedTxBatch<Mode> {
 
 /// The leader of the current Tendermint round is populating
 /// all remaining space in a block proposal with arbitrary
-/// transactions.
+/// protocol transactions that haven't been included in the
+/// block, yet.
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-pub struct FillingRemainingSpace<Mode> {
-    /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
-    _mode: Mode,
-}
+pub enum FillingRemainingSpace {}
 
 /// Allow block proposals to include encrypted txs.
 ///

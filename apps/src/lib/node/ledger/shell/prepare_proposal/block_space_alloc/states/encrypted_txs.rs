@@ -18,7 +18,7 @@ impl TryAlloc
 impl NextStateImpl
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>
 {
-    type Next = BlockSpaceAllocator<FillingRemainingSpace<WithEncryptedTxs>>;
+    type Next = BlockSpaceAllocator<FillingRemainingSpace>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {
@@ -38,7 +38,7 @@ impl TryAlloc
 impl NextStateImpl
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
 {
-    type Next = BlockSpaceAllocator<FillingRemainingSpace<WithoutEncryptedTxs>>;
+    type Next = BlockSpaceAllocator<FillingRemainingSpace>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {
@@ -49,7 +49,7 @@ impl NextStateImpl
 #[inline]
 fn next_state<Mode>(
     mut alloc: BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
-) -> BlockSpaceAllocator<FillingRemainingSpace<Mode>> {
+) -> BlockSpaceAllocator<FillingRemainingSpace> {
     alloc.encrypted_txs.shrink_to_fit();
 
     // reserve space for any remaining txs
