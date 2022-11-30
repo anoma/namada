@@ -282,7 +282,9 @@ impl TxEnv<'_> for Ctx {
 
     fn insert_verifier(&mut self, addr: &Address) -> Result<(), Error> {
         let addr = addr.encode();
-        unsafe { namada_tx_insert_verifier(addr.as_ptr() as _, addr.len() as _) }
+        unsafe {
+            namada_tx_insert_verifier(addr.as_ptr() as _, addr.len() as _)
+        }
         Ok(())
     }
 
