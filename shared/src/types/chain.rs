@@ -2,6 +2,7 @@
 // TODO move BlockHash and BlockHeight here from the storage types
 
 use std::fmt::Display;
+use std::num::NonZeroU64;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
