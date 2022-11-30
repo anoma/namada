@@ -1,6 +1,6 @@
 # Execution
 
-The Namada ledger execution system is based on an initial version of the [Anoma protocol](https://specs.anoma.net). The system implements a generic computational substrate with WASM-based transactions and validity predicate verification architecture, on top of which specific features of Namada such as IBC, proof-of-stake, and the MASP are built.
+The Namada ledger execution system is based on an initial version of the [Namada protocol](https://specs.namada.net). The system implements a generic computational substrate with WASM-based transactions and validity predicate verification architecture, on top of which specific features of Namada such as IBC, proof-of-stake, and the MASP are built.
 
 ## Validity predicates
 
@@ -17,7 +17,7 @@ Interaction with the Namada ledger are made possible via transactions (note tran
 
 While the execution model is fully programmable, for Namada only a selected subset of provided validity predicates and transactions will be permitted through pre-defined whitelists configured at network launch. 
 
-There are some native VPs for internal transparent addresses that are built into the ledger. All the other VPs are implemented as WASM programs. One can build a custom VP using the [VP template](https://github.com/anoma/anoma/tree/master/wasm/vp_template) or use one of the pre-defined VPs.
+There are some native VPs for internal transparent addresses that are built into the ledger. All the other VPs are implemented as WASM programs. One can build a custom VP using the [VP template](https://github.com/anoma/namada/tree/master/wasm/vp_template) or use one of the pre-defined VPs.
 
 Supported validity predicates for Namada:
 - Native

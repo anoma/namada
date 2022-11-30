@@ -22,7 +22,7 @@
 
 ## Current process
 
-1. Ray runs `anoma-network-init` through interactive prompts, get to a started network on cloud infrastructure, config files on Github.
+1. Ray runs `namada-network-init` through interactive prompts, get to a started network on cloud infrastructure, config files on Github.
     - Ask anyone else for help if necessary.
 2. Alex R. updates, reads through, QA checks the testnet documentation for this version.
     - Ask anyone else for docs help if necessary.

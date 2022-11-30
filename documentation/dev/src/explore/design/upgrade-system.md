@@ -1,5 +1,5 @@
 # Upgrade system
 
-[Tracking Issue](https://github.com/anoma/anoma/issues/40)
+[Tracking Issue](https://github.com/anoma/namada/issues/40)
 
 ---

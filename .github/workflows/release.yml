@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        anoma_cache_version: [v1]
+        namada_cache_version: [v1]
         make:
           - name: Build package
             command: package
@@ -70,8 +70,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-anoma-release-${{ matrix.anoma_cache_version }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-anoma-release-${{ matrix.anoma_cache_version }}
+          key: ${{ runner.os }}-namada-release-${{ matrix.namada_cache_version }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-namada-release-${{ matrix.namada_cache_version }}
       - name: Start sccache server
         run: sccache --start-server
       - name: ${{ matrix.make.name }}

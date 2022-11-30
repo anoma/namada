@@ -4,7 +4,7 @@ Welcome to Namada's docs!
 
 ## About Namada
 
-[Namada](https://namada.net/) is a Proof-of-Stake layer 1 protocol for asset-agnostic, interchain privacy. Namada is Anoma's first fractal instance and is currently being developed by [Heliax](https://heliax.dev), a public goods lab.
+[Namada](https://namada.net/) is a Proof-of-Stake layer 1 protocol for asset-agnostic, interchain privacy. Namada is Namada's first fractal instance and is currently being developed by [Heliax](https://heliax.dev), a public goods lab.
 
 Key innovations include:
 - ZCash-like transfers for any assets (fungible and non-fungible)
@@ -13,7 +13,7 @@ Key innovations include:
 - Vertically integrated user interfaces
 
 To learn more, we recommend:
-- Article: [Introducing Namada: Shielded Transfers with Any Assets](https://medium.com/anomanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
+- Article: [Introducing Namada: Shielded Transfers with Any Assets](https://medium.com/namadanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
 
 ## Overview of features
 - Proof-of-Stake with governance to secure and evolve Namada

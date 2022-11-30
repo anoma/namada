@@ -112,7 +112,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
         // If the checksums file doesn't exists ...
         if tokio::fs::canonicalize(&checksums_path).await.is_err() {
             tokio::fs::create_dir_all(&wasm_directory).await.unwrap();
-            // ... try to copy checksums from the Anoma WASM root dir
+            // ... try to copy checksums from the Namada WASM root dir
             if tokio::fs::copy(
                 std::env::current_dir()
                     .unwrap()
@@ -161,7 +161,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                     );
                     #[cfg(feature = "dev")]
                     {
-                        // try to copy built file from the Anoma WASM root dir
+                        // try to copy built file from the Namada WASM root dir
                         if tokio::fs::copy(
                             std::env::current_dir()
                                 .unwrap()
@@ -204,7 +204,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                     std::io::ErrorKind::NotFound => {
                         #[cfg(feature = "dev")]
                         {
-                            // try to copy built file from the Anoma WASM root
+                            // try to copy built file from the Namada WASM root
                             // dir
                             if tokio::fs::copy(
                                 std::env::current_dir()

@@ -62,7 +62,7 @@ pub struct Store {
     payment_addrs: HashMap<Alias, PaymentAddress>,
     /// Cryptographic keypairs
     keys: HashMap<Alias, StoredKeypair<common::SecretKey>>,
-    /// Anoma address book
+    /// Namada address book
     addresses: BiHashMap<Alias, Address>,
     /// Known mappings of public key hashes to their aliases in the `keys`
     /// field. Used for look-up by a public key.

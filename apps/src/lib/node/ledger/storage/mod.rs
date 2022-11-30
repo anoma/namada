@@ -45,7 +45,7 @@ impl fmt::Debug for PersistentStorageHasher {
 }
 
 fn new_blake2b() -> Blake2b {
-    Blake2bBuilder::new(32).personal(b"anoma storage").build()
+    Blake2bBuilder::new(32).personal(b"namada storage").build()
 }
 
 #[cfg(test)]

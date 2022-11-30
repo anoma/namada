@@ -5,7 +5,7 @@
 Latest values regarding the testnet that would be useful to have in your shell:
 
 ```shell
-export NAMADA_TESTNET_CHAIN_ID='anoma-masp-0.3.51d2f83a8412b95'
+export NAMADA_TESTNET_CHAIN_ID='namada-masp-0.3.51d2f83a8412b95'
 export NAMADA_TESTNET_BRANCH='internal/testnet-n1'
 export NAMADA_TESTNET_COMMIT='0184e64e044366ec370d1431ddf4691b4bd3a5b4'
 ```
@@ -29,11 +29,11 @@ namadac utils join-network --chain-id $NAMADA_TESTNET_CHAIN_ID
 It should output something like this where the chain id might differ:
 
 ```shell
-Downloading config release from https://github.com/heliaxdev/anoma-network-config/releases/download/anoma-masp-0.3.51d2f83a8412b95/anoma-masp-0.3.51d2f83a8412b95.tar.gz ...
-Successfully configured for chain ID anoma-masp-0.3.51d2f83a8412b9`
+Downloading config release from https://github.com/heliaxdev/anoma-network-config/releases/download/namada-masp-0.3.51d2f83a8412b95/namada-masp-0.3.51d2f83a8412b95.tar.gz ...
+Successfully configured for chain ID namada-masp-0.3.51d2f83a8412b9`
 ```
 
-The above command downloads the folder `.anoma` which contains a global config file `global-config.toml`; the genesis file for the specified chain id `{chain-id}.toml` and its corresponding configuration folder `{chain-id}` which contains the checksums for the wasm files under `wasm` and the p2p config `config.toml`.
+The above command downloads the folder `.namada` which contains a global config file `global-config.toml`; the genesis file for the specified chain id `{chain-id}.toml` and its corresponding configuration folder `{chain-id}` which contains the checksums for the wasm files under `wasm` and the p2p config `config.toml`.
 
 ### Setup the MASP parameters
 
@@ -178,7 +178,7 @@ make build-wasm-scripts-docker
 If you get the following log, it means that Tendermint is not installed properly on your machine or not available on path. To solve this issue, install Tendermint by following the [Install User Guide](../user-guide/install.md).
 
 ```shell
-2022-03-30T07:21:09.212187Z  INFO namada_apps::cli::context: Chain ID: anoma-masp-0.3.51d2f83a8412b95
+2022-03-30T07:21:09.212187Z  INFO namada_apps::cli::context: Chain ID: namada-masp-0.3.51d2f83a8412b95
 2022-03-30T07:21:09.213968Z  INFO namada_apps::node::ledger: Available logical cores: 8
 2022-03-30T07:21:09.213989Z  INFO namada_apps::node::ledger: Using 4 threads for Rayon.
 2022-03-30T07:21:09.213994Z  INFO namada_apps::node::ledger: Using 4 threads for Tokio.
@@ -193,6 +193,6 @@ If you get the following log, it means that Tendermint is not installed properly
 2022-03-30T07:21:09.219196Z  INFO namada_apps::node::ledger: Tendermint node is no longer running.
 2022-03-30T07:21:09.232544Z  INFO namada::ledger::storage: No state could be found
 2022-03-30T07:21:09.232709Z  INFO namada_apps::node::ledger: Tendermint has exited, shutting down...
-2022-03-30T07:21:09.232794Z  INFO namada_apps::node::ledger: Anoma ledger node started.
-2022-03-30T07:21:09.232849Z  INFO namada_apps::node::ledger: Anoma ledger node has shut down.
+2022-03-30T07:21:09.232794Z  INFO namada_apps::node::ledger: Namada ledger node started.
+2022-03-30T07:21:09.232849Z  INFO namada_apps::node::ledger: Namada ledger node has shut down.
 ```

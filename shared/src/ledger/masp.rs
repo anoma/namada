@@ -20,7 +20,7 @@ use masp_proofs::sapling::SaplingVerificationContext;
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
-pub const ENV_VAR_MASP_PARAMS_DIR: &str = "ANOMA_MASP_PARAMS_DIR";
+pub const ENV_VAR_MASP_PARAMS_DIR: &str = "NAMADA_MASP_PARAMS_DIR";
 
 // TODO these could be exported from masp_proof crate
 /// Spend circuit name

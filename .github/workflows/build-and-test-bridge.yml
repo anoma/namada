@@ -135,7 +135,7 @@ jobs:
           BUCKET_NAME: namada-wasm-master
           AWS_REGION: eu-west-1
 
-  anoma-eth:
+  namada-eth:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 80
     needs: [build-wasm]
@@ -239,7 +239,7 @@ jobs:
         if: always()
         run: sccache --stop-server || true
 
-  anoma-release-eth:
+  namada-release-eth:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -341,7 +341,7 @@ jobs:
         run: sccache --stop-server || true
 
 
-  anoma-e2e-eth:
+  namada-e2e-eth:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 80
     strategy:
@@ -357,14 +357,14 @@ jobs:
             cache_key: anoma
             cache_version: v2
             tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
-            wait_for: anoma-release-eth (ubuntu-latest, 1.7.0, ABCI Release build, anoma-e2e-release, v2)
+            wait_for: namada-release-eth (ubuntu-latest, 1.7.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 1
             cache_key: anoma
             cache_version: v2
             tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
-            wait_for: anoma-release-eth (ubuntu-latest, 1.7.0, ABCI Release build, anoma-e2e-release, v2)
+            wait_for: namada-release-eth (ubuntu-latest, 1.7.0, ABCI Release build, namada-e2e-release, v2)
 
     env:
       CARGO_INCREMENTAL: 0
@@ -465,7 +465,7 @@ jobs:
         with:
           name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
           path: ./wasm
-      - name: Download anoma binaries
+      - name: Download namada binaries
         uses: actions/download-artifact@v3
         with:
           name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
@@ -480,13 +480,13 @@ jobs:
       - name: Run e2e test
         run: python3 .github/workflows/scripts/schedule-e2e.py
         env:
-          ANOMA_TENDERMINT_WEBSOCKET_TIMEOUT: 20
-          ANOMA_E2E_USE_PREBUILT_BINARIES: "true"
-          ANOMA_E2E_KEEP_TEMP: "true"
-          ANOMA_TM_STDOUT: "false"
-          ANOMA_LOG_COLOR: "false"
-          ANOMA_MASP_PARAMS_DIR: "/home/runner/work/masp"
-          ANOMA_LOG: "info"
+          NAMADA_TENDERMINT_WEBSOCKET_TIMEOUT: 20
+          NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
+          NAMADA_E2E_KEEP_TEMP: "true"
+          NAMADA_TM_STDOUT: "false"
+          NAMADA_LOG_COLOR: "false"
+          NAMADA_MASP_PARAMS_DIR: "/home/runner/work/masp"
+          NAMADA_LOG: "info"
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
           INDEX: ${{ matrix.make.index }}
       - name: Upload e2e logs
@@ -496,7 +496,7 @@ jobs:
           name: logs-e2e-${{ matrix.make.index }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             /tmp/.*/logs/
-            /tmp/.*/e2e-test.*/setup/validator-*/.anoma/logs/*.log
+            /tmp/.*/e2e-test.*/setup/validator-*/.namada/logs/*.log
           retention-days: 5
       - name: Print sccache stats
         if: always()

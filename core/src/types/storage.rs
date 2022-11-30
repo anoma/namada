@@ -293,7 +293,7 @@ impl core::fmt::Debug for BlockHash {
 }
 
 /// The data from Tendermint header
-/// relevant for Anoma storage
+/// relevant for Namada storage
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Header {
     /// Merkle root hash of block
@@ -357,7 +357,7 @@ impl FromStr for Key {
 }
 
 /// An enum representing the different types of values
-/// that can be passed into Anoma's storage.
+/// that can be passed into Namada's storage.
 ///
 /// This is a multi-store organized as
 /// several Merkle trees, each of which is

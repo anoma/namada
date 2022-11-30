@@ -1,26 +1,26 @@
-//! Anoma node CLI.
+//! Namada node CLI.
 
 use eyre::{Context, Result};
 use namada_apps::cli::{self, cmds};
 use namada_apps::node::ledger;
 
 pub fn main() -> Result<()> {
-    let (cmd, mut ctx) = cli::anoma_node_cli()?;
+    let (cmd, mut ctx) = cli::namada_node_cli()?;
     if let Some(mode) = ctx.global_args.mode.clone() {
         ctx.config.ledger.tendermint.tendermint_mode = mode;
     }
     match cmd {
-        cmds::AnomaNode::Ledger(sub) => match sub {
+        cmds::NamadaNode::Ledger(sub) => match sub {
             cmds::Ledger::Run(_) => {
                 let wasm_dir = ctx.wasm_dir();
                 ledger::run(ctx.config.ledger, wasm_dir);
             }
             cmds::Ledger::Reset(_) => {
                 ledger::reset(ctx.config.ledger)
-                    .wrap_err("Failed to reset Anoma node")?;
+                    .wrap_err("Failed to reset Namada node")?;
             }
         },
-        cmds::AnomaNode::Config(sub) => match sub {
+        cmds::NamadaNode::Config(sub) => match sub {
             cmds::Config::Gen(cmds::ConfigGen) => {
                 // If the config doesn't exit, it gets generated in the context.
                 // In here, we just need to overwrite the default chain ID, in

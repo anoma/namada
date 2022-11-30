@@ -379,7 +379,7 @@ pub fn tm_consensus_key_raw_hash(pk: &common::PublicKey) -> String {
     }
 }
 
-/// Convert Tendermint validator's raw hash bytes to Anoma raw hash string
+/// Convert Tendermint validator's raw hash bytes to Namada raw hash string
 pub fn tm_raw_hash_to_string(raw_hash: impl AsRef<[u8]>) -> String {
     HEXUPPER.encode(raw_hash.as_ref())
 }

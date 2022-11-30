@@ -35,15 +35,15 @@ use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
 pub const NET_OTHER_ACCOUNTS_DIR: &str = "other";
-/// Github URL prefix of released Anoma network configs
-pub const ENV_VAR_NETWORK_CONFIGS_SERVER: &str = "ANOMA_NETWORK_CONFIGS_SERVER";
+/// Github URL prefix of released Namada network configs
+pub const ENV_VAR_NETWORK_CONFIGS_SERVER: &str = "NAMADA_NETWORK_CONFIGS_SERVER";
 const DEFAULT_NETWORK_CONFIGS_SERVER: &str =
     "https://github.com/heliaxdev/anoma-network-config/releases/download";
 
 /// We do pre-genesis validator set up in this directory
 pub const PRE_GENESIS_DIR: &str = "pre-genesis";
 
-/// Configure Anoma to join an existing network. The chain must be released in
+/// Configure Namada to join an existing network. The chain must be released in
 /// the <https://github.com/heliaxdev/anoma-network-config> repository.
 pub async fn join_network(
     global_args: args::Global,
@@ -159,7 +159,7 @@ pub async fn join_network(
 
     // Rename the base-dir from the default and rename wasm-dir, if non-default.
     if non_default_dir {
-        // For compatibility for networks released with Anoma <= v0.4:
+        // For compatibility for networks released with Namada <= v0.4:
         // The old releases include the WASM directory at root path of the
         // archive. This has been moved into the chain directory, so if the
         // WASM dir is found at the old path, we move it to the new path.

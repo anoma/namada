@@ -1,15 +1,15 @@
 openapi: 3.0.3
 info:
-  title: Anoma
-  description: Interacting with an Anoma blockchain via Tendermint RPC
+  title: Namada
+  description: Interacting with an Namada blockchain via Tendermint RPC
   version: 0.6.1
 servers:
   - url: http://127.0.0.1:26657
-    description: Tendermint RPC endpoint for an Anoma ledger
+    description: Tendermint RPC endpoint for an Namada ledger
 paths:
   /:
     post:
-      summary: Interact with the Anoma blockchain via Tendermint RPC
+      summary: Interact with the Namada blockchain via Tendermint RPC
       operationId: abci_query
       requestBody:
         required: true
