@@ -162,13 +162,14 @@ pub async fn query_tx_deltas(
     // Connect to the Tendermint server holding the transactions
     let client = HttpClient::new(ledger_address.clone()).unwrap();
     // Build up the context that will be queried for transactions
+    ctx.shielded.utils.ledger_address = Some(ledger_address.clone());
     let _ = ctx.shielded.load();
     let vks = ctx.wallet.get_viewing_keys();
     let fvks: Vec<_> = vks
         .values()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    ctx.shielded.fetch(&ledger_address, &[], &fvks).await;
+    ctx.shielded.fetch(&[], &fvks).await;
     // Save the update state so that future fetches can be short-circuited
     let _ = ctx.shielded.save();
     // Required for filtering out rejected transactions from Tendermint
@@ -282,8 +283,6 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
         .values()
         .map(|fvk| (ExtendedFullViewingKey::from(*fvk).fvk.vk, fvk))
         .collect();
-    // Connect to the Tendermint server holding the transactions
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
     // Now display historical shielded and transparent transactions
     for ((height, idx), (epoch, tfer_delta, tx_delta)) in transfers {
         // Check if this transfer pertains to the supplied owner
@@ -304,7 +303,6 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
             let amt = ctx
                 .shielded
                 .compute_exchanged_amount(
-                    client.clone(),
                     amt,
                     epoch,
                     Conversions::new(),
@@ -312,7 +310,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                 .await
                 .0;
             let dec =
-                ctx.shielded.decode_amount(client.clone(), amt, epoch).await;
+                ctx.shielded.decode_amount(amt, epoch).await;
             shielded_accounts.insert(acc, dec);
         }
         // Check if this transfer pertains to the supplied token
@@ -554,9 +552,8 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
     // Build up the context that will be queried for asset decodings
+    ctx.shielded.utils.ledger_address = Some(args.query.ledger_address.clone());
     let _ = ctx.shielded.load();
-    // Establish connection with which to do exchange rate queries
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
     // Print the token balances by payment address
     for owner in owners {
         let mut balance = Err(PinnedBalanceError::InvalidViewingKey);
@@ -566,7 +563,6 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
             balance = ctx
                 .shielded
                 .compute_exchanged_pinned_balance(
-                    &args.query.ledger_address,
                     owner,
                     vk,
                 )
@@ -593,7 +589,6 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
             balance = ctx
                 .shielded
                 .compute_exchanged_pinned_balance(
-                    &args.query.ledger_address,
                     owner,
                     &vk,
                 )
@@ -637,7 +632,7 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                 // Print balances by human-readable token names
                 let balance = ctx
                     .shielded
-                    .decode_amount(client.clone(), balance, epoch)
+                    .decode_amount(balance, epoch)
                     .await;
                 for (addr, value) in balance.components() {
                     let asset_value = token::Amount::from(*value as u64);
@@ -878,20 +873,17 @@ pub async fn query_shielded_balance(
         None => ctx.wallet.get_viewing_keys().values().copied().collect(),
     };
     // Build up the context that will be queried for balances
+    ctx.shielded.utils.ledger_address = Some(args.query.ledger_address.clone());
     let _ = ctx.shielded.load();
     let fvks: Vec<_> = viewing_keys
         .iter()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    ctx.shielded
-        .fetch(&args.query.ledger_address, &[], &fvks)
-        .await;
+    ctx.shielded.fetch(&[], &fvks).await;
     // Save the update state so that future fetches can be short-circuited
     let _ = ctx.shielded.save();
     // The epoch is required to identify timestamped tokens
     let epoch = query_epoch(args.query.clone()).await;
-    // Establish connection with which to do exchange rate queries
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
     // Map addresses to token names
     let tokens = address::tokens();
     match (args.token, owner.is_some()) {
@@ -907,7 +899,6 @@ pub async fn query_shielded_balance(
             } else {
                 ctx.shielded
                     .compute_exchanged_balance(
-                        client.clone(),
                         &viewing_key,
                         epoch,
                     )
@@ -952,7 +943,6 @@ pub async fn query_shielded_balance(
                 } else {
                     ctx.shielded
                         .compute_exchanged_balance(
-                            client.clone(),
                             &viewing_key,
                             epoch,
                         )
@@ -974,7 +964,7 @@ pub async fn query_shielded_balance(
                 // Decode the asset type
                 let decoded = ctx
                     .shielded
-                    .decode_asset_type(client.clone(), asset_type)
+                    .decode_asset_type(asset_type)
                     .await;
                 match decoded {
                     Some((addr, asset_epoch)) if asset_epoch == epoch => {
@@ -1044,7 +1034,6 @@ pub async fn query_shielded_balance(
                 } else {
                     ctx.shielded
                         .compute_exchanged_balance(
-                            client.clone(),
                             &viewing_key,
                             epoch,
                         )
@@ -1079,14 +1068,13 @@ pub async fn query_shielded_balance(
                 // Print balances by human-readable token names
                 let decoded_balance = ctx
                     .shielded
-                    .decode_all_amounts(client.clone(), balance)
+                    .decode_all_amounts(balance)
                     .await;
                 print_decoded_balance_with_epoch(decoded_balance);
             } else {
                 balance = ctx
                     .shielded
                     .compute_exchanged_balance(
-                        client.clone(),
                         &viewing_key,
                         epoch,
                     )
@@ -1095,7 +1083,7 @@ pub async fn query_shielded_balance(
                 // Print balances by human-readable token names
                 let decoded_balance = ctx
                     .shielded
-                    .decode_amount(client.clone(), balance, epoch)
+                    .decode_amount(balance, epoch)
                     .await;
                 print_decoded_balance(decoded_balance);
             }
