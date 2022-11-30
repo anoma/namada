@@ -196,7 +196,15 @@ impl SigningTx {
     /// Expand this reduced Tx using the supplied code only if the the code
     /// hashes to the stored code hash
     pub fn expand(self, code: Vec<u8>) -> Option<Tx> {
-        if hash_tx(&code).0 == self.code_hash {
+        let mut timestamp_bytes = Vec::new();
+        self.timestamp
+            .serialize(&mut timestamp_bytes)
+            .expect("timestamp should be serializable");
+
+        let mut salted_code = code.clone();
+        salted_code.append(&mut timestamp_bytes);
+
+        if hash_tx(&salted_code).0 == self.code_hash {
             Some(Tx {
                 code,
                 data: self.data,
@@ -210,8 +218,16 @@ impl SigningTx {
 
 impl From<Tx> for SigningTx {
     fn from(tx: Tx) -> SigningTx {
+        let mut timestamp_bytes = Vec::new();
+        tx.timestamp
+            .serialize(&mut timestamp_bytes)
+            .expect("timestamp should be serializable");
+
+        let mut salted_code = tx.code.clone();
+        salted_code.append(&mut timestamp_bytes);
+
         SigningTx {
-            code_hash: hash_tx(&tx.code).0,
+            code_hash: hash_tx(&salted_code).0,
             data: tx.data,
             timestamp: tx.timestamp,
         }
