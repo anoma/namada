@@ -3655,6 +3655,8 @@ dependencies = [
  "proptest",
  "prost",
  "pwasm-utils",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
  "rayon",
  "rust_decimal",
  "serde_json",
