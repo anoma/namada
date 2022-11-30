@@ -56,7 +56,7 @@ use tokio::time::{Duration, Instant};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
-use crate::client::tx::{
+use namada::ledger::masp::{
     Conversions, PinnedBalanceError, TransactionDelta, TransferDelta,
 };
 use crate::facade::tendermint::merkle::proof::Proof;

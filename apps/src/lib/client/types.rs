@@ -11,5 +11,4 @@ use namada::types::{key, token};
 
 use super::rpc;
 use crate::cli::{args, Context};
-use crate::client::tx::Conversions;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;

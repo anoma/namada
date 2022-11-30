@@ -11,7 +11,7 @@ use namada::types::key::*;
 use namada::types::masp::{MaspValue, PaymentAddress};
 use namada_apps::cli;
 use namada_apps::cli::{args, cmds, Context};
-use namada_apps::client::tx::find_valid_diversifier;
+use namada::ledger::masp::find_valid_diversifier;
 use namada_apps::wallet::{DecryptionError, FindKeyError};
 use rand_core::OsRng;
 

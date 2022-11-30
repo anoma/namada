@@ -64,6 +64,11 @@ ibc-mocks-abcipp = [
   "namada_core/ibc-mocks-abcipp",
 ]
 
+masp-tx-gen = [
+  "rand",
+  "rand_core",
+]
+
 # for integration tests and test utilies
 testing = [
   "namada_core/testing",
@@ -122,6 +127,8 @@ wasmparser = "0.83.0"
 #libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+rand = {version = "0.8", default-features = false, optional = true}
+rand_core = {version = "0.6", default-features = false, optional = true}
 zeroize = "1.5.5"
 
 [dev-dependencies]
