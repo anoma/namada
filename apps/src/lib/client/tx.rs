@@ -65,13 +65,11 @@ use sha2::Digest;
 use tokio::time::{Duration, Instant};
 
 use super::rpc;
-use super::types::ShieldedTransferContext;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{query_conversion, query_storage_value};
 use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
-use crate::client::types::ParsedTxTransferArgs;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
@@ -1293,18 +1291,32 @@ fn convert_amount(
 /// transactions balanced, but it is understood that transparent account changes
 /// are effected only by the amounts and signatures specified by the containing
 /// Transfer object.
-async fn gen_shielded_transfer<C>(
-    ctx: &mut C,
-    args: &ParsedTxTransferArgs,
+async fn gen_shielded_transfer(
+    ctx: &mut Context,
+    args: &args::TxTransfer,
     shielded_gas: bool,
-) -> Result<Option<(Transaction, TransactionMetadata)>, builder::Error>
-where
-    C: ShieldedTransferContext,
-{
-    let spending_key = args.source.spending_key().map(|x| x.into());
-    let payment_address = args.target.payment_address();
+) -> Result<Option<(Transaction, TransactionMetadata)>, builder::Error> {
+    // No shielded components are needed when neither source nor destination
+    // are shielded
+    let spending_key = ctx.get_cached(&args.source).spending_key();
+    let payment_address = ctx.get(&args.target).payment_address();
+    if spending_key.is_none() && payment_address.is_none() {
+        return Ok(None);
+    }
+    // We want to fund our transaction solely from supplied spending key
+    let spending_key = spending_key.map(|x| x.into());
+    let spending_keys: Vec<_> = spending_key.into_iter().collect();
+    // Load the current shielded context given the spending key we possess
+    let _ = ctx.shielded.load();
+    ctx.shielded
+        .fetch(&args.tx.ledger_address, &spending_keys, &[])
+        .await;
+    // Save the update state so that future fetches can be short-circuited
+    let _ = ctx.shielded.save();
     // Determine epoch in which to submit potential shielded transaction
-    let epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
+    let epoch = rpc::query_epoch(args::Query {
+        ledger_address: args.tx.ledger_address.clone()
+    }).await;
     // Context required for storing which notes are in the source's possesion
     let consensus_branch_id = BranchId::Sapling;
     let amt: u64 = args.amount.into();
@@ -1313,7 +1325,7 @@ where
     // Now we build up the transaction within this object
     let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
     // Convert transaction amount into MASP types
-    let (asset_type, amount) = convert_amount(epoch, &args.token, args.amount);
+    let (asset_type, amount) = convert_amount(epoch, &ctx.get(&args.token), args.amount);
 
     // Transactions with transparent input and shielded output
     // may be affected if constructed close to epoch boundary
@@ -1323,13 +1335,14 @@ where
         // Transaction fees need to match the amount in the wrapper Transfer
         // when MASP source is used
         let (_, fee) =
-            convert_amount(epoch, &args.tx.fee_token, args.tx.fee_amount);
+            convert_amount(epoch, &ctx.get(&args.tx.fee_token), args.tx.fee_amount);
         builder.set_fee(fee.clone())?;
         // If the gas is coming from the shielded pool, then our shielded inputs
         // must also cover the gas fee
         let required_amt = if shielded_gas { amount + fee } else { amount };
         // Locate unspent notes that can help us meet the transaction amount
         let (_, unspent_notes, used_convs) = ctx
+            .shielded
             .collect_unspent_notes(
                 args.tx.ledger_address.clone(),
                 &to_viewing_key(&sk).vk,
@@ -1392,8 +1405,8 @@ where
         epoch_sensitive = false;
         // Embed the transparent target address into the shielded transaction so
         // that it can be signed
-        let target_enc = args
-            .target
+        let target = ctx.get(&args.target);
+        let target_enc = target
             .address()
             .expect("target address should be transparent")
             .try_to_vec()
@@ -1422,7 +1435,9 @@ where
     let mut tx = builder.build(consensus_branch_id, &prover);
 
     if epoch_sensitive {
-        let new_epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
+        let new_epoch = rpc::query_epoch(args::Query {
+            ledger_address: args.tx.ledger_address.clone()
+        }).await;
 
         // If epoch has changed, recalculate shielded outputs to match new epoch
         if new_epoch != epoch {
@@ -1431,7 +1446,7 @@ where
             replay_builder.set_fee(Amount::zero())?;
             let ovk_opt = spending_key.map(|x| x.expsk.ovk);
             let (new_asset_type, _) =
-                convert_amount(new_epoch, &args.token, args.amount);
+                convert_amount(new_epoch, &ctx.get(&args.token), args.amount);
             replay_builder.add_sapling_output(
                 ovk_opt,
                 payment_address.unwrap().into(),
@@ -1476,9 +1491,8 @@ where
 }
 
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
-    let parsed_args = args.parse_from_context(&mut ctx);
-    let source = parsed_args.source.effective_address();
-    let target = parsed_args.target.effective_address();
+    let source = ctx.get_cached(&args.source).effective_address();
+    let target = ctx.get(&args.target).effective_address();
     // Check that the source address exists on chain
     let source_exists =
         rpc::known_address(&source, args.tx.ledger_address.clone()).await;
@@ -1497,25 +1511,26 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             safe_exit(1)
         }
     }
+    let token = ctx.get(&args.token);
     // Check that the token address exists on chain
     let token_exists =
-        rpc::known_address(&parsed_args.token, args.tx.ledger_address.clone())
+        rpc::known_address(&token, args.tx.ledger_address.clone())
             .await;
     if !token_exists {
         eprintln!(
             "The token address {} doesn't exist on chain.",
-            parsed_args.token
+            token
         );
         if !args.tx.force {
             safe_exit(1)
         }
     }
     // Check source balance
-    let (sub_prefix, balance_key) = match args.sub_prefix {
+    let (sub_prefix, balance_key) = match &args.sub_prefix {
         Some(sub_prefix) => {
             let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
             let prefix = token::multitoken_balance_prefix(
-                &parsed_args.token,
+                &token,
                 &sub_prefix,
             );
             (
@@ -1523,7 +1538,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
                 token::multitoken_balance_key(&prefix, &source),
             )
         }
-        None => (None, token::balance_key(&parsed_args.token, &source)),
+        None => (None, token::balance_key(&token, &source)),
     };
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
@@ -1534,7 +1549,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
                     "The balance of the source {} of token {} is lower than \
                      the amount to be transferred. Amount to transfer is {} \
                      and the balance is {}.",
-                    source, parsed_args.token, args.amount, balance
+                    source, token, args.amount, balance
                 );
                 if !args.tx.force {
                     safe_exit(1)
@@ -1544,7 +1559,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         None => {
             eprintln!(
                 "No balance found for the source {} of token {}",
-                source, parsed_args.token
+                source, token
             );
             if !args.tx.force {
                 safe_exit(1)
@@ -1570,13 +1585,13 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
                 args.amount,
-                parsed_args.token.clone(),
+                token.clone(),
             )
         } else {
             (
                 TxSigningKey::WalletAddress(args.source.to_address()),
                 args.amount,
-                parsed_args.token.clone(),
+                token.clone(),
             )
         };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
@@ -1591,6 +1606,27 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         _ => None,
     };
 
+    let stx_result =
+        gen_shielded_transfer(&mut ctx, &args, shielded_gas)
+        .await;
+    let shielded = match stx_result {
+        Ok(stx) => stx.map(|x| x.0),
+        Err(builder::Error::ChangeIsNegative(_)) => {
+            eprintln!(
+                "The balance of the source {} is lower than the \
+                 amount to be transferred and fees. Amount to \
+                 transfer is {} {} and fees are {} {}.",
+                source,
+                args.amount,
+                token,
+                args.tx.fee_amount,
+                ctx.get(&args.tx.fee_token),
+            );
+            safe_exit(1)
+        }
+        Err(err) => panic!("{}", err),
+    };
+
     let transfer = token::Transfer {
         source,
         target,
@@ -1598,49 +1634,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         sub_prefix,
         amount,
         key,
-        shielded: {
-            let spending_key = parsed_args.source.spending_key();
-            let payment_address = parsed_args.target.payment_address();
-            // No shielded components are needed when neither source nor
-            // destination are shielded
-            if spending_key.is_none() && payment_address.is_none() {
-                None
-            } else {
-                // We want to fund our transaction solely from supplied spending
-                // key
-                let spending_key = spending_key.map(|x| x.into());
-                let spending_keys: Vec<_> = spending_key.into_iter().collect();
-                // Load the current shielded context given the spending key we
-                // possess
-                let _ = ctx.shielded.load();
-                ctx.shielded
-                    .fetch(&args.tx.ledger_address, &spending_keys, &[])
-                    .await;
-                // Save the update state so that future fetches can be
-                // short-circuited
-                let _ = ctx.shielded.save();
-                let stx_result =
-                    gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
-                        .await;
-                match stx_result {
-                    Ok(stx) => stx.map(|x| x.0),
-                    Err(builder::Error::ChangeIsNegative(_)) => {
-                        eprintln!(
-                            "The balance of the source {} is lower than the \
-                             amount to be transferred and fees. Amount to \
-                             transfer is {} {} and fees are {} {}.",
-                            parsed_args.source,
-                            args.amount,
-                            parsed_args.token,
-                            args.tx.fee_amount,
-                            parsed_args.tx.fee_token,
-                        );
-                        safe_exit(1)
-                    }
-                    Err(err) => panic!("{}", err),
-                }
-            }
-        },
+        shielded,
     };
     tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer
