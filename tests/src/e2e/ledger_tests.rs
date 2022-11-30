@@ -2303,7 +2303,7 @@ fn proposal_submission() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                max_bytes_per_block: 20 << 20,
+                max_bytes_per_block: Default::default(),
                 min_num_of_blocks: 1,
                 min_duration: 1,
                 max_expected_time_per_block: 1,

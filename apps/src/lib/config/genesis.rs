@@ -228,9 +228,7 @@ pub mod genesis_config {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ParametersConfig {
         // Max Tendermint block size in bytes.
-        // XXX: we use i64 becauase that's what tower-abci
-        // and tendermint-rs expect
-        pub max_bytes_per_block: i64,
+        pub max_bytes_per_block: TendermintBytesPerBlock,
         // Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
@@ -537,9 +535,6 @@ pub mod genesis_config {
             })
             .collect();
 
-        const BLOCK_SIZE_EXPECT: &str =
-            "The acceptable size range for a Tendermint block is 1B - 100MB";
-
         let parameters = Parameters {
             epoch_duration: EpochDuration {
                 min_num_of_blocks: config.parameters.min_num_of_blocks,
@@ -553,14 +548,7 @@ pub mod genesis_config {
                     config.parameters.max_expected_time_per_block,
                 )
                 .into(),
-            max_bytes_per_block: TendermintBytesPerBlock::new(
-                config
-                    .parameters
-                    .max_bytes_per_block
-                    .try_into()
-                    .expect(BLOCK_SIZE_EXPECT),
-            )
-            .expect(BLOCK_SIZE_EXPECT),
+            max_bytes_per_block: config.parameters.max_bytes_per_block,
             vp_whitelist: config.parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: config.parameters.tx_whitelist.unwrap_or_default(),
         };
