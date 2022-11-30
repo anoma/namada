@@ -1,6 +1,5 @@
-//! Code for handling
-//! [`crate::types::transaction::protocol::ProtocolTxType::EthereumEvents`]
-//! transactions.
+//! Code for handling Ethereum events protocol txs.
+
 mod eth_msgs;
 mod events;
 
@@ -9,23 +8,29 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use eth_msgs::{EthMsg, EthMsgUpdate};
 use eyre::Result;
 
+use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
-use crate::ledger::protocol::transactions::utils::{
-    self, get_active_validators,
-};
+use crate::ledger::protocol::transactions::utils;
 use crate::ledger::protocol::transactions::votes::{
-    calculate_new, calculate_updated, write, Votes,
+    self, calculate_new, calculate_updated,
 };
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::types::address::Address;
-use crate::types::storage::{self, BlockHeight};
+use crate::types::storage::BlockHeight;
 use crate::types::transaction::TxResult;
 use crate::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use crate::types::voting_power::FractionalVotingPower;
 
-/// The keys changed while applying a protocol transaction
-type ChangedKeys = BTreeSet<storage::Key>;
+impl utils::GetVoters for HashSet<EthMsgUpdate> {
+    #[inline]
+    fn get_voters(&self) -> HashSet<(Address, BlockHeight)> {
+        self.iter().fold(HashSet::new(), |mut voters, update| {
+            voters.extend(update.seen_by.clone().into_iter());
+            voters
+        })
+    }
+}
 
 /// Applies derived state changes to storage, based on Ethereum `events` which
 /// were newly seen by some active validator(s) in the last epoch. For `events`
@@ -51,9 +56,9 @@ where
          protocol transaction"
     );
 
-    let voting_powers = get_voting_powers(storage, &events)?;
-
     let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
+
+    let voting_powers = utils::get_voting_powers(storage, &updates)?;
 
     let changed_keys = apply_updates(storage, updates, voting_powers)?;
 
@@ -61,39 +66,6 @@ where
         changed_keys,
         ..Default::default()
     })
-}
-
-/// Constructs a map of all validators who voted for an event to their
-/// fractional voting power for block heights at which they voted for an event
-fn get_voting_powers<D, H>(
-    storage: &Storage<D, H>,
-    events: &[MultiSignedEthEvent],
-) -> Result<HashMap<(Address, BlockHeight), FractionalVotingPower>>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    let voters = utils::get_votes_for_events(events.iter());
-    tracing::debug!(?voters, "Got validators who voted on at least one event");
-
-    let active_validators = get_active_validators(
-        storage,
-        voters.iter().map(|(_, h)| h.to_owned()).collect(),
-    );
-    tracing::debug!(
-        n = active_validators.len(),
-        "got active validators - {:#?}",
-        active_validators,
-    );
-
-    let voting_powers =
-        utils::get_voting_powers_for_selected(&active_validators, voters)?;
-    tracing::debug!(
-        ?voting_powers,
-        "got voting powers for relevant validators"
-    );
-
-    Ok(voting_powers)
 }
 
 /// Apply an Ethereum state update + act on any events which are confirmed
@@ -157,17 +129,9 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let mut seen_by = Votes::default();
-    for (address, block_height) in update.seen_by.into_iter() {
-        // TODO: more deterministic deduplication
-        if let Some(present) = seen_by.insert(address, block_height) {
-            tracing::warn!(?present, "Duplicate vote in digest");
-        }
-    }
-
     let (vote_tracking, changed, confirmed) = if !exists_in_storage {
         tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-        let vote_tracking = calculate_new(seen_by, voting_powers)?;
+        let vote_tracking = calculate_new(update.seen_by, voting_powers)?;
         let changed = eth_msg_keys.into_iter().collect();
         let confirmed = vote_tracking.seen;
         (vote_tracking, changed, confirmed)
@@ -177,7 +141,7 @@ where
             "Ethereum event already exists in storage",
         );
         let mut votes = HashMap::default();
-        seen_by.iter().for_each(|(address, block_height)| {
+        update.seen_by.iter().for_each(|(address, block_height)| {
             let voting_power = voting_powers
                 .get(&(address.to_owned(), block_height.to_owned()))
                 .unwrap();
@@ -203,7 +167,7 @@ where
         votes: vote_tracking,
     };
     tracing::debug!("writing EthMsg - {:#?}", &eth_msg_post);
-    write(
+    votes::storage::write(
         storage,
         &eth_msg_keys,
         &eth_msg_post.body,
@@ -217,20 +181,21 @@ mod tests {
     use std::collections::{BTreeSet, HashMap, HashSet};
 
     use borsh::BorshDeserialize;
-    use storage::BlockHeight;
 
     use super::*;
     use crate::ledger::eth_bridge::storage::wrapped_erc20s;
     use crate::ledger::pos::namada_proof_of_stake::epoched::Epoched;
     use crate::ledger::pos::namada_proof_of_stake::PosBase;
     use crate::ledger::pos::types::{ValidatorSet, WeightedValidator};
+    use crate::ledger::protocol::transactions::utils::GetVoters;
+    use crate::ledger::protocol::transactions::votes::Votes;
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::testing::TestStorage;
     use crate::ledger::storage::traits::Sha256Hasher;
     use crate::types::address;
     use crate::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
-        DAI_ERC20_ETH_ADDRESS,
+        arbitrary_single_transfer, DAI_ERC20_ETH_ADDRESS,
     };
     use crate::types::ethereum_events::{EthereumEvent, TransferToNamada};
     use crate::types::token::Amount;
@@ -441,5 +406,62 @@ mod tests {
              should have happened yet as it has only been seen by 1/2 the \
              voting power so far"
         );
+    }
+
+    #[test]
+    /// Assert we don't return anything if we try to get the votes for an empty
+    /// set of updates
+    pub fn test_get_votes_for_updates_empty() {
+        let updates = HashSet::new();
+        assert!(updates.get_voters().is_empty());
+    }
+
+    #[test]
+    /// Test that we correctly get the votes from a set of updates
+    pub fn test_get_votes_for_events() {
+        let updates = HashSet::from([
+            EthMsgUpdate {
+                body: arbitrary_single_transfer(
+                    1.into(),
+                    address::testing::established_address_1(),
+                ),
+                seen_by: Votes::from([
+                    (
+                        address::testing::established_address_1(),
+                        BlockHeight(100),
+                    ),
+                    (
+                        address::testing::established_address_2(),
+                        BlockHeight(102),
+                    ),
+                ]),
+            },
+            EthMsgUpdate {
+                body: arbitrary_single_transfer(
+                    2.into(),
+                    address::testing::established_address_2(),
+                ),
+                seen_by: Votes::from([
+                    (
+                        address::testing::established_address_1(),
+                        BlockHeight(101),
+                    ),
+                    (
+                        address::testing::established_address_3(),
+                        BlockHeight(100),
+                    ),
+                ]),
+            },
+        ]);
+        let voters = updates.get_voters();
+        assert_eq!(
+            voters,
+            HashSet::from([
+                (address::testing::established_address_1(), BlockHeight(100)),
+                (address::testing::established_address_1(), BlockHeight(101)),
+                (address::testing::established_address_2(), BlockHeight(102)),
+                (address::testing::established_address_3(), BlockHeight(100))
+            ])
+        )
     }
 }

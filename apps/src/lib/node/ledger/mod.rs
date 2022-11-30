@@ -1,6 +1,7 @@
 mod abortable;
 mod broadcaster;
 mod ethereum_node;
+pub mod rpc;
 mod shell;
 mod shims;
 pub mod storage;
@@ -19,7 +20,7 @@ use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tokio::task;
 use tower::ServiceBuilder;
 
@@ -229,12 +230,11 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let tendermint_node = start_tendermint(&mut spawner, &config);
 
     // Start managed Ethereum node if necessary
-    let (eth_node, abort_sender) =
-        maybe_start_geth(&mut spawner, &config).await;
+    let eth_node = maybe_start_geth(&mut spawner, &config).await;
 
     // Start oracle if necessary
     let (eth_receiver, oracle) =
-        match maybe_start_ethereum_oracle(&config, abort_sender).await {
+        match maybe_start_ethereum_oracle(&mut spawner, &config).await {
             EthereumOracleTask::NotEnabled {
                 handle,
                 eth_receiver,
@@ -268,14 +268,11 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         tokio::try_join!(tendermint_node, eth_node, abci, oracle, broadcaster);
 
     match res {
-        Ok((tendermint_res, eth_res, abci_res, _, _)) => {
+        Ok((tendermint_res, _, abci_res, _, _)) => {
             // we ignore errors on user-initiated shutdown
             if aborted {
                 if let Err(err) = tendermint_res {
                     tracing::error!("Tendermint error: {}", err);
-                }
-                if let Err(err) = eth_res {
-                    tracing::error!("Ethereum error: {}", err);
                 }
                 if let Err(err) = abci_res {
                     tracing::error!("ABCI error: {}", err);
@@ -646,8 +643,8 @@ enum EthereumOracleTask {
 
 /// Potentially starts an Ethereum event oracle.
 async fn maybe_start_ethereum_oracle(
+    spawner: &mut AbortableSpawner,
     config: &config::Ledger,
-    abort_sender: oneshot::Sender<()>,
 ) -> EthereumOracleTask {
     let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
 
@@ -662,7 +659,6 @@ async fn maybe_start_ethereum_oracle(
                 ethereum_url,
                 eth_sender,
                 control_receiver,
-                abort_sender,
             );
 
             // TODO(namada#686): pass `oracle_control_sender` to the shell for
@@ -681,10 +677,44 @@ async fn maybe_start_ethereum_oracle(
             }
         }
         ethereum_bridge::ledger::Mode::EventsEndpoint => {
-            let handle = ethereum_node::test_tools::events_endpoint::serve(
-                eth_sender,
-                abort_sender,
-            );
+            let (oracle_abort_send, oracle_abort_recv) =
+                tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>(
+                );
+            let handle = spawner
+                .spawn_abortable(
+                    "Ethereum Events Endpoint",
+                    move |aborter| async move {
+                        ethereum_node::test_tools::events_endpoint::serve(
+                            eth_sender,
+                            oracle_abort_recv,
+                        )
+                        .await;
+                        tracing::info!(
+                            "Ethereum events endpoint is no longer running."
+                        );
+
+                        drop(aborter);
+                    },
+                )
+                .with_cleanup(async move {
+                    let (oracle_abort_resp_send, oracle_abort_resp_recv) =
+                        tokio::sync::oneshot::channel::<()>();
+
+                    if let Ok(()) =
+                        oracle_abort_send.send(oracle_abort_resp_send)
+                    {
+                        match oracle_abort_resp_recv.await {
+                            Ok(()) => {}
+                            Err(err) => {
+                                tracing::error!(
+                                    "Failed to receive an abort response from \
+                                     the Ethereum events endpoint task: {}",
+                                    err
+                                );
+                            }
+                        }
+                    }
+                });
             EthereumOracleTask::EventsEndpoint {
                 handle,
                 eth_receiver,
@@ -705,41 +735,32 @@ async fn maybe_start_ethereum_oracle(
 async fn maybe_start_geth(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
-) -> (
-    task::JoinHandle<shell::Result<()>>,
-    tokio::sync::oneshot::Sender<()>,
-) {
+) -> task::JoinHandle<()> {
     if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator)
         || !matches!(
             config.ethereum_bridge.mode,
             ethereum_bridge::ledger::Mode::Managed
         )
     {
-        let eth_node = spawn_dummy_task(Ok(()));
-        let (abort_sender, _) = tokio::sync::oneshot::channel::<()>();
-        return (eth_node, abort_sender);
+        return spawn_dummy_task(());
     }
 
     let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
 
     // Boot up geth and wait for it to finish syncing
-    let (eth_node, abort_sender) =
-        eth_fullnode::EthereumNode::new(&ethereum_url)
-            .await
-            .expect("Unable to start the Ethereum fullnode");
+    let eth_node = eth_fullnode::EthereumNode::new(&ethereum_url)
+        .await
+        .expect("Unable to start the Ethereum fullnode");
 
     // Run geth in the background
     let (eth_abort_send, eth_abort_recv) =
         tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>();
     let eth_node = spawner
         .spawn_abortable("Ethereum", move |aborter| async move {
-            let res = ethereum_node::monitor(eth_node, eth_abort_recv)
-                .map_err(Error::Ethereum)
-                .await;
+            ethereum_node::monitor(eth_node, eth_abort_recv).await;
             tracing::info!("Ethereum fullnode is no longer running.");
 
             drop(aborter);
-            res
         })
         .with_cleanup(async move {
             let (eth_abort_resp_send, eth_abort_resp_recv) =
@@ -757,7 +778,7 @@ async fn maybe_start_geth(
                 }
             }
         });
-    (eth_node, abort_sender)
+    eth_node
 }
 
 /// Spawn a dummy asynchronous task into the runtime,

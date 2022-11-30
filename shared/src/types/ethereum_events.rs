@@ -113,10 +113,7 @@ impl From<EthAddress> for String {
 }
 
 impl KeySeg for EthAddress {
-    fn parse(string: String) -> crate::types::storage::Result<Self>
-    where
-        Self: Sized,
-    {
+    fn parse(string: String) -> crate::types::storage::Result<Self> {
         Self::from_str(string.as_str())
             .map_err(|_| crate::types::storage::Error::ParseKeySeg(string))
     }

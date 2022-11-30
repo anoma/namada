@@ -35,10 +35,11 @@ use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::ledger::{pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::address;
+use namada::types::address::{masp, masp_tx_key};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
-use namada::types::storage::{BlockHeight, Key};
+use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
@@ -213,16 +214,15 @@ impl EthereumReceiver {
         self.queue.iter().cloned().collect()
     }
 
-    /// Given a list of events, remove them from the queue if present
-    /// Note that this method preserves the sorting and de-duplication
+    /// Remove the given [`EthereumEvent`] from the queue, if present.
+    ///
+    /// **INVARIANT:** This method preserves the sorting and de-duplication
     /// of events in the queue.
-    #[allow(dead_code)]
-    pub fn remove(&mut self, events: &[EthereumEvent]) {
-        self.queue.retain(|event| !events.contains(event));
+    pub fn remove_event(&mut self, event: &EthereumEvent) {
+        self.queue.remove(event);
     }
 }
 
-#[allow(dead_code)]
 impl ShellMode {
     /// Get the validator address if ledger is in validator mode
     pub fn get_validator_address(&self) -> Option<&address::Address> {
@@ -233,13 +233,9 @@ impl ShellMode {
     }
 
     /// Remove an Ethereum event from the internal queue
-    pub fn deque_eth_event(&mut self, event: &EthereumEvent) {
-        if let ShellMode::Validator {
-            ethereum_recv: EthereumReceiver { ref mut queue, .. },
-            ..
-        } = self
-        {
-            queue.remove(event);
+    pub fn dequeue_eth_event(&mut self, event: &EthereumEvent) {
+        if let ShellMode::Validator { ethereum_recv, .. } = self {
+            ethereum_recv.remove_event(event);
         }
     }
 
@@ -262,6 +258,7 @@ impl ShellMode {
     }
 
     /// Get the Ethereum bridge keypair for this validator.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn get_eth_bridge_keypair(&self) -> Option<&common::SecretKey> {
         match self {
             ShellMode::Validator {
@@ -281,6 +278,7 @@ impl ShellMode {
 
     /// If this node is a validator, broadcast a tx
     /// to the mempool using the broadcaster subprocess
+    #[cfg_attr(feature = "abcipp", allow(dead_code))]
     pub fn broadcast(&self, data: Vec<u8>) {
         if let Self::Validator {
             broadcast_sender, ..
@@ -671,20 +669,23 @@ where
 
         #[cfg(not(feature = "abcipp"))]
         {
-            use namada::types::transaction::protocol::ProtocolTxType;
+            use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 
             if let ShellMode::Validator { .. } = &self.mode {
                 let ext = self.craft_extension();
-                let ext = self
+
+                let protocol_key = self
                     .mode
                     .get_protocol_key()
-                    .map(|protocol_key| {
-                        ProtocolTxType::VoteExtension(ext)
-                            .sign(protocol_key)
-                            .to_bytes()
-                    })
                     .expect("Validators should have protocol keys");
-                self.mode.broadcast(ext);
+
+                let protocol_txs = iter_protocol_txs(ext).map(|protocol_tx| {
+                    protocol_tx.sign(protocol_key).to_bytes()
+                });
+
+                for tx in protocol_txs {
+                    self.mode.broadcast(tx);
+                }
             }
         }
 
@@ -699,21 +700,75 @@ where
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
+        use namada::types::transaction::protocol::{
+            ProtocolTx, ProtocolTxType,
+        };
+
         let mut response = response::CheckTx::default();
+        const VALID_MSG: &str = "Mempool validation passed";
+
         match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
-            Ok(_) => response.log = String::from("Mempool validation passed"),
+            Ok(tx) => {
+                match process_tx(tx) {
+                    #[cfg(not(feature = "abcipp"))]
+                    Ok(TxType::Protocol(ProtocolTx {
+                        tx: ProtocolTxType::EthEventsVext(ext),
+                        ..
+                    })) => {
+                        if self.validate_eth_events_vext(
+                            ext,
+                            self.storage.last_height,
+                        ) {
+                            response.log = String::from(VALID_MSG);
+                        } else {
+                            response.code = 1;
+                            response.log = String::from(
+                                "Invalid Ethereum events vote extension",
+                            );
+                        }
+                    }
+                    #[cfg(not(feature = "abcipp"))]
+                    Ok(TxType::Protocol(ProtocolTx {
+                        tx: ProtocolTxType::ValSetUpdateVext(ext),
+                        ..
+                    })) => {
+                        if self.validate_valset_upd_vext(
+                            ext,
+                            self.storage.last_height,
+                        ) {
+                            response.log = String::from(VALID_MSG);
+                        } else {
+                            response.code = 1;
+                            response.log = String::from(
+                                "Invalid validator set update vote extension",
+                            );
+                        }
+                    }
+                    Ok(TxType::Protocol(ProtocolTx { tx, .. })) => {
+                        response.code = 1;
+                        response.log = format!(
+                            "The following protocol tx cannot be added to the \
+                             mempool: {tx:?}"
+                        );
+                    }
+                    // `process_tx` errors are handled by
+                    // `Shell::finalize_block`
+                    _ => response.log = String::from(VALID_MSG),
+                }
+            }
             Err(msg) => {
                 response.code = 1;
                 response.log = msg.to_string();
             }
         }
+
         response
     }
 
     /// Lookup a validator's keypair for their established account from their
     /// wallet. If the node is not validator, this function returns None
     #[allow(dead_code)]
-    fn get_account_keypair(&self) -> Option<Rc<common::SecretKey>> {
+    fn get_account_keypair(&self) -> Option<common::SecretKey> {
         let wallet_path = &self.base_dir.join(self.chain_id.as_str());
         let genesis_path = &self
             .base_dir
@@ -779,7 +834,7 @@ mod test_utils {
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHash, Epoch, Header};
+    use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
     use namada::types::time::DateTimeUtc;
     use namada::types::transaction::Fee;
     use tempfile::tempdir;
@@ -1104,6 +1159,7 @@ mod test_utils {
                 next_epoch_min_start_height: BlockHeight(3),
                 next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: &address_gen,
+                results: &BlockResults::default(),
                 tx_queue: &shell.storage.tx_queue,
             })
             .expect("Test failed");

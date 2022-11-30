@@ -137,7 +137,7 @@ impl AbcippShim {
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
-                    let (processing_results, _) =
+                    let processing_results =
                         self.service.check_proposal(&self.delivered_txs);
                     let mut txs = Vec::with_capacity(self.delivered_txs.len());
                     let mut delivered = vec![];
@@ -152,7 +152,6 @@ impl AbcippShim {
                         self.begin_block_request.take().unwrap().into();
                     let hash = self.get_hash();
                     end_block_request.hash = BlockHash::from(hash.clone());
-                    end_block_request.header.hash = hash;
                     end_block_request.txs = txs;
                     self.service
                         .call(Request::FinalizeBlock(end_block_request))

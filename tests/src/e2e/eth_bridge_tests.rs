@@ -1,8 +1,14 @@
+use color_eyre::eyre::Result;
+use namada::types::address::wnam;
 use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS_CHECKSUMMED;
+use namada_apps::config::ethereum_bridge;
 
+use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
-use crate::e2e::setup::constants::{wasm_abs_path, ALBERT, TX_WRITE_STORAGE_KEY_WASM, BERTHA, NAM};
+use crate::e2e::setup::constants::{
+    wasm_abs_path, ALBERT, BERTHA, NAM, TX_WRITE_STORAGE_KEY_WASM,
+};
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
 
@@ -93,13 +99,48 @@ fn everything() {
     }
 }
 
+/// Tests that we can start the ledger with an endpoint for submitting Ethereum
+/// events. This mode can be used in further end-to-end tests.
+#[test]
+fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
+    let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::EventsEndpoint,
+    );
+
+    // Start the ledger as a validator
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
+    ledger.exp_string(
+        "Starting to listen for Borsh-serialized Ethereum events",
+    )?;
+    ledger.exp_string("Anoma ledger node started")?;
+
+    ledger.send_control('c')?;
+    ledger.exp_string(
+        "Stopping listening for Borsh-serialized Ethereum events",
+    )?;
+
+    Ok(())
+}
+
 #[test]
 fn test_add_to_bridge_pool() {
-    const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 30;
-    const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 30;
+    const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 40;
+    const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 60;
     const SOLE_VALIDATOR: Who = Who::Validator(0);
-
+    let wnam_address = wnam().to_canonical();
     let test = setup::single_node_net().unwrap();
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::EventsEndpoint,
+    );
 
     let mut anoman_ledger = run_as!(
         test,
@@ -108,7 +149,7 @@ fn test_add_to_bridge_pool() {
         &["ledger"],
         Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
     )
-        .unwrap();
+    .unwrap();
     anoman_ledger
         .exp_string("Anoma ledger node started")
         .unwrap();
@@ -126,9 +167,9 @@ fn test_add_to_bridge_pool() {
         "--amount",
         "100",
         "--erc20",
-        DAI_ERC20_ETH_ADDRESS_CHECKSUMMED,
+        &wnam_address,
         "--ethereum-address",
-        "DAI_ERC20_ETH_ADDRESS_CHECKSUMMED",
+        DAI_ERC20_ETH_ADDRESS_CHECKSUMMED,
         "--fee-amount",
         "10",
         "--fee-payer",
@@ -144,10 +185,11 @@ fn test_add_to_bridge_pool() {
     ];
 
     let mut anomac_tx = run!(
-            test,
-            Bin::Client,
-            tx_args,
-            Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
-        )
-        .unwrap();
+        test,
+        Bin::Client,
+        tx_args,
+        Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
+    )
+    .unwrap();
+    anomac_tx.exp_string("Transaction applied").unwrap();
 }

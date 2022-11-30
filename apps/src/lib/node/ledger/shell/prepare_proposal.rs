@@ -2,23 +2,30 @@
 
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
+#[cfg(feature = "abcipp")]
+use namada::ledger::storage_api::queries::QueriesExt;
+#[cfg(feature = "abcipp")]
+use namada::ledger::storage_api::queries::SendValsetUpd;
 use namada::proto::Tx;
 use namada::types::storage::BlockHeight;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
+#[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
 
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::{
-    tx_record::TxAction, ExtendedCommitInfo, TxRecord,
+    tx_record::TxAction, ExtendedCommitInfo,
 };
-use crate::node::ledger::shell::queries::{QueriesExt, SendValsetUpd};
-use crate::node::ledger::shell::vote_extensions::{
-    iter_protocol_txs, split_vote_extensions,
-};
+#[cfg(not(feature = "abcipp"))]
+use crate::node::ledger::shell::vote_extensions::deserialize_vote_extensions;
+#[cfg(feature = "abcipp")]
+use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
+#[cfg(feature = "abcipp")]
+use crate::node::ledger::shell::vote_extensions::split_vote_extensions;
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -49,23 +56,16 @@ where
 
             // add ethereum events and validator set updates as protocol txs
             #[cfg(feature = "abcipp")]
-            let txs = self.build_vote_extensions_txs(req.local_last_commit);
+            let txs = self.build_vote_extension_txs(req.local_last_commit);
             #[cfg(not(feature = "abcipp"))]
-            let mut txs = self.build_vote_extensions_txs(&req.txs);
-            #[cfg(feature = "abcipp")]
-            let mut txs: Vec<TxRecord> =
-                txs.into_iter().map(record::add).collect();
+            let mut txs = self.build_vote_extension_txs(&req.txs);
 
             // add mempool txs
             let mut mempool_txs = self.build_mempool_txs(req.txs);
             txs.append(&mut mempool_txs);
 
             // decrypt the wrapper txs included in the previous block
-            let decrypted_txs = self.build_decrypted_txs();
-            #[cfg(feature = "abcipp")]
-            let decrypted_txs: Vec<TxRecord> =
-                decrypted_txs.into_iter().map(record::add).collect();
-            let mut decrypted_txs = decrypted_txs;
+            let mut decrypted_txs = self.build_decrypted_txs();
             txs.append(&mut decrypted_txs);
 
             txs
@@ -94,19 +94,16 @@ where
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
     /// events and, optionally, a validator set update
-    fn build_vote_extensions_txs(
+    #[cfg(feature = "abcipp")]
+    fn build_vote_extension_txs(
         &mut self,
-        #[cfg(feature = "abcipp")] local_last_commit: Option<
-            ExtendedCommitInfo,
-        >,
-        #[cfg(not(feature = "abcipp"))] txs: &[TxBytes],
+        local_last_commit: Option<ExtendedCommitInfo>,
     ) -> Vec<TxBytes> {
-        // genesis block should not contain vote extensions
+        // genesis should not contain vote extensions
         if self.storage.last_height == BlockHeight(0) {
             return vec![];
         }
 
-        #[cfg(feature = "abcipp")]
         let (eth_events, valset_upds) = split_vote_extensions(
             local_last_commit
                 .expect(
@@ -120,13 +117,6 @@ where
                 )
                 .votes,
         );
-        #[cfg(not(feature = "abcipp"))]
-        let (protocol_txs, eth_events, valset_upds) =
-            split_vote_extensions(txs);
-
-        // TODO: remove this later, when we get rid of `abciplus`
-        #[cfg(feature = "abcipp")]
-        let protocol_txs = vec![];
 
         let ethereum_events = self
             .compress_ethereum_events(eth_events)
@@ -154,33 +144,22 @@ where
             validator_set_update,
         })
         .map(|tx| tx.sign(protocol_key).to_bytes())
-        // TODO: remove this later, when we get rid of `abciplus`
-        .chain(protocol_txs.into_iter())
         .collect()
     }
 
-    /// Builds a batch of mempool transactions
-    #[cfg(feature = "abcipp")]
-    fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxRecord> {
-        // filter in half of the new txs from Tendermint, only keeping
-        // wrappers
-        let number_of_new_txs = 1 + txs.len() / 2;
-        txs.into_iter()
-            .take(number_of_new_txs)
-            .map(|tx_bytes| {
-                if let Ok(Ok(TxType::Wrapper(_))) =
-                    Tx::try_from(tx_bytes.as_slice()).map(process_tx)
-                {
-                    record::keep(tx_bytes)
-                } else {
-                    record::remove(tx_bytes)
-                }
-            })
-            .collect()
+    /// Builds a batch of vote extension transactions, comprised of Ethereum
+    /// events and, optionally, a validator set update
+    #[cfg(not(feature = "abcipp"))]
+    fn build_vote_extension_txs(&mut self, txs: &[TxBytes]) -> Vec<TxBytes> {
+        if self.storage.last_height != BlockHeight(0) {
+            deserialize_vote_extensions(txs).collect()
+        } else {
+            // genesis should not contain vote extensions
+            vec![]
+        }
     }
 
     /// Builds a batch of mempool transactions
-    #[cfg(not(feature = "abcipp"))]
     fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxBytes> {
         // filter in half of the new txs from Tendermint, only keeping
         // wrappers
@@ -228,55 +207,17 @@ where
 /// Returns a suitable message to be displayed when Tendermint
 /// somehow decides on a block containing vote extensions
 /// reflecting `<= 2/3` of the total stake.
-const fn not_enough_voting_power_msg() -> &'static str {
-    #[cfg(feature = "abcipp")]
-    {
-        "A Tendermint quorum should never decide on a block including vote \
-         extensions reflecting less than or equal to 2/3 of the total stake."
-    }
-    #[cfg(not(feature = "abcipp"))]
-    {
-        "CONSENSUS FAILURE!!!!!11one!"
-    }
-}
-
-/// Functions for creating the appropriate TxRecord given the
-/// numeric code
 #[cfg(feature = "abcipp")]
-pub(super) mod record {
-    use super::*;
-
-    /// Keep this transaction in the proposal
-    pub fn keep(tx: TxBytes) -> TxRecord {
-        TxRecord {
-            action: TxAction::Unmodified as i32,
-            tx,
-        }
-    }
-
-    /// A transaction added to the proposal not provided by
-    /// Tendermint from the mempool
-    pub fn add(tx: TxBytes) -> TxRecord {
-        TxRecord {
-            action: TxAction::Added as i32,
-            tx,
-        }
-    }
-
-    /// Remove this transaction from the set provided
-    /// by Tendermint from the mempool
-    pub fn remove(tx: TxBytes) -> TxRecord {
-        TxRecord {
-            action: TxAction::Removed as i32,
-            tx,
-        }
-    }
+const fn not_enough_voting_power_msg() -> &'static str {
+    "A Tendermint quorum should never decide on a block including vote \
+     extensions reflecting less than or equal to 2/3 of the total stake."
 }
 
 #[cfg(test)]
 // TODO: write tests for validator set update vote extensions in
 // prepare proposals
 mod test_prepare_proposal {
+    #[cfg(feature = "abcipp")]
     use std::collections::{BTreeSet, HashMap};
 
     use borsh::{BorshDeserialize, BorshSerialize};
@@ -284,16 +225,18 @@ mod test_prepare_proposal {
         VotingPower, WeightedValidator,
     };
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
+    use namada::ledger::storage_api::queries::QueriesExt;
     use namada::proto::{Signed, SignedTxData};
     use namada::types::address::nam;
     use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::{common, RefTo};
+    #[cfg(feature = "abcipp")]
+    use namada::types::key::common;
+    use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, Epoch};
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
-    use namada::types::vote_extensions::ethereum_events::{
-        self, MultiSignedEthEvent,
-    };
+    use namada::types::vote_extensions::ethereum_events;
+    #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
 
     use super::*;
@@ -301,7 +244,6 @@ mod test_prepare_proposal {
     use crate::facade::tendermint_proto::abci::{
         tx_record::TxAction, ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
     };
-    use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };
@@ -373,21 +315,7 @@ mod test_prepare_proposal {
             record::remove(non_wrapper_tx.to_bytes())
         );
         #[cfg(not(feature = "abcipp"))]
-        assert!({
-            let mut assertion = true;
-            // this includes valset upd and eth events
-            // vote extension diggests
-            let transactions = shell.prepare_proposal(req).txs;
-            assert_eq!(transactions.len(), 2);
-            let non_wrapper_tx = non_wrapper_tx.to_bytes();
-            for tx in transactions {
-                if tx == non_wrapper_tx {
-                    assertion = false;
-                    break;
-                }
-            }
-            assertion
-        });
+        assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }
 
     /// Check if we are filtering out an invalid vote extension `vext`
@@ -560,33 +488,26 @@ mod test_prepare_proposal {
         }
     }
 
-    /// Creates an Ethereum events digest manually, and encodes it as a
-    /// [`TxRecord`].
+    /// Creates an Ethereum events digest manually.
+    #[cfg(feature = "abcipp")]
     fn manually_assemble_digest(
         _protocol_key: &common::SecretKey,
         ext: Signed<ethereum_events::Vext>,
         last_height: BlockHeight,
     ) -> ethereum_events::VextDigest {
+        use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
+
         let events = vec![MultiSignedEthEvent {
             event: ext.data.ethereum_events[0].clone(),
             signers: {
                 let mut s = BTreeSet::new();
-                #[cfg(feature = "abcipp")]
                 s.insert(ext.data.validator_addr.clone());
-                #[cfg(not(feature = "abcipp"))]
-                s.insert((ext.data.validator_addr.clone(), last_height));
                 s
             },
         }];
         let signatures = {
             let mut s = HashMap::new();
-            #[cfg(feature = "abcipp")]
-            s.insert(ext.data.validator_addr.clone(), ext.sig.clone());
-            #[cfg(not(feature = "abcipp"))]
-            s.insert(
-                (ext.data.validator_addr.clone(), last_height),
-                ext.sig.clone(),
-            );
+            s.insert(ext.data.validator_addr, ext.sig.clone());
             s
         };
 
@@ -599,11 +520,6 @@ mod test_prepare_proposal {
         );
 
         vote_extension_digest
-
-        // let tx = ProtocolTxType::EthereumEvents(vote_extension_digest)
-        //    .sign(&protocol_key)
-        //    .to_bytes();
-        // super::record::add(tx)
     }
 
     /// Test if Ethereum events validation and inclusion in a block
@@ -682,9 +598,6 @@ mod test_prepare_proposal {
         );
 
         assert_eq!(rsp_digest, digest);
-
-        // NOTE: this comparison will not work because of timestamps
-        // assert_eq!(rsp.tx_records, vec![digest]);
     }
 
     /// Test if Ethereum events validation and inclusion in a block
@@ -706,7 +619,7 @@ mod test_prepare_proposal {
             nonce: 1u64.into(),
             transfers: vec![],
         };
-        let signed_vote_extension = {
+        let ext = {
             let ext = ethereum_events::Vext {
                 validator_addr,
                 block_height: LAST_HEIGHT,
@@ -717,23 +630,16 @@ mod test_prepare_proposal {
             ext
         };
 
-        let rsp_digest = {
-            let vote_extension = VoteExtension {
-                ethereum_events: signed_vote_extension.clone(),
-                validator_set_update: None,
-            };
-            let tx = ProtocolTxType::VoteExtension(vote_extension)
+        let rsp_ext = {
+            let tx = ProtocolTxType::EthEventsVext(ext.clone())
                 .sign(&protocol_key)
                 .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
                 txs: vec![tx],
                 ..Default::default()
             });
-            assert_eq!(rsp.txs.len(), 3);
+            assert_eq!(rsp.txs.len(), 1);
 
-            // NOTE: we remove the first pos, bc the ethereum events
-            // vote extension protocol tx will always precede the
-            // valset upd vext protocol tx
             let tx_bytes = rsp.txs.remove(0);
             let got = Tx::try_from(&tx_bytes[..]).unwrap();
             let got_signed_tx =
@@ -747,21 +653,12 @@ mod test_prepare_proposal {
             };
 
             match protocol_tx {
-                ProtocolTxType::EthereumEvents(digest) => digest,
+                ProtocolTxType::EthEventsVext(ext) => ext,
                 _ => panic!("Test failed"),
             }
         };
 
-        let digest = manually_assemble_digest(
-            &protocol_key,
-            signed_vote_extension,
-            LAST_HEIGHT,
-        );
-
-        assert_eq!(rsp_digest, digest);
-
-        // NOTE: this comparison will not work because of timestamps
-        // assert_eq!(rsp.tx_records, vec![digest]);
+        assert_eq!(rsp_ext, ext);
     }
 
     /// Test if Ethereum events validation and inclusion in a block
@@ -834,13 +731,12 @@ mod test_prepare_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        #[allow(clippy::redundant_clone)]
-        let vote_extension = VoteExtension {
-            ethereum_events: signed_eth_ev_vote_extension.clone(),
-            validator_set_update: None,
-        };
         #[cfg(feature = "abcipp")]
         {
+            let vote_extension = VoteExtension {
+                ethereum_events: signed_eth_ev_vote_extension.clone(),
+                validator_set_update: None,
+            };
             let vote = ExtendedVoteInfo {
                 vote_extension: vote_extension.try_to_vec().unwrap(),
                 ..Default::default()
@@ -856,14 +752,16 @@ mod test_prepare_proposal {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            let vote = ProtocolTxType::VoteExtension(vote_extension)
-                .sign(&protocol_key)
-                .to_bytes();
+            let vote = ProtocolTxType::EthEventsVext(
+                signed_eth_ev_vote_extension.clone(),
+            )
+            .sign(&protocol_key)
+            .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
                 txs: vec![vote],
                 ..Default::default()
             });
-            assert_eq!(rsp.txs.len(), 3);
+            assert_eq!(rsp.txs.len(), 1);
 
             let tx_bytes = rsp.txs.remove(0);
             let got = Tx::try_from(&tx_bytes[..]).unwrap();
@@ -877,18 +775,12 @@ mod test_prepare_proposal {
                 _ => panic!("Test failed"),
             };
 
-            let digest = match protocol_tx {
-                ProtocolTxType::EthereumEvents(digest) => digest,
+            let rsp_ext = match protocol_tx {
+                ProtocolTxType::EthEventsVext(ext) => ext,
                 _ => panic!("Test failed"),
             };
 
-            let expected = manually_assemble_digest(
-                &protocol_key,
-                signed_eth_ev_vote_extension,
-                LAST_HEIGHT,
-            );
-
-            assert_eq!(expected, digest);
+            assert_eq!(signed_eth_ev_vote_extension, rsp_ext);
         }
     }
 
@@ -938,20 +830,7 @@ mod test_prepare_proposal {
             record::remove(wrapper)
         );
         #[cfg(not(feature = "abcipp"))]
-        assert!({
-            let mut assertion = true;
-            // this includes valset upd and eth events
-            // vote extension diggests
-            let transactions = shell.prepare_proposal(req).txs;
-            assert_eq!(transactions.len(), 2);
-            for tx in transactions {
-                if tx == wrapper {
-                    assertion = false;
-                    break;
-                }
-            }
-            assertion
-        });
+        assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }
 
     /// Test that the decrypted txs are included

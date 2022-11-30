@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::str::FromStr;
-use std::string;
 
 use bech32::{self, FromBase32, ToBase32, Variant};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -26,7 +25,8 @@ pub const ADDRESS_LEN: usize = 79 + ADDRESS_HRP.len();
 /// human-readable part of Bech32m encoded address
 // TODO use "a" for live network
 const ADDRESS_HRP: &str = "atest";
-const ADDRESS_BECH32_VARIANT: bech32::Variant = Variant::Bech32m;
+/// We're using "Bech32m" variant
+pub const BECH32M_VARIANT: bech32::Variant = Variant::Bech32m;
 pub(crate) const HASH_LEN: usize = 40;
 
 /// An address string before bech32m encoding must be this size.
@@ -54,18 +54,20 @@ mod internal {
         "ano::Proof of Stake                          ";
     pub const POS_SLASH_POOL: &str =
         "ano::Proof of Stake Slash Pool               ";
-    pub const IBC: &str = 
-        "ano::Inter-Blockchain Communication          ";
     pub const PARAMETERS: &str =
         "ano::Protocol Parameters                     ";
     pub const GOVERNANCE: &str =
         "ano::Governance                              ";
     pub const SLASH_FUND: &str =
         "ano::Slash Fund                              ";
+    pub const IBC: &str =
+        "ibc::Inter-Blockchain Communication          ";
+    pub const IBC_ESCROW: &str =
+        "ibc::IBC Escrow Address                      ";
     pub const IBC_BURN: &str =
-        "ano::IBC Burn Address                        ";
+        "ibc::IBC Burn Address                        ";
     pub const IBC_MINT: &str =
-        "ano::IBC Mint Address                        ";
+        "ibc::IBC Mint Address                        ";
     pub const ETH_BRIDGE: &str =
         "ano::ETH Bridge Address                      ";
     pub const ETH_BRIDGE_POOL: &str =
@@ -78,32 +80,26 @@ const PREFIX_ESTABLISHED: &str = "est";
 const PREFIX_IMPLICIT: &str = "imp";
 /// Fixed-length address strings prefix for internal addresses.
 const PREFIX_INTERNAL: &str = "ano";
+/// Fixed-length address strings prefix for IBC addresses.
+const PREFIX_IBC: &str = "ibc";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum DecodeError {
     #[error("Error decoding address from Bech32m: {0}")]
     DecodeBech32(bech32::Error),
     #[error("Error decoding address from base32: {0}")]
     DecodeBase32(bech32::Error),
-    #[error(
-        "Unexpected Bech32m human-readable part {0}, expected {ADDRESS_HRP}"
-    )]
-    UnexpectedBech32Prefix(String),
-    #[error(
-        "Unexpected Bech32m variant {0:?}, expected {ADDRESS_BECH32_VARIANT:?}"
-    )]
+    #[error("Unexpected Bech32m human-readable part {0}, expected {1}")]
+    UnexpectedBech32Prefix(String, String),
+    #[error("Unexpected Bech32m variant {0:?}, expected {BECH32M_VARIANT:?}")]
     UnexpectedBech32Variant(bech32::Variant),
-    #[error("Address must be encoded with utf-8")]
-    NonUtf8Address(string::FromUtf8Error),
     #[error("Invalid address encoding")]
-    InvalidAddressEncoding(std::io::Error),
-    #[error("Unexpected address hash length {0}, expected {HASH_LEN}")]
-    UnexpectedHashLength(usize),
+    InvalidInnerEncoding(std::io::Error),
 }
 
 /// Result of a function that may fail
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, DecodeError>;
 
 /// An account's address
 #[derive(
@@ -130,7 +126,7 @@ impl Address {
     /// Encode an address with Bech32m encoding
     pub fn encode(&self) -> String {
         let bytes = self.to_fixed_len_string();
-        bech32::encode(ADDRESS_HRP, bytes.to_base32(), ADDRESS_BECH32_VARIANT)
+        bech32::encode(ADDRESS_HRP, bytes.to_base32(), BECH32M_VARIANT)
             .unwrap_or_else(|_| {
                 panic!(
                     "The human-readable part {} should never cause a failure",
@@ -141,19 +137,22 @@ impl Address {
 
     /// Decode an address from Bech32m encoding
     pub fn decode(string: impl AsRef<str>) -> Result<Self> {
-        let (prefix, hash_base32, variant) =
-            bech32::decode(string.as_ref()).map_err(Error::DecodeBech32)?;
+        let (prefix, hash_base32, variant) = bech32::decode(string.as_ref())
+            .map_err(DecodeError::DecodeBech32)?;
         if prefix != ADDRESS_HRP {
-            return Err(Error::UnexpectedBech32Prefix(prefix));
+            return Err(DecodeError::UnexpectedBech32Prefix(
+                prefix,
+                ADDRESS_HRP.into(),
+            ));
         }
         match variant {
-            ADDRESS_BECH32_VARIANT => {}
-            _ => return Err(Error::UnexpectedBech32Variant(variant)),
+            BECH32M_VARIANT => {}
+            _ => return Err(DecodeError::UnexpectedBech32Variant(variant)),
         }
         let bytes: Vec<u8> = FromBase32::from_base32(&hash_base32)
-            .map_err(Error::DecodeBase32)?;
+            .map_err(DecodeError::DecodeBase32)?;
         Self::try_from_fixed_len_string(&mut &bytes[..])
-            .map_err(Error::InvalidAddressEncoding)
+            .map_err(DecodeError::InvalidInnerEncoding)
     }
 
     /// Try to get a raw hash of an address, only defined for established and
@@ -181,7 +180,6 @@ impl Address {
                     InternalAddress::PosSlashPool => {
                         internal::POS_SLASH_POOL.to_string()
                     }
-                    InternalAddress::Ibc => internal::IBC.to_string(),
                     InternalAddress::Parameters => {
                         internal::PARAMETERS.to_string()
                     }
@@ -191,8 +189,12 @@ impl Address {
                     InternalAddress::SlashFund => {
                         internal::SLASH_FUND.to_string()
                     }
-                    InternalAddress::IbcEscrow(hash) => {
-                        format!("{}::{}", PREFIX_INTERNAL, hash)
+                    InternalAddress::Ibc => internal::IBC.to_string(),
+                    InternalAddress::IbcToken(hash) => {
+                        format!("{}::{}", PREFIX_IBC, hash)
+                    }
+                    InternalAddress::IbcEscrow => {
+                        internal::IBC_ESCROW.to_string()
                     }
                     InternalAddress::IbcBurn => internal::IBC_BURN.to_string(),
                     InternalAddress::IbcMint => internal::IBC_MINT.to_string(),
@@ -238,17 +240,13 @@ impl Address {
                     .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
                 Ok(Address::Implicit(ImplicitAddress(pkh)))
             }
-            Some((PREFIX_INTERNAL, raw)) => match string {
+            Some((PREFIX_INTERNAL, _)) => match string {
                 internal::POS => Ok(Address::Internal(InternalAddress::PoS)),
                 internal::POS_SLASH_POOL => {
                     Ok(Address::Internal(InternalAddress::PosSlashPool))
                 }
-                internal::IBC => Ok(Address::Internal(InternalAddress::Ibc)),
                 internal::PARAMETERS => {
                     Ok(Address::Internal(InternalAddress::Parameters))
-                }
-                internal::IBC_BURN => {
-                    Ok(Address::Internal(InternalAddress::IbcBurn))
                 }
                 internal::GOVERNANCE => {
                     Ok(Address::Internal(InternalAddress::Governance))
@@ -256,21 +254,34 @@ impl Address {
                 internal::SLASH_FUND => {
                     Ok(Address::Internal(InternalAddress::SlashFund))
                 }
-                internal::IBC_MINT => {
-                    Ok(Address::Internal(InternalAddress::IbcMint))
-                }
                 internal::ETH_BRIDGE => {
                     Ok(Address::Internal(InternalAddress::EthBridge))
                 }
                 internal::ETH_BRIDGE_POOL => {
                     Ok(Address::Internal(InternalAddress::EthBridgePool))
                 }
-                _ if raw.len() == HASH_LEN => Ok(Address::Internal(
-                    InternalAddress::IbcEscrow(raw.to_string()),
-                )),
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid internal address",
+                )),
+            },
+            Some((PREFIX_IBC, raw)) => match string {
+                internal::IBC => Ok(Address::Internal(InternalAddress::Ibc)),
+                internal::IBC_ESCROW => {
+                    Ok(Address::Internal(InternalAddress::IbcEscrow))
+                }
+                internal::IBC_BURN => {
+                    Ok(Address::Internal(InternalAddress::IbcBurn))
+                }
+                internal::IBC_MINT => {
+                    Ok(Address::Internal(InternalAddress::IbcMint))
+                }
+                _ if raw.len() == HASH_LEN => Ok(Address::Internal(
+                    InternalAddress::IbcToken(raw.to_string()),
+                )),
+                _ => Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "Invalid IBC internal address",
                 )),
             },
             _ => Err(Error::new(
@@ -337,7 +348,7 @@ impl Debug for Address {
 }
 
 impl FromStr for Address {
-    type Err = Error;
+    type Err = DecodeError;
 
     fn from_str(s: &str) -> Result<Self> {
         Address::decode(s)
@@ -446,12 +457,14 @@ pub enum InternalAddress {
     PoS,
     /// Proof-of-stake slash pool contains slashed tokens
     PosSlashPool,
-    /// Inter-blockchain communication
-    Ibc,
     /// Protocol parameters
     Parameters,
+    /// Inter-blockchain communication
+    Ibc,
+    /// IBC-related token
+    IbcToken(String),
     /// Escrow for IBC token transfer
-    IbcEscrow(String),
+    IbcEscrow,
     /// Burn tokens with IBC token transfer
     IbcBurn,
     /// Mint tokens from this address with IBC token transfer
@@ -467,13 +480,17 @@ pub enum InternalAddress {
 }
 
 impl InternalAddress {
-    /// Get an escrow address from the port ID and channel ID
-    pub fn ibc_escrow_address(port_id: String, channel_id: String) -> Self {
+    /// Get an IBC token address from the port ID and channel ID
+    pub fn ibc_token_address(
+        port_id: String,
+        channel_id: String,
+        token: &Address,
+    ) -> Self {
         let mut hasher = Sha256::new();
-        let s = format!("{}/{}", port_id, channel_id);
+        let s = format!("{}/{}/{}", port_id, channel_id, token);
         hasher.update(&s);
-        let hash = format!("{:.width$X}", hasher.finalize(), width = HASH_LEN);
-        InternalAddress::IbcEscrow(hash)
+        let hash = format!("{:.width$x}", hasher.finalize(), width = HASH_LEN);
+        InternalAddress::IbcToken(hash)
     }
 }
 
@@ -485,11 +502,12 @@ impl Display for InternalAddress {
             match self {
                 Self::PoS => "PoS".to_string(),
                 Self::PosSlashPool => "PosSlashPool".to_string(),
-                Self::Ibc => "IBC".to_string(),
                 Self::Parameters => "Parameters".to_string(),
                 Self::Governance => "Governance".to_string(),
                 Self::SlashFund => "SlashFund".to_string(),
-                Self::IbcEscrow(hash) => format!("IbcEscrow: {}", hash),
+                Self::Ibc => "IBC".to_string(),
+                Self::IbcToken(hash) => format!("IbcToken: {}", hash),
+                Self::IbcEscrow => "IbcEscrow".to_string(),
                 Self::IbcBurn => "IbcBurn".to_string(),
                 Self::IbcMint => "IbcMint".to_string(),
                 Self::EthBridge => "EthBridge".to_string(),
@@ -535,6 +553,22 @@ pub fn kartoffel() -> Address {
 }
 
 /// Temporary helper for testing
+pub fn masp() -> Address {
+    Address::decode("atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs35g5unvde4ca36y5").expect("The token address decoding shouldn't fail")
+}
+
+/// Sentinel secret key to indicate a MASP source
+pub fn masp_tx_key() -> crate::types::key::common::SecretKey {
+    use crate::types::key::common;
+    let bytes = [
+        0, 27, 238, 157, 32, 131, 242, 184, 142, 146, 189, 24, 249, 68, 165,
+        205, 71, 213, 158, 25, 253, 52, 217, 87, 52, 171, 225, 110, 131, 238,
+        58, 94, 56,
+    ];
+    common::SecretKey::try_from_slice(bytes.as_ref()).unwrap()
+}
+
+/// Temporary helper for testing
 pub const fn wnam() -> EthAddress {
     // TODO: Replace this with the real wNam ERC20 address once it exists
     // "DEADBEEF DEADBEEF DEADBEEF DEADBEEF DEADBEEF"
@@ -555,6 +589,23 @@ pub fn tokens() -> HashMap<Address, &'static str> {
         (schnitzel(), "Schnitzel"),
         (apfel(), "Apfel"),
         (kartoffel(), "Kartoffel"),
+    ]
+    .into_iter()
+    .collect()
+}
+
+/// Temporary helper for testing, a hash map of tokens addresses with their
+/// MASP XAN incentive schedules. If the reward is (a, b) then a rewarded tokens
+/// are dispensed for every b possessed tokens.
+pub fn masp_rewards() -> HashMap<Address, (u64, u64)> {
+    vec![
+        (nam(), (0, 100)),
+        (btc(), (1, 100)),
+        (eth(), (2, 100)),
+        (dot(), (3, 100)),
+        (schnitzel(), (4, 100)),
+        (apfel(), (5, 100)),
+        (kartoffel(), (6, 100)),
     ]
     .into_iter()
     .collect()
@@ -734,11 +785,12 @@ pub mod testing {
         match InternalAddress::PoS {
             InternalAddress::PoS => {}
             InternalAddress::PosSlashPool => {}
-            InternalAddress::Ibc => {}
             InternalAddress::Governance => {}
             InternalAddress::SlashFund => {}
             InternalAddress::Parameters => {}
-            InternalAddress::IbcEscrow(_) => {}
+            InternalAddress::Ibc => {}
+            InternalAddress::IbcToken(_) => {}
+            InternalAddress::IbcEscrow => {}
             InternalAddress::IbcBurn => {}
             InternalAddress::IbcMint => {}
             InternalAddress::EthBridge => {}
@@ -750,8 +802,9 @@ pub mod testing {
             Just(InternalAddress::PosSlashPool),
             Just(InternalAddress::Ibc),
             Just(InternalAddress::Parameters),
-            arb_port_channel_id()
-                .prop_map(|(p, c)| InternalAddress::ibc_escrow_address(p, c)),
+            Just(InternalAddress::Ibc),
+            arb_ibc_token(),
+            Just(InternalAddress::IbcEscrow),
             Just(InternalAddress::IbcBurn),
             Just(InternalAddress::IbcMint),
             Just(InternalAddress::Governance),
@@ -761,8 +814,20 @@ pub mod testing {
         ]
     }
 
-    fn arb_port_channel_id() -> impl Strategy<Value = (String, String)> {
-        ("[a-zA-Z0-9_]{2,128}", any::<u64>())
-            .prop_map(|(id, counter)| (id, format!("channel-{}", counter)))
+    fn arb_ibc_token() -> impl Strategy<Value = InternalAddress> {
+        // use sha2::{Digest, Sha256};
+        ("[a-zA-Z0-9_]{2,128}", any::<u64>()).prop_map(|(id, counter)| {
+            let mut hasher = sha2::Sha256::new();
+            let s = format!(
+                "{}/{}/{}",
+                id,
+                format_args!("channel-{}", counter),
+                &nam()
+            );
+            hasher.update(&s);
+            let hash =
+                format!("{:.width$x}", hasher.finalize(), width = HASH_LEN);
+            InternalAddress::IbcToken(hash)
+        })
     }
 }

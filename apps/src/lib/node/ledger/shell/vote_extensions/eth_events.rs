@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
+use namada::ledger::storage_api::queries::QueriesExt;
 use namada::proto::Signed;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::BlockHeight;
@@ -15,7 +16,6 @@ use namada::types::vote_extensions::ethereum_events::{
 use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
-use crate::node::ledger::shell::queries::QueriesExt;
 use crate::node::ledger::shell::{Shell, ShellMode};
 
 impl<D, H> Shell<D, H>
@@ -32,7 +32,6 @@ where
     ///  * The validator signed over the correct height inside of the extension.
     ///  * There are no duplicate Ethereum events in this vote extension, and
     ///    the events are sorted in ascending order.
-    #[allow(dead_code)]
     #[inline]
     pub fn validate_eth_events_vext(
         &self,
@@ -129,6 +128,8 @@ where
             .map_err(|err| {
                 tracing::error!(
                     ?err,
+                    ?ext.sig,
+                    ?pk,
                     %validator,
                     "Failed to verify the signature of an Ethereum events vote \
                      extension issued by some validator"
@@ -261,13 +262,22 @@ where
                 );
             }
 
+            let key = (addr, block_height);
+            tracing::debug!(
+                ?key,
+                ?sig,
+                ?validator_addr,
+                "Inserting signature into ethereum_events::VextDigest"
+            );
             #[cfg(not(feature = "abcipp"))]
-            if let Some(sig) = signatures.insert((addr, block_height), sig) {
+            if let Some(existing_sig) = signatures.insert(key, sig.clone()) {
                 tracing::warn!(
                     ?sig,
+                    ?existing_sig,
                     ?validator_addr,
                     "Overwrote old signature from validator while \
-                     constructing ethereum_events::VextDigest"
+                     constructing ethereum_events::VextDigest - maybe private \
+                     key of validator is being used by multiple nodes?"
                 );
             }
         }
@@ -298,6 +308,7 @@ mod test_vote_extensions {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
+    use namada::ledger::storage_api::queries::QueriesExt;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum,
     };
@@ -311,7 +322,6 @@ mod test_vote_extensions {
     use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
     #[cfg(feature = "abcipp")]
     use crate::facade::tower_abci::request;
-    use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 

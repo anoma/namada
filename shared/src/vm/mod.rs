@@ -28,7 +28,7 @@ const UNTRUSTED_WASM_FEATURES: WasmFeatures = WasmFeatures {
     memory64: false,
     mutable_global: false,
     saturating_float_to_int: false,
-    sign_extension: false,
+    sign_extension: true,
     relaxed_simd: false,
     extended_const: false,
 };

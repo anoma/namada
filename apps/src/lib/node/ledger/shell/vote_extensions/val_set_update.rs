@@ -7,13 +7,13 @@ use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::pos::types::VotingPower;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
+use namada::ledger::storage_api::queries::QueriesExt;
 use namada::types::storage::BlockHeight;
 use namada::types::vote_extensions::validator_set_update;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
-use crate::node::ledger::shell::queries::QueriesExt;
 use crate::node::ledger::shell::Shell;
 
 impl<D, H> Shell<D, H>
@@ -34,7 +34,6 @@ where
     ///  * The voting powers are normalized to `2^32`, and sorted in descending
     ///    order.
     #[inline]
-    #[allow(dead_code)]
     pub fn validate_valset_upd_vext(
         &self,
         ext: validator_set_update::SignedVext,
@@ -150,6 +149,8 @@ where
             .map_err(|err| {
                 tracing::error!(
                     ?err,
+                    ?ext.sig,
+                    ?pk,
                     %validator,
                     "Failed to verify the signature of a valset upd vote \
                      extension issued by some validator"
@@ -263,14 +264,22 @@ where
                      constructing validator_set_update::VextDigest"
                 );
             }
-
+            let key = (addr, block_height);
+            tracing::debug!(
+                ?key,
+                ?sig,
+                ?validator_addr,
+                "Inserting signature into validator_set_update::VextDigest"
+            );
             #[cfg(not(feature = "abcipp"))]
-            if let Some(sig) = signatures.insert((addr, block_height), sig) {
+            if let Some(existing_sig) = signatures.insert(key, sig.clone()) {
                 tracing::warn!(
                     ?sig,
+                    ?existing_sig,
                     ?validator_addr,
                     "Overwrote old signature from validator while \
-                     constructing validator_set_update::VextDigest"
+                     constructing validator_set_update::VextDigest - maybe \
+                     private key of validator is being used by multiple nodes?"
                 );
             }
         }
@@ -309,6 +318,7 @@ mod test_vote_extensions {
     use borsh::BorshSerialize;
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
+    use namada::ledger::storage_api::queries::QueriesExt;
     use namada::types::key::RefTo;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::ethereum_events;
@@ -320,7 +330,6 @@ mod test_vote_extensions {
     use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
     #[cfg(feature = "abcipp")]
     use crate::facade::tower_abci::request;
-    use crate::node::ledger::shell::queries::QueriesExt;
     use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;

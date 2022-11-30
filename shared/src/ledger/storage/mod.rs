@@ -1,6 +1,6 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
-mod ics23_specs;
+pub mod ics23_specs;
 mod merkle_tree;
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
@@ -10,14 +10,31 @@ pub mod write_log;
 
 use core::fmt::Debug;
 use std::array;
+use std::collections::{BTreeMap, BTreeSet};
 
+use borsh::{BorshDeserialize, BorshSerialize};
+use ferveo_common::TendermintValidator;
+use masp_primitives::asset_type::AssetType;
+use masp_primitives::convert::AllowedConversion;
+use masp_primitives::merkle_tree::FrozenCommitmentTree;
+use masp_primitives::sapling::Node;
+#[cfg(feature = "wasm-runtime")]
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
+};
+#[cfg(feature = "wasm-runtime")]
+use rayon::prelude::ParallelSlice;
 use thiserror::Error;
 
 use super::parameters::Parameters;
+use super::storage_api;
 use super::storage_api::{ResultExt, StorageRead, StorageWrite};
-use super::{parameters, storage_api};
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::EpochDuration;
+use crate::ledger::pos::namada_proof_of_stake::types::VotingPower;
+use crate::ledger::pos::namada_proof_of_stake::PosBase;
+use crate::ledger::pos::types::WeightedValidator;
+use crate::ledger::pos::PosParams;
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
@@ -26,19 +43,40 @@ pub use crate::ledger::storage::merkle_tree::{
     StoreType,
 };
 pub use crate::ledger::storage::traits::StorageHasher;
+use crate::ledger::storage_api::queries::{self, QueriesExt, SendValsetUpd};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
+use crate::tendermint_proto::google::protobuf;
+use crate::tendermint_proto::types::EvidenceParams;
+use crate::types::address::{
+    masp, Address, EstablishedAddressGen, InternalAddress,
+};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
+use crate::types::ethereum_events::EthAddress;
+use crate::types::key::dkg_session_keys::DkgPublicKey;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::storage::TxQueue;
 use crate::types::storage::{
-    BlockHash, BlockHeight, Epoch, Epochs, Header, Key, KeySeg,
-    MembershipProof, MerkleValue, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
+    MembershipProof, TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
+use crate::types::token::Amount;
+use crate::types::transaction::EllipticCurve;
+use crate::types::vote_extensions::validator_set_update::EthAddrBook;
+use crate::types::{key, token};
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
+/// A representation of the conversion state
+#[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
+pub struct ConversionState {
+    /// The merkle root from the previous epoch
+    pub prev_root: Node,
+    /// The tree currently containing all the conversions
+    pub tree: FrozenCommitmentTree<Node>,
+    /// Map assets to their latest conversion and position in Merkle tree
+    pub assets: BTreeMap<AssetType, (Address, Epoch, AllowedConversion, usize)>,
+}
 /// The maximum size of an IBC key (in bytes) allowed in merkle-ized storage
 pub const IBC_KEY_LIMIT: usize = 120;
 
@@ -67,6 +105,10 @@ where
     pub next_epoch_min_start_time: DateTimeUtc,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
+    /// The shielded transaction index
+    pub tx_index: TxIndex,
+    /// The currently saved conversion state
+    pub conversion_state: ConversionState,
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
@@ -83,6 +125,8 @@ pub struct BlockStorage<H: StorageHasher> {
     pub height: BlockHeight,
     /// Epoch of the block
     pub epoch: Epoch,
+    /// Results of applying transactions
+    pub results: BlockResults,
     /// Predecessor block epochs
     pub pred_epochs: Epochs,
 }
@@ -126,6 +170,8 @@ pub struct BlockStateRead {
     pub next_epoch_min_start_time: DateTimeUtc,
     /// Established address generator
     pub address_gen: EstablishedAddressGen,
+    /// Results of applying transactions
+    pub results: BlockResults,
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
@@ -151,6 +197,8 @@ pub struct BlockStateWrite<'a> {
     pub next_epoch_min_start_time: DateTimeUtc,
     /// Established address generator
     pub address_gen: &'a EstablishedAddressGen,
+    /// Results of applying transactions
+    pub results: &'a BlockResults,
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: &'a TxQueue,
@@ -260,6 +308,9 @@ pub trait DBIter<'iter> {
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// reverse ordered by the storage keys.
     fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
+
+    /// Read results subspace key value pairs from the DB
+    fn iter_results(&'iter self) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.
@@ -292,6 +343,7 @@ where
             height: BlockHeight::default(),
             epoch: Epoch::default(),
             pred_epochs: Epochs::default(),
+            results: BlockResults::default(),
         };
         Storage::<D, H> {
             db: D::open(db_path, cache),
@@ -305,6 +357,8 @@ where
             address_gen: EstablishedAddressGen::new(
                 "Privacy is a function of liberty.",
             ),
+            tx_index: TxIndex::default(),
+            conversion_state: ConversionState::default(),
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
         }
@@ -321,6 +375,7 @@ where
             pred_epochs,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
+            results,
             address_gen,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue,
@@ -330,12 +385,30 @@ where
             self.block.hash = hash;
             self.block.height = height;
             self.block.epoch = epoch;
+            self.block.results = results;
             self.block.pred_epochs = pred_epochs;
             self.last_height = height;
             self.last_epoch = epoch;
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
             self.address_gen = address_gen;
+            if self.last_epoch.0 > 1 {
+                // The derived conversions will be placed in MASP address space
+                let masp_addr = masp();
+                let key_prefix: Key = masp_addr.to_db_key().into();
+                // Load up the conversions currently being given as query
+                // results
+                let state_key = key_prefix
+                    .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
+                    .map_err(Error::KeyError)?;
+                self.conversion_state = types::decode(
+                    self.read(&state_key)
+                        .expect("unable to read conversion state")
+                        .0
+                        .expect("unable to find conversion state"),
+                )
+                .expect("unable to decode conversion state")
+            }
             #[cfg(feature = "ferveo-tpke")]
             {
                 self.tx_queue = tx_queue;
@@ -365,6 +438,7 @@ where
             hash: &self.block.hash,
             height: self.block.height,
             epoch: self.block.epoch,
+            results: &self.block.results,
             pred_epochs: &self.block.pred_epochs,
             next_epoch_min_start_height: self.next_epoch_min_start_height,
             next_epoch_min_start_time: self.next_epoch_min_start_time,
@@ -448,18 +522,21 @@ where
         (self.db.rev_iter_prefix(prefix), prefix.len() as _)
     }
 
+    /// Returns a prefix iterator and the gas cost
+    pub fn iter_results(&self) -> (<D as DBIter<'_>>::PrefixIter, u64) {
+        (self.db.iter_results(), 0)
+    }
+
     /// Write a value to the specified subspace and returns the gas cost and the
     /// size difference
     pub fn write(
         &mut self,
         key: &Key,
-        value: impl Into<MerkleValue>,
+        value: impl AsRef<[u8]>,
     ) -> Result<(u64, i64)> {
-        let value: MerkleValue = value.into();
         tracing::debug!("storage write key {}", key,);
-        self.block.tree.update(key, value.clone())?;
-
-        let bytes = value.to_bytes();
+        let bytes = value.as_ref();
+        self.block.tree.update(key, bytes)?;
         let gas = key.len() + bytes.len();
         let size_diff =
             self.db.write_subspace_val(self.block.height, key, bytes)?;
@@ -542,7 +619,7 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: MerkleValue,
+        value: Vec<u8>,
         height: BlockHeight,
     ) -> Result<Proof> {
         if height >= self.get_block_height().0 {
@@ -589,7 +666,7 @@ where
         key: &Key,
         height: BlockHeight,
     ) -> Result<Proof> {
-        if height >= self.get_block_height().0 {
+        if height >= self.last_height {
             Ok(self.block.tree.get_non_existence_proof(key)?)
         } else {
             match self.db.read_merkle_tree_stores(height)? {
@@ -648,11 +725,14 @@ where
 
     /// Initialize a new epoch when the current epoch is finished. Returns
     /// `true` on a new epoch.
+    #[cfg(feature = "wasm-runtime")]
     pub fn update_epoch(
         &mut self,
         height: BlockHeight,
         time: DateTimeUtc,
     ) -> Result<bool> {
+        use crate::ledger::parameters;
+
         let (parameters, _gas) =
             parameters::read(self).expect("Couldn't read protocol parameters");
 
@@ -675,9 +755,181 @@ where
                 .pred_epochs
                 .new_epoch(height, evidence_max_age_num_blocks);
             tracing::info!("Began a new epoch {}", self.block.epoch);
+            self.update_allowed_conversions()?;
         }
         self.update_epoch_in_merkle_tree()?;
         Ok(new_epoch)
+    }
+
+    /// Get the current conversions
+    pub fn get_conversion_state(&self) -> &ConversionState {
+        &self.conversion_state
+    }
+
+    // Construct MASP asset type with given timestamp for given token
+    #[cfg(feature = "wasm-runtime")]
+    fn encode_asset_type(addr: Address, epoch: Epoch) -> AssetType {
+        let new_asset_bytes = (addr, epoch.0)
+            .try_to_vec()
+            .expect("unable to serialize address and epoch");
+        AssetType::new(new_asset_bytes.as_ref())
+            .expect("unable to derive asset identifier")
+    }
+
+    #[cfg(feature = "wasm-runtime")]
+    /// Update the MASP's allowed conversions
+    fn update_allowed_conversions(&mut self) -> Result<()> {
+        use masp_primitives::ff::PrimeField;
+        use masp_primitives::transaction::components::Amount as MaspAmount;
+
+        use crate::types::address::{masp_rewards, nam};
+
+        // The derived conversions will be placed in MASP address space
+        let masp_addr = masp();
+        let key_prefix: Key = masp_addr.to_db_key().into();
+
+        let masp_rewards = masp_rewards();
+        // The total transparent value of the rewards being distributed
+        let mut total_reward = token::Amount::from(0);
+
+        // Construct MASP asset type for rewards. Always timestamp reward tokens
+        // with the zeroth epoch to minimize the number of convert notes clients
+        // have to use. This trick works under the assumption that reward tokens
+        // from different epochs are exactly equivalent.
+        let reward_asset_bytes = (nam(), 0u64)
+            .try_to_vec()
+            .expect("unable to serialize address and epoch");
+        let reward_asset = AssetType::new(reward_asset_bytes.as_ref())
+            .expect("unable to derive asset identifier");
+        // Conversions from the previous to current asset for each address
+        let mut current_convs = BTreeMap::<Address, AllowedConversion>::new();
+        // Reward all tokens according to above reward rates
+        for (addr, reward) in &masp_rewards {
+            // Dispence a transparent reward in parallel to the shielded rewards
+            let token_key = self.read(&token::balance_key(addr, &masp_addr));
+            if let Ok((Some(addr_balance), _)) = token_key {
+                // The reward for each reward.1 units of the current asset is
+                // reward.0 units of the reward token
+                let addr_bal: token::Amount =
+                    types::decode(addr_balance).expect("invalid balance");
+                // Since floor(a) + floor(b) <= floor(a+b), there will always be
+                // enough rewards to reimburse users
+                total_reward += (addr_bal * *reward).0;
+            }
+            // Provide an allowed conversion from previous timestamp. The
+            // negative sign allows each instance of the old asset to be
+            // cancelled out/replaced with the new asset
+            let old_asset =
+                Self::encode_asset_type(addr.clone(), self.last_epoch);
+            let new_asset =
+                Self::encode_asset_type(addr.clone(), self.block.epoch);
+            current_convs.insert(
+                addr.clone(),
+                (MaspAmount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
+                    + MaspAmount::from_pair(new_asset, reward.1).unwrap()
+                    + MaspAmount::from_pair(reward_asset, reward.0).unwrap())
+                .into(),
+            );
+            // Add a conversion from the previous asset type
+            self.conversion_state.assets.insert(
+                old_asset,
+                (addr.clone(), self.last_epoch, MaspAmount::zero().into(), 0),
+            );
+        }
+
+        // Try to distribute Merkle leaf updating as evenly as possible across
+        // multiple cores
+        let num_threads = rayon::current_num_threads();
+        // Put assets into vector to enable computation batching
+        let assets: Vec<_> = self
+            .conversion_state
+            .assets
+            .values_mut()
+            .enumerate()
+            .collect();
+        // ceil(assets.len() / num_threads)
+        let notes_per_thread_max = (assets.len() - 1) / num_threads + 1;
+        // floor(assets.len() / num_threads)
+        let notes_per_thread_min = assets.len() / num_threads;
+        // Now on each core, add the latest conversion to each conversion
+        let conv_notes: Vec<Node> = assets
+            .into_par_iter()
+            .with_min_len(notes_per_thread_min)
+            .with_max_len(notes_per_thread_max)
+            .map(|(idx, (addr, _epoch, conv, pos))| {
+                // Use transitivity to update conversion
+                *conv += current_convs[addr].clone();
+                // Update conversion position to leaf we are about to create
+                *pos = idx;
+                // The merkle tree need only provide the conversion commitment,
+                // the remaining information is provided through the storage API
+                Node::new(conv.cmu().to_repr())
+            })
+            .collect();
+
+        // Update the MASP's transparent reward token balance to ensure that it
+        // is sufficiently backed to redeem rewards
+        let reward_key = token::balance_key(&nam(), &masp_addr);
+        if let Ok((Some(addr_bal), _)) = self.read(&reward_key) {
+            // If there is already a balance, then add to it
+            let addr_bal: token::Amount =
+                types::decode(addr_bal).expect("invalid balance");
+            let new_bal = types::encode(&(addr_bal + total_reward));
+            self.write(&reward_key, new_bal)
+                .expect("unable to update MASP transparent balance");
+        } else {
+            // Otherwise the rewards form the entirity of the reward token
+            // balance
+            self.write(&reward_key, types::encode(&total_reward))
+                .expect("unable to update MASP transparent balance");
+        }
+        // Try to distribute Merkle tree construction as evenly as possible
+        // across multiple cores
+        // Merkle trees must have exactly 2^n leaves to be mergeable
+        let mut notes_per_thread_rounded = 1;
+        while notes_per_thread_max > notes_per_thread_rounded * 4 {
+            notes_per_thread_rounded *= 2;
+        }
+        // Make the sub-Merkle trees in parallel
+        let tree_parts: Vec<_> = conv_notes
+            .par_chunks(notes_per_thread_rounded)
+            .map(FrozenCommitmentTree::new)
+            .collect();
+
+        // Keep the merkle root from the old tree for transactions constructed
+        // close to the epoch boundary
+        self.conversion_state.prev_root = self.conversion_state.tree.root();
+
+        // Convert conversion vector into tree so that Merkle paths can be
+        // obtained
+        self.conversion_state.tree = FrozenCommitmentTree::merge(&tree_parts);
+
+        // Add purely decoding entries to the assets map. These will be
+        // overwritten before the creation of the next commitment tree
+        for addr in masp_rewards.keys() {
+            // Add the decoding entry for the new asset type. An uncommited
+            // node position is used since this is not a conversion.
+            let new_asset =
+                Self::encode_asset_type(addr.clone(), self.block.epoch);
+            self.conversion_state.assets.insert(
+                new_asset,
+                (
+                    addr.clone(),
+                    self.block.epoch,
+                    MaspAmount::zero().into(),
+                    self.conversion_state.tree.size(),
+                ),
+            );
+        }
+
+        // Save the current conversion state in order to avoid computing
+        // conversion commitments from scratch in the next epoch
+        let state_key = key_prefix
+            .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
+            .map_err(Error::KeyError)?;
+        self.write(&state_key, types::encode(&self.conversion_state))
+            .expect("unable to save current conversion state");
+        Ok(())
     }
 
     /// Update the merkle tree with epoch data
@@ -705,6 +957,7 @@ where
         self.block
             .tree
             .update(&key, types::encode(&self.block.epoch))?;
+
         Ok(())
     }
 
@@ -811,6 +1064,10 @@ where
     ) -> std::result::Result<Epoch, storage_api::Error> {
         Ok(self.block.epoch)
     }
+
+    fn get_tx_index(&self) -> std::result::Result<TxIndex, storage_api::Error> {
+        Ok(self.tx_index)
+    }
 }
 
 impl<D, H> StorageWrite for Storage<D, H>
@@ -889,6 +1146,267 @@ where
     }
 }
 
+impl<D, H> QueriesExt for Storage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn get_active_validators(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> BTreeSet<WeightedValidator<Address>> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        let validator_set = self.read_validator_set();
+        validator_set
+            .get(epoch)
+            .expect("Validators for an epoch should be known")
+            .active
+            .clone()
+    }
+
+    fn get_total_voting_power(&self, epoch: Option<Epoch>) -> VotingPower {
+        self.get_active_validators(epoch)
+            .iter()
+            .map(|validator| u64::from(validator.voting_power))
+            .sum::<u64>()
+            .into()
+    }
+
+    fn get_balance(&self, token: &Address, owner: &Address) -> Amount {
+        let balance = storage_api::StorageRead::read(
+            self,
+            &token::balance_key(token, owner),
+        );
+        // Storage read must not fail, but there might be no value, in which
+        // case default (0) is returned
+        balance
+            .expect("Storage read in the protocol must not fail")
+            .unwrap_or_default()
+    }
+
+    fn get_evidence_params(
+        &self,
+        epoch_duration: &EpochDuration,
+        pos_params: &PosParams,
+    ) -> EvidenceParams {
+        // Minimum number of epochs before tokens are unbonded and can be
+        // withdrawn
+        let len_before_unbonded =
+            std::cmp::max(pos_params.unbonding_len as i64 - 1, 0);
+        let max_age_num_blocks: i64 =
+            epoch_duration.min_num_of_blocks as i64 * len_before_unbonded;
+        let min_duration_secs = epoch_duration.min_duration.0 as i64;
+        let max_age_duration = Some(protobuf::Duration {
+            seconds: min_duration_secs * len_before_unbonded,
+            nanos: 0,
+        });
+        EvidenceParams {
+            max_age_num_blocks,
+            max_age_duration,
+            ..EvidenceParams::default()
+        }
+    }
+
+    fn get_validator_from_protocol_pk(
+        &self,
+        pk: &key::common::PublicKey,
+        epoch: Option<Epoch>,
+    ) -> queries::Result<TendermintValidator<EllipticCurve>> {
+        let pk_bytes = pk
+            .try_to_vec()
+            .expect("Serializing public key should not fail");
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.get_active_validators(Some(epoch))
+            .iter()
+            .find(|validator| {
+                let pk_key = key::protocol_pk_key(&validator.address);
+                match self.read(&pk_key) {
+                    Ok((Some(bytes), _)) => bytes == pk_bytes,
+                    _ => false,
+                }
+            })
+            .map(|validator| {
+                let dkg_key =
+                    key::dkg_session_keys::dkg_pk_key(&validator.address);
+                let bytes = self
+                    .read(&dkg_key)
+                    .expect("Validator should have public dkg key")
+                    .0
+                    .expect("Validator should have public dkg key");
+                let dkg_publickey =
+                    &<DkgPublicKey as BorshDeserialize>::deserialize(
+                        &mut bytes.as_ref(),
+                    )
+                    .expect(
+                        "DKG public key in storage should be deserializable",
+                    );
+                TendermintValidator {
+                    power: validator.voting_power.into(),
+                    address: validator.address.to_string(),
+                    public_key: dkg_publickey.into(),
+                }
+            })
+            .ok_or_else(|| {
+                queries::Error::NotValidatorKey(pk.to_string(), epoch)
+            })
+    }
+
+    fn get_validator_from_address(
+        &self,
+        address: &Address,
+        epoch: Option<Epoch>,
+    ) -> queries::Result<(VotingPower, key::common::PublicKey)> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.get_active_validators(Some(epoch))
+            .iter()
+            .find(|validator| address == &validator.address)
+            .map(|validator| {
+                let protocol_pk_key = key::protocol_pk_key(&validator.address);
+                let bytes = self
+                    .read(&protocol_pk_key)
+                    .expect("Validator should have public protocol key")
+                    .0
+                    .expect("Validator should have public protocol key");
+                let protocol_pk: key::common::PublicKey =
+                    BorshDeserialize::deserialize(&mut bytes.as_ref()).expect(
+                        "Protocol public key in storage should be \
+                         deserializable",
+                    );
+                (validator.voting_power, protocol_pk)
+            })
+            .ok_or_else(|| {
+                queries::Error::NotValidatorAddress(address.clone(), epoch)
+            })
+    }
+
+    fn get_validator_from_tm_address(
+        &self,
+        tm_address: &[u8],
+        epoch: Option<Epoch>,
+    ) -> queries::Result<Address> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        let validator_raw_hash = core::str::from_utf8(tm_address)
+            .map_err(|_| queries::Error::InvalidTMAddress)?;
+        self.read_validator_address_raw_hash(&validator_raw_hash)
+            .ok_or_else(|| {
+                queries::Error::NotValidatorKeyHash(
+                    validator_raw_hash.to_string(),
+                    epoch,
+                )
+            })
+    }
+
+    #[cfg(feature = "abcipp")]
+    fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
+        // TODO: implement this method for ABCI++; should only be able to send
+        // a validator set update at the second block of an epoch
+        true
+    }
+
+    #[cfg(not(feature = "abcipp"))]
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
+        // when checking vote extensions in Prepare
+        // and ProcessProposal, we simply return true
+        if matches!(can_send, SendValsetUpd::AtPrevHeight) {
+            return true;
+        }
+
+        let current_decision_height = self.get_current_decision_height();
+
+        // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
+        // is 0, because of a bug (should be 1), so this code needs to
+        // handle that case
+        //
+        // we can remove this check once that's fixed
+        match current_decision_height {
+            BlockHeight(1) => return false,
+            BlockHeight(2) => return true,
+            _ => (),
+        }
+
+        let fst_heights_of_each_epoch =
+            self.block.pred_epochs.first_block_heights();
+
+        fst_heights_of_each_epoch
+            .last()
+            .map(|&h| {
+                let second_height_of_epoch = h + 1;
+                current_decision_height == second_height_of_epoch
+            })
+            .unwrap_or(false)
+    }
+
+    #[inline]
+    fn get_epoch(&self, height: BlockHeight) -> Option<Epoch> {
+        self.block.pred_epochs.get_epoch(height)
+    }
+
+    #[inline]
+    fn get_current_decision_height(&self) -> BlockHeight {
+        self.last_height + 1
+    }
+
+    #[inline]
+    fn get_ethbridge_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.read_validator_eth_hot_key(validator)
+            .as_ref()
+            .and_then(|epk| epk.get(epoch).and_then(|pk| pk.try_into().ok()))
+    }
+
+    #[inline]
+    fn get_ethgov_from_namada_addr(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddress> {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        self.read_validator_eth_cold_key(validator)
+            .as_ref()
+            .and_then(|epk| epk.get(epoch).and_then(|pk| pk.try_into().ok()))
+    }
+
+    #[inline]
+    fn get_active_eth_addresses<'db>(
+        &'db self,
+        epoch: Option<Epoch>,
+    ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, VotingPower)> + 'db>
+    {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        Box::new(self.get_active_validators(Some(epoch)).into_iter().map(
+            move |validator| {
+                let hot_key_addr = self
+                    .get_ethbridge_from_namada_addr(
+                        &validator.address,
+                        Some(epoch),
+                    )
+                    .expect(
+                        "All Namada validators should have an Ethereum bridge \
+                         key",
+                    );
+                let cold_key_addr = self
+                    .get_ethgov_from_namada_addr(
+                        &validator.address,
+                        Some(epoch),
+                    )
+                    .expect(
+                        "All Namada validators should have an Ethereum \
+                         governance key",
+                    );
+                let eth_addr_book = EthAddrBook {
+                    hot_key_addr,
+                    cold_key_addr,
+                };
+                (eth_addr_book, validator.address, validator.voting_power)
+            },
+        ))
+    }
+}
+
 impl From<MerkleTreeError> for Error {
     fn from(error: MerkleTreeError) -> Self {
         Self::MerkleTreeError(error)
@@ -914,6 +1432,7 @@ pub mod testing {
                 height: BlockHeight::default(),
                 epoch: Epoch::default(),
                 pred_epochs: Epochs::default(),
+                results: BlockResults::default(),
             };
             Self {
                 db: MockDB::default(),
@@ -927,6 +1446,8 @@ pub mod testing {
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),
+                tx_index: TxIndex::default(),
+                conversion_state: ConversionState::default(),
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
             }
@@ -978,8 +1499,8 @@ mod tests {
                 min_duration: Duration::seconds(min_duration).into(),
             };
             (epoch_duration, max_expected_time_per_block,
-                BlockHeight(start_height), Utc.timestamp(start_time, 0).into(),
-                BlockHeight(block_height), Utc.timestamp(block_time, 0).into(),
+                BlockHeight(start_height), Utc.timestamp_opt(start_time, 0).single().expect("expected valid timestamp").into(),
+                BlockHeight(block_height), Utc.timestamp_opt(block_time, 0).single().expect("expected valid timestamp").into(),
                 min_blocks_delta, min_duration_delta, max_time_per_block_delta)
         }
     }

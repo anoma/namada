@@ -13,6 +13,9 @@ use crate::types::storage;
 pub(super) mod ethereum_events;
 
 #[cfg(not(feature = "abcipp"))]
+pub(super) mod validator_set_update;
+
+#[cfg(not(feature = "abcipp"))]
 mod votes;
 
 #[cfg(not(feature = "abcipp"))]

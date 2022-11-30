@@ -26,8 +26,7 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{
-    DbKeySeg, Error as StorageError, Key, MembershipProof, MerkleValue,
-    StringKey, TreeBytes,
+    DbKeySeg, Error as StorageError, Key, MembershipProof, StringKey, TreeBytes,
 };
 
 #[allow(missing_docs)]
@@ -315,9 +314,11 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         &mut self,
         store_type: &StoreType,
         key: &Key,
-        value: MerkleValue,
+        value: impl AsRef<[u8]>,
     ) -> Result<()> {
-        let sub_root = self.tree_mut(store_type).subtree_update(key, value)?;
+        let sub_root = self
+            .tree_mut(store_type)
+            .subtree_update(key, value.as_ref())?;
         // update the base tree with the updated sub root without hashing
         if *store_type != StoreType::Base {
             let base_key = H::hash(&store_type.to_string());
@@ -333,13 +334,9 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     }
 
     /// Update the tree with the given key and value
-    pub fn update(
-        &mut self,
-        key: &Key,
-        value: impl Into<MerkleValue>,
-    ) -> Result<()> {
+    pub fn update(&mut self, key: &Key, value: impl AsRef<[u8]>) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        self.update_tree(&store_type, &sub_key, value.into())
+        self.update_tree(&store_type, &sub_key, value)
     }
 
     /// Delete the value corresponding to the given key
@@ -376,7 +373,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     pub fn get_sub_tree_existence_proof(
         &self,
         keys: &[Key],
-        values: Vec<MerkleValue>,
+        values: Vec<Vec<u8>>,
     ) -> Result<MembershipProof> {
         let first_key = keys.iter().next().ok_or_else(|| {
             Error::InvalidMerkleKey(
@@ -733,7 +730,7 @@ mod test {
         let proof = match tree
             .get_sub_tree_existence_proof(
                 std::array::from_ref(&ibc_key),
-                vec![ibc_val.clone().into()],
+                vec![ibc_val.clone()],
             )
             .unwrap()
         {
@@ -792,7 +789,7 @@ mod test {
         let proof = match tree
             .get_sub_tree_existence_proof(
                 std::array::from_ref(&pos_key),
-                vec![pos_val.clone().into()],
+                vec![pos_val.clone()],
             )
             .unwrap()
         {

@@ -1,7 +1,7 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
 use namada::ledger::protocol;
-use namada::types::storage::{BlockHash, Header};
+use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::transaction::protocol::ProtocolTxType;
 
 use super::governance::execute_governance_proposals;
@@ -51,7 +51,9 @@ where
                 execute_governance_proposals(self, &mut response)?;
         }
 
-        for processed_tx in &req.txs {
+        // Tracks the accepted transactions
+        self.storage.block.results = BlockResults::with_len(req.txs.len());
+        for (tx_index, processed_tx) in req.txs.iter().enumerate() {
             let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
                 tx
             } else {
@@ -149,14 +151,45 @@ where
                     continue;
                 }
                 TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::EthereumEvents(ref digest) => {
-                        for event in
-                            digest.events.iter().map(|signed| &signed.event)
+                    #[cfg(not(feature = "abcipp"))]
+                    ProtocolTxType::EthEventsVext(ref ext) => {
+                        if self
+                            .mode
+                            .get_validator_address()
+                            .map(|validator| {
+                                validator == &ext.data.validator_addr
+                            })
+                            .unwrap_or(false)
                         {
-                            self.mode.deque_eth_event(event);
+                            for event in ext.data.ethereum_events.iter() {
+                                self.mode.dequeue_eth_event(event);
+                            }
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
+                    #[cfg(not(feature = "abcipp"))]
+                    ProtocolTxType::ValSetUpdateVext(_) => {
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    #[cfg(feature = "abcipp")]
+                    ProtocolTxType::EthereumEvents(ref digest) => {
+                        if self
+                            .mode
+                            .get_validator_address()
+                            .map(|validator| {
+                                validator == &ext.data.validator_addr
+                            })
+                            .unwrap_or(false)
+                        {
+                            for event in
+                                digest.events.iter().map(|signed| &signed.event)
+                            {
+                                self.mode.dequeue_eth_event(event);
+                            }
+                        }
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    #[cfg(feature = "abcipp")]
                     ProtocolTxType::ValidatorSetUpdate(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }
@@ -175,6 +208,11 @@ where
             match protocol::dispatch_tx(
                 tx_type,
                 tx_length,
+                TxIndex(
+                    tx_index
+                        .try_into()
+                        .expect("transaction index out of bounds"),
+                ),
                 &mut self.gas_meter,
                 &mut self.write_log,
                 &mut self.storage,
@@ -194,6 +232,7 @@ where
                         self.write_log.commit_tx();
                         if !tx_event.contains_key("code") {
                             tx_event["code"] = ErrorCodes::Ok.into();
+                            self.storage.block.results.accept(tx_index);
                         }
                         if let Some(ibc_event) = &result.ibc_event {
                             // Add the IBC event besides the tx_event
@@ -345,9 +384,9 @@ mod test_finalize_block {
     use namada::types::ethereum_events::EthAddress;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};
-    use namada::types::vote_extensions::ethereum_events::{
-        self, MultiSignedEthEvent,
-    };
+    use namada::types::vote_extensions::ethereum_events;
+    #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;
@@ -659,18 +698,35 @@ mod test_finalize_block {
         assert_eq!(counter, 2);
     }
 
-    /// Test that if a rejected protocol tx is applied and emits
+    /// Test if a rejected protocol tx is applied and emits
     /// the correct event
     #[test]
     fn test_rejected_protocol_tx() {
-        let (mut shell, _, _) = setup();
+        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+        let (mut shell, _, _) = setup_at_height(LAST_HEIGHT);
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
 
+        #[cfg(feature = "abcipp")]
         let tx = ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
             signatures: Default::default(),
             events: vec![],
         })
+        .sign(&protocol_key)
+        .to_bytes();
+
+        #[cfg(not(feature = "abcipp"))]
+        let tx = ProtocolTxType::EthEventsVext(
+            ethereum_events::Vext::empty(
+                LAST_HEIGHT,
+                shell
+                    .mode
+                    .get_validator_address()
+                    .expect("Test failed")
+                    .clone(),
+            )
+            .sign(&protocol_key),
+        )
         .sign(&protocol_key)
         .to_bytes();
 
@@ -716,35 +772,53 @@ mod test_finalize_block {
         assert_eq!(queued_event, event);
 
         // ---- The protocol tx that includes this event on-chain
-        let signature = ethereum_events::Vext {
+        #[allow(clippy::redundant_clone)]
+        let ext = ethereum_events::Vext {
             block_height: shell.storage.last_height,
             ethereum_events: vec![event.clone()],
             validator_addr: address.clone(),
         }
-        .sign(&protocol_key)
-        .sig;
-        let signed = MultiSignedEthEvent {
-            event,
-            #[cfg(feature = "abcipp")]
-            signers: BTreeSet::from([address.clone()]),
-            #[cfg(not(feature = "abcipp"))]
-            signers: BTreeSet::from([(
-                address.clone(),
-                shell.storage.last_height,
-            )]),
-        };
+        .sign(&protocol_key);
 
-        let digest = ethereum_events::VextDigest {
-            #[cfg(feature = "abcipp")]
-            signatures: vec![(address, signature)].into_iter().collect(),
-            #[cfg(not(feature = "abcipp"))]
-            signatures: vec![((address, shell.storage.last_height), signature)]
+        #[cfg(feature = "abcipp")]
+        let processed_tx = {
+            let signed = MultiSignedEthEvent {
+                event,
+                #[cfg(feature = "abcipp")]
+                signers: BTreeSet::from([address.clone()]),
+                #[cfg(not(feature = "abcipp"))]
+                signers: BTreeSet::from([(
+                    address.clone(),
+                    shell.storage.last_height,
+                )]),
+            };
+
+            let digest = ethereum_events::VextDigest {
+                #[cfg(feature = "abcipp")]
+                signatures: vec![(address, ext.sig)].into_iter().collect(),
+                #[cfg(not(feature = "abcipp"))]
+                signatures: vec![(
+                    (address, shell.storage.last_height),
+                    ext.sig,
+                )]
                 .into_iter()
                 .collect(),
-            events: vec![signed],
+                events: vec![signed],
+            };
+            ProcessedTx {
+                tx: ProtocolTxType::EthereumEvents(digest)
+                    .sign(&protocol_key)
+                    .to_bytes(),
+                result: TxResult {
+                    code: ErrorCodes::Ok.into(),
+                    info: "".into(),
+                },
+            }
         };
+
+        #[cfg(not(feature = "abcipp"))]
         let processed_tx = ProcessedTx {
-            tx: ProtocolTxType::EthereumEvents(digest)
+            tx: ProtocolTxType::EthEventsVext(ext)
                 .sign(&protocol_key)
                 .to_bytes(),
             result: TxResult {

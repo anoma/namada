@@ -3,12 +3,13 @@
 
 pub mod collections;
 mod error;
+pub mod queries;
 pub mod validation;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 
-use crate::types::storage::{self, BlockHash, BlockHeight, Epoch};
+use crate::types::storage::{self, BlockHash, BlockHeight, Epoch, TxIndex};
 
 /// Common storage read interface
 ///
@@ -96,6 +97,9 @@ pub trait StorageRead<'iter> {
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch>;
+
+    /// Get the transaction index.
+    fn get_tx_index(&self) -> Result<TxIndex>;
 }
 
 /// Common storage write interface
