@@ -45,7 +45,7 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
 use namada::types::key::*;
-use namada::types::masp::{PaymentAddress, TransferTarget};
+use namada::types::masp::{PaymentAddress, TransferSource, TransferTarget};
 use namada::types::storage::{
     BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
 };
@@ -1259,6 +1259,215 @@ impl ShieldedContext {
         }
         res
     }
+
+    /// Make shielded components to embed within a Transfer object. If no shielded
+    /// payment address nor spending key is specified, then no shielded components
+    /// are produced. Otherwise a transaction containing nullifiers and/or note
+    /// commitments are produced. Dummy transparent UTXOs are sometimes used to make
+    /// transactions balanced, but it is understood that transparent account changes
+    /// are effected only by the amounts and signatures specified by the containing
+    /// Transfer object.
+    async fn gen_shielded_transfer(
+        &mut self,
+        ledger_address: &TendermintAddress,
+        source: TransferSource,
+        target: TransferTarget,
+        args_amount: token::Amount,
+        token: Address,
+        fee_amount: token::Amount,
+        fee_token: Address,
+        shielded_gas: bool,
+    ) -> Result<Option<(Transaction, TransactionMetadata)>, builder::Error> {
+        // No shielded components are needed when neither source nor destination
+        // are shielded
+        let spending_key = source.spending_key();
+        let payment_address = target.payment_address();
+        if spending_key.is_none() && payment_address.is_none() {
+            return Ok(None);
+        }
+        // We want to fund our transaction solely from supplied spending key
+        let spending_key = spending_key.map(|x| x.into());
+        let spending_keys: Vec<_> = spending_key.into_iter().collect();
+        // Load the current shielded context given the spending key we possess
+        let _ = self.load();
+        self.fetch(&ledger_address, &spending_keys, &[])
+            .await;
+        // Save the update state so that future fetches can be short-circuited
+        let _ = self.save();
+        // Determine epoch in which to submit potential shielded transaction
+        let epoch = rpc::query_epoch(args::Query {
+            ledger_address: ledger_address.clone()
+        }).await;
+        // Context required for storing which notes are in the source's possesion
+        let consensus_branch_id = BranchId::Sapling;
+        let amt: u64 = args_amount.into();
+        let memo: Option<Memo> = None;
+
+        // Now we build up the transaction within this object
+        let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
+        // Convert transaction amount into MASP types
+        let (asset_type, amount) = convert_amount(epoch, &token, args_amount);
+
+        // Transactions with transparent input and shielded output
+        // may be affected if constructed close to epoch boundary
+        let mut epoch_sensitive: bool = false;
+        // If there are shielded inputs
+        if let Some(sk) = spending_key {
+            // Transaction fees need to match the amount in the wrapper Transfer
+            // when MASP source is used
+            let (_, fee) =
+                convert_amount(epoch, &fee_token, fee_amount);
+            builder.set_fee(fee.clone())?;
+            // If the gas is coming from the shielded pool, then our shielded inputs
+            // must also cover the gas fee
+            let required_amt = if shielded_gas { amount + fee } else { amount };
+            // Locate unspent notes that can help us meet the transaction amount
+            let (_, unspent_notes, used_convs) = self
+                .collect_unspent_notes(
+                    ledger_address.clone(),
+                    &to_viewing_key(&sk).vk,
+                    required_amt,
+                    epoch,
+                )
+                .await;
+            // Commit the notes found to our transaction
+            for (diversifier, note, merkle_path) in unspent_notes {
+                builder.add_sapling_spend(sk, diversifier, note, merkle_path)?;
+            }
+            // Commit the conversion notes used during summation
+            for (conv, wit, value) in used_convs.values() {
+                if *value > 0 {
+                    builder.add_convert(
+                        conv.clone(),
+                        *value as u64,
+                        wit.clone(),
+                    )?;
+                }
+            }
+        } else {
+            // No transfer fees come from the shielded transaction for non-MASP
+            // sources
+            builder.set_fee(Amount::zero())?;
+            // We add a dummy UTXO to our transaction, but only the source of the
+            // parent Transfer object is used to validate fund availability
+            let secp_sk =
+                secp256k1::SecretKey::from_slice(&[0xcd; 32]).expect("secret key");
+            let secp_ctx = secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
+            let secp_pk =
+                secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
+                .serialize();
+            let hash =
+                ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
+            let script = TransparentAddress::PublicKey(hash.into()).script();
+            epoch_sensitive = true;
+            builder.add_transparent_input(
+                secp_sk,
+                OutPoint::new([0u8; 32], 0),
+                TxOut {
+                    asset_type,
+                    value: amt,
+                    script_pubkey: script,
+                },
+            )?;
+        }
+        // Now handle the outputs of this transaction
+        // If there is a shielded output
+        if let Some(pa) = payment_address {
+            let ovk_opt = spending_key.map(|x| x.expsk.ovk);
+            builder.add_sapling_output(
+                ovk_opt,
+                pa.into(),
+                asset_type,
+                amt,
+                memo.clone(),
+            )?;
+        } else {
+            epoch_sensitive = false;
+            // Embed the transparent target address into the shielded transaction so
+            // that it can be signed
+            let target_enc = target
+                .address()
+                .expect("target address should be transparent")
+                .try_to_vec()
+                .expect("target address encoding");
+            let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
+                target_enc.as_ref(),
+            ));
+            builder.add_transparent_output(
+                &TransparentAddress::PublicKey(hash.into()),
+                asset_type,
+                amt,
+            )?;
+        }
+        let prover = if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
+        {
+            let params_dir = PathBuf::from(params_dir);
+            let spend_path = params_dir.join(masp::SPEND_NAME);
+            let convert_path = params_dir.join(masp::CONVERT_NAME);
+            let output_path = params_dir.join(masp::OUTPUT_NAME);
+            LocalTxProver::new(&spend_path, &output_path, &convert_path)
+        } else {
+            LocalTxProver::with_default_location()
+                .expect("unable to load MASP Parameters")
+        };
+        // Build and return the constructed transaction
+        let mut tx = builder.build(consensus_branch_id, &prover);
+
+        if epoch_sensitive {
+            let new_epoch = rpc::query_epoch(args::Query {
+                ledger_address: ledger_address.clone()
+            }).await;
+
+            // If epoch has changed, recalculate shielded outputs to match new epoch
+            if new_epoch != epoch {
+                // Hack: build new shielded transfer with updated outputs
+                let mut replay_builder = Builder::<TestNetwork, OsRng>::new(0u32);
+                replay_builder.set_fee(Amount::zero())?;
+                let ovk_opt = spending_key.map(|x| x.expsk.ovk);
+                let (new_asset_type, _) =
+                    convert_amount(new_epoch, &token, args_amount);
+                replay_builder.add_sapling_output(
+                    ovk_opt,
+                    payment_address.unwrap().into(),
+                    new_asset_type,
+                    amt,
+                    memo,
+                )?;
+
+                let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
+                    .expect("secret key");
+                let secp_ctx =
+                    secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
+                let secp_pk =
+                    secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
+                    .serialize();
+                let hash =
+                    ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
+                let script = TransparentAddress::PublicKey(hash.into()).script();
+                replay_builder.add_transparent_input(
+                    secp_sk,
+                    OutPoint::new([0u8; 32], 0),
+                    TxOut {
+                        asset_type: new_asset_type,
+                        value: amt,
+                        script_pubkey: script,
+                    },
+                )?;
+
+                let (replay_tx, _) =
+                    replay_builder.build(consensus_branch_id, &prover)?;
+                tx = tx.map(|(t, tm)| {
+                    let mut temp = t.deref().clone();
+                    temp.shielded_outputs = replay_tx.shielded_outputs.clone();
+                    temp.value_balance = temp.value_balance.reject(asset_type)
+                        - Amount::from_pair(new_asset_type, amt).unwrap();
+                    (temp.freeze().unwrap(), tm)
+                });
+            }
+        }
+
+        tx.map(Some)
+    }
 }
 
 /// Make asset type corresponding to given address and epoch
@@ -1284,215 +1493,11 @@ fn convert_amount(
     (asset_type, amount)
 }
 
-/// Make shielded components to embed within a Transfer object. If no shielded
-/// payment address nor spending key is specified, then no shielded components
-/// are produced. Otherwise a transaction containing nullifiers and/or note
-/// commitments are produced. Dummy transparent UTXOs are sometimes used to make
-/// transactions balanced, but it is understood that transparent account changes
-/// are effected only by the amounts and signatures specified by the containing
-/// Transfer object.
-async fn gen_shielded_transfer(
-    ctx: &mut Context,
-    args: &args::TxTransfer,
-    shielded_gas: bool,
-) -> Result<Option<(Transaction, TransactionMetadata)>, builder::Error> {
-    // No shielded components are needed when neither source nor destination
-    // are shielded
-    let spending_key = ctx.get_cached(&args.source).spending_key();
-    let payment_address = ctx.get(&args.target).payment_address();
-    if spending_key.is_none() && payment_address.is_none() {
-        return Ok(None);
-    }
-    // We want to fund our transaction solely from supplied spending key
-    let spending_key = spending_key.map(|x| x.into());
-    let spending_keys: Vec<_> = spending_key.into_iter().collect();
-    // Load the current shielded context given the spending key we possess
-    let _ = ctx.shielded.load();
-    ctx.shielded
-        .fetch(&args.tx.ledger_address, &spending_keys, &[])
-        .await;
-    // Save the update state so that future fetches can be short-circuited
-    let _ = ctx.shielded.save();
-    // Determine epoch in which to submit potential shielded transaction
-    let epoch = rpc::query_epoch(args::Query {
-        ledger_address: args.tx.ledger_address.clone()
-    }).await;
-    // Context required for storing which notes are in the source's possesion
-    let consensus_branch_id = BranchId::Sapling;
-    let amt: u64 = args.amount.into();
-    let memo: Option<Memo> = None;
-
-    // Now we build up the transaction within this object
-    let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
-    // Convert transaction amount into MASP types
-    let (asset_type, amount) = convert_amount(epoch, &ctx.get(&args.token), args.amount);
-
-    // Transactions with transparent input and shielded output
-    // may be affected if constructed close to epoch boundary
-    let mut epoch_sensitive: bool = false;
-    // If there are shielded inputs
-    if let Some(sk) = spending_key {
-        // Transaction fees need to match the amount in the wrapper Transfer
-        // when MASP source is used
-        let (_, fee) =
-            convert_amount(epoch, &ctx.get(&args.tx.fee_token), args.tx.fee_amount);
-        builder.set_fee(fee.clone())?;
-        // If the gas is coming from the shielded pool, then our shielded inputs
-        // must also cover the gas fee
-        let required_amt = if shielded_gas { amount + fee } else { amount };
-        // Locate unspent notes that can help us meet the transaction amount
-        let (_, unspent_notes, used_convs) = ctx
-            .shielded
-            .collect_unspent_notes(
-                args.tx.ledger_address.clone(),
-                &to_viewing_key(&sk).vk,
-                required_amt,
-                epoch,
-            )
-            .await;
-        // Commit the notes found to our transaction
-        for (diversifier, note, merkle_path) in unspent_notes {
-            builder.add_sapling_spend(sk, diversifier, note, merkle_path)?;
-        }
-        // Commit the conversion notes used during summation
-        for (conv, wit, value) in used_convs.values() {
-            if *value > 0 {
-                builder.add_convert(
-                    conv.clone(),
-                    *value as u64,
-                    wit.clone(),
-                )?;
-            }
-        }
-    } else {
-        // No transfer fees come from the shielded transaction for non-MASP
-        // sources
-        builder.set_fee(Amount::zero())?;
-        // We add a dummy UTXO to our transaction, but only the source of the
-        // parent Transfer object is used to validate fund availability
-        let secp_sk =
-            secp256k1::SecretKey::from_slice(&[0xcd; 32]).expect("secret key");
-        let secp_ctx = secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
-        let secp_pk =
-            secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
-                .serialize();
-        let hash =
-            ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
-        let script = TransparentAddress::PublicKey(hash.into()).script();
-        epoch_sensitive = true;
-        builder.add_transparent_input(
-            secp_sk,
-            OutPoint::new([0u8; 32], 0),
-            TxOut {
-                asset_type,
-                value: amt,
-                script_pubkey: script,
-            },
-        )?;
-    }
-    // Now handle the outputs of this transaction
-    // If there is a shielded output
-    if let Some(pa) = payment_address {
-        let ovk_opt = spending_key.map(|x| x.expsk.ovk);
-        builder.add_sapling_output(
-            ovk_opt,
-            pa.into(),
-            asset_type,
-            amt,
-            memo.clone(),
-        )?;
-    } else {
-        epoch_sensitive = false;
-        // Embed the transparent target address into the shielded transaction so
-        // that it can be signed
-        let target = ctx.get(&args.target);
-        let target_enc = target
-            .address()
-            .expect("target address should be transparent")
-            .try_to_vec()
-            .expect("target address encoding");
-        let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
-            target_enc.as_ref(),
-        ));
-        builder.add_transparent_output(
-            &TransparentAddress::PublicKey(hash.into()),
-            asset_type,
-            amt,
-        )?;
-    }
-    let prover = if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
-    {
-        let params_dir = PathBuf::from(params_dir);
-        let spend_path = params_dir.join(masp::SPEND_NAME);
-        let convert_path = params_dir.join(masp::CONVERT_NAME);
-        let output_path = params_dir.join(masp::OUTPUT_NAME);
-        LocalTxProver::new(&spend_path, &output_path, &convert_path)
-    } else {
-        LocalTxProver::with_default_location()
-            .expect("unable to load MASP Parameters")
-    };
-    // Build and return the constructed transaction
-    let mut tx = builder.build(consensus_branch_id, &prover);
-
-    if epoch_sensitive {
-        let new_epoch = rpc::query_epoch(args::Query {
-            ledger_address: args.tx.ledger_address.clone()
-        }).await;
-
-        // If epoch has changed, recalculate shielded outputs to match new epoch
-        if new_epoch != epoch {
-            // Hack: build new shielded transfer with updated outputs
-            let mut replay_builder = Builder::<TestNetwork, OsRng>::new(0u32);
-            replay_builder.set_fee(Amount::zero())?;
-            let ovk_opt = spending_key.map(|x| x.expsk.ovk);
-            let (new_asset_type, _) =
-                convert_amount(new_epoch, &ctx.get(&args.token), args.amount);
-            replay_builder.add_sapling_output(
-                ovk_opt,
-                payment_address.unwrap().into(),
-                new_asset_type,
-                amt,
-                memo,
-            )?;
-
-            let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
-                .expect("secret key");
-            let secp_ctx =
-                secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
-            let secp_pk =
-                secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
-                    .serialize();
-            let hash =
-                ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
-            let script = TransparentAddress::PublicKey(hash.into()).script();
-            replay_builder.add_transparent_input(
-                secp_sk,
-                OutPoint::new([0u8; 32], 0),
-                TxOut {
-                    asset_type: new_asset_type,
-                    value: amt,
-                    script_pubkey: script,
-                },
-            )?;
-
-            let (replay_tx, _) =
-                replay_builder.build(consensus_branch_id, &prover)?;
-            tx = tx.map(|(t, tm)| {
-                let mut temp = t.deref().clone();
-                temp.shielded_outputs = replay_tx.shielded_outputs.clone();
-                temp.value_balance = temp.value_balance.reject(asset_type)
-                    - Amount::from_pair(new_asset_type, amt).unwrap();
-                (temp.freeze().unwrap(), tm)
-            });
-        }
-    }
-
-    tx.map(Some)
-}
-
 pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
-    let source = ctx.get_cached(&args.source).effective_address();
-    let target = ctx.get(&args.target).effective_address();
+    let transfer_source = ctx.get_cached(&args.source);
+    let source = transfer_source.effective_address();
+    let transfer_target = ctx.get(&args.target);
+    let target = transfer_target.effective_address();
     // Check that the source address exists on chain
     let source_exists =
         rpc::known_address(&source, args.tx.ledger_address.clone()).await;
@@ -1607,7 +1612,16 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     };
 
     let stx_result =
-        gen_shielded_transfer(&mut ctx, &args, shielded_gas)
+        ctx.shielded.gen_shielded_transfer(
+            &args.tx.ledger_address,
+            transfer_source,
+            transfer_target,
+            args.amount,
+            ctx.get(&args.token),
+            args.tx.fee_amount,
+            ctx.get(&args.tx.fee_token),
+            shielded_gas,
+        )
         .await;
     let shielded = match stx_result {
         Ok(stx) => stx.map(|x| x.0),
