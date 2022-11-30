@@ -1,5 +1,71 @@
 # CHANGELOG
 
+## v0.11.0
+
+Namada 0.11.0 is a scheduled minor release.
+
+### BUG FIXES
+
+- Fix building with the `abcipp` feature again
+  ([#754](https://github.com/anoma/namada/pull/754))
+- Fixed validation of a validator initialization transaction.
+  ([#763](https://github.com/anoma/namada/pull/763))
+
+### FEATURES
+
+- Allow to set the native token via genesis configuration.
+  ([#582](https://github.com/anoma/namada/pull/582))
+- Added a validity predicate for implicit accounts. This is set in
+  protocol parameters and may be changed via governance. Additionally,
+  added automatic public key reveal in the client that use an implicit
+  account that hasn't revealed its PK yet as a source. It's also
+  possible to manually submit reveal transaction with  client command
+  ([#592](https://github.com/anoma/namada/pull/592))
+- PoS: Removed staking reward addresses in preparation of auto-staked rewards
+  system. ([#687](https://github.com/anoma/namada/pull/687))
+- Allow to set validator's commission rates and a limit on change of commission
+  rate per epoch. Commission rate can be changed via a transaction authorized
+  by the validator, but the limit is immutable value, set when the validator's
+  account is initialized. ([#695](https://github.com/anoma/namada/pull/695))
+- Optimize the PoS code to depend only on bonded stake, removing
+  the VotingPower(Delta) structs. This mitigates some previous
+  information loss in PoS calculations. Instead, the notion of
+  voting power is only relevant when communicating with Tendermint.
+  ([#707](https://github.com/anoma/namada/pull/707))
+- Update the set of parameters in the PoS system according to the
+  latest spec and standardizes the use of the rust_decimal crate
+  for parameters and calculations that require fractional numbers.
+  ([#708](https://github.com/anoma/namada/pull/708))
+- Renamed transaction CLI arguments `--fee-amount` and `--fee-token` to `--gas-
+  amount` and `--gas-token`. ([#775](https://github.com/anoma/namada/pull/775))
+
+### IMPROVEMENTS
+
+- Refactored token decimal formatting.
+  ([#436](https://github.com/anoma/namada/pull/436))
+- Added PoS specific queries ([#570](https://github.com/anoma/namada/pull/570))
+- Added a custom events store and replaced WebSocket client for
+  transaction results with query endpoints to the events store.
+  ([#674](https://github.com/anoma/namada/pull/674))
+- Refactored governance code to use storage_api.
+  ([#719](https://github.com/anoma/namada/pull/719))
+- Public parts of shared `namada` crate have been split up into a
+  `namada_core` crate. The `namada_proof_of_stake`, `namada_vp_prelude`
+  and `namada_tx_prelude` crates now depend on this `namada_core` crate.
+  ([#733](https://github.com/anoma/namada/pull/733))
+- Sign over the hash of code rather than code in transaction signing.
+  ([#807](https://github.com/anoma/namada/pull/807))
+
+### MISCELLANEOUS
+
+- Improve some docstrings relating to block heights
+  ([#650](https://github.com/anoma/namada/pull/650))
+
+### TESTING
+
+- Don't fake a wasm VP for internal addresses in tx tests
+  ([#694](https://github.com/anoma/namada/pull/694))
+
 ## v0.10.1
 
 Namada 0.10.1 is a point release with fixes to shielded transactions.
