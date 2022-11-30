@@ -14,6 +14,8 @@ use super::{
     ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
     VerifySigError,
 };
+use crate::impl_display_and_from_str_via_format;
+use crate::types::string_encoding;
 
 /// Public key
 #[derive(
@@ -66,23 +68,22 @@ impl super::PublicKey for PublicKey {
     }
 }
 
-impl Display for PublicKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", HEXLOWER.encode(&self.try_to_vec().unwrap()))
+/// String decoding error
+pub type DecodeError = string_encoding::DecodeError;
+
+impl string_encoding::Format for PublicKey {
+    const HRP: &'static str = string_encoding::COMMON_PK_HRP;
+
+    fn to_bytes(&self) -> Vec<u8> {
+        BorshSerialize::try_to_vec(self).unwrap()
+    }
+
+    fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+        BorshDeserialize::try_from_slice(bytes)
     }
 }
 
-impl FromStr for PublicKey {
-    type Err = ParsePublicKeyError;
-
-    fn from_str(str: &str) -> Result<Self, Self::Err> {
-        let vec = HEXLOWER
-            .decode(str.as_ref())
-            .map_err(ParsePublicKeyError::InvalidHex)?;
-        Self::try_from_slice(vec.as_slice())
-            .map_err(ParsePublicKeyError::InvalidEncoding)
-    }
-}
+impl_display_and_from_str_via_format!(PublicKey);
 
 /// Secret key
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]

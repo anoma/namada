@@ -79,29 +79,11 @@ pub mod genesis_config {
     #[derive(Error, Debug)]
     pub enum HexKeyError {
         #[error("Invalid hex string: {0:?}")]
-        InvalidHexString(data_encoding::DecodeError),
+        InvalidHexString(#[from] data_encoding::DecodeError),
         #[error("Invalid sha256 checksum: {0}")]
-        InvalidSha256(TryFromSliceError),
+        InvalidSha256(#[from] TryFromSliceError),
         #[error("Invalid public key: {0}")]
-        InvalidPublicKey(ParsePublicKeyError),
-    }
-
-    impl From<data_encoding::DecodeError> for HexKeyError {
-        fn from(err: data_encoding::DecodeError) -> Self {
-            Self::InvalidHexString(err)
-        }
-    }
-
-    impl From<ParsePublicKeyError> for HexKeyError {
-        fn from(err: ParsePublicKeyError) -> Self {
-            Self::InvalidPublicKey(err)
-        }
-    }
-
-    impl From<TryFromSliceError> for HexKeyError {
-        fn from(err: TryFromSliceError) -> Self {
-            Self::InvalidSha256(err)
-        }
+        InvalidPublicKey(#[from] common::DecodeError),
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
