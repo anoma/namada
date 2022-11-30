@@ -46,7 +46,7 @@ use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use crate::types::storage::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    MembershipProof, MerkleValue, TxIndex, BLOCK_HASH_LENGTH,
+    MembershipProof, TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 use crate::types::token;
@@ -625,7 +625,7 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: MerkleValue,
+        value: Vec<u8>,
         height: BlockHeight,
     ) -> Result<Proof> {
         if height >= self.get_block_height().0 {

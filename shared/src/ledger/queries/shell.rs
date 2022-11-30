@@ -207,7 +207,7 @@ where
                     .storage
                     .get_existence_proof(
                         &storage_key,
-                        value.clone().into(),
+                        value.clone(),
                         request.height,
                     )
                     .into_storage_result()?;
@@ -264,7 +264,7 @@ where
         for PrefixValue { key, value } in &data {
             let mut proof = ctx
                 .storage
-                .get_existence_proof(key, value.clone().into(), request.height)
+                .get_existence_proof(key, value.clone(), request.height)
                 .into_storage_result()?;
             ops.append(&mut proof.ops);
         }
