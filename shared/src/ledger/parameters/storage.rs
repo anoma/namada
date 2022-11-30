@@ -6,6 +6,7 @@ const EPOCH_DURATION_KEY: &str = "epoch_duration";
 const VP_WHITELIST_KEY: &str = "vp_whitelist";
 const TX_WHITELIST_KEY: &str = "tx_whitelist";
 const MAX_EXPECTED_TIME_PER_BLOCK_KEY: &str = "max_expected_time_per_block";
+const MAX_BYTES_PER_BLOCK_KEY: &str = "max_bytes_per_block";
 
 /// Returns if the key is a parameter key.
 pub fn is_parameter_key(key: &Key) -> bool {
@@ -18,6 +19,7 @@ pub fn is_protocol_parameter_key(key: &Key) -> bool {
         || is_max_expected_time_per_block_key(key)
         || is_tx_whitelist_key(key)
         || is_vp_whitelist_key(key)
+        || is_max_bytes_per_block_key(key)
 }
 
 /// Returns if the key is an epoch storage key.
@@ -50,6 +52,14 @@ pub fn is_vp_whitelist_key(key: &Key) -> bool {
         DbKeySeg::AddressSeg(addr),
         DbKeySeg::StringSeg(vp_whitelist),
     ] if addr == &ADDRESS && vp_whitelist == VP_WHITELIST_KEY)
+}
+
+/// Returns if the key is the max Tendermint bytes per block key.
+pub fn is_max_bytes_per_block_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+        DbKeySeg::AddressSeg(addr),
+        DbKeySeg::StringSeg(max_bytes_per_block),
+    ] if addr == &ADDRESS && max_bytes_per_block == MAX_BYTES_PER_BLOCK_KEY)
 }
 
 /// Storage key used for epoch parameter.
@@ -88,6 +98,16 @@ pub fn get_max_expected_time_per_block_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(MAX_EXPECTED_TIME_PER_BLOCK_KEY.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for the max Tendermint bytes per block.
+pub fn get_max_bytes_per_block_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(MAX_BYTES_PER_BLOCK_KEY.to_string()),
         ],
     }
 }
