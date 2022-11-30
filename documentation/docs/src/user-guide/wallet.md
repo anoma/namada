@@ -86,8 +86,8 @@ If the wallet doesn't already exist, it will be created for you as soon as you r
 Currently, the Namada client can load the password via:
 
 - **Stdin:** the client will prompt for a password.
-- **Env variable:** by exporting a ENV variable called `ANOMA_WALLET_PASSWORD` with value of the actual password.
-- **File:** by exporting an ENV variable called `ANOMA_WALLET_PASSWORD_FILE` with value containing the path to a file containing the password.
+- **Env variable:** by exporting a ENV variable called `NAMADA_WALLET_PASSWORD` with value of the actual password.
+- **File:** by exporting an ENV variable called `NAMADA_WALLET_PASSWORD_FILE` with value containing the path to a file containing the password.
 
 ## Web Wallet
 

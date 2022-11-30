@@ -12,14 +12,14 @@ Users of shielded transfers are rewarded for their contributions
 to the privacy set in the form of native protocol tokens. A multi-asset shielded transfer wallet
 is provided in order to facilitate safe and private user interaction with the protocol.
 
-### How does Namada relate to Anoma?
+### How does Namada relate to Namada?
 
 Namada is _two things_:
 
-- The first major release _version_ of the Anoma protocol.
-- The first _fractal instance_ launched as part of the Anoma network.
+- The first major release _version_ of the Namada protocol.
+- The first _fractal instance_ launched as part of the Namada network.
 
-The Anoma protocol is designed to facilitate the operation of networked fractal instances,
+The Namada protocol is designed to facilitate the operation of networked fractal instances,
 which intercommunicate but can utilise varied state machines and security models. Different
 fractal instances may specialise in different tasks and serve different communities. The Namada
 instance will be the first such fractal instance, and it will be focused exclusively on the use-case of private asset transfers.
@@ -41,7 +41,7 @@ shielded transfers are cheap and all assets contribute to the same anonymity set
 
 Namada is also a helpful stepping stone to finalise, test,
 and launch a protocol version that is simpler than the full
-Anoma protocol but still encapsulates a unified and useful
+Namada protocol but still encapsulates a unified and useful
 set of features. There are reasons to expect that it may
 make sense for a fractal instance focused exclusively on
 shielded transfers to exist in the long-term, as it can

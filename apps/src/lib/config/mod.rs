@@ -20,17 +20,17 @@ use crate::facade::tendermint::Timeout;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
 /// Base directory contains global config and chain directories.
-pub const DEFAULT_BASE_DIR: &str = ".anoma";
+pub const DEFAULT_BASE_DIR: &str = ".namada";
 /// Default WASM dir.
 pub const DEFAULT_WASM_DIR: &str = "wasm";
 /// The WASM checksums file contains the hashes of built WASMs. It is inside the
 /// WASM dir.
 pub const DEFAULT_WASM_CHECKSUMS_FILE: &str = "checksums.json";
-/// Chain-specific Anoma configuration. Nested in chain dirs.
+/// Chain-specific Namada configuration. Nested in chain dirs.
 pub const FILENAME: &str = "config.toml";
 /// Chain-specific Tendermint configuration. Nested in chain dirs.
 pub const TENDERMINT_DIR: &str = "tendermint";
-/// Chain-specific Anoma DB. Nested in chain dirs.
+/// Chain-specific Namada DB. Nested in chain dirs.
 pub const DB_DIR: &str = "db";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -163,7 +163,7 @@ impl Ledger {
                     IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                     26661,
                 ),
-                instrumentation_namespace: "anoman_tm".to_string(),
+                instrumentation_namespace: "namadan_tm".to_string(),
             },
         }
     }
@@ -294,7 +294,7 @@ impl Config {
             .and_then(|c| c.merge(config::File::with_name(file_name)))
             .and_then(|c| {
                 c.merge(
-                    config::Environment::with_prefix("anoma").separator("__"),
+                    config::Environment::with_prefix("namada").separator("__"),
                 )
             })
             .map_err(Error::ReadError)?;

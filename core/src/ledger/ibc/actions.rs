@@ -77,7 +77,7 @@ use crate::ledger::storage_api;
 use crate::tendermint::Time;
 use crate::tendermint_proto::{Error as ProtoError, Protobuf};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::IbcEvent as AnomaIbcEvent;
+use crate::types::ibc::IbcEvent as NamadaIbcEvent;
 use crate::types::storage::{BlockHeight, Key};
 use crate::types::time::Rfc3339String;
 use crate::types::token::{self, Amount};
@@ -157,7 +157,7 @@ pub trait IbcActions {
     /// Emit an IBC event
     fn emit_ibc_event(
         &mut self,
-        event: AnomaIbcEvent,
+        event: NamadaIbcEvent,
     ) -> std::result::Result<(), Self::Error>;
 
     /// Transfer token
@@ -1339,7 +1339,7 @@ pub fn channel_counterparty(
     ChanCounterparty::new(port_id, Some(channel_id))
 }
 
-/// Returns Anoma commitment prefix
+/// Returns Namada commitment prefix
 pub fn commitment_prefix() -> CommitmentPrefix {
     CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
         .expect("the conversion shouldn't fail")

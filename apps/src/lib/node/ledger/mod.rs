@@ -34,10 +34,10 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
 use crate::{config, wasm_loader};
 
 /// Env. var to set a number of Tokio RT worker threads
-const ENV_VAR_TOKIO_THREADS: &str = "ANOMA_TOKIO_THREADS";
+const ENV_VAR_TOKIO_THREADS: &str = "NAMADA_TOKIO_THREADS";
 
 /// Env. var to set a number of Rayon global worker threads
-const ENV_VAR_RAYON_THREADS: &str = "ANOMA_RAYON_THREADS";
+const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 
 // Until ABCI++ is ready, the shim provides the service implementation.
 // We will add this part back in once the shim is no longer needed.
@@ -252,7 +252,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         }
     }
 
-    tracing::info!("Anoma ledger node has shut down.");
+    tracing::info!("Namada ledger node has shut down.");
 
     let res = task::block_in_place(move || shell_handler.join());
 
@@ -458,7 +458,7 @@ fn start_abci_broadcaster_shell(
     let thread_builder = thread::Builder::new().name("ledger-shell".into());
     let shell_handler = thread_builder
         .spawn(move || {
-            tracing::info!("Anoma ledger node started.");
+            tracing::info!("Namada ledger node started.");
             match tendermint_mode {
                 TendermintMode::Validator => {
                     tracing::info!("This node is a validator");

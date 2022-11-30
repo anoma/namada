@@ -21,7 +21,7 @@ use crate::facade::tendermint_config::{
 };
 
 /// Env. var to output Tendermint log to stdout
-pub const ENV_VAR_TM_STDOUT: &str = "ANOMA_TM_STDOUT";
+pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_TM_STDOUT";
 
 #[derive(Error, Debug)]
 pub enum Error {

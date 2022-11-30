@@ -1,4 +1,4 @@
-//! Anoma Wallet CLI.
+//! Namada Wallet CLI.
 
 use std::fs::File;
 use std::io::{self, Write};
@@ -16,9 +16,9 @@ use namada_apps::wallet::{DecryptionError, FindKeyError};
 use rand_core::OsRng;
 
 pub fn main() -> Result<()> {
-    let (cmd, ctx) = cli::anoma_wallet_cli()?;
+    let (cmd, ctx) = cli::namada_wallet_cli()?;
     match cmd {
-        cmds::AnomaWallet::Key(sub) => match sub {
+        cmds::NamadaWallet::Key(sub) => match sub {
             cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
                 key_and_address_gen(ctx, args)
             }
@@ -28,7 +28,7 @@ pub fn main() -> Result<()> {
                 key_export(ctx, args)
             }
         },
-        cmds::AnomaWallet::Address(sub) => match sub {
+        cmds::NamadaWallet::Address(sub) => match sub {
             cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
                 key_and_address_gen(ctx, args)
             }
@@ -40,7 +40,7 @@ pub fn main() -> Result<()> {
                 address_add(ctx, args)
             }
         },
-        cmds::AnomaWallet::Masp(sub) => match sub {
+        cmds::NamadaWallet::Masp(sub) => match sub {
             cmds::WalletMasp::GenSpendKey(cmds::MaspGenSpendKey(args)) => {
                 spending_key_gen(ctx, args)
             }

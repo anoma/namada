@@ -199,7 +199,7 @@ from Ethereum. This validity predicate will control the `/eth_msgs` storage
 subspace.
 - `#EthBridge` - the storage of which will contain ledgers of balances for 
 wrapped Ethereum assets (ERC20 tokens) structured in a 
-["multitoken"](https://github.com/anoma/anoma/issues/1102) hierarchy
+["multitoken"](https://github.com/anoma/namada/issues/1102) hierarchy
 - `#EthBridgeEscrow` which will hold in escrow wrapped Namada tokens which have 
 been sent to Ethereum.
 
@@ -219,13 +219,13 @@ pub enum EthereumAsset {
     ERC20(EthAddress),
 }
 
-/// An event transferring some kind of value from Ethereum to Anoma
+/// An event transferring some kind of value from Ethereum to Namada
 pub struct TransferToNamada {
     /// Quantity of ether in the transfer
     pub amount: Amount,
     /// Address on Ethereum of the asset
     pub asset: EthereumAsset,
-    /// The Namada address receiving wrapped assets on Anoma
+    /// The Namada address receiving wrapped assets on Namada
     pub receiver: Address,
 }
 ```

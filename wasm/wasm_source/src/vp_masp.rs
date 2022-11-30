@@ -7,7 +7,7 @@ use namada_vp_prelude::address::masp;
 use namada_vp_prelude::storage::Epoch;
 use namada_vp_prelude::*;
 
-/// Convert Anoma amount and token type to MASP equivalents
+/// Convert Namada amount and token type to MASP equivalents
 fn convert_amount(
     epoch: Epoch,
     token: &Address,

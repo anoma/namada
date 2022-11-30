@@ -839,7 +839,7 @@ pub fn genesis() -> Genesis {
     let vp_user_path = "vp_user.wasm";
 
     // NOTE When the validator's key changes, tendermint must be reset with
-    // `anoma reset` command. To generate a new validator, use the
+    // `namada reset` command. To generate a new validator, use the
     // `tests::gen_genesis_validator` below.
     let consensus_keypair = wallet::defaults::validator_keypair();
     let account_keypair = wallet::defaults::validator_keypair();
@@ -857,7 +857,7 @@ pub fn genesis() -> Genesis {
         protocol_key: protocol_keypair.ref_to(),
         dkg_public_key: dkg_keypair.public(),
         non_staked_balance: token::Amount::whole(100_000),
-        // TODO replace with https://github.com/anoma/anoma/issues/25)
+        // TODO replace with https://github.com/anoma/namada/issues/25)
         validator_vp_code_path: vp_user_path.into(),
         validator_vp_sha256: Default::default(),
     };
