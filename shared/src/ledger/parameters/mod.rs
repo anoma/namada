@@ -14,6 +14,7 @@ use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{Address, InternalAddress};
+use crate::types::chain::TendermintBytesPerBlock;
 use crate::types::storage::Key;
 use crate::types::time::DurationSecs;
 use crate::vm::WasmCacheAccess;
@@ -119,6 +120,8 @@ pub struct Parameters {
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block
     pub max_expected_time_per_block: DurationSecs,
+    /// Max Tendermint block size in bytes.
+    pub max_bytes_per_block: TendermintBytesPerBlock,
     /// Whitelisted validity predicate hashes
     pub vp_whitelist: Vec<String>,
     /// Whitelisted tx hashes
@@ -153,6 +156,13 @@ impl Parameters {
         DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
         H: StorageHasher,
     {
+        // write tendermint block size parameter
+        let tm_blk_size_key = storage::get_max_bytes_per_block_key();
+        let max_blk_size_value = encode(&self.max_bytes_per_block);
+        storage.write(&tm_blk_size_key, max_blk_size_value).expect(
+            "Epoch parameters must be initialized in the genesis block",
+        );
+
         // write epoch parameters
         let epoch_key = storage::get_epoch_storage_key();
         let epoch_value = encode(&self.epoch_duration);
@@ -300,6 +310,17 @@ where
     let (epoch_duration, gas_epoch) = read_epoch_parameter(storage)
         .expect("Couldn't read epoch duration parameters");
 
+    // read max block bytes
+    let (max_bytes_per_block, gas_block_bytes) = {
+        let key = storage::get_max_expected_time_per_block_key();
+        let (value, gas) =
+            storage.read(&key).map_err(ReadError::StorageError)?;
+        let value: TendermintBytesPerBlock =
+            decode(value.ok_or(ReadError::ParametersMissing)?)
+                .map_err(ReadError::StorageTypeError)?;
+        (value, gas)
+    };
+
     // read vp whitelist
     let vp_whitelist_key = storage::get_vp_whitelist_storage_key();
     let (value, gas_vp) = storage
@@ -327,14 +348,23 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
+    let total_gas_cost = [gas_epoch, gas_tx, gas_vp, gas_time, gas_block_bytes]
+        .into_iter()
+        .fold(0u64, |accum, gas| {
+            accum
+                .checked_add(gas)
+                .expect("u64 overflow occurred while doing gas arithmetic")
+        });
+
     Ok((
         Parameters {
             epoch_duration,
             max_expected_time_per_block,
+            max_bytes_per_block,
             vp_whitelist,
             tx_whitelist,
         },
-        gas_epoch + gas_tx + gas_vp + gas_time,
+        total_gas_cost,
     ))
 }
 

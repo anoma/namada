@@ -33,6 +33,7 @@ pub mod genesis_config {
     use namada::ledger::pos::types::BasisPoints;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::address::Address;
+    use namada::types::chain::TendermintBytesPerBlock;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
@@ -536,6 +537,9 @@ pub mod genesis_config {
             })
             .collect();
 
+        const BLOCK_SIZE_EXPECT: &str =
+            "The acceptable size range for a Tendermint block is 1B - 100MB";
+
         let parameters = Parameters {
             epoch_duration: EpochDuration {
                 min_num_of_blocks: config.parameters.min_num_of_blocks,
@@ -549,6 +553,14 @@ pub mod genesis_config {
                     config.parameters.max_expected_time_per_block,
                 )
                 .into(),
+            max_bytes_per_block: TendermintBytesPerBlock::new(
+                config
+                    .parameters
+                    .max_bytes_per_block
+                    .try_into()
+                    .expect(BLOCK_SIZE_EXPECT),
+            )
+            .expect(BLOCK_SIZE_EXPECT),
             vp_whitelist: config.parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: config.parameters.tx_whitelist.unwrap_or_default(),
         };
@@ -809,6 +821,7 @@ pub fn genesis() -> Genesis {
             min_duration: namada::types::time::Duration::seconds(600).into(),
         },
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
+        max_bytes_per_block: Default::default(),
         vp_whitelist: vec![],
         tx_whitelist: vec![],
     };
