@@ -10,9 +10,10 @@ use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::masp::*;
+use namada::ledger::masp::ShieldedContext;
 
 use super::args;
-use crate::client::tx::{ShieldedContext, CLIShieldedUtils};
+use crate::client::tx::CLIShieldedUtils;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
