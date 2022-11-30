@@ -48,6 +48,8 @@ impl Default for TendermintBytesPerBlock {
 
 impl TendermintBytesPerBlock {
     /// The upper bound of a [`TendermintBytesPerBlock`] value.
+    ///
+    /// This value is equal to 100 MiB.
     pub const MAX: TendermintBlockSize = unsafe {
         // SAFETY: We are constructing a greater than zero
         // value, so the API contract is never violated.
@@ -61,6 +63,24 @@ impl TendermintBytesPerBlock {
     #[inline]
     pub fn get(self) -> u64 {
         self.inner.get()
+    }
+
+    /// Try to construct a new [`TendermintBytesPerBlock`] instance,
+    /// from the given `max_bytes` value.
+    ///
+    /// This function will return [`None`] if `max_bytes` is not within
+    /// the inclusive range of 1 to [`TendermintBytesPerBlock::MAX`].
+    #[inline]
+    pub fn new(max_bytes: u64) -> Option<Self> {
+        NonZeroU64::new(max_bytes)
+            .map(|inner| Self { inner })
+            .and_then(|value| {
+                if value.get() > (100 << 20) {
+                    None
+                } else {
+                    value
+                }
+            })
     }
 }
 
