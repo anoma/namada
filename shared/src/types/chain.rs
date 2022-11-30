@@ -4,7 +4,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -15,6 +15,54 @@ pub const CHAIN_ID_LENGTH: usize = 30;
 pub const CHAIN_ID_PREFIX_MAX_LEN: usize = 19;
 /// Separator between chain ID prefix and the generated hash
 pub const CHAIN_ID_PREFIX_SEP: char = '.';
+
+/// The value of the Tendermint maximum block size.
+#[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
+pub struct TendermintBytesPerBlock {
+    inner: NonZeroU64,
+}
+
+impl Default for TendermintBytesPerBlock {
+    #[inline]
+    fn default() -> Self {
+        // default value derived from tendermint genesis init
+        // = 21 MB
+        let inner = unsafe {
+            // SAFETY: The value is greater than zero.
+            NonZeroU64::new_unchecked(21 << 20)
+        };
+        Self { inner }
+    }
+}
+
+impl TendermintBytesPerBlock {
+    /// The upper bound of a [`TendermintBytesPerBlock`] value.
+    pub const MAX: TendermintBlockSize = unsafe {
+        // SAFETY: We are constructing a greater than zero
+        // value, so the API contract is never violated.
+        // The value itself is derived from the ABCI specs (100 MB).
+        const INNER: u64 = NonZeroU64::new_unchecked(100 << 20);
+
+        TendermintBytesPerBlock { inner: INNER }
+    };
+
+    /// Return the number of bytes as a [`u64`] value.
+    #[inline]
+    pub fn get(self) -> u64 {
+        self.inner.get()
+    }
+}
 
 /// Development default chain ID. Must be [`CHAIN_ID_LENGTH`] long.
 #[cfg(feature = "dev")]
