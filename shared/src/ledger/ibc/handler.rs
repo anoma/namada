@@ -939,7 +939,7 @@ pub trait IbcActions {
         if let Some(hash) = storage::token_hash_from_denom(&data.denom)
             .map_err(Error::IbcStorage)?
         {
-            let denom_key = storage::ibc_denom_key(&hash);
+            let denom_key = storage::ibc_denom_key(hash);
             let denom_bytes =
                 self.read_ibc_data(&denom_key)?.ok_or_else(|| {
                     Error::SendingToken(format!(

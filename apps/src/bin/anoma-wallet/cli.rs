@@ -455,8 +455,7 @@ fn address_or_alias_find(ctx: Context, args: args::AddressOrAliasFind) {
              message."
         );
     } else if args.alias.is_some() {
-        if let Some(address) =
-            wallet.find_address(&args.alias.as_ref().unwrap())
+        if let Some(address) = wallet.find_address(args.alias.as_ref().unwrap())
         {
             println!("Found address {}", address.to_pretty_string());
         } else {

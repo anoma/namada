@@ -858,13 +858,13 @@ pub trait PosBase {
         &mut self,
         params: &'a PosParams,
         validators: impl Iterator<
-                Item = &'a GenesisValidator<
-                    Self::Address,
-                    Self::TokenAmount,
-                    Self::PublicKey,
-                >,
-            > + Clone
-            + 'a,
+            Item = &'a GenesisValidator<
+                Self::Address,
+                Self::TokenAmount,
+                Self::PublicKey,
+            >,
+        > + Clone
+        + 'a,
         current_epoch: impl Into<Epoch>,
     ) -> Result<(), GenesisError> {
         let current_epoch = current_epoch.into();
@@ -1289,17 +1289,17 @@ where
 fn init_genesis<'a, Address, TokenAmount, TokenChange, PK>(
     params: &'a PosParams,
     validators: impl Iterator<Item = &'a GenesisValidator<Address, TokenAmount, PK>>
-        + Clone
-        + 'a,
+    + Clone
+    + 'a,
     current_epoch: Epoch,
 ) -> Result<
     GenesisData<
         impl Iterator<
-                Item = Result<
-                    GenesisValidatorData<Address, TokenAmount, TokenChange, PK>,
-                    GenesisError,
-                >,
-            > + 'a,
+            Item = Result<
+                GenesisValidatorData<Address, TokenAmount, TokenChange, PK>,
+                GenesisError,
+            >,
+        > + 'a,
         Address,
         TokenAmount,
         TokenChange,
@@ -2019,9 +2019,9 @@ fn update_validator_set<Address, TokenChange>(
                         validator_set.inactive.insert(validator_post);
                     }
                 } else {
-                    debug_assert!(validator_set
-                        .active
-                        .contains(&validator_pre));
+                    debug_assert!(
+                        validator_set.active.contains(&validator_pre)
+                    );
                     let max_inactive_validator =
                         validator_set.inactive.last_shim();
                     let max_bonded_stake = max_inactive_validator

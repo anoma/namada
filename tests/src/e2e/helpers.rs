@@ -52,7 +52,7 @@ pub fn get_actor_rpc(test: &Test, who: &Who) -> String {
         Who::Validator(_) => TendermintMode::Validator,
     };
     let config =
-        Config::load(&base_dir, &test.net.chain_id, Some(tendermint_mode));
+        Config::load(base_dir, &test.net.chain_id, Some(tendermint_mode));
     config.ledger.tendermint.rpc_address.to_string()
 }
 

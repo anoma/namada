@@ -638,11 +638,15 @@ mod tests {
         Set { value: Data, epoch: Epoch },
         UpdateFromOffset(UpdateFromOffset<Data>),
     }
+
+    /// Function for updating epoched data from an offset
+    pub type UpdateFn<Data> = Rc<dyn Fn(&mut Data, Epoch)>;
+
     /// These are the arguments of one of the constructors in
     /// [`EpochedTransition`]. It's not inlined because we need to manually
     /// implement `Debug`.
     struct UpdateFromOffset<Data> {
-        update_value: Rc<dyn Fn(&mut Data, Epoch)>,
+        update_value: UpdateFn<Data>,
         epoch: Epoch,
         offset: DynEpochOffset,
     }
@@ -889,12 +893,12 @@ mod tests {
                     // Post-conditions
                     assert_eq!(data.last_update, epoch);
                     assert_eq!(
-                        data.data[offset as usize],
+                        data.data[offset],
                         Some(value),
                         "The value at offset must be updated"
                     );
                     assert!(
-                        data.data.len() > offset as usize,
+                        data.data.len() > offset,
                         "The length of the data must be greater than the \
                          offset"
                     );
@@ -1191,7 +1195,7 @@ mod tests {
                          change"
                     );
                     assert!(
-                        data.data.len() > offset as usize,
+                        data.data.len() > offset,
                         "The length of the data must be greater than the \
                          offset"
                     );

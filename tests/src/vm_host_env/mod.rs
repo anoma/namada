@@ -1280,7 +1280,7 @@ mod tests {
         writes.extend(channel_writes);
         // the origin-specific token
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
-        let key_prefix = ibc_storage::ibc_token_prefix(&denom).unwrap();
+        let key_prefix = ibc_storage::ibc_token_prefix(denom).unwrap();
         let key = token::multitoken_balance_key(&key_prefix, &sender);
         let init_bal = Amount::from(1_000_000_000u64);
         writes.insert(key, init_bal.try_to_vec().unwrap());
@@ -1338,7 +1338,7 @@ mod tests {
         writes.extend(channel_writes);
         // the origin-specific token
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
-        let key_prefix = ibc_storage::ibc_token_prefix(&denom).unwrap();
+        let key_prefix = ibc_storage::ibc_token_prefix(denom).unwrap();
         let key = token::multitoken_balance_key(&key_prefix, &receiver);
         let init_bal = Amount::from(1_000_000_000u64);
         writes.insert(key, init_bal.try_to_vec().unwrap());

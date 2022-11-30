@@ -294,7 +294,7 @@ pub mod genesis_config {
 
         Validator {
             pos_data: GenesisValidator {
-                address: Address::decode(&config.address.as_ref().unwrap())
+                address: Address::decode(config.address.as_ref().unwrap())
                     .unwrap(),
                 tokens: token::Amount::whole(config.tokens.unwrap_or_default()),
                 consensus_key: config
@@ -369,8 +369,7 @@ pub mod genesis_config {
         let token_vp_config = wasm.get(token_vp_name).unwrap();
 
         TokenAccount {
-            address: Address::decode(&config.address.as_ref().unwrap())
-                .unwrap(),
+            address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             vp_code_path: token_vp_config.filename.to_owned(),
             vp_sha256: token_vp_config
                 .sha256
@@ -388,7 +387,7 @@ pub mod genesis_config {
                 .iter()
                 .map(|(alias_or_address, amount)| {
                     (
-                        match Address::decode(&alias_or_address) {
+                        match Address::decode(alias_or_address) {
                             Ok(address) => address,
                             Err(decode_err) => {
                                 if let Some(alias) =
@@ -451,8 +450,7 @@ pub mod genesis_config {
         let account_vp_config = wasm.get(account_vp_name).unwrap();
 
         EstablishedAccount {
-            address: Address::decode(&config.address.as_ref().unwrap())
-                .unwrap(),
+            address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             vp_code_path: account_vp_config.filename.to_owned(),
             vp_sha256: account_vp_config
                 .sha256
@@ -474,7 +472,7 @@ pub mod genesis_config {
                 .iter()
                 .map(|(address, hex)| {
                     (
-                        storage::Key::parse(&address).unwrap(),
+                        storage::Key::parse(address).unwrap(),
                         hex.to_bytes().unwrap(),
                     )
                 })
@@ -535,6 +533,7 @@ pub mod genesis_config {
             .iter()
             .map(|(name, cfg)| (name.clone(), load_implicit(cfg)))
             .collect();
+        #[allow(clippy::iter_kv_map)]
         let token_accounts = token
             .iter()
             .map(|(_name, cfg)| {
@@ -935,8 +934,8 @@ pub fn genesis() -> Genesis {
         ((&validator.account_key).into(), default_key_tokens),
     ]);
     let token_accounts = address::tokens()
-        .into_iter()
-        .map(|(address, _)| TokenAccount {
+        .into_keys()
+        .map(|address| TokenAccount {
             address,
             vp_code_path: vp_token_path.into(),
             vp_sha256: Default::default(),

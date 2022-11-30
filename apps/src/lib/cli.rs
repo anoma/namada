@@ -3419,6 +3419,7 @@ pub fn anoma_node_cli() -> Result<(cmds::AnomaNode, Context)> {
     cmds::AnomaNode::parse_or_print_help(app)
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum AnomaClient {
     WithoutContext(cmds::Utils, args::Global),
     WithContext(Box<(cmds::AnomaClientWithContext, Context)>),

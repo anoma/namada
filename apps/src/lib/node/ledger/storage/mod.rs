@@ -93,7 +93,7 @@ mod tests {
         assert_eq!(gas, key.len() as u64);
         let (result, gas) = storage.read(&key).expect("read failed");
         let read_value: u64 =
-            types::decode(&result.expect("value doesn't exist"))
+            types::decode(result.expect("value doesn't exist"))
                 .expect("decoding failed");
         assert_eq!(read_value, value);
         assert_eq!(gas, key.len() as u64 + value_bytes_len as u64);

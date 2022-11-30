@@ -283,7 +283,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         let sub_root = self.tree_mut(store_type).subtree_update(key, value)?;
         // update the base tree with the updated sub root without hashing
         if *store_type != StoreType::Base {
-            let base_key = H::hash(&store_type.to_string());
+            let base_key = H::hash(store_type.to_string());
             self.base.update(base_key.into(), sub_root)?;
         }
         Ok(())
@@ -310,7 +310,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
         let sub_root = self.tree_mut(&store_type).subtree_delete(&sub_key)?;
         if store_type != StoreType::Base {
-            let base_key = H::hash(&store_type.to_string());
+            let base_key = H::hash(store_type.to_string());
             self.base.update(base_key.into(), sub_root)?;
         }
         Ok(())

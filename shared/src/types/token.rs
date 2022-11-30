@@ -329,17 +329,12 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
 
 /// Check if the given storage key is a masp key
 pub fn is_masp_key(key: &Key) -> bool {
-    match &key.segments[..] {
+    matches!(&key.segments[..],
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if *addr == masp()
                 && (key == HEAD_TX_KEY
                     || key.starts_with(TX_KEY_PREFIX)
-                    || key.starts_with(PIN_KEY_PREFIX)) =>
-        {
-            true
-        }
-        _ => false,
-    }
+                    || key.starts_with(PIN_KEY_PREFIX)))
 }
 
 /// Check if the given storage key is multitoken balance key for the given

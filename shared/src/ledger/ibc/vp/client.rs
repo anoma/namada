@@ -488,7 +488,7 @@ where
             .iter_pre_next(&mut iter)
             .map_err(|_| Ics02Error::implementation_specific())?
         {
-            let key = Key::parse(&key)
+            let key = Key::parse(key)
                 .map_err(|_| Ics02Error::implementation_specific())?;
             let consensus_height = consensus_height(&key)
                 .map_err(|_| Ics02Error::implementation_specific())?;
@@ -529,7 +529,7 @@ where
             .iter_pre_next(&mut iter)
             .map_err(|_| Ics02Error::implementation_specific())?
         {
-            let key = Key::parse(&key)
+            let key = Key::parse(key)
                 .map_err(|_| Ics02Error::implementation_specific())?;
             let consensus_height = consensus_height(&key)
                 .map_err(|_| Ics02Error::implementation_specific())?;

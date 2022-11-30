@@ -148,7 +148,7 @@ where
                 Error::Denom(format!("Invalid denom: error {}", e))
             })?
         {
-            let denom_key = ibc_storage::ibc_denom_key(&token_hash);
+            let denom_key = ibc_storage::ibc_denom_key(token_hash);
             let denom_bytes = match self.ctx.read_bytes_pre(&denom_key) {
                 Ok(Some(v)) => v,
                 _ => {
@@ -174,7 +174,7 @@ where
             .denom
             .strip_prefix(&format!("{}/", ibc_storage::MULTITOKEN_STORAGE_KEY))
         {
-            let denom_key = ibc_storage::ibc_denom_key(&denom);
+            let denom_key = ibc_storage::ibc_denom_key(denom);
             match self.ctx.read_bytes_pre(&denom_key)? {
                 Some(v) => std::str::from_utf8(&v)
                     .map_err(|e| {

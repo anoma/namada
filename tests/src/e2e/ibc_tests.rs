@@ -800,7 +800,7 @@ fn transfer_back(
         "{}/{}/{}",
         port_channel_id_b.port_id, port_channel_id_b.channel_id, xan
     );
-    let hash = calc_hash(&denom_raw);
+    let hash = calc_hash(denom_raw);
     let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
     // Need the address prefix for ibc-transfer command
     let sub_prefix = format!(
@@ -1133,8 +1133,7 @@ fn check_tx_height(test: &Test, client: &mut AnomaCmd) -> Result<u32> {
         .rsplit_once(' ')
         .unwrap()
         .1
-        .replace('"', "")
-        .replace(',', "");
+        .replace(['"', ','], "");
     let height = height_str.parse().unwrap();
 
     let (_unread, matched) = client.exp_regex("\"code\": .*,")?;
@@ -1143,8 +1142,7 @@ fn check_tx_height(test: &Test, client: &mut AnomaCmd) -> Result<u32> {
         .rsplit_once(' ')
         .unwrap()
         .1
-        .replace('"', "")
-        .replace(',', "");
+        .replace(['"', ','], "");
     if code != "0" {
         return Err(eyre!(
             "The IBC transfer transaction failed: unread {}",
@@ -1299,7 +1297,7 @@ fn check_balances(
         "{}/{}/{}",
         &dest_port_channel_id.port_id, &dest_port_channel_id.channel_id, &token,
     );
-    let key_prefix = ibc_token_prefix(&denom)?;
+    let key_prefix = ibc_token_prefix(denom)?;
     let sub_prefix = key_prefix.sub_key().unwrap().to_string();
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
@@ -1409,7 +1407,7 @@ fn check_balances_after_back(
         "{}/{}/{}",
         &dest_port_channel_id.port_id, &dest_port_channel_id.channel_id, &token,
     );
-    let key_prefix = ibc_token_prefix(&denom)?;
+    let key_prefix = ibc_token_prefix(denom)?;
     let sub_prefix = key_prefix.sub_key().unwrap().to_string();
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![

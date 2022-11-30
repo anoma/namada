@@ -90,7 +90,7 @@ impl Context {
 
         let chain_dir = global_args
             .base_dir
-            .join(&global_config.default_chain_id.as_str());
+            .join(global_config.default_chain_id.as_str());
         let genesis_file_path = global_args
             .base_dir
             .join(format!("{}.toml", global_config.default_chain_id.as_str()));

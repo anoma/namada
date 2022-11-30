@@ -711,7 +711,7 @@ where
                     Error::Denom(format!("Invalid denom: error {}", e))
                 })?
             {
-                let denom_key = ibc_denom_key(&token_hash);
+                let denom_key = ibc_denom_key(token_hash);
                 let denom_bytes = match self.ctx.read_bytes_pre(&denom_key) {
                     Ok(Some(v)) => v,
                     _ => {

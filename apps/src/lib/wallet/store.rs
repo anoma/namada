@@ -421,7 +421,7 @@ impl Store {
         if alias.is_empty() {
             println!(
                 "Empty alias given, defaulting to {}.",
-                alias = Into::<Alias>::into(pkh.to_string())
+                Into::<Alias>::into(pkh.to_string())
             );
         }
         // Addresses and keypairs can share aliases, so first remove any
@@ -573,10 +573,7 @@ impl Store {
         address: Address,
     ) -> Option<Alias> {
         if alias.is_empty() {
-            println!(
-                "Empty alias given, defaulting to {}.",
-                alias = address.encode()
-            );
+            println!("Empty alias given, defaulting to {}.", address.encode());
         }
         // Addresses and keypairs can share aliases, so first remove any keys
         // sharing the same namesake before checking if alias has been used.

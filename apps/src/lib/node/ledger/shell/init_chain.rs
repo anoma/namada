@@ -77,7 +77,7 @@ where
             pos_inflation_amount,
         } = genesis.parameters;
         let implicit_vp =
-            wasm_loader::read_wasm(&self.wasm_dir, &implicit_vp_code_path)
+            wasm_loader::read_wasm(&self.wasm_dir, implicit_vp_code_path)
                 .map_err(Error::ReadingWasm)?;
         // In dev, we don't check the hash
         #[cfg(feature = "dev")]

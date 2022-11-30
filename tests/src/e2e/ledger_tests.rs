@@ -8,6 +8,7 @@
 //!
 //! To keep the temporary files created by a test, use env var
 //! `ANOMA_E2E_KEEP_TEMP=true`.
+#![allow(clippy::type_complexity)]
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -182,7 +183,7 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
     // 2. Kill the tendermint node
     sleep(1);
     Command::new("pkill")
-        .args(&["tendermint"])
+        .args(["tendermint"])
         .spawn()
         .expect("Test failed")
         .wait()
@@ -2676,7 +2677,7 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     let expected_file_name = format!("proposal-vote-{}", albert);
-    let expected_path_vote = test.test_dir.path().join(&expected_file_name);
+    let expected_path_vote = test.test_dir.path().join(expected_file_name);
     assert!(expected_path_vote.exists());
 
     // 4. Compute offline tally
@@ -2827,7 +2828,7 @@ fn test_genesis_validators() -> Result<()> {
             validator_1_alias,
         );
     let config = std::fs::read_to_string(
-        &namada_apps::client::utils::validator_pre_genesis_file(
+        namada_apps::client::utils::validator_pre_genesis_file(
             &validator_1_pre_genesis_dir,
         ),
     )
@@ -3142,7 +3143,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let validator_0_base_dir_copy =
         test.test_dir.path().join("validator-0-copy");
     fs_extra::dir::copy(
-        &validator_0_base_dir,
+        validator_0_base_dir,
         &validator_0_base_dir_copy,
         &fs_extra::dir::CopyOptions {
             copy_inside: true,

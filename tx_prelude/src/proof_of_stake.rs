@@ -182,7 +182,7 @@ impl namada_proof_of_stake::PosActions for Ctx {
         key: &Self::Address,
         value: Decimal,
     ) -> Result<(), Self::Error> {
-        self.write(&validator_max_commission_rate_change_key(key), &value)
+        self.write(&validator_max_commission_rate_change_key(key), value)
     }
 
     fn write_validator_deltas(
