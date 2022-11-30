@@ -14,6 +14,7 @@ use super::merkle_tree::{Amt, Error, Smt};
 use super::{ics23_specs, IBC_KEY_LIMIT};
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolTree;
 use crate::types::eth_bridge_pool::PendingTransfer;
+use crate::ledger::storage::merkle_tree::StorageBytes;
 use crate::types::hash::Hash;
 use crate::types::storage::{Key, MembershipProof, StringKey, TreeBytes};
 
@@ -26,7 +27,7 @@ pub trait SubTreeRead {
     fn subtree_membership_proof(
         &self,
         keys: &[Key],
-        values: Vec<Vec<u8>>,
+        values: Vec<StorageBytes>,
     ) -> Result<MembershipProof, Error>;
 }
 
@@ -54,7 +55,7 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
     fn subtree_membership_proof(
         &self,
         keys: &[Key],
-        mut values: Vec<Vec<u8>>,
+        mut values: Vec<StorageBytes>,
     ) -> Result<MembershipProof, Error> {
         if keys.len() != 1 || values.len() != 1 {
             return Err(Error::Ics23MultiLeaf);
@@ -111,7 +112,7 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
     fn subtree_membership_proof(
         &self,
         keys: &[Key],
-        _: Vec<Vec<u8>>,
+        _: Vec<StorageBytes>,
     ) -> Result<MembershipProof, Error> {
         if keys.len() != 1 {
             return Err(Error::Ics23MultiLeaf);
@@ -165,7 +166,7 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
     fn subtree_membership_proof(
         &self,
         _: &[Key],
-        values: Vec<Vec<u8>>,
+        values: Vec<StorageBytes>,
     ) -> Result<MembershipProof, Error> {
         let values = values
             .iter()
