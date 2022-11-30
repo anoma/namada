@@ -41,6 +41,14 @@ check:
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
+check-abcipp:
+	$(cargo) check \
+		--workspace \
+		--exclude namada_tests \
+		--all-targets \
+		--no-default-features \
+		--features "abcipp ibc-mocks-abcipp testing"
+
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
@@ -60,7 +68,7 @@ clippy-abcipp:
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" && \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" && \
 	$(cargo) +$(nightly) clippy \
 		--all-targets \
 		--manifest-path ./vm_env/Cargo.toml \

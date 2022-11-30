@@ -4,25 +4,14 @@ use std::hash::{Hash, Hasher};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use prost::Message;
 use serde::{Deserialize, Serialize};
-#[cfg(not(feature = "ABCI"))]
-#[cfg(feature = "ferveo-tpke")]
-use tendermint_proto::abci::Event;
-#[cfg(not(feature = "ABCI"))]
-#[cfg(feature = "ferveo-tpke")]
-use tendermint_proto::abci::EventAttribute;
-#[cfg(not(feature = "ABCI"))]
-use tendermint_proto::abci::ResponseDeliverTx;
-#[cfg(feature = "ABCI")]
-#[cfg(feature = "ferveo-tpke")]
-use tendermint_proto_abci::abci::Event;
-#[cfg(feature = "ABCI")]
-#[cfg(feature = "ferveo-tpke")]
-use tendermint_proto_abci::abci::EventAttribute;
-#[cfg(feature = "ABCI")]
-use tendermint_proto_abci::abci::ResponseDeliverTx;
 use thiserror::Error;
 
 use super::generated::types;
+#[cfg(feature = "ferveo-tpke")]
+use crate::tendermint_proto::abci::Event;
+#[cfg(feature = "ferveo-tpke")]
+use crate::tendermint_proto::abci::EventAttribute;
+use crate::tendermint_proto::abci::ResponseDeliverTx;
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]

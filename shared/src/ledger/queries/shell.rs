@@ -2,7 +2,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
-use tendermint::merkle::proof::Proof;
 
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -11,6 +10,7 @@ use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
+use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
