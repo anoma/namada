@@ -51,6 +51,9 @@ ibc-relayer = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "f4703dfe2
 # patched to a commit on the `eth-bridge-integration` branch of our fork
 tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "fcc0014d0bda707109901abfa1b2f782d242f082"}
 
+# patched to the yanked 1.2.0 until masp updates bitvec
+funty = { git = "https://github.com/bitvecto-rs/funty/", rev = "7ef0d890fbcd8b3def1635ac1a877fc298488446" }
+
 [profile.release]
 lto = true
 opt-level = 3
