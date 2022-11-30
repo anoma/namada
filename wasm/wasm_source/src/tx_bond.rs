@@ -17,7 +17,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 mod tests {
     use std::collections::HashMap;
 
-    use namada::ledger::pos::PosParams;
+    use namada::ledger::pos::{BondId, GenesisValidator, PosParams, PosVP};
+    use namada::proof_of_stake::types::Bond;
     use namada::proto::Tx;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
@@ -32,8 +33,6 @@ mod tests {
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::token;
-    use namada_vp_prelude::proof_of_stake::types::Bond;
-    use namada_vp_prelude::proof_of_stake::{BondId, GenesisValidator, PosVP};
     use proptest::prelude::*;
     use rust_decimal;
 
@@ -204,7 +203,7 @@ mod tests {
             // A delegation is applied at pipeline offset
             // Check that bond is empty before pipeline offset
             for epoch in 0..pos_params.pipeline_len {
-                let bond: Option<Bond<token::Amount>> = bonds_post.get(epoch);
+                let bond: Option<Bond> = bonds_post.get(epoch);
                 assert!(
                     bond.is_none(),
                     "Delegation before pipeline offset should be empty - \
@@ -213,13 +212,10 @@ mod tests {
             }
             // Check that bond is updated after the pipeline length
             for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
-                let start_epoch =
-                    namada_tx_prelude::proof_of_stake::types::Epoch::from(
-                        pos_params.pipeline_len,
-                    );
+                let start_epoch = Epoch::from(pos_params.pipeline_len);
                 let expected_bond =
                     HashMap::from_iter([(start_epoch, bond.amount)]);
-                let bond: Bond<token::Amount> = bonds_post.get(epoch).unwrap();
+                let bond: Bond = bonds_post.get(epoch).unwrap();
                 assert_eq!(
                     bond.pos_deltas, expected_bond,
                     "Delegation at and after pipeline offset should be equal \
@@ -230,12 +226,11 @@ mod tests {
             // This is a self-bond
             // Check that a bond already exists from genesis with initial stake
             // for the validator
-            let genesis_epoch =
-                namada_tx_prelude::proof_of_stake::types::Epoch::from(0);
+            let genesis_epoch = Epoch::from(0);
             for epoch in 0..pos_params.pipeline_len {
                 let expected_bond =
                     HashMap::from_iter([(genesis_epoch, initial_stake)]);
-                let bond: Bond<token::Amount> = bonds_post
+                let bond: Bond = bonds_post
                     .get(epoch)
                     .expect("Genesis validator should already have self-bond");
                 assert_eq!(
@@ -246,15 +241,12 @@ mod tests {
             }
             // Check that the bond is updated after the pipeline length
             for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
-                let start_epoch =
-                    namada_tx_prelude::proof_of_stake::types::Epoch::from(
-                        pos_params.pipeline_len,
-                    );
+                let start_epoch = Epoch::from(pos_params.pipeline_len);
                 let expected_bond = HashMap::from_iter([
                     (genesis_epoch, initial_stake),
                     (start_epoch, bond.amount),
                 ]);
-                let bond: Bond<token::Amount> = bonds_post.get(epoch).unwrap();
+                let bond: Bond = bonds_post.get(epoch).unwrap();
                 assert_eq!(
                     bond.pos_deltas, expected_bond,
                     "Self-bond at and after pipeline offset should contain \

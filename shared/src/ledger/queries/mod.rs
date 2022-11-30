@@ -87,7 +87,7 @@ pub fn require_no_data(request: &RequestQuery) -> storage_api::Result<()> {
     Ok(())
 }
 
-#[cfg(any(test, feature = "tendermint-rpc"))]
+#[cfg(any(feature = "tendermint-rpc", feature = "tendermint-rpc-abcipp",))]
 /// Provides [`Client`] implementation for Tendermint RPC client
 pub mod tm {
     use thiserror::Error;
@@ -135,15 +135,14 @@ pub mod tm {
                 prove,
             )
             .await?;
+            use crate::tendermint::abci::Code;
             match response.code {
-                crate::tendermint::abci::Code::Ok => Ok(EncodedResponseQuery {
+                Code::Ok => Ok(EncodedResponseQuery {
                     data: response.value,
                     info: response.info,
                     proof: response.proof,
                 }),
-                crate::tendermint::abci::Code::Err(code) => {
-                    Err(Error::Query(response.info, code))
-                }
+                Code::Err(code) => Err(Error::Query(response.info, code)),
             }
         }
     }

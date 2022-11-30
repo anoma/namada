@@ -9,7 +9,7 @@ pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::types::{self, Slash, Slashes, ValidatorStates};
 use namada_proof_of_stake::validation::validate;
-use namada_proof_of_stake::{validation, PosReadOnly};
+use namada_proof_of_stake::{impl_pos_read_only, validation, PosReadOnly};
 use rust_decimal::Decimal;
 use thiserror::Error;
 
@@ -20,12 +20,11 @@ use super::{
     validator_consensus_key_key, validator_deltas_key,
     validator_max_commission_rate_change_key, validator_set_key,
     validator_slashes_key, validator_state_key, BondId, Bonds, CommissionRates,
-    Unbonds, ValidatorConsensusKeys, ValidatorDeltas, ValidatorSets,
+    TotalDeltas, Unbonds, ValidatorConsensusKeys, ValidatorDeltas,
+    ValidatorSets,
 };
-use crate::impl_pos_read_only;
-use crate::ledger::governance;
 use crate::ledger::native_vp::{
-    self, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
+    self, governance, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
 };
 use crate::ledger::pos::{
     is_validator_address_raw_hash_key, is_validator_commission_rate_key,
@@ -33,7 +32,7 @@ use crate::ledger::pos::{
     is_validator_max_commission_rate_change_key, is_validator_state_key,
 };
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::ledger::storage_api::{self, StorageRead};
+use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::types::token;
@@ -117,7 +116,7 @@ where
         use validation::ValidatorUpdate::*;
 
         let addr = Address::Internal(Self::ADDR);
-        let mut changes: Vec<DataUpdate<_, _, _, _>> = vec![];
+        let mut changes: Vec<DataUpdate> = vec![];
         let current_epoch = self.ctx.pre().get_block_epoch()?;
         let staking_token_address = self.ctx.pre().get_native_token()?;
 
@@ -306,7 +305,6 @@ where
 }
 
 impl_pos_read_only! {
-    type Error = storage_api::Error;
     impl<'f, 'a, DB, H, CA> PosReadOnly for CtxPreStorageRead<'f, 'a, DB, H, CA>
         where
             DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
@@ -315,7 +313,6 @@ impl_pos_read_only! {
 }
 
 impl_pos_read_only! {
-    type Error = storage_api::Error;
     impl<'f, 'a, DB, H, CA> PosReadOnly for CtxPostStorageRead<'f, 'a, DB, H, CA>
         where
             DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,

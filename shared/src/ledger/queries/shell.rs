@@ -2,6 +2,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_core::types::address::Address;
+use namada_core::types::hash::Hash;
+use namada_core::types::storage::BlockResults;
 
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -11,9 +14,7 @@ use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::ledger::storage_api::{self, ResultExt, StorageRead};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::address::Address;
-use crate::types::hash::Hash;
-use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
+use crate::types::storage::{self, Epoch, PrefixValue};
 #[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 
@@ -262,7 +263,7 @@ where
     let proof = if request.prove {
         let mut ops = vec![];
         for PrefixValue { key, value } in &data {
-            let mut proof = ctx
+            let mut proof: crate::tendermint::merkle::proof::Proof = ctx
                 .storage
                 .get_existence_proof(key, value.clone().into(), request.height)
                 .into_storage_result()?;

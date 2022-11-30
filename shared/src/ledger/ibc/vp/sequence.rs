@@ -1,5 +1,6 @@
 //! IBC validity predicate for sequences
 
+use namada_core::ledger::ibc::actions::packet_from_message;
 use thiserror::Error;
 
 use super::super::storage::{port_channel_id, Error as IbcStorageError};
@@ -7,7 +8,6 @@ use super::Ibc;
 use crate::ibc::core::ics04_channel::channel::Order;
 use crate::ibc::core::ics04_channel::context::ChannelReader;
 use crate::ibc::core::ics24_host::identifier::PortChannelId;
-use crate::ledger::ibc::handler::packet_from_message;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::types::ibc::data::{Error as IbcDataError, IbcMessage};
 use crate::types::storage::Key;
