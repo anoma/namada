@@ -55,6 +55,9 @@ pub enum Error {
 /// Result for functions that may fail
 type Result<T> = std::result::Result<T, Error>;
 
+/// Type alias for bytes to be put into the Merkle storage
+pub(super) type StorageBytes = Vec<u8>;
+
 /// Type aliases for the different merkle trees and backing stores
 pub type SmtStore = DefaultStore<SmtHash, Hash, 32>;
 pub type AmtStore = DefaultStore<StringKey, TreeBytes, IBC_KEY_LIMIT>;
@@ -321,7 +324,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             .subtree_update(key, value.as_ref())?;
         // update the base tree with the updated sub root without hashing
         if *store_type != StoreType::Base {
-            let base_key = H::hash(&store_type.to_string());
+            let base_key = H::hash(store_type.to_string());
             self.base.update(base_key.into(), sub_root)?;
         }
         Ok(())
@@ -344,7 +347,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
         let sub_root = self.tree_mut(&store_type).subtree_delete(&sub_key)?;
         if store_type != StoreType::Base {
-            let base_key = H::hash(&store_type.to_string());
+            let base_key = H::hash(store_type.to_string());
             self.base.update(base_key.into(), sub_root)?;
         }
         Ok(())
@@ -373,7 +376,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     pub fn get_sub_tree_existence_proof(
         &self,
         keys: &[Key],
-        values: Vec<Vec<u8>>,
+        values: Vec<StorageBytes>,
     ) -> Result<MembershipProof> {
         let first_key = keys.iter().next().ok_or_else(|| {
             Error::InvalidMerkleKey(
