@@ -63,6 +63,7 @@ use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;
 use sha2::Digest;
 use tokio::time::{Duration, Instant};
+use async_trait::async_trait;
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -387,6 +388,170 @@ pub async fn submit_init_validator(
     }
 }
 
+#[async_trait]
+pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + Clone {
+    async fn query_storage_value<T: Send>(
+        &self,
+        key: &storage::Key,
+    ) -> Option<T>
+    where
+        T: BorshDeserialize;
+
+    async fn query_epoch(&self) -> Epoch;
+
+    //fn download_parameters() -> Result<(), Error>;
+
+    fn local_tx_prover(&self) -> LocalTxProver;
+
+    fn load(self) -> std::io::Result<ShieldedContext<Self>>;
+
+    fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()>;
+
+    async fn query_conversion(
+        &self,
+        asset_type: AssetType,
+    ) -> Option<(
+        Address,
+        Epoch,
+        masp_primitives::transaction::components::Amount,
+        MerklePath<Node>,
+    )>;
+}
+
+/// Shielded context file name
+const FILE_NAME: &str = "shielded.dat";
+const TMP_FILE_NAME: &str = "shielded.tmp";
+
+#[derive(Debug, BorshSerialize, BorshDeserialize, Clone)]
+pub struct CLIShieldedUtils {
+    #[borsh_skip]
+    context_dir: PathBuf,
+    #[borsh_skip]
+    pub ledger_address: Option<TendermintAddress>,
+}
+
+impl CLIShieldedUtils {
+    /// Initialize a shielded transaction context that identifies notes
+    /// decryptable by any viewing key in the given set
+    pub fn new(
+        context_dir: PathBuf,
+    ) -> ShieldedContext<Self> {
+        // Make sure that MASP parameters are downloaded to enable MASP
+        // transaction building and verification later on
+        let params_dir = masp::get_params_dir();
+        let spend_path = params_dir.join(masp::SPEND_NAME);
+        let convert_path = params_dir.join(masp::CONVERT_NAME);
+        let output_path = params_dir.join(masp::OUTPUT_NAME);
+        if !(spend_path.exists()
+            && convert_path.exists()
+            && output_path.exists())
+        {
+            println!("MASP parameters not present, downloading...");
+            masp_proofs::download_parameters()
+                .expect("MASP parameters not present or downloadable");
+            println!("MASP parameter download complete, resuming execution...");
+        }
+        // Finally initialize a shielded context with the supplied directory
+        let utils = Self { context_dir, ledger_address: None };
+        ShieldedContext { utils, ..Default::default() }
+    }
+}
+
+impl Default for CLIShieldedUtils {
+    fn default() -> Self {
+        Self { context_dir: PathBuf::from(FILE_NAME), ledger_address: None }
+    }
+}
+
+#[async_trait]
+impl ShieldedUtils for CLIShieldedUtils {
+    async fn query_storage_value<T: Send>(
+        &self,
+        key: &storage::Key,
+    ) -> Option<T>
+    where T: BorshDeserialize {
+        let client = HttpClient::new(self.ledger_address.clone().unwrap()).unwrap();
+        query_storage_value::<T>(&client, &key).await
+    }
+
+    async fn query_epoch(&self) -> Epoch {
+        rpc::query_epoch(args::Query {
+            ledger_address: self.ledger_address.clone().unwrap()
+        }).await
+    }
+
+    fn local_tx_prover(&self) -> LocalTxProver {
+        if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
+        {
+            let params_dir = PathBuf::from(params_dir);
+            let spend_path = params_dir.join(masp::SPEND_NAME);
+            let convert_path = params_dir.join(masp::CONVERT_NAME);
+            let output_path = params_dir.join(masp::OUTPUT_NAME);
+            LocalTxProver::new(&spend_path, &output_path, &convert_path)
+        } else {
+            LocalTxProver::with_default_location()
+                .expect("unable to load MASP Parameters")
+        }
+    }
+
+    /// Try to load the last saved shielded context from the given context
+    /// directory. If this fails, then leave the current context unchanged.
+    fn load(self) -> std::io::Result<ShieldedContext<Self>> {
+        // Try to load shielded context from file
+        let mut ctx_file = File::open(self.context_dir.join(FILE_NAME))?;
+        let mut bytes = Vec::new();
+        ctx_file.read_to_end(&mut bytes)?;
+        let mut new_ctx = ShieldedContext::deserialize(&mut &bytes[..])?;
+        // Associate the originating context directory with the
+        // shielded context under construction
+        new_ctx.utils = self;
+        Ok(new_ctx)
+    }
+
+    /// Save this shielded context into its associated context directory
+    fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()> {
+        // TODO: use mktemp crate?
+        let tmp_path = self.context_dir.join(TMP_FILE_NAME);
+        {
+            // First serialize the shielded context into a temporary file.
+            // Inability to create this file implies a simultaneuous write is in
+            // progress. In this case, immediately fail. This is unproblematic
+            // because the data intended to be stored can always be re-fetched
+            // from the blockchain.
+            let mut ctx_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(tmp_path.clone())?;
+            let mut bytes = Vec::new();
+            ctx.serialize(&mut bytes)
+                .expect("cannot serialize shielded context");
+            ctx_file.write_all(&bytes[..])?;
+        }
+        // Atomically update the old shielded context file with new data.
+        // Atomicity is required to prevent other client instances from reading
+        // corrupt data.
+        std::fs::rename(tmp_path.clone(), self.context_dir.join(FILE_NAME))?;
+        // Finally, remove our temporary file to allow future saving of shielded
+        // contexts.
+        std::fs::remove_file(tmp_path)?;
+        Ok(())
+    }
+
+    /// Query a conversion.
+    async fn query_conversion(
+        &self,
+        asset_type: AssetType,
+    ) -> Option<(
+        Address,
+        Epoch,
+        masp_primitives::transaction::components::Amount,
+        MerklePath<Node>,
+    )> {
+        let client = HttpClient::new(self.ledger_address.clone().unwrap()).unwrap();
+        query_conversion(client, asset_type).await
+    }
+}
+
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
 pub fn to_viewing_key(esk: &ExtendedSpendingKey) -> FullViewingKey {
     ExtendedFullViewingKey::from(esk).fvk
@@ -453,10 +618,10 @@ pub type TransactionDelta = HashMap<ViewingKey, Amount>;
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
-pub struct ShieldedContext {
+pub struct ShieldedContext<U: ShieldedUtils> {
     /// Location where this shielded context is saved
     #[borsh_skip]
-    context_dir: PathBuf,
+    pub utils: U,
     /// The last transaction index to be processed in this context
     last_txidx: u64,
     /// The commitment tree produced by scanning all transactions up to tx_pos
@@ -486,16 +651,12 @@ pub struct ShieldedContext {
     vk_map: HashMap<usize, ViewingKey>,
 }
 
-/// Shielded context file name
-const FILE_NAME: &str = "shielded.dat";
-const TMP_FILE_NAME: &str = "shielded.tmp";
-
 /// Default implementation to ease construction of TxContexts. Derive cannot be
 /// used here due to CommitmentTree not implementing Default.
-impl Default for ShieldedContext {
-    fn default() -> ShieldedContext {
-        ShieldedContext {
-            context_dir: PathBuf::from(FILE_NAME),
+impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
+    fn default() -> ShieldedContext<U> {
+        ShieldedContext::<U> {
+            utils: U::default(),
             last_txidx: u64::default(),
             tree: CommitmentTree::empty(),
             pos_map: HashMap::default(),
@@ -512,55 +673,24 @@ impl Default for ShieldedContext {
     }
 }
 
-impl ShieldedContext {
+impl<U: ShieldedUtils> ShieldedContext<U> {
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
     pub fn load(&mut self) -> std::io::Result<()> {
-        // Try to load shielded context from file
-        let mut ctx_file = File::open(self.context_dir.join(FILE_NAME))?;
-        let mut bytes = Vec::new();
-        ctx_file.read_to_end(&mut bytes)?;
-        let mut new_ctx = Self::deserialize(&mut &bytes[..])?;
-        // Associate the originating context directory with the
-        // shielded context under construction
-        new_ctx.context_dir = self.context_dir.clone();
+        let new_ctx = self.utils.clone().load()?;
         *self = new_ctx;
         Ok(())
     }
 
     /// Save this shielded context into its associated context directory
     pub fn save(&self) -> std::io::Result<()> {
-        // TODO: use mktemp crate?
-        let tmp_path = self.context_dir.join(TMP_FILE_NAME);
-        {
-            // First serialize the shielded context into a temporary file.
-            // Inability to create this file implies a simultaneuous write is in
-            // progress. In this case, immediately fail. This is unproblematic
-            // because the data intended to be stored can always be re-fetched
-            // from the blockchain.
-            let mut ctx_file = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(tmp_path.clone())?;
-            let mut bytes = Vec::new();
-            self.serialize(&mut bytes)
-                .expect("cannot serialize shielded context");
-            ctx_file.write_all(&bytes[..])?;
-        }
-        // Atomically update the old shielded context file with new data.
-        // Atomicity is required to prevent other client instances from reading
-        // corrupt data.
-        std::fs::rename(tmp_path.clone(), self.context_dir.join(FILE_NAME))?;
-        // Finally, remove our temporary file to allow future saving of shielded
-        // contexts.
-        std::fs::remove_file(tmp_path)?;
-        Ok(())
+        self.utils.save(self)
     }
 
     /// Merge data from the given shielded context into the current shielded
     /// context. It must be the case that the two shielded contexts share the
     /// same last transaction ID and share identical commitment trees.
-    pub fn merge(&mut self, new_ctx: ShieldedContext) {
+    pub fn merge(&mut self, new_ctx: ShieldedContext<U>) {
         debug_assert_eq!(self.last_txidx, new_ctx.last_txidx);
         // Merge by simply extending maps. Identical keys should contain
         // identical values, so overwriting should not be problematic.
@@ -590,7 +720,6 @@ impl ShieldedContext {
     /// ShieldedContext
     pub async fn fetch(
         &mut self,
-        ledger_address: &TendermintAddress,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) {
@@ -615,10 +744,10 @@ impl ShieldedContext {
         let (txs, mut tx_iter);
         if !unknown_keys.is_empty() {
             // Load all transactions accepted until this point
-            txs = Self::fetch_shielded_transfers(ledger_address, 0).await;
+            txs = Self::fetch_shielded_transfers(&self.utils, 0).await;
             tx_iter = txs.iter();
             // Do this by constructing a shielding context only for unknown keys
-            let mut tx_ctx = ShieldedContext::new(self.context_dir.clone());
+            let mut tx_ctx = Self { utils: self.utils.clone(), ..Default::default() };
             for vk in unknown_keys {
                 tx_ctx.pos_map.entry(vk).or_insert_with(HashSet::new);
             }
@@ -636,7 +765,7 @@ impl ShieldedContext {
         } else {
             // Load only transactions accepted from last_txid until this point
             txs =
-                Self::fetch_shielded_transfers(ledger_address, self.last_txidx)
+                Self::fetch_shielded_transfers(&self.utils, self.last_txidx)
                     .await;
             tx_iter = txs.iter();
         }
@@ -647,41 +776,15 @@ impl ShieldedContext {
         }
     }
 
-    /// Initialize a shielded transaction context that identifies notes
-    /// decryptable by any viewing key in the given set
-    pub fn new(context_dir: PathBuf) -> ShieldedContext {
-        // Make sure that MASP parameters are downloaded to enable MASP
-        // transaction building and verification later on
-        let params_dir = masp::get_params_dir();
-        let spend_path = params_dir.join(masp::SPEND_NAME);
-        let convert_path = params_dir.join(masp::CONVERT_NAME);
-        let output_path = params_dir.join(masp::OUTPUT_NAME);
-        if !(spend_path.exists()
-            && convert_path.exists()
-            && output_path.exists())
-        {
-            println!("MASP parameters not present, downloading...");
-            masp_proofs::download_parameters()
-                .expect("MASP parameters not present or downloadable");
-            println!("MASP parameter download complete, resuming execution...");
-        }
-        // Finally initialize a shielded context with the supplied directory
-        Self {
-            context_dir,
-            ..Default::default()
-        }
-    }
-
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from the ledger. The ledger conceptually stores
     /// transactions as a vector. More concretely, the HEAD_TX_KEY location
     /// stores the index of the last accepted transaction and each transaction
     /// is stored at a key derived from its index.
     pub async fn fetch_shielded_transfers(
-        ledger_address: &TendermintAddress,
+        utils: &U,
         last_txidx: u64,
     ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer)> {
-        let client = HttpClient::new(ledger_address.clone()).unwrap();
         // The address of the MASP account
         let masp_addr = masp();
         // Construct the key where last transaction pointer is stored
@@ -689,7 +792,7 @@ impl ShieldedContext {
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");
         // Query for the index of the last accepted transaction
-        let head_txidx = query_storage_value::<u64>(&client, &head_tx_key)
+        let head_txidx = utils.query_storage_value::<u64>(&head_tx_key)
             .await
             .unwrap_or(0);
         let mut shielded_txs = BTreeMap::new();
@@ -701,8 +804,7 @@ impl ShieldedContext {
                 .expect("Cannot obtain a storage key");
             // Obtain the current transaction
             let (tx_epoch, tx_height, tx_index, current_tx) =
-                query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
-                    &client,
+                utils.query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
                     &current_tx_key,
                 )
                 .await
@@ -863,7 +965,6 @@ impl ShieldedContext {
     /// if it is found.
     pub async fn decode_asset_type(
         &mut self,
-        client: HttpClient,
         asset_type: AssetType,
     ) -> Option<(Address, Epoch)> {
         // Try to find the decoding in the cache
@@ -872,7 +973,7 @@ impl ShieldedContext {
         }
         // Query for the ID of the last accepted transaction
         let (addr, ep, _conv, _path): (Address, _, Amount, MerklePath<Node>) =
-            query_conversion(client, asset_type).await?;
+            self.utils.query_conversion(asset_type).await?;
         self.asset_types.insert(asset_type, (addr.clone(), ep));
         Some((addr, ep))
     }
@@ -881,7 +982,6 @@ impl ShieldedContext {
     /// type and cache it.
     async fn query_allowed_conversion<'a>(
         &'a mut self,
-        client: HttpClient,
         asset_type: AssetType,
         conversions: &'a mut Conversions,
     ) -> Option<&'a mut (AllowedConversion, MerklePath<Node>, i64)> {
@@ -890,7 +990,7 @@ impl ShieldedContext {
             Entry::Vacant(conv_entry) => {
                 // Query for the ID of the last accepted transaction
                 let (addr, ep, conv, path): (Address, _, _, _) =
-                    query_conversion(client, asset_type).await?;
+                    self.utils.query_conversion(asset_type).await?;
                 self.asset_types.insert(asset_type, (addr, ep));
                 // If the conversion is 0, then we just have a pure decoding
                 if conv == Amount::zero() {
@@ -908,7 +1008,6 @@ impl ShieldedContext {
     /// balance and hence we return None.
     pub async fn compute_exchanged_balance(
         &mut self,
-        client: HttpClient,
         vk: &ViewingKey,
         target_epoch: Epoch,
     ) -> Option<Amount> {
@@ -917,7 +1016,6 @@ impl ShieldedContext {
             // And then exchange balance into current asset types
             Some(
                 self.compute_exchanged_amount(
-                    client,
                     balance,
                     target_epoch,
                     HashMap::new(),
@@ -973,7 +1071,6 @@ impl ShieldedContext {
     /// terms of the latest asset types.
     pub async fn compute_exchanged_amount(
         &mut self,
-        client: HttpClient,
         mut input: Amount,
         target_epoch: Epoch,
         mut conversions: Conversions,
@@ -985,14 +1082,13 @@ impl ShieldedContext {
             input.components().next().map(cloned_pair)
         {
             let target_asset_type = self
-                .decode_asset_type(client.clone(), asset_type)
+                .decode_asset_type(asset_type)
                 .await
                 .map(|(addr, _epoch)| make_asset_type(target_epoch, &addr))
                 .unwrap_or(asset_type);
             let at_target_asset_type = asset_type == target_asset_type;
             if let (Some((conv, _wit, usage)), false) = (
                 self.query_allowed_conversion(
-                    client.clone(),
                     asset_type,
                     &mut conversions,
                 )
@@ -1015,7 +1111,6 @@ impl ShieldedContext {
                 );
             } else if let (Some((conv, _wit, usage)), false) = (
                 self.query_allowed_conversion(
-                    client.clone(),
                     target_asset_type,
                     &mut conversions,
                 )
@@ -1053,7 +1148,6 @@ impl ShieldedContext {
     /// achieve the total value.
     pub async fn collect_unspent_notes(
         &mut self,
-        ledger_address: TendermintAddress,
         vk: &ViewingKey,
         target: Amount,
         target_epoch: Epoch,
@@ -1063,7 +1157,6 @@ impl ShieldedContext {
         Conversions,
     ) {
         // Establish connection with which to do exchange rate queries
-        let client = HttpClient::new(ledger_address.clone()).unwrap();
         let mut conversions = HashMap::new();
         let mut val_acc = Amount::zero();
         let mut notes = Vec::new();
@@ -1087,7 +1180,6 @@ impl ShieldedContext {
                     .expect("received note has invalid value or asset type");
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(
-                        client.clone(),
                         pre_contr,
                         target_epoch,
                         conversions.clone(),
@@ -1122,7 +1214,7 @@ impl ShieldedContext {
     /// the given payment address fails with
     /// `PinnedBalanceError::NoTransactionPinned`.
     pub async fn compute_pinned_balance(
-        ledger_address: &TendermintAddress,
+        utils: &U,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
     ) -> Result<(Amount, Epoch), PinnedBalanceError> {
@@ -1137,7 +1229,6 @@ impl ShieldedContext {
             Some(counter_owner) if counter_owner == owner.into() => {}
             _ => return Err(PinnedBalanceError::InvalidViewingKey),
         }
-        let client = HttpClient::new(ledger_address.clone()).unwrap();
         // The address of the MASP account
         let masp_addr = masp();
         // Construct the key for where the transaction ID would be stored
@@ -1145,7 +1236,7 @@ impl ShieldedContext {
             .push(&(PIN_KEY_PREFIX.to_owned() + &owner.hash()))
             .expect("Cannot obtain a storage key");
         // Obtain the transaction pointer at the key
-        let txidx = query_storage_value::<u64>(&client, &pin_key)
+        let txidx = utils.query_storage_value::<u64>(&pin_key)
             .await
             .ok_or(PinnedBalanceError::NoTransactionPinned)?;
         // Construct the key for where the pinned transaction is stored
@@ -1154,8 +1245,8 @@ impl ShieldedContext {
             .expect("Cannot obtain a storage key");
         // Obtain the pointed to transaction
         let (tx_epoch, _tx_height, _tx_index, tx) =
-            query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
-                &client, &tx_key,
+            utils.query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+                &tx_key,
             )
             .await
             .expect("Ill-formed epoch, transaction pair");
@@ -1196,19 +1287,16 @@ impl ShieldedContext {
     /// would have been displayed in the epoch of the transaction.
     pub async fn compute_exchanged_pinned_balance(
         &mut self,
-        ledger_address: &TendermintAddress,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
     ) -> Result<(Amount, Epoch), PinnedBalanceError> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
-            Self::compute_pinned_balance(ledger_address, owner, viewing_key)
+            Self::compute_pinned_balance(&self.utils, owner, viewing_key)
                 .await?;
-        // Establish connection with which to do exchange rate queries
-        let client = HttpClient::new(ledger_address.clone()).unwrap();
         // Finally, exchange the balance to the transaction's epoch
         Ok((
-            self.compute_exchanged_amount(client, amt, ep, HashMap::new())
+            self.compute_exchanged_amount(amt, ep, HashMap::new())
                 .await
                 .0,
             ep,
@@ -1220,7 +1308,6 @@ impl ShieldedContext {
     /// the given epoch are ignored.
     pub async fn decode_amount(
         &mut self,
-        client: HttpClient,
         amt: Amount,
         target_epoch: Epoch,
     ) -> Amount<Address> {
@@ -1228,7 +1315,7 @@ impl ShieldedContext {
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded =
-                self.decode_asset_type(client.clone(), *asset_type).await;
+                self.decode_asset_type(*asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
                 Some((addr, epoch)) if epoch == target_epoch => {
@@ -1244,14 +1331,13 @@ impl ShieldedContext {
     /// Addresses that they decode to.
     pub async fn decode_all_amounts(
         &mut self,
-        client: HttpClient,
         amt: Amount,
     ) -> Amount<(Address, Epoch)> {
         let mut res = Amount::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded =
-                self.decode_asset_type(client.clone(), *asset_type).await;
+                self.decode_asset_type(*asset_type).await;
             // Only assets with the target timestamp count
             if let Some((addr, epoch)) = decoded {
                 res += &Amount::from_pair((addr, epoch), *val).unwrap()
@@ -1269,7 +1355,6 @@ impl ShieldedContext {
     /// Transfer object.
     async fn gen_shielded_transfer(
         &mut self,
-        ledger_address: &TendermintAddress,
         source: TransferSource,
         target: TransferTarget,
         args_amount: token::Amount,
@@ -1290,14 +1375,12 @@ impl ShieldedContext {
         let spending_keys: Vec<_> = spending_key.into_iter().collect();
         // Load the current shielded context given the spending key we possess
         let _ = self.load();
-        self.fetch(&ledger_address, &spending_keys, &[])
+        self.fetch(&spending_keys, &[])
             .await;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save();
         // Determine epoch in which to submit potential shielded transaction
-        let epoch = rpc::query_epoch(args::Query {
-            ledger_address: ledger_address.clone()
-        }).await;
+        let epoch = self.utils.query_epoch().await;
         // Context required for storing which notes are in the source's possesion
         let consensus_branch_id = BranchId::Sapling;
         let amt: u64 = args_amount.into();
@@ -1324,7 +1407,6 @@ impl ShieldedContext {
             // Locate unspent notes that can help us meet the transaction amount
             let (_, unspent_notes, used_convs) = self
                 .collect_unspent_notes(
-                    ledger_address.clone(),
                     &to_viewing_key(&sk).vk,
                     required_amt,
                     epoch,
@@ -1399,24 +1481,12 @@ impl ShieldedContext {
                 amt,
             )?;
         }
-        let prover = if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
-        {
-            let params_dir = PathBuf::from(params_dir);
-            let spend_path = params_dir.join(masp::SPEND_NAME);
-            let convert_path = params_dir.join(masp::CONVERT_NAME);
-            let output_path = params_dir.join(masp::OUTPUT_NAME);
-            LocalTxProver::new(&spend_path, &output_path, &convert_path)
-        } else {
-            LocalTxProver::with_default_location()
-                .expect("unable to load MASP Parameters")
-        };
+        let prover = self.utils.local_tx_prover();
         // Build and return the constructed transaction
         let mut tx = builder.build(consensus_branch_id, &prover);
 
         if epoch_sensitive {
-            let new_epoch = rpc::query_epoch(args::Query {
-                ledger_address: ledger_address.clone()
-            }).await;
+            let new_epoch = self.utils.query_epoch().await;
 
             // If epoch has changed, recalculate shielded outputs to match new epoch
             if new_epoch != epoch {
@@ -1611,9 +1681,11 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         _ => None,
     };
 
+    // Update the context with the current ledger address
+    ctx.shielded.utils.ledger_address = Some(args.tx.ledger_address.clone());
+
     let stx_result =
         ctx.shielded.gen_shielded_transfer(
-            &args.tx.ledger_address,
             transfer_source,
             transfer_target,
             args.amount,
