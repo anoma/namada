@@ -1,7 +1,7 @@
 //! Chain related data types
 // TODO move BlockHash and BlockHeight here from the storage types
 
-use std::fmt::Display;
+use std::fmt;
 use std::num::NonZeroU64;
 use std::str::FromStr;
 
@@ -32,6 +32,46 @@ pub const CHAIN_ID_PREFIX_SEP: char = '.';
 )]
 pub struct TendermintBytesPerBlock {
     inner: NonZeroU64,
+}
+
+impl Serialize for TendermintBytesPerBlock {
+    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        s.serialize_u64(self.inner.get())
+    }
+}
+
+impl<'de> Deserialize<'de> for TendermintBytesPerBlock {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = TendermintBytesPerBlock;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "a u64 in the range 1 - 104857600")
+            }
+
+            fn visit_u64<E>(self, size: u64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                TendermintBytesPerBlock::new(size).ok_or_else(|| {
+                    serde::de::Error::invalid_value(
+                        serde::de::Unexpected::Unsigned(size),
+                        &self,
+                    )
+                })
+            }
+        }
+
+        deserializer.deserialize_u64(Visitor)
+    }
 }
 
 impl BorshSchema for TendermintBytesPerBlock {
@@ -200,7 +240,7 @@ impl Default for ChainId {
     }
 }
 
-impl Display for ChainId {
+impl fmt::Display for ChainId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -248,7 +288,7 @@ impl FromStr for ChainId {
 #[serde(transparent)]
 pub struct ChainIdPrefix(String);
 
-impl Display for ChainIdPrefix {
+impl fmt::Display for ChainIdPrefix {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -323,6 +363,18 @@ mod tests {
             // There should be no validation errors
             let errors = chain_id.validate(&genesis_bytes);
             assert!(errors.is_empty(), "There should be no validation errors {:#?}", errors);
+        }
+
+        /// Test if [`TendermintBytesPerBlock`] serde serialization
+        /// is correct.
+        #[test]
+        fn test_tm_blk_size_serialize_roundtrip(s in 1u64..=(1 << 20)) {
+            let size = TendermintBytesPerBlock::new(s).expect("Test failed");
+            assert_eq!(size.get(), s);
+            let json = serde_json::to_string(&size).expect("Test failed");
+            let deserialized: TendermintBytesPerBlock =
+                serde_json::from_str(&json).expect("Test failed");
+            assert_eq!(size, deserialized);
         }
     }
 }
