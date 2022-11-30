@@ -226,6 +226,10 @@ pub mod genesis_config {
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ParametersConfig {
+        // Max Tendermint block size in bytes.
+        // XXX: we use i64 becauase that's what tower-abci
+        // and tendermint-rs expect
+        pub max_bytes_per_block: i64,
         // Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
