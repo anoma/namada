@@ -12,7 +12,7 @@ use namada::types::key::*;
 use namada::types::masp::*;
 
 use super::args;
-use crate::client::tx::ShieldedContext;
+use crate::client::tx::{ShieldedContext, CLIShieldedUtils};
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
@@ -72,7 +72,7 @@ pub struct Context {
     /// The ledger configuration for a specific chain ID
     pub config: Config,
     /// The context fr shielded operations
-    pub shielded: ShieldedContext,
+    pub shielded: ShieldedContext<CLIShieldedUtils>,
     /// Native token's address
     pub native_token: Address,
 }
@@ -118,7 +118,7 @@ impl Context {
             wallet,
             global_config,
             config,
-            shielded: ShieldedContext::new(chain_dir),
+            shielded: CLIShieldedUtils::new(chain_dir),
             native_token,
         })
     }
