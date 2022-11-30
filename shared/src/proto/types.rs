@@ -158,7 +158,7 @@ impl SigningTx {
     /// Sign a transaction using [`SignedTxData`].
     pub fn sign(self, keypair: &common::SecretKey) -> Self {
         let to_sign = self.hash();
-        let sig = common::SigScheme::sign(keypair, &to_sign);
+        let sig = common::SigScheme::sign(keypair, to_sign);
         let signed = SignedTxData {
             data: self.data,
             sig,
