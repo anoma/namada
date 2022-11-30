@@ -71,12 +71,13 @@ impl TendermintBytesPerBlock {
     /// The upper bound of a [`TendermintBytesPerBlock`] value.
     ///
     /// This value is equal to 100 MiB.
-    pub const MAX: TendermintBytesPerBlock = unsafe {
-        // SAFETY: We are constructing a greater than zero
-        // value, so the API contract is never violated.
-        // The value itself is derived from the ABCI specs (100 MB).
-        const INNER: NonZeroU64 = NonZeroU64::new_unchecked(100 << 20);
-
+    pub const MAX: TendermintBytesPerBlock = {
+        const INNER: NonZeroU64 = unsafe {
+            // SAFETY: We are constructing a greater than zero
+            // value, so the API contract is never violated.
+            // The value itself is derived from the ABCI specs (100 MB).
+            NonZeroU64::new_unchecked(100 << 20)
+        };
         TendermintBytesPerBlock { inner: INNER }
     };
 
