@@ -26,12 +26,32 @@ pub const CHAIN_ID_PREFIX_SEP: char = '.';
     Ord,
     PartialOrd,
     Hash,
+    Debug,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct TendermintBytesPerBlock {
     inner: NonZeroU64,
+}
+
+impl BorshSchema for TendermintBytesPerBlock {
+    fn add_definitions_recursively(
+        definitions: &mut std::collections::HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields = borsh::schema::Fields::NamedFields(vec![(
+            "inner".into(),
+            u64::declaration(),
+        )]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        definitions.insert(Self::declaration(), definition);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        std::any::type_name::<Self>().into()
+    }
 }
 
 impl Default for TendermintBytesPerBlock {
@@ -51,11 +71,11 @@ impl TendermintBytesPerBlock {
     /// The upper bound of a [`TendermintBytesPerBlock`] value.
     ///
     /// This value is equal to 100 MiB.
-    pub const MAX: TendermintBlockSize = unsafe {
+    pub const MAX: TendermintBytesPerBlock = unsafe {
         // SAFETY: We are constructing a greater than zero
         // value, so the API contract is never violated.
         // The value itself is derived from the ABCI specs (100 MB).
-        const INNER: u64 = NonZeroU64::new_unchecked(100 << 20);
+        const INNER: NonZeroU64 = NonZeroU64::new_unchecked(100 << 20);
 
         TendermintBytesPerBlock { inner: INNER }
     };
@@ -79,7 +99,7 @@ impl TendermintBytesPerBlock {
                 if value.get() > (100 << 20) {
                     None
                 } else {
-                    value
+                    Some(value)
                 }
             })
     }
