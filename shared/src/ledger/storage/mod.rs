@@ -31,7 +31,7 @@ use super::storage_api::{ResultExt, StorageRead, StorageWrite};
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::EpochDuration;
 use crate::ledger::storage::merkle_tree::{
-    Error as MerkleTreeError, MerkleRoot,
+    Error as MerkleTreeError, MerkleRoot, StorageBytes,
 };
 pub use crate::ledger::storage::merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
@@ -625,7 +625,7 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: Vec<u8>,
+        value: StorageBytes,
         height: BlockHeight,
     ) -> Result<Proof> {
         if height >= self.get_block_height().0 {

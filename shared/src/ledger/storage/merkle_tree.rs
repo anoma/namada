@@ -52,7 +52,7 @@ pub enum Error {
 type Result<T> = std::result::Result<T, Error>;
 
 /// Type alias for bytes to be put into the Merkle storage
-pub(super) type StorageBytes = Vec<u8>;
+pub(super) type StorageBytes<'a> = &'a [u8];
 
 /// Type aliases for the different merkle trees and backing stores
 pub type SmtStore = DefaultStore<SmtHash, Hash, 32>;
@@ -675,7 +675,7 @@ mod test {
         let MembershipProof::ICS23(proof) = tree
             .get_sub_tree_existence_proof(
                 std::array::from_ref(&ibc_key),
-                vec![ibc_val.clone()],
+                vec![&ibc_val],
             )
             .unwrap();
         let proof = tree.get_tendermint_proof(&ibc_key, proof).unwrap();
@@ -730,7 +730,7 @@ mod test {
         let MembershipProof::ICS23(proof) = tree
             .get_sub_tree_existence_proof(
                 std::array::from_ref(&pos_key),
-                vec![pos_val.clone()],
+                vec![&pos_val],
             )
             .unwrap();
         let proof = tree.get_tendermint_proof(&pos_key, proof).unwrap();
