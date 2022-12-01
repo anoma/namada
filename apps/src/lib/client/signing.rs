@@ -3,7 +3,7 @@
 
 use borsh::BorshSerialize;
 use namada::proto::Tx;
-use namada::types::address::{Address, ImplicitAddress};
+use namada::types::address::{masp_tx_key, Address, ImplicitAddress};
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
@@ -120,7 +120,10 @@ pub async fn tx_signer(
         TxSigningKey::SecretKey(signing_key) => {
             // Check if the signing key needs to reveal its PK first
             let pk: common::PublicKey = signing_key.ref_to();
-            super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
+            // Do not try to reveal MASP sentinel key
+            if masp_tx_key().ref_to() != pk {
+                super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
+            }
             signing_key
         }
         TxSigningKey::None => {
