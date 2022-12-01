@@ -853,6 +853,54 @@ pub mod eth_events {
             Ok(())
         }
 
+        /// Test that for Ethereum events for which a custom number of
+        /// confirmations may be specified, the custom number is used if it is
+        /// at least the protocol-specified minimum confirmations.
+        #[test]
+        fn test_custom_confirmations_used() {
+            let arbitrary_block_height: Uint256 = 123u64.into();
+            let min_confirmations: Uint256 = 100u64.into();
+            let higher_than_min_confirmations = 200;
+
+            let (sig, event) = (
+                signatures::TRANSFER_TO_NAMADA_SIG,
+                RawTransfersToNamada {
+                    transfers: vec![],
+                    nonce: 0.into(),
+                    confirmations: higher_than_min_confirmations,
+                },
+            );
+            let data = event.encode();
+            let pending_event = PendingEvent::decode(
+                sig,
+                arbitrary_block_height.clone(),
+                &data,
+                min_confirmations.clone(),
+            )
+            .unwrap();
+
+            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == higher_than_min_confirmations.into());
+
+            let (sig, event) = (
+                signatures::TRANSFER_TO_ETHEREUM_SIG,
+                RawTransfersToEthereum {
+                    transfers: vec![],
+                    nonce: 0.into(),
+                    confirmations: higher_than_min_confirmations,
+                },
+            );
+            let data = event.encode();
+            let pending_event = PendingEvent::decode(
+                sig,
+                arbitrary_block_height,
+                &data,
+                min_confirmations,
+            )
+            .unwrap();
+
+            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == higher_than_min_confirmations.into());
+        }
+
         /// For each of the basic types, test that roundtrip
         /// encoding - decoding is a no-op
         #[test]
