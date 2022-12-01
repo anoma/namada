@@ -13,8 +13,8 @@ use sha2::{Digest, Sha256};
 use super::merkle_tree::{Amt, Error, Smt};
 use super::{ics23_specs, IBC_KEY_LIMIT};
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolTree;
-use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::ledger::storage::merkle_tree::StorageBytes;
+use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::hash::Hash;
 use crate::types::storage::{Key, MembershipProof, StringKey, TreeBytes};
 
