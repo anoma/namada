@@ -64,7 +64,7 @@ use ibc_relayer::config::{AddressType, ChainConfig, GasPrice, PacketFilter};
 use ibc_relayer::keyring::Store;
 use ibc_relayer::light_client::tendermint::LightClient as TmLightClient;
 use ibc_relayer::light_client::{LightClient, Verified};
-use namada::ledger::ibc::handler::{commitment_prefix, port_channel_id};
+use namada::core::ledger::ibc::actions::{commitment_prefix, port_channel_id};
 use namada::ledger::ibc::storage::*;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::traits::Sha256Hasher;
@@ -86,7 +86,7 @@ use tokio::runtime::Runtime;
 
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
-use crate::e2e::setup::{self, sleep, NamadaCmd, Bin, Test, Who};
+use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
 use crate::{run, run_as};
 
 #[test]
@@ -708,7 +708,7 @@ fn transfer_token(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::from(100000_f64),
+        &Amount::whole(100000),
         port_channel_id_a,
         None,
         None,
@@ -814,7 +814,7 @@ fn transfer_back(
         "{}/{}/{}",
         port_channel_id_b.port_id, port_channel_id_b.channel_id, xan
     );
-    let hash = calc_hash(&denom_raw);
+    let hash = calc_hash(denom_raw);
     let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
     // Need the address prefix for ibc-transfer command
     let sub_prefix = format!(
@@ -827,7 +827,7 @@ fn transfer_back(
         BERTHA,
         &receiver,
         NAM,
-        &Amount::from(50000_f64),
+        &Amount::whole(50000),
         port_channel_id_b,
         Some(sub_prefix),
         None,
@@ -886,7 +886,7 @@ fn transfer_timeout(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::from(100000_f64),
+        &Amount::whole(100000),
         port_channel_id_a,
         None,
         Some(Duration::new(5, 0)),
@@ -931,7 +931,7 @@ fn transfer_timeout_on_close(
         BERTHA,
         &receiver,
         NAM,
-        &Amount::from(100000_f64),
+        &Amount::whole(100000),
         port_channel_id_b,
         None,
         None,
@@ -980,7 +980,7 @@ fn try_transfer_on_close(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::from(100000_f64),
+        &Amount::whole(100000),
         port_channel_id_a,
         None,
         None,
@@ -1147,8 +1147,7 @@ fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
         .rsplit_once(' ')
         .unwrap()
         .1
-        .replace('"', "")
-        .replace(',', "");
+        .replace(['"', ','], "");
     let height = height_str.parse().unwrap();
 
     let (_unread, matched) = client.exp_regex("\"code\": .*,")?;
@@ -1157,8 +1156,7 @@ fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
         .rsplit_once(' ')
         .unwrap()
         .1
-        .replace('"', "")
-        .replace(',', "");
+        .replace(['"', ','], "");
     if code != "0" {
         return Err(eyre!(
             "The IBC transfer transaction failed: unread {}",
@@ -1313,7 +1311,7 @@ fn check_balances(
         "{}/{}/{}",
         &dest_port_channel_id.port_id, &dest_port_channel_id.channel_id, &token,
     );
-    let key_prefix = ibc_token_prefix(&denom)?;
+    let key_prefix = ibc_token_prefix(denom)?;
     let sub_prefix = key_prefix.sub_key().unwrap().to_string();
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
@@ -1423,7 +1421,7 @@ fn check_balances_after_back(
         "{}/{}/{}",
         &dest_port_channel_id.port_id, &dest_port_channel_id.channel_id, &token,
     );
-    let key_prefix = ibc_token_prefix(&denom)?;
+    let key_prefix = ibc_token_prefix(denom)?;
     let sub_prefix = key_prefix.sub_key().unwrap().to_string();
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![

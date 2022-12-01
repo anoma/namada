@@ -17,24 +17,25 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
-pub use namada::ledger::governance::storage as gov_storage;
-pub use namada::ledger::storage_api::{
+pub use namada_core::ledger::governance::storage as gov_storage;
+pub use namada_core::ledger::parameters;
+pub use namada_core::ledger::storage_api::{
     self, iter_prefix, iter_prefix_bytes, rev_iter_prefix,
     rev_iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
 };
-pub use namada::ledger::vp_env::VpEnv;
-pub use namada::ledger::{parameters, pos as proof_of_stake};
-pub use namada::proto::{Signed, SignedTxData};
-pub use namada::types::address::Address;
-use namada::types::chain::CHAIN_ID_LENGTH;
-use namada::types::hash::{Hash, HASH_LENGTH};
-use namada::types::internal::HostEnvResult;
-use namada::types::key::*;
-use namada::types::storage::{
+pub use namada_core::ledger::vp_env::VpEnv;
+pub use namada_core::proto::{Signed, SignedTxData};
+pub use namada_core::types::address::Address;
+use namada_core::types::chain::CHAIN_ID_LENGTH;
+use namada_core::types::hash::{Hash, HASH_LENGTH};
+use namada_core::types::internal::HostEnvResult;
+use namada_core::types::key::*;
+use namada_core::types::storage::{
     BlockHash, BlockHeight, Epoch, TxIndex, BLOCK_HASH_LENGTH,
 };
-pub use namada::types::*;
+pub use namada_core::types::*;
 pub use namada_macros::validity_predicate;
+pub use namada_proof_of_stake::storage as proof_of_stake;
 use namada_vm_env::vp::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
 pub use sha2::{Digest, Sha256, Sha384, Sha512};
@@ -244,6 +245,11 @@ impl<'view> VpEnv<'view> for Ctx {
         get_tx_index()
     }
 
+    fn get_native_token(&'view self) -> Result<Address, Error> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_native_token()
+    }
+
     fn iter_prefix(
         &self,
         prefix: &storage::Key,
@@ -374,6 +380,10 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
     fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
         get_tx_index()
     }
+
+    fn get_native_token(&self) -> Result<Address, Error> {
+        get_native_token()
+    }
 }
 
 impl StorageRead<'_> for CtxPostStorageRead<'_> {
@@ -388,8 +398,9 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
 
     fn has_key(&self, key: &storage::Key) -> Result<bool, Error> {
         let key = key.to_string();
-        let found =
-            unsafe { namada_vp_has_key_post(key.as_ptr() as _, key.len() as _) };
+        let found = unsafe {
+            namada_vp_has_key_post(key.as_ptr() as _, key.len() as _)
+        };
         Ok(HostEnvResult::is_success(found))
     }
 
@@ -438,6 +449,10 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
 
     fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
         get_tx_index()
+    }
+
+    fn get_native_token(&self) -> Result<Address, Error> {
+        get_native_token()
     }
 }
 
@@ -494,4 +509,16 @@ fn get_block_epoch() -> Result<Epoch, Error> {
 
 fn get_tx_index() -> Result<TxIndex, storage_api::Error> {
     Ok(TxIndex(unsafe { namada_vp_get_tx_index() }))
+}
+
+fn get_native_token() -> Result<Address, Error> {
+    let result = Vec::with_capacity(address::ADDRESS_LEN);
+    unsafe {
+        namada_vp_get_native_token(result.as_ptr() as _);
+    }
+    let slice =
+        unsafe { slice::from_raw_parts(result.as_ptr(), address::ADDRESS_LEN) };
+    let address_str =
+        std::str::from_utf8(slice).expect("Cannot decode native address");
+    Ok(Address::decode(address_str).expect("Cannot decode native address"))
 }

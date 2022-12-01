@@ -8,8 +8,7 @@
 use std::mem::ManuallyDrop;
 
 use borsh::BorshDeserialize;
-use namada::types::internal::HostEnvResult;
-use namada::vm::types::KeyVal;
+use namada_core::types::internal::{HostEnvResult, KeyVal};
 
 /// Transaction environment imports
 pub mod tx {
@@ -104,6 +103,9 @@ pub mod tx {
         // Get the current tx id
         pub fn namada_tx_get_tx_index() -> u32;
 
+        // Get the native token address
+        pub fn namada_tx_get_native_token(result_ptr: u64);
+
         // Requires a node running with "Info" log level
         pub fn namada_tx_log_string(str_ptr: u64, str_len: u64);
     }
@@ -186,6 +188,9 @@ pub mod vp {
 
         // Get the current tx index
         pub fn namada_vp_get_tx_index() -> u32;
+
+        // Get the native token address
+        pub fn namada_vp_get_native_token(result_ptr: u64);
 
         // Verify a transaction signature
         pub fn namada_vp_verify_tx_signature(

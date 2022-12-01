@@ -1,10 +1,9 @@
 //! IBC integration
 
-pub mod handler;
-pub mod storage;
+pub use namada_core::ledger::ibc::{actions as handler, storage};
 pub mod vp;
 
-use storage::{
+use namada_core::ledger::ibc::storage::{
     capability_index_key, channel_counter_key, client_counter_key,
     connection_counter_key,
 };

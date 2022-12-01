@@ -47,6 +47,7 @@ fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
         | cli::cmds::Namada::TxTransfer(_)
         | cli::cmds::Namada::TxIbcTransfer(_)
         | cli::cmds::Namada::TxUpdateVp(_)
+        | cli::cmds::Namada::TxRevealPk(_)
         | cli::cmds::Namada::TxInitProposal(_)
         | cli::cmds::Namada::TxVoteProposal(_) => {
             handle_subcommand("namadac", sub_args)

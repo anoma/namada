@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_apps"
 readme = "../README.md"
 resolver = "2"
-version = "0.10.1"
+version = "0.11.0"
 default-run = "namada"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -52,25 +52,27 @@ std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies
 testing = ["dev"]
 abcipp = [
+    "namada/abcipp",
+    "namada/tendermint-rpc-abcipp",
     "tendermint-abcipp",
     "tendermint-config-abcipp",
     "tendermint-proto-abcipp",
     "tendermint-rpc-abcipp",
     "tower-abci-abcipp",
-    "namada/abcipp"
 ]
 
 abciplus = [
+    "namada/abciplus",
+    "namada/tendermint-rpc",
     "tendermint",
     "tendermint-config",
     "tendermint-rpc",
     "tendermint-proto",
     "tower-abci",
-    "namada/abciplus"
 ]
 
 [dependencies]
-namada = {path = "../shared", features = ["wasm-runtime", "ferveo-tpke", "rand", "tendermint-rpc", "secp256k1-sign-verify"]}
+namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
@@ -156,13 +158,15 @@ winapi = "0.3.9"
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["transparent-inputs"] }
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["bundled-prover", "download-params"] }
 bimap = {version = "0.6.2", features = ["serde"]}
+rust_decimal = "1.26.1"
+rust_decimal_macros = "1.26.1"
 
 warp = "0.3.2"
 bytes = "1.1.0"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-namada = {path = "../shared", features = ["testing", "wasm-runtime"]}
+namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 bit-set = "0.5.2"
 # A fork with state machime testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}

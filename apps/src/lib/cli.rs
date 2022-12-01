@@ -53,6 +53,7 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
+        TxRevealPk(TxRevealPk),
     }
 
     impl Cmd for Namada {
@@ -68,6 +69,7 @@ pub mod cmds {
                 .subcommand(TxUpdateVp::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
+                .subcommand(TxRevealPk::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -84,6 +86,7 @@ pub mod cmds {
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
                 SubCmd::parse(matches).map(Self::TxVoteProposal);
+            let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
             node.or(client)
                 .or(wallet)
                 .or(ledger)
@@ -93,6 +96,7 @@ pub mod cmds {
                 .or(tx_update_vp)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
+                .or(tx_reveal_pk)
         }
     }
 
@@ -156,11 +160,12 @@ pub mod cmds {
                 .subcommand(TxIbcTransfer::def().display_order(1))
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
-                .subcommand(TxInitValidator::def().display_order(1))
+                .subcommand(TxRevealPk::def().display_order(1))
                 // Proposal transactions
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
                 // PoS transactions
+                .subcommand(TxInitValidator::def().display_order(2))
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
@@ -173,7 +178,7 @@ pub mod cmds {
                 .subcommand(QueryBlock::def().display_order(3))
                 .subcommand(QueryBalance::def().display_order(3))
                 .subcommand(QueryBonds::def().display_order(3))
-                .subcommand(QueryVotingPower::def().display_order(3))
+                .subcommand(QueryBondedStake::def().display_order(3))
                 .subcommand(QuerySlashes::def().display_order(3))
                 .subcommand(QueryResult::def().display_order(3))
                 .subcommand(QueryRawBytes::def().display_order(3))
@@ -193,6 +198,7 @@ pub mod cmds {
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
+            let tx_reveal_pk = Self::parse_with_ctx(matches, TxRevealPk);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
@@ -207,8 +213,8 @@ pub mod cmds {
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
-            let query_voting_power =
-                Self::parse_with_ctx(matches, QueryVotingPower);
+            let query_bonded_stake =
+                Self::parse_with_ctx(matches, QueryBondedStake);
             let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
             let query_result = Self::parse_with_ctx(matches, QueryResult);
             let query_raw_bytes = Self::parse_with_ctx(matches, QueryRawBytes);
@@ -225,9 +231,10 @@ pub mod cmds {
                 .or(tx_ibc_transfer)
                 .or(tx_update_vp)
                 .or(tx_init_account)
-                .or(tx_init_validator)
+                .or(tx_reveal_pk)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
+                .or(tx_init_validator)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -238,7 +245,7 @@ pub mod cmds {
                 .or(query_block)
                 .or(query_balance)
                 .or(query_bonds)
-                .or(query_voting_power)
+                .or(query_bonded_stake)
                 .or(query_slashes)
                 .or(query_result)
                 .or(query_raw_bytes)
@@ -290,6 +297,7 @@ pub mod cmds {
         TxInitValidator(TxInitValidator),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
+        TxRevealPk(TxRevealPk),
         Bond(Bond),
         Unbond(Unbond),
         Withdraw(Withdraw),
@@ -300,7 +308,8 @@ pub mod cmds {
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
-        QueryVotingPower(QueryVotingPower),
+        QueryBondedStake(QueryBondedStake),
+        QueryCommissionRate(QueryCommissionRate),
         QuerySlashes(QuerySlashes),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
@@ -1056,8 +1065,8 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Send a signed transaction to create a new validator and \
-                     its staking reward account.",
+                    "Send a signed transaction to create a new validator \
+                     account.",
                 )
                 .add_args::<args::TxInitValidator>()
         }
@@ -1216,21 +1225,21 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryVotingPower(pub args::QueryVotingPower);
+    pub struct QueryBondedStake(pub args::QueryBondedStake);
 
-    impl SubCmd for QueryVotingPower {
-        const CMD: &'static str = "voting-power";
+    impl SubCmd for QueryBondedStake {
+        const CMD: &'static str = "bonded-stake";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                QueryVotingPower(args::QueryVotingPower::parse(matches))
+                QueryBondedStake(args::QueryBondedStake::parse(matches))
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS voting power.")
-                .add_args::<args::QueryVotingPower>()
+                .about("Query PoS bonded stake.")
+                .add_args::<args::QueryBondedStake>()
         }
     }
 
@@ -1250,6 +1259,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query the accepted transfers to date.")
                 .add_args::<args::QueryConversions>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryCommissionRate(pub args::QueryCommissionRate);
+
+    impl SubCmd for QueryCommissionRate {
+        const CMD: &'static str = "commission-rate";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryCommissionRate(args::QueryCommissionRate::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query commission rate.")
+                .add_args::<args::QueryCommissionRate>()
         }
     }
 
@@ -1335,6 +1363,36 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Vote a proposal.")
                 .add_args::<args::VoteProposal>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxRevealPk(pub args::RevealPk);
+
+    impl SubCmd for TxRevealPk {
+        const CMD: &'static str = "reveal-pk";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| TxRevealPk(args::RevealPk::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Submit a tx to reveal the public key an implicit \
+                     account. Typically, you don't have to do this manually \
+                     and the client will detect when a tx to reveal PK is \
+                     needed and submit it automatically. This will write the \
+                     PK into the account's storage so that it can be used for \
+                     signature verification on transactions authorized by \
+                     this account.",
+                )
+                .add_args::<args::RevealPk>()
         }
     }
 
@@ -1448,9 +1506,9 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Initialize genesis validator's address, staking reward \
-                     address, consensus key, validator account key and \
-                     staking rewards key and use it in the ledger's node.",
+                    "Initialize genesis validator's address, consensus key \
+                     and validator account key and use it in the ledger's \
+                     node.",
                 )
                 .add_args::<args::InitGenesisValidator>()
         }
@@ -1582,6 +1640,7 @@ pub mod args {
     use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::GasLimit;
+    use rust_decimal::Decimal;
 
     use super::context::*;
     use super::utils::*;
@@ -1613,6 +1672,7 @@ pub mod args {
     const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
+    const COMMISSION_RATE: Arg<Decimal> = arg("commission-rate");
     const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
@@ -1651,6 +1711,8 @@ pub mod args {
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MASP_VALUE: Arg<MaspValue> = arg("value");
+    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
+        arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
@@ -1671,8 +1733,6 @@ pub mod args {
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const RECEIVER: Arg<String> = arg("receiver");
-    const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
-    const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
@@ -2117,10 +2177,10 @@ pub mod args {
         pub consensus_key: Option<WalletKeypair>,
         pub eth_cold_key: Option<WalletKeypair>,
         pub eth_hot_key: Option<WalletKeypair>,
-        pub rewards_account_key: Option<WalletPublicKey>,
         pub protocol_key: Option<WalletPublicKey>,
+        pub commission_rate: Decimal,
+        pub max_commission_rate_change: Decimal,
         pub validator_vp_code_path: Option<PathBuf>,
-        pub rewards_vp_code_path: Option<PathBuf>,
         pub unsafe_dont_encrypt: bool,
     }
 
@@ -2133,10 +2193,11 @@ pub mod args {
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let eth_cold_key = VALIDATOR_ETH_COLD_KEY.parse(matches);
             let eth_hot_key = VALIDATOR_ETH_HOT_KEY.parse(matches);
-            let rewards_account_key = REWARDS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
+            let commission_rate = COMMISSION_RATE.parse(matches);
+            let max_commission_rate_change =
+                MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
-            let rewards_vp_code_path = REWARDS_CODE_PATH.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 tx,
@@ -2146,10 +2207,10 @@ pub mod args {
                 consensus_key,
                 eth_cold_key,
                 eth_hot_key,
-                rewards_account_key,
                 protocol_key,
+                commission_rate,
+                max_commission_rate_change,
                 validator_vp_code_path,
-                rewards_vp_code_path,
                 unsafe_dont_encrypt,
             }
         }
@@ -2182,23 +2243,25 @@ pub mod args {
                      be generated if none given. Note that this must be \
                      secp256k1.",
                 ))
-                .arg(REWARDS_KEY.def().about(
-                    "A public key for the staking reward account. A new one \
-                     will be generated if none given.",
-                ))
                 .arg(PROTOCOL_KEY.def().about(
                     "A public key for signing protocol transactions. A new \
                      one will be generated if none given.",
+                ))
+                .arg(COMMISSION_RATE.def().about(
+                    "The commission rate charged by the validator for \
+                     delegation rewards. Expressed as a decimal between 0 and \
+                     1. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. \
+                     Expressed as a decimal between 0 and 1. This is a \
+                     required parameter.",
                 ))
                 .arg(VALIDATOR_CODE_PATH.def().about(
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
                      if none specified.",
-                ))
-                .arg(REWARDS_CODE_PATH.def().about(
-                    "The path to the validity predicate WASM code to be used \
-                     for the staking reward account. Uses the default staking \
-                     reward VP if none specified.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
@@ -2425,6 +2488,28 @@ pub mod args {
                         )
                         .conflicts_with(PROPOSAL_ID.name),
                 )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct RevealPk {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// A public key to be revealed on-chain
+        pub public_key: WalletPublicKey,
+    }
+
+    impl Args for RevealPk {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let public_key = PUBLIC_KEY.parse(matches);
+
+            Self { tx, public_key }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(PUBLIC_KEY.def().about("A public key to reveal."))
         }
     }
 
@@ -2720,18 +2805,18 @@ pub mod args {
         }
     }
 
-    /// Query PoS voting power
+    /// Query PoS bonded stake
     #[derive(Clone, Debug)]
-    pub struct QueryVotingPower {
+    pub struct QueryBondedStake {
         /// Common query args
         pub query: Query,
         /// Address of a validator
         pub validator: Option<WalletAddress>,
-        /// Epoch in which to find voting power
+        /// Epoch in which to find bonded stake
         pub epoch: Option<Epoch>,
     }
 
-    impl Args for QueryVotingPower {
+    impl Args for QueryBondedStake {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let validator = VALIDATOR_OPT.parse(matches);
@@ -2746,7 +2831,78 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query>()
                 .arg(VALIDATOR_OPT.def().about(
-                    "The validator's address whose voting power to query.",
+                    "The validator's address whose bonded stake to query.",
+                ))
+                .arg(EPOCH.def().about(
+                    "The epoch at which to query (last committed, if not \
+                     specified).",
+                ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    /// Commission rate change args
+    pub struct TxCommissionRateChange {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Validator address (should be self)
+        pub validator: WalletAddress,
+        /// Value to which the tx changes the commission rate
+        pub rate: Decimal,
+    }
+
+    impl Args for TxCommissionRateChange {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let rate = COMMISSION_RATE.parse(matches);
+            Self {
+                tx,
+                validator,
+                rate,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(VALIDATOR.def().about(
+                    "The validator's address whose commission rate to change.",
+                ))
+                .arg(
+                    COMMISSION_RATE
+                        .def()
+                        .about("The desired new commission rate."),
+                )
+        }
+    }
+
+    /// Query PoS commission rate
+    #[derive(Clone, Debug)]
+    pub struct QueryCommissionRate {
+        /// Common query args
+        pub query: Query,
+        /// Address of a validator
+        pub validator: WalletAddress,
+        /// Epoch in which to find commission rate
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for QueryCommissionRate {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self {
+                query,
+                validator,
+                epoch,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(VALIDATOR.def().about(
+                    "The validator's address whose commission rate to query.",
                 ))
                 .arg(EPOCH.def().about(
                     "The epoch at which to query (last committed, if not \
@@ -3440,6 +3596,8 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
         pub alias: String,
+        pub commission_rate: Decimal,
+        pub max_commission_rate_change: Decimal,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
@@ -3448,6 +3606,9 @@ pub mod args {
     impl Args for InitGenesisValidator {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let commission_rate = COMMISSION_RATE.parse(matches);
+            let max_commission_rate_change =
+                MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let key_scheme = SCHEME.parse(matches);
@@ -3456,6 +3617,8 @@ pub mod args {
                 net_address,
                 unsafe_dont_encrypt,
                 key_scheme,
+                commission_rate,
+                max_commission_rate_change,
             }
         }
 
@@ -3465,6 +3628,15 @@ pub mod args {
                     "Static {host:port} of your validator node's P2P address. \
                      Namada uses port `26656` for P2P connections by default, \
                      but you can configure a different value.",
+                ))
+                .arg(COMMISSION_RATE.def().about(
+                    "The commission rate charged by the validator for \
+                     delegation rewards. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. This is \
+                     a required parameter.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
@@ -3498,6 +3670,7 @@ pub fn namada_node_cli() -> Result<(cmds::NamadaNode, Context)> {
     cmds::NamadaNode::parse_or_print_help(app)
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum NamadaClient {
     WithoutContext(cmds::Utils, args::Global),
     WithContext(Box<(cmds::NamadaClientWithContext, Context)>),

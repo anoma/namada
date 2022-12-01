@@ -43,7 +43,9 @@ fn everything() {
     namadan_ledger
         .exp_string("Namada ledger node started")
         .unwrap();
-    namadan_ledger.exp_string("Tendermint node started").unwrap();
+    namadan_ledger
+        .exp_string("Tendermint node started")
+        .unwrap();
     namadan_ledger.exp_string("Committed block hash").unwrap();
     let _bg_ledger = namadan_ledger.background();
 

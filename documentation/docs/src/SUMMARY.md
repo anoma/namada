@@ -14,4 +14,3 @@
   - [Applying to be a genesis validator](./user-guide/genesis-validator-apply.md)
 - [Testnets](./testnets/README.md)
   - [Namada Close Quarters Testnet 1](./testnets/namada-close-quarters-testnet-1.md)
-- [Namada Trusted Setup](./namada-trusted-setup.md)

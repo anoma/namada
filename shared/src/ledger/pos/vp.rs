@@ -5,39 +5,36 @@ use std::panic::{RefUnwindSafe, UnwindSafe};
 
 use borsh::BorshDeserialize;
 use itertools::Itertools;
+use namada_core::ledger::vp_env::VpEnv;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
-pub use namada_proof_of_stake::types::{
-    self, Slash, Slashes, TotalVotingPowers, ValidatorStates,
-    ValidatorVotingPowers,
-};
+pub use namada_proof_of_stake::types::{self, Slash, Slashes, ValidatorStates};
 use namada_proof_of_stake::validation::validate;
-use namada_proof_of_stake::{validation, PosReadOnly};
+use namada_proof_of_stake::{impl_pos_read_only, validation, PosReadOnly};
+use rust_decimal::Decimal;
 use thiserror::Error;
 
 use super::{
-    bond_key, is_bond_key, is_params_key, is_total_voting_power_key,
-    is_unbond_key, is_validator_set_key,
-    is_validator_staking_reward_address_key, is_validator_total_deltas_key,
-    is_validator_voting_power_key, params_key, staking_token_address,
-    storage_api, total_voting_power_key, unbond_key,
-    validator_consensus_key_key, validator_eth_cold_key_key,
-    validator_eth_hot_key_key, validator_set_key, validator_slashes_key,
-    validator_staking_reward_address_key, validator_state_key,
-    validator_total_deltas_key, validator_voting_power_key, BondId, Bonds,
-    Unbonds, ValidatorConsensusKeys, ValidatorSets, ValidatorTotalDeltas,
+    bond_key, is_bond_key, is_params_key, is_total_deltas_key, is_unbond_key,
+    is_validator_deltas_key, is_validator_set_key, params_key,
+    total_deltas_key, unbond_key, validator_commission_rate_key,
+    validator_consensus_key_key, validator_deltas_key,
+    validator_max_commission_rate_change_key, validator_set_key,
+    validator_slashes_key, validator_state_key, BondId, Bonds, CommissionRates,
+    TotalDeltas, Unbonds, ValidatorConsensusKeys, ValidatorDeltas,
+    ValidatorSets,
 };
-use crate::impl_pos_read_only;
-use crate::ledger::governance::vp::is_proposal_accepted;
 use crate::ledger::native_vp::{
-    self, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp, VpEnv,
+    self, governance, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp,
 };
 use crate::ledger::pos::{
-    is_validator_address_raw_hash_key, is_validator_consensus_key_key,
-    is_validator_state_key,
+    is_validator_address_raw_hash_key, is_validator_commission_rate_key,
+    is_validator_consensus_key_key,
+    is_validator_max_commission_rate_change_key, is_validator_state_key,
+    validator_eth_cold_key_key, validator_eth_hot_key_key,
 };
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{self as ledger_storage};
+use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::types::token;
@@ -121,16 +118,17 @@ where
         use validation::ValidatorUpdate::*;
 
         let addr = Address::Internal(Self::ADDR);
-        let mut changes: Vec<DataUpdate<_, _, _, _>> = vec![];
-        let current_epoch = self.ctx.get_block_epoch()?;
+        let mut changes: Vec<DataUpdate> = vec![];
+        let current_epoch = self.ctx.pre().get_block_epoch()?;
+        let staking_token_address = self.ctx.pre().get_native_token()?;
 
         for key in keys_changed {
             if is_params_key(key) {
-                let proposal_id = u64::try_from_slice(tx_data).ok();
-                match proposal_id {
-                    Some(id) => return Ok(is_proposal_accepted(&self.ctx, id)),
-                    _ => return Ok(false),
-                }
+                return governance::utils::is_proposal_accepted(
+                    self.ctx.storage,
+                    tx_data,
+                )
+                .map_err(Error::NativeVpError);
             } else if is_validator_set_key(key) {
                 let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
                     ValidatorSets::try_from_slice(&bytes[..]).ok()
@@ -150,21 +148,6 @@ where
                     address: validator.clone(),
                     update: State(Data { pre, post }),
                 });
-            } else if let Some(validator) =
-                is_validator_staking_reward_address_key(key)
-            {
-                let pre = self
-                    .ctx
-                    .read_bytes_pre(key)?
-                    .and_then(|bytes| Address::try_from_slice(&bytes[..]).ok());
-                let post = self
-                    .ctx
-                    .read_bytes_post(key)?
-                    .and_then(|bytes| Address::try_from_slice(&bytes[..]).ok());
-                changes.push(Validator {
-                    address: validator.clone(),
-                    update: StakingRewardAddress(Data { pre, post }),
-                });
             } else if let Some(validator) = is_validator_consensus_key_key(key)
             {
                 let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
@@ -177,27 +160,16 @@ where
                     address: validator.clone(),
                     update: ConsensusKey(Data { pre, post }),
                 });
-            } else if let Some(validator) = is_validator_total_deltas_key(key) {
-                let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
-                    ValidatorTotalDeltas::try_from_slice(&bytes[..]).ok()
+            } else if let Some(validator) = is_validator_deltas_key(key) {
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                    namada_proof_of_stake::types::ValidatorDeltas::try_from_slice(&bytes[..]).ok()
                 });
-                let post = self.ctx.read_bytes_post(key)?.and_then(|bytes| {
-                    ValidatorTotalDeltas::try_from_slice(&bytes[..]).ok()
-                });
-                changes.push(Validator {
-                    address: validator.clone(),
-                    update: TotalDeltas(Data { pre, post }),
-                });
-            } else if let Some(validator) = is_validator_voting_power_key(key) {
-                let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
-                    ValidatorVotingPowers::try_from_slice(&bytes[..]).ok()
-                });
-                let post = self.ctx.read_bytes_post(key)?.and_then(|bytes| {
-                    ValidatorVotingPowers::try_from_slice(&bytes[..]).ok()
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                    namada_proof_of_stake::types::ValidatorDeltas::try_from_slice(&bytes[..]).ok()
                 });
                 changes.push(Validator {
                     address: validator.clone(),
-                    update: VotingPowerUpdate(Data { pre, post }),
+                    update: ValidatorDeltas(Data { pre, post }),
                 });
             } else if let Some(raw_hash) =
                 is_validator_address_raw_hash_key(key)
@@ -215,7 +187,7 @@ where
                     data: Data { pre, post },
                 });
             } else if let Some(owner) =
-                token::is_balance_key(&staking_token_address(), key)
+                token::is_balance_key(&staking_token_address, key)
             {
                 if owner != &addr {
                     continue;
@@ -269,21 +241,54 @@ where
                     data: Data { pre, post },
                     slashes,
                 });
-            } else if is_total_voting_power_key(key) {
-                let pre = self.ctx.read_bytes_pre(key)?.and_then(|bytes| {
-                    TotalVotingPowers::try_from_slice(&bytes[..]).ok()
+            } else if is_total_deltas_key(key) {
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                    super::TotalDeltas::try_from_slice(&bytes[..]).ok()
                 });
-                let post = self.ctx.read_bytes_post(key)?.and_then(|bytes| {
-                    TotalVotingPowers::try_from_slice(&bytes[..]).ok()
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                    super::TotalDeltas::try_from_slice(&bytes[..]).ok()
                 });
-                changes.push(TotalVotingPower(Data { pre, post }));
+                changes.push(TotalDeltas(Data { pre, post }));
+            } else if let Some(address) = is_validator_commission_rate_key(key)
+            {
+                let max_change = self
+                    .ctx
+                    .pre()
+                    .read_bytes(&validator_max_commission_rate_change_key(
+                        address,
+                    ))?
+                    .and_then(|bytes| Decimal::try_from_slice(&bytes[..]).ok());
+                let pre = self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                    CommissionRates::try_from_slice(&bytes[..]).ok()
+                });
+                let post = self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                    CommissionRates::try_from_slice(&bytes[..]).ok()
+                });
+                changes.push(Validator {
+                    address: address.clone(),
+                    update: CommissionRate(Data { pre, post }, max_change),
+                });
+            } else if let Some(address) =
+                is_validator_max_commission_rate_change_key(key)
+            {
+                let pre =
+                    self.ctx.pre().read_bytes(key)?.and_then(|bytes| {
+                        Decimal::try_from_slice(&bytes[..]).ok()
+                    });
+                let post =
+                    self.ctx.post().read_bytes(key)?.and_then(|bytes| {
+                        Decimal::try_from_slice(&bytes[..]).ok()
+                    });
+                changes.push(Validator {
+                    address: address.clone(),
+                    update: MaxCommissionRateChange(Data { pre, post }),
+                });
             } else if key.segments.get(0) == Some(&addr.to_db_key()) {
                 // Unknown changes to this address space are disallowed
                 tracing::info!("PoS unrecognized key change {} rejected", key);
                 return Ok(false);
             } else {
                 // Unknown changes anywhere else are permitted
-                return Ok(true);
             }
         }
 
@@ -302,7 +307,6 @@ where
 }
 
 impl_pos_read_only! {
-    type Error = storage_api::Error;
     impl<'f, 'a, DB, H, CA> PosReadOnly for CtxPreStorageRead<'f, 'a, DB, H, CA>
         where
             DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
@@ -311,7 +315,6 @@ impl_pos_read_only! {
 }
 
 impl_pos_read_only! {
-    type Error = storage_api::Error;
     impl<'f, 'a, DB, H, CA> PosReadOnly for CtxPostStorageRead<'f, 'a, DB, H, CA>
         where
             DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,

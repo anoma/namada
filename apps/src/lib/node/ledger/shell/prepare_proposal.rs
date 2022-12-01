@@ -1,11 +1,11 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
+#[cfg(feature = "abcipp")]
+use namada::ledger::queries_ext::QueriesExt;
+#[cfg(feature = "abcipp")]
+use namada::ledger::queries_ext::SendValsetUpd;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-#[cfg(feature = "abcipp")]
-use namada::ledger::storage_api::queries::QueriesExt;
-#[cfg(feature = "abcipp")]
-use namada::ledger::storage_api::queries::SendValsetUpd;
 use namada::proto::Tx;
 use namada::types::storage::BlockHeight;
 use namada::types::transaction::tx_types::TxType;
@@ -221,13 +221,10 @@ mod test_prepare_proposal {
     use std::collections::{BTreeSet, HashMap};
 
     use borsh::{BorshDeserialize, BorshSerialize};
-    use namada::ledger::pos::namada_proof_of_stake::types::{
-        VotingPower, WeightedValidator,
-    };
+    use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::storage_api::queries::QueriesExt;
+    use namada::ledger::queries_ext::QueriesExt;
     use namada::proto::{Signed, SignedTxData};
-    use namada::types::address::nam;
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
@@ -400,7 +397,7 @@ mod test_prepare_proposal {
             assert_eq!(
                 filtered_votes,
                 vec![(
-                    test_utils::get_validator_voting_power(),
+                    test_utils::get_validator_bonded_stake(),
                     signed_vote_extension
                 )]
             )
@@ -690,7 +687,7 @@ mod test_prepare_proposal {
                 .iter()
                 .cloned()
                 .map(|v| WeightedValidator {
-                    voting_power: VotingPower::from(0u64),
+                    bonded_stake: 0,
                     ..v
                 })
                 .collect();
@@ -802,7 +799,7 @@ mod test_prepare_proposal {
                 WrapperTx::new(
                     Fee {
                         amount: 0.into(),
-                        token: nam(),
+                        token: shell.storage.native_token.clone(),
                     },
                     &keypair,
                     Epoch(0),
@@ -860,7 +857,7 @@ mod test_prepare_proposal {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),

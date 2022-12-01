@@ -14,11 +14,11 @@ use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::eyre;
-
-use crate::ledger::eth_bridge::storage;
-use crate::ledger::eth_bridge::storage::bridge_pool::{
+use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
+
+use crate::ledger::eth_bridge::storage;
 use crate::ledger::eth_bridge::storage::wrapped_erc20s;
 use crate::ledger::eth_bridge::vp::check_balance_changes;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
@@ -393,12 +393,13 @@ mod test_bridge_pool_vp {
     use std::env::temp_dir;
 
     use borsh::{BorshDeserialize, BorshSerialize};
+    use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
+    use namada_core::types::address;
 
     use super::*;
     use crate::ledger::eth_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
-    use crate::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::traits::Sha256Hasher;
@@ -558,6 +559,7 @@ mod test_bridge_pool_vp {
         let mut storage = Storage::<MockDB, Sha256Hasher>::open(
             std::path::Path::new(""),
             ChainId::default(),
+            address::nam(),
             None,
         );
         // a dummy config for testing

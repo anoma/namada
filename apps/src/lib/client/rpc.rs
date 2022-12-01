@@ -25,11 +25,9 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::governance::utils::Votes;
+use namada::ledger::native_vp::governance::utils::Votes;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pos::types::{
-    Epoch as PosEpoch, VotingPower, WeightedValidator,
-};
+use namada::ledger::pos::types::{decimal_mult_u64, WeightedValidator};
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
@@ -53,6 +51,7 @@ use namada::types::transaction::{
     WrapperTx,
 };
 use namada::types::{address, storage, token};
+use rust_decimal::Decimal;
 use tokio::time::{Duration, Instant};
 
 use crate::cli::{self, args, Context};
@@ -130,7 +129,7 @@ pub async fn query_epoch(args: args::Query) -> Epoch {
 /// Query the last committed block
 pub async fn query_block(
     args: args::Query,
-) -> tendermint_rpc::endpoint::block::Response {
+) -> crate::facade::tendermint_rpc::endpoint::block::Response {
     let client = HttpClient::new(args.ledger_address).unwrap();
     let response = client.latest_block().await.unwrap();
     println!(
@@ -776,6 +775,17 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 println!("{:4}Status: pending", "");
             } else if start_epoch <= current_epoch && current_epoch <= end_epoch
             {
+                let votes = get_proposal_votes(client, start_epoch, id).await;
+                let partial_proposal_result =
+                    compute_tally(client, start_epoch, votes).await;
+                println!(
+                    "{:4}Yay votes: {}",
+                    "", partial_proposal_result.total_yay_power
+                );
+                println!(
+                    "{:4}Nay votes: {}",
+                    "", partial_proposal_result.total_nay_power
+                );
                 println!("{:4}Status: on-going", "");
             } else {
                 let votes = get_proposal_votes(client, start_epoch, id).await;
@@ -1228,7 +1238,7 @@ pub async fn query_proposal_result(
                             cli::safe_exit(1)
                         }
 
-                        let file = File::open(&path.join("proposal"))
+                        let file = File::open(path.join("proposal"))
                             .expect("Proposal file must exist.");
                         let proposal: OfflineProposal =
                             serde_json::from_reader(file).expect(
@@ -1287,7 +1297,7 @@ pub async fn query_protocol_parameters(
     println!("Governance Parameters\n {:4}", gov_parameters);
 
     println!("Protocol parameters");
-    let key = param_storage::get_epoch_storage_key();
+    let key = param_storage::get_epoch_duration_storage_key();
     let epoch_duration = query_storage_value::<EpochDuration>(&client, &key)
         .await
         .expect("Parameter should be definied.");
@@ -1332,12 +1342,12 @@ pub async fn query_protocol_parameters(
         "", pos_params.block_vote_reward
     );
     println!(
-        "{:4}Duplicate vote slash rate: {}",
-        "", pos_params.duplicate_vote_slash_rate
+        "{:4}Duplicate vote minimum slash rate: {}",
+        "", pos_params.duplicate_vote_min_slash_rate
     );
     println!(
-        "{:4}Light client attack slash rate: {}",
-        "", pos_params.light_client_attack_slash_rate
+        "{:4}Light client attack minimum slash rate: {}",
+        "", pos_params.light_client_attack_min_slash_rate
     );
     println!(
         "{:4}Max. validator slots: {}",
@@ -1345,7 +1355,7 @@ pub async fn query_protocol_parameters(
     );
     println!("{:4}Pipeline length: {}", "", pos_params.pipeline_len);
     println!("{:4}Unbonding length: {}", "", pos_params.unbonding_len);
-    println!("{:4}Votes per token: {}", "", pos_params.votes_per_token);
+    println!("{:4}Votes per token: {}", "", pos_params.tm_votes_per_token);
 }
 
 /// Query PoS bond(s)
@@ -1695,8 +1705,8 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
     }
 }
 
-/// Query PoS voting power
-pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
+/// Query PoS bonded stake
+pub async fn query_bonded_stake(ctx: Context, args: args::QueryBondedStake) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
         None => query_epoch(args.query.clone()).await,
@@ -1712,26 +1722,26 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
     let validator_set = validator_sets
         .get(epoch)
         .expect("Validator set should be always set in the current epoch");
+
     match args.validator {
         Some(validator) => {
             let validator = ctx.get(&validator);
-            // Find voting power for the given validator
-            let voting_power_key = pos::validator_voting_power_key(&validator);
-            let voting_powers =
-                query_storage_value::<pos::ValidatorVotingPowers>(
-                    &client,
-                    &voting_power_key,
-                )
-                .await;
-            match voting_powers.and_then(|data| data.get(epoch)) {
-                Some(voting_power_delta) => {
-                    let voting_power: VotingPower =
-                        voting_power_delta.try_into().expect(
-                            "The sum voting power deltas shouldn't be negative",
-                        );
+            // Find bonded stake for the given validator
+            let validator_deltas_key = pos::validator_deltas_key(&validator);
+            let validator_deltas = query_storage_value::<pos::ValidatorDeltas>(
+                &client,
+                &validator_deltas_key,
+            )
+            .await;
+            match validator_deltas.and_then(|data| data.get(epoch)) {
+                Some(val_stake) => {
+                    let bonded_stake: u64 = val_stake.try_into().expect(
+                        "The sum of the bonded stake deltas shouldn't be \
+                         negative",
+                    );
                     let weighted = WeightedValidator {
                         address: validator.clone(),
-                        voting_power,
+                        bonded_stake,
                     };
                     let is_active = validator_set.active.contains(&weighted);
                     if !is_active {
@@ -1740,14 +1750,14 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
                         );
                     }
                     println!(
-                        "Validator {} is {}, voting power: {}",
+                        "Validator {} is {}, bonded stake: {}",
                         validator.encode(),
                         if is_active { "active" } else { "inactive" },
-                        voting_power
+                        bonded_stake,
                     )
                 }
                 None => {
-                    println!("No voting power found for {}", validator.encode())
+                    println!("No bonded stake found for {}", validator.encode())
                 }
             }
         }
@@ -1762,7 +1772,7 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
                     w,
                     "  {}: {}",
                     active.address.encode(),
-                    active.voting_power
+                    active.bonded_stake
                 )
                 .unwrap();
             }
@@ -1773,24 +1783,82 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
                         w,
                         "  {}: {}",
                         inactive.address.encode(),
-                        inactive.voting_power
+                        inactive.bonded_stake
                     )
                     .unwrap();
                 }
             }
         }
     }
-    let total_voting_power_key = pos::total_voting_power_key();
-    let total_voting_powers = query_storage_value::<pos::TotalVotingPowers>(
-        &client,
-        &total_voting_power_key,
-    )
-    .await
-    .expect("Total voting power should always be set");
-    let total_voting_power = total_voting_powers
+    let total_deltas_key = pos::total_deltas_key();
+    let total_deltas =
+        query_storage_value::<pos::TotalDeltas>(&client, &total_deltas_key)
+            .await
+            .expect("Total bonded stake should always be set");
+    let total_bonded_stake = total_deltas
         .get(epoch)
-        .expect("Total voting power should be always set in the current epoch");
-    println!("Total voting power: {}", total_voting_power);
+        .expect("Total bonded stake should be always set in the current epoch");
+    let total_bonded_stake: u64 = total_bonded_stake
+        .try_into()
+        .expect("total_bonded_stake should be a positive value");
+
+    println!("Total bonded stake: {}", total_bonded_stake);
+}
+
+/// Query PoS validator's commission rate
+pub async fn query_commission_rate(
+    ctx: Context,
+    args: args::QueryCommissionRate,
+) {
+    let epoch = match args.epoch {
+        Some(epoch) => epoch,
+        None => query_epoch(args.query.clone()).await,
+    };
+    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+    let validator = ctx.get(&args.validator);
+    let is_validator =
+        is_validator(&validator, args.query.ledger_address).await;
+
+    if is_validator {
+        let validator_commission_key =
+            pos::validator_commission_rate_key(&validator);
+        let validator_max_commission_change_key =
+            pos::validator_max_commission_rate_change_key(&validator);
+        let commission_rates = query_storage_value::<pos::CommissionRates>(
+            &client,
+            &validator_commission_key,
+        )
+        .await;
+        let max_rate_change = query_storage_value::<Decimal>(
+            &client,
+            &validator_max_commission_change_key,
+        )
+        .await;
+        let max_rate_change =
+            max_rate_change.expect("No max rate change found");
+        let commission_rates =
+            commission_rates.expect("No commission rate found ");
+        match commission_rates.get(epoch) {
+            Some(rate) => {
+                println!(
+                    "Validator {} commission rate: {}, max change per epoch: \
+                     {}",
+                    validator.encode(),
+                    *rate,
+                    max_rate_change,
+                )
+            }
+            None => {
+                println!(
+                    "No commission rate found for {} in epoch {}",
+                    validator.encode(),
+                    epoch
+                )
+            }
+        }
+    } else {
+        println!("Cannot find validator with address {}", validator);
+    }
 }
 
 /// Query PoS slashes
@@ -1890,10 +1958,7 @@ pub async fn is_validator(
     ledger_address: TendermintAddress,
 ) -> bool {
     let client = HttpClient::new(ledger_address).unwrap();
-    let key = pos::validator_state_key(address);
-    let state: Option<pos::ValidatorStates> =
-        query_storage_value(&client, &key).await;
-    state.is_some()
+    unwrap_client_response(RPC.vp().pos().is_validator(&client, address).await)
 }
 
 /// Check if a given address is a known delegator
@@ -1945,8 +2010,8 @@ pub async fn known_address(
 fn apply_slashes(
     slashes: &[Slash],
     mut delta: token::Amount,
-    epoch_start: PosEpoch,
-    withdraw_epoch: Option<PosEpoch>,
+    epoch_start: Epoch,
+    withdraw_epoch: Option<Epoch>,
     mut w: Option<&mut std::io::StdoutLock>,
 ) -> token::Amount {
     let mut slashed = token::Amount::default();
@@ -1963,7 +2028,8 @@ fn apply_slashes(
                 .unwrap();
             }
             let raw_delta: u64 = delta.into();
-            let current_slashed = token::Amount::from(slash.rate * raw_delta);
+            let current_slashed =
+                token::Amount::from(decimal_mult_u64(slash.rate, raw_delta));
             slashed += current_slashed;
             delta -= current_slashed;
         }
@@ -1997,8 +2063,7 @@ fn process_bonds_query(
                 .unwrap();
             delta = apply_slashes(slashes, delta, *epoch_start, None, Some(w));
             current_total += delta;
-            let epoch_start: Epoch = (*epoch_start).into();
-            if epoch >= &epoch_start {
+            if epoch >= epoch_start {
                 total_active += delta;
             }
         }
@@ -2053,8 +2118,7 @@ fn process_unbonds_query(
                 Some(w),
             );
             current_total += delta;
-            let epoch_end: Epoch = (*epoch_end).into();
-            if epoch > &epoch_end {
+            if epoch > epoch_end {
                 withdrawable += delta;
             }
         }
@@ -2352,11 +2416,11 @@ pub async fn query_tx_response(
     // applied to the blockchain
     let query_event_opt =
         response_block_results.end_block_events.and_then(|events| {
-            (&events)
+            events
                 .iter()
                 .find(|event| {
                     event.type_str == tx_query.event_type()
-                        && (&event.attributes).iter().any(|tag| {
+                        && event.attributes.iter().any(|tag| {
                             tag.key.as_ref() == "hash"
                                 && tag.value.as_ref() == tx_query.tx_hash()
                         })
@@ -2371,8 +2435,8 @@ pub async fn query_tx_response(
         )
     })?;
     // Reformat the event attributes so as to ease value extraction
-    let event_map: std::collections::HashMap<&str, &str> = (&query_event
-        .attributes)
+    let event_map: std::collections::HashMap<&str, &str> = query_event
+        .attributes
         .iter()
         .map(|tag| (tag.key.as_ref(), tag.value.as_ref()))
         .collect();
@@ -2461,8 +2525,10 @@ pub async fn get_proposal_votes(
                 .expect("Vote key should contain the voting address.")
                 .clone();
             if vote.is_yay() && validators.contains(&voter_address) {
-                let amount =
-                    get_validator_stake(client, epoch, &voter_address).await;
+                let amount: VotePower =
+                    get_validator_stake(client, epoch, &voter_address)
+                        .await
+                        .into();
                 yay_validators.insert(voter_address, amount);
             } else if !validators.contains(&voter_address) {
                 let validator_address =
@@ -2536,12 +2602,13 @@ pub async fn get_proposal_offline_votes(
         if proposal_vote.vote.is_yay()
             && validators.contains(&proposal_vote.address)
         {
-            let amount = get_validator_stake(
+            let amount: VotePower = get_validator_stake(
                 client,
                 proposal.tally_epoch,
                 &proposal_vote.address,
             )
-            .await;
+            .await
+            .into();
             yay_validators.insert(proposal_vote.address, amount);
         } else if is_delegator_at(
             client,
@@ -2569,11 +2636,8 @@ pub async fn get_proposal_offline_votes(
                     .await
                     .unwrap_or_default();
                     let mut delegated_amount: token::Amount = 0.into();
-                    let epoch = namada::ledger::pos::types::Epoch::from(
-                        proposal.tally_epoch.0,
-                    );
                     let bond = epoched_bonds
-                        .get(epoch)
+                        .get(proposal.tally_epoch)
                         .expect("Delegation bond should be defined.");
                     let mut to_deduct = bond.neg_deltas;
                     for (start_epoch, &(mut delta)) in
@@ -2639,9 +2703,8 @@ pub async fn compute_tally(
     epoch: Epoch,
     votes: Votes,
 ) -> ProposalResult {
-    let validators = get_all_validators(client, epoch).await;
-    let total_stacked_tokens =
-        get_total_staked_tokes(client, epoch, &validators).await;
+    let total_staked_tokens: VotePower =
+        get_total_staked_tokens(client, epoch).await.into();
 
     let Votes {
         yay_validators,
@@ -2649,16 +2712,16 @@ pub async fn compute_tally(
         nay_delegators,
     } = votes;
 
-    let mut total_yay_stacked_tokens = VotePower::from(0_u64);
+    let mut total_yay_staked_tokens = VotePower::from(0_u64);
     for (_, amount) in yay_validators.clone().into_iter() {
-        total_yay_stacked_tokens += amount;
+        total_yay_staked_tokens += amount;
     }
 
     // YAY: Add delegator amount whose validator didn't vote / voted nay
     for (_, vote_map) in yay_delegators.iter() {
         for (validator_address, vote_power) in vote_map.iter() {
             if !yay_validators.contains_key(validator_address) {
-                total_yay_stacked_tokens += vote_power;
+                total_yay_staked_tokens += vote_power;
             }
         }
     }
@@ -2667,23 +2730,23 @@ pub async fn compute_tally(
     for (_, vote_map) in nay_delegators.iter() {
         for (validator_address, vote_power) in vote_map.iter() {
             if yay_validators.contains_key(validator_address) {
-                total_yay_stacked_tokens -= vote_power;
+                total_yay_staked_tokens -= vote_power;
             }
         }
     }
 
-    if total_yay_stacked_tokens >= (total_stacked_tokens / 3) * 2 {
+    if total_yay_staked_tokens >= (total_staked_tokens / 3) * 2 {
         ProposalResult {
             result: TallyResult::Passed,
-            total_voting_power: total_stacked_tokens,
-            total_yay_power: total_yay_stacked_tokens,
+            total_voting_power: total_staked_tokens,
+            total_yay_power: total_yay_staked_tokens,
             total_nay_power: 0,
         }
     } else {
         ProposalResult {
             result: TallyResult::Rejected,
-            total_voting_power: total_stacked_tokens,
-            total_yay_power: total_yay_stacked_tokens,
+            total_voting_power: total_staked_tokens,
+            total_yay_power: total_yay_staked_tokens,
             total_nay_power: 0,
         }
     }
@@ -2730,8 +2793,7 @@ pub async fn get_bond_amount_at(
                         None,
                         None,
                     );
-                    let epoch_start: Epoch = (*epoch_start).into();
-                    if epoch >= epoch_start {
+                    if epoch >= *epoch_start {
                         delegated_amount += delta;
                     }
                 }
@@ -2745,69 +2807,42 @@ pub async fn get_bond_amount_at(
 pub async fn get_all_validators(
     client: &HttpClient,
     epoch: Epoch,
-) -> Vec<Address> {
-    let validator_set_key = pos::validator_set_key();
-    let validator_sets =
-        query_storage_value::<pos::ValidatorSets>(client, &validator_set_key)
-            .await
-            .expect("Validator set should always be set");
-    let validator_set = validator_sets
-        .get(epoch)
-        .expect("Validator set should be always set in the current epoch");
-    let all_validators = validator_set.active.union(&validator_set.inactive);
-    all_validators
-        .map(|validator| validator.address.clone())
-        .collect()
+) -> HashSet<Address> {
+    unwrap_client_response(
+        RPC.vp()
+            .pos()
+            .validator_addresses(client, &Some(epoch))
+            .await,
+    )
 }
 
-pub async fn get_total_staked_tokes(
+pub async fn get_total_staked_tokens(
     client: &HttpClient,
     epoch: Epoch,
-    validators: &[Address],
-) -> VotePower {
-    let mut total = VotePower::from(0_u64);
-
-    for validator in validators {
-        total += get_validator_stake(client, epoch, validator).await;
-    }
-    total
+) -> token::Amount {
+    unwrap_client_response(
+        RPC.vp().pos().total_stake(client, &Some(epoch)).await,
+    )
 }
 
 async fn get_validator_stake(
     client: &HttpClient,
     epoch: Epoch,
     validator: &Address,
-) -> VotePower {
-    let total_voting_power_key = pos::validator_total_deltas_key(validator);
-    let total_voting_power = query_storage_value::<pos::ValidatorTotalDeltas>(
-        client,
-        &total_voting_power_key,
+) -> token::Amount {
+    unwrap_client_response(
+        RPC.vp()
+            .pos()
+            .validator_stake(client, validator, &Some(epoch))
+            .await,
     )
-    .await
-    .expect("Total deltas should be defined");
-    let epoched_total_voting_power = total_voting_power.get(epoch);
-
-    VotePower::try_from(epoched_total_voting_power.unwrap_or_default())
-        .unwrap_or_default()
 }
 
 pub async fn get_delegators_delegation(
     client: &HttpClient,
     address: &Address,
-    _epoch: Epoch,
-) -> Vec<Address> {
-    let key = pos::bonds_for_source_prefix(address);
-    let bonds_iter = query_storage_prefix::<pos::Bonds>(client, &key).await;
-
-    let mut delegation_addresses: Vec<Address> = Vec::new();
-    if let Some(bonds) = bonds_iter {
-        for (key, _epoched_amount) in bonds {
-            let validator_address = pos::get_validator_address_from_bond(&key)
-                .expect("Delegation key should contain validator address.");
-            delegation_addresses.push(validator_address);
-        }
-    }
-    delegation_addresses
+) -> HashSet<Address> {
+    unwrap_client_response(RPC.vp().pos().delegations(client, address).await)
 }
 
 pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {

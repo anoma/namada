@@ -372,10 +372,11 @@ fn md_fmt_type(type_name: impl AsRef<str>) -> String {
 fn write_generated_code_notice(
     file: &mut std::fs::File,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let path = std::file!();
     writeln!(
         file,
-        "<!--- THIS PAGE IS GENERATED FROM CODE: {}. Do not edit manually! -->",
-        std::file!()
+        "<!--- THIS PAGE IS GENERATED FROM CODE: {path}. Do not edit \
+         manually! -->",
     )?;
     Ok(())
 }
@@ -390,9 +391,7 @@ fn escape_fragment_anchor(string: impl AsRef<str>) -> String {
     // mdBook turns headings fragment links to lowercase
     string
         .as_ref()
-        .replace('>', "")
-        .replace('<', "")
-        .replace(',', "")
+        .replace(['>', '<', ','], "")
         .replace(' ', "-")
         .replace(':', "")
         .to_ascii_lowercase()

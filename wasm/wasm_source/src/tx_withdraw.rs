@@ -21,7 +21,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 
 #[cfg(test)]
 mod tests {
-    use namada::ledger::pos::PosParams;
+    use namada::ledger::pos::{BondId, GenesisValidator, PosParams, PosVP};
     use namada::proto::Tx;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
@@ -35,9 +35,6 @@ mod tests {
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
-    use namada_vp_prelude::proof_of_stake::{
-        staking_token_address, BondId, GenesisValidator, PosVP,
-    };
     use proptest::prelude::*;
 
     use super::*;
@@ -73,15 +70,14 @@ mod tests {
     ) -> TxResult {
         let is_delegation = matches!(
             &withdraw.source, Some(source) if *source != withdraw.validator);
-        let staking_reward_address = address::testing::established_address_1();
         let consensus_key = key::testing::keypair_1().ref_to();
-        let staking_reward_key = key::testing::keypair_2().ref_to();
         let eth_cold_key = key::testing::keypair_3().ref_to();
         let eth_hot_key = key::testing::keypair_4().ref_to();
+        let commission_rate = rust_decimal::Decimal::new(5, 2);
+        let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
 
         let genesis_validators = [GenesisValidator {
             address: withdraw.validator.clone(),
-            staking_reward_address,
             tokens: if is_delegation {
                 // If we're withdrawing a delegation, we'll give the initial
                 // stake to the delegation instead of the
@@ -91,14 +87,16 @@ mod tests {
                 initial_stake
             },
             consensus_key,
-            staking_reward_key,
             eth_cold_key,
             eth_hot_key,
+            commission_rate,
+            max_commission_rate_change,
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
-        tx_host_env::with(|tx_env| {
+        let native_token = tx_host_env::with(|tx_env| {
+            let native_token = tx_env.storage.native_token.clone();
             if is_delegation {
                 let source = withdraw.source.as_ref().unwrap();
                 tx_env.spawn_accounts([source]);
@@ -109,11 +107,12 @@ mod tests {
                 // before we initialize the bond below
                 tx_env.credit_tokens(
                     source,
-                    &staking_token_address(),
+                    &native_token,
                     None,
                     initial_stake,
                 );
             }
+            native_token
         });
 
         if is_delegation {
@@ -155,7 +154,7 @@ mod tests {
 
         // Read data before we apply tx:
         let pos_balance_key = token::balance_key(
-            &staking_token_address(),
+            &native_token,
             &Address::Internal(InternalAddress::PoS),
         );
         let pos_balance_pre: token::Amount = ctx()
@@ -206,13 +205,16 @@ mod tests {
     fn arb_initial_stake_and_unbonded_amount()
     -> impl Strategy<Value = (token::Amount, token::Amount)> {
         // Generate initial stake
-        token::testing::arb_amount().prop_flat_map(|initial_stake| {
-            // Use the initial stake to limit the unbonded amount from the stake
-            let unbonded_amount =
-                token::testing::arb_amount_ceiled(initial_stake.into());
-            // Use the generated initial stake too too
-            (Just(initial_stake), unbonded_amount)
-        })
+        token::testing::arb_amount_ceiled((i64::MAX / 8) as u64).prop_flat_map(
+            |initial_stake| {
+                // Use the initial stake to limit the unbonded amount from the
+                // stake
+                let unbonded_amount =
+                    token::testing::arb_amount_ceiled(initial_stake.into());
+                // Use the generated initial stake too too
+                (Just(initial_stake), unbonded_amount)
+            },
+        )
     }
 
     fn arb_withdraw() -> impl Strategy<Value = transaction::pos::Withdraw> {

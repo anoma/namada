@@ -53,7 +53,8 @@ pub enum Error {
     #[error("Failed running wasm with: {0}")]
     RuntimeError(wasmer::RuntimeError),
     #[error("Failed instantiating wasm module with: {0}")]
-    InstantiationError(wasmer::InstantiationError),
+    // Boxed cause it's 128b
+    InstantiationError(Box<wasmer::InstantiationError>),
     #[error(
         "Unexpected module entrypoint interface {entrypoint}, failed with: \
          {error}"
@@ -116,7 +117,7 @@ where
 
     // Instantiate the wasm module
     let instance = wasmer::Instance::new(&module, &imports)
-        .map_err(Error::InstantiationError)?;
+        .map_err(|e| Error::InstantiationError(Box::new(e)))?;
 
     // We need to write the inputs in the memory exported from the wasm
     // module
@@ -184,7 +185,7 @@ where
     validate_untrusted_wasm(vp_code).map_err(Error::ValidationError)?;
 
     // Compile the wasm module
-    let (module, store) = vp_wasm_cache.fetch_or_compile(&vp_code)?;
+    let (module, store) = vp_wasm_cache.fetch_or_compile(vp_code)?;
 
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
     let mut result_buffer: Option<Vec<u8>> = None;
@@ -241,7 +242,7 @@ fn run_vp(
 
     // Instantiate the wasm module
     let instance = wasmer::Instance::new(&module, &vp_imports)
-        .map_err(Error::InstantiationError)?;
+        .map_err(|e| Error::InstantiationError(Box::new(e)))?;
 
     // We need to write the inputs in the memory exported from the wasm
     // module

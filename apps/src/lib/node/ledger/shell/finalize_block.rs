@@ -1,5 +1,6 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
+use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
 use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::transaction::protocol::ProtocolTxType;
@@ -318,21 +319,16 @@ where
             .begin_block(hash, height)
             .expect("Beginning a block shouldn't fail");
 
+        let header_time = header.time;
         self.storage
             .set_header(header)
             .expect("Setting a header shouldn't fail");
 
         self.byzantine_validators = byzantine_validators;
 
-        let header = self
-            .storage
-            .header
-            .as_ref()
-            .expect("Header must have been set in prepare_proposal.");
-        let time = header.time;
         let new_epoch = self
             .storage
-            .update_epoch(height, time)
+            .update_epoch(height, header_time)
             .expect("Must be able to update epoch");
 
         self.slash();
@@ -344,18 +340,19 @@ where
     fn update_epoch(&self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
         let (current_epoch, _gas) = self.storage.get_current_epoch();
+        let pos_params = self.storage.read_pos_params();
         // TODO ABCI validator updates on block H affects the validator set
         // on block H+2, do we need to update a block earlier?
         self.storage.validator_set_update(current_epoch, |update| {
             let (consensus_key, power) = match update {
                 ValidatorSetUpdate::Active(ActiveValidator {
                     consensus_key,
-                    voting_power,
+                    bonded_stake,
                 }) => {
-                    let power: u64 = voting_power.into();
-                    let power: i64 = power
-                        .try_into()
-                        .expect("unexpected validator's voting power");
+                    let power: i64 = into_tm_voting_power(
+                        pos_params.tm_votes_per_token,
+                        bonded_stake,
+                    );
                     (consensus_key, power)
                 }
                 ValidatorSetUpdate::Deactivated(consensus_key) => {
@@ -380,7 +377,6 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use namada::types::address::nam;
     use namada::types::ethereum_events::EthAddress;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};
@@ -412,7 +408,7 @@ mod test_finalize_block {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -483,7 +479,7 @@ mod test_finalize_block {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -535,7 +531,7 @@ mod test_finalize_block {
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
@@ -601,7 +597,7 @@ mod test_finalize_block {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -632,7 +628,7 @@ mod test_finalize_block {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),

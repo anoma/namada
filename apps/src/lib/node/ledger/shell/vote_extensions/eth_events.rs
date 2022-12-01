@@ -2,13 +2,13 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
+use namada::ledger::queries_ext::QueriesExt;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-use namada::ledger::storage_api::queries::QueriesExt;
 use namada::proto::Signed;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::BlockHeight;
+use namada::types::token;
 use namada::types::vote_extensions::ethereum_events::{
     self, MultiSignedEthEvent,
 };
@@ -50,7 +50,7 @@ where
         ext: Signed<ethereum_events::Vext>,
         last_height: BlockHeight,
     ) -> std::result::Result<
-        (VotingPower, Signed<ethereum_events::Vext>),
+        (token::Amount, Signed<ethereum_events::Vext>),
         VoteExtensionError,
     > {
         #[cfg(feature = "abcipp")]
@@ -165,7 +165,7 @@ where
         + 'iter,
     ) -> impl Iterator<
         Item = std::result::Result<
-            (VotingPower, Signed<ethereum_events::Vext>),
+            (token::Amount, Signed<ethereum_events::Vext>),
             VoteExtensionError,
         >,
     > + 'iter {
@@ -184,7 +184,7 @@ where
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
         + 'iter,
-    ) -> impl Iterator<Item = (VotingPower, Signed<ethereum_events::Vext>)> + 'iter
+    ) -> impl Iterator<Item = (token::Amount, Signed<ethereum_events::Vext>)> + 'iter
     {
         self.validate_eth_events_vext_list(vote_extensions)
             .filter_map(|ext| ext.ok())
@@ -308,7 +308,7 @@ mod test_vote_extensions {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::storage_api::queries::QueriesExt;
+    use namada::ledger::queries_ext::QueriesExt;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum,
     };
