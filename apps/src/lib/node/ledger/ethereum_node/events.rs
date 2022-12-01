@@ -67,6 +67,7 @@ pub mod eth_events {
 
     pub type Result<T> = std::result::Result<T, Error>;
 
+    #[derive(Clone, Debug, PartialEq)]
     /// An event waiting for a certain number of confirmations
     /// before being sent to the ledger
     pub(in super::super) struct PendingEvent {
@@ -759,6 +760,8 @@ pub mod eth_events {
 
     #[cfg(test)]
     mod test_events {
+        use assert_matches::assert_matches;
+
         use super::*;
 
         #[test]
@@ -800,6 +803,34 @@ pub mod eth_events {
                 }]
             )
         }
+
+        /// Test that for Ethereum events for which a custom number of
+        /// confirmations may be specified, if a value lower than the
+        /// protocol-specified minimum confirmations is attempted to be used,
+        /// then the protcol-specified minimum confirmations is used instead.
+        #[test]
+        fn test_min_confirmations_enforced() -> Result<()> {
+            let sig = signatures::TRANSFER_TO_NAMADA_SIG;
+            let arbitrary_block_height = 123u64.into();
+            let min_confirmations: Uint256 = 100u64.into();
+            let event = RawTransfersToNamada {
+                transfers: vec![],
+                nonce: 0.into(),
+                confirmations: 1, // this is lower than `min_confirmations`
+            };
+            let data = event.encode();
+
+            let pending_event = PendingEvent::decode(
+                sig,
+                arbitrary_block_height,
+                &data,
+                min_confirmations.clone(),
+            )?;
+
+            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == min_confirmations);
+            Ok(())
+        }
+
         /// For each of the basic types, test that roundtrip
         /// encoding - decoding is a no-op
         #[test]
