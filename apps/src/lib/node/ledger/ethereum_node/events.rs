@@ -810,16 +810,37 @@ pub mod eth_events {
         /// then the protcol-specified minimum confirmations is used instead.
         #[test]
         fn test_min_confirmations_enforced() -> Result<()> {
-            let sig = signatures::TRANSFER_TO_NAMADA_SIG;
-            let arbitrary_block_height = 123u64.into();
+            let arbitrary_block_height: Uint256 = 123u64.into();
             let min_confirmations: Uint256 = 100u64.into();
-            let event = RawTransfersToNamada {
-                transfers: vec![],
-                nonce: 0.into(),
-                confirmations: 1, // this is lower than `min_confirmations`
-            };
-            let data = event.encode();
+            let lower_than_min_confirmations = 5;
 
+            let (sig, event) = (
+                signatures::TRANSFER_TO_NAMADA_SIG,
+                RawTransfersToNamada {
+                    transfers: vec![],
+                    nonce: 0.into(),
+                    confirmations: lower_than_min_confirmations,
+                },
+            );
+            let data = event.encode();
+            let pending_event = PendingEvent::decode(
+                sig,
+                arbitrary_block_height.clone(),
+                &data,
+                min_confirmations.clone(),
+            )?;
+
+            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == min_confirmations);
+
+            let (sig, event) = (
+                signatures::TRANSFER_TO_ETHEREUM_SIG,
+                RawTransfersToEthereum {
+                    transfers: vec![],
+                    nonce: 0.into(),
+                    confirmations: lower_than_min_confirmations,
+                },
+            );
+            let data = event.encode();
             let pending_event = PendingEvent::decode(
                 sig,
                 arbitrary_block_height,
@@ -828,6 +849,7 @@ pub mod eth_events {
             )?;
 
             assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == min_confirmations);
+
             Ok(())
         }
 
