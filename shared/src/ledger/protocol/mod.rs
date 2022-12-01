@@ -370,7 +370,7 @@ where
 {
     verifiers
         .par_iter()
-        // TODO temporary pending on <https://github.com/anoma/anoma/issues/193>
+        // TODO temporary pending on <https://github.com/anoma/namada/issues/193>
         .filter(|addr| !matches!(addr, Address::Implicit(_)))
         .try_fold(VpsResult::default, |mut result, addr| {
             let mut gas_meter = VpGasMeter::new(initial_gas);
@@ -523,7 +523,7 @@ where
 
                     accepted
                 }
-                // TODO temporary pending on <https://github.com/anoma/anoma/issues/193>
+                // TODO temporary pending on <https://github.com/anoma/namada/issues/193>
                 Address::Implicit(_) => unreachable!(),
             };
 

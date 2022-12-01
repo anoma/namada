@@ -84,7 +84,7 @@ We can generate the code on demand (e.g. we could allow to query a node to gener
 
 ```rust
 // load the account(s) code where the identifier is the account's address.
-use anoma_accounts::SharedSavings;
+use namada_accounts::SharedSavings;
 
 fn transaction(...) {
   let multisig = SharedSavings::read_multisig();

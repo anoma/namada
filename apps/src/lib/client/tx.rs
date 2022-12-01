@@ -1362,7 +1362,7 @@ fn make_asset_type(epoch: Epoch, token: &Address) -> AssetType {
     AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
 }
 
-/// Convert Anoma amount and token type to MASP equivalents
+/// Convert Namada amount and token type to MASP equivalents
 fn convert_amount(
     epoch: Epoch,
     token: &Address,

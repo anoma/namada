@@ -20,9 +20,9 @@ use crate::wallet::Wallet;
 use crate::wasm_loader;
 
 /// Env. var to set chain ID
-const ENV_VAR_CHAIN_ID: &str = "ANOMA_CHAIN_ID";
+const ENV_VAR_CHAIN_ID: &str = "NAMADA_CHAIN_ID";
 /// Env. var to set wasm directory
-pub const ENV_VAR_WASM_DIR: &str = "ANOMA_WASM_DIR";
+pub const ENV_VAR_WASM_DIR: &str = "NAMADA_WASM_DIR";
 
 /// A raw address (bech32m encoding) or an alias of an address that may be found
 /// in the wallet

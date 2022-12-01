@@ -37,15 +37,15 @@ pub static INIT: Once = Once::new();
 pub const APPS_PACKAGE: &str = "namada_apps";
 
 /// Env. var for running E2E tests in debug mode
-pub const ENV_VAR_DEBUG: &str = "ANOMA_E2E_DEBUG";
+pub const ENV_VAR_DEBUG: &str = "NAMADA_E2E_DEBUG";
 
 /// Env. var for keeping temporary files created by the E2E tests
-const ENV_VAR_KEEP_TEMP: &str = "ANOMA_E2E_KEEP_TEMP";
+const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
 
 /// Env. var to use a set of prebuilt binaries. This variable holds the path to
 /// a folder.
 pub const ENV_VAR_USE_PREBUILT_BINARIES: &str =
-    "ANOMA_E2E_USE_PREBUILT_BINARIES";
+    "NAMADA_E2E_USE_PREBUILT_BINARIES";
 
 /// The E2E tests genesis config source.
 /// This file must contain a single validator with alias "validator-0".
@@ -247,7 +247,7 @@ pub fn network(
     })
 }
 
-/// Anoma binaries
+/// Namada binaries
 #[derive(Debug)]
 pub enum Bin {
     Node,
@@ -260,7 +260,7 @@ pub struct Test {
     /// The dir where the tests run from, usually the repo root dir
     pub working_dir: PathBuf,
     /// Temporary test directory is used as the default base-dir for running
-    /// Anoma cmds
+    /// Namada cmds
     pub test_dir: TestDir,
     pub net: Network,
     pub genesis: GenesisConfig,
@@ -322,10 +322,10 @@ impl Drop for Test {
 // Internally used macros only for attaching source locations to commands
 #[macro_use]
 mod macros {
-    /// Get an [`AnomaCmd`] to run an Anoma binary. By default, these will run
+    /// Get an [`NamadaCmd`] to run an Namada binary. By default, these will run
     /// in release mode. This can be disabled by setting environment
-    /// variable `ANOMA_E2E_DEBUG=true`.
-    /// On [`AnomaCmd`], you can then call e.g. `exp_string` or `exp_regex` to
+    /// variable `NAMADA_E2E_DEBUG=true`.
+    /// On [`NamadaCmd`], you can then call e.g. `exp_string` or `exp_regex` to
     /// look for an expected output from the command.
     ///
     /// Arguments:
@@ -347,10 +347,10 @@ mod macros {
         }};
     }
 
-    /// Get an [`AnomaCmd`] to run an Anoma binary. By default, these will run
+    /// Get an [`NamadaCmd`] to run an Namada binary. By default, these will run
     /// in release mode. This can be disabled by setting environment
-    /// variable `ANOMA_E2E_DEBUG=true`.
-    /// On [`AnomaCmd`], you can then call e.g. `exp_string` or `exp_regex` to
+    /// variable `NAMADA_E2E_DEBUG=true`.
+    /// On [`NamadaCmd`], you can then call e.g. `exp_string` or `exp_regex` to
     /// look for an expected output from the command.
     ///
     /// Arguments:
@@ -391,16 +391,16 @@ impl Test {
     /// Use the `run!` macro instead of calling this method directly to get
     /// automatic source location reporting.
     ///
-    /// Get an [`AnomaCmd`] to run an Anoma binary. By default, these will run
+    /// Get an [`NamadaCmd`] to run an Namada binary. By default, these will run
     /// in release mode. This can be disabled by setting environment
-    /// variable `ANOMA_E2E_DEBUG=true`.
+    /// variable `NAMADA_E2E_DEBUG=true`.
     pub fn run_cmd<I, S>(
         &self,
         bin: Bin,
         args: I,
         timeout_sec: Option<u64>,
         loc: String,
-    ) -> Result<AnomaCmd>
+    ) -> Result<NamadaCmd>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -411,9 +411,9 @@ impl Test {
     /// Use the `run!` macro instead of calling this method directly to get
     /// automatic source location reporting.
     ///
-    /// Get an [`AnomaCmd`] to run an Anoma binary. By default, these will run
+    /// Get an [`NamadaCmd`] to run an Namada binary. By default, these will run
     /// in release mode. This can be disabled by setting environment
-    /// variable `ANOMA_E2E_DEBUG=true`.
+    /// variable `NAMADA_E2E_DEBUG=true`.
     pub fn run_cmd_as<I, S>(
         &self,
         who: Who,
@@ -421,7 +421,7 @@ impl Test {
         args: I,
         timeout_sec: Option<u64>,
         loc: String,
-    ) -> Result<AnomaCmd>
+    ) -> Result<NamadaCmd>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -476,13 +476,13 @@ pub fn working_dir() -> PathBuf {
 }
 
 /// A command under test
-pub struct AnomaCmd {
+pub struct NamadaCmd {
     pub session: Session<UnixProcess, LoggedStream<PtyStream, File>>,
     pub cmd_str: String,
     pub log_path: PathBuf,
 }
 
-impl Display for AnomaCmd {
+impl Display for NamadaCmd {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -494,26 +494,26 @@ impl Display for AnomaCmd {
 }
 
 /// A command under test running on a background thread
-pub struct AnomaBgCmd {
-    join_handle: std::thread::JoinHandle<AnomaCmd>,
+pub struct NamadaBgCmd {
+    join_handle: std::thread::JoinHandle<NamadaCmd>,
     abort_send: std::sync::mpsc::Sender<()>,
 }
 
-impl AnomaBgCmd {
+impl NamadaBgCmd {
     /// Re-gain control of a background command (created with
-    /// [`AnomaCmd::background()`]) to check its output.
-    pub fn foreground(self) -> AnomaCmd {
+    /// [`NamadaCmd::background()`]) to check its output.
+    pub fn foreground(self) -> NamadaCmd {
         self.abort_send.send(()).unwrap();
         self.join_handle.join().unwrap()
     }
 }
 
-impl AnomaCmd {
+impl NamadaCmd {
     /// Keep reading the session's output in a background thread to prevent the
-    /// buffer from filling up. Call [`AnomaBgCmd::foreground()`] on the
-    /// returned [`AnomaBgCmd`] to stop the loop and return back the original
+    /// buffer from filling up. Call [`NamadaBgCmd::foreground()`] on the
+    /// returned [`NamadaBgCmd`] to stop the loop and return back the original
     /// command.
-    pub fn background(self) -> AnomaBgCmd {
+    pub fn background(self) -> NamadaBgCmd {
         let (abort_send, abort_recv) = std::sync::mpsc::channel();
         let join_handle = std::thread::spawn(move || {
             let mut cmd = self;
@@ -528,7 +528,7 @@ impl AnomaCmd {
                 cmd.session.is_matched(Eof).unwrap();
             }
         });
-        AnomaBgCmd {
+        NamadaBgCmd {
             join_handle,
             abort_send,
         }
@@ -645,7 +645,7 @@ impl AnomaCmd {
     }
 }
 
-impl Drop for AnomaCmd {
+impl Drop for NamadaCmd {
     fn drop(&mut self) {
         // attempt to clean up the process
         println!(
@@ -690,9 +690,9 @@ impl Drop for AnomaCmd {
     }
 }
 
-/// Get a [`Command`] to run an Anoma binary. By default, these will run in
+/// Get a [`Command`] to run an Namada binary. By default, these will run in
 /// release mode. This can be disabled by setting environment variable
-/// `ANOMA_E2E_DEBUG=true`.
+/// `NAMADA_E2E_DEBUG=true`.
 pub fn run_cmd<I, S>(
     bin: Bin,
     args: I,
@@ -701,7 +701,7 @@ pub fn run_cmd<I, S>(
     base_dir: impl AsRef<Path>,
     mode: &str,
     loc: String,
-) -> Result<AnomaCmd>
+) -> Result<NamadaCmd>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -719,10 +719,10 @@ where
     );
 
     run_cmd
-        .env("ANOMA_LOG", log_level)
-        .env("ANOMA_TM_STDOUT", "true")
+        .env("NAMADA_LOG", log_level)
+        .env("NAMADA_TM_STDOUT", "true")
         .env("TM_LOG_LEVEL", "info")
-        .env("ANOMA_LOG_COLOR", "false")
+        .env("NAMADA_LOG_COLOR", "false")
         .current_dir(working_dir)
         .args(&[
             "--base-dir",
@@ -771,7 +771,7 @@ where
 
     session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
 
-    let mut cmd_process = AnomaCmd {
+    let mut cmd_process = NamadaCmd {
         session,
         cmd_str,
         log_path,

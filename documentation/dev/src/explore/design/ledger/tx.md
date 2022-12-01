@@ -1,6 +1,6 @@
 # Transactions
 
-[Tracking Issue](https://github.com/anoma/anoma/issues/43)
+[Tracking Issue](https://github.com/anoma/namada/issues/43)
 
 ---
 

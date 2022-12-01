@@ -22,7 +22,7 @@ use super::test_tools::mock_web3_client::Web3;
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
 
 /// A client that can talk to geth and parse
-/// and relay events relevant to Anoma to the
+/// and relay events relevant to Namada to the
 /// ledger process
 pub struct Oracle {
     /// The client that talks to the Ethereum fullnode
@@ -61,7 +61,7 @@ impl Oracle {
         }
     }
 
-    /// Send a series of [`EthereumEvent`]s to the Anoma
+    /// Send a series of [`EthereumEvent`]s to the Namada
     /// ledger. Returns a boolean indicating that all sent
     /// successfully. If false is returned, the receiver
     /// has hung up.
@@ -131,7 +131,7 @@ pub fn run_oracle(
 }
 
 /// Given an oracle, watch for new Ethereum events, processing
-/// them into Anoma native types.
+/// them into Namada native types.
 ///
 /// It also checks that once the specified number of confirmations
 /// is reached, an event is forwarded to the ledger process

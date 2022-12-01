@@ -1,7 +1,7 @@
-//! The shared code for the Anoma ledger, gossip and wasms.
+//! The shared code for the Namada ledger, gossip and wasms.
 
-#![doc(html_favicon_url = "https://dev.anoma.net/master/favicon.png")]
-#![doc(html_logo_url = "https://dev.anoma.net/master/rustdoc-logo.png")]
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
 #![warn(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]

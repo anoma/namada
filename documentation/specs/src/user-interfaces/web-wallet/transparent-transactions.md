@@ -8,7 +8,7 @@
 
 ## Constructing Transparent Transactions
 
-The web-wallet will need to support many transactions. As the data that gets submitted to the ledger is most easily constructed from `anoma` types, we perform the assembly of the transaction with in WebAssembly using Rust so that we may natively interact with `anoma`. The role of wasm in this scenario is to provide two pieces of data to the client (which will handle the broadcasting of the transaction), which are:
+The web-wallet will need to support many transactions. As the data that gets submitted to the ledger is most easily constructed from `namada` types, we perform the assembly of the transaction with in WebAssembly using Rust so that we may natively interact with `namada`. The role of wasm in this scenario is to provide two pieces of data to the client (which will handle the broadcasting of the transaction), which are:
 
 1. `hash` - the hash of the transaction
 2. `data` - A byte array of the final wrapped and signed transaction
@@ -19,16 +19,16 @@ The following outlines how we can construct these transactions before returning 
 
 There are a few steps involved in creating and signing a transaction:
 
-1. Create an `anoma::proto::Tx struct` and sign it with a keypair
-2. Wrap Tx with a `anoma::types::transaction::WrapperTx` struct which encrypts the transaction
-3. Create a new `anoma::proto::Tx` with the new `WrapperTx` as data, and sign it with a keypair (this will be broadcast to the ledger)
+1. Create an `namada::proto::Tx struct` and sign it with a keypair
+2. Wrap Tx with a `namada::types::transaction::WrapperTx` struct which encrypts the transaction
+3. Create a new `namada::proto::Tx` with the new `WrapperTx` as data, and sign it with a keypair (this will be broadcast to the ledger)
 
-### 1.1 - Creating the `anoma::proto::Tx` struct
+### 1.1 - Creating the `namada::proto::Tx` struct
 
 The requirements for creating this struct are as follow:
 
 - A pre-built wasm in the form of a byte array (this is loaded in the client as a `Uint8Array` type to pass to the wasm)
-- A serialized `anoma::types::token::Transfer` object which contains the following:
+- A serialized `namada::types::token::Transfer` object which contains the following:
   - `source` - source address derived from keypair
   - `target` - target address
   - `token` - token address
@@ -36,7 +36,7 @@ The requirements for creating this struct are as follow:
 - A UTC timestamp. _NOTE_ this is created when calling `proto::Tx::new()`, however, this is incompatible with the wasm in runtime (`time` is undefined). Therefore, we need to get a valid timestamp from `js_sys`:
 
 ```rust
-// anoma-lib/src/util.rs
+// namada-lib/src/util.rs
 
 pub fn get_timestamp() -> DateTimeUtc {
     let now = js_sys::Date::new_0();
@@ -58,7 +58,7 @@ pub fn get_timestamp() -> DateTimeUtc {
 _In wasm:_
 
 ```rust
-// anoma-lib/src/transfer.rs
+// namada-lib/src/transfer.rs
 
 let transfer = token::Transfer {
     source: source.0,
@@ -73,8 +73,8 @@ let data = transfer
     .expect("Encoding unsigned transfer shouldn't fail");
 ```
 
-_In Anoma CLI:_
-https://github.com/anoma/anoma/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L406-L411
+_In Namada CLI:_
+https://github.com/anoma/namada/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L406-L411
 
 
 #### Creating and signing the `proto::Tx` struct
@@ -82,7 +82,7 @@ https://github.com/anoma/anoma/blob/f6e78278608aaef253617885bb7ef95a50057268/app
 _In wasm:_
 
 ```rust
-// anoma-lib/src/types/tx.rs
+// namada-lib/src/types/tx.rs
 
 impl Tx {
     pub fn new(tx_code: Vec<u8>, data: Vec<u8>) -> proto::Tx {
@@ -97,11 +97,11 @@ impl Tx {
 
 **NOTE** Here we provide a work around to an issue with `proto::Tx::new()` in wasm - instead of calling the method directly on `Tx`, we create a new implementation that returns a `proto::Tx`, with the timestamp being set using `js_sys` in order to make this wasm-compatible.
 
-_In Anoma CLI:_
-https://github.com/anoma/anoma/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L417-L419
+_In Namada CLI:_
+https://github.com/anoma/namada/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L417-L419
 
 
-### 1.2 - Creating the `anoma::types::transaction::WrapperTx` struct
+### 1.2 - Creating the `namada::types::transaction::WrapperTx` struct
 
 The requirements for creating this struct are as follows:
 
@@ -115,7 +115,7 @@ The requirements for creating this struct are as follows:
 _In wasm:_
 
 ```rust
-// anoma-lib/src/types/wrapper.rs
+// namada-lib/src/types/wrapper.rs
 
 transaction::WrapperTx::new(
     transaction::Fee {
@@ -131,8 +131,8 @@ transaction::WrapperTx::new(
 
 **NOTE** Here we can directly invoke `WrapperTx::new`, so we only need to concern ourselves with convering the JavaScript-provided values into the appropriate types.
 
-_In Anoma CLI:_
-https://github.com/anoma/anoma/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L687-L696
+_In Namada CLI:_
+https://github.com/anoma/namada/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L687-L696
 
 #### 1.3 - Create a new `Tx` with `WrapperTx` and sign it
 
@@ -141,7 +141,7 @@ Here we create a `WrapperTx` type, and with that we create a new `Tx` type (our 
 _In wasm:_
 
 ```rust
-// anoma-lib/src/types/wrapper.rs -> sign()
+// namada-lib/src/types/wrapper.rs -> sign()
 
 (Tx::new(
     vec![],
@@ -151,7 +151,7 @@ _In wasm:_
 )).sign(&keypair)
 ```
 
-We can summarize a high-level overview of the entire process from the `anoma-lib/src/types/transaction.rs` implementation:
+We can summarize a high-level overview of the entire process from the `namada-lib/src/types/transaction.rs` implementation:
 
 ```rust
 let source_keypair = Keypair::deserialize(serialized_keypair)?;
@@ -184,8 +184,8 @@ Ok(Transaction {
 })
 ```
 
-_In Anoma CLI:_
-https://github.com/anoma/anoma/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L810-L814
+_In Namada CLI:_
+https://github.com/anoma/namada/blob/f6e78278608aaef253617885bb7ef95a50057268/apps/src/lib/client/tx.rs#L810-L814
 
 
 ## Part 2 - Initialize Account Transaction
@@ -193,7 +193,7 @@ https://github.com/anoma/anoma/blob/f6e78278608aaef253617885bb7ef95a50057268/app
 Constructing an Initialize Account transaction follows a similar process to a transfer, however, in addition to providing a `tx_init_account` wasm, we need to provide the `vp_user` wasm as well, as this is required when constructing the transaction:
 
 ```rust
-// anoma-lib/src/account.rs
+// namada-lib/src/account.rs
 
 let vp_code: Vec<u8> = vp_code.to_vec();
 let keypair = &Keypair::deserialize(serialized_keypair.clone())

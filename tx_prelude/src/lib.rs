@@ -1,8 +1,8 @@
 //! This crate contains library code for transaction WASM. Most of the code is
 //! re-exported from the `namada_vm_env` crate.
 
-#![doc(html_favicon_url = "https://dev.anoma.net/master/favicon.png")]
-#![doc(html_logo_url = "https://dev.anoma.net/master/rustdoc-logo.png")]
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
@@ -47,7 +47,7 @@ pub use crate::proof_of_stake::{PosRead, PosWrite};
 pub fn log_string<T: AsRef<str>>(msg: T) {
     let msg = msg.as_ref();
     unsafe {
-        anoma_tx_log_string(msg.as_ptr() as _, msg.len() as _);
+        namada_tx_log_string(msg.as_ptr() as _, msg.len() as _);
     }
 }
 
@@ -87,7 +87,7 @@ impl Ctx {
     ///
     /// # Safety
     ///
-    /// When using `#[transaction]` macro from `anoma_macros`,
+    /// When using `#[transaction]` macro from `namada_macros`,
     /// the constructor should not be called from transactions and validity
     /// predicates implementation directly - they receive `&Self` as
     /// an argument provided by the macro that wrap the low-level WASM
@@ -121,8 +121,8 @@ impl StorageRead<'_> for Ctx {
     ) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
         let read_result =
-            unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
-        Ok(read_from_buffer(read_result, anoma_tx_result_buffer))
+            unsafe { namada_tx_read(key.as_ptr() as _, key.len() as _) };
+        Ok(read_from_buffer(read_result, namada_tx_result_buffer))
     }
 
     fn has_key(
@@ -131,14 +131,14 @@ impl StorageRead<'_> for Ctx {
     ) -> Result<bool, Error> {
         let key = key.to_string();
         let found =
-            unsafe { anoma_tx_has_key(key.as_ptr() as _, key.len() as _) };
+            unsafe { namada_tx_has_key(key.as_ptr() as _, key.len() as _) };
         Ok(HostEnvResult::is_success(found))
     }
 
     fn get_chain_id(&self) -> Result<String, Error> {
         let result = Vec::with_capacity(CHAIN_ID_LENGTH);
         unsafe {
-            anoma_tx_get_chain_id(result.as_ptr() as _);
+            namada_tx_get_chain_id(result.as_ptr() as _);
         }
         let slice =
             unsafe { slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH) };
@@ -149,7 +149,7 @@ impl StorageRead<'_> for Ctx {
     fn get_block_height(
         &self,
     ) -> Result<namada::types::storage::BlockHeight, Error> {
-        Ok(BlockHeight(unsafe { anoma_tx_get_block_height() }))
+        Ok(BlockHeight(unsafe { namada_tx_get_block_height() }))
     }
 
     fn get_block_hash(
@@ -157,7 +157,7 @@ impl StorageRead<'_> for Ctx {
     ) -> Result<namada::types::storage::BlockHash, Error> {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
         unsafe {
-            anoma_tx_get_block_hash(result.as_ptr() as _);
+            namada_tx_get_block_hash(result.as_ptr() as _);
         }
         let slice = unsafe {
             slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH)
@@ -166,7 +166,7 @@ impl StorageRead<'_> for Ctx {
     }
 
     fn get_block_epoch(&self) -> Result<namada::types::storage::Epoch, Error> {
-        Ok(Epoch(unsafe { anoma_tx_get_block_epoch() }))
+        Ok(Epoch(unsafe { namada_tx_get_block_epoch() }))
     }
 
     fn iter_prefix(
@@ -175,7 +175,7 @@ impl StorageRead<'_> for Ctx {
     ) -> Result<Self::PrefixIter, Error> {
         let prefix = prefix.to_string();
         let iter_id = unsafe {
-            anoma_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+            namada_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
         };
         Ok(KeyValIterator(iter_id, PhantomData))
     }
@@ -186,7 +186,7 @@ impl StorageRead<'_> for Ctx {
     ) -> Result<Self::PrefixIter, Error> {
         let prefix = prefix.to_string();
         let iter_id = unsafe {
-            anoma_tx_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+            namada_tx_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
         };
         Ok(KeyValIterator(iter_id, PhantomData))
     }
@@ -195,17 +195,17 @@ impl StorageRead<'_> for Ctx {
         &self,
         iter: &mut Self::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>, Error> {
-        let read_result = unsafe { anoma_tx_iter_next(iter.0) };
+        let read_result = unsafe { namada_tx_iter_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
             read_result,
-            anoma_tx_result_buffer,
+            namada_tx_result_buffer,
         ))
     }
 
     fn get_tx_index(
         &self,
     ) -> Result<namada::types::storage::TxIndex, storage_api::Error> {
-        let tx_index = unsafe { anoma_tx_get_tx_index() };
+        let tx_index = unsafe { namada_tx_get_tx_index() };
         Ok(TxIndex(tx_index))
     }
 }
@@ -218,7 +218,7 @@ impl StorageWrite for Ctx {
     ) -> storage_api::Result<()> {
         let key = key.to_string();
         unsafe {
-            anoma_tx_write(
+            namada_tx_write(
                 key.as_ptr() as _,
                 key.len() as _,
                 val.as_ref().as_ptr() as _,
@@ -233,15 +233,15 @@ impl StorageWrite for Ctx {
         key: &namada::types::storage::Key,
     ) -> storage_api::Result<()> {
         let key = key.to_string();
-        unsafe { anoma_tx_delete(key.as_ptr() as _, key.len() as _) };
+        unsafe { namada_tx_delete(key.as_ptr() as _, key.len() as _) };
         Ok(())
     }
 }
 
 impl TxEnv<'_> for Ctx {
     fn get_block_time(&self) -> Result<time::Rfc3339String, Error> {
-        let read_result = unsafe { anoma_tx_get_block_time() };
-        let time_value = read_from_buffer(read_result, anoma_tx_result_buffer)
+        let read_result = unsafe { namada_tx_get_block_time() };
+        let time_value = read_from_buffer(read_result, namada_tx_result_buffer)
             .expect("The block time should exist");
         Ok(Rfc3339String(
             String::try_from_slice(&time_value[..])
@@ -265,7 +265,7 @@ impl TxEnv<'_> for Ctx {
     ) -> Result<(), Error> {
         let key = key.to_string();
         unsafe {
-            anoma_tx_write_temp(
+            namada_tx_write_temp(
                 key.as_ptr() as _,
                 key.len() as _,
                 val.as_ref().as_ptr() as _,
@@ -277,7 +277,7 @@ impl TxEnv<'_> for Ctx {
 
     fn insert_verifier(&mut self, addr: &Address) -> Result<(), Error> {
         let addr = addr.encode();
-        unsafe { anoma_tx_insert_verifier(addr.as_ptr() as _, addr.len() as _) }
+        unsafe { namada_tx_insert_verifier(addr.as_ptr() as _, addr.len() as _) }
         Ok(())
     }
 
@@ -288,7 +288,7 @@ impl TxEnv<'_> for Ctx {
         let code = code.as_ref();
         let result = Vec::with_capacity(address::ESTABLISHED_ADDRESS_BYTES_LEN);
         unsafe {
-            anoma_tx_init_account(
+            namada_tx_init_account(
                 code.as_ptr() as _,
                 code.len() as _,
                 result.as_ptr() as _,
@@ -312,7 +312,7 @@ impl TxEnv<'_> for Ctx {
         let addr = addr.encode();
         let code = code.as_ref();
         unsafe {
-            anoma_tx_update_validity_predicate(
+            namada_tx_update_validity_predicate(
                 addr.as_ptr() as _,
                 addr.len() as _,
                 code.as_ptr() as _,
@@ -325,7 +325,7 @@ impl TxEnv<'_> for Ctx {
     fn emit_ibc_event(&mut self, event: &ibc::IbcEvent) -> Result<(), Error> {
         let event = BorshSerialize::try_to_vec(event).unwrap();
         unsafe {
-            anoma_tx_emit_ibc_event(event.as_ptr() as _, event.len() as _)
+            namada_tx_emit_ibc_event(event.as_ptr() as _, event.len() as _)
         };
         Ok(())
     }

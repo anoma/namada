@@ -1,5 +1,5 @@
 /// Types for sending and verifying txs
-/// used in Anoma protocols
+/// used in Namada protocols
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 

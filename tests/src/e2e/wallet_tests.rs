@@ -1,13 +1,13 @@
 //! By default, these tests will run in release mode. This can be disabled
-//! by setting environment variable `ANOMA_E2E_DEBUG=true`. For debugging,
+//! by setting environment variable `NAMADA_E2E_DEBUG=true`. For debugging,
 //! you'll typically also want to set `RUST_BACKTRACE=1`, e.g.:
 //!
 //! ```ignore,shell
-//! ANOMA_E2E_DEBUG=true RUST_BACKTRACE=1 cargo test e2e::wallet_tests -- --test-threads=1 --nocapture
+//! NAMADA_E2E_DEBUG=true RUST_BACKTRACE=1 cargo test e2e::wallet_tests -- --test-threads=1 --nocapture
 //! ```
 //!
 //! To keep the temporary files created by a test, use env var
-//! `ANOMA_E2E_KEEP_TEMP=true`.
+//! `NAMADA_E2E_KEEP_TEMP=true`.
 
 use std::env;
 
@@ -79,7 +79,7 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
     let key_alias = "test_key_1";
     let password = "VeRySeCuR3";
 
-    env::set_var("ANOMA_WALLET_PASSWORD", password);
+    env::set_var("NAMADA_WALLET_PASSWORD", password);
 
     // 1. key gen
     let mut cmd = run!(

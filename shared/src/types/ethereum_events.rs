@@ -1,4 +1,4 @@
-//! Types representing data intended for Anoma via Ethereum events
+//! Types representing data intended for Namada via Ethereum events
 
 use std::fmt::Display;
 use std::str::FromStr;
@@ -14,7 +14,7 @@ use crate::types::keccak::KeccakHash;
 use crate::types::storage::{DbKeySeg, KeySeg};
 use crate::types::token::Amount;
 
-/// Anoma native type to replace the ethabi::Uint type
+/// Namada native type to replace the ethabi::Uint type
 #[derive(
     Clone,
     Debug,
@@ -127,7 +127,7 @@ impl KeySeg for EthAddress {
     }
 }
 
-/// An Ethereum event to be processed by the Anoma ledger
+/// An Ethereum event to be processed by the Namada ledger
 #[derive(
     PartialEq,
     Eq,
@@ -142,7 +142,7 @@ impl KeySeg for EthAddress {
 )]
 pub enum EthereumEvent {
     /// Event transferring batches of ether or Ethereum based ERC20 tokens
-    /// from Ethereum to wrapped assets on Anoma
+    /// from Ethereum to wrapped assets on Namada
     TransfersToNamada {
         /// Monotonically increasing nonce
         #[allow(dead_code)]
@@ -152,7 +152,7 @@ pub enum EthereumEvent {
         transfers: Vec<TransferToNamada>,
     },
     /// A confirmation event that a batch of transfers have been made
-    /// from Anoma to Ethereum
+    /// from Namada to Ethereum
     TransfersToEthereum {
         /// Monotonically increasing nonce
         #[allow(dead_code)]
@@ -213,7 +213,7 @@ impl EthereumEvent {
     }
 }
 
-/// An event transferring some kind of value from Ethereum to Anoma
+/// An event transferring some kind of value from Ethereum to Namada
 #[derive(
     Clone,
     Debug,
@@ -231,11 +231,11 @@ pub struct TransferToNamada {
     pub amount: Amount,
     /// Address of the smart contract issuing the token
     pub asset: EthAddress,
-    /// The address receiving wrapped assets on Anoma
+    /// The address receiving wrapped assets on Namada
     pub receiver: Address,
 }
 
-/// An event transferring some kind of value from Anoma to Ethereum
+/// An event transferring some kind of value from Namada to Ethereum
 #[derive(
     Clone,
     Debug,

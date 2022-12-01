@@ -1,13 +1,13 @@
 //! By default, these tests will run in release mode. This can be disabled
-//! by setting environment variable `ANOMA_E2E_DEBUG=true`. For debugging,
+//! by setting environment variable `NAMADA_E2E_DEBUG=true`. For debugging,
 //! you'll typically also want to set `RUST_BACKTRACE=1`, e.g.:
 //!
 //! ```ignore,shell
-//! ANOMA_E2E_DEBUG=true RUST_BACKTRACE=1 cargo test e2e::ledger_tests -- --test-threads=1 --nocapture
+//! NAMADA_E2E_DEBUG=true RUST_BACKTRACE=1 cargo test e2e::ledger_tests -- --test-threads=1 --nocapture
 //! ```
 //!
 //! To keep the temporary files created by a test, use env var
-//! `ANOMA_E2E_KEEP_TEMP=true`.
+//! `NAMADA_E2E_KEEP_TEMP=true`.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -56,7 +56,7 @@ fn run_ledger() -> Result<()> {
     for args in &cmd_combinations {
         let mut ledger =
             run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-        ledger.exp_string("Anoma ledger node started")?;
+        ledger.exp_string("Namada ledger node started")?;
         ledger.exp_string("This node is a validator")?;
     }
 
@@ -64,7 +64,7 @@ fn run_ledger() -> Result<()> {
     for args in &cmd_combinations {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-        ledger.exp_string("Anoma ledger node started")?;
+        ledger.exp_string("Namada ledger node started")?;
         ledger.exp_string("This node is not a validator")?;
     }
 
@@ -101,17 +101,17 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     let args = ["ledger"];
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Anoma ledger node started")?;
+    validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
     validator_0.exp_string("Starting RPC HTTP server on")?;
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Anoma ledger node started")?;
+    validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
     validator_1.exp_string("Starting RPC HTTP server on")?;
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-    non_validator.exp_string("Anoma ledger node started")?;
+    non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
     non_validator.exp_string("Starting RPC HTTP server on")?;
 
@@ -196,7 +196,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
 /// 3. Check that the node detects this
 /// 4. Check that the node shuts down
 #[test]
-fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
+fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
     let test = setup::single_node_net()?;
 
     set_ethereum_bridge_mode(
@@ -210,7 +210,7 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("Starting RPC HTTP server on")?;
 
     // 2. Kill the tendermint node
@@ -222,11 +222,11 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
         .wait()
         .expect("Test failed");
 
-    // 3. Check that anoma detects that the tendermint node is dead
+    // 3. Check that namada detects that the tendermint node is dead
     ledger.exp_string("Tendermint node is no longer running.")?;
 
     // 4. Check that the ledger node shuts down
-    ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_string("Namada ledger node has shut down.")?;
     ledger.exp_eof()?;
 
     Ok(())
@@ -254,7 +254,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     // There should be no previous state
     ledger.exp_string("No state could be found")?;
     // Wait to commit a block
@@ -264,7 +264,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.send_control('c')?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
-    ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_string("Namada ledger node has shut down.")?;
     ledger.exp_eof()?;
     drop(ledger);
 
@@ -272,7 +272,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
@@ -297,7 +297,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     let mut session =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    session.exp_string("Anoma ledger node started")?;
+    session.exp_string("Namada ledger node started")?;
 
     // There should be no previous state
     session.exp_string("No state could be found")?;
@@ -533,7 +533,7 @@ fn masp_txs_and_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("Starting RPC HTTP server")?;
 
     let _bg_ledger = ledger.background();
@@ -806,7 +806,7 @@ fn masp_pinned_txs() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("Starting RPC HTTP server")?;
 
     let _bg_ledger = ledger.background();
@@ -974,7 +974,7 @@ fn masp_incentives() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("Starting RPC HTTP server")?;
 
     let _bg_ledger = ledger.background();
@@ -1680,7 +1680,7 @@ fn invalid_transactions() -> Result<()> {
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("Starting RPC HTTP server on")?;
 
     let bg_ledger = ledger.background();
@@ -1743,7 +1743,7 @@ fn invalid_transactions() -> Result<()> {
     ledger.send_control('c')?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
-    ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_string("Namada ledger node has shut down.")?;
     ledger.exp_eof()?;
     drop(ledger);
 
@@ -1751,7 +1751,7 @@ fn invalid_transactions() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
@@ -2333,10 +2333,10 @@ fn proposal_submission() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
     );
 
-    let anomac_help = vec!["--help"];
+    let namadac_help = vec!["--help"];
 
-    let mut client = run!(test, Bin::Client, anomac_help, Some(40))?;
-    client.exp_string("Anoma client command line interface.")?;
+    let mut client = run!(test, Bin::Client, namadac_help, Some(40))?;
+    client.exp_string("Namada client command line interface.")?;
     client.assert_success();
 
     // 1. Run the ledger node
@@ -3137,19 +3137,19 @@ fn test_genesis_validators() -> Result<()> {
     let args = ["ledger"];
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Anoma ledger node started")?;
+    validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
     validator_0.exp_string("Starting RPC HTTP server on")?;
 
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Anoma ledger node started")?;
+    validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
     validator_1.exp_string("Starting RPC HTTP server on")?;
 
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-    non_validator.exp_string("Anoma ledger node started")?;
+    non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
     non_validator.exp_string("Starting RPC HTTP server on")?;
 
@@ -3268,12 +3268,12 @@ fn double_signing_gets_slashed() -> Result<()> {
     let args = ["ledger"];
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Anoma ledger node started")?;
+    validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
     let _bg_validator_0 = validator_0.background();
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Anoma ledger node started")?;
+    validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
     let bg_validator_1 = validator_1.background();
 
@@ -3343,7 +3343,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         "validator",
         loc,
     )?;
-    validator_0_copy.exp_string("Anoma ledger node started")?;
+    validator_0_copy.exp_string("Namada ledger node started")?;
     validator_0_copy.exp_string("This node is a validator")?;
     let _bg_validator_0_copy = validator_0_copy.background();
 

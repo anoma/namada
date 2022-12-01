@@ -1,10 +1,10 @@
-//! The ledger shell connects the ABCI++ interface with the Anoma ledger app.
+//! The ledger shell connects the ABCI++ interface with the Namada ledger app.
 //!
 //! Any changes applied before [`Shell::finalize_block`] might have to be
 //! reverted, so any changes applied in the methods [`Shell::prepare_proposal`]
 //! and [`Shell::process_proposal`] must be also reverted
 //! (unless we can simply overwrite them in the next block).
-//! More info in <https://github.com/anoma/anoma/issues/362>.
+//! More info in <https://github.com/anoma/namada/issues/362>.
 mod finalize_block;
 mod governance;
 mod init_chain;
@@ -364,7 +364,7 @@ where
             config.shell.storage_read_past_height_limit;
         if !Path::new(&base_dir).is_dir() {
             std::fs::create_dir(&base_dir)
-                .expect("Creating directory for Anoma should not fail");
+                .expect("Creating directory for Namada should not fail");
         }
         // load last state from storage
         let mut storage = Storage::open(db_path, chain_id.clone(), db_cache);

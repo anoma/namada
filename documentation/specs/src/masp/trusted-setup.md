@@ -31,9 +31,9 @@ The Namada Trusted Setup (TS) consists of running the phase 2 of the MPC which i
 7. When Contributor is in position 0 in the queue, it leaves the queue. CLI can then acquire the lock of the next chunk by sending a request to the HTTP REST API endpoint `contributor/lock_chunk`.
 8. As soon as the file is locked on the Coordinator, the CLI asks for more info about the chunk through the endpoint `download/chunk`. This info is later needed to form a new contribution file and send it back to the Coordinator.
 9. CLI gets the actual blob challenge file by sending a request to the endpoint `contributor/challenge`.
-10. CLI saves challenge file `anoma_challenge_round_{round_number}.params` in the root folder.
+10. CLI saves challenge file `namada_challenge_round_{round_number}.params` in the root folder.
 11. CLI computes challenge hash.
-12. CLI creates contribution file `anoma_contribution_round_{round_number}_public_key_{public_key}.params` in the root folder.
+12. CLI creates contribution file `namada_contribution_round_{round_number}_public_key_{public_key}.params` in the root folder.
 13. Previous challenge hash is appended to the contribution file.
 14. Contributor decides whether to do the computation on the same machine or on a different machine.
 Do you want to use another machine to run your contribution?
@@ -41,7 +41,7 @@ NOTE: be clear that if users choose to generate the parameters on a OFFLINE mach
 - No. Participant will use the Online Machine to contribute. CLI runs `contribute_masp()` that executes the same functions as in the `contribute()` function from the `masp-mpc` crate.
     CLI asks the contributor if he wants to input a custom seed of randomness instead of using the combination of entropy and OS randomness. In both cases, he has to input something.
     CLI creates a contribution file signature `ContributionFileSignature` of the contribution.
-- Yes. Participant will use an Offline Machine to contribute. CLI display a message with instructions about the challenge and contribution files. Participant can export the Contribution file `anoma_contribution_round_{round_number}_public_key_{public_key}.params` to the Offline Machine and contribute from there. When the Contributor is done, he gives the path to the contribution file. Before continuing, CLI checks if the required files are available on path and if the transformation of the parameters is valid.
+- Yes. Participant will use an Offline Machine to contribute. CLI display a message with instructions about the challenge and contribution files. Participant can export the Contribution file `namada_contribution_round_{round_number}_public_key_{public_key}.params` to the Offline Machine and contribute from there. When the Contributor is done, he gives the path to the contribution file. Before continuing, CLI checks if the required files are available on path and if the transformation of the parameters is valid.
 NOTE: CLI will display a countdown of 10 min with an extension capability of 5 min.
 14. CLI generates a json file saved locally that contains the full name, email, the public key used for the contribution, contribution hash, hash of the contribution file, contribution file signature, plus a signature of the metadata. -> display the signature and message that needs to be posted somewhere over the Internet
 15.  CLI uploads the chunk to the Coordinator by using the endpoint `upload/chunk`.

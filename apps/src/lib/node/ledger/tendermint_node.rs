@@ -26,7 +26,7 @@ use crate::facade::tendermint_config::{
 };
 
 /// Env. var to output Tendermint log to stdout
-pub const ENV_VAR_TM_STDOUT: &str = "ANOMA_TM_STDOUT";
+pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_TM_STDOUT";
 
 #[cfg(feature = "abciplus")]
 pub const VERSION_REQUIREMENTS: &str = ">= 0.37.0-alpha.2, <0.38.0";

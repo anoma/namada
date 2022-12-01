@@ -1,13 +1,13 @@
 //! By default, these tests will run in release mode. This can be disabled
-//! by setting environment variable `ANOMA_E2E_DEBUG=true`. For debugging,
+//! by setting environment variable `NAMADA_E2E_DEBUG=true`. For debugging,
 //! you'll typically also want to set `RUST_BACKTRACE=1`, e.g.:
 //!
 //! ```ignore,shell
-//! ANOMA_E2E_DEBUG=true RUST_BACKTRACE=1 cargo test e2e::ibc_tests -- --test-threads=1 --nocapture
+//! NAMADA_E2E_DEBUG=true RUST_BACKTRACE=1 cargo test e2e::ibc_tests -- --test-threads=1 --nocapture
 //! ```
 //!
 //! To keep the temporary files created by a test, use env var
-//! `ANOMA_E2E_KEEP_TEMP=true`.
+//! `NAMADA_E2E_KEEP_TEMP=true`.
 
 use core::convert::TryFrom;
 use core::str::FromStr;
@@ -86,7 +86,7 @@ use tokio::runtime::Runtime;
 
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
-use crate::e2e::setup::{self, sleep, AnomaCmd, Bin, Test, Who};
+use crate::e2e::setup::{self, sleep, NamadaCmd, Bin, Test, Who};
 use crate::{run, run_as};
 
 #[test]
@@ -108,11 +108,11 @@ fn run_ledger_ibc() -> Result<()> {
     // Run Chain A
     let mut ledger_a =
         run_as!(test_a, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger_a.exp_string("Anoma ledger node started")?;
+    ledger_a.exp_string("Namada ledger node started")?;
     // Run Chain B
     let mut ledger_b =
         run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger_b.exp_string("Anoma ledger node started")?;
+    ledger_b.exp_string("Namada ledger node started")?;
     ledger_a.exp_string("This node is a validator")?;
     ledger_b.exp_string("This node is a validator")?;
     let _bg_ledger_a = ledger_a.background();
@@ -1140,7 +1140,7 @@ fn transfer(
     check_tx_height(test, &mut client)
 }
 
-fn check_tx_height(test: &Test, client: &mut AnomaCmd) -> Result<u32> {
+fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
     let (unread, matched) = client.exp_regex("\"height\": .*,")?;
     let height_str = matched
         .trim()

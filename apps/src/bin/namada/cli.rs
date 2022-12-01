@@ -1,8 +1,8 @@
-//! Anoma CLI.
+//! Namada CLI.
 //!
 //! This CLI groups together the most commonly used commands inlined from the
 //! node and the client. The other commands for the node, client and wallet can
-//! be dispatched via `anoma node ...`, `anoma client ...` or `anoma wallet
+//! be dispatched via `namada node ...`, `namada client ...` or `namada wallet
 //! ...`, respectively.
 
 use std::env;
@@ -12,18 +12,18 @@ use eyre::Result;
 use namada_apps::cli;
 
 pub fn main() -> Result<()> {
-    let (cmd, raw_sub_cmd) = cli::anoma_cli();
+    let (cmd, raw_sub_cmd) = cli::namada_cli();
     handle_command(cmd, raw_sub_cmd)
 }
 
-fn handle_command(cmd: cli::cmds::Anoma, raw_sub_cmd: String) -> Result<()> {
+fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
     let args = env::args();
 
     let is_bin_sub_cmd = matches!(
         cmd,
-        cli::cmds::Anoma::Node(_)
-            | cli::cmds::Anoma::Client(_)
-            | cli::cmds::Anoma::Wallet(_)
+        cli::cmds::Namada::Node(_)
+            | cli::cmds::Namada::Client(_)
+            | cli::cmds::Namada::Wallet(_)
     );
 
     // Skip the first arg, which is the name of the binary
@@ -39,20 +39,20 @@ fn handle_command(cmd: cli::cmds::Anoma, raw_sub_cmd: String) -> Result<()> {
     }
 
     match cmd {
-        cli::cmds::Anoma::Node(_) | cli::cmds::Anoma::Ledger(_) => {
+        cli::cmds::Namada::Node(_) | cli::cmds::Namada::Ledger(_) => {
             handle_subcommand("namadan", sub_args)
         }
-        cli::cmds::Anoma::Client(_)
-        | cli::cmds::Anoma::TxCustom(_)
-        | cli::cmds::Anoma::TxTransfer(_)
-        | cli::cmds::Anoma::TxIbcTransfer(_)
-        | cli::cmds::Anoma::TxUpdateVp(_)
-        | cli::cmds::Anoma::TxInitProposal(_)
-        | cli::cmds::Anoma::TxVoteProposal(_) => {
+        cli::cmds::Namada::Client(_)
+        | cli::cmds::Namada::TxCustom(_)
+        | cli::cmds::Namada::TxTransfer(_)
+        | cli::cmds::Namada::TxIbcTransfer(_)
+        | cli::cmds::Namada::TxUpdateVp(_)
+        | cli::cmds::Namada::TxInitProposal(_)
+        | cli::cmds::Namada::TxVoteProposal(_) => {
             handle_subcommand("namadac", sub_args)
         }
-        cli::cmds::Anoma::Wallet(_) => handle_subcommand("namadaw", sub_args),
-        cli::cmds::Anoma::EthBridgePool(_) => {
+        cli::cmds::Namada::Wallet(_) => handle_subcommand("namadaw", sub_args),
+        cli::cmds::Namada::EthBridgePool(_) => {
             handle_subcommand("namadar", sub_args)
         }
     }
@@ -73,8 +73,8 @@ fn handle_subcommand(program: &str, mut sub_args: Vec<String>) -> Result<()> {
     } else {
         // Get the full path to the program to be inside the parent directory of
         // the current process
-        let anoma_path = env::current_exe()?;
-        anoma_path.parent().unwrap().join(program)
+        let namada_path = env::current_exe()?;
+        namada_path.parent().unwrap().join(program)
     };
 
     let mut cmd = Command::new(cmd_name);

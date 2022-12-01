@@ -1,4 +1,4 @@
-# Anoma CLI wallet
+# Namada CLI wallet
 
 ## Features
 

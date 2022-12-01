@@ -4,7 +4,7 @@ The web wallet must be able to transfer token amounts to other chains via the In
 
 We need to be able to support the following:
 
-- Fungible token transfer (ICS020) from Namada to other Anoma chains
+- Fungible token transfer (ICS020) from Namada to other Namada chains
 - Fungible token transfer (ICS020) from Namada to Cosmos
 
 What the UI will need to display to the user:
@@ -66,7 +66,7 @@ MsgTransfer {
 
 **NOTE** Unlike with `tx_transfer`, the amount we pass with the Token is _not_ submitted in micro-units, but as a regular `f32` value. No conversion is needed in the web wallet.
 
-Once this transaction is unwrapped and validated, `apply_tx` will invoke `IBC.dispatch()` (see: <https://github.com/anoma/anoma/blob/master/wasm/wasm_source/src/tx_ibc.rs>).
+Once this transaction is unwrapped and validated, `apply_tx` will invoke `IBC.dispatch()` (see: <https://github.com/anoma/namada/blob/master/wasm/wasm_source/src/tx_ibc.rs>).
 
 When this is executed on the source chain, the balance will be deducted on the source account, so we need to reflect this in the interface. If the transaction succeeds, query
 the balance for that token and display to the user.
@@ -91,11 +91,11 @@ The wallet web app should accept a configuration per-environment that will conta
 
 ## Resources
 
-- [Anoma Ledger IBC Rust Docs](https://docs.anoma.network/master/rustdoc/anoma/ledger/ibc/)
+- [Namada Ledger IBC Rust Docs](https://docs.namada.network/master/rustdoc/namada/ledger/ibc/)
 - [HackMD IBC Summary](https://hackmd.io/H2yGO3IQRLiWCPWwQQdVow)
 - [ibc-rs](https://github.com/informalsystems/ibc-rs/)
 - [ICS020 - Fungible Token Transfers](https://github.com/cosmos/ibc/blob/master/spec/app/ics-020-fungible-token-transfer/README.md)
-- <https://spec.anoma.network/master/architecture/namada/ibc.html>
+- <https://spec.namada.network/master/architecture/namada/ibc.html>
 - <https://ibc.cosmos.network/main/ibc/overview.html>
 - <https://ibcprotocol.org/>
 

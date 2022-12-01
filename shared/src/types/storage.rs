@@ -284,7 +284,7 @@ impl core::fmt::Debug for BlockHash {
 }
 
 /// The data from Tendermint header
-/// relevant for Anoma storage
+/// relevant for Namada storage
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Header {
     /// Merkle root hash of block

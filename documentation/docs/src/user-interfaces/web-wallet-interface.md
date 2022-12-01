@@ -47,4 +47,4 @@ The application consist of the an UI that allows the user to perform the followi
 * Core application is built on React/TypeScript
 * State management with Redux
 * Application styling is accomplished with styled-components
-* Extensive usage of WASM compiled Rust code from the common Anoma code base is encouraged where ever feasible.
+* Extensive usage of WASM compiled Rust code from the common Namada code base is encouraged where ever feasible.

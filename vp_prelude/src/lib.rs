@@ -1,8 +1,8 @@
 //! This crate contains library code for validity predicate WASM. Most of the
 //! code is re-exported from the `namada_vm_env` crate.
 
-#![doc(html_favicon_url = "https://dev.anoma.net/master/favicon.png")]
-#![doc(html_logo_url = "https://dev.anoma.net/master/rustdoc-logo.png")]
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
@@ -64,7 +64,7 @@ pub fn is_vp_whitelisted(ctx: &Ctx, vp_bytes: &[u8]) -> VpResult {
 pub fn log_string<T: AsRef<str>>(msg: T) {
     let msg = msg.as_ref();
     unsafe {
-        anoma_vp_log_string(msg.as_ptr() as _, msg.len() as _);
+        namada_vp_log_string(msg.as_ptr() as _, msg.len() as _);
     }
 }
 
@@ -126,7 +126,7 @@ impl Ctx {
     ///
     /// # Safety
     ///
-    /// When using `#[validity_predicate]` macro from `anoma_macros`,
+    /// When using `#[validity_predicate]` macro from `namada_macros`,
     /// the constructor should not be called from transactions and validity
     /// predicates implementation directly - they receive `&Self` as
     /// an argument provided by the macro that wrap the low-level WASM
@@ -205,8 +205,8 @@ impl<'view> VpEnv<'view> for Ctx {
     ) -> Result<Option<T>, Error> {
         let key = key.to_string();
         let read_result =
-            unsafe { anoma_vp_read_temp(key.as_ptr() as _, key.len() as _) };
-        Ok(read_from_buffer(read_result, anoma_vp_result_buffer)
+            unsafe { namada_vp_read_temp(key.as_ptr() as _, key.len() as _) };
+        Ok(read_from_buffer(read_result, namada_vp_result_buffer)
             .and_then(|t| T::try_from_slice(&t[..]).ok()))
     }
 
@@ -216,8 +216,8 @@ impl<'view> VpEnv<'view> for Ctx {
     ) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
         let read_result =
-            unsafe { anoma_vp_read_temp(key.as_ptr() as _, key.len() as _) };
-        Ok(read_from_buffer(read_result, anoma_vp_result_buffer))
+            unsafe { namada_vp_read_temp(key.as_ptr() as _, key.len() as _) };
+        Ok(read_from_buffer(read_result, namada_vp_result_buffer))
     }
 
     fn get_chain_id(&'view self) -> Result<String, Error> {
@@ -266,7 +266,7 @@ impl<'view> VpEnv<'view> for Ctx {
         input_data: Vec<u8>,
     ) -> Result<bool, Error> {
         let result = unsafe {
-            anoma_vp_eval(
+            namada_vp_eval(
                 vp_code.as_ptr() as _,
                 vp_code.len() as _,
                 input_data.as_ptr() as _,
@@ -284,7 +284,7 @@ impl<'view> VpEnv<'view> for Ctx {
         let pk = BorshSerialize::try_to_vec(pk).unwrap();
         let sig = BorshSerialize::try_to_vec(sig).unwrap();
         let valid = unsafe {
-            anoma_vp_verify_tx_signature(
+            namada_vp_verify_tx_signature(
                 pk.as_ptr() as _,
                 pk.len() as _,
                 sig.as_ptr() as _,
@@ -297,7 +297,7 @@ impl<'view> VpEnv<'view> for Ctx {
     fn get_tx_code_hash(&self) -> Result<Hash, Error> {
         let result = Vec::with_capacity(HASH_LENGTH);
         unsafe {
-            anoma_vp_get_tx_code_hash(result.as_ptr() as _);
+            namada_vp_get_tx_code_hash(result.as_ptr() as _);
         }
         let slice =
             unsafe { slice::from_raw_parts(result.as_ptr(), HASH_LENGTH) };
@@ -306,7 +306,7 @@ impl<'view> VpEnv<'view> for Ctx {
 
     fn verify_masp(&self, tx: Vec<u8>) -> Result<bool, self::Error> {
         let valid =
-            unsafe { anoma_vp_verify_masp(tx.as_ptr() as _, tx.len() as _) };
+            unsafe { namada_vp_verify_masp(tx.as_ptr() as _, tx.len() as _) };
         Ok(HostEnvResult::is_success(valid))
     }
 }
@@ -317,14 +317,14 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
     fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
         let read_result =
-            unsafe { anoma_vp_read_pre(key.as_ptr() as _, key.len() as _) };
-        Ok(read_from_buffer(read_result, anoma_vp_result_buffer))
+            unsafe { namada_vp_read_pre(key.as_ptr() as _, key.len() as _) };
+        Ok(read_from_buffer(read_result, namada_vp_result_buffer))
     }
 
     fn has_key(&self, key: &storage::Key) -> Result<bool, Error> {
         let key = key.to_string();
         let found =
-            unsafe { anoma_vp_has_key_pre(key.as_ptr() as _, key.len() as _) };
+            unsafe { namada_vp_has_key_pre(key.as_ptr() as _, key.len() as _) };
         Ok(HostEnvResult::is_success(found))
     }
 
@@ -332,10 +332,10 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
         &self,
         iter: &mut Self::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>, Error> {
-        let read_result = unsafe { anoma_vp_iter_pre_next(iter.0) };
+        let read_result = unsafe { namada_vp_iter_pre_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
             read_result,
-            anoma_vp_result_buffer,
+            namada_vp_result_buffer,
         ))
     }
 
@@ -382,14 +382,14 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
     fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
         let read_result =
-            unsafe { anoma_vp_read_post(key.as_ptr() as _, key.len() as _) };
-        Ok(read_from_buffer(read_result, anoma_vp_result_buffer))
+            unsafe { namada_vp_read_post(key.as_ptr() as _, key.len() as _) };
+        Ok(read_from_buffer(read_result, namada_vp_result_buffer))
     }
 
     fn has_key(&self, key: &storage::Key) -> Result<bool, Error> {
         let key = key.to_string();
         let found =
-            unsafe { anoma_vp_has_key_post(key.as_ptr() as _, key.len() as _) };
+            unsafe { namada_vp_has_key_post(key.as_ptr() as _, key.len() as _) };
         Ok(HostEnvResult::is_success(found))
     }
 
@@ -397,10 +397,10 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
         &self,
         iter: &mut Self::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>, Error> {
-        let read_result = unsafe { anoma_vp_iter_post_next(iter.0) };
+        let read_result = unsafe { namada_vp_iter_post_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
             read_result,
-            anoma_vp_result_buffer,
+            namada_vp_result_buffer,
         ))
     }
 
@@ -446,7 +446,7 @@ fn iter_prefix_impl(
 ) -> Result<KeyValIterator<(String, Vec<u8>)>, Error> {
     let prefix = prefix.to_string();
     let iter_id = unsafe {
-        anoma_vp_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        namada_vp_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
     };
     Ok(KeyValIterator(iter_id, PhantomData))
 }
@@ -456,7 +456,7 @@ fn rev_iter_prefix_impl(
 ) -> Result<KeyValIterator<(String, Vec<u8>)>, Error> {
     let prefix = prefix.to_string();
     let iter_id = unsafe {
-        anoma_vp_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+        namada_vp_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
     };
     Ok(KeyValIterator(iter_id, PhantomData))
 }
@@ -464,7 +464,7 @@ fn rev_iter_prefix_impl(
 fn get_chain_id() -> Result<String, Error> {
     let result = Vec::with_capacity(CHAIN_ID_LENGTH);
     unsafe {
-        anoma_vp_get_chain_id(result.as_ptr() as _);
+        namada_vp_get_chain_id(result.as_ptr() as _);
     }
     let slice =
         unsafe { slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH) };
@@ -475,13 +475,13 @@ fn get_chain_id() -> Result<String, Error> {
 }
 
 fn get_block_height() -> Result<BlockHeight, Error> {
-    Ok(BlockHeight(unsafe { anoma_vp_get_block_height() }))
+    Ok(BlockHeight(unsafe { namada_vp_get_block_height() }))
 }
 
 fn get_block_hash() -> Result<BlockHash, Error> {
     let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
     unsafe {
-        anoma_vp_get_block_hash(result.as_ptr() as _);
+        namada_vp_get_block_hash(result.as_ptr() as _);
     }
     let slice =
         unsafe { slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH) };
@@ -489,9 +489,9 @@ fn get_block_hash() -> Result<BlockHash, Error> {
 }
 
 fn get_block_epoch() -> Result<Epoch, Error> {
-    Ok(Epoch(unsafe { anoma_vp_get_block_epoch() }))
+    Ok(Epoch(unsafe { namada_vp_get_block_epoch() }))
 }
 
 fn get_tx_index() -> Result<TxIndex, storage_api::Error> {
-    Ok(TxIndex(unsafe { anoma_vp_get_tx_index() }))
+    Ok(TxIndex(unsafe { namada_vp_get_tx_index() }))
 }

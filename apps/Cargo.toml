@@ -19,31 +19,31 @@ path = "src/lib/mod.rs"
 [[bin]]
 doc = false
 name = "namada"
-path = "src/bin/anoma/main.rs"
+path = "src/bin/namada/main.rs"
 
 # Namada node
 [[bin]]
 doc = false
 name = "namadan"
-path = "src/bin/anoma-node/main.rs"
+path = "src/bin/namada-node/main.rs"
 
 # Namada client
 [[bin]]
 doc = false
 name = "namadac"
-path = "src/bin/anoma-client/main.rs"
+path = "src/bin/namada-client/main.rs"
 
 # Namada wallet
 [[bin]]
 doc = false
 name = "namadaw"
-path = "src/bin/anoma-wallet/main.rs"
+path = "src/bin/namada-wallet/main.rs"
 
 # Namada relayer
 [[bin]]
 doc = false
 name = "namadar"
-path = "src/bin/anoma-relayer/main.rs"
+path = "src/bin/namada-relayer/main.rs"
 
 [features]
 default = ["std", "abciplus"]
