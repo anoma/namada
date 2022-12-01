@@ -126,7 +126,8 @@ pub mod eth_events {
             match signature {
                 signatures::TRANSFER_TO_NAMADA_SIG => {
                     RawTransfersToNamada::decode(data).map(|txs| PendingEvent {
-                        confirmations: txs.confirmations.into(),
+                        confirmations: min_confirmations
+                            .max(txs.confirmations.into()),
                         block_height,
                         event: EthereumEvent::TransfersToNamada {
                             nonce: txs.nonce,
@@ -137,7 +138,8 @@ pub mod eth_events {
                 signatures::TRANSFER_TO_ETHEREUM_SIG => {
                     RawTransfersToEthereum::decode(data).map(|txs| {
                         PendingEvent {
-                            confirmations: txs.confirmations.into(),
+                            confirmations: min_confirmations
+                                .max(txs.confirmations.into()),
                             block_height,
                             event: EthereumEvent::TransfersToEthereum {
                                 nonce: txs.nonce,
