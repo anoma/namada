@@ -148,7 +148,7 @@ jobs:
         make:
           - name: ABCI
             suffix: ''
-            cache_key: anoma
+            cache_key: namada
             cache_version: v2
             tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
 
@@ -250,7 +250,7 @@ jobs:
         make:
           - name: ABCI Release build
             suffix: ''
-            cache_key: anoma-e2e-release
+            cache_key: namada-e2e-release
             cache_version: "v2"
 
     env:
@@ -354,14 +354,14 @@ jobs:
           - name: e2e
             suffix: ''
             index: 0
-            cache_key: anoma
+            cache_key: namada
             cache_version: v2
             tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
             wait_for: namada-release-eth (ubuntu-latest, 1.7.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 1
-            cache_key: anoma
+            cache_key: namada
             cache_version: v2
             tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
             wait_for: namada-release-eth (ubuntu-latest, 1.7.0, ABCI Release build, namada-e2e-release, v2)
