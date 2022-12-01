@@ -1648,8 +1648,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
-    process_tx(ctx, &args.tx, tx, signing_address).await;
+    process_tx(ctx, &args.tx, tx, default_signer).await;
 }
 
 pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
