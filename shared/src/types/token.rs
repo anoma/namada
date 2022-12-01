@@ -234,7 +234,7 @@ impl FromStr for Amount {
         match rust_decimal::Decimal::from_str(s) {
             Ok(decimal) => {
                 let scale = decimal.scale();
-                if scale > 6 {
+                if scale > MAX_DECIMAL_PLACES {
                     return Err(AmountParseError::ScaleTooLarge(scale));
                 }
                 let whole =
@@ -517,5 +517,13 @@ pub mod testing {
     /// Generate an arbitrary token amount up to and including given `max` value
     pub fn arb_amount_ceiled(max: u64) -> impl Strategy<Value = Amount> {
         (0..=max).prop_map(Amount::from)
+    }
+
+    /// Generate an arbitrary non-zero token amount up to and including given
+    /// `max` value
+    pub fn arb_amount_non_zero_ceiled(
+        max: u64,
+    ) -> impl Strategy<Value = Amount> {
+        (1..=max).prop_map(Amount::from)
     }
 }
