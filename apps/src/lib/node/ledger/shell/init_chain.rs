@@ -78,8 +78,7 @@ where
         // borrow necessary for release build, annoys clippy on dev build
         #[allow(clippy::needless_borrow)]
         let implicit_vp =
-            wasm_loader::read_wasm(&self.wasm_dir, &implicit_vp_code_path)
-                .map_err(Error::ReadingWasm)?;
+            self.wasm_loader.read_from_disk(&implicit_vp_code_path).map_err(Error::ReadingWasm)?;
         // In dev, we don't check the hash
         #[cfg(feature = "dev")]
         let _ = implicit_vp_sha256;
