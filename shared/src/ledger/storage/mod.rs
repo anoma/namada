@@ -36,7 +36,7 @@ use crate::ledger::pos::namada_proof_of_stake::PosBase;
 use crate::ledger::pos::types::WeightedValidator;
 use crate::ledger::pos::PosParams;
 use crate::ledger::storage::merkle_tree::{
-    Error as MerkleTreeError, MerkleRoot,
+    Error as MerkleTreeError, MerkleRoot, StorageBytes,
 };
 pub use crate::ledger::storage::merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreRef,
@@ -619,7 +619,7 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: Vec<u8>,
+        value: StorageBytes,
         height: BlockHeight,
     ) -> Result<Proof> {
         if height >= self.get_block_height().0 {

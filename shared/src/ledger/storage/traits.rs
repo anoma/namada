@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 use super::merkle_tree::{Amt, Error, Smt};
 use super::{ics23_specs, IBC_KEY_LIMIT};
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolTree;
+use crate::ledger::storage::merkle_tree::StorageBytes;
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::ledger::storage::merkle_tree::StorageBytes;
 use crate::types::hash::Hash;
@@ -38,7 +39,7 @@ pub trait SubTreeWrite {
     fn subtree_update(
         &mut self,
         key: &Key,
-        value: &[u8],
+        value: StorageBytes,
     ) -> Result<Hash, Error>;
     /// Delete a key from the sub-tree
     fn subtree_delete(&mut self, key: &Key) -> Result<Hash, Error>;
@@ -68,7 +69,7 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
             Ics23Proof::Exist(ep) => Ok(CommitmentProof {
                 proof: Some(Ics23Proof::Exist(ExistenceProof {
                     key: key.to_string().as_bytes().to_vec(),
-                    value,
+                    value: value.to_vec(),
                     leaf: Some(ics23_specs::leaf_spec::<H>()),
                     ..ep
                 })),
@@ -84,7 +85,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
     fn subtree_update(
         &mut self,
         key: &Key,
-        value: &[u8],
+        value: StorageBytes,
     ) -> Result<Hash, Error> {
         let value = H::hash(value);
         self.update(H::hash(key.to_string()).into(), value.into())
@@ -139,7 +140,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
     fn subtree_update(
         &mut self,
         key: &Key,
-        value: &[u8],
+        value: StorageBytes,
     ) -> Result<Hash, Error> {
         let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
         let value = TreeBytes::from(value.as_ref().to_owned());
@@ -170,9 +171,7 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
     ) -> Result<MembershipProof, Error> {
         let values = values
             .iter()
-            .filter_map(|val| {
-                PendingTransfer::try_from_slice(val.as_slice()).ok()
-            })
+            .filter_map(|val| PendingTransfer::try_from_slice(val).ok())
             .collect();
         self.get_membership_proof(values)
             .map(Into::into)
@@ -181,7 +180,11 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
 }
 
 impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
-    fn subtree_update(&mut self, key: &Key, _: &[u8]) -> Result<Hash, Error> {
+    fn subtree_update(
+        &mut self,
+        key: &Key,
+        _: StorageBytes,
+    ) -> Result<Hash, Error> {
         self.insert_key(key)
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }

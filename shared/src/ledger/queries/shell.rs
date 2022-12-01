@@ -250,11 +250,7 @@ where
             let proof = if request.prove {
                 let proof = ctx
                     .storage
-                    .get_existence_proof(
-                        &storage_key,
-                        value.clone(),
-                        request.height,
-                    )
+                    .get_existence_proof(&storage_key, &value, request.height)
                     .into_storage_result()?;
                 Some(proof)
             } else {
@@ -309,7 +305,7 @@ where
         for PrefixValue { key, value } in &data {
             let mut proof = ctx
                 .storage
-                .get_existence_proof(key, value.clone(), request.height)
+                .get_existence_proof(key, value, request.height)
                 .into_storage_result()?;
             ops.append(&mut proof.ops);
         }
@@ -477,7 +473,10 @@ where
             )));
         }
         // get the membership proof
-        match tree.get_sub_tree_existence_proof(&keys, values) {
+        match tree.get_sub_tree_existence_proof(
+            &keys,
+            values.iter().map(|v| v.as_slice()).collect(),
+        ) {
             Ok(BridgePool(proof)) => {
                 let data = EncodeCell::new(&RelayProof {
                     // TODO: use actual validators
