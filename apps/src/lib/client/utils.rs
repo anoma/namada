@@ -1110,7 +1110,7 @@ fn exit_if_chain_dir_exists(base_dir: &Path, chain_id: &ChainId) {
 fn unpack_release<R: std::io::Read>(tgz: R, unpack_dir: &Path) {
     let decoder = GzDecoder::new(tgz);
     let mut archive = tar::Archive::new(decoder);
-    archive.unpack(&unpack_dir).unwrap()
+    archive.unpack(unpack_dir).unwrap()
 }
 
 /// Returns the [`ChainId`] of the chain for a release archive unpacked at
