@@ -57,7 +57,7 @@ use crate::types::key::dkg_session_keys::DkgPublicKey;
 use crate::types::storage::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    MembershipProof, MerkleValue, TxIndex, BLOCK_HASH_LENGTH,
+    MembershipProof, TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 use crate::types::token::Amount;
@@ -532,13 +532,11 @@ where
     pub fn write(
         &mut self,
         key: &Key,
-        value: impl Into<MerkleValue>,
+        value: impl AsRef<[u8]>,
     ) -> Result<(u64, i64)> {
-        let value: MerkleValue = value.into();
         tracing::debug!("storage write key {}", key,);
-        self.block.tree.update(key, value.clone())?;
-
-        let bytes = value.to_bytes();
+        let bytes = value.as_ref();
+        self.block.tree.update(key, bytes)?;
         let gas = key.len() + bytes.len();
         let size_diff =
             self.db.write_subspace_val(self.block.height, key, bytes)?;
@@ -621,7 +619,7 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: MerkleValue,
+        value: Vec<u8>,
         height: BlockHeight,
     ) -> Result<Proof> {
         if height >= self.get_block_height().0 {
