@@ -80,10 +80,10 @@ where
             );
             txs.append(&mut protocol_txs);
 
-            // add mempool txs
-            let (mut mempool_txs, alloc) =
-                self.build_mempool_txs(alloc, &req.txs);
-            txs.append(&mut mempool_txs);
+            // add encrypted txs
+            let (mut encrypted_txs, alloc) =
+                self.build_encrypted_txs(alloc, &req.txs);
+            txs.append(&mut encrypted_txs);
 
             // fill up the remaining block space with
             // protocol transactions that haven't been
@@ -266,7 +266,7 @@ where
 
     /// Builds a batch of mempool transactions.
     #[cfg(feature = "abcipp")]
-    fn build_mempool_txs(
+    fn build_encrypted_txs(
         &mut self,
         _alloc: EncryptedTxBatchAllocator,
         txs: &[TxBytes],
@@ -277,7 +277,7 @@ where
 
     /// Builds a batch of mempool transactions.
     #[cfg(not(feature = "abcipp"))]
-    fn build_mempool_txs(
+    fn build_encrypted_txs(
         &mut self,
         mut alloc: EncryptedTxBatchAllocator,
         txs: &[TxBytes],
