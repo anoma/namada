@@ -69,7 +69,7 @@ where
             let mut txs = decrypted_txs;
 
             // add vote extension protocol txs
-            let (mut protocol_txs, alloc) = self.build_vote_extension_txs(
+            let (mut protocol_txs, alloc) = self.build_protocol_txs(
                 alloc,
                 #[cfg(not(feature = "abcipp"))]
                 &mut protocol_tx_indices,
@@ -125,7 +125,7 @@ where
     /// Builds a batch of vote extension transactions, comprised of Ethereum
     /// events and, optionally, a validator set update.
     #[cfg(feature = "abcipp")]
-    fn build_vote_extension_txs(
+    fn build_protocol_txs(
         &mut self,
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         local_last_commit: Option<ExtendedCommitInfo>,
@@ -188,7 +188,7 @@ where
     /// Builds a batch of vote extension transactions, comprised of Ethereum
     /// events and, optionally, a validator set update
     #[cfg(not(feature = "abcipp"))]
-    fn build_vote_extension_txs(
+    fn build_protocol_txs(
         &mut self,
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         protocol_tx_indices: &mut VecIndexSet<u128>,
