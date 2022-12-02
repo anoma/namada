@@ -253,6 +253,7 @@ pub enum Bin {
     Node,
     Client,
     Wallet,
+    BridgePool,
 }
 
 #[derive(Debug)]
@@ -711,6 +712,7 @@ where
         Bin::Node => ("namadan", "info"),
         Bin::Client => ("namadac", "tendermint_rpc=debug"),
         Bin::Wallet => ("namadaw", "info"),
+        Bin::BridgePool => ("namadar", "info"),
     };
 
     let mut run_cmd = generate_bin_command(
