@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use borsh::BorshSerialize;
 use namada::ledger::queries::RPC;
 use namada::proto::Tx;
+use namada::types::eth_abi::Encode;
 use namada::types::eth_bridge_pool::{
     GasFee, PendingTransfer, TransferToEthereum,
 };
@@ -67,11 +70,19 @@ pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
 /// Prints out a json payload.
 pub async fn query_bridge_pool(args: args::Query) {
     let client = HttpClient::new(args.ledger_address).unwrap();
-    let response = RPC
+    let response: Vec<PendingTransfer> = RPC
         .shell()
         .read_ethereum_bridge_pool(&client)
         .await
         .unwrap();
-
-    println!("{:#?}", serde_json::to_string_pretty(&response));
+    let pool_contents: HashMap<String, PendingTransfer> = response
+        .into_iter()
+        .map(|transfer| (transfer.keccak256().to_string(), transfer))
+        .collect();
+    if pool_contents.is_empty() {
+        println!("Bridge pool is empty.");
+    } else {
+        println!("Bridge pool contents: ");
+    }
+    println!("{}", serde_json::to_string_pretty(&pool_contents).unwrap());
 }

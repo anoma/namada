@@ -1,6 +1,10 @@
 use color_eyre::eyre::Result;
+use namada::ledger::eth_bridge::parameters::{
+    Contracts, EthereumBridgeConfig, UpgradeableContract,
+};
 use namada::types::address::wnam;
 use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS_CHECKSUMMED;
+use namada::types::ethereum_events::EthAddress;
 use namada_apps::config::ethereum_bridge;
 
 use super::setup::set_ethereum_bridge_mode;
@@ -128,13 +132,37 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
     Ok(())
 }
 
+/// In this test, we check the following:
+/// 1. We can successfully add tranfers to the bridge pool.
+/// 2. We can query the bridge pool and it is non-empty.
 #[test]
 fn test_add_to_bridge_pool() {
     const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 40;
     const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 60;
+    const QUERY_TIMEOUT_SECONDS: u64 = 40;
     const SOLE_VALIDATOR: Who = Who::Validator(0);
     let wnam_address = wnam().to_canonical();
-    let test = setup::single_node_net().unwrap();
+    let test = setup::network(
+        |mut genesis| {
+            genesis.ethereum_bridge_params = Some(EthereumBridgeConfig {
+                min_confirmations: Default::default(),
+                contracts: Contracts {
+                    native_erc20: wnam(),
+                    bridge: UpgradeableContract {
+                        address: EthAddress([0; 20]),
+                        version: Default::default(),
+                    },
+                    governance: UpgradeableContract {
+                        address: EthAddress([1; 20]),
+                        version: Default::default(),
+                    },
+                },
+            });
+            genesis
+        },
+        None,
+    )
+    .unwrap();
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
@@ -142,7 +170,7 @@ fn test_add_to_bridge_pool() {
         ethereum_bridge::ledger::Mode::EventsEndpoint,
     );
 
-    let mut anoman_ledger = run_as!(
+    let mut namadan_ledger = run_as!(
         test,
         SOLE_VALIDATOR,
         Bin::Node,
@@ -150,12 +178,14 @@ fn test_add_to_bridge_pool() {
         Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
     )
     .unwrap();
-    anoman_ledger
+    namadan_ledger
         .exp_string("Anoma ledger node started")
         .unwrap();
-    anoman_ledger.exp_string("Tendermint node started").unwrap();
-    anoman_ledger.exp_string("Committed block hash").unwrap();
-    let _bg_ledger = anoman_ledger.background();
+    namadan_ledger
+        .exp_string("Tendermint node started")
+        .unwrap();
+    namadan_ledger.exp_string("Committed block hash").unwrap();
+    let _bg_ledger = namadan_ledger.background();
 
     let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
     let tx_args = vec![
@@ -184,12 +214,23 @@ fn test_add_to_bridge_pool() {
         &ledger_addr,
     ];
 
-    let mut anomac_tx = run!(
+    let mut namadac_tx = run!(
         test,
         Bin::Client,
         tx_args,
         Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
     )
     .unwrap();
-    anomac_tx.exp_string("Transaction applied").unwrap();
+    namadac_tx.exp_string("Transaction applied").unwrap();
+    namadac_tx.exp_string("Transaction is valid").unwrap();
+    drop(namadac_tx);
+
+    let mut namadar = run!(
+        test,
+        Bin::BridgePool,
+        ["query", "--ledger-address", &ledger_addr,],
+        Some(QUERY_TIMEOUT_SECONDS),
+    )
+    .unwrap();
+    namadar.exp_string("Bridge pool contents:").unwrap();
 }
