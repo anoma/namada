@@ -242,7 +242,18 @@ where
         (txs, self.get_encrypted_txs_allocator(alloc))
     }
 
-    /// Transition to an [`EncryptedTxBatchAllocator`].
+    /// Depending on the current block height offset within the epoch,
+    /// transition state accordingly, from a protocol tx batch allocator
+    /// to an encrypted tx batch allocator.
+    ///
+    /// # How to determine which path to take in the states DAG
+    ///
+    /// If we are at the second or third block height offset within an
+    /// epoch, we do not allow encrypted transactions to be included in
+    /// a block, therefore we return an allocator wrapped in an
+    /// [`EncryptedTxBatchAllocator::WithoutEncryptedTxs`] value.
+    /// Otherwise, we return an allocator wrapped in an
+    /// [`EncryptedTxBatchAllocator::WithEncryptedTxs`] value.
     #[inline]
     fn get_encrypted_txs_allocator(
         &self,
