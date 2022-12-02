@@ -1319,7 +1319,7 @@ where
         }
     }
 
-    fn is_deciding_offset_within_epoch(&self, height_off: u64) -> bool {
+    fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
         let current_decision_height = self.get_current_decision_height();
 
         // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
@@ -1328,7 +1328,7 @@ where
         //
         // we can remove this check once that's fixed
         if self.get_current_epoch().0 == Epoch(0) {
-            let height_offset_within_epoch = BlockHeight(1 + height_off);
+            let height_offset_within_epoch = BlockHeight(1 + height_offset);
             return current_decision_height == height_offset_within_epoch;
         }
 
@@ -1338,7 +1338,7 @@ where
         fst_heights_of_each_epoch
             .last()
             .map(|&h| {
-                let height_offset_within_epoch = h + height_off;
+                let height_offset_within_epoch = h + height_offset;
                 current_decision_height == height_offset_within_epoch
             })
             .unwrap_or(false)

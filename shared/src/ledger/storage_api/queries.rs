@@ -128,9 +128,9 @@ pub trait QueriesExt {
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
 
-    /// Check if we are at a given [`BlockHeight`] offset, `height_off`, within
-    /// the current [`Epoch`].
-    fn is_deciding_offset_within_epoch(&self, height_off: u64) -> bool;
+    /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
+    /// within the current [`Epoch`].
+    fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool;
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
     fn get_epoch(&self, height: BlockHeight) -> Option<Epoch>;
