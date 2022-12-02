@@ -401,7 +401,7 @@ where
         protocol_tx_indices: &VecIndexSet<u128>,
         txs: Vec<TxBytes>,
     ) -> Vec<TxBytes> {
-        get_remaining_txs(protocol_tx_indices, txs)
+        get_remaining_protocol_txs(protocol_tx_indices, txs)
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&*tx_bytes).map_or_else(
                     |status| match status {
@@ -437,7 +437,7 @@ where
 
 /// Return a list of the protocol transactions that haven't
 /// been marked for inclusion in the block, yet.
-fn get_remaining_txs(
+fn get_remaining_protocol_txs(
     protocol_tx_indices: &VecIndexSet<u128>,
     txs: Vec<TxBytes>,
 ) -> impl Iterator<Item = TxBytes> + '_ {
@@ -530,9 +530,9 @@ mod test_prepare_proposal {
         }
     }
 
-    /// Test if [`get_remaining_txs`] is working as expected.
+    /// Test if [`get_remaining_protocol_txs`] is working as expected.
     #[test]
-    fn test_get_remaining_txs() {
+    fn test_get_remaining_protocol_txs() {
         // TODO(feature = "abcipp"): use a different tx type here
         fn bertha_ext(at_height: u64) -> TxBytes {
             let key = wallet::defaults::bertha_keypair();
@@ -560,7 +560,7 @@ mod test_prepare_proposal {
             s
         };
 
-        let got_txs: Vec<_> = get_remaining_txs(&set, all_txs)
+        let got_txs: Vec<_> = get_remaining_protocol_txs(&set, all_txs)
             .map(extract_eth_events_vext)
             .collect();
         assert_eq!(expected_txs, got_txs);
