@@ -303,7 +303,7 @@ pub fn deserialize_vote_extensions(
 #[cfg(not(feature = "abcipp"))]
 pub fn deserialize_vote_extensions<'shell>(
     txs: &'shell [TxBytes],
-    tx_indices: &'shell mut VecIndexSet<u128>,
+    protocol_tx_indices: &'shell mut VecIndexSet<u128>,
 ) -> impl Iterator<Item = TxBytes> + 'shell {
     use namada::types::transaction::protocol::ProtocolTx;
 
@@ -326,7 +326,7 @@ pub fn deserialize_vote_extensions<'shell>(
                 ..
             }) => {
                 // mark tx for inclusion
-                tx_indices.insert(index);
+                protocol_tx_indices.insert(index);
                 Some(tx_bytes.clone())
             }
             _ => None,

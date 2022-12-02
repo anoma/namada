@@ -62,7 +62,7 @@ where
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
             let alloc = BlockSpaceAllocator::from(&req);
-            let mut tx_indices = VecIndexSet::default();
+            let mut protocol_tx_indices = VecIndexSet::default();
 
             // decrypt the wrapper txs included in the previous block
             let (decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
@@ -72,7 +72,7 @@ where
             let (mut protocol_txs, alloc) = self.build_vote_extension_txs(
                 alloc,
                 #[cfg(not(feature = "abcipp"))]
-                &mut tx_indices,
+                &mut protocol_tx_indices,
                 #[cfg(feature = "abcipp")]
                 req.local_last_commit,
                 #[cfg(not(feature = "abcipp"))]
@@ -90,8 +90,11 @@ where
             // selected for inclusion yet, and whose
             // size allows them to fit in the free
             // space left
-            let mut remaining_txs =
-                self.build_remaining_batch(alloc, &tx_indices, req.txs);
+            let mut remaining_txs = self.build_remaining_batch(
+                alloc,
+                &protocol_tx_indices,
+                req.txs,
+            );
             txs.append(&mut remaining_txs);
 
             txs
@@ -188,7 +191,7 @@ where
     fn build_vote_extension_txs(
         &mut self,
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
-        tx_indices: &mut VecIndexSet<u128>,
+        protocol_tx_indices: &mut VecIndexSet<u128>,
         txs: &[TxBytes],
     ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
         if self.storage.last_height == BlockHeight(0) {
@@ -196,7 +199,7 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let txs = deserialize_vote_extensions(txs, tx_indices).take_while(|tx_bytes|
+        let txs = deserialize_vote_extensions(txs, protocol_tx_indices).take_while(|tx_bytes|
             alloc.try_alloc(&*tx_bytes)
                 .map_or_else(
                     |status| match status {
@@ -395,10 +398,10 @@ where
     fn build_remaining_batch(
         &mut self,
         mut alloc: BlockSpaceAllocator<FillingRemainingSpace>,
-        tx_indices: &VecIndexSet<u128>,
+        protocol_tx_indices: &VecIndexSet<u128>,
         txs: Vec<TxBytes>,
     ) -> Vec<TxBytes> {
-        get_remaining_txs(tx_indices, txs)
+        get_remaining_txs(protocol_tx_indices, txs)
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&*tx_bytes).map_or_else(
                     |status| match status {
@@ -435,10 +438,10 @@ where
 /// Return a list of the protocol transactions that haven't
 /// been marked for inclusion in the block, yet.
 fn get_remaining_txs(
-    tx_indices: &VecIndexSet<u128>,
+    protocol_tx_indices: &VecIndexSet<u128>,
     txs: Vec<TxBytes>,
 ) -> impl Iterator<Item = TxBytes> + '_ {
-    let mut skip_list = tx_indices.iter();
+    let mut skip_list = protocol_tx_indices.iter();
     let mut skip = skip_list.next();
 
     txs.into_iter().enumerate().filter_map(move |(index, tx)| {
