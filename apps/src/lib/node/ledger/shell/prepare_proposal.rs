@@ -45,11 +45,8 @@ where
 {
     /// Begin a new block.
     ///
-    /// Block space is roughly divided into three equal parts, which we call
-    /// allotments. In the following order, each allotted area is home to:
-    /// decrypted, protocol and encrypted transactions, respectively. During
-    /// some protocol phases, we might omit encrypted and decrypted transactions
-    /// entirely, such as when we negotiate DKG parameters.
+    /// Block construction is documented in [`block_space_alloc`]
+    /// and [`block_space_alloc::states`].
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
