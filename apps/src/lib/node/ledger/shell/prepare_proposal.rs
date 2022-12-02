@@ -278,7 +278,8 @@ where
         }
     }
 
-    /// Builds a batch of mempool transactions.
+    /// Builds a batch of encrypted transactions, retrieved from
+    /// Tendermint's mempool.
     #[cfg(feature = "abcipp")]
     fn build_encrypted_txs(
         &mut self,
@@ -289,7 +290,8 @@ where
         todo!()
     }
 
-    /// Builds a batch of mempool transactions.
+    /// Builds a batch of encrypted transactions, retrieved from
+    /// Tendermint's mempool.
     #[cfg(not(feature = "abcipp"))]
     fn build_encrypted_txs(
         &mut self,
