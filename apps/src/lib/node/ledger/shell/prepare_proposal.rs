@@ -89,8 +89,10 @@ where
             txs.append(&mut mempool_txs);
 
             // fill up the remaining block space with
-            // arbitrary transactions that can fit in
-            // the free space left
+            // protocol transactions that haven't been
+            // selected for inclusion yet, and whose
+            // size allows them to fit in the free
+            // space left
             let mut remaining_txs =
                 self.build_remaining_batch(alloc, &tx_indices, req.txs);
             txs.append(&mut remaining_txs);
