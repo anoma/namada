@@ -8,8 +8,8 @@
 //! The code in this module doesn't perform any deserializing to
 //! verify if we are, in fact, allocating space for the correct
 //! kind of tx for the current [`BlockSpaceAllocator`] state. It
-//! is up to the user to dispatch the correct kind of tx into the
-//! current state of the allocator.
+//! is up to `PrepareProposal` to dispatch the correct kind of tx
+//! into the current state of the allocator.
 //!
 //! # How space is allocated
 //!
