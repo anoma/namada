@@ -147,6 +147,10 @@ As mentioned earlier, only validators in the `consensus` validator set have the 
 
 The distribution of block rewards given to the proposer, signers, and other `consensus` validators is dependent on the cumulative stake of all validator signatures included in the block by the proposer. The distribution is designed in such a way that the proposer is always incentivized to include as many validator signatures as possible in the block. This behavior is encouraged because light client efficiency increases with the number of signatures. Namada's current configuration rewards 1.00 - 1.33% of the block rewards solely to the proposer. The cumulative tokens rewarded to the set of signing validators is distributed to each according to their weighted stake of the total signing stake. Likewise, the tokens reserved solely for being a `consensus` validator are proportional to the validator's stake.  More details are described in [here](https://specs.namada.net/economics/proof-of-stake/reward-distribution.html#distribution-to-validators).
 
+# Conclusion / TLDR
 
-**Some kind of conclusion**
-- To do
+This article has described the various parts of Namada's proof-of-stake system and the improvements that it employs relative to other proof-of-stake blockchain systems. These improvements are summarized as:
+
+- **Epoched staking:** applying PoS state changes only at epoch boundaries makes light clients more efficient and allows for a DKG protocol to properly run in order to encrypt transactions in the mempool for optimized privacy.
+- **Cubic slashing:** accounting for correlated validator behavior (infractions committed nearby each other) and increasing the severity of slashing punishments provides better security.
+- **Auto-compounding rewards:** the concept of *rewards products* increases the protocol efficiency for processing PoS state changes and helps maximize rewards and UX for users (delegators).
