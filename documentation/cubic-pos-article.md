@@ -1,29 +1,27 @@
 # Introduction
 
-Proof-of-stake (PoS) consensus was developed as a way to solve the large computational overhead and long block finality times of proof-of-work (PoW) consensus mechanisms (e.g. in Bitcoin). Rather than miners competing to create the next block by hashing with lots of computing power in PoW systems, the block proposer is selected from a set of validators with probability proportional to the validator's bonded stake (or voting power). This block proposer mechanism allows PoS chains to be much greener than PoW chains that need to consume massive amounts of energy to reach consensus.
+Namada is a L1 proof-of-stake blockchain that provides interchain asset-agnostic privacy. Namada is based on a byzantine fault-tolerant (BFT) consensus mechanism widely used in the Cosmos ecosystem, provided by [Tendermint](https://github.com/informalsystems/tendermint-rs), that enables fast block finality times and much lower computational overhead than in proof-of-work (PoW) consensus mechanisms, as in Bitcoin. For consensus to be achieved in a BFT system, at least a 2/3 majority of the nodes (called validators) must be honest and behave according to the protocol.
 
-Namada's PoS module is similar to and influenced by the PoS system of the Cosmos Hub. Like many other blockchains in the Cosmos ecosystem, Namada employs Tendermint as its PoS consensus engine. Tendermint is a byzantine fault-tolerant (BFT) system that provides deterministic state machine replication as long as at least $2/3$ of the consensus voting power agrees on the state of the machine. Voting power in the consensus mechanism is held by nodes called validators, and the voting power is proportional to the amount of staked tokens held by the validators.
+Namada uses [proof-of-stake](https://blog.ethereum.org/2014/01/15/slasher-a-punitive-proof-of-stake-algorithm) to provide security against Sybil attacks on the network, wherein a malicious entity achieves enough voting power to disrupt consensus of the true chain. Rather than miners competing to create the next block by hashing with lots of computing power in PoW systems, the block proposer is selected from a set of validators with probability proportional to the validator's bonded stake (or voting power). This voting power is then used by the validators to determine if the 2/3 majority of consensus has been achieved. Furthermore, the block proposer mechanism also allows PoS chains to be much greener than PoW chains that need to consume massive amounts of energy to reach consensus.
 
-- Anything else?
+Namada's PoS module is inspired in large part by the PoS system of the Cosmos Hub and by [prior discussions](https://github.com/cosmos/cosmos-sdk/blob/019444ae4328beaca32f2f8416ee5edbac2ef30b/docs/architecture/adr-039-epoched-staking.md#pipelining-the-epochs) on its future development, which have ultimately not been implemented. The ["nothing at stake" problem](https://blog.ethereum.org/2014/01/15/slasher-a-punitive-proof-of-stake-algorithm) is solved by slashing misbehaving validators, which amounts primarily to confiscating their bonded tokens.
+
+In the PoS system, both users and validators are incentivized with rewards to contribute to the security of the network by bonding tokens in the PoS module. Namada has a regular schedule for minting new tokens (inflation), many of which are paid out to accounts that have bonded tokens. Non-valdating accounts can participate by *delegating* their tokens to a particular validator: the tokens are locked in the PoS system and the target validator can then use those tokens as voting power in the consensus mechanism.
 
 This article is divided into three main sections. First, we describe the mechanics and configuration of the epoched PoS system. Then we describe Namada's novel approach to slashing for validator misbehavior. Finally, we describe the inflation and rewards system within the PoS module.
 
 
 # Epoched Proof of Stake
 
-The native staking token in Namada is identified as *NAM*. We call the smallest denomination of this token *namnam*, where 1 million *namnam* is equal to 1 *NAM*.
-
-Namada's epoched PoS model is influenced by that of [Cosmos](https://github.com/cosmos/cosmos-sdk/blob/019444ae4328beaca32f2f8416ee5edbac2ef30b/docs/architecture/adr-039-epoched-staking.md#pipelining-the-epochs). Sets of blocks are batched into epochs, which are periods of time that have some fixed configuration of the PoS system. For example, the set of validators who participate in the consensus protocol and their associated consensus voting powers can only change at the boundary of two epochs and are constant throughout the duration of one.
+The native staking token in Namada is identified as *NAM*. We call the smallest denomination of this token *namnam*, where 1 million *namnam* is equal to 1 *NAM*. An epoch defines a grouped set of consecutive blocks and a period of time that have some fixed configuration of the PoS system. For example, the set of validators who participate in the consensus protocol and their associated consensus voting powers can only change at the boundary of two epochs and are constant throughout the duration of one.
 
 Namada employs epoched staking for two main reasons:
-- Light clients become more efficient because there are fewer state changes (particularly validator set changes) to store, resulting in fewer headers needed to verify state
-	- TODO: maybe need to reword
-	- Q: does this light client efficiency apply only to IBC or also for Eth?
-- Eventually, Namada (and the larger Anoma ecosystem) will rely on the Ferveo DKG protocol to encrypt transactions in the mempool. Ferveo must know the validator set for a near-future epoch in order to have sufficient time to compute the DKG in advance of the given epoch.
+- Light clients become more efficient because there are fewer state changes (particularly validator set changes) to keep track of, resulting in quicker state verification
+- Eventually, Namada (and the larger Anoma ecosystem) will rely on the [Ferveo DKG protocol](https://eprint.iacr.org/2022/898) to encrypt transactions in the mempool. Ferveo must know the validator set for a near-future epoch in order to have sufficient time to compute the DKG in advance of the given epoch.
 
 Thus, changes to the state of the PoS system are enqueued to take effect at some epoch in the future, the lengths of which we refer to as *offsets* relative to the epoch in which the transaction is submitted. Most state changes, including validator set updates, take effect at the *pipeline offset* - 2 epochs into the future. The other important offset in the model is the *unbonding offset* of 21 epochs, primarily the length of time before an unbond becomes withdrawable.
 
-**Important parameters in the Namada PoS model**
+**Important parameters in the Namada PoS model (followed by their default values)**
 - Duration of a block: ~ 5 - 10 seconds
 - Duration of an epoch: ~ 1 day
 - Pipeline offset length: 2 epochs
@@ -35,10 +33,11 @@ Below, we will review the rules around important PoS actions
 - Unbonding tx submitted at epoch `n`
 	- Updates validator set with decreased validator voting power at epoch `n + pipeline_offset (n+2)`
 	- Amount of the unbond is withdrawable at epoch `n + unbonding_offset + pipeline_offset (n+23)`
-		- TODO: check over this w Tomas
 - Redelegation tx submitted at epoch `n`
-	- Only support 100% token amount redelegated
-	- TODO: more details needed here perhaps?
+	- Updates validator set with voting powers for old and new validators at epoch `n + pipeline_offset (n+2)`
+	- Only support redelegating 100% of the token amount of a bond
+	- A redelegated bond cannot be redelegated again until epoch `n + unbonding_offset + pipeline_offset (n+23)`
+	- Slashes are properly handled to ensure that only tokens that contributed to a validator's voting power at the time of infraction are affected
 
 **Validator Sets**
 
@@ -49,7 +48,7 @@ Namada validators are classified into one of three sets:
 
 The *consensus* and *below capacity* validator sets are explicitly held in storage, ordered by their bonded stake, and are updated at every epoch boundary. However, no ordered set of *below threshold* validators is kept in storage. This validator set construction and the `min_validator_stake` threshold exist primarily to prevent the possibility of significant slowing of PoS system updates due to spam validator account creation. Thus, unbounded iteration when updating and validating PoS system state changes is avoided. Conversely, the *below capacity* validator set must be kept in storage, ordered by bonded stake, in order to properly process validator set changes in which validators may drop out or enter the *consensus* validator set.
 
-**Important validator set configuration values, mutable via governance:**
+**Important validator set configuration values, mutable via governance (with default values):**
 - `max_validators` = 100
 - `min_validator_stake` = 1 NAM
 
@@ -62,9 +61,7 @@ As in many other PoS blockchains, slashing is applied as a way to punish misbeha
 - proposing two different blocks at the same height
 - double-signing a block
 
-Ultimately, slashed tokens are sent to a slash pool fund, which...
-
-- TODO: what happens to slashed tokens atm?
+Ultimately, slashed tokens are sent to a slash pool fund, from which the funds can be spent by governance to refund slashed accounts in the event of accidental misbehavior.
 
 Typically, the slash amount for an infraction is proportional to a validator's voting power, however  Namada employs a slashing scheme that has more severe punishments for correlated validator misbehavior: so-called [*cubic slashing*](https://specs.namada.net/economics/proof-of-stake/cubic-slashing.html), wherein the slashed token amount can be proportional to the cube of a validator's voting power (the slash rate is quadratic). Cubic slashing employs more severe punishments to validators who commit infractions close to each other in time, making it riskier for an entity to operate larger or multiple similarly configured validators.
 
@@ -77,15 +74,17 @@ $$\text{sum}~ = \sum_{i \in \text{infractions}} \frac{\text{vp}_{i}}{\text{vp}_{
 
 Note that the voting power in the above expression is the voting power of the validator *when the infraction was committed*.
 
-3. The slash rate is then a function of the square of this sum, bounded below by some configurable minimum slash rate $r_{\text{min}}$:
+3. The slash rate is then a function of the square of this sum, bounded below by some configurable minimum slash rate $r_{\text{min}}$ (with the corresponding plot):
 
-$$\max (~r_{\text{min}}~,~9*\text{sum}^2 ~)$$
+$$\max (~r_{\text{min}}~,~9*\text{sum}^2 ~).$$
 
-The factor of $9$ is included such that the slash rate maxes out at $100\%$ for total voting power of $1/3$. This is a critical point in the BFT consensus model, as a total colluding voting power of greater than $1/3$ can prevent the chain from achieving consensus.
+The factor of $9$ is included such that the slash rate maxes out at $100\%$ for total voting power of $1/3$. This is a critical point in the BFT consensus model, as a total colluding voting power of greater than $1/3$ can prevent the chain from achieving consensus. The cubic slashing rate is also plotted here for visual convenience:
+
+[<img src="cubic_slash.png" width="500"/>](cubic_slash.png)
 
 Once the slash rate is determined, the voting power of the jailed misbehaving validator can be immediately slashed and updated. This validator can then submit a transaction to become unjailed, which takes effect at the pipeline offset relative to the epoch of submission. Once the validator has been reinstated into the appropriate validator set depending on its new voting power, it and its delegators can resume bonding, unbonding, and redelegating.
 
-Namada's slashing system also guarantees that only delegators whose stake were used in a misbehaving validator's voting power during the epoch of infraction are slashed. If a delegator that contributed to a misbehaving validator's voting power at the time of infraction has since redelegated to a new validator by the time the infraction is discovered, then the protocol will still properly slash the delegator. This is an improved PoS guarantee offered by Namada, whereas in other chains, such as Cosmos, there is no guarantee that all delegators contributing voting power to an infraction (and only these delegators) will be properly slashed for the infraction.
+Namada's slashing system also guarantees that only delegators whose stake were used in a misbehaving validator's voting power during the epoch of infraction are slashed. If a delegator that contributed to a misbehaving validator's voting power at the time of infraction has since redelegated to a new validator by the time the infraction is discovered, then the protocol will still properly slash the delegator. This is an improved PoS guarantee offered by Namada, whereas in other chains using the Cosmos SDK's PoS module, there is no guarantee that all delegators contributing voting power to an infraction (and only these delegators) will be properly slashed for the infraction.
 
 # Inflation and Rewards
 
@@ -138,18 +137,16 @@ $$\prod_{e=0}^e\big(1 + (1 - c_V(e))\frac{r_V(e)}{s_V(e)} \big),$$
 
 where $c_V(e)$ is a validator's commission rate for delegations in epoch $e$.
 
-**Check this next bit**
 There are several nice advantages of using the rewards products:
 - The storage of the rewards products allows the validators' voting powers to be updated immediately by considering the rewards products along with their bonded staked tokens.
 - The number of tokens to be credited to a delegator (or validator for a self-bond) only needs to be calculated at the moment of withdrawal by considering the original amount in the bond and the rewards products over the course of the bond's lifetime.
-- Lots of unneeded iteration in storage can be avoided
-- ???
+- Lots of unneeded iteration in storage can be avoided.
+- Delegators do not need to repeatedly withdraw rewards and then redelegate.
 
 As mentioned earlier, only validators in the `consensus` validator set have the ability to earn block rewards. Different portions of the block rewards are reserved for different behaviors; rewards are earned for proposing blocks, for signing (voting on) blocks, and also simply for being a member of the `consensus` validator set. Furthermore, all fees collected from transactions included in the block are owed solely to the block proposer.
 
 The distribution of block rewards given to the proposer, signers, and other `consensus` validators is dependent on the cumulative stake of all validator signatures included in the block by the proposer. The distribution is designed in such a way that the proposer is always incentivized to include as many validator signatures as possible in the block. This behavior is encouraged because light client efficiency increases with the number of signatures. Namada's current configuration rewards 1.00 - 1.33% of the block rewards solely to the proposer. The cumulative tokens rewarded to the set of signing validators is distributed to each according to their weighted stake of the total signing stake. Likewise, the tokens reserved solely for being a `consensus` validator are proportional to the validator's stake.  More details are described in [here](https://specs.namada.net/economics/proof-of-stake/reward-distribution.html#distribution-to-validators).
 
-- Check claim about light client efficiency dependence on number of signatures. Maybe elaborate too
 
 **Some kind of conclusion**
 - To do
