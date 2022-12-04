@@ -96,28 +96,33 @@ impl AbcippShim {
             let resp = match req {
                 Req::ProcessProposal(proposal) => {
                     #[cfg(not(feature = "abcipp"))]
-                    if !proposal.proposer_address.is_empty() {
-                        let tm_raw_hash_string = tm_raw_hash_to_string(
-                            proposal.proposer_address.clone(),
-                        );
-                        let native_proposer_address = self
-                            .service
-                            .storage
-                            .read_validator_address_raw_hash(tm_raw_hash_string)
-                            .expect(
-                                "Unable to find native validator address of \
-                                 block proposer from tendermint raw hash",
                     {
                         println!("\nRECEIVED REQUEST PROCESSPROPOSAL");
+                        if !proposal.proposer_address.is_empty() {
+                            let tm_raw_hash_string = tm_raw_hash_to_string(
+                                proposal.proposer_address.clone(),
                             );
-                        self.service
-                            .storage
-                            .write_current_block_proposer_address(
-                                &native_proposer_address,
+                            let native_proposer_address = self
+                                .service
+                                .storage
+                                .read_validator_address_raw_hash(
+                                    tm_raw_hash_string,
+                                )
+                                .expect(
+                                    "Unable to find native validator address \
+                                     of block proposer from tendermint raw \
+                                     hash",
+                                );
                             println!(
                                 "BLOCK PROPOSER (PROCESSPROPOSAL): {}",
                                 native_proposer_address
                             );
+                            self.service
+                                .storage
+                                .write_current_block_proposer_address(
+                                    &native_proposer_address,
+                                );
+                        }
                     }
                     self.service
                         .call(Request::ProcessProposal(proposal))

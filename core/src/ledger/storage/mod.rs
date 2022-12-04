@@ -97,6 +97,8 @@ where
     pub next_epoch_min_start_time: DateTimeUtc,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
+    /// Epoch update info
+    pub epoch_update_tracker: (bool, u32),
     /// The shielded transaction index
     pub tx_index: TxIndex,
     /// The currently saved conversion state
@@ -354,6 +356,7 @@ where
             address_gen: EstablishedAddressGen::new(
                 "Privacy is a function of liberty.",
             ),
+            epoch_update_tracker: (false, 0),
             tx_index: TxIndex::default(),
             conversion_state: ConversionState::default(),
             #[cfg(feature = "ferveo-tpke")]
@@ -728,9 +731,37 @@ where
         let (parameters, _gas) =
             parameters::read(self).expect("Couldn't read protocol parameters");
 
-        // Check if the current epoch is over
-        let new_epoch = height >= self.next_epoch_min_start_height
+        // Check if the new epoch minimum start height and start time have been
+        // fulfilled. If so, queue the next epoch to start two blocks
+        // into the future so as to align validator set updates + etc with
+        // tendermint. This is because tendermint has a two block delay
+        // to validator changes.
+        let current_epoch_duration_satisfied = height
+            >= self.next_epoch_min_start_height
             && time >= self.next_epoch_min_start_time;
+
+        println!(
+            "Next epoch min start height = {}",
+            self.next_epoch_min_start_height
+        );
+        println!(
+            "Epoch duration satisfied = {}",
+            current_epoch_duration_satisfied
+        );
+
+        if current_epoch_duration_satisfied {
+            if !self.epoch_update_tracker.0 {
+                self.epoch_update_tracker = (true, 2);
+            } else {
+                self.epoch_update_tracker =
+                    (true, self.epoch_update_tracker.1 - 1);
+            }
+        } else if self.epoch_update_tracker.0 {
+            self.epoch_update_tracker.0 = false
+        }
+        let new_epoch =
+            self.epoch_update_tracker.0 && self.epoch_update_tracker.1 == 0;
+
         if new_epoch {
             // Begin a new epoch
             self.block.epoch = self.block.epoch.next();
@@ -747,6 +778,10 @@ where
                 .pred_epochs
                 .new_epoch(height, evidence_max_age_num_blocks);
             tracing::info!("Began a new epoch {}", self.block.epoch);
+            println!(
+                "NEW EPOCH Next epoch min start height = {}",
+                self.next_epoch_min_start_height
+            );
             self.update_allowed_conversions()?;
         }
         self.update_epoch_in_merkle_tree()?;
@@ -1142,6 +1177,7 @@ pub mod testing {
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),
+                epoch_update_tracker: (false, 0),
                 tx_index: TxIndex::default(),
                 conversion_state: ConversionState::default(),
                 #[cfg(feature = "ferveo-tpke")]

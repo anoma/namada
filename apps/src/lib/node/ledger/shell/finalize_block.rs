@@ -65,6 +65,8 @@ where
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
         let (current_epoch, _gas) = self.storage.get_current_epoch();
+        let update_for_tendermint = self.storage.epoch_update_tracker.0
+            && self.storage.epoch_update_tracker.1 == 2;
 
         println!(
             "BLOCK HEIGHT {} AND EPOCH {}, NEW EPOCH = {}",
@@ -363,7 +365,7 @@ where
 
         tracing::info!("{}", stats);
 
-        if new_epoch {
+        if update_for_tendermint {
             self.update_epoch(&mut response);
         }
 
