@@ -968,8 +968,6 @@ pub enum BondError {
     InactiveValidator(Address),
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
-    #[error("Given zero amount to bond")]
-    ZeroAmount,
 }
 
 #[allow(missing_docs)]
@@ -987,8 +985,6 @@ pub enum UnbondError {
     ValidatorHasNoVotingPower(Address),
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
-    #[error("Given zero amount to unbond")]
-    ZeroAmount,
 }
 
 #[allow(missing_docs)]
@@ -1291,9 +1287,6 @@ fn bond_tokens(
     validator_set: &mut ValidatorSets,
     current_epoch: Epoch,
 ) -> Result<BondData, BondError> {
-    if amount == token::Amount::default() {
-        return Err(BondError::ZeroAmount);
-    }
     // Check the validator state
     match validator_state {
         None => {
@@ -1400,9 +1393,6 @@ fn unbond_tokens(
     validator_set: &mut ValidatorSets,
     current_epoch: Epoch,
 ) -> Result<UnbondData, UnbondError> {
-    if amount == token::Amount::default() {
-        return Err(UnbondError::ZeroAmount);
-    }
     // We can unbond tokens that are bonded for a future epoch (not yet
     // active), hence we check the total at the pipeline offset
     let unbondable_amount = bond

@@ -502,4 +502,12 @@ pub mod testing {
     pub fn arb_amount_ceiled(max: u64) -> impl Strategy<Value = Amount> {
         (0..=max).prop_map(Amount::from)
     }
+
+    /// Generate an arbitrary non-zero token amount up to and including given
+    /// `max` value
+    pub fn arb_amount_non_zero_ceiled(
+        max: u64,
+    ) -> impl Strategy<Value = Amount> {
+        (1..=max).prop_map(Amount::from)
+    }
 }
