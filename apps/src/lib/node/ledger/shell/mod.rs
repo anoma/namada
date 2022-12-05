@@ -737,6 +737,9 @@ where
                             self.storage.last_height,
                         ) {
                             response.log = String::from(VALID_MSG);
+                            // validator set update votes should be decided
+                            // as soon as possible
+                            response.priority = i64::MAX;
                         } else {
                             response.code = 1;
                             response.log = String::from(
