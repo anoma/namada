@@ -624,7 +624,7 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: crate::types::storage::MerkleValue,
+        value: &[u8],
         height: BlockHeight,
     ) -> Result<Proof> {
         use std::array;
