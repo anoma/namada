@@ -143,6 +143,13 @@ test-unit:
 			--skip e2e \
 			-Z unstable-options --report-time
 
+test-unit-debug:
+	$(debug-cargo) test \
+			$(TEST_FILTER) -- \
+			--skip e2e \
+			--nocapture \
+			-Z unstable-options --report-time
+
 test-wasm:
 	make -C $(wasms) test
 
