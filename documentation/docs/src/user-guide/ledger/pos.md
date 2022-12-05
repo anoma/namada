@@ -86,10 +86,10 @@ Upon success, the withdrawn tokens will be credited back your account and debite
 
 ### Validators' Voting Power
 
-To see all validators and their voting power, you can query:
+To see all validators and their voting power, which is exactly equal to the amount of staked NAM tokens from their self-bonds and delegations, you can query:
 
 ```shell
-namada client voting-power
+namada client bonded-stake
 ```
 
 With this command, you can specify `--epoch` to find the voting powers at some future epoch. Note that only the voting powers for the current and the next epoch are final.
@@ -103,21 +103,21 @@ To register a new validator account, run:
 ```shell
 namada client init-validator \
   --alias my-validator \
-  --source my-new-acc
+  --source my-new-acc \
+  --commission-rate <commission-rate>
+  --max-commission-rate-change <max-commission-rate-change>
 ```
+
+The commission rate charged by the validator for delegation rewards and the maximum change per epoch in the commission rate charged by the validator for delegation rewards. Both are expressed as a decimal between 0 and 1. *Staking rewards are not yet implemented*.
 
 This command will generate the keys required for running a validator:
 
 - Consensus key, which is used in [signing blocks in Tendermint](https://docs.tendermint.com/master/nodes/validators.html#validator-keys).
 - Validator account key for signing transactions on the validator account, such as token self-bonding, unbonding and withdrawal, validator keys, validity predicate, state and metadata updates.
-- Staking reward account key for signing transactions on the staking reward accounts. More on this account below.
 
-Then, it submits a transaction to the ledger that generates two new accounts with established addresses:
+Then, it submits a transaction to the ledger that generates the new validator account with established address, which can be used to receive new delegations.
 
-- A validator account with the main validator address, which can be used to receive new delegations
-- A staking reward account, which will receive rewards for participation in the PoS system. In the future, the validity predicate of this account will be able to control how the rewards are to be distributed to the validator's delegators. *Staking rewards are not yet implemented*.
-
-These keys and aliases of the addresses will be saved in your wallet. Your local ledger node will also be setup to run this validator, you just have to shut it down with e.g. `Ctrl + C`, then start it again with the same command:
+The keys and the alias of the address will be saved in your wallet. Your local ledger node will also be setup to run this validator, you just have to shut it down with e.g. `Ctrl + C`, then start it again with the same command:
 
 ```shell
 namada ledger
@@ -145,7 +145,7 @@ namada client bond \
 
 ### Determine your voting power
 
-A validator's voting power is determined by the sum of all their active self-bonds and delegations of tokens, with slashes applied, if any, divided by `1000` (PoS `votes_per_token` parameter, with the current value set to `10‱` in parts per ten thousand).
+A validator's voting power is determined by the sum of all their active self-bonds and delegations of tokens, with slashes applied, if any.
 
 The same rules apply to delegations. When you self-bond tokens, the bonded amount won't count towards your validator's stake (which in turn determines your power) until the beginning of epoch `n + 2` in the current epoch `n`. The bonded amount of tokens will be deducted from the validator's account immediately and will be credited to the PoS system's account.
 
