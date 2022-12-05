@@ -60,7 +60,6 @@ ark-serialize = {version = "0.3"}
 arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "04ad1eeb28901b57a7599bbe433b3822965dabe8", default-features = false, features = ["std", "borsh"]}
 bech32 = "0.8.0"
 bellman = "0.11.2"
-bit-vec = "0.6.3"
 borsh = "0.9.0"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 data-encoding = "2.3.2"
@@ -75,6 +74,7 @@ ibc-proto = {version = "0.17.1", default-features = false, optional = true}
 ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
 ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
 ics23 = "0.7.0"
+index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}
 itertools = "0.10.0"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
