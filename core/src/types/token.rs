@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use masp_primitives::transaction::Transaction;
+use num_traits::CheckedAdd;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -174,6 +175,14 @@ impl Add for Amount {
     fn add(mut self, rhs: Self) -> Self::Output {
         self.micro += rhs.micro;
         self
+    }
+}
+
+impl CheckedAdd for Amount {
+    fn checked_add(&self, v: &Self) -> Option<Self> {
+        Some(Self {
+            micro: self.micro.checked_add(v.micro)?,
+        })
     }
 }
 

@@ -10,9 +10,9 @@ use borsh::BorshSerialize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use namada::types::address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
+use namada::types::{address, token};
 use prost::bytes::Bytes;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
@@ -26,7 +26,7 @@ use crate::config::genesis::genesis_config::{
     self, HexString, ValidatorPreGenesisConfig,
 };
 use crate::config::global::GlobalConfig;
-use crate::config::{self, Config, TendermintMode};
+use crate::config::{self, genesis_new, Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
@@ -1057,4 +1057,61 @@ pub fn validator_pre_genesis_file(pre_genesis_path: &Path) -> PathBuf {
 /// The default validator pre-genesis directory
 pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
     base_dir.join(PRE_GENESIS_DIR).join(alias)
+}
+
+pub fn validate_genesis_templates(
+    _global_args: args::Global,
+    args::ValidateGenesisTemplates { path }: args::ValidateGenesisTemplates,
+) {
+    const MAX_TOKEN_BALANCE_SUM: u64 = u64::MAX / 2;
+
+    let mut is_valid = true;
+    let balances_file = path.join(genesis_new::BALANCES_FILE_NAME);
+    if !balances_file.exists() {
+        is_valid = false;
+        eprintln!(
+            "Balances file is missing at {}",
+            balances_file.to_string_lossy()
+        );
+    }
+
+    let balances = genesis_new::read_balances(&balances_file);
+    match balances {
+        Ok(balances) => {
+            balances.0.into_iter().for_each(|(token, next)| {
+                let sum = next.0.values().try_fold(
+                    token::Amount::default(),
+                    |acc, amount| {
+                        let res = acc.checked_add(*amount);
+                        if let None = res.as_ref() {
+                            is_valid = false;
+                            eprintln!(
+                                "Balances for token {token} overflow u64::MAX"
+                            );
+                        }
+                        res
+                    },
+                );
+                if sum.is_none()
+                    || u64::from(sum.unwrap()) > MAX_TOKEN_BALANCE_SUM
+                {
+                    eprintln!(
+                        "The sum of balances for token {token} is greater \
+                         than `u64::MAX / 2`"
+                    );
+                    is_valid = false;
+                }
+            });
+
+            println!("Balances file is valid.");
+        }
+        Err(err) => {
+            is_valid = false;
+            eprintln!("Balances file is NOT valid. Failed to read with: {err}");
+        }
+    }
+
+    if !is_valid {
+        cli::safe_exit(1)
+    }
 }

@@ -12,6 +12,13 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub const BALANCES_FILE_NAME: &str = "balances.toml";
+
+/// Genesis balances of all tokens
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct Balances(pub HashMap<Alias, TokenBalances>);
+
 /// An account alias (a token, special accounts such as faucet etc.)
 pub type Alias = String;
 
@@ -20,37 +27,32 @@ pub type Alias = String;
     Clone, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash,
 )]
 #[serde(transparent)]
-pub struct HexString<T>
+pub struct StringEncoded<T>
 where
     T: FromStr + Display,
 {
     #[serde(
-        serialize_with = "encode_hex_string",
-        deserialize_with = "decode_hex_string"
+        serialize_with = "encode_via_display",
+        deserialize_with = "decode_via_from_str"
     )]
     pub raw: T,
 }
 
 #[derive(Error, Debug)]
-pub enum HexDecodeError {
-    #[error("Invalid hex string")]
-    InvalidHexString,
+pub enum StringDecodeError {
+    #[error("Invalid string encoding")]
+    InvalidStringEncoded,
 }
-
-/// Genesis balances of all tokens
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct Balances(pub HashMap<Alias, TokenBalances>);
 
 /// Genesis balances for a given token
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TokenBalances(
-    pub HashMap<HexString<common::PublicKey>, token::Amount>,
+    pub HashMap<StringEncoded<common::PublicKey>, token::Amount>,
 );
 
 impl TokenBalances {
     pub fn get(&self, pk: common::PublicKey) -> Option<&token::Amount> {
-        let pk = HexString { raw: pk };
+        let pk = StringEncoded { raw: pk };
         self.0.get(&pk)
     }
 }
@@ -90,7 +92,7 @@ mod tests {
     #[test]
     fn test_read_balances() {
         let test_dir = tempdir().unwrap();
-        let path = test_dir.path().join("balances.toml");
+        let path = test_dir.path().join(BALANCES_FILE_NAME);
         let sk = key::testing::keypair_1();
         let pk = sk.ref_to();
         let balance = token::Amount::from(101_000_001);
@@ -109,7 +111,7 @@ mod tests {
     }
 }
 
-fn encode_hex_string<S, T>(val: &T, serializer: S) -> Result<S::Ok, S::Error>
+fn encode_via_display<S, T>(val: &T, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
     T: Display,
@@ -118,12 +120,13 @@ where
     serde::Serialize::serialize(&val_str, serializer)
 }
 
-fn decode_hex_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+fn decode_via_from_str<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: FromStr,
 {
     let val_str: String = serde::Deserialize::deserialize(deserializer)?;
-    FromStr::from_str(&val_str)
-        .map_err(|_| serde::de::Error::custom(HexDecodeError::InvalidHexString))
+    FromStr::from_str(&val_str).map_err(|_| {
+        serde::de::Error::custom(StringDecodeError::InvalidStringEncoded)
+    })
 }

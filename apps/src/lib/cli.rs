@@ -1449,6 +1449,7 @@ pub mod cmds {
         FetchWasms(FetchWasms),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
+        ValidateGenesisTemplates(ValidateGenesisTemplates),
     }
 
     impl SubCmd for Utils {
@@ -1463,10 +1464,13 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
+                let validate_genesis_templates =
+                    SubCmd::parse(matches).map(Self::ValidateGenesisTemplates);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
                     .or(init_genesis)
+                    .or(validate_genesis_templates)
             })
         }
 
@@ -1477,6 +1481,7 @@ pub mod cmds {
                 .subcommand(FetchWasms::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
+                .subcommand(ValidateGenesisTemplates::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
         }
     }
@@ -1558,6 +1563,25 @@ pub mod cmds {
                      node.",
                 )
                 .add_args::<args::InitGenesisValidator>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidateGenesisTemplates(pub args::ValidateGenesisTemplates);
+
+    impl SubCmd for ValidateGenesisTemplates {
+        const CMD: &'static str = "validate-genesis-templates";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::ValidateGenesisTemplates::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Validate genesis templates.")
+                .add_args::<args::ValidateGenesisTemplates>()
         }
     }
 }
@@ -1655,6 +1679,7 @@ pub mod args {
     const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
     const OWNER: Arg<WalletAddress> = arg("owner");
     const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
+    const PATH: Arg<PathBuf> = arg("path");
     const PIN: ArgFlag = flag("pin");
     const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
@@ -3669,6 +3694,26 @@ pub mod args {
                     "The key scheme/type used for the validator keys. \
                      Currently supports ed25519 and secp256k1.",
                 ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidateGenesisTemplates {
+        /// Templates dir
+        pub path: PathBuf,
+    }
+
+    impl Args for ValidateGenesisTemplates {
+        fn parse(matches: &ArgMatches) -> Self {
+            let path = PATH.parse(matches);
+            Self { path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                PATH.def()
+                    .about("Path to the directory with the template files."),
+            )
         }
     }
 }
