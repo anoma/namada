@@ -221,6 +221,7 @@ fn test_add_to_bridge_pool() {
         Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
     )
     .unwrap();
+    namadac_tx.exp_string("Transaction accepted").unwrap();
     namadac_tx.exp_string("Transaction applied").unwrap();
     namadac_tx.exp_string("Transaction is valid").unwrap();
     drop(namadac_tx);
