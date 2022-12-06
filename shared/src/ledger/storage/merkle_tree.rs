@@ -56,7 +56,7 @@ pub enum Error {
 type Result<T> = std::result::Result<T, Error>;
 
 /// Type alias for bytes to be put into the Merkle storage
-pub(super) type StorageBytes<'a> = &'a [u8];
+pub(super) type StorageBytes<'a> = std::borrow::Cow<'a, [u8]>;
 
 /// Type aliases for the different merkle trees and backing stores
 pub type SmtStore = DefaultStore<SmtHash, Hash, 32>;
