@@ -233,5 +233,5 @@ fn test_add_to_bridge_pool() {
         Some(QUERY_TIMEOUT_SECONDS),
     )
     .unwrap();
-    namadar.exp_string("Bridge pool contents:").unwrap();
+    namadar.exp_string(r#""bridge_pool_contents":"#).unwrap();
 }

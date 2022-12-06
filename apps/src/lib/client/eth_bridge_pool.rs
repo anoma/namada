@@ -7,6 +7,7 @@ use namada::types::eth_abi::Encode;
 use namada::types::eth_bridge_pool::{
     GasFee, PendingTransfer, TransferToEthereum,
 };
+use serde::{Deserialize, Serialize};
 
 use super::signing::TxSigningKey;
 use super::tx::process_tx;
@@ -66,6 +67,13 @@ pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
     );
 }
 
+/// A json serializable representation of the Ethereum
+/// bridge pool.
+#[derive(Serialize, Deserialize)]
+struct BridgePoolResponse {
+    bridge_pool_contents: HashMap<String, PendingTransfer>,
+}
+
 /// Query the contents of the Ethereum bridge pool.
 /// Prints out a json payload.
 pub async fn query_bridge_pool(args: args::Query) {
@@ -82,8 +90,7 @@ pub async fn query_bridge_pool(args: args::Query) {
     if pool_contents.is_empty() {
         println!("Bridge pool is empty.");
         return;
-    } else {
-        println!("Bridge pool contents: ");
     }
-    println!("{}", serde_json::to_string_pretty(&pool_contents).unwrap());
+    let contents = BridgePoolResponse{ bridge_pool_contents: pool_contents};
+    println!("{}", serde_json::to_string_pretty(&contents).unwrap());
 }
