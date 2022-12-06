@@ -758,8 +758,15 @@ where
                              be added to the mempool: {tx:?}"
                         );
                     }
-                    Ok(TxType::Wrapper(_) | TxType::Raw(_)) => {
+                    Ok(TxType::Wrapper(_)) => {
                         response.log = String::from(VALID_MSG);
+                    }
+                    Ok(TxType::Raw(_)) => {
+                        response.code = 1;
+                        response.log = format!(
+                            "{INVALID_MSG}: Raw transactions cannot be \
+                             accepted into the mempool"
+                        );
                     }
                     Ok(TxType::Decrypted(_)) => {
                         response.code = 1;
